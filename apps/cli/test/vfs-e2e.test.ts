@@ -158,7 +158,7 @@ describe("vfs CLI e2e", () => {
         ["vfs", "--db", dbPath, "write", "/v.txt", "--version", "1"],
         { input: "three" },
       );
-      assert.notEqual(bad.status, 0);
+      assert.equal(bad.status, 2);
       assert.match(bad.stderr, /conflict|Version/i);
     } finally {
       await rm(dir, { recursive: true, force: true });

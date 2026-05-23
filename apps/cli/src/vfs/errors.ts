@@ -20,5 +20,8 @@ export function exitCodeForError(error: unknown): number {
   if (error instanceof VfsError || error instanceof TdbcError) {
     return EXIT_RUNTIME;
   }
+  if (error instanceof Error && error.message.startsWith("Usage:")) {
+    return EXIT_USAGE;
+  }
   return EXIT_RUNTIME;
 }

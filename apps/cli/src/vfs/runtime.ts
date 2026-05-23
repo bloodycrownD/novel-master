@@ -16,12 +16,12 @@ const DEFAULT_DB = "./.novel-master/novel.db";
  * Resolves database file path: NOVEL_MASTER_DB > --db > default.
  */
 export function resolveDbPath(argv: readonly string[]): string {
+  if (process.env.NOVEL_MASTER_DB) {
+    return process.env.NOVEL_MASTER_DB;
+  }
   const fromFlag = extractDbPath(argv).dbPath;
   if (fromFlag != null) {
     return fromFlag;
-  }
-  if (process.env.NOVEL_MASTER_DB) {
-    return process.env.NOVEL_MASTER_DB;
   }
   return DEFAULT_DB;
 }
