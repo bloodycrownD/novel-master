@@ -9,10 +9,10 @@ import assert from "node:assert/strict";
 import {
   SqlTemplateParser,
   TdbcError,
-  clearDrivers,
   open,
   type TdbcConnection,
 } from "@novel-master/core";
+import { clearDrivers } from "@novel-master/core/tdbc";
 
 export type ConformanceFactory = () => Promise<TdbcConnection>;
 

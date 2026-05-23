@@ -1,5 +1,5 @@
 import { describe } from "node:test";
-import { clearDrivers } from "@novel-master/core";
+import { clearDrivers } from "@novel-master/core/tdbc";
 import { runConformanceTests } from "@novel-master/tdbc-conformance";
 import { RnDriver, RN_DRIVER_NAME } from "../src/driver.js";
 import { MockRnSqliteAdapter } from "./mock-adapter.js";

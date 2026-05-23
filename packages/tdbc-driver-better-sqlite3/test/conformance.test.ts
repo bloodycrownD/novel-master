@@ -1,5 +1,6 @@
 import { describe } from "node:test";
-import { open, clearDrivers } from "@novel-master/core";
+import { open } from "@novel-master/core";
+import { clearDrivers } from "@novel-master/core/tdbc";
 import { runConformanceTests } from "@novel-master/tdbc-conformance";
 import {
   registerBetterSqlite3Driver,

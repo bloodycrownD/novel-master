@@ -38,7 +38,6 @@ export {
   getDriver,
   listDrivers,
   resolveDriver,
-  clearDrivers,
   normalizeBindings,
   executeTemplate,
   queryTemplate,

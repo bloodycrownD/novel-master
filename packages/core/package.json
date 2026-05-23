@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./tdbc": {
+      "types": "./dist/infra/tdbc/index.d.ts",
+      "import": "./dist/infra/tdbc/index.js"
     }
   },
   "scripts": {
