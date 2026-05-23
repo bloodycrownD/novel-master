@@ -10,10 +10,12 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
-    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\""
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@novel-master/core": "*"
+    "@novel-master/core": "*",
+    "@novel-master/tdbc-driver-better-sqlite3": "*"
   },
   "devDependencies": {
     "tsx": "^4.21.0"

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { greet } from "@novel-master/core";
+import { main } from "./main.js";
 
-const name = process.argv[2] ?? "world";
-console.log(greet(name));
+main().then((code) => {
+  process.exitCode = code;
+});
