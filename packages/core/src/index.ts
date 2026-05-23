@@ -26,3 +26,31 @@ export type {
   SqlTemplateErrorCode,
   AstNode,
 } from "./infra/sql-template/index.js";
+
+/**
+ * TDBC: async SQLite connectivity protocol (drivers register separately).
+ */
+export {
+  TdbcError,
+  open,
+  parseUrl,
+  registerDriver,
+  getDriver,
+  listDrivers,
+  resolveDriver,
+  clearDrivers,
+  normalizeBindings,
+  executeTemplate,
+  queryTemplate,
+} from "./infra/tdbc/index.js";
+export type {
+  TdbcConnection,
+  TdbcDriver,
+  TdbcErrorCode,
+  SqlValue,
+  Row,
+  ExecuteResult,
+  BatchResult,
+  OpenOptions,
+  ParsedTdbcUrl,
+} from "./infra/tdbc/index.js";
