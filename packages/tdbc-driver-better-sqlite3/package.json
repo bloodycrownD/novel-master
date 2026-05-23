@@ -1,0 +1,29 @@
+{
+  "name": "@novel-master/tdbc-driver-better-sqlite3",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@novel-master/core": "*",
+    "better-sqlite3": "^11.10.0"
+  },
+  "devDependencies": {
+    "@novel-master/tdbc-conformance": "*",
+    "@types/better-sqlite3": "^7.6.13",
+    "tsx": "^4.21.0"
+  }
+}
