@@ -131,9 +131,8 @@ export class RnConnection implements TdbcConnection {
       return { totalChanges: 0, count: 0 };
     }
 
-    await this.adapter.execute("BEGIN");
-    let totalChanges = 0;
-    try {
+    const runStatements = async (): Promise<BatchResult> => {
+      let totalChanges = 0;
       for (const params of parametersList) {
         const result = await this.adapter.execute(
           sql,
@@ -141,8 +140,27 @@ export class RnConnection implements TdbcConnection {
         );
         totalChanges += result.rowsAffected ?? 0;
       }
-      await this.adapter.execute("COMMIT");
       return { totalChanges, count: parametersList.length };
+    };
+
+    if (this.inTransaction) {
+      // --- batch inside outer transaction: statements only, no nested BEGIN/COMMIT ---
+      try {
+        return await runStatements();
+      } catch (cause) {
+        throw new TdbcError("BATCH_FAILED", "Batch execution failed", {
+          driver: "rn",
+          cause,
+        });
+      }
+    }
+
+    // --- batch boundary: standalone transaction via adapter ---
+    await this.adapter.execute("BEGIN");
+    try {
+      const result = await runStatements();
+      await this.adapter.execute("COMMIT");
+      return result;
     } catch (cause) {
       await this.adapter.execute("ROLLBACK");
       throw new TdbcError("BATCH_FAILED", "Batch execution failed", {

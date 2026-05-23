@@ -6,7 +6,7 @@
 
 /** Subset of react-native-quick-sqlite execute result. */
 export interface QuickSqliteResult {
-  rows?: Record<string, unknown>[];
+  rows?: (Record<string, unknown> | unknown[])[];
   rowsAffected?: number;
   insertId?: number;
   columnNames?: string[];

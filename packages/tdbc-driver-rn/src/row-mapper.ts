@@ -27,16 +27,36 @@ function mapValue(value: unknown): SqlValue {
   return String(value);
 }
 
+function rowFromObject(record: Record<string, unknown>): Row {
+  const row: Row = {};
+  for (const [key, value] of Object.entries(record)) {
+    row[key] = mapValue(value);
+  }
+  return row;
+}
+
+function rowFromArray(values: unknown[], columnNames: readonly string[]): Row {
+  const row: Row = {};
+  const len = Math.min(columnNames.length, values.length);
+  for (let i = 0; i < len; i++) {
+    row[columnNames[i]!] = mapValue(values[i]);
+  }
+  return row;
+}
+
 /** Builds TDBC rows from a quick-sqlite result. */
 export function rowsFromResult(result: QuickSqliteResult): Row[] {
   if (!result.rows || result.rows.length === 0) {
     return [];
   }
+  const columnNames = result.columnNames;
   return result.rows.map((record) => {
-    const row: Row = {};
-    for (const [key, value] of Object.entries(record)) {
-      row[key] = mapValue(value);
+    if (Array.isArray(record) && columnNames && columnNames.length > 0) {
+      return rowFromArray(record, columnNames);
     }
-    return row;
+    if (record !== null && typeof record === "object" && !Array.isArray(record)) {
+      return rowFromObject(record as Record<string, unknown>);
+    }
+    return {};
   });
 }
