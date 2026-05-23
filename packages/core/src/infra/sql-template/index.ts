@@ -15,7 +15,12 @@ export type {
   TrimAttrs,
 } from "./types.js";
 export { parseTemplateToAst, TemplateParser } from "./parser.js";
-export { normalizeExpression, evaluateTest } from "./expression.js";
+export {
+  normalizeExpression,
+  bindExpressionToContext,
+  evaluateTest,
+} from "./expression.js";
+export type { EvaluateTestOptions } from "./expression.js";
 
 import { TemplateEvaluator } from "./evaluator.js";
 import { TemplateParser } from "./parser.js";
@@ -40,6 +45,11 @@ export class SqlTemplateParser {
    *
    * @param template - SQL template string with dynamic tags and `#{` / `${` placeholders.
    * @param params - Root binding context (missing properties resolve to `undefined`).
+   * @remarks
+   * `${name}` placeholders are interpolated as raw strings into the output SQL and are
+   * **not** added to `parameters`. Only use `${...}` with trusted, validated values
+   * (for example fixed column names from an allow-list). Untrusted input in `${...}`
+   * can cause SQL injection. Prefer `#{name}` for user-supplied values.
    */
   parse(
     template: string,

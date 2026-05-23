@@ -203,11 +203,16 @@ function readCloseTag(
   return { name: m[1], end: offset + m[0].length };
 }
 
+interface ParsedAttribute {
+  value: string;
+  valueOffset: number;
+}
+
 function readOpenTagHeader(
   template: string,
   offset: number,
   tagName: string,
-): { attrs: Map<string, string>; bodyStart: number } {
+): { attrs: Map<string, ParsedAttribute>; bodyStart: number } {
   const headerStart = offset + 1 + tagName.length;
   const gt = template.indexOf(">", headerStart);
   if (gt === -1) {
@@ -217,20 +222,26 @@ function readOpenTagHeader(
     });
   }
   const header = template.slice(headerStart, gt);
-  const attrs = parseAttributes(header, offset, tagName);
+  const attrs = parseAttributes(header, headerStart, offset, tagName);
   return { attrs, bodyStart: gt + 1 };
 }
 
 function parseAttributes(
   header: string,
+  headerStart: number,
   offset: number,
   tagName: string,
-): Map<string, string> {
-  const attrs = new Map<string, string>();
+): Map<string, ParsedAttribute> {
+  const attrs = new Map<string, ParsedAttribute>();
   const attrRe = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
   let m: RegExpExecArray | null;
   while ((m = attrRe.exec(header)) !== null) {
-    attrs.set(m[1].toLowerCase(), m[2] ?? m[3] ?? "");
+    const quoteIdx = m[0].search(/["']/);
+    const valueOffset = headerStart + m.index + quoteIdx;
+    attrs.set(m[1].toLowerCase(), {
+      value: m[2] ?? m[3] ?? "",
+      valueOffset,
+    });
   }
   if (header.trim() && attrs.size === 0 && /\S/.test(header)) {
     throw new SqlTemplateError(
@@ -243,11 +254,11 @@ function parseAttributes(
 }
 
 function requireAttr(
-  attrs: Map<string, string>,
+  attrs: Map<string, ParsedAttribute>,
   name: string,
   tagName: string,
   offset: number,
-): string {
+): ParsedAttribute {
   const val = attrs.get(name);
   if (val === undefined) {
     throw new SqlTemplateError(
@@ -270,34 +281,39 @@ function parseOpenTag(
 
   switch (tagName) {
     case "if": {
-      const test = requireAttr(attrs, "test", tagName, offset);
+      const testAttr = requireAttr(attrs, "test", tagName, offset);
       const children = parseChildren(template, pos, tagName);
-      return { type: "if", test, children };
+      return {
+        type: "if",
+        test: testAttr.value,
+        testOffset: testAttr.valueOffset,
+        children,
+      };
     }
     case "where": {
       const children = parseChildren(template, pos, tagName);
       return { type: "where", children };
     }
     case "foreach": {
-      const collection = requireAttr(attrs, "collection", tagName, offset);
-      const item = requireAttr(attrs, "item", tagName, offset);
+      const collection = requireAttr(attrs, "collection", tagName, offset).value;
+      const item = requireAttr(attrs, "item", tagName, offset).value;
       const foreachAttrs: ForeachAttrs = {
         collection,
         item,
-        index: attrs.get("index"),
-        open: attrs.get("open"),
-        close: attrs.get("close"),
-        separator: attrs.get("separator"),
+        index: attrs.get("index")?.value,
+        open: attrs.get("open")?.value,
+        close: attrs.get("close")?.value,
+        separator: attrs.get("separator")?.value,
       };
       const children = parseChildren(template, pos, tagName);
       return { type: "foreach", attrs: foreachAttrs, children };
     }
     case "trim": {
       const trimAttrs: TrimAttrs = {
-        prefix: attrs.get("prefix"),
-        suffix: attrs.get("suffix"),
-        prefixOverrides: attrs.get("prefixoverrides"),
-        suffixOverrides: attrs.get("suffixoverrides"),
+        prefix: attrs.get("prefix")?.value,
+        suffix: attrs.get("suffix")?.value,
+        prefixOverrides: attrs.get("prefixoverrides")?.value,
+        suffixOverrides: attrs.get("suffixoverrides")?.value,
       };
       const children = parseChildren(template, pos, tagName);
       return { type: "trim", attrs: trimAttrs, children };
@@ -317,7 +333,7 @@ function parseChooseBody(
   pos: { value: number },
   offset: number,
 ): AstNode {
-  const whens: { test: string; children: AstNode[] }[] = [];
+  const whens: { test: string; testOffset?: number; children: AstNode[] }[] = [];
   let otherwise: AstNode[] | undefined;
 
   while (pos.value < template.length) {
@@ -345,10 +361,14 @@ function parseChooseBody(
         tagStart,
         "when",
       );
-      const test = requireAttr(attrs, "test", "when", tagStart);
+      const testAttr = requireAttr(attrs, "test", "when", tagStart);
       pos.value = bodyStart;
       const children = parseChildren(template, pos, "when");
-      whens.push({ test, children });
+      whens.push({
+        test: testAttr.value,
+        testOffset: testAttr.valueOffset,
+        children,
+      });
       continue;
     }
 

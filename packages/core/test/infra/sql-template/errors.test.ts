@@ -29,11 +29,14 @@ describe("errors", () => {
   });
 
   it("#15 EXPRESSION_ERROR for invalid test", () => {
+    const template = '<if test=")">x</if>';
+    const testOffset = template.indexOf('test="') + 'test="'.length - 1;
     assert.throws(
-      () => parser.parse('<if test=")">x</if>', {}),
+      () => parser.parse(template, {}),
       (err: unknown) => {
         assert.ok(err instanceof SqlTemplateError);
         assert.equal(err.code, "EXPRESSION_ERROR");
+        assert.equal(err.offset, testOffset);
         return true;
       },
     );

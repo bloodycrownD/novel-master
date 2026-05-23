@@ -64,7 +64,9 @@ export class TemplateEvaluator {
         break;
       }
       case "if":
-        if (evaluateTest(node.test, stack)) {
+        if (
+          evaluateTest(node.test, stack, { offset: node.testOffset })
+        ) {
           this.evaluateNodes(node.children, stack, state);
         }
         break;
@@ -117,7 +119,9 @@ export class TemplateEvaluator {
       }
       case "choose": {
         for (const when of node.whens) {
-          if (evaluateTest(when.test, stack)) {
+          if (
+            evaluateTest(when.test, stack, { offset: when.testOffset })
+          ) {
             this.evaluateNodes(when.children, stack, state);
             return;
           }

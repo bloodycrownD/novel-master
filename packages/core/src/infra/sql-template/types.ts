@@ -36,12 +36,12 @@ export interface TrimAttrs {
 export type AstNode =
   | { type: "text"; value: string }
   | { type: "bind"; kind: "hash" | "dollar"; path: string }
-  | { type: "if"; test: string; children: AstNode[] }
+  | { type: "if"; test: string; testOffset?: number; children: AstNode[] }
   | { type: "where"; children: AstNode[] }
   | { type: "foreach"; attrs: ForeachAttrs; children: AstNode[] }
   | { type: "trim"; attrs: TrimAttrs; children: AstNode[] }
   | {
       type: "choose";
-      whens: { test: string; children: AstNode[] }[];
+      whens: { test: string; testOffset?: number; children: AstNode[] }[];
       otherwise?: AstNode[];
     };
