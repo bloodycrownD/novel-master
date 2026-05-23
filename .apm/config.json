@@ -1,0 +1,20 @@
+{
+  "limits": {
+    "role": {
+      "min": 50,
+      "max": 400
+    },
+    "persist": {
+      "min": 100,
+      "max": 2000
+    },
+    "dynamicDetail": {
+      "min": 100,
+      "max": 2000
+    },
+    "kbDynamicDetail": {
+      "min": 100,
+      "max": 2000
+    }
+  }
+}
