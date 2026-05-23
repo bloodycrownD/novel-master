@@ -53,3 +53,18 @@ export type {
   OpenOptions,
   ParsedTdbcUrl,
 } from "./infra/tdbc/index.js";
+
+/**
+ * Virtual file system: path-keyed content with optimistic versioning.
+ */
+export { VfsError } from "./errors/vfs-errors.js";
+export type { VfsErrorCode } from "./errors/vfs-errors.js";
+export type { VfsEntry, VfsStorageKind } from "./domain/vfs/model/vfs-entry.js";
+export { bootstrapVfs } from "./bootstrap/vfs/vfs-bootstrap.js";
+export { createVfsService } from "./service/vfs/create-vfs-service.js";
+export type {
+  VfsService,
+  VfsReadResult,
+  WriteOptions,
+  VfsGrepMatch,
+} from "./service/vfs/vfs.port.js";

@@ -22,6 +22,7 @@
     "test": "tsx --test test/**/*.test.ts"
   },
   "devDependencies": {
+    "@novel-master/tdbc-driver-better-sqlite3": "*",
     "tsx": "^4.21.0"
   }
 }
