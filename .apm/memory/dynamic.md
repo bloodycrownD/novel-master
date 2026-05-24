@@ -1,5 +1,9 @@
 ---
 createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-05-23 22:16:49'
+updatedAt: '2026-05-24 22:00:00'
 ---
-2026-05-23: TDBC merged to main (HEAD e2710b1). Packages: core infra/tdbc, tdbc-conformance, tdbc-driver-better-sqlite3, tdbc-driver-rn. feature/tdbc branch deleted. SqlTemplateParser + TDBC stack on main.
+2026-05-24: prompt-engine 已合并 main（feature/prompt-engine → main）。含 YAML blocks、宏替换（`.worktree`/`$.time`/`$.week_cn`）、`nm prompt render`；CLI 捕获见 kb `Iterations/prompt-engine/test/prompt-cli.md`。
+
+2026-05-24: virtual-worktree 已合并 main（HEAD dc3abe4）。含 worktree dir/file/list/display、project|session template pull、session 创建继承 worktree；CLI 捕获见 kb Iterations/virtual-worktree/test/worktree-cli.md。
+
+下一步：push 到 GitHub；新迭代前 `apm read`。跑 CLI 测试前勿残留环境变量 `NOVEL_MASTER_DB`（会覆盖 `--db`）。
