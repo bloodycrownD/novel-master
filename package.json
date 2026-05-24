@@ -17,7 +17,9 @@
     "vfs:sync": "node scripts/vfs-test-sync/dist/main.js",
     "vfs:watch": "node scripts/vfs-test-sync/dist/main.js watch --mirror ./tmp/mirror",
     "vfs:push": "node scripts/vfs-test-sync/dist/main.js push --mirror ./tmp/mirror",
-    "vfs:pull": "node scripts/vfs-test-sync/dist/main.js pull --mirror ./tmp/mirror"
+    "vfs:pull": "node scripts/vfs-test-sync/dist/main.js pull --mirror ./tmp/mirror",
+    "mobile:start": "npm run start -w @novel-master/mobile",
+    "mobile:android": "npm run android -w @novel-master/mobile"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

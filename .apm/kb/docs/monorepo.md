@@ -7,6 +7,7 @@
 | `packages/core` | `@novel-master/core` | TDBC、SqlTemplateParser、**VFS**（`VfsService`） |
 | `packages/tdbc-driver-*` | 各 driver | better-sqlite3、RN 等 |
 | `apps/cli` | `@novel-master/cli` | CLI：`novel-master` / **`nm`**（`npm link`） |
+| `apps/mobile` | `@novel-master/mobile` | RN 脚手架：设备端 VFS 开发验证页（Android Debug） |
 | `scripts/vfs-test-sync` | `@novel-master/vfs-test-sync` | dev-only：VFS ↔ 本地目录 force 同步 |
 
 ## 根脚本
@@ -19,6 +20,8 @@
 | `npm run vfs:watch` | watch 同步，默认镜像 `./tmp/mirror` |
 | `npm run vfs:push` / `vfs:pull` | force 全量 push/pull |
 | `npm run vfs:sync -- …` | 自定义参数：`push` / `pull` / `watch` |
+| `npm run mobile:start` | Metro for `@novel-master/mobile` |
+| `npm run mobile:android` | `run-android` for `@novel-master/mobile` |
 
 ## VFS 开发速查
 
