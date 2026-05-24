@@ -20,24 +20,25 @@ React Native app scaffold for monorepo VFS validation on device (Android Debug).
 
 ### Android SDK path (required once per machine)
 
-Gradle needs your SDK location. Use **either**:
+Gradle needs your SDK location. **Three layers** (any one is enough for Gradle; adb needs PATH):
 
-**A. `local.properties`** (recommended; same as banzhu):
+| 方式 | 作用 |
+|------|------|
+| **`android/local.properties`** | Gradle 读 `sdk.dir`（本机已 gitignore，见 `local.properties.example`） |
+| **Windows 用户环境变量** | `ANDROID_HOME` + `platform-tools`/`emulator` 在 Path（持久，新开终端生效） |
+| **PowerShell Profile** | 每个 PS 会话自动 `$env:ANDROID_HOME` 与 Path（见 `Documents\PowerShell\Microsoft.PowerShell_profile.ps1`） |
+| **`.vscode/settings.json`** | Cursor 集成终端注入 `ANDROID_HOME`（本仓库已配置） |
+
+**A. `local.properties`**（与 banzhu 相同，Gradle 最稳）:
 
 ```bash
 cp apps/mobile/android/local.properties.example apps/mobile/android/local.properties
-# Edit sdk.dir= to your SDK (Android Studio default on Windows):
 # sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
 ```
 
-**B. Environment variable** (PowerShell profile or session):
+**B. 新开终端后** 无需再手动 `$env:ANDROID_HOME=...`（已写入用户级变量 + Profile）。
 
-```powershell
-$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
-$env:Path += ";$env:ANDROID_HOME\platform-tools"
-```
-
-If build fails with `SDK location not found`, you are missing A or B.
+若仍报 `SDK location not found`，确认 `local.properties` 存在且路径正确。
 
 ## Build order
 
