@@ -92,13 +92,15 @@ adb logcat *:S ReactNative:V ReactNativeJS:V
 
 **注意**：若开启 Chrome 远程调试，quick-sqlite（JSI）会失败；请用 on-device 调试。
 
+若报 `quick-sqlite is not installed or failed to load`：先 `npm run mobile:start -- --reset-cache`，再 `npm run mobile:android` 重装（需 Metro 把 native 模块打进 bundle）。
+
 ## VFS dev screen
 
 1. Launch the app; home shows **VFS initializing…** until bootstrap completes.
 2. Tap **Open VFS dev screen** for list / read / write / replace / delete / glob.
 3. Use VFS paths starting with `/` (e.g. `/dev/note.md`).
 
-Device DB name: `novel-master-vfs` (quick-sqlite app-private storage). This is **not** the CLI file `.novel-master/novel.db`.
+Device DB name: `novel_master_vfs` (quick-sqlite app-private storage). This is **not** the CLI file `.novel-master/novel.db`.
 
 ### CLI对照 (same semantics, different DB)
 

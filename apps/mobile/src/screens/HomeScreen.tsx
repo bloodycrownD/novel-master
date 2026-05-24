@@ -14,7 +14,7 @@ export function HomeScreen({onOpenVfs, vfsReady, vfsError}: Props) {
       <Text style={styles.title}>Novel Master</Text>
       <Text style={styles.body}>
         Mobile scaffold for workspace VFS validation. The on-device database (
-        novel-master-vfs) is separate from the CLI database under
+        novel_master_vfs) is separate from the CLI database under
         .novel-master/novel.db; operations share the same API semantics.
       </Text>
       {!vfsReady && !vfsError && (
