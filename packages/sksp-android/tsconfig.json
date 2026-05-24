@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "lib": ["ES2022"]
+  },
+  "include": ["src/**/*"],
+  "references": [
+    { "path": "../sksp" },
+    { "path": "../core" }
+  ]
+}

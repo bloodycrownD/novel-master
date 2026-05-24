@@ -9,11 +9,13 @@
     "lint": "eslint .",
     "start": "react-native start",
     "test": "jest",
-    "prestart": "npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn",
-    "preandroid": "npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn"
+    "prestart": "npm run build -w @novel-master/core -w @novel-master/sksp -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn",
+    "preandroid": "npm run build -w @novel-master/core -w @novel-master/sksp -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn"
   },
   "dependencies": {
     "@novel-master/core": "*",
+    "@novel-master/sksp": "*",
+    "@novel-master/sksp-android": "*",
     "@novel-master/tdbc-driver-rn": "*",
     "react": "19.2.3",
     "react-native": "0.85.3",

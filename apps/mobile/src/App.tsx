@@ -6,10 +6,11 @@ import {StatusBar, StyleSheet, useColorScheme, View} from 'react-native';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {HomeScreen} from './screens/HomeScreen';
 import {VfsDevScreen} from './screens/VfsDevScreen';
+import {SkspDevScreen} from './screens/SkspDevScreen';
 import {formatVfsError} from './vfs/errors';
 import {getVfs} from './vfs/runtime';
 
-type Screen = 'home' | 'vfs';
+type Screen = 'home' | 'vfs' | 'sksp';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -42,11 +43,14 @@ function App() {
         {screen === 'home' ? (
           <HomeScreen
             onOpenVfs={() => setScreen('vfs')}
+            onOpenSksp={() => setScreen('sksp')}
             vfsReady={vfsReady}
             vfsError={vfsError}
           />
-        ) : (
+        ) : screen === 'vfs' ? (
           <VfsDevScreen onBack={() => setScreen('home')} />
+        ) : (
+          <SkspDevScreen onBack={() => setScreen('home')} />
         )}
       </View>
     </SafeAreaProvider>

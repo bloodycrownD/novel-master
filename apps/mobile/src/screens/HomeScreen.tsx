@@ -3,12 +3,13 @@ import {Button, StyleSheet, Text, View} from 'react-native';
 
 type Props = {
   onOpenVfs: () => void;
+  onOpenSksp: () => void;
   vfsReady: boolean;
   vfsError: string | null;
 };
 
 /** Entry screen: explains device DB vs CLI and links to the VFS dev page. */
-export function HomeScreen({onOpenVfs, vfsReady, vfsError}: Props) {
+export function HomeScreen({onOpenVfs, onOpenSksp, vfsReady, vfsError}: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Novel Master</Text>
@@ -28,6 +29,12 @@ export function HomeScreen({onOpenVfs, vfsReady, vfsError}: Props) {
       <Button
         title="Open VFS dev screen"
         onPress={onOpenVfs}
+        disabled={!vfsReady}
+      />
+      <View style={styles.gap} />
+      <Button
+        title="Open SKSP dev screen"
+        onPress={onOpenSksp}
         disabled={!vfsReady}
       />
     </View>
@@ -60,4 +67,5 @@ const styles = StyleSheet.create({
     color: '#b00020',
     marginBottom: 12,
   },
+  gap: {height: 12},
 });
