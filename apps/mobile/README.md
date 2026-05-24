@@ -18,6 +18,27 @@ React Native app scaffold for monorepo VFS validation on device (Android Debug).
 - JDK 17+ and Android SDK (API 34+ recommended)
 - Android emulator or USB device with debugging enabled
 
+### Android SDK path (required once per machine)
+
+Gradle needs your SDK location. Use **either**:
+
+**A. `local.properties`** (recommended; same as banzhu):
+
+```bash
+cp apps/mobile/android/local.properties.example apps/mobile/android/local.properties
+# Edit sdk.dir= to your SDK (Android Studio default on Windows):
+# sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
+```
+
+**B. Environment variable** (PowerShell profile or session):
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:Path += ";$env:ANDROID_HOME\platform-tools"
+```
+
+If build fails with `SDK location not found`, you are missing A or B.
+
 ## Build order
 
 Workspace packages must be compiled before Metro bundles them:

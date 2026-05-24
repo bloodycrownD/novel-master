@@ -1,0 +1,5 @@
+# Copy to local.properties (gitignored) and set your Android SDK path.
+# Windows example:
+sdk.dir=C\:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
+#
+# Or set ANDROID_HOME / ANDROID_SDK_ROOT instead of this file.
