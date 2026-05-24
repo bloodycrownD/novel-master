@@ -4,6 +4,7 @@
  * @module domain/worktree/worktree-display
  */
 
+import { formatLocalDateTime } from "../../infra/date-format.js";
 import type { DisplayState } from "./model/worktree-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
 
@@ -18,9 +19,7 @@ function escapeXmlAttr(value: string): string {
  * Formats epoch ms as local `yyyy-MM-dd HH:mm:ss`.
  */
 export function formatLocalMtime(mtimeMs: number): string {
-  const d = new Date(mtimeMs);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  return formatLocalDateTime(mtimeMs);
 }
 
 function basename(logicalPath: string): string {

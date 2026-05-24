@@ -151,3 +151,19 @@ export { createWorktreeService } from "./service/worktree/create-worktree-servic
 export type { WorktreeService } from "./service/worktree/worktree.port.js";
 export { createTemplatePullService } from "./service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "./service/template/template-pull.port.js";
+
+/**
+ * Prompt engine: YAML blocks, macros, and plain-text rendering.
+ */
+export { PromptError } from "./errors/prompt-errors.js";
+export type { PromptErrorCode } from "./errors/prompt-errors.js";
+export type {
+  PromptBlock,
+  PromptBlockRole,
+} from "./domain/prompt/model/prompt-block.js";
+export { messageBodyText } from "./domain/prompt/message-body.js";
+export { validatePromptBlocks } from "./domain/prompt/prompt-blocks-validate.js";
+export { parsePromptYaml } from "./infra/prompt-yaml/parse-prompt-yaml.js";
+export { renderPromptToText } from "./service/prompt/render-prompt.js";
+export type { PromptRenderContext } from "./service/prompt/render-prompt.js";
+export { formatLocalDateTime } from "./infra/date-format.js";

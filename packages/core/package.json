@@ -21,6 +21,9 @@
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "test": "tsx --tsconfig tsconfig.test.json --test test/**/*.test.ts"
   },
+  "dependencies": {
+    "yaml": "^2.8.2"
+  },
   "devDependencies": {
     "@novel-master/tdbc-driver-better-sqlite3": "*",
     "tsc-alias": "^1.8.10",
