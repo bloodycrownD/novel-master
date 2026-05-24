@@ -5,7 +5,7 @@
 | 路径 | 包名 | 说明 |
 |------|------|------|
 | `packages/core` | `@novel-master/core` | TDBC、SqlTemplateParser、**VFS**（`VfsService`） |
-| `packages/tdbc-driver-*` | 各 driver | better-sqlite3、RN 等 |
+| `packages/tdbc-driver-*` | 各 driver | better-sqlite3、RN 等（RN App 用 `@novel-master/tdbc-driver-rn/native`） |
 | `apps/cli` | `@novel-master/cli` | CLI：`novel-master` / **`nm`**（`npm link`） |
 | `apps/mobile` | `@novel-master/mobile` | RN 脚手架：设备端 VFS 开发验证页（Android Debug） |
 | `scripts/vfs-test-sync` | `@novel-master/vfs-test-sync` | dev-only：VFS ↔ 本地目录 force 同步 |
