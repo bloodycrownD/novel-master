@@ -28,13 +28,17 @@
 - **DB 默认**：`./.novel-master/novel.db`（已 `.gitignore`，不进仓库）
 - **镜像目录**：`./tmp/mirror`（已 `.gitignore`）
 - **Node**：`.nvmrc` 为 `22.22.0`（与 Cursor / `better-sqlite3` 预编译一致）；`nvm use` 后 `npm rebuild better-sqlite3`
-- **CLI**：
+- **CLI**（全局 VFS 仅 `/template/…` 逻辑路径）：
   ```bash
   npm run link:cli
-  nm vfs write /path --text "hello"
-  nm vfs read /path
-  nm vfs list / -r
-  nm vfs replace /path --old a --new b
+  nm vfs write /template/foo.md --text "hello"
+  nm vfs read /template/foo.md
+  nm project create --name "My Project"
+  nm session create --project <projectId>
+  nm message append --session <sessionId> --role user --content "hi"
+  nm kkv set --module app --key cfg --value "{}"
+  nm project vfs list /template --project <projectId>
+  nm session vfs list / --project <projectId> --session <sessionId>
   ```
 - **同步脚本**：`npm run vfs:watch`（stderr 会打印 `watch started`）
 

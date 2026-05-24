@@ -34,9 +34,9 @@ describe("sync-engine", () => {
   it("T1: push writes VFS content to disk", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await withTempMirror(async (_root, config) => {
-      await vfs.write("/a.md", "from-vfs");
+      await vfs.write("/template/a.md", "from-vfs");
       await push(vfs, config);
-      const disk = await readFile(join(config.mirrorRoot, "a.md"), "utf8");
+      const disk = await readFile(join(config.mirrorRoot, "template", "a.md"), "utf8");
       assert.equal(disk, "from-vfs");
     });
     await conn.close();
@@ -45,11 +45,11 @@ describe("sync-engine", () => {
   it("T2: push deletes disk orphans", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await withTempMirror(async (root, config) => {
-      await vfs.write("/keep.md", "keep");
+      await vfs.write("/template/keep.md", "keep");
       await mkdir(root, { recursive: true });
       await writeFile(join(root, "orphan.md"), "gone", "utf8");
       await push(vfs, config);
-      const keep = await readFile(join(root, "keep.md"), "utf8");
+      const keep = await readFile(join(root, "template", "keep.md"), "utf8");
       assert.equal(keep, "keep");
       await assert.rejects(() => readFile(join(root, "orphan.md"), "utf8"));
     });
@@ -71,7 +71,7 @@ describe("sync-engine", () => {
   it("T4: pull deletes VFS orphans", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await withTempMirror(async (root, config) => {
-      await vfs.write("/d.md", "stale");
+      await vfs.write("/template/d.md", "stale");
       await mkdir(root, { recursive: true });
       await pull(vfs, config);
       await assert.rejects(() => vfs.read("/d.md"));
@@ -82,7 +82,7 @@ describe("sync-engine", () => {
   it("T5: push then disk edit then pull round-trips", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await withTempMirror(async (root, config) => {
-      await vfs.write("/round.md", "v1");
+      await vfs.write("/template/round.md", "v1");
       await push(vfs, config);
       await writeFile(join(root, "round.md"), "v2-disk", "utf8");
       await pull(vfs, config);
@@ -126,7 +126,7 @@ describe("sync-engine", () => {
       pollMs: 500,
     };
     try {
-      await vfs.write("/a.md", "content");
+      await vfs.write("/template/a.md", "content");
       await writeFile(mirrorRoot, "not-a-directory", "utf8");
       await assert.rejects(() => push(vfs, config), MirrorError);
     } finally {

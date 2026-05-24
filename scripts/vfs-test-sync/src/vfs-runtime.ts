@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
-  bootstrapVfs,
+  bootstrapNovelMaster,
   createVfsService,
   open,
   type TdbcConnection,
@@ -42,7 +42,7 @@ export async function createVfsRuntime(argv: readonly string[]): Promise<{
   await mkdir(dirname(dbPath), { recursive: true });
   const url = `tdbc:sqlite:file:${dbPath}`;
   const conn = await open(url, { driver: "better-sqlite3" });
-  await bootstrapVfs(conn);
+  await bootstrapNovelMaster(conn);
   const vfs = createVfsService(conn);
   return { vfs, conn };
 }

@@ -1,0 +1,46 @@
+/**
+ * `nm project vfs` subcommands.
+ *
+ * @module project/vfs
+ */
+
+import type { VfsService } from "@novel-master/core";
+import { runDelete } from "../vfs/commands/delete.js";
+import { runGlob } from "../vfs/commands/glob.js";
+import { runGrep } from "../vfs/commands/grep.js";
+import { runList } from "../vfs/commands/list.js";
+import { runRead } from "../vfs/commands/read.js";
+import { runReplace } from "../vfs/commands/replace.js";
+import { runWrite } from "../vfs/commands/write.js";
+import { parseCliArgs } from "../vfs/parse-args.js";
+
+const PROJECT_VFS_COMMANDS: Record<
+  string,
+  (vfs: VfsService, args: readonly string[]) => Promise<void>
+> = {
+  list: runList,
+  read: runRead,
+  write: runWrite,
+  replace: runReplace,
+  glob: runGlob,
+  grep: runGrep,
+  delete: runDelete,
+};
+
+export async function runProjectVfs(
+  projectVfs: (projectId: string) => VfsService,
+  projectId: string,
+  args: readonly string[],
+): Promise<void> {
+  const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
+  const { positional } = parseCliArgs(vfsRest);
+  const sub = positional[0];
+  if (sub == null || !(sub in PROJECT_VFS_COMMANDS)) {
+    throw new Error(
+      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete> ...",
+    );
+  }
+  const vfs = projectVfs(projectId);
+  const idx = vfsRest.indexOf(sub);
+  await PROJECT_VFS_COMMANDS[sub]!(vfs, vfsRest.slice(idx + 1));
+}
