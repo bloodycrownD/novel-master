@@ -1,10 +1,15 @@
 /**
- * SQLite implementation of {@link VfsEntryRepository}.
+ * SQLite implementation of {@link VfsEntryRepository} via SqlTemplateParser.
  *
  * @module domain/vfs/repositories/impl/sqlite-vfs-entry.repository
  */
 
 import type { TdbcConnection } from "../../../../infra/tdbc/connection.js";
+import { SqlTemplateParser } from "../../../../infra/sql-template/index.js";
+import {
+  executeTemplate,
+  queryTemplate,
+} from "../../../../infra/tdbc/template-helper.js";
 import type { Row } from "../../../../infra/tdbc/types.js";
 import {
   vfsConflict,
@@ -50,14 +55,18 @@ function escapeLike(value: string): string {
  * TDBC-backed vfs_entry repository.
  */
 export class SqliteVfsEntryRepository implements VfsEntryRepository {
+  private readonly parser = new SqlTemplateParser();
+
   constructor(private readonly conn: TdbcConnection) {}
 
   async list(dir: string, options?: VfsListOptions): Promise<string[]> {
     const normalizedDir = normalizePath(dir);
     const likePattern = listPrefix(normalizedDir);
-    const rows = await this.conn.query<{ path: string }>(
-      `SELECT path FROM vfs_entry WHERE path LIKE ? ESCAPE '\\'`,
-      [likePattern],
+    const rows = await queryTemplate<{ path: string }>(
+      this.conn,
+      this.parser,
+      `SELECT path FROM vfs_entry WHERE path LIKE #{likePattern} ESCAPE '\\'`,
+      { likePattern },
     );
 
     const recursive = options?.recursive === true;
@@ -89,10 +98,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async findByPath(path: string): Promise<VfsEntry | null> {
     const normalized = normalizePath(path);
-    const rows = await this.conn.query(
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
       `SELECT path, content, version, mtime_ms, storage_kind, external_uri
-       FROM vfs_entry WHERE path = ?`,
-      [normalized],
+       FROM vfs_entry WHERE path = #{path}`,
+      { path: normalized },
     );
     if (rows.length === 0) {
       return null;
@@ -103,10 +114,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   async insert(path: string, content: string): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
-    await this.conn.execute(
+    await executeTemplate(
+      this.conn,
+      this.parser,
       `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind)
-       VALUES (?, ?, 1, ?, 'inline')`,
-      [normalized, content, mtimeMs],
+       VALUES (#{path}, #{content}, 1, #{mtimeMs}, 'inline')`,
+      { path: normalized, content, mtimeMs },
     );
     return { version: 1 };
   }
@@ -121,16 +134,20 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
     if (options.versionCheck) {
       const expectedVersion = options.expectedVersion!;
-      const result = await this.conn.execute(
+      const result = await executeTemplate(
+        this.conn,
+        this.parser,
         `UPDATE vfs_entry
-         SET content = ?, version = version + 1, mtime_ms = ?
-         WHERE path = ? AND version = ?`,
-        [content, mtimeMs, normalized, expectedVersion],
+         SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
+         WHERE path = #{path} AND version = #{expectedVersion}`,
+        { content, mtimeMs, path: normalized, expectedVersion },
       );
       if (result.changes === 0) {
-        const rows = await this.conn.query<{ version: number }>(
-          `SELECT version FROM vfs_entry WHERE path = ?`,
-          [normalized],
+        const rows = await queryTemplate<{ version: number }>(
+          this.conn,
+          this.parser,
+          `SELECT version FROM vfs_entry WHERE path = #{path}`,
+          { path: normalized },
         );
         if (rows.length === 0) {
           throw vfsNotFound(normalized);
@@ -142,20 +159,24 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         );
       }
     } else {
-      const result = await this.conn.execute(
+      const result = await executeTemplate(
+        this.conn,
+        this.parser,
         `UPDATE vfs_entry
-         SET content = ?, version = version + 1, mtime_ms = ?
-         WHERE path = ?`,
-        [content, mtimeMs, normalized],
+         SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
+         WHERE path = #{path}`,
+        { content, mtimeMs, path: normalized },
       );
       if (result.changes === 0) {
         throw vfsNotFound(normalized);
       }
     }
 
-    const rows = await this.conn.query<{ version: number }>(
-      `SELECT version FROM vfs_entry WHERE path = ?`,
-      [normalized],
+    const rows = await queryTemplate<{ version: number }>(
+      this.conn,
+      this.parser,
+      `SELECT version FROM vfs_entry WHERE path = #{path}`,
+      { path: normalized },
     );
     return { version: Number(rows[0]!.version) };
   }
@@ -165,17 +186,21 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const escaped = escapeLike(normalized);
 
     if (!options.recursive) {
-      const childRows = await this.conn.query(
-        `SELECT 1 FROM vfs_entry WHERE path LIKE ? ESCAPE '\\' LIMIT 1`,
-        [`${escaped}/%`],
+      const childRows = await queryTemplate(
+        this.conn,
+        this.parser,
+        `SELECT 1 FROM vfs_entry WHERE path LIKE #{childPattern} ESCAPE '\\' LIMIT 1`,
+        { childPattern: `${escaped}/%` },
       );
       if (childRows.length > 0) {
         throw vfsDirectoryNotEmpty(normalized);
       }
 
-      const result = await this.conn.execute(
-        `DELETE FROM vfs_entry WHERE path = ?`,
-        [normalized],
+      const result = await executeTemplate(
+        this.conn,
+        this.parser,
+        `DELETE FROM vfs_entry WHERE path = #{path}`,
+        { path: normalized },
       );
       if (result.changes === 0) {
         throw vfsNotFound(normalized);
@@ -183,9 +208,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       return;
     }
 
-    const result = await this.conn.execute(
-      `DELETE FROM vfs_entry WHERE path = ? OR path LIKE ? ESCAPE '\\'`,
-      [normalized, `${escaped}/%`],
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM vfs_entry WHERE path = #{path} OR path LIKE #{childPattern} ESCAPE '\\'`,
+      { path: normalized, childPattern: `${escaped}/%` },
     );
     if (result.changes === 0) {
       throw vfsNotFound(normalized);
@@ -193,8 +220,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async listAllPaths(): Promise<string[]> {
-    const rows = await this.conn.query<{ path: string }>(
+    const rows = await queryTemplate<{ path: string }>(
+      this.conn,
+      this.parser,
       `SELECT path FROM vfs_entry ORDER BY path`,
+      {},
     );
     return rows.map((row) => String(row.path));
   }
@@ -203,8 +233,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     pathPrefix?: string,
   ): Promise<ReadonlyArray<{ path: string; content: string }>> {
     if (pathPrefix == null) {
-      const rows = await this.conn.query<{ path: string; content: string }>(
+      const rows = await queryTemplate<{ path: string; content: string }>(
+        this.conn,
+        this.parser,
         `SELECT path, content FROM vfs_entry`,
+        {},
       );
       return rows.map((row) => ({
         path: String(row.path),
@@ -214,10 +247,12 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
     const normalized = normalizePath(pathPrefix);
     const escaped = escapeLike(normalized);
-    const rows = await this.conn.query<{ path: string; content: string }>(
+    const rows = await queryTemplate<{ path: string; content: string }>(
+      this.conn,
+      this.parser,
       `SELECT path, content FROM vfs_entry
-       WHERE path = ? OR path LIKE ? ESCAPE '\\'`,
-      [normalized, `${escaped}/%`],
+       WHERE path = #{path} OR path LIKE #{childPattern} ESCAPE '\\'`,
+      { path: normalized, childPattern: `${escaped}/%` },
     );
     return rows.map((row) => ({
       path: String(row.path),
