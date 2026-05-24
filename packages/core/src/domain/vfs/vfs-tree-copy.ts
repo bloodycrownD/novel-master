@@ -62,6 +62,19 @@ export async function copyVfsTree(
 }
 
 /**
+ * Replaces the target VFS subtree: delete `toPrefix` then copy from `fromPrefix`.
+ */
+export async function replaceVfsSubtree(
+  repo: VfsEntryRepository,
+  fromPrefix: string,
+  toPrefix: string,
+  options?: { mapPath?: (relative: string) => string },
+): Promise<void> {
+  await deleteVfsPrefix(repo, toPrefix);
+  await copyVfsTree(repo, fromPrefix, toPrefix, options);
+}
+
+/**
  * Deletes all vfs entries under a physical prefix.
  */
 export async function deleteVfsPrefix(

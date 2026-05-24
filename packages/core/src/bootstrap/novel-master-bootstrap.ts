@@ -9,6 +9,7 @@ import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
+import { WORKTREE_SCHEMA_STATEMENTS } from "./worktree/worktree-schema.js";
 
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -16,10 +17,11 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...KKV_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
+  ...WORKTREE_SCHEMA_STATEMENTS,
 ];
 
 /**
- * Ensures VFS, KKV, chat, and session-fs tables exist. Safe to call multiple times.
+ * Ensures VFS, KKV, chat, session-fs, and worktree tables exist. Safe to call multiple times.
  *
  * @param conn - Open TDBC connection
  */
