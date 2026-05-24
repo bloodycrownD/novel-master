@@ -5,6 +5,7 @@
  */
 
 import type { NovelMasterRuntime } from "../runtime.js";
+import { resolveProjectUseId } from "../config/resolve-entity.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runProject(
@@ -37,15 +38,22 @@ export async function runProject(
       return;
     }
     case "use": {
-      const id = flags.get("project");
-      if (typeof id !== "string") {
-        throw new Error("Usage: nm project use --project <id>");
-      }
-      await rt.projects.get(id);
+      const id = await resolveProjectUseId(rt.projects, flags);
       await rt.setCliContext({
         currentProjectId: id,
         currentSessionId: undefined,
       });
+      return;
+    }
+    case "current": {
+      const id = rt.scope.getConfigSnapshot().currentProjectId;
+      if (id == null || id === "") {
+        throw new Error(
+          "No current project (run: nm project use --project <id> or --name <name>)",
+        );
+      }
+      const p = await rt.projects.get(id);
+      console.log(`${p.id}\t${p.name}`);
       return;
     }
     case "delete": {
@@ -67,7 +75,7 @@ export async function runProject(
     }
     default:
       throw new Error(
-        "Usage: nm project <list|create|use|delete|copy|vfs> ...",
+        "Usage: nm project <list|create|use|current|delete|copy|vfs> ...",
       );
   }
 }

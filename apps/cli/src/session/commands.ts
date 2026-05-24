@@ -5,6 +5,7 @@
  */
 
 import type { VfsService } from "@novel-master/core";
+import { resolveSessionUseId } from "../config/resolve-entity.js";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runGlob } from "../vfs/commands/glob.js";
@@ -62,15 +63,28 @@ export async function runSession(
       return;
     }
     case "use": {
-      const id = flags.get("session");
-      if (typeof id !== "string") {
-        throw new Error("Usage: nm session use --session <id>");
-      }
+      const config = deps.scope.getConfigSnapshot();
+      const id = await resolveSessionUseId(
+        deps.sessions,
+        flags,
+        config.currentProjectId,
+      );
       const session = await deps.sessions.get(id);
       await deps.setCliContext({
         currentProjectId: session.projectId,
         currentSessionId: id,
       });
+      return;
+    }
+    case "current": {
+      const id = deps.scope.getConfigSnapshot().currentSessionId;
+      if (id == null || id === "") {
+        throw new Error(
+          "No current session (run: nm session use --session <id> or --title <title>)",
+        );
+      }
+      const s = await deps.sessions.get(id);
+      console.log(`${s.id}\t${s.title ?? ""}`);
       return;
     }
     case "delete": {
@@ -94,7 +108,7 @@ export async function runSession(
     }
     default:
       throw new Error(
-        "Usage: nm session <list|create|use|delete|copy|vfs> ...",
+        "Usage: nm session <list|create|use|current|delete|copy|vfs> ...",
       );
   }
 }

@@ -234,6 +234,43 @@ describe("CLI config context e2e", () => {
     }
   });
 
+  it("T10: project use --name and project current", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm(["project", "create", "--name", "ByName", "--db", dbPath]);
+      const use = runNm(["project", "use", "--name", "ByName", "--db", dbPath]);
+      assert.equal(use.status, 0, use.stderr);
+
+      const current = runNm(["project", "current", "--db", dbPath]);
+      assert.equal(current.status, 0, current.stderr);
+      const [id, name] = current.stdout.trim().split("\t");
+      assert.equal(name, "ByName");
+      assert.ok(id.length > 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("T11: session use --title and session current", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm(["project", "create", "--name", "P", "--db", dbPath]);
+      runNm(["session", "create", "--title", "Main", "--db", dbPath]);
+      const use = runNm(["session", "use", "--title", "Main", "--db", dbPath]);
+      assert.equal(use.status, 0, use.stderr);
+
+      const current = runNm(["session", "current", "--db", dbPath]);
+      assert.equal(current.status, 0, current.stderr);
+      const [id, title] = current.stdout.trim().split("\t");
+      assert.equal(title, "Main");
+      assert.ok(id.length > 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("T9: message list without config session fails with use hint", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
     const dbPath = join(dir, "novel.db");
