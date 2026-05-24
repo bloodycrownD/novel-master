@@ -76,10 +76,11 @@ export class DefaultWorktreeService implements WorktreeService {
       worktreeScopeKey(this.scope),
       logicalPath,
     );
+    // Any save without explicit --rule off enables rules (do not preserve prior rule_off).
     const rule: WorktreeDirRule = {
       scopeKey: worktreeScopeKey(this.scope),
       logicalPath,
-      ruleEnabled: input.ruleEnabled ?? existing?.ruleEnabled ?? true,
+      ruleEnabled: input.ruleEnabled === false ? false : true,
       sortField: input.sortField ?? existing?.sortField ?? "name",
       sortOrder: input.sortOrder ?? existing?.sortOrder ?? "asc",
       headCount: input.headCount ?? existing?.headCount ?? 0,
@@ -250,10 +251,8 @@ export class DefaultWorktreeService implements WorktreeService {
       }
     }
 
-    const subdirs = sortDirPaths(
-      directChildDirs(dirPath, ctx.allDirs),
-      ctx.dirRuleMap,
-    );
+    // Sibling dirs: parent dir rule controls order (not each child's own rule).
+    const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
     for (const sub of subdirs) {
       await this.walkDir(ctx, sub, listRows, displayBlocks);
     }

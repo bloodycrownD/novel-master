@@ -125,21 +125,20 @@ export function evaluateFileDisplay(params: {
 }
 
 /**
- * Sorts directory paths for sibling ordering (uses each dir's own rule or defaults).
+ * Sorts sibling directory paths using the parent directory's rule (name + order).
  */
 export function sortDirPaths(
   paths: readonly string[],
-  dirRules: ReadonlyMap<string, WorktreeDirRule>,
+  parentDirRule: WorktreeDirRule | null,
 ): string[] {
+  const sortOrder: SortOrder = parentDirRule?.sortOrder ?? "asc";
   const sorted = [...paths];
   sorted.sort((a, b) => {
-    const ruleA = dirRules.get(a) ?? null;
-    const orderA = ruleA?.sortOrder ?? "asc";
-    const nameCmp = compareStrings(basename(a), basename(b), orderA);
+    const nameCmp = compareStrings(basename(a), basename(b), sortOrder);
     if (nameCmp !== 0) {
       return nameCmp;
     }
-    return compareStrings(a, b, orderA);
+    return compareStrings(a, b, sortOrder);
   });
   return sorted;
 }

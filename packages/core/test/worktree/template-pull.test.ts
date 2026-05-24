@@ -42,6 +42,25 @@ describe("template pull", () => {
     await ctx.conn.close();
   });
 
+  it("project pull does not change existing session vfs or messages", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    await ctx.projectVfs(project.id).write("/template/base.md", "BASE");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/only-in-session.md", "session-only");
+    await ctx.messages.append(session.id, "user", { content: "keep me" });
+
+    await ctx.globalVfs().write("/template/g.md", "G");
+    await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
+
+    const sessionPaths = await svfs.list("/", { recursive: true });
+    assert.deepEqual(sessionPaths.sort(), ["/base.md", "/only-in-session.md"]);
+    assert.equal((await svfs.read("/only-in-session.md")).content, "session-only");
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
+    await ctx.conn.close();
+  });
+
   it("project pull replaces vfs orphans and worktree from global", async () => {
     const ctx = await openNovelMasterTestConnection();
     const gvfs = ctx.globalVfs();

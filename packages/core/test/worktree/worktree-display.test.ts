@@ -15,6 +15,8 @@ describe("worktree display", () => {
       content: "",
     });
     assert.match(block, /path="\/template\/a&amp;b&quot;c\.md"/);
+    assert.match(block, /createdAt="[^"]+"/);
+    assert.match(block, /updatedAt="[^"]+"/);
   });
 
   it("parses valid front matter", () => {

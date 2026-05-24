@@ -58,9 +58,11 @@ export function renderFileBlock(params: {
   readonly content: string;
 }): string {
   const lines = contentLines(params.display, params.logicalPath, params.content);
+  const mtimeLocal = formatLocalMtime(params.mtimeMs);
   const attrs = [
     `path="${escapeXmlAttr(params.logicalPath)}"`,
-    `updatedAt="${escapeXmlAttr(formatLocalMtime(params.mtimeMs))}"`,
+    `createdAt="${escapeXmlAttr(mtimeLocal)}"`,
+    `updatedAt="${escapeXmlAttr(mtimeLocal)}"`,
     `updatedBy="user"`,
   ].join(" ");
   const body = lines.join("\n");
