@@ -19,4 +19,10 @@ export interface SessionService {
 
   /** Copies session VFS tree and all messages to a new session. */
   copy(id: string): Promise<ChatSession>;
+
+  /**
+   * Overwrites session VFS + worktree from project template;
+   * clears session-fs data but not messages.
+   */
+  pullTemplate(sessionId: string): Promise<void>;
 }

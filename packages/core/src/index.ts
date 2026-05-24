@@ -115,3 +115,39 @@ export type {
   SessionFsBatchSummary,
   SessionFsSnapshotSummary,
 } from "./service/session-fs/session-fs.port.js";
+
+/**
+ * Virtual worktree: display rules, list, and template inheritance.
+ */
+export type {
+  WorktreeScope,
+  RuleState,
+  InclusionMode,
+  DisplayState,
+  SortField,
+  SortOrder,
+  FillPolicy,
+  WorktreeListRow,
+  SetDirRuleInput,
+  SetFileRuleInput,
+} from "./domain/worktree/model/worktree-types.js";
+export {
+  mapProjectWorktreePathToSession,
+  mapSessionWorktreePathToProject,
+} from "./domain/worktree/worktree-path-map.js";
+export {
+  evaluateFileDisplay,
+  computeHeadTailIndices,
+  sortFilesForDir,
+} from "./domain/worktree/worktree-eval.js";
+export {
+  renderFileBlock,
+  joinFileBlocks,
+  formatLocalMtime,
+} from "./domain/worktree/worktree-display.js";
+export { parseMarkdownFrontMatter } from "./domain/worktree/front-matter.js";
+export { replaceVfsSubtree } from "./domain/vfs/vfs-tree-copy.js";
+export { createWorktreeService } from "./service/worktree/create-worktree-service.js";
+export type { WorktreeService } from "./service/worktree/worktree.port.js";
+export { createTemplatePullService } from "./service/template/create-template-pull-service.js";
+export type { TemplatePullService } from "./service/template/template-pull.port.js";

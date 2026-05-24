@@ -12,6 +12,10 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/vfs-tree-copy.js";
+import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
+import { mapProjectWorktreePathToSession } from "@/domain/worktree/worktree-path-map.js";
+import { worktreeScopeKey } from "@/domain/worktree/worktree-scope.js";
+import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -78,6 +82,16 @@ export class DefaultSessionService implements SessionService {
         `/projects/${projectId}/template`,
         `/projects/${projectId}/sessions/${session.id}`,
       );
+      const worktree = new SqliteWorktreeRepository(tx);
+      await worktree.copyScope(
+        worktreeScopeKey({ kind: "project", projectId }),
+        worktreeScopeKey({
+          kind: "session",
+          projectId,
+          sessionId: session.id,
+        }),
+        mapProjectWorktreePathToSession,
+      );
       return session;
     });
   }
@@ -97,6 +111,13 @@ export class DefaultSessionService implements SessionService {
         throw chatNotFound("session", id);
       }
     });
+  }
+
+  async pullTemplate(sessionId: string): Promise<void> {
+    await this.get(sessionId);
+    await new DefaultTemplatePullService(this.deps.conn).sessionTemplatePull(
+      sessionId,
+    );
   }
 
   async copy(id: string): Promise<ChatSession> {

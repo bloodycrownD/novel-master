@@ -18,4 +18,7 @@ export interface ProjectService {
 
   /** Copies project metadata and project-domain template VFS only. */
   copy(id: string): Promise<ChatProject>;
+
+  /** Overwrites project template VFS + worktree from global. */
+  pullTemplate(projectId: string): Promise<void>;
 }

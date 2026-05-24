@@ -19,6 +19,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import type { ProjectService } from "../project.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -92,6 +93,13 @@ export class DefaultProjectService implements ProjectService {
         throw chatNotFound("project", id);
       }
     });
+  }
+
+  async pullTemplate(projectId: string): Promise<void> {
+    await this.get(projectId);
+    await new DefaultTemplatePullService(this.deps.conn).projectTemplatePull(
+      projectId,
+    );
   }
 
   async copy(id: string): Promise<ChatProject> {
