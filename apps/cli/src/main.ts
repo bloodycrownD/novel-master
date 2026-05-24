@@ -10,6 +10,7 @@ import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
 import { runProjectVfs } from "./project/vfs.js";
 import { runVfsWorktree } from "./vfs/worktree.js";
+import { runPrompt } from "./prompt/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
@@ -86,7 +87,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "kkv" ||
     top === "project" ||
     top === "session" ||
-    top === "message"
+    top === "message" ||
+    top === "prompt"
   ) {
     const rt = await createNovelMasterRuntime(argv);
     try {
@@ -118,6 +120,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "message":
           await runMessage(rt, sub, rest);
+          break;
+        case "prompt":
+          await runPrompt(rt, sub, rest);
           break;
       }
       return 0;

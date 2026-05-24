@@ -4,7 +4,13 @@
  * @module cli-errors
  */
 
-import { ChatError, KkvError, TdbcError, VfsError } from "@novel-master/core";
+import {
+  ChatError,
+  KkvError,
+  PromptError,
+  TdbcError,
+  VfsError,
+} from "@novel-master/core";
 
 export const EXIT_USAGE = 1;
 export const EXIT_RUNTIME = 2;
@@ -14,6 +20,7 @@ export function formatCliError(error: unknown): string {
     error instanceof VfsError ||
     error instanceof KkvError ||
     error instanceof ChatError ||
+    error instanceof PromptError ||
     error instanceof TdbcError
   ) {
     return error.message;
