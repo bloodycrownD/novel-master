@@ -12,6 +12,15 @@ describe('formatVfsError', () => {
     expect(formatVfsError(err)).toBe('Expected tdbc:sqlite:<path>');
   });
 
+  it('formats TdbcError with cause', () => {
+    const err = new TdbcError('SQLITE_ERROR', 'Failed to open database', {
+      cause: new Error('JSI not available'),
+    });
+    expect(formatVfsError(err)).toBe(
+      'Failed to open database\nJSI not available',
+    );
+  });
+
   it('formats generic Error', () => {
     expect(formatVfsError(new Error('boom'))).toBe('boom');
   });

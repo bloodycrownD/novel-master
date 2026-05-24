@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "log-android": "react-native log-android",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",

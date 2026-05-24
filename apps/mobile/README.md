@@ -72,6 +72,26 @@ npm run start -w @novel-master/mobile
 npm run android -w @novel-master/mobile
 ```
 
+## Android logs
+
+Monorepo 根目录 **不要** 直接 `npx react-native log-android`（找不到本 app 工程）。用 workspace 脚本：
+
+```bash
+# repo root
+npm run mobile:log
+
+# or inside apps/mobile
+npm run log-android -w @novel-master/mobile
+```
+
+等价于 `adb logcat` 过滤 RN/Metro 相关输出。也可直接用：
+
+```bash
+adb logcat *:S ReactNative:V ReactNativeJS:V
+```
+
+**注意**：若开启 Chrome 远程调试，quick-sqlite（JSI）会失败；请用 on-device 调试。
+
 ## VFS dev screen
 
 1. Launch the app; home shows **VFS initializing…** until bootstrap completes.
