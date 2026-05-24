@@ -2,8 +2,25 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { VfsError, type VfsService } from "@novel-master/core";
 import type { SyncConfig } from "./config.js";
+import { MirrorError } from "./errors.js";
 import { walkMirror } from "./mirror-walk.js";
 import { toMirrorFile, toMirrorRelative, toVfsPath } from "./path-map.js";
+
+/** Wraps mirror filesystem IO so main can exit 1 with a clear message (I1). */
+async function mirrorIo<T>(
+  action: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: unknown) {
+    if (err instanceof MirrorError) {
+      throw err;
+    }
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new MirrorError(`mirror ${action} failed: ${detail}`, { cause: err });
+  }
+}
 
 /** Summary counters for verbose logging and tests. */
 export interface SyncStats {
@@ -21,7 +38,7 @@ export async function push(
   const stats: SyncStats = { written: 0, deleted: 0 };
   const { mirrorRoot, prefix, verbose } = config;
 
-  await mkdir(mirrorRoot, { recursive: true });
+  await mirrorIo("mkdir", () => mkdir(mirrorRoot, { recursive: true }));
 
   const pathsVfs = await vfs.glob("**/*", { cwd: prefix });
   const vfsSet = new Set(pathsVfs);
@@ -33,8 +50,10 @@ export async function push(
     }
     const { content } = await vfs.read(vfsPath);
     const filePath = toMirrorFile(mirrorRoot, rel);
-    await mkdir(dirname(filePath), { recursive: true });
-    await writeFile(filePath, content, "utf8");
+    await mirrorIo(`mkdir ${rel}`, () =>
+      mkdir(dirname(filePath), { recursive: true }),
+    );
+    await mirrorIo(`write ${rel}`, () => writeFile(filePath, content, "utf8"));
     stats.written++;
     if (verbose) {
       console.error(`push: write ${rel}`);
@@ -45,7 +64,9 @@ export async function push(
   for (const rel of pathsDisk) {
     const vfsPath = toVfsPath(prefix, rel);
     if (!vfsSet.has(vfsPath)) {
-      await unlink(toMirrorFile(mirrorRoot, rel));
+      await mirrorIo(`delete ${rel}`, () =>
+        unlink(toMirrorFile(mirrorRoot, rel)),
+      );
       stats.deleted++;
       if (verbose) {
         console.error(`push: delete orphan ${rel}`);
@@ -73,7 +94,9 @@ export async function pull(
   for (const rel of pathsDisk) {
     const vfsPath = toVfsPath(prefix, rel);
     diskVfsPaths.add(vfsPath);
-    const content = await readFile(toMirrorFile(mirrorRoot, rel), "utf8");
+    const content = await mirrorIo(`read ${rel}`, () =>
+      readFile(toMirrorFile(mirrorRoot, rel), "utf8"),
+    );
 
     let exists = true;
     try {

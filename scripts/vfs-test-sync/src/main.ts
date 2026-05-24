@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { VfsError } from "@novel-master/core";
-import { ConfigError } from "./errors.js";
+import { ConfigError, MirrorError, PathMapError } from "./errors.js";
 import { parseArgv } from "./config.js";
 import { createSyncEngine } from "./sync-engine.js";
 import { createVfsRuntime } from "./vfs-runtime.js";
@@ -34,9 +34,14 @@ async function main(): Promise<number> {
       await runWatch({ config, engine, vfs, once });
     }
   } catch (err: unknown) {
-    if (err instanceof VfsError) {
+    // CLI boundary: runtime IO/VFS failures → exit 1; path-map misuse → exit 2.
+    if (err instanceof VfsError || err instanceof MirrorError) {
       console.error(err.message);
       return 1;
+    }
+    if (err instanceof PathMapError) {
+      console.error(err.message);
+      return 2;
     }
     throw err;
   } finally {

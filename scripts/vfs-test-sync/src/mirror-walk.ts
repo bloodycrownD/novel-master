@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { MirrorError } from "./errors.js";
 
 /** Directory names excluded from mirror walks (never synced to VFS). */
 const SKIP_DIRS = new Set([".git"]);
@@ -24,7 +25,10 @@ export async function walkMirror(root: string): Promise<string[]> {
       ) {
         return;
       }
-      throw err;
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new MirrorError(`mirror walk failed at ${dir}: ${detail}`, {
+        cause: err,
+      });
     }
 
     for (const entry of entries) {

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import { ConfigError } from "./errors.js";
+import { ConfigError, PathMapError } from "./errors.js";
+import { normalizePrefix } from "./path-map.js";
 
 /** Resolved sync settings shared by push, pull, and watch. */
 export interface SyncConfig {
@@ -93,7 +94,16 @@ export function parseArgv(argv: readonly string[]): {
     throw new ConfigError("--mirror or VFS_TEST_MIRROR is required");
   }
 
-  const prefix = flagString(flags, "prefix") ?? DEFAULT_PREFIX;
+  // Normalize once so vfs.glob({ cwd }) matches path-map prefix semantics (C1).
+  let prefix: string;
+  try {
+    prefix = normalizePrefix(flagString(flags, "prefix") ?? DEFAULT_PREFIX);
+  } catch (err: unknown) {
+    if (err instanceof PathMapError) {
+      throw new ConfigError(err.message);
+    }
+    throw err;
+  }
   const debounceMs = flagString(flags, "debounce-ms")
     ? parsePositiveInt(flagString(flags, "debounce-ms")!, "debounce-ms")
     : DEFAULT_DEBOUNCE_MS;
