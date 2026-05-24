@@ -8,9 +8,8 @@ import {
   type TdbcConnection,
   type VfsService,
 } from '@novel-master/core';
-import {registerRnDriver} from '@novel-master/tdbc-driver-rn';
+import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
 import {MOBILE_TDBC_URL} from './constants';
-import {DeviceSqliteAdapter} from './device-sqlite-adapter';
 
 let conn: TdbcConnection | undefined;
 let vfs: VfsService | undefined;
@@ -23,7 +22,7 @@ export async function getVfs(): Promise<VfsService> {
   }
   if (!initPromise) {
     initPromise = (async () => {
-      registerRnDriver(new DeviceSqliteAdapter());
+      registerRnDriver();
       const c = await open(MOBILE_TDBC_URL, {driver: 'rn'});
       await bootstrapVfs(c);
       conn = c;

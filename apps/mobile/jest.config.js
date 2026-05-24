@@ -12,6 +12,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/index.js',
     ),
+    '^@novel-master/tdbc-driver-rn/native$': path.join(
+      repoRoot,
+      'packages/tdbc-driver-rn/dist/native.js',
+    ),
     '^@novel-master/tdbc-driver-rn$': path.join(
       repoRoot,
       'packages/tdbc-driver-rn/dist/index.js',

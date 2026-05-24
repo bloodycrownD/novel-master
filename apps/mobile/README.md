@@ -100,7 +100,7 @@ adb logcat *:S ReactNative:V ReactNativeJS:V
 2. Tap **Open VFS dev screen** for list / read / write / replace / delete / glob.
 3. Use VFS paths starting with `/` (e.g. `/dev/note.md`).
 
-Device DB name: `novel_master_vfs` (quick-sqlite app-private storage). This is **not** the CLI file `.novel-master/novel.db`.
+Device DB name: `novel_master_vfs` (quick-sqlite app-private storage). This is **not** the CLI file `.novel-master/novel.db`. VFS runtime registers the driver via `@novel-master/tdbc-driver-rn/native`.
 
 ### CLI对照 (same semantics, different DB)
 
