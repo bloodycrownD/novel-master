@@ -8,7 +8,7 @@ import type { OpenOptions, TdbcConnection, TdbcDriver } from "@novel-master/core
 import { TdbcError } from "@novel-master/core";
 import type { RnSqliteAdapter } from "./adapter.js";
 import { RnConnection } from "./connection.js";
-import { QuickSqliteAdapter } from "./quick-sqlite-adapter.js";
+import { QuickSqliteAdapter } from "./impl/quick-sqlite-dynamic.adapter.js";
 
 export const RN_DRIVER_NAME = "rn";
 

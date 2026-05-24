@@ -2,7 +2,16 @@
 
 React Native TDBC driver via [react-native-quick-sqlite](https://github.com/margelo/react-native-quick-sqlite) (peer dependency).
 
-## Setup
+## Entry points
+
+| Import | Use when |
+|--------|----------|
+| `@novel-master/tdbc-driver-rn` | Node tests, CI conformance, docs (default adapter uses **dynamic** `import()`) |
+| `@novel-master/tdbc-driver-rn/native` | **RN App / Metro** — static quick-sqlite binding (`NativeQuickSqliteAdapter`) |
+
+React Native apps should import from **`/native`** so Metro includes the peer in the bundle.
+
+## Setup (Node / docs)
 
 ```typescript
 import { open, SqlTemplateParser, executeTemplate } from "@novel-master/core";
@@ -11,6 +20,14 @@ import { registerRnDriver } from "@novel-master/tdbc-driver-rn";
 registerRnDriver();
 
 const conn = await open("tdbc:sqlite:file:myapp.db", { driver: "rn" });
+```
+
+## Setup (RN App)
+
+```typescript
+import { registerRnDriver } from "@novel-master/tdbc-driver-rn/native";
+
+registerRnDriver();
 ```
 
 ## SqlTemplateParser + execute
