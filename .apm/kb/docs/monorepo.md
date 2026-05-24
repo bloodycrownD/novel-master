@@ -33,12 +33,14 @@
   npm run link:cli
   nm vfs write /template/foo.md --text "hello"
   nm vfs read /template/foo.md
-  nm project create --name "My Project"
-  nm session create --project <projectId>
-  nm message append --session <sessionId> --role user --content "hi"
+  nm project create --name "My Project"          # sets current project in .novel-master/config.json
+  nm session create --title "main"               # uses current project; sets current session
+  nm project use --project <projectId>           # switch project (clears current session)
+  nm session use --session <sessionId>           # switch session (and its project)
+  nm message append --role user --content "hi"   # uses current session when flags omitted
   nm kkv set --module app --key cfg --value "{}"
-  nm project vfs list /template --project <projectId>
-  nm session vfs list / --project <projectId> --session <sessionId>
+  nm project vfs list /template                  # uses current project when --project omitted
+  nm session vfs list /                          # uses current project + session
   ```
 - **同步脚本**：`npm run vfs:watch`（stderr 会打印 `watch started`）
 
