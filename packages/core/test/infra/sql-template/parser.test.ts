@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { SqlTemplateError } from "../../../src/infra/sql-template/errors.js";
-import { parseTemplateToAst } from "../../../src/infra/sql-template/parser.js";
+import { SqlTemplateError } from "@/infra/sql-template/errors.js";
+import { parseTemplateToAst } from "@/infra/sql-template/parser.js";
 
 describe("parser", () => {
   it("builds AST for nested if", () => {

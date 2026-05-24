@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { matchGlob } from "../../src/service/vfs/glob-match.js";
+import { matchGlob } from "@/service/vfs/glob-match.js";
 
 describe("matchGlob", () => {
   it("matches single-segment wildcards", () => {

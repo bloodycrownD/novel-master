@@ -4,12 +4,12 @@
  * @module service/vfs/impl/vfs.service
  */
 
-import type { VfsEntryRepository } from "../../../domain/vfs/repositories/vfs-entry.port.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import {
   VfsError,
   vfsNotFound,
   vfsReplaceNotFound,
-} from "../../../errors/vfs-errors.js";
+} from "@/errors/vfs-errors.js";
 import { matchGlob } from "../glob-match.js";
 import type {
   VfsGrepMatch,

@@ -4,18 +4,18 @@
  * @module domain/vfs/repositories/impl/sqlite-vfs-entry.repository
  */
 
-import type { TdbcConnection } from "../../../../infra/tdbc/connection.js";
-import { SqlTemplateParser } from "../../../../infra/sql-template/index.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "../../../../infra/tdbc/template-helper.js";
-import type { Row } from "../../../../infra/tdbc/types.js";
+} from "@/infra/tdbc/template-helper.js";
+import type { Row } from "@/infra/tdbc/types.js";
 import {
   vfsConflict,
   vfsDirectoryNotEmpty,
   vfsNotFound,
-} from "../../../../errors/vfs-errors.js";
+} from "@/errors/vfs-errors.js";
 import type { VfsEntry, VfsStorageKind } from "../../model/vfs-entry.js";
 import type {
   VfsDeleteOptions,

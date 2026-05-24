@@ -4,12 +4,12 @@
  * @module service/vfs/impl/scoped-vfs.service
  */
 
-import type { VfsScope } from "../../../domain/vfs/vfs-path-mapper.js";
+import type { VfsScope } from "@/domain/vfs/vfs-path-mapper.js";
 import {
   assertLogicalPathAllowed,
   toLogicalPath,
   toPhysicalPath,
-} from "../../../domain/vfs/vfs-path-mapper.js";
+} from "@/domain/vfs/vfs-path-mapper.js";
 import type { VfsService } from "../vfs.port.js";
 import type {
   VfsGrepMatch,

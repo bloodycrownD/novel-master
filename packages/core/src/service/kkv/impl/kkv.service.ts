@@ -4,8 +4,8 @@
  * @module service/kkv/impl/kkv.service
  */
 
-import type { KkvRepository } from "../../../domain/kkv/repositories/kkv.port.js";
-import { kkvNotFound } from "../../../errors/kkv-errors.js";
+import type { KkvRepository } from "@/domain/kkv/repositories/kkv.port.js";
+import { kkvNotFound } from "@/errors/kkv-errors.js";
 import type { KkvService } from "../kkv.port.js";
 
 /**

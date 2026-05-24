@@ -2,7 +2,7 @@
  * Singleton VFS runtime: RN SQLite driver + core bootstrap on app start.
  */
 import {
-  bootstrapVfs,
+  bootstrapNovelMaster,
   createVfsService,
   open,
   type TdbcConnection,
@@ -24,7 +24,7 @@ export async function getVfs(): Promise<VfsService> {
     initPromise = (async () => {
       registerRnDriver();
       const c = await open(MOBILE_TDBC_URL, {driver: 'rn'});
-      await bootstrapVfs(c);
+      await bootstrapNovelMaster(c);
       conn = c;
       vfs = createVfsService(c);
       return vfs;

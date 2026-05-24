@@ -16,8 +16,8 @@
 | `VfsService` | `list/read/write/replace/glob/grep/delete`；更新需 `expectedVersion`（`versionCheck` 可关） | 域 VFS 包装路径；session execute 自动带 version |
 | `vfs_entry` | 单表 `path TEXT PK`；`normalizePath` POSIX | 物理路径写入 `projects/{id}/…`；逻辑路径映射 |
 | `createVfsService` | 直连全表 | **保持**；新增 `createScopedVfsService` / `createSessionFsService` |
-| `bootstrapVfs` | 仅 `vfs_entry` DDL | 新增 `bootstrapNovelMaster` 聚合（或 `bootstrapAll`） |
-| `apps/cli` | `main` 仅 `vfs` + `greet`；`createVfsRuntime` → `bootstrapVfs` + `createVfsService` | 路由扩展；共享 `runtime.ts` 改为 bootstrap 全库 |
+| bootstrap | 各模块仅 `*-schema.ts`；**唯一入口** `bootstrapNovelMaster`（单事务跑齐 DDL） | 已删除 `bootstrapVfs` / `vfs-bootstrap.ts` |
+| `apps/cli` | `runtime` → `bootstrapNovelMaster` | 与 kkv/chat/session-fs 一致 |
 | 测试 | core `test/vfs/*`；cli `test/vfs-e2e.test.ts` | 新增 chat/kkv/session-fs 单测；cli e2e 扩展 |
 | `scripts/vfs-test-sync` | 使用无范围 `createVfsService`，路径如 `/a.md` | **不破坏**：继续用无范围工厂 |
 | PRD | session 创建复制 project template；fork 复制消息；project copy 不含 session | 见下文语义 |
@@ -201,7 +201,7 @@ export function assertLogicalPathAllowed(scope: VfsScope, logical: string): void
 | `created_at_ms` | `INTEGER` | |
 | `created_by` | `TEXT` | |
 
-`bootstrapNovelMaster(conn)`：事务内依次 `bootstrapVfs` + 上述 DDL（`IF NOT EXISTS`）。
+`bootstrapNovelMaster(conn)`：单事务内执行 `VFS_SCHEMA_STATEMENTS` + kkv + chat + session-fs DDL（`IF NOT EXISTS`）。导出 `NOVEL_MASTER_SCHEMA_STATEMENTS`。
 
 ### 领域服务语义（锁定）
 

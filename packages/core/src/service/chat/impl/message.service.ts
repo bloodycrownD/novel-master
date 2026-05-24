@@ -5,17 +5,17 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "../../../infra/tdbc/connection.js";
-import type { ChatMessage, MessageContent } from "../../../domain/chat/model/message.js";
-import type { ChatSession } from "../../../domain/chat/model/session.js";
-import type { MessageRepository } from "../../../domain/chat/repositories/message.port.js";
-import type { SessionRepository } from "../../../domain/chat/repositories/session.port.js";
-import type { VfsEntryRepository } from "../../../domain/vfs/repositories/vfs-entry.port.js";
-import { copyVfsTree } from "../../../domain/vfs/vfs-tree-copy.js";
-import { chatInvalidArgument, chatNotFound } from "../../../errors/chat-errors.js";
-import { SqliteSessionRepository } from "../../../domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageRepository } from "../../../domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "../../../domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import type { ChatSession } from "@/domain/chat/model/session.js";
+import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
+import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { copyVfsTree } from "@/domain/vfs/vfs-tree-copy.js";
+import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { MessageService } from "../message.port.js";
 
 function reposFor(conn: TdbcConnection) {

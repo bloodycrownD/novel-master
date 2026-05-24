@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { bootstrapVfs } from "@novel-master/core";
+import { bootstrapNovelMaster } from "@novel-master/core";
 import { openVfsTestConnection } from "./helpers.js";
 
-describe("bootstrapVfs", () => {
+describe("bootstrapNovelMaster", () => {
   it("is idempotent on empty database", async () => {
     const { conn } = await openVfsTestConnection();
-    await bootstrapVfs(conn);
-    await bootstrapVfs(conn);
+    await bootstrapNovelMaster(conn);
+    await bootstrapNovelMaster(conn);
     const rows = await conn.query<{ name: string }>(
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vfs_entry'`,
     );

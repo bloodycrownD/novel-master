@@ -5,19 +5,19 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "../../../infra/tdbc/connection.js";
-import type { ChatSession } from "../../../domain/chat/model/session.js";
-import type { ProjectRepository } from "../../../domain/chat/repositories/project.port.js";
-import type { SessionRepository } from "../../../domain/chat/repositories/session.port.js";
-import type { MessageRepository } from "../../../domain/chat/repositories/message.port.js";
-import type { VfsEntryRepository } from "../../../domain/vfs/repositories/vfs-entry.port.js";
-import { copyVfsTree, deleteVfsPrefix } from "../../../domain/vfs/vfs-tree-copy.js";
-import { chatNotFound } from "../../../errors/chat-errors.js";
-import { SqliteProjectRepository } from "../../../domain/chat/repositories/impl/sqlite-project.repository.js";
-import { SqliteSessionRepository } from "../../../domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageRepository } from "../../../domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "../../../domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { deleteSessionFsData } from "../../session-fs/create-session-fs-service.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { ChatSession } from "@/domain/chat/model/session.js";
+import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
+import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/vfs-tree-copy.js";
+import { chatNotFound } from "@/errors/chat-errors.js";
+import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
+import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
 import type { SessionService } from "../session.port.js";
 
 function reposFor(conn: TdbcConnection) {

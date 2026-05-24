@@ -4,7 +4,7 @@ import {
   bindExpressionToContext,
   evaluateTest,
   normalizeExpression,
-} from "../../../src/infra/sql-template/expression.js";
+} from "@/infra/sql-template/expression.js";
 
 describe("expression", () => {
   it("normalizes MyBatis and/or/not", () => {

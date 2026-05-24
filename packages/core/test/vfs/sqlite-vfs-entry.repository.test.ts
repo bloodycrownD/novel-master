@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "../../src/errors/vfs-errors.js";
-import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { normalizePath } from "../../src/domain/vfs/repositories/impl/normalize-path.js";
+import { VfsError } from "@/errors/vfs-errors.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { openVfsTestConnection } from "./helpers.js";
 
 describe("normalizePath", () => {

@@ -4,7 +4,7 @@
  * @module service/chat/session.port
  */
 
-import type { ChatSession } from "../../domain/chat/model/session.js";
+import type { ChatSession } from "@/domain/chat/model/session.js";
 
 /** Session CRUD, template copy on create, and full copy. */
 export interface SessionService {

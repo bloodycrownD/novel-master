@@ -16,13 +16,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
-    "test": "tsx --test test/**/*.test.ts"
+    "test": "tsx --tsconfig tsconfig.test.json --test test/**/*.test.ts"
   },
   "devDependencies": {
     "@novel-master/tdbc-driver-better-sqlite3": "*",
+    "tsc-alias": "^1.8.10",
     "tsx": "^4.21.0"
   }
 }

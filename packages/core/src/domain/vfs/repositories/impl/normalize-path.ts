@@ -4,7 +4,7 @@
  * @module domain/vfs/repositories/impl/normalize-path
  */
 
-import { vfsInvalidPath } from "../../../../errors/vfs-errors.js";
+import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 
 /**
  * Normalizes a path to absolute POSIX form: leading `/`, no trailing slash (except `/`).

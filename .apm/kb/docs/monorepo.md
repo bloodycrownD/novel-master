@@ -48,6 +48,13 @@
 - TypeScript 6，ESM
 - `tsconfig.base.json` 共享编译选项
 
+## `@novel-master/core` 路径别名
+
+- `packages/core` 内使用 **`@/*` → `src/*`**（见 `packages/core/tsconfig.json`）。
+- 跨顶层目录（`infra`、`domain`、`errors`、`service`、`bootstrap`）用 `@/…`；同一 domain 模块内仍可用 `../model`、`../port` 等同目录相对路径。
+- 构建：`tsc` + **`tsc-alias`** 将 `@/` 改写为相对路径写入 `dist/`（Node 可直接 `import`）。
+- 测试：`tsx --tsconfig tsconfig.test.json`（含 `src` + `test`）。
+
 ## APM 知识库
 
 - 迭代文档：`.apm/kb/docs/Iterations/<名称>/prd.md`、`spec.md`

@@ -4,7 +4,7 @@
  * @module service/chat/project.port
  */
 
-import type { ChatProject } from "../../domain/chat/model/project.js";
+import type { ChatProject } from "@/domain/chat/model/project.js";
 
 /** Project CRUD and copy operations. */
 export interface ProjectService {

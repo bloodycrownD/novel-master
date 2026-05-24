@@ -4,11 +4,11 @@
  * @module service/chat/create-chat-services
  */
 
-import type { TdbcConnection } from "../../infra/tdbc/connection.js";
-import { SqliteProjectRepository } from "../../domain/chat/repositories/impl/sqlite-project.repository.js";
-import { SqliteSessionRepository } from "../../domain/chat/repositories/impl/sqlite-session.repository.js";
-import { SqliteMessageRepository } from "../../domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteVfsEntryRepository } from "../../domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
+import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { DefaultProjectService } from "./impl/project.service.js";
 import { DefaultSessionService } from "./impl/session.service.js";
 import { DefaultMessageService } from "./impl/message.service.js";

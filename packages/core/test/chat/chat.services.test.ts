@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TdbcConnection } from "@novel-master/core";
-import { SqliteSessionExecuteRepository } from "../../src/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
-import { SqliteSessionSnapshotRepository } from "../../src/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
+import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
+import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 async function assertNoSessionFsData(

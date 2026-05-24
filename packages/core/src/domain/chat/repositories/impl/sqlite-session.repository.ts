@@ -4,13 +4,13 @@
  * @module domain/chat/repositories/impl/sqlite-session.repository
  */
 
-import type { TdbcConnection } from "../../../../infra/tdbc/connection.js";
-import { SqlTemplateParser } from "../../../../infra/sql-template/index.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "../../../../infra/tdbc/template-helper.js";
-import type { Row } from "../../../../infra/tdbc/types.js";
+} from "@/infra/tdbc/template-helper.js";
+import type { Row } from "@/infra/tdbc/types.js";
 import type { ChatSession } from "../../model/session.js";
 import type { SessionRepository } from "../session.port.js";
 

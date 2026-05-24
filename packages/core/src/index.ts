@@ -60,8 +60,10 @@ export type {
 export { VfsError } from "./errors/vfs-errors.js";
 export type { VfsErrorCode } from "./errors/vfs-errors.js";
 export type { VfsEntry, VfsStorageKind } from "./domain/vfs/model/vfs-entry.js";
-export { bootstrapVfs } from "./bootstrap/vfs/vfs-bootstrap.js";
-export { bootstrapNovelMaster } from "./bootstrap/novel-master-bootstrap.js";
+export {
+  bootstrapNovelMaster,
+  NOVEL_MASTER_SCHEMA_STATEMENTS,
+} from "./bootstrap/novel-master-bootstrap.js";
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export type {

@@ -4,8 +4,8 @@
  * @module service/kkv/create-kkv-service
  */
 
-import type { TdbcConnection } from "../../infra/tdbc/connection.js";
-import { SqliteKkvRepository } from "../../domain/kkv/repositories/impl/sqlite-kkv.repository.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import { SqliteKkvRepository } from "@/domain/kkv/repositories/impl/sqlite-kkv.repository.js";
 import { DefaultKkvService } from "./impl/kkv.service.js";
 import type { KkvService } from "./kkv.port.js";
 

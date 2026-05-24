@@ -4,7 +4,7 @@
  * @module domain/vfs/vfs-path-mapper
  */
 
-import { vfsInvalidPath } from "../../errors/vfs-errors.js";
+import { vfsInvalidPath } from "@/errors/vfs-errors.js";
 import { normalizePath } from "./repositories/impl/normalize-path.js";
 
 /** VFS visibility scope (global, project, or session). */

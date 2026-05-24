@@ -5,14 +5,14 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "../../../infra/tdbc/connection.js";
-import { VfsError, vfsNotFound } from "../../../errors/vfs-errors.js";
-import type { SessionExecuteRepository } from "../../../domain/session-fs/repositories/execute.port.js";
-import type { SessionSnapshotRepository } from "../../../domain/session-fs/repositories/snapshot.port.js";
-import { SqliteSessionSnapshotRepository } from "../../../domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
-import { SqliteSessionExecuteRepository } from "../../../domain/session-fs/repositories/impl/sqlite-execute.repository.js";
-import { createScopedVfsService } from "../../vfs/create-scoped-vfs-service.js";
-import type { VfsService } from "../../vfs/vfs.port.js";
+import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import { VfsError, vfsNotFound } from "@/errors/vfs-errors.js";
+import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
+import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";
+import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
+import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
+import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
+import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type {
   SessionFsAction,
   SessionFsActor,

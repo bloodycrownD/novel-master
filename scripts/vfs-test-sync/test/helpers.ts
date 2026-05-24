@@ -1,5 +1,5 @@
 import {
-  bootstrapVfs,
+  bootstrapNovelMaster,
   createVfsService,
   open,
   type TdbcConnection,
@@ -20,7 +20,7 @@ export async function openVfsTestConnection(): Promise<{
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
-  await bootstrapVfs(conn);
+  await bootstrapNovelMaster(conn);
   const vfs = createVfsService(conn);
   return { conn, vfs };
 }
