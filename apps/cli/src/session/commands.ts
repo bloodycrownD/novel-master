@@ -24,7 +24,7 @@ const SESSION_VFS_COMMANDS: Record<
 > = {
   list: runList,
   read: runRead,
-  write: runWrite,
+  write: (vfs, args) => runWrite(vfs, args, { defaultNoVersionCheck: true }),
   replace: runReplace,
   glob: runGlob,
   grep: runGrep,

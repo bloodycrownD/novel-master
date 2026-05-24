@@ -12,7 +12,16 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-export async function runWrite(vfs: VfsService, args: readonly string[]): Promise<void> {
+/** CLI options when a scope hides version from callers (e.g. session vfs). */
+export interface RunWriteCliOptions {
+  readonly defaultNoVersionCheck?: boolean;
+}
+
+export async function runWrite(
+  vfs: VfsService,
+  args: readonly string[],
+  cliOptions?: RunWriteCliOptions,
+): Promise<void> {
   const { positional, flags } = parseCliArgs(args);
   const path = positional[0];
   if (path == null) {
@@ -35,8 +44,10 @@ export async function runWrite(vfs: VfsService, args: readonly string[]): Promis
         : await readStdin();
 
   const versionFlag = flags.get("version");
+  const noVersionCheck =
+    flags.has("no-version-check") || cliOptions?.defaultNoVersionCheck === true;
   const options: WriteOptions = {
-    ...(flags.has("no-version-check") ? { versionCheck: false } : {}),
+    ...(noVersionCheck ? { versionCheck: false } : {}),
     ...(typeof versionFlag === "string"
       ? { expectedVersion: Number.parseInt(versionFlag, 10) }
       : {}),
@@ -44,7 +55,7 @@ export async function runWrite(vfs: VfsService, args: readonly string[]): Promis
 
   try {
     const existing = await vfs.read(path);
-    if (!flags.has("no-version-check") && flags.get("version") == null) {
+    if (!noVersionCheck && flags.get("version") == null) {
       throw new VfsError(
         "CONFLICT",
         `Path exists; pass --version ${existing.version} or --no-version-check`,

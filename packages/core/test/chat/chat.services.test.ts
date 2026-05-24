@@ -31,6 +31,23 @@ describe("Chat services", () => {
     await ctx.conn.close();
   });
 
+  it("project template changes after session create do not affect session vfs", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/template/a.md", "A");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await pvfs.write("/template/a.md", "CHANGED", { versionCheck: false });
+    await pvfs.write("/template/new.md", "NEW");
+
+    assert.equal((await svfs.read("/a.md")).content, "A");
+    const paths = await svfs.list("/", { recursive: true });
+    assert.deepEqual(paths.sort(), ["/a.md"]);
+    await ctx.conn.close();
+  });
+
   it("empty template yields empty session vfs", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("Empty");
@@ -73,6 +90,53 @@ describe("Chat services", () => {
       "edited",
     );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
+    await ctx.conn.close();
+  });
+
+  it("message fork then append on forked session does not affect source", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
+    const m2 = await ctx.messages.append(session.id, "user", { content: "2" });
+    await ctx.messages.append(session.id, "user", { content: "3" });
+
+    const forked = await ctx.messages.fork(session.id, m2.id);
+    await ctx.messages.append(forked.id, "user", { content: "fork-only" });
+
+    const sourceMsgs = await ctx.messages.listBySession(session.id);
+    assert.equal(sourceMsgs.length, 3);
+    assert.equal(sourceMsgs[2]!.content.content, "3");
+
+    const forkedMsgs = await ctx.messages.listBySession(forked.id);
+    assert.equal(forkedMsgs.length, 3);
+    assert.equal(forkedMsgs[0]!.content.content, "1");
+    assert.equal(forkedMsgs[1]!.content.content, "2");
+    assert.equal(forkedMsgs[2]!.content.content, "fork-only");
+    assert.notEqual(forkedMsgs[0]!.id, m1.id);
+    await ctx.conn.close();
+  });
+
+  it("session copy duplicates vfs and messages", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/note.md", "body");
+    await ctx.messages.append(session.id, "user", { content: "hi" });
+    await ctx.messages.append(session.id, "assistant", { content: "hey" });
+
+    const copy = await ctx.sessions.copy(session.id);
+    const copyVfs = ctx.sessionVfs(project.id, copy.id);
+    assert.equal((await copyVfs.read("/note.md")).content, "body");
+    const copyMsgs = await ctx.messages.listBySession(copy.id);
+    assert.equal(copyMsgs.length, 2);
+    assert.equal(copyMsgs[0]!.content.content, "hi");
+    assert.equal(copyMsgs[1]!.content.content, "hey");
+    assert.notEqual(copyMsgs[0]!.id, (await ctx.messages.listBySession(session.id))[0]!.id);
+
+    await svfs.write("/note.md", "mutated", { versionCheck: false });
+    assert.equal((await copyVfs.read("/note.md")).content, "body");
     await ctx.conn.close();
   });
 
