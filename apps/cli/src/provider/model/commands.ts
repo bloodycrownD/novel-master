@@ -89,11 +89,10 @@ export async function runProviderModel(
         );
       }
       const { providerId: pid, vendorModelId } = parseApplicationModelId(modelId);
-      await rt.providerModels.editSaved(
-        pid,
-        vendorModelId,
-        flagString(flags, "displayName") ?? null,
-      );
+      const displayName = flags.has("displayName")
+        ? (flagString(flags, "displayName") ?? null)
+        : undefined;
+      await rt.providerModels.editSaved(pid, vendorModelId, displayName);
       return;
     }
     case "delete": {

@@ -102,7 +102,7 @@ export class DefaultProviderModelService implements ProviderModelService {
   async editSaved(
     providerId: string,
     vendorModelId: string,
-    displayName: string | null,
+    displayName?: string | null,
   ): Promise<SavedModel> {
     const existing = await this.deps.savedModels.find(
       providerId,
@@ -117,7 +117,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     }
     const updated: SavedModel = {
       ...existing,
-      displayName,
+      ...(displayName !== undefined ? { displayName } : {}),
       updatedAtMs: Date.now(),
     };
     await this.deps.savedModels.update(updated);

@@ -11,10 +11,11 @@ export interface ProviderModelService {
   ): Promise<SavedModel>;
   create(providerId: string, vendorModelId: string): Promise<SavedModel>;
   savedList(providerId: string): Promise<SavedModel[]>;
+  /** When `displayName` is omitted, existing display name is kept. */
   editSaved(
     providerId: string,
     vendorModelId: string,
-    displayName: string | null,
+    displayName?: string | null,
   ): Promise<SavedModel>;
   deleteSaved(providerId: string, vendorModelId: string): Promise<void>;
 }
