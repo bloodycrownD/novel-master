@@ -275,8 +275,8 @@ novel-master vfs <subcommand> [options] [args]
 |--------|-------------|--------------|
 | `list` | `<dir>` | `list(dir, { recursive: -r, maxDepth: --depth })` |
 | `read` | `<path>` | `read` → stdout 内容 |
-| `write` | `<path>` | `--file` 或 stdin；`--version`；`--no-version-check` |
-| `replace` | `<path> <old> <new>` | `--all` → `replaceAll` |
+| `write` | `<path>` | `--text` 或 `--file` 或 stdin；`--version`；`--no-version-check` |
+| `replace` | `<path> <old> <new>` 或 `<path> --old <old> --new <new>` | `--all` → `replaceAll` |
 | `glob` | `<pattern>` | `--cwd` |
 | `grep` | `<pattern>` | `--path-prefix`；输出 `path:line:excerpt` |
 | `delete` | `<path>` | `-r` / `--recursive` |

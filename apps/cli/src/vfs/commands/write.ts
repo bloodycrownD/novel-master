@@ -17,15 +17,22 @@ export async function runWrite(vfs: VfsService, args: readonly string[]): Promis
   const path = positional[0];
   if (path == null) {
     throw new Error(
-      "Usage: novel-master vfs write <path> [--file <path>] [--version <n>] [--no-version-check]",
+      "Usage: novel-master vfs write <path> [--text <content>] [--file <path>] [--version <n>] [--no-version-check]",
     );
   }
 
   const fileFlag = flags.get("file");
+  const textFlag = flags.get("text");
+  if (typeof fileFlag === "string" && typeof textFlag === "string") {
+    throw new Error("Cannot use both --file and --text");
+  }
+
   const content =
     typeof fileFlag === "string"
       ? await readFile(fileFlag, "utf8")
-      : await readStdin();
+      : typeof textFlag === "string"
+        ? textFlag
+        : await readStdin();
 
   const versionFlag = flags.get("version");
   const options: WriteOptions = {

@@ -55,6 +55,40 @@ describe("watch scheduler", () => {
 });
 
 describe("runWatch", () => {
+  it("prints watch started line to stderr", async () => {
+    const { conn, vfs } = await openVfsTestConnection();
+    const lines: string[] = [];
+    const origError = console.error;
+    console.error = (...args: unknown[]) => {
+      lines.push(args.map(String).join(" "));
+      origError.apply(console, args);
+    };
+    try {
+      await withTempMirror(async (_root, config) => {
+        const driver: WatchDriver = {
+          watchDisk() {
+            return { close() {} };
+          },
+          startVfsPoll(onTick, _pollMs) {
+            void onTick();
+            return { stop() {} };
+          },
+        };
+        await runWatch({
+          config,
+          engine: createSyncEngine(vfs, config),
+          vfs,
+          driver,
+          once: true,
+        });
+      });
+      assert.match(lines.join("\n"), /vfs-test-sync watch started/);
+    } finally {
+      console.error = origError;
+      await conn.close();
+    }
+  });
+
   it("T6: disk change triggers pull after debounce", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await withTempMirror(async (root, config) => {

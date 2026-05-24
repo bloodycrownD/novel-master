@@ -7,3 +7,7 @@ dist/
 coverage/
 .DS_Store
 Thumbs.db
+
+# Local VFS SQLite DB and mirror dirs (dev/test)
+.novel-master/
+tmp/

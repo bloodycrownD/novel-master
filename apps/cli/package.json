@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "bin": {
-    "novel-master": "./dist/index.js"
+    "novel-master": "./dist/index.js",
+    "nm": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

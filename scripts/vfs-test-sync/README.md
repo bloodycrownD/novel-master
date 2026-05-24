@@ -12,25 +12,36 @@ Dev-only script to force-sync between the Novel Master VFS (SQLite) and a local 
 
 ## Setup
 
-From the repo root:
+From the repo root (requires **Node 22** — see `.nvmrc`; matches Cursor bundled Node):
 
 ```bash
+nvm use          # reads .nvmrc → 22.22.0
 npm install
 npm run build -w @novel-master/core
 npm run build -w @novel-master/vfs-test-sync
+npm rebuild better-sqlite3
+```
+
+**Windows / nvm:** run `nvm use` in the **same terminal** before `npm run`. If `vfs:sync` still reports Node 24, check `where node` and `where npm` — both must point to `v22.22.0`. Close the terminal and open a new one after `nvm use`.
+
+If you see `NODE_MODULE_VERSION` / `ERR_DLOPEN_FAILED`:
+
+```bash
+nvm use 22.22.0
+npm rebuild better-sqlite3
 ```
 
 ## Usage
 
 ```bash
-# Via workspace script
+# 默认镜像目录 ./tmp/mirror（仓库根）
+npm run vfs:watch
+npm run vfs:push
+npm run vfs:pull
+
+# 自定义参数仍用 vfs:sync
+npm run vfs:sync -- watch --mirror ./other-mirror --verbose
 npm run vfs:sync -- push --mirror ./tmp/vfs-mirror
-
-# Or directly
-npm run start -w @novel-master/vfs-test-sync -- pull --mirror ./tmp/vfs-mirror --db ./.novel-master/novel.db
-
-# Watch mode (Ctrl+C to stop)
-npm run vfs:sync -- watch --mirror ./tmp/vfs-mirror --verbose
 ```
 
 ### Options

@@ -202,6 +202,11 @@ export async function createDefaultDiskWatcher(
  */
 export async function runWatch(options: WatchOptions): Promise<void> {
   const { config, engine, vfs, once = false } = options;
+
+  console.error(
+    `vfs-test-sync watch started (mirror=${config.mirrorRoot}, prefix=${config.prefix}, debounce=${config.debounceMs}ms, poll=${config.pollMs}ms); Ctrl+C to stop.`,
+  );
+
   const scheduler = createDebouncedSyncScheduler(engine, config.debounceMs);
   let vfsSnapshot = await snapshotVfs(vfs, config.prefix);
 

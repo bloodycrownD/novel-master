@@ -4,23 +4,53 @@
 
 | 路径 | 包名 | 说明 |
 |------|------|------|
-| `packages/core` | `@novel-master/core` | 核心业务库，导出 `greet` 等 API |
-| `apps/cli` | `@novel-master/cli` | CLI，`novel-master` 二进制入口 |
+| `packages/core` | `@novel-master/core` | TDBC、SqlTemplateParser、**VFS**（`VfsService`） |
+| `packages/tdbc-driver-*` | 各 driver | better-sqlite3、RN 等 |
+| `apps/cli` | `@novel-master/cli` | CLI：`novel-master` / **`nm`**（`npm link`） |
+| `scripts/vfs-test-sync` | `@novel-master/vfs-test-sync` | dev-only：VFS ↔ 本地目录 force 同步 |
 
 ## 根脚本
 
-- `npm run build` — 各 workspace 构建（`tsc`）
-- `npm run dev` — 开发模式
-- `npm run test` — 测试（各包若有）
-- `npm run clean` — 清理 `dist`
+| 脚本 | 说明 |
+|------|------|
+| `npm run build` | 各 workspace 构建 |
+| `npm run test` | 各 workspace 测试 |
+| `npm run link:cli` | build + `npm link` CLI（全局 `nm` / `novel-master`） |
+| `npm run vfs:watch` | watch 同步，默认镜像 `./tmp/mirror` |
+| `npm run vfs:push` / `vfs:pull` | force 全量 push/pull |
+| `npm run vfs:sync -- …` | 自定义参数：`push` / `pull` / `watch` |
+
+## VFS 开发速查
+
+- **DB 默认**：`./.novel-master/novel.db`（已 `.gitignore`，不进仓库）
+- **镜像目录**：`./tmp/mirror`（已 `.gitignore`）
+- **Node**：`.nvmrc` 为 `22.22.0`（与 Cursor / `better-sqlite3` 预编译一致）；`nvm use` 后 `npm rebuild better-sqlite3`
+- **CLI**：
+  ```bash
+  npm run link:cli
+  nm vfs write /path --text "hello"
+  nm vfs read /path
+  nm vfs list / -r
+  nm vfs replace /path --old a --new b
+  ```
+- **同步脚本**：`npm run vfs:watch`（stderr 会打印 `watch started`）
 
 ## 技术栈
 
-- Node.js >= 20
-- TypeScript 6，ESM（`"type": "module"`）
+- Node.js **22**（推荐，见 `.nvmrc`）
+- TypeScript 6，ESM
 - `tsconfig.base.json` 共享编译选项
-- CLI 开发可用 `tsx src/index.ts`
 
-## APM
+## APM 知识库
 
-项目根目录 `.apm/` 为 Agent 外置记忆（`apm read` / `dynamic` / `persist`）。与仓库内其他 `memory/` 目录无关。
+- 迭代文档：`.apm/kb/docs/Iterations/<名称>/prd.md`、`spec.md`
+- 子 feature：`.apm/kb/docs/Iterations/<名称>/features/<变更>/prd.md`、`spec.md`
+- 会话开始：`apm read`；改 kb 后：`apm kb index rebuild`
+- `.apm/` 为本地工作区（默认不进 Git）
+
+## Git 忽略（本地数据）
+
+```
+.novel-master/   # VFS SQLite
+tmp/             # 镜像目录等
+```

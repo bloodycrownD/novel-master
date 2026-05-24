@@ -1,10 +1,37 @@
 #!/usr/bin/env node
-import { VfsError } from "@novel-master/core";
+import { TdbcError, VfsError } from "@novel-master/core";
 import { ConfigError, MirrorError, PathMapError } from "./errors.js";
 import { parseArgv } from "./config.js";
 import { createSyncEngine } from "./sync-engine.js";
 import { createVfsRuntime } from "./vfs-runtime.js";
 import { runWatch } from "./watch.js";
+
+function formatRuntimeError(err: unknown): string {
+  if (!(err instanceof TdbcError)) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  const cause = err.cause;
+  const causeMsg =
+    cause instanceof Error ? cause.message : cause != null ? String(cause) : "";
+  if (
+    causeMsg.includes("NODE_MODULE_VERSION") ||
+    causeMsg.includes("ERR_DLOPEN_FAILED")
+  ) {
+    return (
+      `${err.message}: better-sqlite3 native module does not match this Node.js version.\n` +
+      `Run from repo root: npm rebuild better-sqlite3\n` +
+      `(Node ${process.version})`
+    );
+  }
+  if (causeMsg.includes("Could not locate the bindings file")) {
+    return (
+      `${err.message}: better-sqlite3 native binary is missing.\n` +
+      `From repo root with Node 22: nvm use 22.22.0 && npm rebuild better-sqlite3\n` +
+      `(Node ${process.version})`
+    );
+  }
+  return err.message;
+}
 
 async function main(): Promise<number> {
   const argv = process.argv.slice(2);
@@ -20,7 +47,14 @@ async function main(): Promise<number> {
   }
 
   const { command, config, dbArgv } = parsed;
-  const { vfs, conn } = await createVfsRuntime(dbArgv);
+  let vfs;
+  let conn;
+  try {
+    ({ vfs, conn } = await createVfsRuntime(dbArgv));
+  } catch (err: unknown) {
+    console.error(formatRuntimeError(err));
+    return 1;
+  }
 
   try {
     const engine = createSyncEngine(vfs, config);

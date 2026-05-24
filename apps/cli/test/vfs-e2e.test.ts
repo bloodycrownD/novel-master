@@ -188,6 +188,54 @@ describe("vfs CLI e2e", () => {
     }
   });
 
+  it("write with --text", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      const write = runCli([
+        "vfs",
+        "--db",
+        dbPath,
+        "write",
+        "/text.txt",
+        "--text",
+        "inline body",
+      ]);
+      assert.equal(write.status, 0, write.stderr);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/text.txt"]);
+      assert.equal(read.stdout, "inline body");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("replace with --old and --new flags", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runCli(["vfs", "--db", dbPath, "write", "/r2.txt"], {
+        input: "hello world",
+      });
+      const replaced = runCli([
+        "vfs",
+        "--db",
+        dbPath,
+        "replace",
+        "/r2.txt",
+        "--old",
+        "world",
+        "--new",
+        "there",
+      ]);
+      assert.equal(replaced.status, 0, replaced.stderr);
+
+      const read = runCli(["vfs", "--db", dbPath, "read", "/r2.txt"]);
+      assert.equal(read.stdout, "hello there");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("preserves greet fallback", () => {
     const greet = runCli(["Ada"]);
     assert.equal(greet.status, 0);
