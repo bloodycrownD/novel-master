@@ -5,11 +5,20 @@
  */
 
 /** Subset of react-native-quick-sqlite execute result. */
+export type QuickSqliteRows =
+  | (Record<string, unknown> | unknown[])[]
+  | {
+      readonly _array: (Record<string, unknown> | unknown[])[];
+      readonly length: number;
+      item?: (idx: number) => unknown;
+    };
+
 export interface QuickSqliteResult {
-  rows?: (Record<string, unknown> | unknown[])[];
+  rows?: QuickSqliteRows;
   rowsAffected?: number;
   insertId?: number;
   columnNames?: string[];
+  metadata?: { columnName: string }[];
 }
 
 /**

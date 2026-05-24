@@ -44,13 +44,40 @@ function rowFromArray(values: unknown[], columnNames: readonly string[]): Row {
   return row;
 }
 
-/** Builds TDBC rows from a quick-sqlite result. */
-export function rowsFromResult(result: QuickSqliteResult): Row[] {
-  if (!result.rows || result.rows.length === 0) {
+/** quick-sqlite returns rows as an array or `{ _array, length, item }`. */
+function normalizeRowsArray(rows: QuickSqliteResult["rows"]): unknown[] {
+  if (rows == null) {
     return [];
   }
-  const columnNames = result.columnNames;
-  return result.rows.map((record) => {
+  if (Array.isArray(rows)) {
+    return rows;
+  }
+  if (typeof rows === "object" && Array.isArray(rows._array)) {
+    return rows._array;
+  }
+  return [];
+}
+
+function resolveColumnNames(
+  result: QuickSqliteResult,
+): readonly string[] | undefined {
+  if (result.columnNames && result.columnNames.length > 0) {
+    return result.columnNames;
+  }
+  if (result.metadata && result.metadata.length > 0) {
+    return result.metadata.map((m) => m.columnName);
+  }
+  return undefined;
+}
+
+/** Builds TDBC rows from a quick-sqlite result. */
+export function rowsFromResult(result: QuickSqliteResult): Row[] {
+  const rawRows = normalizeRowsArray(result.rows);
+  if (rawRows.length === 0) {
+    return [];
+  }
+  const columnNames = resolveColumnNames(result);
+  return rawRows.map((record) => {
     if (Array.isArray(record) && columnNames && columnNames.length > 0) {
       return rowFromArray(record, columnNames);
     }

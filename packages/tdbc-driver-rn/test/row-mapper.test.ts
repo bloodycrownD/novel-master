@@ -17,4 +17,16 @@ describe("rowsFromResult", () => {
     });
     assert.deepEqual(rows, [{ id: 2, label: "y" }]);
   });
+
+  it("maps quick-sqlite _array rows with metadata", () => {
+    const rows = rowsFromResult({
+      metadata: [{ columnName: "path" }],
+      rows: {
+        _array: [{ path: "/dev/note.md" }],
+        length: 1,
+        item: (idx) => [{ path: "/dev/note.md" }][idx],
+      },
+    });
+    assert.deepEqual(rows, [{ path: "/dev/note.md" }]);
+  });
 });
