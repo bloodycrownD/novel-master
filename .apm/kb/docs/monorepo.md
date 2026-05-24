@@ -43,6 +43,12 @@
   nm kkv set --module app --key cfg --value "{}"
   nm project vfs list /template                  # uses current project when --project omitted
   nm session vfs list /                          # uses current project + session
+  nm vfs worktree list                           # global worktree TSV (template paths)
+  nm project worktree dir /template --head 2     # directory rules under /template
+  nm project worktree file /template/a.md --mode show
+  nm project template pull                       # overwrite project template from global
+  nm session worktree display                    # <file> blocks for visible files
+  nm session template pull                       # overwrite session from project; clears session-fs
   ```
 - **同步脚本**：`npm run vfs:watch`（stderr 会打印 `watch started`）
 
