@@ -8,9 +8,11 @@ import {
   ChatError,
   KkvError,
   PromptError,
+  ProviderError,
   TdbcError,
   VfsError,
 } from "@novel-master/core";
+import { SkspError } from "@novel-master/sksp";
 
 export const EXIT_USAGE = 1;
 export const EXIT_RUNTIME = 2;
@@ -21,7 +23,9 @@ export function formatCliError(error: unknown): string {
     error instanceof KkvError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
-    error instanceof TdbcError
+    error instanceof TdbcError ||
+    error instanceof ProviderError ||
+    error instanceof SkspError
   ) {
     return error.message;
   }
@@ -37,7 +41,9 @@ export function exitCodeForError(error: unknown): number {
     error instanceof KkvError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
-    error instanceof TdbcError
+    error instanceof TdbcError ||
+    error instanceof ProviderError ||
+    error instanceof SkspError
   ) {
     return EXIT_RUNTIME;
   }

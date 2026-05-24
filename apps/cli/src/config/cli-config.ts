@@ -8,10 +8,12 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { CliConfigError } from "./cli-config-errors.js";
 
-/** Persisted current project / session ids (CLI only). */
+/** Persisted current project / session / provider / model ids (CLI only). */
 export interface CliConfig {
   readonly currentProjectId?: string;
   readonly currentSessionId?: string;
+  readonly currentProviderId?: string;
+  readonly currentModelId?: string;
 }
 
 /**
@@ -33,14 +35,27 @@ function normalizeConfig(raw: unknown): CliConfig {
     return {};
   }
   const record = raw as Record<string, unknown>;
-  const config: { currentProjectId?: string; currentSessionId?: string } = {};
+  const config: {
+    currentProjectId?: string;
+    currentSessionId?: string;
+    currentProviderId?: string;
+    currentModelId?: string;
+  } = {};
   const projectId = normalizeField(record.currentProjectId);
   const sessionId = normalizeField(record.currentSessionId);
+  const providerId = normalizeField(record.currentProviderId);
+  const modelId = normalizeField(record.currentModelId);
   if (projectId != null) {
     config.currentProjectId = projectId;
   }
   if (sessionId != null) {
     config.currentSessionId = sessionId;
+  }
+  if (providerId != null) {
+    config.currentProviderId = providerId;
+  }
+  if (modelId != null) {
+    config.currentModelId = modelId;
   }
   return config;
 }
@@ -68,10 +83,18 @@ export async function loadCliConfig(path: string): Promise<CliConfig> {
 }
 
 function mergeConfig(existing: CliConfig, patch: Partial<CliConfig>): CliConfig {
-  const next: { currentProjectId?: string; currentSessionId?: string } = {
-    ...existing,
-  };
-  for (const key of ["currentProjectId", "currentSessionId"] as const) {
+  const next: {
+    currentProjectId?: string;
+    currentSessionId?: string;
+    currentProviderId?: string;
+    currentModelId?: string;
+  } = { ...existing };
+  for (const key of [
+    "currentProjectId",
+    "currentSessionId",
+    "currentProviderId",
+    "currentModelId",
+  ] as const) {
     if (!(key in patch)) {
       continue;
     }

@@ -14,9 +14,14 @@ import {
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
+  createProviderServices,
   createWorktreeService,
   open,
   type KkvService,
+  type ModelRequestService,
+  type ProviderModelService,
+  type ProviderService,
+  type SecretStore,
   type MessageService,
   type ProjectService,
   type SessionFsService,
@@ -27,6 +32,9 @@ import {
   type WorktreeService,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import { createCompositeSecretStore, resolveSkspDriver } from "@novel-master/sksp";
+import { createEnvSecretStore } from "@novel-master/sksp-env";
+import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
 import {
   type CliConfig,
   loadCliConfig,
@@ -67,6 +75,10 @@ export interface NovelMasterRuntime {
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
   worktree(scope: VfsScope): WorktreeService;
+  readonly secretStore: SecretStore;
+  readonly providers: ProviderService;
+  readonly providerModels: ProviderModelService;
+  readonly modelRequests: ModelRequestService;
   /** Merges into `config.json` and refreshes the in-memory scope resolver. */
   setCliContext(patch: Partial<CliConfig>): Promise<void>;
 }
@@ -78,6 +90,7 @@ export async function createNovelMasterRuntime(
   argv: readonly string[],
 ): Promise<NovelMasterRuntime> {
   registerBetterSqlite3Driver();
+  registerSkspWindowsDriver();
   const dbPath = resolve(resolveDbPath(argv));
   const configPath = resolveConfigPath(dbPath);
   await mkdir(dirname(dbPath), { recursive: true });
@@ -88,6 +101,13 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+
+  const dbStore = resolveSkspDriver("windows").createStore(conn);
+  const secretStore = createCompositeSecretStore({
+    db: dbStore,
+    env: createEnvSecretStore(),
+  });
+  const providerBundle = createProviderServices(conn, secretStore);
 
   const setCliContext = async (patch: Partial<CliConfig>): Promise<void> => {
     await saveCliConfig(configPath, patch);
@@ -117,5 +137,9 @@ export async function createNovelMasterRuntime(
         sessionId,
       }),
     worktree: (scope) => createWorktreeService(conn, scope),
+    secretStore,
+    providers: providerBundle.providers,
+    providerModels: providerBundle.providerModels,
+    modelRequests: providerBundle.modelRequests,
   };
 }
