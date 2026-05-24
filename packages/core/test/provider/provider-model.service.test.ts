@@ -1,0 +1,74 @@
+import { describe, it, mock } from "node:test";
+import assert from "node:assert/strict";
+import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import type { SecretStore } from "@novel-master/sksp";
+import {
+  clearProtocolAdapters,
+  getProtocolAdapter,
+} from "../../src/infra/llm-protocol/registry.js";
+import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+
+function memorySecretStore(): SecretStore {
+  const map = new Map<string, string>();
+  return {
+    async get(ref) {
+      return map.get(ref) ?? null;
+    },
+    async has(ref) {
+      return map.has(ref);
+    },
+    async set(ref, plain) {
+      map.set(ref, plain);
+    },
+    async delete(ref) {
+      return map.delete(ref);
+    },
+  };
+}
+
+describe("ProviderModelService fetch", () => {
+  it("populates suggestions from listModels response", async () => {
+    clearProtocolAdapters();
+    const fetchFn = mock.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "gpt-4o" }, { id: "gpt-4o-mini" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+    const ctx = await openNovelMasterTestConnection();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    await secrets.set("provider/openai/apiKey", "sk-test");
+
+    await bundle.providerModels.fetch("openai");
+    const suggestions = await bundle.providerModels.suggestList("openai");
+    assert.equal(suggestions.length, 2);
+    assert.ok(
+      suggestions.some((s) => s.vendorModelId === "gpt-4o" && s.stale === false),
+    );
+    const saved = await bundle.providerModels.savedList("openai");
+    assert.equal(saved.length, 0);
+
+    await ctx.conn.close();
+    clearProtocolAdapters();
+  });
+});
+
+describe("ProviderModelService editSaved", () => {
+  it("preserves displayName when omitted", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    await bundle.providerModels.create("openai", "manual-model");
+    await bundle.providerModels.editSaved("openai", "manual-model", "Label A");
+    const after = await bundle.providerModels.editSaved(
+      "openai",
+      "manual-model",
+    );
+    assert.equal(after.displayName, "Label A");
+    await ctx.conn.close();
+  });
+});

@@ -58,4 +58,20 @@ describe("ProviderService", () => {
     );
     await ctx.conn.close();
   });
+
+  it("delete custom provider removes secret ref", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    await bundle.providers.create({
+      id: "tmpgw",
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      apiKey: "gw-secret",
+    });
+    assert.equal(await secrets.has("provider/tmpgw/apiKey"), true);
+    await bundle.providers.delete("tmpgw");
+    assert.equal(await secrets.has("provider/tmpgw/apiKey"), false);
+    await ctx.conn.close();
+  });
 });

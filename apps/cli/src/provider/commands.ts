@@ -166,8 +166,8 @@ export async function runProvider(
           "No current provider (run: nm provider use --providerId <id>)",
         );
       }
-      const p = await rt.providers.get(id);
-      console.log(`${p.id}\t${p.protocol}\t${p.baseUrl}`);
+      await rt.providers.get(id);
+      console.log(id);
       return;
     }
     default:
