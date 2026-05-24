@@ -11,6 +11,19 @@ React Native TDBC driver via [react-native-quick-sqlite](https://github.com/marg
 
 React Native apps should import from **`/native`** so Metro includes the peer in the bundle.
 
+## Layout (port + impl)
+
+```text
+adapter.ts              # port: RnSqliteAdapter
+impl/
+  quick-sqlite.adapter.ts         # BaseQuickSqliteAdapter (shared open/execute)
+  quick-sqlite-dynamic.adapter.ts # QuickSqliteAdapter — main entry default
+  quick-sqlite-native.adapter.ts  # NativeQuickSqliteAdapter — /native default
+driver.ts / connection.ts         # TDBC RN driver (no impl imports in driver.ts)
+```
+
+`driver.ts` does **not** import `impl/`; `index.ts` and `native.ts` choose the default adapter.
+
 ## Setup (Node / docs)
 
 ```typescript

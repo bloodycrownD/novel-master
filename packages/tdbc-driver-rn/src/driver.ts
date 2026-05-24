@@ -8,7 +8,6 @@ import type { OpenOptions, TdbcConnection, TdbcDriver } from "@novel-master/core
 import { TdbcError } from "@novel-master/core";
 import type { RnSqliteAdapter } from "./adapter.js";
 import { RnConnection } from "./connection.js";
-import { QuickSqliteAdapter } from "./impl/quick-sqlite-dynamic.adapter.js";
 
 export const RN_DRIVER_NAME = "rn";
 
@@ -24,8 +23,11 @@ export class RnDriver implements TdbcDriver {
   readonly name = RN_DRIVER_NAME;
   private readonly defaultAdapter: RnSqliteAdapter;
 
-  constructor(defaultAdapter?: RnSqliteAdapter) {
-    this.defaultAdapter = defaultAdapter ?? new QuickSqliteAdapter();
+  /**
+   * @param defaultAdapter - Required; entry modules ({@link index.ts}, {@link native.ts}) supply impl.
+   */
+  constructor(defaultAdapter: RnSqliteAdapter) {
+    this.defaultAdapter = defaultAdapter;
   }
 
   async open(options: RnOpenOptions & { url?: string }): Promise<TdbcConnection> {
