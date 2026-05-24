@@ -1,0 +1,24 @@
+{
+  "name": "@novel-master/vfs-test-sync",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "vfs-test-sync": "./dist/main.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "dev": "tsx src/main.ts",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@novel-master/core": "*",
+    "@novel-master/tdbc-driver-better-sqlite3": "*",
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
