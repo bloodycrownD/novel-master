@@ -11,3 +11,6 @@ Thumbs.db
 # Local VFS SQLite DB and mirror dirs (dev/test)
 .novel-master/
 tmp/
+
+# Generated knowledge-base search index (rebuild locally)
+.apm/kb/index/
