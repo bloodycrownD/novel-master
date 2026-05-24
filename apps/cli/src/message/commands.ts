@@ -5,23 +5,20 @@
  */
 
 import { readFile } from "node:fs/promises";
-import type { MessageService } from "@novel-master/core";
+import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runMessage(
-  messages: MessageService,
+  rt: Pick<NovelMasterRuntime, "messages" | "scope">,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const sessionId = flags.get("session");
-  if (typeof sessionId !== "string") {
-    throw new Error("Missing --session <id>");
-  }
+  const sessionId = rt.scope.resolveSessionId(flags);
 
   switch (subcommand) {
     case "list": {
-      const list = await messages.listBySession(sessionId);
+      const list = await rt.messages.listBySession(sessionId);
       for (const m of list) {
         const text = m.content.content ?? JSON.stringify(m.content);
         console.log(`${m.id}\t${m.seq}\t${m.role}\t${text}`);
@@ -34,7 +31,7 @@ export async function runMessage(
       const fileFlag = flags.get("file");
       if (typeof role !== "string") {
         throw new Error(
-          "Usage: nm message append --session <id> --role <role> [--content <text>|--file <path>]",
+          "Usage: nm message append [--session <id>] --role <role> [--content <text>|--file <path>]",
         );
       }
       if (typeof contentFlag === "string" && typeof fileFlag === "string") {
@@ -48,27 +45,31 @@ export async function runMessage(
             : null;
       if (content == null) {
         throw new Error(
-          "Usage: nm message append --session <id> --role <role> [--content <text>|--file <path>]",
+          "Usage: nm message append [--session <id>] --role <role> [--content <text>|--file <path>]",
         );
       }
-      const msg = await messages.append(sessionId, role, { content });
+      const msg = await rt.messages.append(sessionId, role, { content });
       console.log(msg.id);
       return;
     }
     case "delete": {
       const messageId = flags.get("message");
       if (typeof messageId !== "string") {
-        throw new Error("Usage: nm message delete --session <id> --message <id>");
+        throw new Error(
+          "Usage: nm message delete [--session <id>] --message <id>",
+        );
       }
-      await messages.delete(messageId);
+      await rt.messages.delete(messageId);
       return;
     }
     case "fork": {
       const upTo = flags.get("up-to");
       if (typeof upTo !== "string") {
-        throw new Error("Usage: nm message fork --session <id> --up-to <messageId>");
+        throw new Error(
+          "Usage: nm message fork [--session <id>] --up-to <messageId>",
+        );
       }
-      const forked = await messages.fork(sessionId, upTo);
+      const forked = await rt.messages.fork(sessionId, upTo);
       console.log(forked.id);
       return;
     }

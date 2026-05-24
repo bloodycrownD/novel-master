@@ -92,32 +92,21 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         case "project":
           if (sub === "vfs") {
             const { flags } = parseCliArgs(rest);
-            const projectId = flags.get("project");
-            if (typeof projectId !== "string") {
-              throw new Error("Missing --project <id>");
-            }
+            const projectId = rt.scope.resolveProjectId(flags);
             await runProjectVfs(
               (id) => rt.projectVfs(id),
               projectId,
               rest,
             );
           } else {
-            await runProject(rt.projects, sub, rest);
+            await runProject(rt, sub, rest);
           }
           break;
         case "session":
-          await runSession(
-            {
-              sessions: rt.sessions,
-              sessionFs: rt.sessionFs,
-              sessionVfs: (pid, sid) => rt.sessionVfs(pid, sid),
-            },
-            sub,
-            rest,
-          );
+          await runSession(rt, sub, rest);
           break;
         case "message":
-          await runMessage(rt.messages, sub, rest);
+          await runMessage(rt, sub, rest);
           break;
       }
       return 0;

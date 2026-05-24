@@ -24,6 +24,14 @@ import {
   type VfsService,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
+import {
+  type CliConfig,
+  loadCliConfig,
+  mergeCliConfig,
+  resolveConfigPath,
+  saveCliConfig,
+} from "./config/cli-config.js";
+import { CliScopeResolver } from "./config/resolve-scope.js";
 import { extractDbPath } from "./vfs/parse-args.js";
 
 const DEFAULT_DB = "./.novel-master/novel.db";
@@ -50,9 +58,13 @@ export interface NovelMasterRuntime {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
+  readonly configPath: string;
+  readonly scope: CliScopeResolver;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
+  /** Merges into `config.json` and refreshes the in-memory scope resolver. */
+  setCliContext(patch: Partial<CliConfig>): Promise<void>;
 }
 
 /**
@@ -63,11 +75,22 @@ export async function createNovelMasterRuntime(
 ): Promise<NovelMasterRuntime> {
   registerBetterSqlite3Driver();
   const dbPath = resolve(resolveDbPath(argv));
+  const configPath = resolveConfigPath(dbPath);
   await mkdir(dirname(dbPath), { recursive: true });
+  let config = await loadCliConfig(configPath);
+  let scope = new CliScopeResolver(config, { configPath });
+
   const conn = await open(`tdbc:sqlite:file:${dbPath}`, {
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+
+  const setCliContext = async (patch: Partial<CliConfig>): Promise<void> => {
+    await saveCliConfig(configPath, patch);
+    config = mergeCliConfig(config, patch);
+    scope.replaceConfig(config);
+  };
+
   return {
     conn,
     kkv: createKkvService(conn),
@@ -75,6 +98,11 @@ export async function createNovelMasterRuntime(
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
+    configPath,
+    get scope() {
+      return scope;
+    },
+    setCliContext,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

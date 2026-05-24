@@ -4,19 +4,14 @@
  * @module project/commands
  */
 
-import type { ProjectService } from "@novel-master/core";
+import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-function requireProjectFlag(flags: ReadonlyMap<string, string | true>): string {
-  const id = flags.get("project");
-  if (typeof id !== "string") {
-    throw new Error("Missing --project <id>");
-  }
-  return id;
-}
-
 export async function runProject(
-  projects: ProjectService,
+  rt: Pick<
+    NovelMasterRuntime,
+    "projects" | "scope" | "setCliContext"
+  >,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
@@ -24,7 +19,7 @@ export async function runProject(
 
   switch (subcommand) {
     case "list": {
-      const list = await projects.list();
+      const list = await rt.projects.list();
       for (const p of list) {
         console.log(`${p.id}\t${p.name}`);
       }
@@ -33,22 +28,46 @@ export async function runProject(
     case "create": {
       const nameFlag = flags.get("name");
       const name = typeof nameFlag === "string" ? nameFlag : "project";
-      const p = await projects.create(name);
+      const p = await rt.projects.create(name);
+      await rt.setCliContext({
+        currentProjectId: p.id,
+        currentSessionId: undefined,
+      });
       console.log(p.id);
       return;
     }
+    case "use": {
+      const id = flags.get("project");
+      if (typeof id !== "string") {
+        throw new Error("Usage: nm project use --project <id>");
+      }
+      await rt.projects.get(id);
+      await rt.setCliContext({
+        currentProjectId: id,
+        currentSessionId: undefined,
+      });
+      return;
+    }
     case "delete": {
-      const id = requireProjectFlag(flags);
-      await projects.delete(id);
+      const id = rt.scope.resolveProjectId(flags);
+      await rt.projects.delete(id);
+      if (rt.scope.getConfigSnapshot().currentProjectId === id) {
+        await rt.setCliContext({
+          currentProjectId: undefined,
+          currentSessionId: undefined,
+        });
+      }
       return;
     }
     case "copy": {
-      const id = requireProjectFlag(flags);
-      const copy = await projects.copy(id);
+      const id = rt.scope.resolveProjectId(flags);
+      const copy = await rt.projects.copy(id);
       console.log(copy.id);
       return;
     }
     default:
-      throw new Error("Usage: nm project <list|create|delete|copy> ...");
+      throw new Error(
+        "Usage: nm project <list|create|use|delete|copy|vfs> ...",
+      );
   }
 }

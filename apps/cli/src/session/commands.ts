@@ -4,11 +4,8 @@
  * @module session/commands
  */
 
-import type {
-  SessionFsService,
-  SessionService,
-  VfsService,
-} from "@novel-master/core";
+import type { VfsService } from "@novel-master/core";
+import type { NovelMasterRuntime } from "../runtime.js";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runGlob } from "../vfs/commands/glob.js";
 import { runGrep } from "../vfs/commands/grep.js";
@@ -31,36 +28,21 @@ const SESSION_VFS_COMMANDS: Record<
   delete: runDelete,
 };
 
-function requireProject(flags: ReadonlyMap<string, string | true>): string {
-  const id = flags.get("project");
-  if (typeof id !== "string") {
-    throw new Error("Missing --project <id>");
-  }
-  return id;
-}
-
-function requireSession(flags: ReadonlyMap<string, string | true>): string {
-  const id = flags.get("session");
-  if (typeof id !== "string") {
-    throw new Error("Missing --session <id>");
-  }
-  return id;
-}
+type SessionDeps = Pick<
+  NovelMasterRuntime,
+  "sessions" | "sessionFs" | "sessionVfs" | "scope" | "setCliContext"
+>;
 
 export async function runSession(
-  deps: {
-    sessions: SessionService;
-    sessionFs: SessionFsService;
-    sessionVfs: (projectId: string, sessionId: string) => VfsService;
-  },
+  deps: SessionDeps,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const projectId = requireProject(flags);
 
   switch (subcommand) {
     case "list": {
+      const projectId = deps.scope.resolveProjectId(flags);
       const list = await deps.sessions.listByProject(projectId);
       for (const s of list) {
         console.log(`${s.id}\t${s.title ?? ""}`);
@@ -68,48 +50,63 @@ export async function runSession(
       return;
     }
     case "create": {
+      const projectId = deps.scope.resolveProjectId(flags);
       const title =
         typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
       const s = await deps.sessions.create(projectId, title);
+      await deps.setCliContext({
+        currentProjectId: projectId,
+        currentSessionId: s.id,
+      });
       console.log(s.id);
       return;
     }
+    case "use": {
+      const id = flags.get("session");
+      if (typeof id !== "string") {
+        throw new Error("Usage: nm session use --session <id>");
+      }
+      const session = await deps.sessions.get(id);
+      await deps.setCliContext({
+        currentProjectId: session.projectId,
+        currentSessionId: id,
+      });
+      return;
+    }
     case "delete": {
-      const sessionId = requireSession(flags);
+      const sessionId = deps.scope.resolveSessionId(flags);
       await deps.sessions.delete(sessionId);
+      if (deps.scope.getConfigSnapshot().currentSessionId === sessionId) {
+        await deps.setCliContext({ currentSessionId: undefined });
+      }
       return;
     }
     case "copy": {
-      const sessionId = requireSession(flags);
+      const sessionId = deps.scope.resolveSessionId(flags);
       const copy = await deps.sessions.copy(sessionId);
       console.log(copy.id);
       return;
     }
     case "vfs": {
       const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
-      await runSessionVfs(deps, projectId, vfsRest);
+      await runSessionVfs(deps, vfsRest);
       return;
     }
     default:
-      throw new Error("Usage: nm session <list|create|delete|copy|vfs> ...");
+      throw new Error(
+        "Usage: nm session <list|create|use|delete|copy|vfs> ...",
+      );
   }
 }
 
-async function runSessionVfs(
-  deps: {
-    sessionFs: SessionFsService;
-    sessionVfs: (projectId: string, sessionId: string) => VfsService;
-  },
-  projectId: string,
-  args: readonly string[],
-): Promise<void> {
+async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promise<void> {
   const { positional, flags } = parseCliArgs(args);
+  const { projectId, sessionId } = deps.scope.resolveProjectSession(flags);
   const group = positional[0];
   const rest = positional.slice(1);
 
   if (group === "records") {
     const sub = rest[0];
-    const sessionId = requireSession(flags);
     if (sub === "list") {
       const batches = await deps.sessionFs.listBatches(sessionId);
       for (const b of batches) {
@@ -121,7 +118,7 @@ async function runSessionVfs(
       const batchId = flags.get("batch");
       if (typeof batchId !== "string") {
         throw new Error(
-          "Usage: nm session vfs records rollback --project <id> --session <id> --batch <id>",
+          "Usage: nm session vfs records rollback [--project <id>] [--session <id>] --batch <id>",
         );
       }
       await deps.sessionFs.rollbackBatch(sessionId, projectId, batchId);
@@ -132,7 +129,6 @@ async function runSessionVfs(
 
   if (group === "snapshot") {
     const sub = rest[0];
-    const sessionId = requireSession(flags);
     const file = flags.get("file");
     if (typeof file !== "string") {
       throw new Error("Missing --file <logicalPath>");
@@ -167,7 +163,6 @@ async function runSessionVfs(
       "Usage: nm session vfs <list|read|write|...> | records ... | snapshot ...",
     );
   }
-  const sessionId = requireSession(flags);
   const vfs = deps.sessionVfs(projectId, sessionId);
   const idx = args.indexOf(group);
   const subArgs = args.slice(idx + 1);
