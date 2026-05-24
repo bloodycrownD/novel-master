@@ -9,6 +9,7 @@ import { runKkv } from "./kkv/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
 import { runProjectVfs } from "./project/vfs.js";
+import { runVfsWorktree } from "./vfs/worktree.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
@@ -43,9 +44,19 @@ async function runVfs(argv: string[]): Promise<number> {
   const subcommand = rest[0];
   const subArgs = rest.slice(1);
 
+  if (subcommand === "worktree") {
+    const rt = await createNovelMasterRuntime(argv);
+    try {
+      await runVfsWorktree(rt, subArgs);
+      return 0;
+    } finally {
+      await rt.conn.close();
+    }
+  }
+
   if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
     console.error(
-      "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete> ...",
+      "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|worktree> ...",
     );
     return EXIT_USAGE;
   }

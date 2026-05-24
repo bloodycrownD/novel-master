@@ -14,6 +14,7 @@ import {
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
+  createWorktreeService,
   open,
   type KkvService,
   type MessageService,
@@ -21,7 +22,9 @@ import {
   type SessionFsService,
   type SessionService,
   type TdbcConnection,
+  type VfsScope,
   type VfsService,
+  type WorktreeService,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
@@ -63,6 +66,7 @@ export interface NovelMasterRuntime {
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
+  worktree(scope: VfsScope): WorktreeService;
   /** Merges into `config.json` and refreshes the in-memory scope resolver. */
   setCliContext(patch: Partial<CliConfig>): Promise<void>;
 }
@@ -112,5 +116,6 @@ export async function createNovelMasterRuntime(
         projectId,
         sessionId,
       }),
+    worktree: (scope) => createWorktreeService(conn, scope),
   };
 }

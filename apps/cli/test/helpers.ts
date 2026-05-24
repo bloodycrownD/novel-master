@@ -17,7 +17,7 @@ export interface SpawnResult {
 /** Spawns the CLI entry via tsx (same as other e2e tests). */
 export function runNm(
   args: string[],
-  env?: NodeJS.ProcessEnv,
+  options?: { env?: NodeJS.ProcessEnv; input?: string },
 ): SpawnResult {
   const result = spawnSync(
     process.execPath,
@@ -25,7 +25,8 @@ export function runNm(
     {
       cwd: CLI_ROOT,
       encoding: "utf8",
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...options?.env },
+      input: options?.input,
     },
   );
   return {

@@ -14,6 +14,8 @@ import { runList } from "../vfs/commands/list.js";
 import { runRead } from "../vfs/commands/read.js";
 import { runReplace } from "../vfs/commands/replace.js";
 import { runWrite } from "../vfs/commands/write.js";
+import { runSessionTemplate } from "./template.js";
+import { runSessionWorktree } from "./worktree.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const SESSION_VFS_COMMANDS: Record<
@@ -31,7 +33,12 @@ const SESSION_VFS_COMMANDS: Record<
 
 type SessionDeps = Pick<
   NovelMasterRuntime,
-  "sessions" | "sessionFs" | "sessionVfs" | "scope" | "setCliContext"
+  | "sessions"
+  | "sessionFs"
+  | "sessionVfs"
+  | "scope"
+  | "setCliContext"
+  | "worktree"
 >;
 
 export async function runSession(
@@ -106,9 +113,20 @@ export async function runSession(
       await runSessionVfs(deps, vfsRest);
       return;
     }
+    case "worktree":
+      await runSessionWorktree(deps, args);
+      return;
+    case "template": {
+      const templateSub = args[0];
+      if (templateSub == null) {
+        throw new Error("Usage: nm session template pull ...");
+      }
+      await runSessionTemplate(deps, templateSub, args.slice(1));
+      return;
+    }
     default:
       throw new Error(
-        "Usage: nm session <list|create|use|current|delete|copy|vfs> ...",
+        "Usage: nm session <list|create|use|current|delete|copy|vfs|worktree|template> ...",
       );
   }
 }

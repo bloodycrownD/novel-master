@@ -6,13 +6,12 @@
 
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveProjectUseId } from "../config/resolve-entity.js";
+import { runProjectTemplate } from "./template.js";
+import { runProjectWorktree } from "./worktree.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runProject(
-  rt: Pick<
-    NovelMasterRuntime,
-    "projects" | "scope" | "setCliContext"
-  >,
+  rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
@@ -73,9 +72,20 @@ export async function runProject(
       console.log(copy.id);
       return;
     }
+    case "worktree":
+      await runProjectWorktree(rt, args);
+      return;
+    case "template": {
+      const templateSub = args[0];
+      if (templateSub == null) {
+        throw new Error("Usage: nm project template pull ...");
+      }
+      await runProjectTemplate(rt, templateSub, args.slice(1));
+      return;
+    }
     default:
       throw new Error(
-        "Usage: nm project <list|create|use|current|delete|copy|vfs> ...",
+        "Usage: nm project <list|create|use|current|delete|copy|vfs|worktree|template> ...",
       );
   }
 }
