@@ -218,8 +218,15 @@ export class DefaultWorktreeService implements WorktreeService {
       displayState: "",
     });
 
-    const files = directChildFiles(dirPath, ctx.fileSet);
     const dirRule = ctx.dirRuleMap.get(dirPath) ?? null;
+
+    // DFS: child directories before sibling files (parent dir rule sorts both).
+    const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
+    for (const sub of subdirs) {
+      await this.walkDir(ctx, sub, listRows, displayBlocks);
+    }
+
+    const files = directChildFiles(dirPath, ctx.fileSet);
     const sortedFiles = sortFilesForDir(
       files.map((p) => ({
         logicalPath: p,
@@ -249,12 +256,6 @@ export class DefaultWorktreeService implements WorktreeService {
           }),
         );
       }
-    }
-
-    // Sibling dirs: parent dir rule controls order (not each child's own rule).
-    const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
-    for (const sub of subdirs) {
-      await this.walkDir(ctx, sub, listRows, displayBlocks);
     }
   }
 }

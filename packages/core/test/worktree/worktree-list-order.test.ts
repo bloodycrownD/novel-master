@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { createWorktreeService } from "@novel-master/core";
+import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+
+describe("worktree list order", () => {
+  it("emits child directories before sibling files at each level", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const gvfs = ctx.globalVfs();
+    await gvfs.write("/template/parent/a.md", "A");
+    await gvfs.write("/template/parent/sub/b.md", "B");
+
+    const wt = createWorktreeService(ctx.conn, { kind: "global" });
+    await wt.setFileRule({
+      logicalPath: "/template/parent/a.md",
+      inclusionMode: "show",
+    });
+    await wt.setFileRule({
+      logicalPath: "/template/parent/sub/b.md",
+      inclusionMode: "show",
+    });
+    const rows = await wt.buildListRows();
+
+    const parentDir = "/template/parent";
+    const subDir = "/template/parent/sub";
+    const aFile = "/template/parent/a.md";
+
+    const parentIdx = rows.findIndex((r) => r.path === parentDir);
+    const subIdx = rows.findIndex((r) => r.path === subDir);
+    const aIdx = rows.findIndex((r) => r.path === aFile);
+
+    assert.ok(parentIdx >= 0, "parent dir row");
+    assert.ok(subIdx >= 0, "sub dir row");
+    assert.ok(aIdx >= 0, "a.md file row");
+    assert.ok(subIdx > parentIdx, "sub dir after parent dir");
+    assert.ok(aIdx > parentIdx, "a.md after parent dir");
+    assert.ok(subIdx < aIdx, "sub dir before sibling a.md");
+
+    const display = await wt.renderDisplay();
+    const subPos = display.indexOf('path="/template/parent/sub/b.md"');
+    const aPos = display.indexOf('path="/template/parent/a.md"');
+    assert.ok(subPos >= 0, "sub file in display");
+    assert.ok(aPos >= 0, "a.md in display");
+    assert.ok(subPos < aPos, "display DFS: sub tree before sibling file");
+
+    await ctx.conn.close();
+  });
+});
