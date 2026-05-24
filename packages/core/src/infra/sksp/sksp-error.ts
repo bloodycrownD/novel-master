@@ -1,7 +1,7 @@
 /**
  * SKSP error types.
  *
- * @module sksp-error
+ * @module infra/sksp/sksp-error
  */
 
 /** Discriminant codes for {@link SkspError}. */

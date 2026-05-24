@@ -12,7 +12,7 @@ import {
   TdbcError,
   VfsError,
 } from "@novel-master/core";
-import { SkspError } from "@novel-master/sksp";
+import { SkspError } from "@novel-master/core/sksp";
 
 export const EXIT_USAGE = 1;
 export const EXIT_RUNTIME = 2;

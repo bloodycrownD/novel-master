@@ -6,8 +6,5 @@
     "lib": ["ES2022"]
   },
   "include": ["src/**/*"],
-  "references": [
-    { "path": "../sksp" },
-    { "path": "../core" }
-  ]
+  "references": [{ "path": "../core" }]
 }

@@ -1,7 +1,7 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
-import type { SecretStore } from "@novel-master/sksp";
+import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
 import {
   clearProtocolAdapters,
   getProtocolAdapter,

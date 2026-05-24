@@ -21,8 +21,7 @@
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\""
   },
   "dependencies": {
-    "@novel-master/core": "*",
-    "@novel-master/sksp": "*"
+    "@novel-master/core": "*"
   },
   "peerDependencies": {
     "react-native": ">=0.74.0"

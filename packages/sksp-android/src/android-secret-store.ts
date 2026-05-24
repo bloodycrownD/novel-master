@@ -14,7 +14,7 @@ import {
   assertValidRef,
   SkspError,
   type SecretStore,
-} from "@novel-master/sksp";
+} from "@novel-master/core/sksp";
 import { getSkspNativeModule } from "./native.js";
 
 const ALGO = "android-keystore-aes-gcm-v1";

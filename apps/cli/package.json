@@ -16,8 +16,6 @@
   },
   "dependencies": {
     "@novel-master/core": "*",
-    "@novel-master/sksp": "*",
-    "@novel-master/sksp-env": "*",
     "@novel-master/sksp-windows": "*",
     "@novel-master/tdbc-driver-better-sqlite3": "*"
   },

@@ -4,7 +4,7 @@
  * @module dpapi
  */
 
-import { SkspError } from "@novel-master/sksp";
+import { SkspError } from "@novel-master/core/sksp";
 
 /** Test hook: bypass DPAPI (UTF-8 passthrough as "ciphertext"). @internal */
 let testPassthrough = false;

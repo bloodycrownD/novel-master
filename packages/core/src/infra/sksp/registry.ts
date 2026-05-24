@@ -1,7 +1,7 @@
 /**
  * SKSP driver registry (mirrors TDBC registry semantics).
  *
- * @module registry
+ * @module infra/sksp/registry
  */
 
 import type { SecretStore } from "./secret-store.port.js";

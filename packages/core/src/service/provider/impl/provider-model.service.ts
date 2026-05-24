@@ -12,7 +12,7 @@ import type { ProviderRepository } from "@/domain/provider/repositories/provider
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
-import type { SecretStore } from "@novel-master/sksp";
+import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";
 

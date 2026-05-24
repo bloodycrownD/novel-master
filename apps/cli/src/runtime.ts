@@ -32,8 +32,11 @@ import {
   type WorktreeService,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
-import { createCompositeSecretStore, resolveSkspDriver } from "@novel-master/sksp";
-import { createEnvSecretStore } from "@novel-master/sksp-env";
+import {
+  createCompositeSecretStore,
+  createEnvSecretStore,
+  resolveSkspDriver,
+} from "@novel-master/core/sksp";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
 import {
   type CliConfig,

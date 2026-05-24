@@ -4,8 +4,8 @@ import {
   clearSkspDrivers,
   registerSkspDriver,
   resolveSkspDriver,
-} from "../src/registry.js";
-import { SkspError } from "../src/sksp-error.js";
+} from "../../../src/infra/sksp/registry.js";
+import { SkspError } from "../../../src/infra/sksp/sksp-error.js";
 
 describe("SKSP registry", () => {
   it("resolves single registered driver", () => {

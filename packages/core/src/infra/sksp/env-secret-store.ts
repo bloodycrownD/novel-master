@@ -1,7 +1,7 @@
 /**
  * Environment-variable secret store (read-only).
  *
- * @module env-secret-store
+ * @module infra/sksp/env-secret-store
  */
 
 import { refToEnvVar } from "./ref-to-env.js";

@@ -9,6 +9,5 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../sksp" }]
+  "include": ["src/**/*"]
 }

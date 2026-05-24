@@ -5,7 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/connection.js";
-import type { SecretStore } from "@novel-master/sksp";
+import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
 import { SqliteProviderRepository } from "@/domain/provider/repositories/impl/sqlite-provider.repository.js";
 import { SqliteModelSuggestionRepository } from "@/domain/provider/repositories/impl/sqlite-model-suggestion.repository.js";
 import { SqliteSavedModelRepository } from "@/domain/provider/repositories/impl/sqlite-saved-model.repository.js";

@@ -15,7 +15,7 @@ import {
   assertValidRef,
   SkspError,
   type SecretStore,
-} from "@novel-master/sksp";
+} from "@novel-master/core/sksp";
 import { protectUtf8, unprotectUtf8 } from "./dpapi.js";
 
 const ALGO = "dpapi-v1";

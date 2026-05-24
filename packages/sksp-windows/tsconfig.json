@@ -5,8 +5,5 @@
     "outDir": "./dist"
   },
   "include": ["src/**/*"],
-  "references": [
-    { "path": "../sksp" },
-    { "path": "../core" }
-  ]
+  "references": [{ "path": "../core" }]
 }

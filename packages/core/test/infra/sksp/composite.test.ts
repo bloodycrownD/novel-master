@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { createCompositeSecretStore } from "../src/composite-secret-store.js";
-import type { SecretStore } from "../src/secret-store.port.js";
+import { createCompositeSecretStore } from "../../../src/infra/sksp/composite-secret-store.js";
+import type { SecretStore } from "../../../src/infra/sksp/secret-store.port.js";
 
 function memoryStore(initial?: Record<string, string>): SecretStore {
   const map = new Map(Object.entries(initial ?? {}));

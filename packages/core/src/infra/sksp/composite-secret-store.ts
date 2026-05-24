@@ -1,7 +1,7 @@
 /**
  * Composite secret store: env overrides DB for reads.
  *
- * @module composite-secret-store
+ * @module infra/sksp/composite-secret-store
  */
 
 import type { SecretStore } from "./secret-store.port.js";

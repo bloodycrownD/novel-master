@@ -4,7 +4,7 @@
  * @module service/provider/impl/provider.service
  */
 
-import type { SecretStore } from "@novel-master/sksp";
+import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";

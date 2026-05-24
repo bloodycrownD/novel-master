@@ -19,8 +19,7 @@
   },
   "dependencies": {
     "@primno/dpapi": "^2.0.1",
-    "@novel-master/core": "*",
-    "@novel-master/sksp": "*"
+    "@novel-master/core": "*"
   },
   "devDependencies": {
     "@novel-master/tdbc-driver-better-sqlite3": "*",

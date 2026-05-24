@@ -11,7 +11,7 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
 import type { LlmChatResult } from "@/infra/llm-protocol/adapter.port.js";
-import type { SecretStore } from "@novel-master/sksp";
+import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
 import type { ModelRequestService } from "../model-request.port.js";
 
 export interface DefaultModelRequestServiceDeps {

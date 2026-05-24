@@ -1,7 +1,7 @@
 /**
  * Secret Key Storage Protocol — async secret store port.
  *
- * @module secret-store.port
+ * @module infra/sksp/secret-store.port
  */
 
 /** Async key-value secret storage (ciphertext at rest in DB drivers). */

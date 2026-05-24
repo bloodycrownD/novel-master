@@ -1,7 +1,7 @@
 /**
  * Maps SKSP refs to environment variable names.
  *
- * @module ref-to-env
+ * @module infra/sksp/ref-to-env
  */
 
 /**

@@ -13,16 +13,19 @@
     "./tdbc": {
       "types": "./dist/infra/tdbc/index.d.ts",
       "import": "./dist/infra/tdbc/index.js"
+    },
+    "./sksp": {
+      "types": "./dist/infra/sksp/index.d.ts",
+      "import": "./dist/infra/sksp/index.js"
     }
   },
   "scripts": {
-    "build": "npm run build -w @novel-master/sksp && tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && tsc-alias -p tsconfig.json",
     "dev": "tsc -p tsconfig.json --watch",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "test": "tsx --tsconfig tsconfig.test.json --test test/**/*.test.ts"
   },
   "dependencies": {
-    "@novel-master/sksp": "*",
     "yaml": "^2.8.2"
   },
   "devDependencies": {

@@ -5,7 +5,7 @@
  */
 
 import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { registerSkspDriver } from "@novel-master/sksp";
+import { registerSkspDriver } from "@novel-master/core/sksp";
 import { createAndroidSecretStore } from "./android-secret-store.js";
 
 /** Registers `android` SKSP driver (Keystore + SQLite). */

@@ -4,18 +4,18 @@
 
 - 定义 **Secret Key Storage Protocol（SKSP）**：异步 `SecretStore` 端口 + 可插拔驱动，模式对齐 [TDBC SPEC](../TDBC/spec.md)（`registerDriver` / `resolveDriver`）。
 - **统一持久化**：API Key 等敏感值以**密文**存入与业务共用的 `novel.db` 表 `sksp_secrets`；业务表（如 `llm_provider`）仅存 **`secretRef`**，**无明文** key。
-- **v1 驱动（本期均必交付）**：`@novel-master/sksp-windows`（DPAPI + SQLite）、`@novel-master/sksp-android`（Keystore + RN 桥）；可选 `@novel-master/sksp-env`（CI）。
-- **零原生依赖** 的协议包 `@novel-master/sksp`；Windows/Android 原生逻辑仅在各自 driver 包。
+- **v1 驱动（本期均必交付）**：`@novel-master/sksp-windows`（DPAPI + SQLite）、`@novel-master/sksp-android`（Keystore + RN 桥）。
+- **零原生依赖** 的协议在 `@novel-master/core/sksp`（`packages/core/src/infra/sksp`）；含 env 读（CI，无原生）；Windows/Android 原生逻辑仅在各自 driver 包。
 - 供 [provider-model SPEC](../provider-model/spec.md) 通过 `SecretStore.get/set/delete/has` 接线；SKSP **不** 解析 HTTP、provider 业务规则。
 
 ## 现状与约束（代码探索）
 
 | 项 | 路径 / 现状 | 本迭代 |
 |----|-------------|--------|
-| TDBC registry | `packages/core/src/infra/tdbc/registry.ts`：`registerDriver`、`resolveDriver` | SKSP **独立包** `packages/sksp/src/registry.ts` 复制同等语义（`registerSkspDriver`），避免 core 依赖 native |
+| TDBC registry | `packages/core/src/infra/tdbc/registry.ts`：`registerDriver`、`resolveDriver` | SKSP `packages/core/src/infra/sksp/registry.ts` 镜像同等语义（`registerSkspDriver`）；平台驱动独立包 |
 | Bootstrap | `packages/core/src/bootstrap/novel-master-bootstrap.ts` 聚合 `*_SCHEMA_STATEMENTS` | `SKSP_SCHEMA_STATEMENTS` 在 **core** `bootstrap/sksp/sksp-schema.ts`（DDL 与 novel 库绑定）；驱动不负责建表 |
 | CLI runtime | `apps/cli/src/runtime.ts`：`registerBetterSqlite3Driver()` → `createNovelMasterRuntime` | 其后 `registerSkspWindowsDriver()`；`runtime.secretStore` 注入 |
-| SKSP 代码 | **尚无** `packages/sksp*` | 本迭代新建 |
+| SKSP 代码 | `packages/core/src/infra/sksp` + `sksp-windows` / `sksp-android` | 协议与 env 在 core；驱动包独立 |
 | `CliConfig` | 不含密钥 | 密钥 **永不** 写入 `config.json` |
 | Mobile | `apps/mobile` + `tdbc-driver-rn` | **本期实现** `sksp-android` 注册 + 最小验收（Dev 探针或单元桥接测）；RN `nm provider` UI **不做** |
 
@@ -40,7 +40,7 @@
 flowchart TB
   APP[ProviderService / CLI]
   CS[CompositeSecretStore]
-  ENV[sksp-env]
+  ENV[core/sksp EnvSecretStore]
   WIN[sksp-windows SqliteSecretStore]
   DB[(sksp_secrets)]
   AND[sksp-android Keystore]
@@ -54,11 +54,10 @@ flowchart TB
   AND --> KS[Android Keystore]
 ```
 
-1. **`@novel-master/sksp`**：`SecretStore` 接口、`SkspError`、`registerSkspDriver` / `resolveSkspDriver`、`createCompositeSecretStore`（组合 env + 默认 DB 驱动）。
+1. **`@novel-master/core/sksp`**：`SecretStore`、`SkspError`、`registerSkspDriver` / `resolveSkspDriver`、`createCompositeSecretStore`、`EnvSecretStore` / `refToEnvVar`（env 无原生，供 CI）。
 2. **`@novel-master/sksp-windows`**（CLI）：DPAPI + `sksp_secrets` CRUD。
 3. **`@novel-master/sksp-android`**（RN，**本期必交付**）：Keystore AES-GCM + 同表 CRUD。
-4. **`@novel-master/sksp-env`**（可选）：环境变量 `get`/`has`。
-5. **DDL** 由 core bootstrap 执行；驱动假定表已存在。
+4. **DDL** 由 core bootstrap 执行；驱动假定表已存在。
 
 ### `SecretStore` 端口
 
@@ -104,7 +103,7 @@ CLI：`apps/cli/src/cli-errors.ts` 映射 `SkspError` → `EXIT_RUNTIME`，stder
 
 ### Registry
 
-`packages/sksp/src/registry.ts`（镜像 `infra/tdbc/registry.ts`）：
+`packages/core/src/infra/sksp/registry.ts`（镜像 `infra/tdbc/registry.ts`）：
 
 ```typescript
 export interface SkspDriver {
@@ -125,7 +124,7 @@ export function clearSkspDrivers(): void; // @internal tests
 ```typescript
 export function createCompositeSecretStore(options: {
   db: SecretStore;           // sksp-windows
-  env?: EnvSecretStore;      // sksp-env
+  env?: EnvSecretStore;      // core/sksp env-secret-store
 }): SecretStore;
 ```
 
@@ -228,9 +227,9 @@ const secretStore = createCompositeSecretStore({
 
 ---
 
-## sksp-env（v1 可选，建议同期）
+## Env 后端（CI，合入 core/sksp）
 
-`packages/sksp-env/src/env-secret-store.ts`：
+`packages/core/src/infra/sksp/env-secret-store.ts`（零原生，不单独发包）：
 
 ```typescript
 export function refToEnvVar(ref: string): string | null {
@@ -287,7 +286,7 @@ export class EnvSecretStore implements Pick<SecretStore, "get" | "has"> {
 
 | 文件 | 变更 |
 |------|------|
-| `apps/mobile/package.json` | 依赖 `@novel-master/sksp`、`@novel-master/sksp-android` |
+| `apps/mobile/package.json` | 依赖 `@novel-master/core`、`@novel-master/sksp-android` |
 | `apps/mobile/android/settings.gradle` / `app/build.gradle` | 纳入 `sksp-android` 原生模块（或 autolinking） |
 | `apps/mobile/src/vfs/runtime.ts`（或新建 `src/sksp/runtime.ts`） | `bootstrapNovelMaster` 后 `registerSkspAndroidDriver()`；`createAndroidSecretStore(conn)` 供后续 provider 复用 |
 | `apps/mobile/src/screens/SkspDevScreen.tsx`（**新增，本期验收用**） | 按钮：`set(testRef)` → `get` → 显示 ok/fail；不暴露完整 secret；可从 Home 导航进入（与 VfsDevScreen 同级） |
@@ -313,17 +312,18 @@ export class EnvSecretStore implements Pick<SecretStore, "get" | "has"> {
 ## 最终项目结构
 
 ```text
-packages/sksp/
-  package.json
-  src/
-    secret-store.port.ts
-    sksp-error.ts
-    registry.ts
-    composite-secret-store.ts
-    index.ts
-  test/
-    composite.test.ts
-    registry.test.ts
+packages/core/src/infra/sksp/
+  secret-store.port.ts
+  sksp-error.ts
+  registry.ts
+  composite-secret-store.ts
+  ref-to-env.ts
+  env-secret-store.ts
+  index.ts
+packages/core/test/infra/sksp/
+  composite.test.ts
+  registry.test.ts
+  env-secret-store.test.ts
 
 packages/sksp-windows/
   package.json
@@ -334,15 +334,6 @@ packages/sksp-windows/
     index.ts
   test/
     sqlite-secret-store.test.ts   # mock DPAPI 或 skip on non-win
-
-packages/sksp-env/
-  package.json
-  src/
-    env-secret-store.ts
-    ref-to-env.ts
-    index.ts
-  test/
-    env-secret-store.test.ts
 
 packages/sksp-android/
   package.json
@@ -361,7 +352,7 @@ packages/core/src/bootstrap/sksp/
   sksp-schema.ts
 ```
 
-**不放入 core**：`SecretStore` 实现；core 仅 DDL + 可选 re-export `export type { SecretStore } from "@novel-master/sksp"`（若 provider 服务在 core，core 依赖 `@novel-master/sksp`）。
+**不放入 core 协议模块**：平台 `SecretStore` 实现（DPAPI / Keystore）；core 含 DDL、协议、`EnvSecretStore`，并 re-export `SecretStore` 类型；驱动包依赖 `@novel-master/core/sksp`。
 
 ---
 
@@ -369,17 +360,16 @@ packages/core/src/bootstrap/sksp/
 
 | 文件 | 变更 |
 |------|------|
-| `packages/sksp/**` | **新增** |
-| `packages/sksp-windows/**` | **新增** |
-| `packages/sksp-env/**` | **新增**（建议） |
-| `packages/sksp-android/**` | **新增**（本期必交付） |
+| `packages/core/src/infra/sksp/**` | 协议 + env |
+| `packages/sksp-windows/**` | Windows 驱动 |
+| `packages/sksp-android/**` | Android 驱动 |
 | `packages/core/src/bootstrap/sksp/sksp-schema.ts` | **新增** |
 | `packages/core/src/bootstrap/novel-master-bootstrap.ts` | 追加 `SKSP_SCHEMA_STATEMENTS` |
 | `apps/cli/src/runtime.ts` | 注册 windows 驱动 + `secretStore` |
 | `apps/cli/src/cli-errors.ts` | `SkspError` 格式化 |
-| `apps/cli/package.json` | `sksp`、`sksp-windows`、`sksp-env` workspace 依赖 |
+| `apps/cli/package.json` | `core`（`/sksp` 子路径）、`sksp-windows` |
 | `apps/mobile/**` | `sksp-android` 依赖、原生链接、`SkspDevScreen`、runtime 注册 |
-| `packages/core/package.json` | 依赖 `@novel-master/sksp`（类型 + 无 native） |
+| `packages/core/package.json` | 导出 `./sksp` 子路径；无 `@novel-master/sksp` 依赖 |
 
 ---
 
@@ -387,10 +377,10 @@ packages/core/src/bootstrap/sksp/
 
 ### 步骤 1：协议包
 
-1. 创建 `packages/sksp`：`SecretStore`、`SkspError`、`registry`、`createCompositeSecretStore`。
-2. 单元测：composite 优先级、registry 冲突。
+1. `packages/core/src/infra/sksp`：`SecretStore`、`SkspError`、`registry`、`createCompositeSecretStore`、`EnvSecretStore`。
+2. 单元测：`packages/core/test/infra/sksp/*`。
 
-**验证**：`npm test -w @novel-master/sksp`（或包内 test 脚本）。
+**验证**：`npm test -w @novel-master/core`（infra/sksp 用例）。
 
 ### 步骤 2：DDL
 
@@ -405,7 +395,7 @@ packages/core/src/bootstrap/sksp/
 
 **验证**：Windows 上 round-trip；raw 表 `ciphertext` 非 UTF-8 明文 key。
 
-### 步骤 4：sksp-env + CLI
+### 步骤 4：env + CLI
 
 1. `EnvSecretStore` + composite。
 2. `runtime.ts` 接线。
@@ -430,8 +420,7 @@ packages/core/src/bootstrap/sksp/
 
 | 层级 | 产物 | 说明 |
 |------|------|------|
-| 单元 | `packages/sksp/test/*` | composite、registry |
-| 单元 | `packages/sksp-env/test/*` | ref → env 名 |
+| 单元 | `packages/core/test/infra/sksp/*` | composite、registry、env |
 | 集成 | `packages/sksp-windows/test/*` | mock DPAPI 或 `@skip` non-win32 |
 | Bootstrap | `packages/core/test/sksp/schema.test.ts` | 表存在 |
 | CLI | [provider-model/test/provider-cli.md](../provider-model/test/provider-cli.md) P1 | `edit --apiKey` + list 不泄露 |
@@ -472,4 +461,4 @@ packages/core/src/bootstrap/sksp/
 
 **实现完成后**：`apm kb index rebuild`；provider-model CLI 依赖步骤 1–4；**步骤 5 与 provider 可并行**，但 **本期迭代结束前必须合入**。
 
-**v1 交付检查**：`sksp-windows` + `sksp-android` 均可用；`sksp-env` 可选。
+**v1 交付检查**：`sksp-windows` + `sksp-android` 均可用；`core/sksp` env 供 CI。

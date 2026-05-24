@@ -27,7 +27,7 @@
 | Bootstrap | `packages/core/src/bootstrap/novel-master-bootstrap.ts` 聚合 `*_SCHEMA_STATEMENTS` | 追加 `PROVIDER_SCHEMA_STATEMENTS`、`SKSP_SCHEMA_STATEMENTS`；seed 在 bootstrap 事务末执行 |
 | Chat DDL 模式 | `packages/core/src/bootstrap/chat/chat-schema.ts`：`CREATE TABLE IF NOT EXISTS` | 同款 `provider/provider-schema.ts`、`sksp/sksp-schema.ts` |
 | Domain 分层 | `domain/chat` + `service/chat` + `Sqlite*Repository` | 新增 `domain/provider`、`service/provider`、`infra/llm-protocol` |
-| SKSP 代码 | **仓库尚无** `packages/sksp*` | 按 [sksp/spec.md](../sksp/spec.md) 实现；provider 仅消费 `SecretStore` |
+| SKSP 代码 | `packages/core/src/infra/sksp`（`@novel-master/core/sksp`） | 平台驱动 `sksp-windows` / `sksp-android`；provider 仅消费 `SecretStore` |
 | `message.provider` | `chat_message.provider` 列已存在（`chat-schema.ts`） | v1 **不写**；二期与 chat 集成时再定 |
 | Mobile | `apps/mobile`：VFS dev screen，`tdbc-driver-rn` | 本期 **不** 加 provider CLI；**SKSP Android 本期必交付**（sksp SPEC 步骤 5 + `SkspDevScreen`） |
 | 参考 SPEC 结构 | `.apm/kb/docs/Iterations/prompt-engine/spec.md` | 本文档对齐章节：设计目标、探索表、架构、结构、变更清单、步骤、测试、风险 |
@@ -431,7 +431,7 @@ apps/cli/src/
 | `packages/core/src/service/provider/**` | **新增** |
 | `packages/core/src/errors/provider-errors.ts` | **新增** |
 | `packages/core/src/index.ts` | 导出 provider/SKSP 工厂与类型 |
-| `packages/core/package.json` | 依赖 `@novel-master/sksp`（类型）；**不**依赖 sksp-windows |
+| `packages/core/package.json` | 导出 `./sksp` 子路径；**不**依赖 sksp-windows |
 | `apps/cli/src/main.ts` | `provider`、`model` 路由 |
 | `apps/cli/src/runtime.ts` | `secretStore`、`providers` bundle |
 | `apps/cli/src/config/cli-config.ts` | 扩展字段 |

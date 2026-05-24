@@ -5,7 +5,7 @@
  */
 
 import type { TdbcConnection } from "@novel-master/core/tdbc";
-import { registerSkspDriver } from "@novel-master/sksp";
+import { registerSkspDriver } from "@novel-master/core/sksp";
 import { createWindowsSecretStore } from "./sqlite-secret-store.js";
 
 /** Registers `windows` SKSP driver (DPAPI + SQLite). */

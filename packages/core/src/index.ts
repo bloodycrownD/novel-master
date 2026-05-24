@@ -173,7 +173,7 @@ export { formatLocalDateTime } from "./infra/date-format.js";
  */
 export { ProviderError } from "./errors/provider-errors.js";
 export type { ProviderErrorCode } from "./errors/provider-errors.js";
-export type { SecretStore } from "@novel-master/sksp";
+export type { SecretStore } from "./infra/sksp/index.js";
 export {
   parseApplicationModelId,
   formatApplicationModelId,

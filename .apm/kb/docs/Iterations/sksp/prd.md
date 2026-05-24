@@ -53,10 +53,9 @@ Provider 行：仅 secretRef（如 provider/<providerId>/apiKey），无 apiKey 
 
 **包结构（意向，SPEC 定名）**
 
-- `@novel-master/core` 或 `packages/sksp`：协议接口、错误类型、registry（无原生依赖）。
+- `@novel-master/core/sksp`（`packages/core/src/infra/sksp`）：协议、registry、composite、env 只读后端（无原生依赖）。
 - `@novel-master/sksp-windows`：Node CLI / Windows。
 - `@novel-master/sksp-android`：RN 原生模块 + JS 桥。
-- `@novel-master/sksp-env`（可选）：环境变量后端。
 
 **与 provider-model**
 
