@@ -167,3 +167,27 @@ export { parsePromptYaml } from "./infra/prompt-yaml/parse-prompt-yaml.js";
 export { renderPromptToText } from "./service/prompt/render-prompt.js";
 export type { PromptRenderContext } from "./service/prompt/render-prompt.js";
 export { formatLocalDateTime } from "./infra/date-format.js";
+
+/**
+ * LLM providers, models, and protocol adapters.
+ */
+export { ProviderError } from "./errors/provider-errors.js";
+export type { ProviderErrorCode } from "./errors/provider-errors.js";
+export type { SecretStore } from "@novel-master/sksp";
+export {
+  parseApplicationModelId,
+  formatApplicationModelId,
+} from "./domain/provider/application-model-id.js";
+export type { LlmProvider } from "./domain/provider/model/provider.js";
+export { providerApiKeyRef } from "./domain/provider/model/provider.js";
+export type { LlmProtocolKind } from "./infra/llm-protocol/adapter.port.js";
+export { createProviderServices } from "./service/provider/create-provider-services.js";
+export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";
+export type {
+  ProviderService,
+  ProviderListItem,
+  CreateProviderInput,
+  EditProviderPatch,
+} from "./service/provider/provider.port.js";
+export type { ProviderModelService } from "./service/provider/provider-model.port.js";
+export type { ModelRequestService } from "./service/provider/model-request.port.js";

@@ -10,6 +10,9 @@ import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
 import { WORKTREE_SCHEMA_STATEMENTS } from "./worktree/worktree-schema.js";
+import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
+import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
+import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -18,6 +21,8 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
   ...WORKTREE_SCHEMA_STATEMENTS,
+  ...SKSP_SCHEMA_STATEMENTS,
+  ...PROVIDER_SCHEMA_STATEMENTS,
 ];
 
 /**
@@ -30,5 +35,6 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
+    await seedBuiltinProviders(tx);
   });
 }
