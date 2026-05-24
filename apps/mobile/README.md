@@ -87,4 +87,4 @@ npx @react-native-community/cli@latest init NovelMaster \
   --skip-git-init
 ```
 
-Then apply monorepo `package.json`, `metro.config.js`, and `src/` per `.apm/kb/docs/Iterations/mobile-app-scaffold/spec.md`.
+Then apply monorepo `package.json`, `metro.config.js`, `android/settings.gradle` + `android/app/build.gradle` (hoisted `node_modules`), and `src/` per `.apm/kb/docs/Iterations/mobile-app-scaffold/spec.md`.
