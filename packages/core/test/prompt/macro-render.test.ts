@@ -44,6 +44,36 @@ describe("renderMacro", () => {
     assert.equal(out, "ab");
   });
 
+  it("throws UNSUPPORTED_SYNTAX for if", () => {
+    assert.throws(
+      () =>
+        renderMacro("{{ if .x }}", {
+          dot: { worktree: "" },
+          root: { time: "t", week_cn: "w" },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "UNSUPPORTED_SYNTAX");
+        return true;
+      },
+    );
+  });
+
+  it("throws UNKNOWN_FIELD for unknown root key", () => {
+    assert.throws(
+      () =>
+        renderMacro("{{ $.foo }}", {
+          dot: { worktree: "" },
+          root: { time: "t", week_cn: "w" },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "UNKNOWN_FIELD");
+        return true;
+      },
+    );
+  });
+
   it("throws UNKNOWN_FIELD for missing dot path", () => {
     assert.throws(
       () =>

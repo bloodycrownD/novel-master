@@ -36,6 +36,7 @@ export function exitCodeForError(error: unknown): number {
     error instanceof VfsError ||
     error instanceof KkvError ||
     error instanceof ChatError ||
+    error instanceof PromptError ||
     error instanceof TdbcError
   ) {
     return EXIT_RUNTIME;

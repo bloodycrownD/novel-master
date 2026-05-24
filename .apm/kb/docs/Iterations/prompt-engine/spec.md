@@ -382,12 +382,12 @@ Usage 字符串：`Usage: novel-master prompt render --path <file> [--project <i
 
 ## 迭代完成检查清单
 
-- [ ] `packages/core` prompt 单测通过
-- [ ] `npm run build` 通过
-- [ ] `nm prompt render` 可用
-- [ ] `.apm/kb/docs/Iterations/prompt-engine/fixtures/example.yaml` 已添加
-- [ ] `.apm/kb/docs/Iterations/prompt-engine/test/prompt-cli.md` 已按 cli-test **真实执行**写入（**当前未实现**）
-- [ ] `apm kb index rebuild`（若仅改 kb 文档）
+- [x] `packages/core` prompt 单测通过
+- [x] `npm run build` 通过
+- [x] `nm prompt render` 可用
+- [x] `.apm/kb/docs/Iterations/prompt-engine/fixtures/example.yaml` 已添加
+- [x] `.apm/kb/docs/Iterations/prompt-engine/test/prompt-cli.md` 已按 cli-test **真实执行**写入
+- [x] `apm kb index rebuild`（实现合并前执行）
 
 ---
 

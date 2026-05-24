@@ -42,6 +42,20 @@ describe("validatePromptBlocks", () => {
     );
   });
 
+  it("rejects chat with content", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks([
+          { name: "a", type: "chat", content: "must not" },
+        ]),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        return true;
+      },
+    );
+  });
+
   it("rejects chat with role", () => {
     assert.throws(
       () =>
