@@ -17,6 +17,7 @@ import { SqliteProjectRepository } from "../../../domain/chat/repositories/impl/
 import { SqliteSessionRepository } from "../../../domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "../../../domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "../../../domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { deleteSessionFsData } from "../../session-fs/create-session-fs-service.js";
 import type { SessionService } from "../session.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -35,7 +36,6 @@ export interface SessionServiceDeps {
   readonly sessions: SessionRepository;
   readonly messages: MessageRepository;
   readonly vfs: VfsEntryRepository;
-  readonly deleteSessionFsData?: (sessionId: string) => Promise<void>;
 }
 
 /**
@@ -87,6 +87,7 @@ export class DefaultSessionService implements SessionService {
     await this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       await r.messages.deleteBySession(id);
+      await deleteSessionFsData(tx, id);
       await deleteVfsPrefix(
         r.vfs,
         `/projects/${session.projectId}/sessions/${id}`,
@@ -96,9 +97,6 @@ export class DefaultSessionService implements SessionService {
         throw chatNotFound("session", id);
       }
     });
-    if (this.deps.deleteSessionFsData) {
-      await this.deps.deleteSessionFsData(id);
-    }
   }
 
   async copy(id: string): Promise<ChatSession> {

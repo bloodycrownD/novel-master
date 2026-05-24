@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { TdbcConnection } from "@novel-master/core";
+import { SqliteSessionExecuteRepository } from "../../src/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
+import { SqliteSessionSnapshotRepository } from "../../src/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+
+async function assertNoSessionFsData(
+  conn: TdbcConnection,
+  sessionId: string,
+): Promise<void> {
+  const execute = new SqliteSessionExecuteRepository(conn);
+  const snapshots = new SqliteSessionSnapshotRepository(conn);
+  assert.equal((await execute.listBatches(sessionId)).length, 0);
+  assert.equal((await snapshots.listByPath(sessionId, "/purge.md")).length, 0);
+}
 
 describe("Chat services", () => {
   it("session create copies project template to session vfs", async () => {
@@ -60,6 +73,47 @@ describe("Chat services", () => {
       "edited",
     );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
+    await ctx.conn.close();
+  });
+
+  it("session delete purges session-fs rows in transaction", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    await ctx.sessionFs.execute(
+      session.id,
+      project.id,
+      [{ function: "write", path: "/purge.md", content: "x" }],
+      "user",
+    );
+    assert.equal(
+      (await new SqliteSessionExecuteRepository(ctx.conn).listBatches(session.id))
+        .length,
+      1,
+    );
+
+    await ctx.sessions.delete(session.id);
+    await assertNoSessionFsData(ctx.conn, session.id);
+    await ctx.conn.close();
+  });
+
+  it("project delete purges session-fs for all sessions", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const s1 = await ctx.sessions.create(project.id);
+    const s2 = await ctx.sessions.create(project.id);
+    for (const session of [s1, s2]) {
+      await ctx.sessionFs.execute(
+        session.id,
+        project.id,
+        [{ function: "write", path: "/purge.md", content: "x" }],
+        "user",
+      );
+    }
+
+    await ctx.projects.delete(project.id);
+    await assertNoSessionFsData(ctx.conn, s1.id);
+    await assertNoSessionFsData(ctx.conn, s2.id);
     await ctx.conn.close();
   });
 

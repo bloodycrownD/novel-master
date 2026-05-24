@@ -15,8 +15,6 @@ import { DefaultMessageService } from "./impl/message.service.js";
 import type { ProjectService } from "./project.port.js";
 import type { SessionService } from "./session.port.js";
 import type { MessageService } from "./message.port.js";
-import { deleteSessionFsData } from "../session-fs/create-session-fs-service.js";
-
 /** Shared chat repositories wired from one connection. */
 export interface ChatServiceBundle {
   readonly projects: ProjectService;
@@ -28,15 +26,8 @@ export interface ChatServiceBundle {
  * Creates project, session, and message services sharing repositories.
  *
  * @param conn - Open connection after {@link bootstrapNovelMaster}
- * @param options.deleteSessionFsData - Hook to purge session-fs rows on session delete
  */
-export function createChatServices(
-  conn: TdbcConnection,
-  options?: { deleteSessionFsData?: (sessionId: string) => Promise<void> },
-): ChatServiceBundle {
-  const deleteFs =
-    options?.deleteSessionFsData ??
-    ((sessionId: string) => deleteSessionFsData(conn, sessionId));
+export function createChatServices(conn: TdbcConnection): ChatServiceBundle {
   const projectRepo = new SqliteProjectRepository(conn);
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn);
@@ -56,7 +47,6 @@ export function createChatServices(
     sessions: sessionRepo,
     messages: messageRepo,
     vfs: vfsRepo,
-    deleteSessionFsData: deleteFs,
   });
 
   const messages = new DefaultMessageService({
@@ -75,11 +65,8 @@ export function createProjectService(conn: TdbcConnection): ProjectService {
 }
 
 /** Creates a {@link SessionService} instance. */
-export function createSessionService(
-  conn: TdbcConnection,
-  options?: { deleteSessionFsData?: (sessionId: string) => Promise<void> },
-): SessionService {
-  return createChatServices(conn, options).sessions;
+export function createSessionService(conn: TdbcConnection): SessionService {
+  return createChatServices(conn).sessions;
 }
 
 /** Creates a {@link MessageService} instance. */

@@ -4,6 +4,7 @@
  * @module message/commands
  */
 
+import { readFile } from "node:fs/promises";
 import type { MessageService } from "@novel-master/core";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -29,10 +30,25 @@ export async function runMessage(
     }
     case "append": {
       const role = flags.get("role");
-      const content = flags.get("content");
-      if (typeof role !== "string" || typeof content !== "string") {
+      const contentFlag = flags.get("content");
+      const fileFlag = flags.get("file");
+      if (typeof role !== "string") {
         throw new Error(
-          "Usage: nm message append --session <id> --role <role> --content <text>",
+          "Usage: nm message append --session <id> --role <role> [--content <text>|--file <path>]",
+        );
+      }
+      if (typeof contentFlag === "string" && typeof fileFlag === "string") {
+        throw new Error("Cannot use both --content and --file");
+      }
+      const content =
+        typeof fileFlag === "string"
+          ? await readFile(fileFlag, "utf8")
+          : typeof contentFlag === "string"
+            ? contentFlag
+            : null;
+      if (content == null) {
+        throw new Error(
+          "Usage: nm message append --session <id> --role <role> [--content <text>|--file <path>]",
         );
       }
       const msg = await messages.append(sessionId, role, { content });

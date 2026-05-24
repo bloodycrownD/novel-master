@@ -18,6 +18,7 @@ import { SqliteProjectRepository } from "../../../domain/chat/repositories/impl/
 import { SqliteSessionRepository } from "../../../domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "../../../domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "../../../domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { deleteSessionFsData } from "../../session-fs/create-session-fs-service.js";
 import type { ProjectService } from "../project.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -78,6 +79,7 @@ export class DefaultProjectService implements ProjectService {
       const sessionList = await r.sessions.listByProject(id);
       for (const session of sessionList) {
         await r.messages.deleteBySession(session.id);
+        await deleteSessionFsData(tx, session.id);
         await deleteVfsPrefix(
           r.vfs,
           `/projects/${id}/sessions/${session.id}`,
