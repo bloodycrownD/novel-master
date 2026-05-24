@@ -22,11 +22,11 @@
 | `scripts/vfs-test-sync` | 使用无范围 `createVfsService`，路径如 `/a.md` | **不破坏**：继续用无范围工厂 |
 | PRD | session 创建复制 project template；fork 复制消息；project copy 不含 session | 见下文语义 |
 
-**兼容性原则**
+**兼容性原则（2025-05 实现决策：无历史数据，不保留旧路径兼容）**
 
-- `createVfsService(conn)`：**行为不变**（任意规范化物理路径）。
-- `nm vfs`（全局）：改用 **GlobalScoped** `VfsService`，逻辑路径限定 **`/template/…`**（与 PRD 一致）；现有 cli e2e 路径改为 `/template/...`。
-- 新表与 DDL 均为 **`IF NOT EXISTS`**；旧库执行 bootstrap 后自动补表。
+- `nm vfs`（全局）与全部新 repository：**强制** GlobalScoped，逻辑路径仅 `/template/…`；cli e2e、`vfs-test-sync` 等一律改为 `/template/...` 或 scoped 工厂。
+- 新 repository（kkv、chat、session-fs）及 **VfsEntryRepository 改造**：SQL 经 **`SqlTemplateParser` + `queryTemplate` / `executeTemplate`** 拼接，禁止裸字符串拼接用户输入。
+- 新表 DDL 均为 **`IF NOT EXISTS`**。
 
 ---
 
