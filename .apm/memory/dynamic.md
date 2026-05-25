@@ -1,7 +1,5 @@
 ---
 createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-05-25 00:46:30'
+updatedAt: '2026-05-25 22:22:30'
 ---
-2026-05-25: sksp-provider-model 已合并 main（feature/sksp-provider-model → main，HEAD 9a4e596）。含 SKSP（`core/infra/sksp` + `sksp-windows`/`sksp-android` 驱动）、provider/model CLI、OpenAI/Anthropic/Gemini 协议；协议与 env 后端导出 `@novel-master/core/sksp`。CLI 捕获见 kb `Iterations/provider-model/test/provider-cli.md`、`sksp/test/sksp-cli.md`。Android `SkspDevScreen` 待真机验收（`sksp/test/sksp-android.md` A2）。
-
-下一步：新迭代前 `apm read`。远程 https://github.com/bloodycrownD/novel-master.git 分支 `master`（本地 `main`）。跑 CLI 测试前勿残留 `NOVEL_MASTER_DB`。
+2026-05-25: 完成 global-config-system PRD 与 SPEC。PRD 明确需求：基于 KKV 实现全局配置，完全替换 config.json，支持类型化方法（getBoolean/setBoolean/getNumber/setNumber）。SPEC 已完成代码探索（config.json 读写、KKV 系统、session-fs versionCheck、影响范围），设计方案包含 ConfigService 接口、CLI 命令、迁移策略、测试用例。下一步：等待用户确认 SPEC 后开始编码实现。
