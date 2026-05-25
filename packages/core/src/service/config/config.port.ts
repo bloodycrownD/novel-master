@@ -1,62 +1,71 @@
 /**
- * ConfigService port: application-level global configuration.
+ * Global configuration service port.
  *
  * @module service/config/config.port
  */
 
 /**
- * Application-level global configuration service.
+ * Application-wide configuration store backed by KKV.
  *
- * @remarks
- * All values are stored as strings in KKV (module: "global-config").
- * Type-specific methods handle conversion to/from boolean and number.
+ * @remarks All values are stored as strings in KKV (module: "global-config").
+ * Type-specific methods handle conversion to/from string representation.
  */
 export interface ConfigService {
   /**
-   * Gets a string value by key.
-   * @returns The value, or `undefined` if not set.
+   * Gets a configuration value as string.
+   *
+   * @returns The value, or `undefined` if the key does not exist.
    */
   get(key: string): Promise<string | undefined>;
 
   /**
-   * Sets a string value by key.
+   * Sets a configuration value as string.
    */
   set(key: string, value: string): Promise<void>;
 
   /**
-   * Gets a boolean value by key.
-   * @param defaultValue - Returned if key is not set.
-   * @returns `true` if value is "true", `false` if "false", otherwise `defaultValue`.
-   * @throws {ConfigError} If value exists but is not "true" or "false" and no default provided.
+   * Gets a configuration value as boolean.
+   *
+   * @param defaultValue - Returned when the key does not exist.
+   * @returns The boolean value.
+   * @throws {ConfigError} When the stored value is not "true" or "false".
    */
   getBoolean(key: string, defaultValue?: boolean): Promise<boolean>;
 
   /**
-   * Sets a boolean value by key (stored as "true" or "false").
+   * Sets a configuration value as boolean.
+   *
+   * @remarks Stores "true" for `true`, "false" for `false`.
    */
   setBoolean(key: string, value: boolean): Promise<void>;
 
   /**
-   * Gets a number value by key.
-   * @param defaultValue - Returned if key is not set.
-   * @returns Parsed number.
-   * @throws {ConfigError} If value exists but cannot be parsed as number and no default provided.
+   * Gets a configuration value as number.
+   *
+   * @param defaultValue - Returned when the key does not exist.
+   * @returns The number value.
+   * @throws {ConfigError} When the stored value cannot be parsed as a number.
    */
   getNumber(key: string, defaultValue?: number): Promise<number>;
 
   /**
-   * Sets a number value by key (stored as string representation).
+   * Sets a configuration value as number.
+   *
+   * @remarks Converts the number to its string representation.
    */
   setNumber(key: string, value: number): Promise<void>;
 
   /**
-   * Lists all config entries.
-   * @returns Array of key-value pairs.
+   * Lists all configuration entries.
+   *
+   * @returns Array of key-value pairs, sorted by key.
    */
   list(): Promise<Array<{ key: string; value: string }>>;
 
   /**
-   * Resets a config key (deletes from storage).
+   * Resets (deletes) a configuration key.
+   *
+   * @remarks After reset, `get(key)` will return `undefined`.
    */
   reset(key: string): Promise<void>;
 }

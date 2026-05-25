@@ -1,5 +1,5 @@
 /**
- * Config domain errors.
+ * Configuration domain errors.
  *
  * @module errors/config-errors
  */
@@ -8,7 +8,7 @@
 export type ConfigErrorCode = "INVALID_TYPE";
 
 /**
- * Unified error for ConfigService operations.
+ * Unified error for configuration service operations.
  */
 export class ConfigError extends Error {
   readonly code: ConfigErrorCode;
@@ -27,7 +27,14 @@ export class ConfigError extends Error {
 }
 
 /**
- * Creates an INVALID_TYPE error when a config value cannot be converted to expected type.
+ * Thrown when a configuration value cannot be converted to the requested type.
+ *
+ * @example
+ * ```ts
+ * // When "foo" contains "not-a-number"
+ * await config.getNumber("foo");
+ * // throws ConfigError with code "INVALID_TYPE"
+ * ```
  */
 export function configInvalidType(
   key: string,

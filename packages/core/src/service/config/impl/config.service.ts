@@ -1,20 +1,21 @@
 /**
- * Default ConfigService implementation backed by KKV.
+ * Default configuration service implementation.
  *
  * @module service/config/impl/config.service
  */
 
-import type { KkvService } from "../../kkv/kkv.port.js";
-import { KkvError } from "../../../errors/kkv-errors.js";
-import { configInvalidType } from "../../../errors/config-errors.js";
+import type { KkvService } from "@/service/kkv/kkv.port.js";
+import { KkvError } from "@/errors/kkv-errors.js";
+import { configInvalidType } from "@/errors/config-errors.js";
 import type { ConfigService } from "../config.port.js";
 
 /**
- * KKV-backed implementation of ConfigService.
+ * Configuration service backed by KKV with module "global-config".
  *
  * @remarks
- * All config entries are stored in KKV module "global-config".
- * Values are always strings; type conversion is handled by getBoolean/getNumber/setBoolean/setNumber.
+ * - All values are stored as strings in KKV.
+ * - Type-specific methods (`getBoolean`, `getNumber`) handle conversion.
+ * - Missing keys return `undefined` from `get()`; type methods can provide defaults.
  */
 export class DefaultConfigService implements ConfigService {
   private readonly MODULE = "global-config";
@@ -25,7 +26,6 @@ export class DefaultConfigService implements ConfigService {
     try {
       return await this.kkv.get(this.MODULE, key);
     } catch (error) {
-      // KKV throws NOT_FOUND when key doesn't exist; we return undefined
       if (error instanceof KkvError && error.code === "NOT_FOUND") {
         return undefined;
       }
@@ -37,21 +37,16 @@ export class DefaultConfigService implements ConfigService {
     await this.kkv.set(this.MODULE, key, value);
   }
 
-  async getBoolean(key: string, defaultValue?: boolean): Promise<boolean> {
+  async getBoolean(key: string, defaultValue = false): Promise<boolean> {
     const value = await this.get(key);
     if (value === undefined) {
-      // Key not set: return default or false
-      return defaultValue ?? false;
+      return defaultValue;
     }
     if (value === "true") {
       return true;
     }
     if (value === "false") {
       return false;
-    }
-    // Invalid boolean value: throw if no default, otherwise return default
-    if (defaultValue !== undefined) {
-      return defaultValue;
     }
     throw configInvalidType(key, "boolean", value);
   }
@@ -60,22 +55,16 @@ export class DefaultConfigService implements ConfigService {
     await this.set(key, value ? "true" : "false");
   }
 
-  async getNumber(key: string, defaultValue?: number): Promise<number> {
+  async getNumber(key: string, defaultValue = 0): Promise<number> {
     const value = await this.get(key);
     if (value === undefined) {
-      // Key not set: return default or 0
-      return defaultValue ?? 0;
-    }
-    const parsed = Number(value);
-    // Check for valid number (not NaN, not Infinity)
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-    // Invalid number value: throw if no default, otherwise return default
-    if (defaultValue !== undefined) {
       return defaultValue;
     }
-    throw configInvalidType(key, "number", value);
+    const num = Number(value);
+    if (Number.isNaN(num)) {
+      throw configInvalidType(key, "number", value);
+    }
+    return num;
   }
 
   async setNumber(key: string, value: number): Promise<void> {
@@ -90,9 +79,11 @@ export class DefaultConfigService implements ConfigService {
         const value = await this.kkv.get(this.MODULE, key);
         entries.push({ key, value });
       } catch {
-        // Key might have been deleted between listKeys and get; skip it
+        // Skip keys that disappeared between list and get
       }
     }
+    // Sort by key for consistent output
+    entries.sort((a, b) => a.key.localeCompare(b.key));
     return entries;
   }
 
@@ -100,8 +91,8 @@ export class DefaultConfigService implements ConfigService {
     try {
       await this.kkv.delete(this.MODULE, key);
     } catch (error) {
-      // Ignore NOT_FOUND errors (key already doesn't exist)
       if (error instanceof KkvError && error.code === "NOT_FOUND") {
+        // Key already doesn't exist, treat as success
         return;
       }
       throw error;
