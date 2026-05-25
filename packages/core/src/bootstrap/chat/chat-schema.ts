@@ -32,6 +32,4 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     created_at_ms INTEGER NOT NULL,
     UNIQUE (session_id, seq)
   )`,
-  // Add hidden column for message visibility control
-  `ALTER TABLE chat_message ADD COLUMN IF NOT EXISTS hidden INTEGER NOT NULL DEFAULT 0`,
 ];

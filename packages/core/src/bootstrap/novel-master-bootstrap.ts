@@ -35,6 +35,24 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
+    // Migrate: add hidden column to chat_message if it doesn't exist
+    await migrateChatMessageHidden(tx);
     await seedBuiltinProviders(tx);
   });
+}
+
+/**
+ * Adds the `hidden` column to `chat_message` table if it doesn't exist.
+ * This migration is idempotent and safe to run multiple times.
+ */
+async function migrateChatMessageHidden(conn: TdbcConnection): Promise<void> {
+  // Check if hidden column exists
+  const rows = await conn.query("PRAGMA table_info(chat_message)");
+  const hasHidden = rows.some((row) => row.name === "hidden");
+  
+  if (!hasHidden) {
+    await conn.execute(
+      "ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0"
+    );
+  }
 }
