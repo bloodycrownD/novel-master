@@ -1,10 +1,10 @@
 /**
- * Resolves `--providerId` / `--modelId` from CLI flags or `config.json`.
+ * Resolves `--providerId` / `--modelId` from CLI flags or ConfigService.
  *
  * @module config/resolve-provider-scope
  */
 
-import type { CliConfig } from "./cli-config.js";
+import type { ConfigService } from "@novel-master/core";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -15,15 +15,15 @@ function flagString(
 }
 
 /** Resolves provider id: flag > config > error. */
-export function resolveProviderId(
+export async function resolveProviderId(
   flags: ReadonlyMap<string, string | true>,
-  config: CliConfig,
-): string {
+  config: ConfigService,
+): Promise<string> {
   const fromFlag = flagString(flags, "providerId");
   if (fromFlag != null) {
     return fromFlag;
   }
-  const fromConfig = config.currentProviderId;
+  const fromConfig = await config.get("currentProviderId");
   if (fromConfig != null && fromConfig !== "") {
     return fromConfig;
   }
@@ -33,15 +33,15 @@ export function resolveProviderId(
 }
 
 /** Resolves model id: flag > config > error. */
-export function resolveModelId(
+export async function resolveModelId(
   flags: ReadonlyMap<string, string | true>,
-  config: CliConfig,
-): string {
+  config: ConfigService,
+): Promise<string> {
   const fromFlag = flagString(flags, "modelId");
   if (fromFlag != null) {
     return fromFlag;
   }
-  const fromConfig = config.currentModelId;
+  const fromConfig = await config.get("currentModelId");
   if (fromConfig != null && fromConfig !== "") {
     return fromConfig;
   }
@@ -60,3 +60,4 @@ export function requireProviderId(
   }
   throw new Error("Missing --providerId <id>");
 }
+

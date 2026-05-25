@@ -29,23 +29,21 @@ export async function runProject(
       const nameFlag = flags.get("name");
       const name = typeof nameFlag === "string" ? nameFlag : "project";
       const p = await rt.projects.create(name);
-      await rt.setCliContext({
-        currentProjectId: p.id,
-        currentSessionId: undefined,
-      });
+      // Set current project and clear session
+      await rt.config.set("currentProjectId", p.id);
+      await rt.config.reset("currentSessionId");
       console.log(p.id);
       return;
     }
     case "use": {
       const id = await resolveProjectUseId(rt.projects, flags);
-      await rt.setCliContext({
-        currentProjectId: id,
-        currentSessionId: undefined,
-      });
+      // Set current project and clear session
+      await rt.config.set("currentProjectId", id);
+      await rt.config.reset("currentSessionId");
       return;
     }
     case "current": {
-      const id = rt.scope.getConfigSnapshot().currentProjectId;
+      const id = await rt.config.get("currentProjectId");
       if (id == null || id === "") {
         throw new Error(
           "No current project (run: nm project use --project <id> or --name <name>)",
@@ -56,18 +54,18 @@ export async function runProject(
       return;
     }
     case "delete": {
-      const id = rt.scope.resolveProjectId(flags);
+      const id = await rt.scope.resolveProjectId(flags);
       await rt.projects.delete(id);
-      if (rt.scope.getConfigSnapshot().currentProjectId === id) {
-        await rt.setCliContext({
-          currentProjectId: undefined,
-          currentSessionId: undefined,
-        });
+      // Clear current project if it was deleted
+      const currentId = await rt.config.get("currentProjectId");
+      if (currentId === id) {
+        await rt.config.reset("currentProjectId");
+        await rt.config.reset("currentSessionId");
       }
       return;
     }
     case "copy": {
-      const id = rt.scope.resolveProjectId(flags);
+      const id = await rt.scope.resolveProjectId(flags);
       const copy = await rt.projects.copy(id);
       console.log(copy.id);
       return;

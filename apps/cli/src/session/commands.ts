@@ -33,11 +33,11 @@ const SESSION_VFS_COMMANDS: Record<
 
 type SessionDeps = Pick<
   NovelMasterRuntime,
+  | "config"
   | "sessions"
   | "sessionFs"
   | "sessionVfs"
   | "scope"
-  | "setCliContext"
   | "worktree"
 >;
 
@@ -50,7 +50,7 @@ export async function runSession(
 
   switch (subcommand) {
     case "list": {
-      const projectId = deps.scope.resolveProjectId(flags);
+      const projectId = await deps.scope.resolveProjectId(flags);
       const list = await deps.sessions.listByProject(projectId);
       for (const s of list) {
         console.log(`${s.id}\t${s.title ?? ""}`);
@@ -58,33 +58,31 @@ export async function runSession(
       return;
     }
     case "create": {
-      const projectId = deps.scope.resolveProjectId(flags);
+      const projectId = await deps.scope.resolveProjectId(flags);
       const title =
         typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
       const s = await deps.sessions.create(projectId, title);
-      await deps.setCliContext({
-        currentProjectId: projectId,
-        currentSessionId: s.id,
-      });
+      // Set current project and session
+      await deps.config.set("currentProjectId", projectId);
+      await deps.config.set("currentSessionId", s.id);
       console.log(s.id);
       return;
     }
     case "use": {
-      const config = deps.scope.getConfigSnapshot();
+      const currentProjectId = await deps.config.get("currentProjectId");
       const id = await resolveSessionUseId(
         deps.sessions,
         flags,
-        config.currentProjectId,
+        currentProjectId,
       );
       const session = await deps.sessions.get(id);
-      await deps.setCliContext({
-        currentProjectId: session.projectId,
-        currentSessionId: id,
-      });
+      // Set current project and session
+      await deps.config.set("currentProjectId", session.projectId);
+      await deps.config.set("currentSessionId", id);
       return;
     }
     case "current": {
-      const id = deps.scope.getConfigSnapshot().currentSessionId;
+      const id = await deps.config.get("currentSessionId");
       if (id == null || id === "") {
         throw new Error(
           "No current session (run: nm session use --session <id> or --title <title>)",
@@ -95,15 +93,17 @@ export async function runSession(
       return;
     }
     case "delete": {
-      const sessionId = deps.scope.resolveSessionId(flags);
+      const sessionId = await deps.scope.resolveSessionId(flags);
       await deps.sessions.delete(sessionId);
-      if (deps.scope.getConfigSnapshot().currentSessionId === sessionId) {
-        await deps.setCliContext({ currentSessionId: undefined });
+      // Clear current session if it was deleted
+      const currentSessionId = await deps.config.get("currentSessionId");
+      if (currentSessionId === sessionId) {
+        await deps.config.reset("currentSessionId");
       }
       return;
     }
     case "copy": {
-      const sessionId = deps.scope.resolveSessionId(flags);
+      const sessionId = await deps.scope.resolveSessionId(flags);
       const copy = await deps.sessions.copy(sessionId);
       console.log(copy.id);
       return;
@@ -133,7 +133,7 @@ export async function runSession(
 
 async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promise<void> {
   const { positional, flags } = parseCliArgs(args);
-  const { projectId, sessionId } = deps.scope.resolveProjectSession(flags);
+  const { projectId, sessionId } = await deps.scope.resolveProjectSession(flags);
   const group = positional[0];
   const rest = positional.slice(1);
 
@@ -195,8 +195,17 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
       "Usage: nm session vfs <list|read|write|...> | records ... | snapshot ...",
     );
   }
+  
   const vfs = deps.sessionVfs(projectId, sessionId);
   const idx = args.indexOf(group);
   const subArgs = args.slice(idx + 1);
+  
+  // Special handling for write command: read versionCheck config
+  if (group === "write") {
+    const versionCheck = await deps.config.getBoolean("session-fs.versionCheck", true);
+    await runWrite(vfs, subArgs, { defaultNoVersionCheck: !versionCheck });
+    return;
+  }
+  
   await SESSION_VFS_COMMANDS[group]!(vfs, subArgs);
 }

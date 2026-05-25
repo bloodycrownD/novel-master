@@ -13,7 +13,7 @@ export async function runProjectWorktree(
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const projectId = rt.scope.resolveProjectId(flags);
+  const projectId = await rt.scope.resolveProjectId(flags);
   const wt = rt.worktree({ kind: "project", projectId });
   const rest = args[0] === "worktree" ? args.slice(1) : args;
   await runWorktree(wt, rest);

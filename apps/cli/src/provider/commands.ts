@@ -97,19 +97,15 @@ export async function runProvider(
     case "delete": {
       const id = requireProviderId(flags);
       await rt.providers.delete(id);
-      const snap = rt.scope.getConfigSnapshot();
-      const patch: {
-        currentProviderId?: string;
-        currentModelId?: string;
-      } = {};
-      if (snap.currentProviderId === id) {
-        patch.currentProviderId = undefined;
+      // Clear current provider if it was deleted
+      const currentProviderId = await rt.config.get("currentProviderId");
+      if (currentProviderId === id) {
+        await rt.config.reset("currentProviderId");
       }
-      if (snap.currentModelId?.startsWith(`${id}/`)) {
-        patch.currentModelId = undefined;
-      }
-      if ("currentProviderId" in patch || "currentModelId" in patch) {
-        await rt.setCliContext(patch);
+      // Clear current model if it belongs to this provider
+      const currentModelId = await rt.config.get("currentModelId");
+      if (currentModelId?.startsWith(`${id}/`)) {
+        await rt.config.reset("currentModelId");
       }
       return;
     }
@@ -156,11 +152,11 @@ export async function runProvider(
     case "use": {
       const id = requireProviderId(flags);
       await rt.providers.get(id);
-      await rt.setCliContext({ currentProviderId: id });
+      await rt.config.set("currentProviderId", id);
       return;
     }
     case "current": {
-      const id = rt.scope.getConfigSnapshot().currentProviderId;
+      const id = await rt.config.get("currentProviderId");
       if (id == null || id === "") {
         throw new Error(
           "No current provider (run: nm provider use --providerId <id>)",

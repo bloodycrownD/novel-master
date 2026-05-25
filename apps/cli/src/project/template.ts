@@ -16,6 +16,6 @@ export async function runProjectTemplate(
     throw new Error("Usage: nm project template pull [--project <id>]");
   }
   const { flags } = parseCliArgs(args);
-  const projectId = rt.scope.resolveProjectId(flags);
+  const projectId = await rt.scope.resolveProjectId(flags);
   await rt.projects.pullTemplate(projectId);
 }

@@ -15,7 +15,7 @@ export async function runSessionWorktree(
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const { projectId, sessionId } = rt.scope.resolveProjectSession(flags);
+  const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const wt = rt.worktree({ kind: "session", projectId, sessionId });
   const rest = args[0] === "worktree" ? args.slice(1) : args;
   await runWorktree(wt, rest);

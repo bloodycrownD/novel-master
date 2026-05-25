@@ -5,6 +5,7 @@
  */
 
 import { greet, type VfsService } from "@novel-master/core";
+import { runConfig } from "./config-cmd/commands.js";
 import { runKkv } from "./kkv/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
@@ -86,6 +87,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 
   if (
+    top === "config" ||
     top === "kkv" ||
     top === "project" ||
     top === "session" ||
@@ -103,13 +105,16 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         return EXIT_USAGE;
       }
       switch (top) {
+        case "config":
+          await runConfig(rt.config, sub, rest);
+          break;
         case "kkv":
           await runKkv(rt.kkv, sub, rest);
           break;
         case "project":
           if (sub === "vfs") {
             const { flags } = parseCliArgs(rest);
-            const projectId = rt.scope.resolveProjectId(flags);
+            const projectId = await rt.scope.resolveProjectId(flags);
             await runProjectVfs(
               (id) => rt.projectVfs(id),
               projectId,

@@ -14,7 +14,7 @@ export async function runMessage(
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const sessionId = rt.scope.resolveSessionId(flags);
+  const sessionId = await rt.scope.resolveSessionId(flags);
 
   switch (subcommand) {
     case "list": {

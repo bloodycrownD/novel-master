@@ -24,14 +24,13 @@ export async function runProviderModel(
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const config = rt.scope.getConfigSnapshot();
 
   if (subcommand === "suggest") {
     const suggestSub = args[0];
     if (suggestSub !== "list") {
       throw new Error("Usage: nm provider model suggest list ...");
     }
-    const providerId = resolveProviderId(parseCliArgs(args.slice(1)).flags, config);
+    const providerId = await resolveProviderId(parseCliArgs(args.slice(1)).flags, rt.config);
     const list = await rt.providerModels.suggestList(providerId);
     for (const s of list) {
       console.log(
@@ -41,7 +40,7 @@ export async function runProviderModel(
     return;
   }
 
-  const providerId = resolveProviderId(flags, config);
+  const providerId = await resolveProviderId(flags, rt.config);
 
   switch (subcommand) {
     case "fetch": {

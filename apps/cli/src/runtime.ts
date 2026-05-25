@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   bootstrapNovelMaster,
+  createConfigService,
   createKkvService,
   createMessageService,
   createProjectService,
@@ -17,6 +18,7 @@ import {
   createProviderServices,
   createWorktreeService,
   open,
+  type ConfigService,
   type KkvService,
   type ModelRequestService,
   type ProviderModelService,
@@ -38,13 +40,6 @@ import {
   resolveSkspDriver,
 } from "@novel-master/core/sksp";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
-import {
-  type CliConfig,
-  loadCliConfig,
-  mergeCliConfig,
-  resolveConfigPath,
-  saveCliConfig,
-} from "./config/cli-config.js";
 import { CliScopeResolver } from "./config/resolve-scope.js";
 import { extractDbPath } from "./vfs/parse-args.js";
 
@@ -68,11 +63,11 @@ export function resolveDbPath(argv: readonly string[]): string {
 export interface NovelMasterRuntime {
   readonly conn: TdbcConnection;
   readonly kkv: KkvService;
+  readonly config: ConfigService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
-  readonly configPath: string;
   readonly scope: CliScopeResolver;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -82,8 +77,6 @@ export interface NovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
-  /** Merges into `config.json` and refreshes the in-memory scope resolver. */
-  setCliContext(patch: Partial<CliConfig>): Promise<void>;
 }
 
 /**
@@ -95,15 +88,16 @@ export async function createNovelMasterRuntime(
   registerBetterSqlite3Driver();
   registerSkspWindowsDriver();
   const dbPath = resolve(resolveDbPath(argv));
-  const configPath = resolveConfigPath(dbPath);
   await mkdir(dirname(dbPath), { recursive: true });
-  let config = await loadCliConfig(configPath);
-  let scope = new CliScopeResolver(config, { configPath });
 
   const conn = await open(`tdbc:sqlite:file:${dbPath}`, {
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+
+  const kkv = createKkvService(conn);
+  const config = createConfigService(conn);
+  const scope = new CliScopeResolver(config);
 
   const dbStore = resolveSkspDriver("windows").createStore(conn);
   const secretStore = createCompositeSecretStore({
@@ -112,24 +106,17 @@ export async function createNovelMasterRuntime(
   });
   const providerBundle = createProviderServices(conn, secretStore);
 
-  const setCliContext = async (patch: Partial<CliConfig>): Promise<void> => {
-    await saveCliConfig(configPath, patch);
-    config = mergeCliConfig(config, patch);
-    scope.replaceConfig(config);
-  };
-
   return {
     conn,
-    kkv: createKkvService(conn),
+    kkv,
+    config,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
-    configPath,
     get scope() {
       return scope;
     },
-    setCliContext,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

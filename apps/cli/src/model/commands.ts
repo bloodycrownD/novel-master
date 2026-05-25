@@ -26,7 +26,6 @@ export async function runModel(
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
-  const config = rt.scope.getConfigSnapshot();
 
   switch (subcommand) {
     case "use": {
@@ -43,11 +42,11 @@ export async function runModel(
           { modelId },
         );
       }
-      await rt.setCliContext({ currentModelId: modelId });
+      await rt.config.set("currentModelId", modelId);
       return;
     }
     case "current": {
-      const modelId = config.currentModelId;
+      const modelId = await rt.config.get("currentModelId");
       if (modelId == null || modelId === "") {
         throw new Error(
           "No current model (run: nm model use --modelId <provider>/<vendor>)",
@@ -61,7 +60,7 @@ export async function runModel(
       if (!content) {
         throw new Error("Usage: nm model request --content <text> [--modelId] [--raw]");
       }
-      const modelId = resolveModelId(flags, config);
+      const modelId = await resolveModelId(flags, rt.config);
       const result = await rt.modelRequests.request(modelId, content);
       if (flags.get("raw") === true) {
         console.log(JSON.stringify(result.raw));

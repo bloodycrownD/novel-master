@@ -18,6 +18,6 @@ export async function runSessionTemplate(
     );
   }
   const { flags } = parseCliArgs(args);
-  const sessionId = rt.scope.resolveSessionId(flags);
+  const sessionId = await rt.scope.resolveSessionId(flags);
   await rt.sessions.pullTemplate(sessionId);
 }

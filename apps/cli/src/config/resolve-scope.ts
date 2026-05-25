@@ -1,10 +1,10 @@
 /**
- * Resolves `--project` / `--session` from CLI flags or `config.json`.
+ * Resolves `--project` / `--session` from CLI flags or ConfigService.
  *
  * @module config/resolve-scope
  */
 
-import type { CliConfig } from "./cli-config.js";
+import type { ConfigService } from "@novel-master/core";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -14,41 +14,20 @@ function flagString(
   return typeof value === "string" ? value : undefined;
 }
 
-function configString(
-  config: CliConfig,
-  key: keyof Pick<CliConfig, "currentProjectId" | "currentSessionId">,
-): string | undefined {
-  const value = config[key];
-  return value != null && value !== "" ? value : undefined;
-}
-
 /**
- * Priority: CLI flag > `config.json` > thrown error with usage hint.
+ * Priority: CLI flag > ConfigService > thrown error with usage hint.
  */
 export class CliScopeResolver {
-  constructor(
-    private config: CliConfig,
-    _hints: { configPath: string },
-  ) {}
+  constructor(private readonly config: ConfigService) {}
 
-  /** Snapshot of config-backed ids (ignores CLI flags). */
-  getConfigSnapshot(): Readonly<CliConfig> {
-    return this.config;
-  }
-
-  /** Updates the in-memory config used for subsequent resolves in the same process. */
-  replaceConfig(config: CliConfig): void {
-    this.config = config;
-  }
-
-  /** Flag `--project` > `config.currentProjectId`. */
-  resolveProjectId(flags: ReadonlyMap<string, string | true>): string {
+  /** Flag `--project` > `config.get("currentProjectId")`. */
+  async resolveProjectId(flags: ReadonlyMap<string, string | true>): Promise<string> {
     const fromFlag = flagString(flags, "project");
     if (fromFlag != null) {
       return fromFlag;
     }
-    const fromConfig = configString(this.config, "currentProjectId");
-    if (fromConfig != null) {
+    const fromConfig = await this.config.get("currentProjectId");
+    if (fromConfig != null && fromConfig !== "") {
       return fromConfig;
     }
     throw new Error(
@@ -56,14 +35,14 @@ export class CliScopeResolver {
     );
   }
 
-  /** Flag `--session` > `config.currentSessionId`. */
-  resolveSessionId(flags: ReadonlyMap<string, string | true>): string {
+  /** Flag `--session` > `config.get("currentSessionId")`. */
+  async resolveSessionId(flags: ReadonlyMap<string, string | true>): Promise<string> {
     const fromFlag = flagString(flags, "session");
     if (fromFlag != null) {
       return fromFlag;
     }
-    const fromConfig = configString(this.config, "currentSessionId");
-    if (fromConfig != null) {
+    const fromConfig = await this.config.get("currentSessionId");
+    if (fromConfig != null && fromConfig !== "") {
       return fromConfig;
     }
     throw new Error(
@@ -72,13 +51,13 @@ export class CliScopeResolver {
   }
 
   /** Resolves both project and session scope (session vfs, records, snapshot). */
-  resolveProjectSession(flags: ReadonlyMap<string, string | true>): {
+  async resolveProjectSession(flags: ReadonlyMap<string, string | true>): Promise<{
     projectId: string;
     sessionId: string;
-  } {
+  }> {
     return {
-      projectId: this.resolveProjectId(flags),
-      sessionId: this.resolveSessionId(flags),
+      projectId: await this.resolveProjectId(flags),
+      sessionId: await this.resolveSessionId(flags),
     };
   }
 }
