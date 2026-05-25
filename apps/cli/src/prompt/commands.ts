@@ -34,7 +34,9 @@ export async function runPrompt(
   const source = await readFile(path, "utf8");
   const blocks = parsePromptYaml(source);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
-  const messages = await rt.messages.listBySession(sessionId);
+  const allMessages = await rt.messages.listBySession(sessionId);
+  // Filter out hidden messages from prompt rendering
+  const messages = allMessages.filter((m) => !m.hidden);
   const worktreeDisplay = await rt
     .worktree({ kind: "session", projectId, sessionId })
     .renderDisplay();

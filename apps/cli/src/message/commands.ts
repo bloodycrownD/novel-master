@@ -21,7 +21,9 @@ export async function runMessage(
       const list = await rt.messages.listBySession(sessionId);
       for (const m of list) {
         const text = m.content.content ?? JSON.stringify(m.content);
-        console.log(`${m.id}\t${m.seq}\t${m.role}\t${text}`);
+        // Display [H] marker for hidden messages
+        const hiddenMark = m.hidden ? "[H]" : "";
+        console.log(`${m.id}\t${m.seq}\t${m.role}\t${hiddenMark}\t${text}`);
       }
       return;
     }
@@ -73,7 +75,53 @@ export async function runMessage(
       console.log(forked.id);
       return;
     }
+    case "hide": {
+      const messageId = flags.get("message");
+      // Single message hide
+      if (typeof messageId === "string") {
+        await rt.messages.hide(messageId);
+        return;
+      }
+      // Batch hide by seq range
+      const fromSeqRaw = flags.get("from-seq");
+      const toSeqRaw = flags.get("to-seq");
+      if (typeof fromSeqRaw !== "string" || typeof toSeqRaw !== "string") {
+        throw new Error(
+          "Usage: nm message hide --message <id> | --session <id> --from-seq <n> --to-seq <n>",
+        );
+      }
+      const count = await rt.messages.hideRange(
+        sessionId,
+        Number.parseInt(fromSeqRaw, 10),
+        Number.parseInt(toSeqRaw, 10),
+      );
+      console.log(`Hidden ${count} message(s)`);
+      return;
+    }
+    case "show": {
+      const messageId = flags.get("message");
+      // Single message show
+      if (typeof messageId === "string") {
+        await rt.messages.show(messageId);
+        return;
+      }
+      // Batch show by seq range
+      const fromSeqRaw = flags.get("from-seq");
+      const toSeqRaw = flags.get("to-seq");
+      if (typeof fromSeqRaw !== "string" || typeof toSeqRaw !== "string") {
+        throw new Error(
+          "Usage: nm message show --message <id> | --session <id> --from-seq <n> --to-seq <n>",
+        );
+      }
+      const count = await rt.messages.showRange(
+        sessionId,
+        Number.parseInt(fromSeqRaw, 10),
+        Number.parseInt(toSeqRaw, 10),
+      );
+      console.log(`Shown ${count} message(s)`);
+      return;
+    }
     default:
-      throw new Error("Usage: nm message <list|append|delete|fork> ...");
+      throw new Error("Usage: nm message <list|append|delete|fork|hide|show> ...");
   }
 }
