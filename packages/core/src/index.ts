@@ -83,6 +83,14 @@ export { createKkvService } from "./service/kkv/create-kkv-service.js";
 export type { KkvService } from "./service/kkv/kkv.port.js";
 
 /**
+ * Config: application-level global configuration.
+ */
+export { ConfigError } from "./errors/config-errors.js";
+export type { ConfigErrorCode } from "./errors/config-errors.js";
+export { createConfigService } from "./service/config/create-config-service.js";
+export type { ConfigService } from "./service/config/config.port.js";
+
+/**
  * Chat: projects, sessions, messages.
  */
 export { ChatError } from "./errors/chat-errors.js";
