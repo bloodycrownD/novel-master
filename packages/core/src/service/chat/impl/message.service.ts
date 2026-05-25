@@ -63,6 +63,7 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("session", sessionId);
     }
     const seq = await this.deps.messages.nextSeq(sessionId);
+    // New messages are visible by default
     const message: ChatMessage = {
       id: randomUUID(),
       sessionId,
@@ -72,6 +73,7 @@ export class DefaultMessageService implements MessageService {
       provider: options?.provider ?? null,
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
+      hidden: false,
     };
     await this.deps.messages.insert(message);
     return message;

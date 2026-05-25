@@ -31,6 +31,8 @@ function rowToMessage(row: Row): ChatMessage {
         ? null
         : (JSON.parse(String(row.raw_json)) as Record<string, unknown>),
     createdAtMs: Number(row.created_at_ms),
+    // Parse hidden column: 1 = true, 0 = false
+    hidden: Number(row.hidden) === 1,
   };
 }
 
@@ -44,7 +46,7 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms
+      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
        FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
       { sessionId },
     );
@@ -55,7 +57,7 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms
+      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
        FROM chat_message WHERE id = #{id}`,
       { id },
     );
@@ -81,8 +83,8 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `INSERT INTO chat_message
-       (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms)
-       VALUES (#{id}, #{sessionId}, #{seq}, #{role}, #{contentJson}, #{provider}, #{rawJson}, #{createdAtMs})`,
+       (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden)
+       VALUES (#{id}, #{sessionId}, #{seq}, #{role}, #{contentJson}, #{provider}, #{rawJson}, #{createdAtMs}, #{hidden})`,
       {
         id: message.id,
         sessionId: message.sessionId,
@@ -92,6 +94,8 @@ export class SqliteMessageRepository implements MessageRepository {
         provider: message.provider,
         rawJson: message.raw == null ? null : JSON.stringify(message.raw),
         createdAtMs: message.createdAtMs,
+        // Convert boolean to integer: true = 1, false = 0
+        hidden: message.hidden ? 1 : 0,
       },
     );
   }
@@ -113,5 +117,34 @@ export class SqliteMessageRepository implements MessageRepository {
       `DELETE FROM chat_message WHERE session_id = #{sessionId}`,
       { sessionId },
     );
+  }
+
+  async updateHidden(messageId: string, hidden: boolean): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_message SET hidden = #{hidden} WHERE id = #{id}`,
+      { id: messageId, hidden: hidden ? 1 : 0 },
+    );
+    return result.changes > 0;
+  }
+
+  async updateHiddenRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number,
+    hidden: boolean,
+  ): Promise<number> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_message 
+       SET hidden = #{hidden} 
+       WHERE session_id = #{sessionId} 
+         AND seq >= #{fromSeq} 
+         AND seq <= #{toSeq}`,
+      { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 },
+    );
+    return result.changes;
   }
 }

@@ -19,4 +19,15 @@ export interface MessageRepository {
   delete(id: string): Promise<boolean>;
 
   deleteBySession(sessionId: string): Promise<void>;
+
+  /** Update the hidden state of a single message. Returns true if message was found. */
+  updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
+
+  /** Update the hidden state of messages in a seq range. Returns count of affected rows. */
+  updateHiddenRange(
+    sessionId: string,
+    fromSeq: number,
+    toSeq: number,
+    hidden: boolean,
+  ): Promise<number>;
 }

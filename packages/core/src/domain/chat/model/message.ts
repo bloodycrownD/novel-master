@@ -20,4 +20,6 @@ export interface ChatMessage {
   readonly provider: string | null;
   readonly raw: Record<string, unknown> | null;
   readonly createdAtMs: number;
+  /** Whether this message is hidden from LLM prompt rendering. */
+  readonly hidden: boolean;
 }
