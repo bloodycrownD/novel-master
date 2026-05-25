@@ -1,5 +1,6 @@
 import {
   bootstrapNovelMaster,
+  createConfigService,
   createKkvService,
   createMessageService,
   createProjectService,
@@ -7,6 +8,7 @@ import {
   createSessionFsService,
   createSessionService,
   open,
+  type ConfigService,
   type KkvService,
   type MessageService,
   type ProjectService,
@@ -23,6 +25,7 @@ import {
 export interface NovelMasterTestContext {
   readonly conn: TdbcConnection;
   readonly kkv: KkvService;
+  readonly config: ConfigService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -42,6 +45,7 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
   return {
     conn,
     kkv: createKkvService(conn),
+    config: createConfigService(conn),
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
