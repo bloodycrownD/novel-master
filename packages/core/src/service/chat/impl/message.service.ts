@@ -119,6 +119,7 @@ export class DefaultMessageService implements MessageService {
 
       let seq = 1;
       for (const msg of toCopy) {
+        // Preserve hidden state when forking
         await r.messages.insert({
           ...msg,
           id: randomUUID(),
@@ -129,5 +130,37 @@ export class DefaultMessageService implements MessageService {
       }
       return forked;
     });
+  }
+
+  async hide(messageId: string): Promise<void> {
+    const updated = await this.deps.messages.updateHidden(messageId, true);
+    if (!updated) {
+      throw chatNotFound("message", messageId);
+    }
+  }
+
+  async show(messageId: string): Promise<void> {
+    const updated = await this.deps.messages.updateHidden(messageId, false);
+    if (!updated) {
+      throw chatNotFound("message", messageId);
+    }
+  }
+
+  async hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
+    // Verify session exists
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, true);
+  }
+
+  async showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number> {
+    // Verify session exists
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+    return this.deps.messages.updateHiddenRange(sessionId, fromSeq, toSeq, false);
   }
 }

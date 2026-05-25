@@ -26,4 +26,16 @@ export interface MessageService {
    * Creates a new session with source session VFS and messages up to `upToMessageId`.
    */
   fork(sessionId: string, upToMessageId: string): Promise<ChatSession>;
+
+  /** Hide a single message from LLM prompt rendering. */
+  hide(messageId: string): Promise<void>;
+
+  /** Show a previously hidden message. */
+  show(messageId: string): Promise<void>;
+
+  /** Hide a range of messages by seq. Returns count of affected messages. */
+  hideRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
+
+  /** Show a range of messages by seq. Returns count of affected messages. */
+  showRange(sessionId: string, fromSeq: number, toSeq: number): Promise<number>;
 }
