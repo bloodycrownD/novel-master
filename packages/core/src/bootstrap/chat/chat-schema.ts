@@ -30,6 +30,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     provider TEXT,
     raw_json TEXT,
     created_at_ms INTEGER NOT NULL,
+    hidden INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id, seq)
   )`,
 ];
