@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   renderPromptToText,
+  textBlocks,
   type ChatMessage,
   type PromptBlock,
 } from "@novel-master/core";
@@ -18,10 +19,11 @@ function message(
     sessionId: "s1",
     seq,
     role,
-    content: { content },
+    content: textBlocks(content),
     provider: null,
     raw: null,
     createdAtMs: seq,
+    hidden: false,
   };
 }
 

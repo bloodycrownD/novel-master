@@ -6,6 +6,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { textBlocks } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("Message visibility", () => {
@@ -13,7 +14,7 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "msg1" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("msg1"));
 
     await ctx.messages.hide(m1.id);
     const hidden = await ctx.messages.get(m1.id);
@@ -30,10 +31,10 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", { content: "1" });
-    await ctx.messages.append(session.id, "assistant", { content: "2" });
-    await ctx.messages.append(session.id, "user", { content: "3" });
-    await ctx.messages.append(session.id, "assistant", { content: "4" });
+    await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+    await ctx.messages.append(session.id, "user", textBlocks("3"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("4"));
 
     const count = await ctx.messages.hideRange(session.id, 2, 3);
     assert.equal(count, 2);
@@ -51,8 +52,8 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
-    const m2 = await ctx.messages.append(session.id, "assistant", { content: "2" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
 
     await ctx.messages.hide(m1.id);
     await ctx.messages.hide(m2.id);
@@ -71,8 +72,8 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
-    const m2 = await ctx.messages.append(session.id, "assistant", { content: "2" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    const m2 = await ctx.messages.append(session.id, "assistant", textBlocks("2"));
 
     await ctx.messages.hide(m1.id);
 
@@ -90,8 +91,8 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
-    await ctx.messages.append(session.id, "assistant", { content: "2" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
 
     await ctx.messages.hide(m1.id);
 
@@ -109,7 +110,7 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", { content: "1" });
+    await ctx.messages.append(session.id, "user", textBlocks("1"));
 
     const count = await ctx.messages.hideRange(session.id, 5, 3);
     assert.equal(count, 0);
@@ -121,8 +122,8 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    await ctx.messages.append(session.id, "user", { content: "1" });
-    await ctx.messages.append(session.id, "assistant", { content: "2" });
+    await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
 
     const count = await ctx.messages.hideRange(session.id, 1, 10);
     assert.equal(count, 2); // Only 2 messages exist
@@ -134,7 +135,7 @@ describe("Message visibility", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id, "S");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "msg1" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("msg1"));
 
     assert.equal(m1.hidden, false);
 

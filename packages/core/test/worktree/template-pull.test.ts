@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   createTemplatePullService,
   createWorktreeService,
+  textBlocks,
 } from "@novel-master/core";
 import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
@@ -49,7 +50,7 @@ describe("template pull", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only-in-session.md", "session-only");
-    await ctx.messages.append(session.id, "user", { content: "keep me" });
+    await ctx.messages.append(session.id, "user", textBlocks("keep me"));
 
     await ctx.globalVfs().write("/template/g.md", "G");
     await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
@@ -96,7 +97,7 @@ describe("template pull", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only.md", "local");
-    await ctx.messages.append(session.id, "user", { content: "hi" });
+    await ctx.messages.append(session.id, "user", textBlocks("hi"));
     await ctx.sessionFs.execute(
       session.id,
       project.id,

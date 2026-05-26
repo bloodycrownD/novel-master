@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { TdbcConnection } from "@novel-master/core";
+import type { MessageContent, TdbcConnection } from "@novel-master/core";
+import { textBlocks } from "@novel-master/core";
 import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+
+function firstTextBlock(content: MessageContent): string {
+  const block = content.blocks[0];
+  assert.equal(block?.type, "text");
+  return block!.type === "text" ? block.text : "";
+}
 
 async function assertNoSessionFsData(
   conn: TdbcConnection,
@@ -61,8 +68,8 @@ describe("Chat services", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
-    await ctx.messages.append(session.id, "user", { content: "hi" });
-    await ctx.messages.append(session.id, "assistant", { content: "hey" });
+    await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("hey"));
     const list = await ctx.messages.listBySession(session.id);
     assert.equal(list.length, 2);
     assert.equal(list[0]!.seq, 1);
@@ -76,15 +83,15 @@ describe("Chat services", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "edited");
-    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
-    const m2 = await ctx.messages.append(session.id, "user", { content: "2" });
-    await ctx.messages.append(session.id, "user", { content: "3" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    const m2 = await ctx.messages.append(session.id, "user", textBlocks("2"));
+    await ctx.messages.append(session.id, "user", textBlocks("3"));
 
     const forked = await ctx.messages.fork(session.id, m2.id);
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
     assert.equal(forkedMsgs.length, 2);
-    assert.equal(forkedMsgs[0]!.content.content, "1");
-    assert.equal(forkedMsgs[1]!.content.content, "2");
+    assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
+    assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
     assert.equal(
       (await ctx.sessionVfs(project.id, forked.id).read("/note.md")).content,
       "edited",
@@ -97,22 +104,22 @@ describe("Chat services", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
-    const m1 = await ctx.messages.append(session.id, "user", { content: "1" });
-    const m2 = await ctx.messages.append(session.id, "user", { content: "2" });
-    await ctx.messages.append(session.id, "user", { content: "3" });
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+    const m2 = await ctx.messages.append(session.id, "user", textBlocks("2"));
+    await ctx.messages.append(session.id, "user", textBlocks("3"));
 
     const forked = await ctx.messages.fork(session.id, m2.id);
-    await ctx.messages.append(forked.id, "user", { content: "fork-only" });
+    await ctx.messages.append(forked.id, "user", textBlocks("fork-only"));
 
     const sourceMsgs = await ctx.messages.listBySession(session.id);
     assert.equal(sourceMsgs.length, 3);
-    assert.equal(sourceMsgs[2]!.content.content, "3");
+    assert.equal(firstTextBlock(sourceMsgs[2]!.content), "3");
 
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
     assert.equal(forkedMsgs.length, 3);
-    assert.equal(forkedMsgs[0]!.content.content, "1");
-    assert.equal(forkedMsgs[1]!.content.content, "2");
-    assert.equal(forkedMsgs[2]!.content.content, "fork-only");
+    assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
+    assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
+    assert.equal(firstTextBlock(forkedMsgs[2]!.content), "fork-only");
     assert.notEqual(forkedMsgs[0]!.id, m1.id);
     await ctx.conn.close();
   });
@@ -123,16 +130,16 @@ describe("Chat services", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "body");
-    await ctx.messages.append(session.id, "user", { content: "hi" });
-    await ctx.messages.append(session.id, "assistant", { content: "hey" });
+    await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("hey"));
 
     const copy = await ctx.sessions.copy(session.id);
     const copyVfs = ctx.sessionVfs(project.id, copy.id);
     assert.equal((await copyVfs.read("/note.md")).content, "body");
     const copyMsgs = await ctx.messages.listBySession(copy.id);
     assert.equal(copyMsgs.length, 2);
-    assert.equal(copyMsgs[0]!.content.content, "hi");
-    assert.equal(copyMsgs[1]!.content.content, "hey");
+    assert.equal(firstTextBlock(copyMsgs[0]!.content), "hi");
+    assert.equal(firstTextBlock(copyMsgs[1]!.content), "hey");
     assert.notEqual(copyMsgs[0]!.id, (await ctx.messages.listBySession(session.id))[0]!.id);
 
     await svfs.write("/note.md", "mutated", { versionCheck: false });

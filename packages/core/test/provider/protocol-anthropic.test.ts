@@ -49,5 +49,7 @@ describe("AnthropicProtocolAdapter HTTP", () => {
     assert.equal(calls[0]!.url, "https://api.anthropic.com/v1/messages");
     assert.equal(calls[0]!.init.method, "POST");
     assert.equal(result.assistantText, "hi");
+    assert.equal(result.blocks.length, 1);
+    assert.equal(result.blocks[0]!.type, "text");
   });
 });
