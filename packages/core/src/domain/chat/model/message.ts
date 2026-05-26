@@ -4,11 +4,9 @@
  * @module domain/chat/model/message
  */
 
-/** Minimal message content JSON stored in `content_json`. */
-export interface MessageContent {
-  readonly content?: string;
-  readonly parts?: ReadonlyArray<unknown>;
-}
+export type { MessageContent } from "./content-block.js";
+
+import type { MessageContent } from "./content-block.js";
 
 /** A single message in a session, ordered by `seq`. */
 export interface ChatMessage {

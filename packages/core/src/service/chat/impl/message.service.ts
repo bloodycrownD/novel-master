@@ -6,7 +6,9 @@
 
 import { randomUUID } from "node:crypto";
 import type { TdbcConnection } from "@/infra/tdbc/connection.js";
-import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import type { MessageContent } from "@/domain/chat/model/content-block.js";
+import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -62,6 +64,7 @@ export class DefaultMessageService implements MessageService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
+    assertMessageContent(content);
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
     const message: ChatMessage = {

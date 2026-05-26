@@ -11,11 +11,12 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
-import type { ChatMessage, MessageContent } from "../../model/message.js";
+import { parseMessageContent } from "../../content/parse-message-content.js";
+import type { ChatMessage } from "../../model/message.js";
 import type { MessageRepository } from "../message.port.js";
 
-function parseContent(json: string): MessageContent {
-  return JSON.parse(json) as MessageContent;
+function parseContent(json: string) {
+  return parseMessageContent(json);
 }
 
 function rowToMessage(row: Row): ChatMessage {

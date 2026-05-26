@@ -1,0 +1,140 @@
+/**
+ * Strict parse/validate for `content_json` message bodies.
+ *
+ * @module domain/chat/content/parse-message-content
+ */
+
+import { chatInvalidArgument } from "@/errors/chat-errors.js";
+import type {
+  ContentBlock,
+  ImageBlock,
+  ImageSource,
+  MessageContent,
+  TextBlock,
+  ThinkingBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "../model/content-block.js";
+
+const LEGACY_SHAPE_MSG =
+  "Legacy message content shape is not supported; use { blocks: [...] }";
+
+const BLOCK_TYPES = new Set([
+  "text",
+  "image",
+  "tool_use",
+  "tool_result",
+  "thinking",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function requireString(obj: Record<string, unknown>, key: string, label: string): string {
+  const v = obj[key];
+  if (typeof v !== "string" || v === "") {
+    throw chatInvalidArgument(`${label}: ${key} must be a non-empty string`);
+  }
+  return v;
+}
+
+function parseImageSource(value: unknown): ImageSource {
+  if (!isRecord(value)) {
+    throw chatInvalidArgument("image block: source must be an object");
+  }
+  const kind = value.kind;
+  if (kind === "url") {
+    const url = requireString(value, "url", "image url source");
+    return { kind: "url", url };
+  }
+  if (kind === "base64") {
+    const mediaType = requireString(value, "mediaType", "image base64 source");
+    const data = requireString(value, "data", "image base64 source");
+    return { kind: "base64", mediaType, data };
+  }
+  throw chatInvalidArgument('image block: source.kind must be "url" or "base64"');
+}
+
+function parseBlock(value: unknown, index: number): ContentBlock {
+  if (!isRecord(value)) {
+    throw chatInvalidArgument(`blocks[${index}]: must be an object`);
+  }
+  const type = value.type;
+  if (typeof type !== "string" || !BLOCK_TYPES.has(type)) {
+    throw chatInvalidArgument(
+      `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking)`,
+    );
+  }
+
+  switch (type) {
+    case "text": {
+      const text = requireString(value, "text", `blocks[${index}] text`);
+      return { type: "text", text } satisfies TextBlock;
+    }
+    case "image": {
+      const source = parseImageSource(value.source);
+      return { type: "image", source } satisfies ImageBlock;
+    }
+    case "tool_use": {
+      const id = requireString(value, "id", `blocks[${index}] tool_use`);
+      const name = requireString(value, "name", `blocks[${index}] tool_use`);
+      const input = value.input;
+      if (!isRecord(input)) {
+        throw chatInvalidArgument(`blocks[${index}] tool_use: input must be an object`);
+      }
+      return { type: "tool_use", id, name, input } satisfies ToolUseBlock;
+    }
+    case "tool_result": {
+      const toolUseId = requireString(value, "toolUseId", `blocks[${index}] tool_result`);
+      const content =
+        typeof value.content === "string" ? value.content : "";
+      return { type: "tool_result", toolUseId, content } satisfies ToolResultBlock;
+    }
+    case "thinking": {
+      const text = requireString(value, "text", `blocks[${index}] thinking`);
+      return { type: "thinking", text } satisfies ThinkingBlock;
+    }
+    default:
+      throw chatInvalidArgument(`blocks[${index}]: unsupported type`);
+  }
+}
+
+/** Runtime validation for in-memory {@link MessageContent} before append. */
+export function assertMessageContent(value: unknown): asserts value is MessageContent {
+  if (!isRecord(value)) {
+    throw chatInvalidArgument("MessageContent must be an object");
+  }
+  if ("content" in value || "parts" in value) {
+    throw chatInvalidArgument(LEGACY_SHAPE_MSG);
+  }
+  const extraKeys = Object.keys(value).filter((k) => k !== "blocks");
+  if (extraKeys.length > 0) {
+    throw chatInvalidArgument(
+      `MessageContent has unexpected keys: ${extraKeys.join(", ")}`,
+    );
+  }
+  if (!("blocks" in value)) {
+    throw chatInvalidArgument("MessageContent must have a blocks array");
+  }
+  if (!Array.isArray(value.blocks)) {
+    throw chatInvalidArgument("MessageContent.blocks must be an array");
+  }
+  const blocks: ContentBlock[] = [];
+  for (let i = 0; i < value.blocks.length; i++) {
+    blocks.push(parseBlock(value.blocks[i], i));
+  }
+  (value as { blocks: ContentBlock[] }).blocks = blocks;
+}
+
+/** Parse and validate JSON from `content_json`. */
+export function parseMessageContent(json: string): MessageContent {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw chatInvalidArgument("Invalid JSON in message content");
+  }
+  assertMessageContent(parsed);
+  return parsed;
+}
