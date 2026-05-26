@@ -7,6 +7,7 @@
 import {
   parseApplicationModelId,
   ProviderError,
+  textBlocks,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
@@ -58,9 +59,35 @@ export async function runModel(
     case "request": {
       const content = flagString(flags, "content");
       if (!content) {
-        throw new Error("Usage: nm model request --content <text> [--modelId] [--raw]");
+        throw new Error(
+          "Usage: nm model request --content <text> [--session <id>] [--modelId] [--raw]",
+        );
       }
       const modelId = await resolveModelId(flags, rt.config);
+      const sessionId = flagString(flags, "session");
+
+      if (sessionId != null) {
+        await rt.messages.append(sessionId, "user", textBlocks(content));
+        const history = (await rt.messages.listBySession(sessionId)).filter(
+          (m) => !m.hidden,
+        );
+        const result = await rt.modelRequests.request(modelId, content, {
+          history,
+        });
+        await rt.messages.append(
+          sessionId,
+          "assistant",
+          { blocks: result.blocks },
+          { raw: result.raw as Record<string, unknown> },
+        );
+        if (flags.get("raw") === true) {
+          console.log(JSON.stringify(result.raw));
+        } else {
+          console.log(result.assistantText);
+        }
+        return;
+      }
+
       const result = await rt.modelRequests.request(modelId, content);
       if (flags.get("raw") === true) {
         console.log(JSON.stringify(result.raw));

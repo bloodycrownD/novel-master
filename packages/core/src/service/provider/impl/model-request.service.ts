@@ -12,7 +12,10 @@ import type { ProviderRepository } from "@/domain/provider/repositories/provider
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
 import type { LlmChatResult } from "@/infra/llm-protocol/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
-import type { ModelRequestService } from "../model-request.port.js";
+import type {
+  ModelRequestOptions,
+  ModelRequestService,
+} from "../model-request.port.js";
 
 export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -27,6 +30,7 @@ export class DefaultModelRequestService implements ModelRequestService {
   async request(
     applicationModelId: string,
     userContent: string,
+    options?: ModelRequestOptions,
   ): Promise<LlmChatResult> {
     const { providerId, vendorModelId } =
       parseApplicationModelId(applicationModelId);
@@ -60,6 +64,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       vendorModelId,
       userContent,
       extraHeaders: provider.headers,
+      history: options?.history,
     });
   }
 }

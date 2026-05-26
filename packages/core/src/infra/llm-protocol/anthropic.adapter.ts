@@ -1,9 +1,11 @@
 /**
- * Anthropic protocol adapter.
+ * Anthropic protocol adapter (multi-block request/response).
  *
  * @module infra/llm-protocol/anthropic.adapter
  */
 
+import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
+import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
   LlmChatRequest,
@@ -11,6 +13,11 @@ import type {
   LlmListModelsResult,
   LlmProtocolAdapter,
 } from "./adapter.port.js";
+import {
+  anthropicContentToBlocks,
+  blocksToAnthropicContent,
+  chatMessagesToAnthropic,
+} from "./anthropic-content-mapper.js";
 import { fetchJson, joinUrl } from "./http-util.js";
 
 export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
@@ -19,7 +26,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent">,
+    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">,
   ): Promise<LlmListModelsResult> {
     const url = joinUrl(req.baseUrl, "/v1/models");
     const data = (await fetchJson(this.fetchFn, url, {
@@ -42,6 +49,16 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = joinUrl(req.baseUrl, "/v1/messages");
+    const messages =
+      req.history != null && req.history.length > 0
+        ? chatMessagesToAnthropic(req.history)
+        : [
+            {
+              role: "user",
+              content: blocksToAnthropicContent(textBlocks(req.userContent).blocks),
+            },
+          ];
+
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",
       headers: {
@@ -53,13 +70,12 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       body: JSON.stringify({
         model: req.vendorModelId,
         max_tokens: 1024,
-        messages: [{ role: "user", content: req.userContent }],
+        messages,
       }),
     });
-    const record = raw as {
-      content?: Array<{ type?: string; text?: string }>;
-    };
-    const text = record.content?.[0]?.text ?? "";
-    return { assistantText: text, raw };
+    const record = raw as { content?: unknown[] };
+    const blocks = anthropicContentToBlocks(record.content ?? []);
+    const assistantText = messageBodyTextFromContent({ blocks });
+    return { assistantText, blocks, raw };
   }
 }
