@@ -5,8 +5,53 @@
  */
 
 import { readFile } from "node:fs/promises";
+import {
+  assertMessageContent,
+  formatMessageForCli,
+  parseMessageContent,
+  textBlocks,
+} from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
+
+async function resolveAppendContent(
+  flags: ReadonlyMap<string, string | true>,
+): Promise<ReturnType<typeof textBlocks>> {
+  const contentFlag = flags.get("content");
+  const blocksPath = flags.get("blocks");
+  const blocksJson = flags.get("blocks-json");
+  const fileFlag = flags.get("file");
+
+  const blockInputs = [
+    contentFlag !== undefined,
+    blocksPath !== undefined,
+    blocksJson !== undefined,
+    fileFlag !== undefined,
+  ].filter(Boolean).length;
+
+  if (blockInputs > 1) {
+    throw new Error("Use only one of --content, --blocks, --blocks-json, or --file");
+  }
+
+  if (typeof contentFlag === "string") {
+    return textBlocks(contentFlag);
+  }
+  if (typeof blocksJson === "string") {
+    return parseMessageContent(blocksJson);
+  }
+  if (typeof blocksPath === "string") {
+    const raw = await readFile(blocksPath, "utf8");
+    return parseMessageContent(raw);
+  }
+  if (typeof fileFlag === "string") {
+    const text = await readFile(fileFlag, "utf8");
+    return textBlocks(text);
+  }
+
+  throw new Error(
+    "Usage: nm message append [--session <id>] --role <role> [--content <text>|--blocks <path>|--blocks-json <json>|--file <path>]",
+  );
+}
 
 export async function runMessage(
   rt: Pick<NovelMasterRuntime, "messages" | "scope">,
@@ -20,8 +65,7 @@ export async function runMessage(
     case "list": {
       const list = await rt.messages.listBySession(sessionId);
       for (const m of list) {
-        const text = m.content.content ?? JSON.stringify(m.content);
-        // Display [H] marker for hidden messages
+        const text = formatMessageForCli(m.content).replace(/\n/g, "⏎");
         const hiddenMark = m.hidden ? "[H]" : "";
         console.log(`${m.id}\t${m.seq}\t${m.role}\t${hiddenMark}\t${text}`);
       }
@@ -29,28 +73,14 @@ export async function runMessage(
     }
     case "append": {
       const role = flags.get("role");
-      const contentFlag = flags.get("content");
-      const fileFlag = flags.get("file");
       if (typeof role !== "string") {
         throw new Error(
-          "Usage: nm message append [--session <id>] --role <role> [--content <text>|--file <path>]",
+          "Usage: nm message append [--session <id>] --role <role> [--content <text>|--blocks <path>|--blocks-json <json>|--file <path>]",
         );
       }
-      if (typeof contentFlag === "string" && typeof fileFlag === "string") {
-        throw new Error("Cannot use both --content and --file");
-      }
-      const content =
-        typeof fileFlag === "string"
-          ? await readFile(fileFlag, "utf8")
-          : typeof contentFlag === "string"
-            ? contentFlag
-            : null;
-      if (content == null) {
-        throw new Error(
-          "Usage: nm message append [--session <id>] --role <role> [--content <text>|--file <path>]",
-        );
-      }
-      const msg = await rt.messages.append(sessionId, role, { content });
+      const content = await resolveAppendContent(flags);
+      assertMessageContent(content);
+      const msg = await rt.messages.append(sessionId, role, content);
       console.log(msg.id);
       return;
     }
@@ -77,12 +107,10 @@ export async function runMessage(
     }
     case "hide": {
       const messageId = flags.get("message");
-      // Single message hide
       if (typeof messageId === "string") {
         await rt.messages.hide(messageId);
         return;
       }
-      // Batch hide by seq range
       const fromSeqRaw = flags.get("from-seq");
       const toSeqRaw = flags.get("to-seq");
       if (typeof fromSeqRaw !== "string" || typeof toSeqRaw !== "string") {
@@ -100,12 +128,10 @@ export async function runMessage(
     }
     case "show": {
       const messageId = flags.get("message");
-      // Single message show
       if (typeof messageId === "string") {
         await rt.messages.show(messageId);
         return;
       }
-      // Batch show by seq range
       const fromSeqRaw = flags.get("from-seq");
       const toSeqRaw = flags.get("to-seq");
       if (typeof fromSeqRaw !== "string" || typeof toSeqRaw !== "string") {
