@@ -7,6 +7,15 @@ import {
 } from "../../src/infra/llm-protocol/anthropic-content-mapper.js";
 
 describe("anthropic content mapper", () => {
+  it("drops empty text segments from API response", () => {
+    const blocks = anthropicContentToBlocks([
+      { type: "text", text: "" },
+      { type: "tool_use", id: "tu_1", name: "grep", input: {} },
+    ]);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]!.type, "tool_use");
+  });
+
   it("maps tool_use and text from API response", () => {
     const blocks = anthropicContentToBlocks([
       {

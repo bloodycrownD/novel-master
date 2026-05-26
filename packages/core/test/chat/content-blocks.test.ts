@@ -55,6 +55,21 @@ describe("parseMessageContent", () => {
     );
   });
 
+  it("rejects legacy { parts } shape", () => {
+    assert.throws(
+      () =>
+        parseMessageContent(
+          JSON.stringify({ parts: [{ type: "text", text: "x" }] }),
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ChatError);
+        assert.equal(err.code, "INVALID_ARGUMENT");
+        assert.match(err.message, /Legacy message content shape/);
+        return true;
+      },
+    );
+  });
+
   it("rejects unknown block type", () => {
     assert.throws(() =>
       parseMessageContent(

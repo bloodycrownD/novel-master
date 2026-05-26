@@ -1,5 +1,7 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { ProviderError } from "../../src/errors/provider-errors.js";
+import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/openai.adapter.js";
 
 describe("OpenAiProtocolAdapter HTTP", () => {
@@ -24,5 +26,45 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     const headers = calls[0]!.init.headers as Record<string, string>;
     assert.equal(headers.Authorization, "Bearer sk-test");
     assert.equal(result.models[0]?.vendorModelId, "gpt-4o");
+  });
+
+  it("chat rejects history with image blocks", async () => {
+    const adapter = new OpenAiProtocolAdapter();
+    const history: ChatMessage[] = [
+      {
+        id: "m1",
+        sessionId: "s1",
+        seq: 1,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "image",
+              source: { kind: "url", url: "https://example.com/a.png" },
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
+    await assert.rejects(
+      () =>
+        adapter.chat({
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "sk-test",
+          vendorModelId: "gpt-4o",
+          userContent: "hello",
+          history,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "UNSUPPORTED_CONTENT");
+        return true;
+      },
+    );
   });
 });

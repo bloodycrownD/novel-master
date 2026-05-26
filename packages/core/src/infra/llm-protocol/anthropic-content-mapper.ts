@@ -69,7 +69,9 @@ export function anthropicContentToBlocks(
     switch (item.type) {
       case "text": {
         const text = typeof item.text === "string" ? item.text : "";
-        blocks.push({ type: "text", text });
+        if (text !== "") {
+          blocks.push({ type: "text", text });
+        }
         break;
       }
       case "image": {
