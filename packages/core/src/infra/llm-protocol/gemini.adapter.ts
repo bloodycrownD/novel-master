@@ -1,9 +1,10 @@
 /**
- * Google Gemini protocol adapter.
+ * Google Gemini protocol adapter (text-only content blocks).
  *
  * @module infra/llm-protocol/gemini.adapter
  */
 
+import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
   LlmChatRequest,
@@ -11,6 +12,7 @@ import type {
   LlmListModelsResult,
   LlmProtocolAdapter,
 } from "./adapter.port.js";
+import { blocksToTextOnly, chatMessagesToTextOnly } from "./text-only-content.js";
 import { fetchJson, joinUrl } from "./http-util.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
@@ -19,7 +21,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent">,
+    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">,
   ): Promise<LlmListModelsResult> {
     const url = `${joinUrl(req.baseUrl, "/models")}?key=${encodeURIComponent(req.apiKey)}`;
     const data = (await fetchJson(this.fetchFn, url, {
@@ -45,6 +47,11 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     const path = `/models/${encodeURIComponent(req.vendorModelId)}:generateContent`;
     const url = `${joinUrl(req.baseUrl, path)}?key=${encodeURIComponent(req.apiKey)}`;
+    const userText =
+      req.history != null && req.history.length > 0
+        ? chatMessagesToTextOnly(req.history)
+        : blocksToTextOnly(textBlocks(req.userContent).blocks);
+
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",
       headers: {
@@ -55,7 +62,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
         contents: [
           {
             role: "user",
-            parts: [{ text: req.userContent }],
+            parts: [{ text: userText }],
           },
         ],
       }),
@@ -66,6 +73,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       }>;
     };
     const text = record.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    return { assistantText: text, raw };
+    const blocks = [{ type: "text" as const, text }];
+    return { assistantText: text, blocks, raw };
   }
 }

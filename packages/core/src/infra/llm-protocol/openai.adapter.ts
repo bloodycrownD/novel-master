@@ -1,9 +1,10 @@
 /**
- * OpenAI-compatible protocol adapter.
+ * OpenAI-compatible protocol adapter (text-only content blocks).
  *
  * @module infra/llm-protocol/openai.adapter
  */
 
+import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
   LlmChatRequest,
@@ -11,6 +12,7 @@ import type {
   LlmListModelsResult,
   LlmProtocolAdapter,
 } from "./adapter.port.js";
+import { blocksToTextOnly, chatMessagesToTextOnly } from "./text-only-content.js";
 import { fetchJson, joinUrl } from "./http-util.js";
 
 export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
@@ -19,7 +21,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   constructor(private readonly fetchFn: FetchFn = globalThis.fetch) {}
 
   async listModels(
-    req: Omit<LlmChatRequest, "vendorModelId" | "userContent">,
+    req: Omit<LlmChatRequest, "vendorModelId" | "userContent" | "history">,
   ): Promise<LlmListModelsResult> {
     const url = joinUrl(req.baseUrl, "/models");
     const data = (await fetchJson(this.fetchFn, url, {
@@ -37,6 +39,11 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = joinUrl(req.baseUrl, "/chat/completions");
+    const userText =
+      req.history != null && req.history.length > 0
+        ? chatMessagesToTextOnly(req.history)
+        : blocksToTextOnly(textBlocks(req.userContent).blocks);
+
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",
       headers: {
@@ -47,13 +54,14 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       body: JSON.stringify({
         model: req.vendorModelId,
         stream: false,
-        messages: [{ role: "user", content: req.userContent }],
+        messages: [{ role: "user", content: userText }],
       }),
     });
     const record = raw as {
       choices?: Array<{ message?: { content?: string } }>;
     };
     const text = record.choices?.[0]?.message?.content ?? "";
-    return { assistantText: text, raw };
+    const blocks = [{ type: "text" as const, text }];
+    return { assistantText: text, blocks, raw };
   }
 }
