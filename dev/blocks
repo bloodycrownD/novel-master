@@ -1,2 +1,0 @@
-  `content` mediumtext NULL COMMENT '统一content blocks JSON数组, 类型: text/image/tool_use/tool_result/thinking',
-新需求，处理统一的content blocks
