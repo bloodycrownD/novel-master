@@ -28,8 +28,107 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.equal(result.models[0]?.vendorModelId, "gpt-4o");
   });
 
-  it("chat rejects history with image blocks", async () => {
-    const adapter = new OpenAiProtocolAdapter();
+  it("O4: chat sends tools and tool_choice in request body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: "ok",
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hello",
+      system: "You are helpful",
+      tools: [
+        {
+          name: "vfs.read",
+          description: "read file",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ],
+    });
+
+    assert.equal(calls.length, 1);
+    const parsed = JSON.parse(calls[0]!.body) as {
+      messages?: unknown[];
+      tools?: unknown[];
+      tool_choice?: string;
+    };
+    assert.equal(parsed.tool_choice, "auto");
+    assert.ok(Array.isArray(parsed.tools));
+    assert.equal((parsed.tools as unknown[]).length, 1);
+    const firstMsg = (parsed.messages as Array<{ role: string }>)[0];
+    assert.equal(firstMsg?.role, "system");
+  });
+
+  it("O5: stream emits text-delta and done", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}',
+      "",
+      'data: {"choices":[{"delta":{"content":"lo"}}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const deltas: string[] = [];
+    let done = false;
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hi",
+      stream: true,
+      onStream: (ev) => {
+        if (ev.type === "text-delta") {
+          deltas.push(ev.text);
+        }
+        if (ev.type === "done") {
+          done = true;
+        }
+      },
+    });
+
+    assert.deepEqual(deltas, ["Hel", "lo"]);
+    assert.equal(result.assistantText, "Hello");
+    assert.ok(done);
+  });
+
+  it("O6: history with image maps to vision content in POST body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "seen" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
     const history: ChatMessage[] = [
       {
         id: "m1",
@@ -38,6 +137,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
         role: "user",
         content: {
           blocks: [
+            { type: "text", text: "what is this?" },
             {
               type: "image",
               source: { kind: "url", url: "https://example.com/a.png" },
@@ -51,14 +151,81 @@ describe("OpenAiProtocolAdapter HTTP", () => {
       },
     ];
 
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "ignored",
+      history,
+      tools: [{ name: "t", description: "d", inputSchema: {} }],
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      messages?: Array<{ role: string; content: unknown }>;
+    };
+    const userMsg = parsed.messages?.find((m) => m.role === "user");
+    assert.ok(userMsg);
+    const content = userMsg!.content as Array<{ type: string; image_url?: { url: string } }>;
+    assert.ok(Array.isArray(content));
+    assert.equal(content[1]!.type, "image_url");
+    assert.equal(content[1]!.image_url!.url, "https://example.com/a.png");
+  });
+
+  it("text-only shortcut still uses single user message", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "pong" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "ping",
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      messages?: Array<{ role: string; content: string }>;
+    };
+    assert.equal(parsed.messages?.length, 1);
+    assert.equal(parsed.messages?.[0]?.role, "user");
+    assert.equal(parsed.messages?.[0]?.content, "ping");
+    assert.equal(result.assistantText, "pong");
+  });
+
+  it("rejects thinking in full mapper path", async () => {
+    const adapter = new OpenAiProtocolAdapter(async () => new Response("{}"));
+    const history: ChatMessage[] = [
+      {
+        id: "m1",
+        sessionId: "s1",
+        seq: 1,
+        role: "assistant",
+        content: { blocks: [{ type: "thinking", text: "secret" }] },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
     await assert.rejects(
       () =>
         adapter.chat({
           baseUrl: "https://api.openai.com/v1",
           apiKey: "sk-test",
           vendorModelId: "gpt-4o",
-          userContent: "hello",
+          userContent: "hi",
           history,
+          tools: [{ name: "t", description: "d", inputSchema: {} }],
         }),
       (err: unknown) => {
         assert.ok(err instanceof ProviderError);

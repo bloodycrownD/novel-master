@@ -24,6 +24,18 @@ export function blocksToTextOnly(blocks: readonly ContentBlock[]): string {
   return parts.join("\n\n");
 }
 
+/** True when every block in history is `text` (legacy `nm model request` shortcut). */
+export function isTextOnlyHistory(messages: readonly ChatMessage[]): boolean {
+  for (const msg of messages) {
+    for (const block of msg.content.blocks) {
+      if (block.type !== "text") {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 /** Flatten chat history to a single user string (text blocks only). */
 export function chatMessagesToTextOnly(messages: readonly ChatMessage[]): string {
   const parts: string[] = [];

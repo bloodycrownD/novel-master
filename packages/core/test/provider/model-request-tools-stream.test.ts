@@ -79,19 +79,89 @@ describe("ModelRequest tools + stream (adapters)", () => {
     assert.equal(result.assistantText, "Hi");
   });
 
-  it("OpenAI throws UNSUPPORTED when tools present", async () => {
-    const adapter = new OpenAiProtocolAdapter(async () => new Response("{}"));
-    await assert.rejects(
-      () =>
-        adapter.chat({
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: "k",
-          vendorModelId: "gpt-4",
-          userContent: "hi",
-          tools: [{ name: "t", description: "d", inputSchema: {} }],
+  it("OpenAI chat sends tools in request body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                tool_calls: [
+                  {
+                    id: "call_1",
+                    type: "function",
+                    function: {
+                      name: "vfs.read",
+                      arguments: '{"path":"/a"}',
+                    },
+                  },
+                ],
+              },
+            },
+          ],
         }),
-      (e: unknown) => e instanceof ProviderError && e.code === "UNSUPPORTED",
-    );
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "k",
+      vendorModelId: "gpt-4",
+      userContent: "hi",
+      system: "sys",
+      tools: [
+        {
+          name: "vfs.read",
+          description: "read",
+          inputSchema: { type: "object" },
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as { tools?: unknown[]; tool_choice?: string };
+    assert.ok(Array.isArray(parsed.tools));
+    assert.equal(parsed.tool_choice, "auto");
+    assert.equal(result.blocks.length, 1);
+    assert.equal(result.blocks[0]!.type, "tool_use");
+  });
+
+  it("OpenAI stream emits text-delta and done", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const deltas: string[] = [];
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "k",
+      vendorModelId: "gpt-4",
+      userContent: "hi",
+      stream: true,
+      onStream: (ev) => {
+        if (ev.type === "text-delta") {
+          deltas.push(ev.text);
+        }
+      },
+    });
+
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(result.assistantText, "Hi");
   });
 
   it("Gemini throws UNSUPPORTED when tools present", async () => {
