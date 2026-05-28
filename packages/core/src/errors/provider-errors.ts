@@ -13,7 +13,8 @@ export type ProviderErrorCode =
   | "HTTP_ERROR"
   | "API_KEY_NOT_SET"
   | "MODEL_NOT_SAVED"
-  | "UNSUPPORTED_CONTENT";
+  | "UNSUPPORTED_CONTENT"
+  | "UNSUPPORTED";
 
 /**
  * Unified error for provider service and LLM HTTP operations.
