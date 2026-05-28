@@ -76,6 +76,47 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.equal(firstMsg?.role, "system");
   });
 
+  it("O4b: OPENAI_TOOL_CHOICE_REQUIRED=1 sends tool_choice required", async () => {
+    const prev = process.env.OPENAI_TOOL_CHOICE_REQUIRED;
+    process.env.OPENAI_TOOL_CHOICE_REQUIRED = "1";
+    try {
+      const calls: Array<{ body: string }> = [];
+      const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+        calls.push({ body: String(init?.body ?? "") });
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { role: "assistant", content: "ok" } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      });
+
+      const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+      await adapter.chat({
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "sk-test",
+        vendorModelId: "gpt-4o",
+        userContent: "hello",
+        tools: [
+          {
+            name: "vfs.write",
+            description: "write file",
+            inputSchema: { type: "object", properties: { path: { type: "string" } } },
+          },
+        ],
+      });
+
+      const parsed = JSON.parse(calls[0]!.body) as { tool_choice?: string };
+      assert.equal(parsed.tool_choice, "required");
+    } finally {
+      if (prev === undefined) {
+        delete process.env.OPENAI_TOOL_CHOICE_REQUIRED;
+      } else {
+        process.env.OPENAI_TOOL_CHOICE_REQUIRED = prev;
+      }
+    }
+  });
+
   it("O5: stream emits text-delta and done", async () => {
     const sse = [
       'data: {"choices":[{"delta":{"content":"Hel"}}]}',

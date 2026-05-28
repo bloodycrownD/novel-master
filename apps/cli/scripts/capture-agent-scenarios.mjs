@@ -9,7 +9,10 @@
  *
  * Usage:
  *   node apps/cli/scripts/capture-agent-scenarios.mjs [--db <path>]
+ *   node apps/cli/scripts/capture-agent-scenarios.mjs --scenario 9
  *   NM_AGENT_MOCK_LLM=1 node apps/cli/scripts/capture-agent-scenarios.mjs
+ *
+ * Scenario 9 sets OPENAI_TOOL_CHOICE_REQUIRED=1 to force tool_choice=required.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
@@ -24,16 +27,34 @@ const USE_MOCK = process.env.NM_AGENT_MOCK_LLM === "1";
 const ZHIPU_BASE = "https://open.bigmodel.cn/api/coding/paas/v4";
 const CAPTURE_PROJECT = "AgentCaptureZhipu";
 const COMPACT_PROJECT = "CompactZhipu";
+const ZHIPU_TOOL_MODEL_PREFERENCE = [
+  "glm-4-flash",
+  "glm-4-plus",
+  "glm-4-air",
+  "glm-4.6",
+];
+const VFS_TOOL_PROMPT =
+  "You MUST call vfs.write with path /agent-test.txt and content hello-zhipu. " +
+  "Do not describe or explain; invoke the tool now.";
 
 function parseArgv(argv) {
   let explicitDb = null;
+  const scenarios = new Set();
   for (let i = 2; i < argv.length; i++) {
     if (argv[i] === "--db" && argv[i + 1]) {
       explicitDb = resolve(argv[++i]);
-      i++;
+    } else if (argv[i] === "--scenario" && argv[i + 1]) {
+      scenarios.add(Number(argv[++i]));
     }
   }
-  return { explicitDb };
+  return {
+    explicitDb,
+    scenarios: scenarios.size > 0 ? scenarios : null,
+  };
+}
+
+function shouldRunScenario(scenarios, n) {
+  return scenarios == null || scenarios.has(n);
 }
 
 function resolveDbPath(explicitDb) {
@@ -55,7 +76,7 @@ function resolveDbPath(explicitDb) {
   return { dbPath: join(tempDir, "novel.db"), isTemp: true, tempDir };
 }
 
-const { explicitDb } = parseArgv(process.argv);
+const { explicitDb, scenarios } = parseArgv(process.argv);
 const { dbPath, isTemp, tempDir } = resolveDbPath(explicitDb);
 
 function run(args, env = {}) {
@@ -237,6 +258,46 @@ function setupZhipuModel(targetDb, useProjectDb) {
   return `zhipu/${vendor}`;
 }
 
+function listZhipuModelIds(targetDb) {
+  const listed = run([
+    "provider",
+    "model",
+    "list",
+    "--providerId",
+    "zhipu",
+    "--db",
+    targetDb,
+  ]);
+  return listed.stdout
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .map((l) => l.split(/\s+/)[0])
+    .filter((id) => id?.includes("/"));
+}
+
+function pickZhipuToolModel(targetDb, fallbackModelId) {
+  const envModel = process.env.NM_CAPTURE_ZHIPU_MODEL;
+  const ids = listZhipuModelIds(targetDb);
+  if (envModel) {
+    if (ids.includes(envModel)) {
+      return envModel;
+    }
+    const full = envModel.includes("/") ? envModel : `zhipu/${envModel}`;
+    if (ids.includes(full)) {
+      return full;
+    }
+  }
+  for (const vendor of ZHIPU_TOOL_MODEL_PREFERENCE) {
+    const full = `zhipu/${vendor}`;
+    const found = ids.find((id) => id === full || id.endsWith(`/${vendor}`));
+    if (found) {
+      return found;
+    }
+  }
+  return fallbackModelId;
+}
+
 function configGet(targetDb, key) {
   const r = run(["config", "get", "--key", key, "--db", targetDb]);
   if (r.status !== 0) {
@@ -308,45 +369,117 @@ try {
   const modelFlag = ["--modelId", modelId, "--db", dbPath];
   const zhipuNote = `provider zhipu, baseUrl ${ZHIPU_BASE}, model ${modelId}, db ${dbPath}`;
 
-  function runZhipuScenario(title, args) {
+  function runZhipuScenario(title, args, extraEnv = {}) {
     createCaptureScope(dbPath, CAPTURE_PROJECT);
-    block(title, run(args, {}), zhipuNote);
+    block(title, run(args, extraEnv), zhipuNote);
   }
 
-  runZhipuScenario(
-    "场景 7 — 单步 continue（zhipu 真机）",
-    ["agent", "continue", "--content", "用一句话介绍你自己。", ...modelFlag],
-  );
+  function runZhipuVfsToolScenario() {
+    createCaptureScope(dbPath, CAPTURE_PROJECT);
+    const vfsModelId = pickZhipuToolModel(dbPath, modelId);
+    const vfsModelFlag = ["--modelId", vfsModelId, "--db", dbPath];
+    const toolEnv = { OPENAI_TOOL_CHOICE_REQUIRED: "1" };
 
-  runZhipuScenario("场景 8 — 多步 run（zhipu 真机）", [
-    "agent",
-    "run",
-    "--content",
-    "先说一句你好，然后结束。",
-    "--max-steps",
-    "3",
-    ...modelFlag,
-  ]);
+    const continueRun = run(
+      ["agent", "continue", "--content", VFS_TOOL_PROMPT, ...vfsModelFlag],
+      toolEnv,
+    );
+    const listAfter = run(["message", "list", "--db", dbPath]);
+    const vfsRead = run([
+      "session",
+      "vfs",
+      "read",
+      "/agent-test.txt",
+      "--db",
+      dbPath,
+    ]);
 
-  runZhipuScenario("场景 9 — vfs tool（zhipu 真机）", [
-    "agent",
-    "continue",
-    "--content",
-    "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu",
-    ...modelFlag,
-  ]);
+    const hasToolUse = /\[tool_use\]|tool_use/.test(listAfter.stdout);
+    const hasToolResult = /\[tool_result\]|tool_result/.test(listAfter.stdout);
+    const vfsOk =
+      vfsRead.status === 0 && vfsRead.stdout.includes("hello-zhipu");
 
-  runZhipuScenario("场景 10 — streaming（zhipu 真机）", [
+    let notes =
+      `${zhipuNote}; vfs model ${vfsModelId}; OPENAI_TOOL_CHOICE_REQUIRED=1`;
+    if (!hasToolUse || !hasToolResult) {
+      notes += "; WARNING: message list missing tool_use/tool_result";
+    }
+    if (!vfsOk) {
+      notes += "; WARNING: VFS /agent-test.txt missing or wrong content";
+    }
+
+    const cmdLines = [
+      `node --import tsx apps/cli/src/index.ts agent continue --content "${VFS_TOOL_PROMPT}" ${vfsModelFlag.join(" ")}`,
+      "# OPENAI_TOOL_CHOICE_REQUIRED=1",
+      `node --import tsx apps/cli/src/index.ts message list --db ${dbPath}`,
+      `node --import tsx apps/cli/src/index.ts session vfs read /agent-test.txt --db ${dbPath}`,
+    ];
+
+    block(
+      "场景 9 — vfs tool（zhipu 真机）",
+      {
+        status: continueRun.status,
+        stdout: [
+          continueRun.stdout,
+          "",
+          "--- message list ---",
+          listAfter.stdout,
+          "",
+          "--- session vfs read /agent-test.txt ---",
+          vfsRead.status === 0
+            ? vfsRead.stdout
+            : `(exit ${vfsRead.status}) ${vfsRead.stderr || vfsRead.stdout || "not found"}`,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        stderr: continueRun.stderr,
+        cmd: cmdLines.join("\n"),
+      },
+      notes,
+    );
+  }
+
+  if (shouldRunScenario(scenarios, 7)) {
+    runZhipuScenario(
+      "场景 7 — 单步 continue（zhipu 真机）",
+      ["agent", "continue", "--content", "用一句话介绍你自己。", ...modelFlag],
+    );
+  }
+
+  if (shouldRunScenario(scenarios, 8)) {
+    runZhipuScenario("场景 8 — 多步 run（zhipu 真机）", [
+      "agent",
+      "run",
+      "--content",
+      "先说一句你好，然后结束。",
+      "--max-steps",
+      "3",
+      ...modelFlag,
+    ]);
+  }
+
+  if (shouldRunScenario(scenarios, 9)) {
+    runZhipuVfsToolScenario();
+  }
+
+  if (scenarios != null && scenarios.size === 1 && scenarios.has(9)) {
+    process.exit(0);
+  }
+
+  if (shouldRunScenario(scenarios, 10)) {
+    runZhipuScenario("场景 10 — streaming（zhipu 真机）", [
     "agent",
     "continue",
     "--content",
     "请流式回复：streaming ok",
-    ...modelFlag,
-  ]);
+      ...modelFlag,
+    ]);
+  }
 
-  createCaptureScope(mockDbPath, "AgentCaptureMock");
-  block(
-    "场景 11 — doom_loop（mock LLM，非 zhipu）",
+  if (shouldRunScenario(scenarios, 11)) {
+    createCaptureScope(mockDbPath, "AgentCaptureMock");
+    block(
+      "场景 11 — doom_loop（mock LLM，非 zhipu）",
     run(
       [
         "agent",
@@ -360,8 +493,17 @@ try {
       ],
       { NM_AGENT_MOCK_LLM: "1", NM_AGENT_MOCK_SCENARIO: "doom" },
     ),
-    "显式 mock：NM_AGENT_MOCK_LLM=1 + NM_AGENT_MOCK_SCENARIO=doom（独立 temp db）",
-  );
+      "显式 mock：NM_AGENT_MOCK_LLM=1 + NM_AGENT_MOCK_SCENARIO=doom（独立 temp db）",
+    );
+  }
+
+  if (!shouldRunScenario(scenarios, 12)) {
+    console.log(
+      `备注: 场景 7–10、12 使用 zhipu 真机（db ${dbPath}）；场景 11 为 mock（temp）。` +
+        ` API key 来自 SKSP/DB 或 NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY。`,
+    );
+    process.exit(0);
+  }
 
   const prevThreshold = configGet(dbPath, "agent.compaction.thresholdTokens");
   const prevKeepLastN = configGet(dbPath, "agent.compaction.keepLastN");

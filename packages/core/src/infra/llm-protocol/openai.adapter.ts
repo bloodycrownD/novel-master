@@ -3,6 +3,9 @@
  *
  * Wire serialization lives in {@link ./openai-content-mapper.js}; this module handles HTTP/SSE only.
  *
+ * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` — when tools are sent, set `tool_choice` to `"required"`
+ * instead of `"auto"` (E2E capture / providers that need forced tool calls).
+ *
  * @module infra/llm-protocol/openai.adapter
  */
 
@@ -100,6 +103,10 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     return messages;
   }
 
+  private toolChoiceWhenToolsPresent(): "auto" | "required" {
+    return process.env.OPENAI_TOOL_CHOICE_REQUIRED === "1" ? "required" : "auto";
+  }
+
   private buildBody(req: LlmChatRequest, stream: boolean): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
@@ -108,7 +115,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     };
     if (req.tools != null && req.tools.length > 0) {
       body.tools = openAiTools(req.tools);
-      body.tool_choice = "auto";
+      body.tool_choice = this.toolChoiceWhenToolsPresent();
     }
     return body;
   }
