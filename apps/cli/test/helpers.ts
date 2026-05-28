@@ -1,9 +1,13 @@
-import { readFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { CliConfig } from "../src/config/cli-config.js";
-import { resolveConfigPath } from "../src/config/cli-config.js";
+import {
+  bootstrapNovelMaster,
+  createConfigService,
+  open,
+  type TdbcConnection,
+} from "@novel-master/core";
+import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
@@ -36,11 +40,38 @@ export function runNm(
   };
 }
 
-/** Reads `config.json` beside the given DB path. */
+export interface CliConfig {
+  readonly currentProjectId?: string;
+  readonly currentSessionId?: string;
+  readonly currentProviderId?: string;
+  readonly currentModelId?: string;
+}
+
+async function openConn(dbPath: string): Promise<TdbcConnection> {
+  registerBetterSqlite3Driver();
+  const conn = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
+  await bootstrapNovelMaster(conn);
+  return conn;
+}
+
+/** Reads CLI config values from the DB-backed ConfigService. */
 export async function readCliConfig(dbPath: string): Promise<CliConfig> {
-  const configPath = resolveConfigPath(dbPath);
-  const text = await readFile(configPath, "utf8");
-  return JSON.parse(text) as CliConfig;
+  const conn = await openConn(dbPath);
+  try {
+    const config = createConfigService(conn);
+    const currentProjectId = await config.get("currentProjectId");
+    const currentSessionId = await config.get("currentSessionId");
+    const currentProviderId = await config.get("currentProviderId");
+    const currentModelId = await config.get("currentModelId");
+    return {
+      currentProjectId: currentProjectId || undefined,
+      currentSessionId: currentSessionId || undefined,
+      currentProviderId: currentProviderId || undefined,
+      currentModelId: currentModelId || undefined,
+    };
+  } finally {
+    await conn.close();
+  }
 }
 
 /** Directory containing the DB file (for custom `--db` layout tests). */

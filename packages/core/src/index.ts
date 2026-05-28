@@ -75,6 +75,17 @@ export type {
 export type { VfsScope } from "./domain/vfs/vfs-path-mapper.js";
 
 /**
+ * Tool system: schema-validated registry + runner, plus builtin `vfs.*` tools.
+ */
+export type { Tool } from "./domain/tool/model/tool.js";
+export { ToolError } from "./domain/tool/tool-errors.js";
+export type { ToolErrorCode } from "./domain/tool/tool-errors.js";
+export { ToolRegistry } from "./domain/tool/tool-registry.js";
+export { ToolRunner } from "./domain/tool/tool-runner.js";
+export { createVfsTools, registerVfsTools } from "./domain/tool/builtin/vfs-tools.js";
+export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
+
+/**
  * KKV module-scoped key-value store.
  */
 export { KkvError } from "./errors/kkv-errors.js";
