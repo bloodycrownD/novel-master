@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/openai.adapter
  */
 
+import { ProviderError } from "@/errors/provider-errors.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type {
   FetchFn,
@@ -38,6 +39,18 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   }
 
   async chat(req: LlmChatRequest): Promise<LlmChatResult> {
+    if (req.tools != null && req.tools.length > 0) {
+      throw new ProviderError(
+        "UNSUPPORTED",
+        "OpenAI protocol adapter does not support tools in this iteration",
+      );
+    }
+    if (req.stream) {
+      throw new ProviderError(
+        "UNSUPPORTED",
+        "OpenAI protocol adapter does not support streaming in this iteration",
+      );
+    }
     const url = joinUrl(req.baseUrl, "/chat/completions");
     const userText =
       req.history != null && req.history.length > 0

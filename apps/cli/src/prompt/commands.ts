@@ -6,8 +6,9 @@
 
 import { readFile } from "node:fs/promises";
 import {
+  buildPromptLlmInput,
+  formatPromptLlmInputForCli,
   parsePromptYaml,
-  renderPromptToText,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -41,7 +42,9 @@ export async function runPrompt(
     .worktree({ kind: "session", projectId, sessionId })
     .renderDisplay();
 
-  const text = renderPromptToText(blocks, { worktreeDisplay, messages });
+  const ctx = { worktreeDisplay, messages };
+  const input = buildPromptLlmInput(blocks, ctx);
+  const text = formatPromptLlmInputForCli(blocks, input, ctx);
   if (text.length > 0) {
     process.stdout.write(text);
   }

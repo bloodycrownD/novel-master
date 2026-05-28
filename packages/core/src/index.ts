@@ -198,8 +198,14 @@ export type {
 export { messageBodyText } from "./domain/prompt/message-body.js";
 export { validatePromptBlocks } from "./domain/prompt/prompt-blocks-validate.js";
 export { parsePromptYaml } from "./infra/prompt-yaml/parse-prompt-yaml.js";
-export { renderPromptToText } from "./service/prompt/render-prompt.js";
-export type { PromptRenderContext } from "./service/prompt/render-prompt.js";
+export {
+  buildPromptLlmInput,
+  formatPromptLlmInputForCli,
+} from "./service/prompt/render-prompt.js";
+export type {
+  PromptRenderContext,
+  PromptLlmInput,
+} from "./service/prompt/render-prompt.js";
 export { formatLocalDateTime } from "./infra/date-format.js";
 
 /**
@@ -214,7 +220,32 @@ export {
 } from "./domain/provider/application-model-id.js";
 export type { LlmProvider } from "./domain/provider/model/provider.js";
 export { providerApiKeyRef } from "./domain/provider/model/provider.js";
-export type { LlmProtocolKind } from "./infra/llm-protocol/adapter.port.js";
+export type {
+  LlmProtocolKind,
+  LlmToolDefinition,
+  LlmStreamEvent,
+} from "./infra/llm-protocol/adapter.port.js";
+export { toolsFromRegistry } from "./infra/llm-protocol/tool-definitions.js";
+export { zodToJsonSchema } from "./infra/llm-protocol/zod-to-json-schema.js";
+export type { AgentSession } from "./domain/agent/agent-session.port.js";
+export { AgentError } from "./domain/agent/agent-errors.js";
+export type { AgentErrorCode } from "./domain/agent/agent-errors.js";
+export type {
+  AgentRunResult,
+  ModelRoundSummary,
+} from "./domain/agent/agent-run-result.js";
+export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/doom-loop.js";
+export { InMemoryAgentSession } from "./domain/agent/impl/in-memory-agent-session.js";
+export { ChatAgentSession } from "./domain/agent/impl/chat-agent-session.js";
+export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
+export { createAgentRunner } from "./service/agent/create-agent-runner.js";
+export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
+export type { CompactionService } from "./service/compaction/compaction.port.js";
+export {
+  DefaultCompactionService,
+  NoOpCompactionService,
+} from "./service/compaction/impl/default-compaction.service.js";
+export { estimateTokens } from "./service/compaction/token-estimate.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";
 export type {

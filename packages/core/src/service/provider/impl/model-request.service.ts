@@ -65,6 +65,10 @@ export class DefaultModelRequestService implements ModelRequestService {
       userContent,
       extraHeaders: provider.headers,
       history: options?.history,
+      system: options?.system,
+      tools: options?.tools,
+      stream: options?.stream,
+      onStream: options?.onStream,
     });
   }
 }
