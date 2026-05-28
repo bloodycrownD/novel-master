@@ -40,6 +40,7 @@ import {
   resolveSkspDriver,
 } from "@novel-master/core/sksp";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
+import { createAgentMockModelRequests } from "./agent/mock-llm.js";
 import { CliScopeResolver } from "./config/resolve-scope.js";
 import { extractDbPath } from "./vfs/parse-args.js";
 
@@ -105,6 +106,10 @@ export async function createNovelMasterRuntime(
     env: createEnvSecretStore(),
   });
   const providerBundle = createProviderServices(conn, secretStore);
+  const modelRequests =
+    process.env.NM_AGENT_MOCK_LLM === "1"
+      ? createAgentMockModelRequests()
+      : providerBundle.modelRequests;
 
   return {
     conn,
@@ -130,6 +135,6 @@ export async function createNovelMasterRuntime(
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
-    modelRequests: providerBundle.modelRequests,
+    modelRequests,
   };
 }
