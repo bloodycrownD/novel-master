@@ -1,27 +1,62 @@
 /**
  * Runs agent CLI scenarios 7–12 and prints cli-test blocks.
  *
- * Default: zhipu real API (no NM_AGENT_MOCK_LLM). Requires
- * `NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY` or provider edit --apiKey.
- * Scenario 11 (doom_loop) always uses mock.
+ * Default DB: NOVEL_MASTER_DB → .novel-master/novel.db (if exists) → temp db.
+ * Project DB: reuses existing zhipu provider (SKSP apiKey); capture projects only.
  *
- * Full mock path: NM_AGENT_MOCK_LLM=1 node apps/cli/scripts/capture-agent-scenarios.mjs
+ * Requires zhipu with apiKey in DB, or NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY.
+ * Scenario 11 (doom_loop) always uses mock on a temp db.
  *
- * Usage: node apps/cli/scripts/capture-agent-scenarios.mjs
+ * Usage:
+ *   node apps/cli/scripts/capture-agent-scenarios.mjs [--db <path>]
+ *   NM_AGENT_MOCK_LLM=1 node apps/cli/scripts/capture-agent-scenarios.mjs
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const REPO_ROOT = resolve(CLI_ROOT, "../..");
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
 const USE_MOCK = process.env.NM_AGENT_MOCK_LLM === "1";
 const ZHIPU_BASE = "https://open.bigmodel.cn/api/coding/paas/v4";
+const CAPTURE_PROJECT = "AgentCaptureZhipu";
+const COMPACT_PROJECT = "CompactZhipu";
 
-const dir = mkdtempSync(join(tmpdir(), "nm-agent-capture-"));
-const dbPath = join(dir, "novel.db");
+function parseArgv(argv) {
+  let explicitDb = null;
+  for (let i = 2; i < argv.length; i++) {
+    if (argv[i] === "--db" && argv[i + 1]) {
+      explicitDb = resolve(argv[++i]);
+      i++;
+    }
+  }
+  return { explicitDb };
+}
+
+function resolveDbPath(explicitDb) {
+  if (explicitDb) {
+    return { dbPath: explicitDb, isTemp: false, tempDir: null };
+  }
+  if (process.env.NOVEL_MASTER_DB) {
+    return {
+      dbPath: resolve(process.env.NOVEL_MASTER_DB),
+      isTemp: false,
+      tempDir: null,
+    };
+  }
+  const projectDb = resolve(REPO_ROOT, ".novel-master/novel.db");
+  if (existsSync(projectDb)) {
+    return { dbPath: projectDb, isTemp: false, tempDir: null };
+  }
+  const tempDir = mkdtempSync(join(tmpdir(), "nm-agent-capture-"));
+  return { dbPath: join(tempDir, "novel.db"), isTemp: true, tempDir };
+}
+
+const { explicitDb } = parseArgv(process.argv);
+const { dbPath, isTemp, tempDir } = resolveDbPath(explicitDb);
 
 function run(args, env = {}) {
   const result = spawnSync(
@@ -72,16 +107,62 @@ function block(title, r, notes = "") {
   console.log("---\n");
 }
 
-function ensureZhipuProvider(targetDb = dbPath) {
+function ensureChatMessageHiddenColumn(targetDb) {
+  const script = `
+    const Database = require("better-sqlite3");
+    const db = new Database(process.argv[1]);
+    const cols = db.prepare("PRAGMA table_info(chat_message)").all().map((r) => r.name);
+    if (!cols.includes("hidden")) {
+      db.exec("ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0");
+    }
+    db.close();
+  `;
+  spawnSync(process.execPath, ["-e", script, targetDb], {
+    cwd: REPO_ROOT,
+    encoding: "utf8",
+  });
+}
+
+function assertZhipuReady(targetDb) {
+  const envKey = process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY;
   const list = run(["provider", "list", "--db", targetDb]);
-  if (list.stdout.includes("zhipu\t")) {
+  const zhipuLine = list.stdout
+    .split("\n")
+    .find((line) => line.startsWith("zhipu\t"));
+  if (!zhipuLine) {
+    console.error(
+      "capture-agent-scenarios: zhipu provider not found in database.\n" +
+        `  db: ${targetDb}\n` +
+        "  Fix: nm provider create --providerId zhipu --protocol openai " +
+        `--baseUrl ${ZHIPU_BASE} --apiKey <key> --db <db>\n` +
+        "  Or: set NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY",
+    );
+    process.exit(1);
+  }
+  if (!zhipuLine.includes("apiKey: set") && !envKey) {
+    console.error(
+      "capture-agent-scenarios: zhipu apiKey is not set and NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY is unset.\n" +
+        `  db: ${targetDb}\n` +
+        "  Fix: nm provider edit --providerId zhipu --apiKey <key> --db <db>\n" +
+        "  Or: export NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY=<key>",
+    );
+    process.exit(1);
+  }
+}
+
+function ensureZhipuProvider(targetDb) {
+  const list = run(["provider", "list", "--db", targetDb]);
+  if (list.stdout.split("\n").some((line) => line.startsWith("zhipu\t"))) {
     return;
   }
   const apiKey =
     process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY ??
     process.env.ZHIPU_API_KEY ??
     "";
-  const createArgs = [
+  if (!apiKey) {
+    return;
+  }
+  run([
     "provider",
     "create",
     "--providerId",
@@ -92,22 +173,28 @@ function ensureZhipuProvider(targetDb = dbPath) {
     ZHIPU_BASE,
     "--displayName",
     "Zhipu GLM",
+    "--apiKey",
+    apiKey,
     "--db",
     targetDb,
-  ];
-  if (apiKey) {
-    createArgs.push("--apiKey", apiKey);
-  }
-  run(createArgs);
+  ]);
 }
 
-function setupZhipuModel(targetDb = dbPath) {
-  run(["provider", "use", "--providerId", "zhipu", "--db", targetDb]);
-  const hasKey =
-    Boolean(process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY) ||
-    Boolean(process.env.ZHIPU_API_KEY);
-  if (hasKey) {
-    run(["provider", "model", "fetch", "--providerId", "zhipu", "--db", targetDb]);
+function setupZhipuModel(targetDb, useProjectDb) {
+  if (!useProjectDb) {
+    run(["provider", "use", "--providerId", "zhipu", "--db", targetDb]);
+    const hasKey = Boolean(process.env.NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY);
+    if (hasKey) {
+      run([
+        "provider",
+        "model",
+        "fetch",
+        "--providerId",
+        "zhipu",
+        "--db",
+        targetDb,
+      ]);
+    }
   }
   const listed = run([
     "provider",
@@ -128,6 +215,13 @@ function setupZhipuModel(targetDb = dbPath) {
       return appId;
     }
   }
+  if (useProjectDb) {
+    console.error(
+      "capture-agent-scenarios: no zhipu application model in database.\n" +
+        "  Fix: nm provider model save --vendorModelId glm-4-flash --providerId zhipu --db <db>",
+    );
+    process.exit(1);
+  }
   const vendor = "glm-4-flash";
   run([
     "provider",
@@ -143,28 +237,51 @@ function setupZhipuModel(targetDb = dbPath) {
   return `zhipu/${vendor}`;
 }
 
+function configGet(targetDb, key) {
+  const r = run(["config", "get", "--key", key, "--db", targetDb]);
+  if (r.status !== 0) {
+    return null;
+  }
+  return r.stdout.trim();
+}
+
+function configSet(targetDb, key, value) {
+  run(["config", "set", "--key", key, "--value", value, "--db", targetDb]);
+}
+
+function configReset(targetDb, key) {
+  run(["config", "reset", "--key", key, "--db", targetDb]);
+}
+
+function createCaptureScope(targetDb, projectName) {
+  const projectId = run([
+    "project",
+    "create",
+    "--name",
+    projectName,
+    "--db",
+    targetDb,
+  ]).stdout.trim();
+  run(["project", "use", "--project", projectId, "--db", targetDb]);
+  const sessionId = run([
+    "session",
+    "create",
+    "--project",
+    projectId,
+    "--db",
+    targetDb,
+  ]).stdout.trim();
+  run(["session", "use", "--session", sessionId, "--db", targetDb]);
+  return { projectId, sessionId };
+}
+
+const mockTempDir = mkdtempSync(join(tmpdir(), "nm-agent-mock-"));
+const mockDbPath = join(mockTempDir, "novel.db");
+
 try {
   if (USE_MOCK) {
-    const modelFlag = ["--modelId", "mock/test", "--db", dbPath];
-    const projectId = run([
-      "project",
-      "create",
-      "--name",
-      "AgentCapture",
-      "--db",
-      dbPath,
-    ]).stdout.trim();
-    run(["project", "use", "--project", projectId, "--db", dbPath]);
-    const sessionId = run([
-      "session",
-      "create",
-      "--project",
-      projectId,
-      "--db",
-      dbPath,
-    ]).stdout.trim();
-    run(["session", "use", "--session", sessionId, "--db", dbPath]);
-
+    const modelFlag = ["--modelId", "mock/test", "--db", mockDbPath];
+    createCaptureScope(mockDbPath, "AgentCapture");
     block(
       "场景 7 — 单步 continue（mock LLM）",
       run(
@@ -176,108 +293,80 @@ try {
     process.exit(0);
   }
 
-  ensureZhipuProvider();
-  const modelId = setupZhipuModel();
-  run(["model", "use", "--modelId", modelId, "--db", dbPath]);
+  if (!isTemp) {
+    ensureChatMessageHiddenColumn(dbPath);
+  }
+  assertZhipuReady(dbPath);
+  if (isTemp) {
+    ensureZhipuProvider(dbPath);
+    assertZhipuReady(dbPath);
+  }
 
-  const projectId = run([
-    "project",
-    "create",
-    "--name",
-    "AgentCaptureZhipu",
-    "--db",
-    dbPath,
-  ]).stdout.trim();
-  run(["project", "use", "--project", projectId, "--db", dbPath]);
-  const sessionId = run([
-    "session",
-    "create",
-    "--project",
-    projectId,
-    "--db",
-    dbPath,
-  ]).stdout.trim();
-  run(["session", "use", "--session", sessionId, "--db", dbPath]);
+  const useProjectDb = !isTemp;
+  const modelId = setupZhipuModel(dbPath, useProjectDb);
 
   const modelFlag = ["--modelId", modelId, "--db", dbPath];
-  const zhipuNote = `provider zhipu, baseUrl ${ZHIPU_BASE}, model ${modelId}`;
+  const zhipuNote = `provider zhipu, baseUrl ${ZHIPU_BASE}, model ${modelId}, db ${dbPath}`;
 
-  block(
+  function runZhipuScenario(title, args) {
+    createCaptureScope(dbPath, CAPTURE_PROJECT);
+    block(title, run(args, {}), zhipuNote);
+  }
+
+  runZhipuScenario(
     "场景 7 — 单步 continue（zhipu 真机）",
-    run(["agent", "continue", "--content", "用一句话介绍你自己。", ...modelFlag]),
-    zhipuNote,
+    ["agent", "continue", "--content", "用一句话介绍你自己。", ...modelFlag],
   );
 
-  block(
-    "场景 8 — 多步 run（zhipu 真机）",
-    run([
-      "agent",
-      "run",
-      "--content",
-      "先说一句你好，然后结束。",
-      "--max-steps",
-      "3",
-      ...modelFlag,
-    ]),
-    zhipuNote,
-  );
+  runZhipuScenario("场景 8 — 多步 run（zhipu 真机）", [
+    "agent",
+    "run",
+    "--content",
+    "先说一句你好，然后结束。",
+    "--max-steps",
+    "3",
+    ...modelFlag,
+  ]);
 
-  block(
-    "场景 9 — vfs tool（zhipu 真机）",
-    run([
-      "agent",
-      "continue",
-      "--content",
-      "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu",
-      ...modelFlag,
-    ]),
-    zhipuNote,
-  );
+  runZhipuScenario("场景 9 — vfs tool（zhipu 真机）", [
+    "agent",
+    "continue",
+    "--content",
+    "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu",
+    ...modelFlag,
+  ]);
 
-  block(
-    "场景 10 — streaming（zhipu 真机）",
-    run([
-      "agent",
-      "continue",
-      "--content",
-      "请流式回复：streaming ok",
-      ...modelFlag,
-    ]),
-    zhipuNote,
-  );
+  runZhipuScenario("场景 10 — streaming（zhipu 真机）", [
+    "agent",
+    "continue",
+    "--content",
+    "请流式回复：streaming ok",
+    ...modelFlag,
+  ]);
 
+  createCaptureScope(mockDbPath, "AgentCaptureMock");
   block(
     "场景 11 — doom_loop（mock LLM，非 zhipu）",
     run(
-      ["agent", "continue", "--content", "doom", "--modelId", "mock/test", "--db", dbPath],
+      [
+        "agent",
+        "continue",
+        "--content",
+        "doom",
+        "--modelId",
+        "mock/test",
+        "--db",
+        mockDbPath,
+      ],
       { NM_AGENT_MOCK_LLM: "1", NM_AGENT_MOCK_SCENARIO: "doom" },
     ),
-    "显式 mock：NM_AGENT_MOCK_LLM=1 + NM_AGENT_MOCK_SCENARIO=doom",
+    "显式 mock：NM_AGENT_MOCK_LLM=1 + NM_AGENT_MOCK_SCENARIO=doom（独立 temp db）",
   );
 
-  const compactDir = mkdtempSync(join(tmpdir(), "nm-agent-compact-"));
-  const compactDb = join(compactDir, "novel.db");
-  ensureZhipuProvider(compactDb);
-  const compactModelId = setupZhipuModel(compactDb);
-  run(["model", "use", "--modelId", compactModelId, "--db", compactDb]);
-  const compactProject = run([
-    "project",
-    "create",
-    "--name",
-    "CompactZhipu",
-    "--db",
-    compactDb,
-  ]).stdout.trim();
-  run(["project", "use", "--project", compactProject, "--db", compactDb]);
-  const compactSession = run([
-    "session",
-    "create",
-    "--project",
-    compactProject,
-    "--db",
-    compactDb,
-  ]).stdout.trim();
-  run(["session", "use", "--session", compactSession, "--db", compactDb]);
+  const prevThreshold = configGet(dbPath, "agent.compaction.thresholdTokens");
+  const prevKeepLastN = configGet(dbPath, "agent.compaction.keepLastN");
+
+  createCaptureScope(dbPath, COMPACT_PROJECT);
   for (let i = 0; i < 10; i++) {
     run([
       "message",
@@ -287,43 +376,32 @@ try {
       "--content",
       `long history line ${i} `.repeat(40),
       "--db",
-      compactDb,
+      dbPath,
     ]);
   }
-  run([
-    "config",
-    "set",
-    "--key",
-    "agent.compaction.thresholdTokens",
-    "--value",
-    "10",
-    "--db",
-    compactDb,
-  ]);
-  run([
-    "config",
-    "set",
-    "--key",
-    "agent.compaction.keepLastN",
-    "--value",
-    "2",
-    "--db",
-    compactDb,
-  ]);
+  configSet(dbPath, "agent.compaction.thresholdTokens", "10");
+  configSet(dbPath, "agent.compaction.keepLastN", "2");
 
-  const compactionRun = run(
-    [
-      "agent",
-      "continue",
-      "--content",
-      "请简短总结上文并回复 done",
-      "--modelId",
-      compactModelId,
-      "--db",
-      compactDb,
-    ],
-  );
-  const listAfter = run(["message", "list", "--db", compactDb]);
+  const compactionRun = run([
+    "agent",
+    "continue",
+    "--content",
+    "请简短总结上文并回复 done",
+    ...modelFlag,
+  ]);
+  const listAfter = run(["message", "list", "--db", dbPath]);
+
+  if (prevThreshold != null && prevThreshold !== "") {
+    configSet(dbPath, "agent.compaction.thresholdTokens", prevThreshold);
+  } else {
+    configReset(dbPath, "agent.compaction.thresholdTokens");
+  }
+  if (prevKeepLastN != null && prevKeepLastN !== "") {
+    configSet(dbPath, "agent.compaction.keepLastN", prevKeepLastN);
+  } else {
+    configReset(dbPath, "agent.compaction.keepLastN");
+  }
+
   block("场景 12 — compaction（zhipu 真机）", {
     ...compactionRun,
     stdout: [compactionRun.stdout, "", "--- message list ---", listAfter.stdout]
@@ -331,12 +409,13 @@ try {
       .join("\n"),
   }, zhipuNote);
 
-  rmSync(compactDir, { recursive: true, force: true });
-
   console.log(
-    `备注: 场景 7–10、12 使用 zhipu 真机（库 ${dir}）；场景 11 为 mock。` +
-      ` API key 来源: NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY 或 provider create --apiKey。`,
+    `备注: 场景 7–10、12 使用 zhipu 真机（db ${dbPath}）；场景 11 为 mock（temp）。` +
+      ` API key 来自 SKSP/DB 或 NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY。`,
   );
 } finally {
-  rmSync(dir, { recursive: true, force: true });
+  if (tempDir) {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+  rmSync(mockTempDir, { recursive: true, force: true });
 }

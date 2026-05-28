@@ -3,11 +3,11 @@
 - 日期: 2026-05-29
 - 审查人: pending
 - 环境: `NO_COLOR=1`；场景 1–6 与场景 11 见各节说明
-- Provider（场景 7–10、12）: **zhipu**（`protocol: openai`，`baseUrl: https://open.bigmodel.cn/api/coding/paas/v4`，模型 `zhipu/glm-4-flash`）；**未设置** `NM_AGENT_MOCK_LLM`
-- API key: `NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY` 或 `nm provider edit --providerId zhipu --apiKey <key>`
-- 捕获脚本: `node apps/cli/scripts/capture-agent-scenarios.mjs`（真实执行；Z11 固定 mock）
+- Provider（场景 7–10、12）: **zhipu**（`protocol: openai`，`baseUrl: https://open.bigmodel.cn/api/coding/paas/v4`，模型 `zhipu/glm-4.6`）；**未设置** `NM_AGENT_MOCK_LLM`
+- API key: SKSP（`nm provider list` 显示 `apiKey: set`）或 `NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY`
+- 捕获脚本: `node apps/cli/scripts/capture-agent-scenarios.mjs`（默认 db: `.novel-master/novel.db`；Z11 固定 mock）
 
-**说明（2026-05-29 捕获环境）**: 下列 Z7–Z10、Z12 在自动化捕获时 **未注入 zhipu API key**，故退出码为 2、stderr 为 `API key not set`。本地配置 key 后重跑脚本可得到 exit 0 与真实 assistant 输出。Z11 始终为 mock，与 zhipu 无关。
+**说明（2026-05-29 捕获）**: Z7–Z9、Z12 为 zhipu 真机 exit 0。Z10 首次捕获因 `fetch failed`（网络瞬断）exit 2；同环境单独重跑 exit 0（见场景 10 备注）。Z11 为 mock doom_loop（预期 exit 2）。捕获脚本会对旧库自动 `ALTER TABLE` 补 `chat_message.hidden` 列。
 
 ---
 
@@ -111,72 +111,79 @@ node --import tsx src/index.ts message list --db <db>
 
 ## 场景 7 — 单步 continue（zhipu 真机）
 
-前置：捕获脚本创建 `zhipu` provider、`provider model save --vendorModelId glm-4-flash`、`model use zhipu/glm-4-flash`；**未设置** `NM_AGENT_MOCK_LLM`。
-
 ```bash
 cd apps/cli
-node --import tsx src/index.ts agent continue --content "用一句话介绍你自己。" --modelId zhipu/glm-4-flash --db <db>
+# 未设置 NM_AGENT_MOCK_LLM
+node --import tsx src/index.ts agent continue --content "用一句话介绍你自己。" --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
-退出码: 2（捕获时无 API key）
+退出码: 0
 
-标准错误:
+标准输出:
 ```
-API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+我是AI助手，致力于为您提供准确、专业的问答和解决方案。
 ```
 
-备注: 配置 key 后预期 exit 0，stdout 为 assistant 文本（流式累积）。
+备注: 每场景独立 `AgentCaptureZhipu` project/session；db 含 SKSP zhipu apiKey。
 
 ---
 
 ## 场景 8 — 多步 run（zhipu 真机）
 
 ```bash
-node --import tsx src/index.ts agent run --content "先说一句你好，然后结束。" --max-steps 3 --modelId zhipu/glm-4-flash --db <db>
+node --import tsx src/index.ts agent run --content "先说一句你好，然后结束。" --max-steps 3 --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
-退出码: 2（捕获时无 API key）
+退出码: 0
 
-标准错误:
+标准输出:
 ```
-API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+你好！
 ```
-
-备注: 配置 key 后预期多轮 message（含 assistant text 或 max_steps 终止）。
 
 ---
 
 ## 场景 9 — vfs tool（zhipu 真机）
 
 ```bash
-node --import tsx src/index.ts agent continue --content "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu" --modelId zhipu/glm-4-flash --db <db>
+node --import tsx src/index.ts agent continue --content "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu" --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
-退出码: 2（捕获时无 API key）
+退出码: 0
 
-标准错误:
+标准输出:
 ```
-API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+我将使用 vfs.write 函数在 VFS 中创建文件 `/agent-test.txt`，内容为 `hello-zhipu`。
 ```
 
-备注: 配置 key 后预期 `tool_use` + `tool_result` 与 VFS 文件；image **不在** zhipu 真机范围（见 Core 单测 O6）。
+备注: 本次模型以文本描述工具调用；若需断言 `tool_use` 块可换更强 tool 模型或复查 message list。
 
 ---
 
 ## 场景 10 — streaming（zhipu 真机）
 
 ```bash
-node --import tsx src/index.ts agent continue --content "请流式回复：streaming ok" --modelId zhipu/glm-4-flash --db <db>
+node --import tsx src/index.ts agent continue --content "请流式回复：streaming ok" --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
-退出码: 2（捕获时无 API key）
+退出码: 0
 
-标准错误:
+标准输出:
 ```
-API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+收到！我将采用流式方式进行回复。
+
+流式响应已就绪...
+
+有什么我可以帮您的吗？
+
+无论是代码编写、文件操作、还是其他任务，我都可以协助您完成。
+
+您可以随时提出具体需求，我会逐步为您处理并流式返回结果。
+
+请继续您的指令...
 ```
 
-备注: 配置 key 后预期 stdout 增量（`text-delta`）；`--no-stream` 关闭增量。
+备注: 批量捕获时曾出现 `fetch failed`（exit 2）；上列为同 db/key 单独重跑成功输出。
 
 ---
 
@@ -203,26 +210,24 @@ Doom loop: tool "vfs.read" invoked 3 times with identical input
 
 ## 场景 12 — compaction（zhipu 真机）
 
-前置（独立库）：10× `message append` 长文本 → `config set --key agent.compaction.thresholdTokens --value 10` → `config set --key agent.compaction.keepLastN --value 2`。
+前置（`CompactZhipu` project）：10× `message append` 长文本 → `config set --key agent.compaction.thresholdTokens --value 10` → `config set --key agent.compaction.keepLastN --value 2`（捕获后恢复原 config）。
 
 ```bash
-node --import tsx src/index.ts agent continue --content "请简短总结上文并回复 done" --modelId zhipu/glm-4-flash --db <compact-db>
-node --import tsx src/index.ts message list --db <compact-db>
+node --import tsx src/index.ts agent continue --content "请简短总结上文并回复 done" --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
+node --import tsx src/index.ts message list --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
-退出码: 2（捕获时无 API key；`message list` 仍 exit 0）
+退出码: 0
 
-标准错误（agent continue）:
+标准输出（message list 节选）:
 ```
-API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
-```
-
-标准输出（message list 节选 — 压缩前 agent 未跑通，仅见历史 user 行）:
-```
-<uuid>	1	user	[H]	long history line 0 ...
+dc64d447-1649-47bb-911e-096113cfe092	1	user	[H]	long history line 0 ...
+38779d97-b87e-46ec-bf06-e6fe5369a61c	2	user	[H]	long history line 1 ...
 ...
-<uuid>	10	user		long history line 9 ...
-<uuid>	11	user		请简短总结上文并回复 done
+27005cd4-b4a8-4e13-b9a5-10852e2041f7	10	user		long history line 9 ...
+14bbcf0c-5fb1-402b-ba4d-8713cf1d969d	11	user		请简短总结上文并回复 done
+5a7e740e-14fb-4f4d-ada3-551c93977551	12	user		[Compaction summary]⏎The user provided nine repetitive messages...
+e00db693-b6db-4cc0-af61-456774aed15f	13	assistant		[thinking] ⏎done
 ```
 
-备注: 配置 key 后重跑 continue，预期 summary user 消息、`[H]` 隐藏旧消息、assistant 回复。`[H]` = `hidden: true`。
+备注: `[H]` = `hidden: true`；seq 12 为 compaction summary user 消息。
