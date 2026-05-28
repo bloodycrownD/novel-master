@@ -1,9 +1,13 @@
 # CLI 验收：Agent System
 
-- 日期: 2026-05-28
+- 日期: 2026-05-29
 - 审查人: pending
-- 环境: `NO_COLOR=1`；场景 7–12 使用 mock LLM（无 API key）：`NM_AGENT_MOCK_LLM=1` + `NM_AGENT_MOCK_SCENARIO=<name>`
-- 捕获脚本: `node apps/cli/scripts/capture-agent-scenarios.mjs`（真实执行，非编造）
+- 环境: `NO_COLOR=1`；场景 1–6 与场景 11 见各节说明
+- Provider（场景 7–10、12）: **zhipu**（`protocol: openai`，`baseUrl: https://open.bigmodel.cn/api/coding/paas/v4`，模型 `zhipu/glm-4-flash`）；**未设置** `NM_AGENT_MOCK_LLM`
+- API key: `NOVEL_MASTER_PROVIDER_ZHIPU_API_KEY` 或 `nm provider edit --providerId zhipu --apiKey <key>`
+- 捕获脚本: `node apps/cli/scripts/capture-agent-scenarios.mjs`（真实执行；Z11 固定 mock）
+
+**说明（2026-05-29 捕获环境）**: 下列 Z7–Z10、Z12 在自动化捕获时 **未注入 zhipu API key**，故退出码为 2、stderr 为 `API key not set`。本地配置 key 后重跑脚本可得到 exit 0 与真实 assistant 输出。Z11 始终为 mock，与 zhipu 无关。
 
 ---
 
@@ -105,85 +109,83 @@ node --import tsx src/index.ts message list --db <db>
 
 ---
 
-## 场景 7 — 单步 continue（mock LLM）
+## 场景 7 — 单步 continue（zhipu 真机）
 
-前置：同捕获脚本 — `project create` → `project use` → `session create` → `session use`。
+前置：捕获脚本创建 `zhipu` provider、`provider model save --vendorModelId glm-4-flash`、`model use zhipu/glm-4-flash`；**未设置** `NM_AGENT_MOCK_LLM`。
 
 ```bash
 cd apps/cli
+node --import tsx src/index.ts agent continue --content "用一句话介绍你自己。" --modelId zhipu/glm-4-flash --db <db>
+```
+
+退出码: 2（捕获时无 API key）
+
+标准错误:
+```
+API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+```
+
+备注: 配置 key 后预期 exit 0，stdout 为 assistant 文本（流式累积）。
+
+---
+
+## 场景 8 — 多步 run（zhipu 真机）
+
+```bash
+node --import tsx src/index.ts agent run --content "先说一句你好，然后结束。" --max-steps 3 --modelId zhipu/glm-4-flash --db <db>
+```
+
+退出码: 2（捕获时无 API key）
+
+标准错误:
+```
+API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+```
+
+备注: 配置 key 后预期多轮 message（含 assistant text 或 max_steps 终止）。
+
+---
+
+## 场景 9 — vfs tool（zhipu 真机）
+
+```bash
+node --import tsx src/index.ts agent continue --content "请用 vfs.write 在项目 VFS 写入文件 /agent-test.txt，内容为 hello-zhipu" --modelId zhipu/glm-4-flash --db <db>
+```
+
+退出码: 2（捕获时无 API key）
+
+标准错误:
+```
+API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+```
+
+备注: 配置 key 后预期 `tool_use` + `tool_result` 与 VFS 文件；image **不在** zhipu 真机范围（见 Core 单测 O6）。
+
+---
+
+## 场景 10 — streaming（zhipu 真机）
+
+```bash
+node --import tsx src/index.ts agent continue --content "请流式回复：streaming ok" --modelId zhipu/glm-4-flash --db <db>
+```
+
+退出码: 2（捕获时无 API key）
+
+标准错误:
+```
+API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
+```
+
+备注: 配置 key 后预期 stdout 增量（`text-delta`）；`--no-stream` 关闭增量。
+
+---
+
+## 场景 11 — doom_loop（mock LLM，非 zhipu）
+
+**显式 mock** — 不使用 zhipu。
+
+```bash
 set NM_AGENT_MOCK_LLM=1
-set NM_AGENT_MOCK_SCENARIO=continue
-node --import tsx src/index.ts agent continue --content "step one" --modelId mock/test --db <db>
-```
-
-退出码: 0
-
-标准输出:
-```
-Assistant reply (single step).
-```
-
-备注: `maxSteps=1`；仅一次 model 往返；stdout 为流式 text-delta 累积结果。
-
----
-
-## 场景 8 — 多步 run（mock LLM）
-
-```bash
-set NM_AGENT_MOCK_SCENARIO=run
-node --import tsx src/index.ts agent run --content multi --max-steps 3 --modelId mock/test --db <db>
-```
-
-退出码: 0
-
-标准输出:
-```
-Multi-step run finished.
-```
-
-备注: mock 前两轮返回 `vfs.list` tool_use，第三轮返回文本；`message list` 可见 tool_use / tool_result 与最终 assistant。
-
----
-
-## 场景 9 — vfs tool（mock LLM）
-
-```bash
-set NM_AGENT_MOCK_SCENARIO=vfs
-node --import tsx src/index.ts agent continue --content "write file" --modelId mock/test --db <db>
-```
-
-退出码: 0
-
-标准输出:
-```
-(无 — 本轮 assistant 仅 tool_use，无 text 块)
-```
-
-备注: `message list` 含 `[tool_use] vfs.write` 与对应 `tool_result`；session VFS 写入由 ToolRunner 完成。
-
----
-
-## 场景 10 — streaming（mock LLM）
-
-```bash
-set NM_AGENT_MOCK_SCENARIO=stream
-node --import tsx src/index.ts agent continue --content "stream please" --modelId mock/test --db <db>
-```
-
-退出码: 0
-
-标准输出:
-```
-streamed hello
-```
-
-备注: 默认流式；`--no-stream` 时不写增量 text-delta。
-
----
-
-## 场景 11 — doom_loop（mock LLM）
-
-```bash
 set NM_AGENT_MOCK_SCENARIO=doom
 node --import tsx src/index.ts agent continue --content doom --modelId mock/test --db <db>
 ```
@@ -195,34 +197,32 @@ node --import tsx src/index.ts agent continue --content doom --modelId mock/test
 Doom loop: tool "vfs.read" invoked 3 times with identical input
 ```
 
+备注: `NM_AGENT_MOCK_LLM=1` + `NM_AGENT_MOCK_SCENARIO=doom`；与 OpenAI adapter 实现无关。
+
 ---
 
-## 场景 12 — compaction（mock LLM）
+## 场景 12 — compaction（zhipu 真机）
 
 前置（独立库）：10× `message append` 长文本 → `config set --key agent.compaction.thresholdTokens --value 10` → `config set --key agent.compaction.keepLastN --value 2`。
 
 ```bash
-set NM_AGENT_MOCK_SCENARIO=compaction
-node --import tsx src/index.ts agent continue --content "compact me" --modelId mock/test --db <compact-db>
+node --import tsx src/index.ts agent continue --content "请简短总结上文并回复 done" --modelId zhipu/glm-4-flash --db <compact-db>
 node --import tsx src/index.ts message list --db <compact-db>
 ```
 
-退出码: 0
+退出码: 2（捕获时无 API key；`message list` 仍 exit 0）
 
-标准输出（agent continue）:
+标准错误（agent continue）:
 ```
-After compaction.
+API key not set for provider zhipu (run: nm provider edit --providerId zhipu --apiKey <key>)
 ```
 
-标准输出（message list 节选 — 原样捕获，长行未截断）:
+标准输出（message list 节选 — 压缩前 agent 未跑通，仅见历史 user 行）:
 ```
 <uuid>	1	user	[H]	long history line 0 ...
 ...
 <uuid>	10	user		long history line 9 ...
-<uuid>	11	user		compact me
-<uuid>	12	user		[Compaction summary]
-summary text
-<uuid>	13	assistant		After compaction.
+<uuid>	11	user		请简短总结上文并回复 done
 ```
 
-备注: `[H]` 表示 `hidden: true`；seq 1–9 已隐藏；可见条数含摘要 user 消息与 keepLastN 保留的最近消息。
+备注: 配置 key 后重跑 continue，预期 summary user 消息、`[H]` 隐藏旧消息、assistant 回复。`[H]` = `hidden: true`。
