@@ -117,6 +117,78 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.ok(done);
   });
 
+  it("M1: stream accumulates delta.tool_calls by index", async () => {
+    const chunk1 = {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                function: { name: "vfs.read", arguments: '{"path":' },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const chunk2 = {
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, function: { arguments: '"/tmp/x"}' } }],
+          },
+        },
+      ],
+    };
+    const sse = [
+      `data: ${JSON.stringify(chunk1)}`,
+      "",
+      `data: ${JSON.stringify(chunk2)}`,
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> =
+      [];
+    let done = false;
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "read file",
+      stream: true,
+      tools: [{ name: "vfs.read", description: "read", inputSchema: {} }],
+      onStream: (ev) => {
+        if (ev.type === "tool-use") {
+          toolUses.push({ id: ev.id, name: ev.name, input: ev.input });
+        }
+        if (ev.type === "done") {
+          done = true;
+        }
+      },
+    });
+
+    assert.equal(toolUses.length, 1);
+    assert.equal(toolUses[0]!.name, "vfs.read");
+    assert.equal(toolUses[0]!.input.path, "/tmp/x");
+    const toolBlock = result.blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolBlock && toolBlock.type === "tool_use");
+    assert.equal(toolBlock.name, "vfs.read");
+    assert.equal((toolBlock as { input: Record<string, unknown> }).input.path, "/tmp/x");
+    assert.ok(done);
+  });
+
   it("O6: history with image maps to vision content in POST body", async () => {
     const calls: Array<{ body: string }> = [];
     const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
