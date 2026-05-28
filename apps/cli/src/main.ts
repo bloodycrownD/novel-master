@@ -14,6 +14,7 @@ import { runVfsWorktree } from "./vfs/worktree.js";
 import { runPrompt } from "./prompt/commands.js";
 import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
+import { runAgent } from "./agent/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
@@ -94,7 +95,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "message" ||
     top === "prompt" ||
     top === "provider" ||
-    top === "model"
+    top === "model" ||
+    top === "agent"
   ) {
     const rt = await createNovelMasterRuntime(argv);
     try {
@@ -138,6 +140,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "model":
           await runModel(rt, sub, rest);
+          break;
+        case "agent":
+          await runAgent(rt, sub, rest);
           break;
       }
       return 0;

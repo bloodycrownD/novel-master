@@ -1,0 +1,124 @@
+import assert from "node:assert/strict";
+import { describe, it, mock } from "node:test";
+import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/anthropic.adapter.js";
+import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/openai.adapter.js";
+import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/gemini.adapter.js";
+import { toolsFromRegistry, ToolRegistry, registerVfsTools } from "@novel-master/core";
+import { ProviderError } from "../../src/errors/provider-errors.js";
+
+describe("ModelRequest tools + stream (adapters)", () => {
+  it("Anthropic chat sends tools in request body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          content: [{ type: "text", text: "ok" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "key",
+      vendorModelId: "claude-3-5-sonnet",
+      userContent: "hi",
+      system: "You are helpful",
+      tools: [
+        {
+          name: "vfs.read",
+          description: "read",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ],
+    });
+
+    assert.equal(calls.length, 1);
+    const parsed = JSON.parse(calls[0]!.body) as {
+      system?: string;
+      tools?: unknown[];
+    };
+    assert.equal(parsed.system, "You are helpful");
+    assert.ok(Array.isArray(parsed.tools));
+    assert.equal((parsed.tools as unknown[]).length, 1);
+  });
+
+  it("Anthropic stream emits text-delta and done", async () => {
+    const sse = [
+      'data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hi"}}',
+      "",
+      'data: {"type":"message_stop"}',
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const deltas: string[] = [];
+    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "key",
+      vendorModelId: "claude",
+      userContent: "hi",
+      stream: true,
+      onStream: (ev) => {
+        if (ev.type === "text-delta") {
+          deltas.push(ev.text);
+        }
+      },
+    });
+
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(result.assistantText, "Hi");
+  });
+
+  it("OpenAI throws UNSUPPORTED when tools present", async () => {
+    const adapter = new OpenAiProtocolAdapter(async () => new Response("{}"));
+    await assert.rejects(
+      () =>
+        adapter.chat({
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "k",
+          vendorModelId: "gpt-4",
+          userContent: "hi",
+          tools: [{ name: "t", description: "d", inputSchema: {} }],
+        }),
+      (e: unknown) => e instanceof ProviderError && e.code === "UNSUPPORTED",
+    );
+  });
+
+  it("Gemini throws UNSUPPORTED when tools present", async () => {
+    const adapter = new GeminiProtocolAdapter(async () => new Response("{}"));
+    await assert.rejects(
+      () =>
+        adapter.chat({
+          baseUrl: "https://generativelanguage.googleapis.com",
+          apiKey: "k",
+          vendorModelId: "gemini",
+          userContent: "hi",
+          tools: [{ name: "t", description: "d", inputSchema: {} }],
+        }),
+      (e: unknown) => e instanceof ProviderError && e.code === "UNSUPPORTED",
+    );
+  });
+
+  it("toolsFromRegistry produces serializable schemas", () => {
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const tools = toolsFromRegistry(registry);
+    assert.ok(tools.length >= 6);
+    for (const t of tools) {
+      assert.equal(typeof t.name, "string");
+      assert.equal(typeof t.description, "string");
+      assert.equal(typeof t.inputSchema, "object");
+      assert.ok(JSON.stringify(t.inputSchema).length > 2);
+    }
+  });
+});
