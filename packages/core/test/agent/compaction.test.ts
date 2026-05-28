@@ -67,6 +67,13 @@ describe("DefaultCompactionService", () => {
 
     await compaction.maybeCompact(session, "anthropic/claude");
 
+    const all = session.allMessages();
+    const hidden = all.filter((m) => m.hidden);
+    assert.ok(hidden.length >= 8, `expected old messages hidden, got ${hidden.length}`);
+    for (const m of hidden) {
+      assert.equal(m.hidden, true);
+    }
+
     const visible = await session.list();
     assert.ok(visible.length <= 4);
     const summary = visible.find((m) =>
