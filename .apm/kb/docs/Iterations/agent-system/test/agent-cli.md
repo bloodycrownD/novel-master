@@ -2,7 +2,10 @@
 
 - 日期: 2026-05-28
 - 审查人: pending
-- 备注: 临时目录 `C:\Users\BloodyCrown\AppData\Local\Temp\tmp58CA.tmp-nm-agent`，数据库 `novel.db`
+- 环境: `NO_COLOR=1`；场景 7–12 使用 mock LLM（无 API key）：`NM_AGENT_MOCK_LLM=1` + `NM_AGENT_MOCK_SCENARIO=<name>`
+- 捕获脚本: `node apps/cli/scripts/capture-agent-scenarios.mjs`（真实执行，非编造）
+
+---
 
 ## 场景 1 — 缺少子命令（用法）
 
@@ -11,10 +14,7 @@ cd apps/cli
 node --import tsx src/index.ts agent
 ```
 
-标准输出:
-```
-(无)
-```
+退出码: 1
 
 标准错误:
 ```
@@ -29,10 +29,7 @@ Usage: novel-master agent <subcommand> ...
 node --import tsx src/index.ts agent run
 ```
 
-标准输出:
-```
-(无)
-```
+退出码: 1
 
 标准错误:
 ```
@@ -49,6 +46,8 @@ Missing --project <id> (or run: nm project use --project <id>)
 node --import tsx src/index.ts agent continue --content "step one" --db <db>
 ```
 
+退出码: 1
+
 标准错误:
 ```
 Missing --modelId <id> (or run: nm model use --modelId <provider>/<vendor>)
@@ -58,11 +57,13 @@ Missing --modelId <id> (or run: nm model use --modelId <provider>/<vendor>)
 
 ## 场景 4 — 单步 continue（缺 API key）
 
-前置：`model use --modelId anthropic/claude-sonnet-4-20250514`
+前置：`model use --modelId anthropic/claude-sonnet-4-20250514`（未设置 `NM_AGENT_MOCK_LLM`）
 
 ```bash
 node --import tsx src/index.ts agent continue --content "ping" --db <db>
 ```
+
+退出码: 1
 
 标准错误:
 ```
@@ -71,11 +72,13 @@ API key not set for provider anthropic (run: nm provider edit --providerId anthr
 
 ---
 
-## 场景 5 — prompt render（buildPromptLlmInput + formatPromptLlmInputForCli）
+## 场景 5 — prompt render（buildPromptLlmInput）
 
 ```bash
 node --import tsx src/index.ts prompt render --path <tmpdir>/prompt.yaml --db <db>
 ```
+
+退出码: 0
 
 标准输出:
 ```
@@ -92,25 +95,134 @@ user: ping
 node --import tsx src/index.ts message list --db <db>
 ```
 
+退出码: 0
+
 标准输出:
 ```
-aac93ab2-414e-45b2-b7f6-9a23e5cd1ccc	1	user		hello agent
-8ec9922a-80ff-40c1-9ee5-40b19a59eb7b	2	user		ping
+<uuid>	1	user		hello agent
+<uuid>	2	user		ping
 ```
 
 ---
 
-## 场景 7–12 — 需 Anthropic API key 的 E2E
+## 场景 7 — 单步 continue（mock LLM）
 
-以下场景在本地未配置 `anthropic` API key 时会在 `agent continue` / `agent run` 阶段以场景 4 相同错误中止。配置 key 后预期行为：
+前置：同捕获脚本 — `project create` → `project use` → `session create` → `session use`。
 
-| 场景 | 命令要点 | 预期 |
-|------|----------|------|
-| 单步 continue | `agent continue --content "..."` | 1 次 model 往返；若有 tool 则执行并写 tool_result，不自动第二次 LLM |
-| 多步 run | `agent run --max-steps 5` | 多轮 tool 闭环直至文本结束或达上限 |
-| vfs tool | prompt + `vfs.write` 等 | session VFS 内读写 |
-| streaming | 默认流式；`--no-stream` 关闭 | stdout 增量 text-delta |
-| doom_loop | 模型连续 3 次相同 tool_use | `AgentError: DOOM_LOOP` |
-| compaction | `config set agent.compaction.thresholdTokens 10` 等 | 出现 `[Compaction summary]` 前缀的 user 消息 |
+```bash
+cd apps/cli
+set NM_AGENT_MOCK_LLM=1
+set NM_AGENT_MOCK_SCENARIO=continue
+node --import tsx src/index.ts agent continue --content "step one" --modelId mock/test --db <db>
+```
 
-Core 单测覆盖：`packages/core/test/agent/*`、`model-request-tools-stream.test.ts`。
+退出码: 0
+
+标准输出:
+```
+Assistant reply (single step).
+```
+
+备注: `maxSteps=1`；仅一次 model 往返；stdout 为流式 text-delta 累积结果。
+
+---
+
+## 场景 8 — 多步 run（mock LLM）
+
+```bash
+set NM_AGENT_MOCK_SCENARIO=run
+node --import tsx src/index.ts agent run --content multi --max-steps 3 --modelId mock/test --db <db>
+```
+
+退出码: 0
+
+标准输出:
+```
+Multi-step run finished.
+```
+
+备注: mock 前两轮返回 `vfs.list` tool_use，第三轮返回文本；`message list` 可见 tool_use / tool_result 与最终 assistant。
+
+---
+
+## 场景 9 — vfs tool（mock LLM）
+
+```bash
+set NM_AGENT_MOCK_SCENARIO=vfs
+node --import tsx src/index.ts agent continue --content "write file" --modelId mock/test --db <db>
+```
+
+退出码: 0
+
+标准输出:
+```
+(无 — 本轮 assistant 仅 tool_use，无 text 块)
+```
+
+备注: `message list` 含 `[tool_use] vfs.write` 与对应 `tool_result`；session VFS 写入由 ToolRunner 完成。
+
+---
+
+## 场景 10 — streaming（mock LLM）
+
+```bash
+set NM_AGENT_MOCK_SCENARIO=stream
+node --import tsx src/index.ts agent continue --content "stream please" --modelId mock/test --db <db>
+```
+
+退出码: 0
+
+标准输出:
+```
+streamed hello
+```
+
+备注: 默认流式；`--no-stream` 时不写增量 text-delta。
+
+---
+
+## 场景 11 — doom_loop（mock LLM）
+
+```bash
+set NM_AGENT_MOCK_SCENARIO=doom
+node --import tsx src/index.ts agent continue --content doom --modelId mock/test --db <db>
+```
+
+退出码: 2
+
+标准错误:
+```
+Doom loop: tool "vfs.read" invoked 3 times with identical input
+```
+
+---
+
+## 场景 12 — compaction（mock LLM）
+
+前置（独立库）：10× `message append` 长文本 → `config set --key agent.compaction.thresholdTokens --value 10` → `config set --key agent.compaction.keepLastN --value 2`。
+
+```bash
+set NM_AGENT_MOCK_SCENARIO=compaction
+node --import tsx src/index.ts agent continue --content "compact me" --modelId mock/test --db <compact-db>
+node --import tsx src/index.ts message list --db <compact-db>
+```
+
+退出码: 0
+
+标准输出（agent continue）:
+```
+After compaction.
+```
+
+标准输出（message list 节选 — 原样捕获，长行未截断）:
+```
+<uuid>	1	user	[H]	long history line 0 ...
+...
+<uuid>	10	user		long history line 9 ...
+<uuid>	11	user		compact me
+<uuid>	12	user		[Compaction summary]
+summary text
+<uuid>	13	assistant		After compaction.
+```
+
+备注: `[H]` 表示 `hidden: true`；seq 1–9 已隐藏；可见条数含摘要 user 消息与 keepLastN 保留的最近消息。
