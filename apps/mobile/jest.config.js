@@ -8,10 +8,10 @@ const repoRoot = path.resolve(__dirname, '../..');
 module.exports = {
   preset: '@react-native/jest-preset',
   moduleNameMapper: {
-    '^@novel-master/core$': path.join(
-      repoRoot,
-      'packages/core/dist/index.js',
-    ),
+    // Avoid importing `@novel-master/core` barrel in tests: it pulls in the
+    // prompt-yaml module which depends on `yaml` ESM browser entry and breaks
+    // under the default RN Jest transform settings.
+    '^@novel-master/core$': '<rootDir>/test-utils/core-shim.ts',
     '^@novel-master/tdbc-driver-rn/native$': path.join(
       repoRoot,
       'packages/tdbc-driver-rn/dist/native.js',
