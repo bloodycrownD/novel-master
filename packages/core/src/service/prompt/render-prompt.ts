@@ -7,14 +7,23 @@
 import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { messageBodyText } from "../../domain/prompt/message-body.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
+import { evaluatePromptBlockWhen } from "../../domain/prompt/model/prompt-block-when.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
 import { renderMacro } from "../../infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
+
+/** Dot fields available during prompt macro expansion. */
+export interface PromptRenderDot {
+  readonly worktree: string;
+  readonly abstract: string;
+}
 
 /** Inputs required to build LLM input from prompt blocks. */
 export interface PromptRenderContext {
   readonly worktreeDisplay: string;
   readonly messages: readonly ChatMessage[];
+  /** Compaction abstract for `when` + `{{.abstract}}`; default "". */
+  readonly abstract?: string;
   /** Defaults to `new Date()` when omitted (tests inject a fixed time). */
   readonly now?: Date;
 }
@@ -37,15 +46,23 @@ function formatSegment(role: string, body: string): string {
   return `${role}: ${lines[0]}\n${lines.slice(1).join("\n")}`;
 }
 
+function buildDot(ctx: PromptRenderContext): PromptRenderDot {
+  return {
+    worktree: ctx.worktreeDisplay,
+    abstract: ctx.abstract ?? "",
+  };
+}
+
 /**
- * Builds LLM input from prompt blocks: system text blocks + visible chat messages.
+ * Builds LLM input: filter text blocks by when → render macros → merge system.
  */
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],
   ctx: PromptRenderContext,
 ): PromptLlmInput {
   const now = ctx.now ?? new Date();
-  const dot = { worktree: ctx.worktreeDisplay };
+  const dot = buildDot(ctx);
+  const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
   const root = {
     time: formatLocalDateTime(now),
     week_cn: formatWeekCn(now),
@@ -54,9 +71,20 @@ export function buildPromptLlmInput(
   const systemParts: string[] = [];
 
   for (const block of blocks) {
-    if (block.type === "text" && block.role === "system") {
-      systemParts.push(renderMacro(block.content, { dot, root }));
+    if (block.type !== "text" || block.role !== "system") {
+      continue;
     }
+    // when evaluation boundary: skip block before macro render
+    if (block.when != null && !evaluatePromptBlockWhen(block.when, dotRecord)) {
+      continue;
+    }
+    systemParts.push(
+      renderMacro(block.content, {
+        dot: dotRecord,
+        root,
+        optionalDotFields: ["abstract"],
+      }),
+    );
   }
 
   const system =
@@ -77,7 +105,8 @@ export function formatPromptLlmInputForCli(
   ctx: PromptRenderContext,
 ): string {
   const now = ctx.now ?? new Date();
-  const dot = { worktree: ctx.worktreeDisplay };
+  const dot = buildDot(ctx);
+  const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
   const root = {
     time: formatLocalDateTime(now),
     week_cn: formatWeekCn(now),
@@ -87,7 +116,17 @@ export function formatPromptLlmInputForCli(
 
   for (const block of blocks) {
     if (block.type === "text") {
-      const content = renderMacro(block.content, { dot, root });
+      if (
+        block.when != null &&
+        !evaluatePromptBlockWhen(block.when, dotRecord)
+      ) {
+        continue;
+      }
+      const content = renderMacro(block.content, {
+        dot: dotRecord,
+        root,
+        optionalDotFields: ["abstract"],
+      });
       segments.push(formatSegment(block.role, content));
       continue;
     }

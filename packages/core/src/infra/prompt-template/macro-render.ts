@@ -10,13 +10,29 @@ import { scanMacroActions } from "./macro-scan.js";
 export interface MacroRenderContext {
   readonly dot: Readonly<Record<string, unknown>>;
   readonly root: Readonly<Record<string, string>>;
+  /** Dot fields that resolve to "" when missing (e.g. abstract). */
+  readonly optionalDotFields?: readonly string[];
 }
 
 function lookupDot(
   dot: Readonly<Record<string, unknown>>,
   path: readonly string[],
   offset: number,
+  optionalTopLevel?: ReadonlySet<string>,
 ): string {
+  if (
+    path.length === 1 &&
+    optionalTopLevel?.has(path[0]!) === true
+  ) {
+    const value = dot[path[0]!];
+    if (value == null) {
+      return "";
+    }
+    if (typeof value !== "string") {
+      return "";
+    }
+    return value;
+  }
   let current: unknown = dot;
   for (const segment of path) {
     if (current == null || typeof current !== "object" || Array.isArray(current)) {
@@ -69,6 +85,11 @@ export function renderMacro(
     return template;
   }
 
+  const optionalTopLevel =
+    ctx.optionalDotFields != null
+      ? new Set(ctx.optionalDotFields)
+      : undefined;
+
   let out = "";
   let cursor = 0;
 
@@ -81,7 +102,7 @@ export function renderMacro(
     }
 
     if (action.kind === "dot") {
-      out += lookupDot(ctx.dot, action.path, action.start);
+      out += lookupDot(ctx.dot, action.path, action.start, optionalTopLevel);
     } else {
       out += lookupRoot(ctx.root, action.path[0]!, action.start);
     }
