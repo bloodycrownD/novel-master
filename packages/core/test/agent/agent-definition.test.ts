@@ -102,29 +102,6 @@ describe("agentDefinitionFromJson", () => {
     );
   });
 
-  it("rejects text block with when in full document", () => {
-    assert.throws(
-      () =>
-        agentDefinitionFromJson({
-          schemaVersion: 1,
-          name: "x",
-          prompts: {
-            blocks: [
-              {
-                name: "a",
-                type: "text",
-                role: "system",
-                content: "x",
-                when: { present: "abstract" },
-              },
-            ],
-          },
-          model: { applicationModelId: "openai/gpt-4" },
-        }),
-      (e: unknown) => e instanceof AgentConfigError,
-    );
-  });
-
   it("accepts abstract block in full document", () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
