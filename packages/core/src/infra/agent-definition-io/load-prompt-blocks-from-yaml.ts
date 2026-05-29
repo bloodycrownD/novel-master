@@ -1,7 +1,7 @@
 /**
- * Parses prompt definition YAML into validated {@link PromptBlock} models.
+ * Loads only `prompts.blocks` from YAML (--prompt-path test shortcut).
  *
- * @module infra/prompt-yaml/parse-prompt-yaml
+ * @module infra/agent-definition-io/load-prompt-blocks-from-yaml
  */
 
 import { parse as parseYaml } from "yaml";
@@ -10,9 +10,9 @@ import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
 import { PromptError } from "../../errors/prompt-errors.js";
 
 /**
- * Parses YAML source and returns validated prompt blocks in file order.
+ * Parses YAML containing `blocks` at root or under `prompts.blocks`.
  */
-export function parsePromptYaml(source: string): readonly PromptBlock[] {
+export function loadPromptBlocksFromYaml(source: string): readonly PromptBlock[] {
   let parsed: unknown;
   try {
     parsed = parseYaml(source);
@@ -26,7 +26,15 @@ export function parsePromptYaml(source: string): readonly PromptBlock[] {
     throw new PromptError("INVALID_YAML", "prompt root must be an object");
   }
 
-  const blocks = (parsed as Record<string, unknown>).blocks;
+  const record = parsed as Record<string, unknown>;
+  let blocks: unknown = record.blocks;
+  if (!Array.isArray(blocks) && record.prompts != null) {
+    const prompts = record.prompts;
+    if (prompts != null && typeof prompts === "object" && !Array.isArray(prompts)) {
+      blocks = (prompts as Record<string, unknown>).blocks;
+    }
+  }
+
   if (!Array.isArray(blocks)) {
     throw new PromptError("INVALID_YAML", "prompt root must contain a blocks array");
   }

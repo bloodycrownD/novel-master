@@ -6,6 +6,7 @@
 
 import { PromptError } from "../../errors/prompt-errors.js";
 import type { PromptBlock, PromptBlockRole } from "./model/prompt-block.js";
+import type { PromptBlockWhen } from "./model/prompt-block-when.js";
 
 const ROLES = new Set<PromptBlockRole>(["system", "user", "assistant"]);
 
@@ -17,6 +18,43 @@ function blockLabel(index: number, name: unknown): string {
   return typeof name === "string" && name.length > 0
     ? `block "${name}"`
     : `block[${index}]`;
+}
+
+function parseWhen(
+  raw: unknown,
+  label: string,
+): PromptBlockWhen | undefined {
+  if (raw === undefined) {
+    return undefined;
+  }
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new PromptError("INVALID_BLOCK", `${label}: when must be an object`);
+  }
+  const record = raw as Record<string, unknown>;
+  const hasPresent = "present" in record;
+  const hasAbsent = "absent" in record;
+  if (hasPresent === hasAbsent) {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}: when requires exactly one of present or absent`,
+    );
+  }
+  if (hasPresent) {
+    if (typeof record.present !== "string" || record.present.length === 0) {
+      throw new PromptError(
+        "INVALID_BLOCK",
+        `${label}: when.present must be a non-empty string`,
+      );
+    }
+    return { present: record.present };
+  }
+  if (typeof record.absent !== "string" || record.absent.length === 0) {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}: when.absent must be a non-empty string`,
+    );
+  }
+  return { absent: record.absent! };
 }
 
 /**
@@ -70,16 +108,24 @@ export function validatePromptBlocks(raw: unknown): readonly PromptBlock[] {
           `${label}: text block requires string content`,
         );
       }
+      const when = parseWhen(record.when, label);
       blocks.push({
         name,
         type: "text",
         role: role as PromptBlockRole,
         content: record.content,
+        ...(when != null ? { when } : {}),
       });
       continue;
     }
 
     if (type === "chat") {
+      if ("when" in record) {
+        throw new PromptError(
+          "INVALID_BLOCK",
+          `${label}: chat block must not include when`,
+        );
+      }
       if ("role" in record) {
         throw new PromptError(
           "INVALID_BLOCK",
