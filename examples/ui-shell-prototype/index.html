@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>工作区与协作 - 移动端原型</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 主容器 -->
+    <div id="app">
+        <!-- 顶栏 -->
+        <header id="header">
+            <button id="backBtn" class="icon-btn hidden">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7"/>
+                </svg>
+            </button>
+            <h1 id="pageTitle">会话</h1>
+            <button id="drawerBtn" class="icon-btn" aria-label="打开项目列表">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M3 12h18M3 18h18"/>
+                </svg>
+            </button>
+        </header>
+
+        <!-- 页面容器 -->
+        <main id="mainContent">
+            <!-- 对话 Tab：默认会话列表，点进会话后显示聊天 -->
+            <div id="chatPage" class="page active">
+                <!-- 会话列表：上 Tab「会话 / 项目模板」 -->
+                <div id="sessionListView" class="chat-subview active">
+                    <div class="current-project-banner" id="currentProjectBanner">
+                        <span class="banner-label">当前项目</span>
+                        <span class="banner-name" id="bannerProjectName">科幻小说创作</span>
+                    </div>
+                    <div class="chat-top-tabs" role="tablist">
+                        <button type="button" class="chat-top-tab active" data-session-panel="sessions" role="tab" aria-selected="true">会话</button>
+                        <button type="button" class="chat-top-tab" data-session-panel="template" role="tab" aria-selected="false">项目模板</button>
+                    </div>
+                    <div id="sessionPanelSessions" class="session-list-panel active">
+                        <div class="section-header">
+                            <h2>会话</h2>
+                            <button class="btn-primary" data-action="new-session">新建会话</button>
+                        </div>
+                        <div class="session-list">
+                            <div class="session-item active" data-id="session-1" data-name="第一卷创作">
+                                <div class="session-info">
+                                    <div class="session-name">第一卷创作</div>
+                                    <div class="session-meta">45条消息 · 活跃中</div>
+                                </div>
+                                <span class="current-badge">当前</span>
+                            </div>
+                            <div class="session-item" data-id="session-2" data-name="角色设定讨论">
+                                <div class="session-info">
+                                    <div class="session-name">角色设定讨论</div>
+                                    <div class="session-meta">23条消息 · 2小时前</div>
+                                </div>
+                            </div>
+                            <div class="session-item" data-id="session-3" data-name="世界观构建">
+                                <div class="session-info">
+                                    <div class="session-name">世界观构建</div>
+                                    <div class="session-meta">67条消息 · 1天前</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="sessionPanelTemplate" class="session-list-panel workspace-panel project-template-panel">
+                        <div class="info-banner files-scope-banner">
+                            <span>当前项目的模板目录（/template）</span>
+                        </div>
+                        <div class="vfs-browser" data-vfs-scope="project"></div>
+                    </div>
+                </div>
+
+                <!-- 聊天界面：上 Tab「聊天 / 会话工作区」 -->
+                <div id="chatConversationView" class="chat-subview">
+                    <div class="chat-top-tabs" role="tablist">
+                        <button type="button" class="chat-top-tab active" data-chat-panel="chat" role="tab" aria-selected="true">聊天</button>
+                        <button type="button" class="chat-top-tab" data-chat-panel="workspace" role="tab" aria-selected="false">会话工作区</button>
+                    </div>
+
+                    <div id="chatPanelChat" class="chat-panel active">
+                        <div class="chat-header">
+                            <div class="chat-meta">
+                                <span class="agent-name">默认 Agent</span>
+                                <span class="model-name">GPT-4</span>
+                                <span class="token-info">2.5K / 8K tokens</span>
+                            </div>
+                        </div>
+
+                        <div class="messages" id="messageList">
+                            <div class="message user">
+                                <div class="message-content">帮我续写第三章的内容</div>
+                            </div>
+                            <div class="message assistant">
+                                <div class="message-content">好的，我会基于当前真实提示词中的内容为第三章续写。让我先查看相关文件...</div>
+                            </div>
+                            <div class="tool-call">
+                                <div class="tool-header">
+                                    <span class="tool-name">📄 read_file</span>
+                                    <span class="tool-status success">成功</span>
+                                </div>
+                                <div class="tool-summary">读取 /chapters/chapter-03.md</div>
+                            </div>
+                        </div>
+
+                        <div class="chat-compose-dock">
+                            <div class="context-chips context-chips--floating" aria-label="快捷入口">
+                                <button type="button" class="chip" data-action="real-prompt">真实提示词</button>
+                                <button type="button" class="chip" data-action="logs">工具日志</button>
+                                <button type="button" class="chip" data-action="checkpoints">检查点</button>
+                            </div>
+                            <div class="input-area">
+                                <textarea placeholder="输入消息..." rows="1"></textarea>
+                                <button type="button" class="send-btn" aria-label="发送">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="chatPanelWorkspace" class="chat-panel workspace-panel">
+                        <div class="vfs-browser" data-vfs-scope="session"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent 列表（底栏 Tab） -->
+            <div id="agentsPage" class="page">
+                <div class="section-header">
+                    <h2>Agent</h2>
+                    <button class="btn-primary" data-action="new-agent">新建</button>
+                </div>
+                <div class="agent-list">
+                    <div class="agent-item" data-id="agent-1">
+                        <div class="agent-info">
+                            <div class="agent-name">默认 Agent</div>
+                            <div class="agent-meta">GPT-4 · 最大步数: 10</div>
+                        </div>
+                        <span class="default-badge">默认</span>
+                    </div>
+                    <div class="agent-item" data-id="agent-2">
+                        <div class="agent-info">
+                            <div class="agent-name">创意写作助手</div>
+                            <div class="agent-meta">Claude-3 · 温度: 0.9</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 我的页面 -->
+            <div id="profilePage" class="page">
+                <div class="menu-list">
+                    <div class="menu-item" data-action="providers">
+                        <div class="menu-icon">🔌</div>
+                        <div class="menu-label">服务商管理</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="global-template">
+                        <div class="menu-icon">🌐</div>
+                        <div class="menu-label">全局模板</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="settings">
+                        <div class="menu-icon">⚙️</div>
+                        <div class="menu-label">扩展设置</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="debug">
+                        <div class="menu-icon">🔧</div>
+                        <div class="menu-label">开发调试</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 全局模板（从「我的」进入） -->
+            <div id="globalTemplatePage" class="page">
+                <div class="info-banner">
+                    <span>全应用共享；项目可通过「从上级同步」拉取此处模板</span>
+                </div>
+                <div class="vfs-browser vfs-browser--page" data-vfs-scope="global"></div>
+            </div>
+
+            <!-- 真实提示词预览 -->
+            <div id="realPromptPage" class="page">
+                <div class="real-prompt-preview">
+                    <pre class="real-prompt-content">&lt;file path="/chapters/chapter-01.md"&gt;
+# 第一章 觉醒
+
+在2157年的新上海...
+&lt;/file&gt;
+
+&lt;file path="/chapters/chapter-02.md"&gt;
+# 第二章 发现
+
+主角发现了一个惊人的秘密...
+&lt;/file&gt;
+
+&lt;file path="/chapters/chapter-03.md" mode="header"&gt;
+---
+title: 第三章 抉择
+status: draft
+---
+&lt;/file&gt;</pre>
+                </div>
+                <div class="info-banner">
+                    <span>💡 在会话工作区文件列表中调整纳入规则可改变此预览</span>
+                </div>
+            </div>
+
+            <!-- 工具日志页面 -->
+            <div id="logsPage" class="page">
+                <div class="log-list">
+                    <div class="log-item success">
+                        <div class="log-header">
+                            <span class="log-tool">read_file</span>
+                            <span class="log-time">2分钟前</span>
+                        </div>
+                        <div class="log-summary">读取 /chapters/chapter-03.md</div>
+                        <div class="log-checkpoint">
+                            <span>检查点: </span>
+                            <a href="#" class="checkpoint-link">cp_1234</a>
+                        </div>
+                    </div>
+                    <div class="log-item success">
+                        <div class="log-header">
+                            <span class="log-tool">write_file</span>
+                            <span class="log-time">5分钟前</span>
+                        </div>
+                        <div class="log-summary">写入 /chapters/chapter-02.md (1.2KB)</div>
+                        <div class="log-checkpoint">
+                            <span>检查点: </span>
+                            <a href="#" class="checkpoint-link">cp_1233</a>
+                        </div>
+                    </div>
+                    <div class="log-item failed">
+                        <div class="log-header">
+                            <span class="log-tool">replace_in_file</span>
+                            <span class="log-time">10分钟前</span>
+                        </div>
+                        <div class="log-summary">替换失败: 未找到匹配内容</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 检查点页面 -->
+            <div id="checkpointsPage" class="page">
+                <div class="info-banner warning">
+                    <span>⚠️ 最多保留 100 个检查点，超出后最旧的将被移除</span>
+                </div>
+                <div class="checkpoint-list">
+                    <div class="checkpoint-item" data-id="cp_1234">
+                        <div class="checkpoint-header">
+                            <span class="checkpoint-id">cp_1234</span>
+                            <span class="checkpoint-time">2分钟前</span>
+                        </div>
+                        <div class="checkpoint-source">来源: 工具执行 (read_file)</div>
+                        <button class="btn-secondary rollback-btn">回滚到此</button>
+                    </div>
+                    <div class="checkpoint-item" data-id="cp_1233">
+                        <div class="checkpoint-header">
+                            <span class="checkpoint-id">cp_1233</span>
+                            <span class="checkpoint-time">5分钟前</span>
+                        </div>
+                        <div class="checkpoint-source">来源: 工具执行 (write_file)</div>
+                        <button class="btn-secondary rollback-btn">回滚到此</button>
+                    </div>
+                    <div class="checkpoint-item" data-id="cp_1232">
+                        <div class="checkpoint-header">
+                            <span class="checkpoint-id">cp_1232</span>
+                            <span class="checkpoint-time">1小时前</span>
+                        </div>
+                        <div class="checkpoint-source">来源: 手动保存</div>
+                        <button class="btn-secondary rollback-btn">回滚到此</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 服务商管理页面 -->
+            <div id="providersPage" class="page">
+                <div class="section-header">
+                    <h2>服务商</h2>
+                    <button class="btn-primary" data-action="new-provider">添加</button>
+                </div>
+                <div class="provider-list">
+                    <div class="provider-item" data-id="provider-1">
+                        <div class="provider-icon">🟢</div>
+                        <div class="provider-info">
+                            <div class="provider-name">OpenAI</div>
+                            <div class="provider-meta">已连接 · 3个模型</div>
+                        </div>
+                    </div>
+                    <div class="provider-item" data-id="provider-2">
+                        <div class="provider-icon">🟢</div>
+                        <div class="provider-info">
+                            <div class="provider-name">Anthropic</div>
+                            <div class="provider-meta">已连接 · 2个模型</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 设置页面 -->
+            <div id="settingsPage" class="page">
+                <div class="settings-group">
+                    <div class="settings-title">虚拟文件</div>
+                    <div class="setting-item">
+                        <label>启用虚拟文件系统</label>
+                        <input type="checkbox" class="toggle" checked>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-title">检查点</div>
+                    <div class="setting-item">
+                        <label>保留检查点数量</label>
+                        <input type="number" value="100" min="1" max="500">
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <div class="settings-title">工具</div>
+                    <div class="setting-item">
+                        <label>显示完整工具参数</label>
+                        <input type="checkbox" class="toggle">
+                    </div>
+                    <div class="setting-item">
+                        <label>自动修复 JSON</label>
+                        <input type="checkbox" class="toggle" checked>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 文件编辑页面 -->
+            <div id="fileEditorPage" class="page">
+                <div class="editor-toolbar">
+                    <button class="toolbar-btn" data-action="save">保存</button>
+                    <button class="toolbar-btn" data-action="preview">预览</button>
+                    <span class="unsaved-indicator hidden">未保存</span>
+                </div>
+                <div class="editor-container">
+                    <div class="line-numbers">
+                        <div>1</div><div>2</div><div>3</div><div>4</div><div>5</div>
+                        <div>6</div><div>7</div><div>8</div><div>9</div><div>10</div>
+                    </div>
+                    <textarea class="code-editor" spellcheck="false"># 第三章 抉择
+
+在经历了前两章的铺垫后，主角面临着人生中最重要的选择...
+
+## 场景一：实验室
+
+"你确定要这么做吗？"李博士的声音在空旷的实验室里回荡。
+
+主角沉默了片刻，最终坚定地点了点头。</textarea>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部导航栏 -->
+        <nav id="bottomNav">
+            <button class="nav-item active" data-page="chat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                <span>对话</span>
+            </button>
+            <button class="nav-item" data-page="agents">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+                </svg>
+                <span>Agent</span>
+            </button>
+            <button class="nav-item" data-page="profile">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                <span>我的</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- 左侧项目抽屉 -->
+    <div id="drawerOverlay" class="drawer-overlay hidden" aria-hidden="true"></div>
+    <aside id="projectDrawer" class="project-drawer" aria-label="项目列表">
+        <div class="drawer-header">
+            <h2>项目</h2>
+            <button type="button" class="btn-primary drawer-new-project" data-action="new-project">新建</button>
+        </div>
+        <div class="project-list drawer-project-list">
+            <div class="project-item active" data-id="novel-1" data-name="科幻小说创作">
+                <div class="project-icon">📚</div>
+                <div class="project-info">
+                    <div class="project-name">科幻小说创作</div>
+                    <div class="project-meta">3个会话 · 更新于 2小时前</div>
+                </div>
+                <span class="current-badge">当前</span>
+            </div>
+            <div class="project-item" data-id="novel-2" data-name="历史小说">
+                <div class="project-icon">📖</div>
+                <div class="project-info">
+                    <div class="project-name">历史小说</div>
+                    <div class="project-meta">1个会话 · 更新于 1天前</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 底部弹出菜单 -->
+    <div id="bottomSheet" class="bottom-sheet hidden">
+        <div class="sheet-handle"></div>
+        <div class="sheet-content" id="sheetContent"></div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
