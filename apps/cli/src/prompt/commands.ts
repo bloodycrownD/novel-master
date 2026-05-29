@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import {
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
-  parsePromptYaml,
+  loadPromptBlocksFromYaml,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -33,7 +33,7 @@ export async function runPrompt(
   }
 
   const source = await readFile(path, "utf8");
-  const blocks = parsePromptYaml(source);
+  const blocks = loadPromptBlocksFromYaml(source);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const allMessages = await rt.messages.listBySession(sessionId);
   // Filter out hidden messages from prompt rendering

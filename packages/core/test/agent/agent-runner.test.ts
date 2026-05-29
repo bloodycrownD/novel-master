@@ -3,15 +3,25 @@ import { describe, it, mock } from "node:test";
 import {
   AgentError,
   createAgentRunner,
+  createNoOpCompactionPipeline,
   InMemoryAgentSession,
-  NoOpCompactionService,
   registerVfsTools,
   textBlocks,
   ToolRegistry,
+  type AgentDefinition,
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
 import type { VfsService } from "@novel-master/core";
+
+function minimalDefinition(modelId = "anthropic/claude"): AgentDefinition {
+  return {
+    schemaVersion: 1,
+    name: "test",
+    prompts: [{ name: "c", type: "chat" }],
+    model: { applicationModelId: modelId },
+  };
+}
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -88,14 +98,13 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: { vfs: mockVfs() },
-      compaction: new NoOpCompactionService(),
+      compaction: createNoOpCompactionPipeline(),
     });
 
     const result = await runner.run({
       maxSteps: 1,
-      applicationModelId: "anthropic/claude",
-      promptBlocks: [{ name: "c", type: "chat" }],
-      promptContext: { worktreeDisplay: "", messages: await session.list() },
+      definition: minimalDefinition(),
+      promptContext: { worktreeDisplay: "" },
     });
 
     assert.equal(model.callCount(), 1);
@@ -152,14 +161,13 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: { vfs: mockVfs() },
-      compaction: new NoOpCompactionService(),
+      compaction: createNoOpCompactionPipeline(),
     });
 
     const result = await runner.run({
       maxSteps: 3,
-      applicationModelId: "anthropic/claude",
-      promptBlocks: [{ name: "c", type: "chat" }],
-      promptContext: { worktreeDisplay: "", messages: await session.list() },
+      definition: minimalDefinition(),
+      promptContext: { worktreeDisplay: "" },
     });
 
     assert.equal(model.callCount(), 3);
@@ -191,16 +199,15 @@ describe("AgentRunner", () => {
       modelRequests: model,
       registry,
       toolCtx: { vfs: mockVfs() },
-      compaction: new NoOpCompactionService(),
+      compaction: createNoOpCompactionPipeline(),
     });
 
     await assert.rejects(
       () =>
         runner.run({
           maxSteps: 3,
-          applicationModelId: "anthropic/claude",
-          promptBlocks: [],
-          promptContext: { worktreeDisplay: "", messages: [] },
+          definition: { ...minimalDefinition(), prompts: [] },
+          promptContext: { worktreeDisplay: "" },
         }),
       (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
     );

@@ -195,17 +195,51 @@ export type {
   PromptBlock,
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
+export type { PromptBlockWhen } from "./domain/prompt/model/prompt-block-when.js";
+export { evaluatePromptBlockWhen } from "./domain/prompt/model/prompt-block-when.js";
 export { messageBodyText } from "./domain/prompt/message-body.js";
 export { validatePromptBlocks } from "./domain/prompt/prompt-blocks-validate.js";
-export { parsePromptYaml } from "./infra/prompt-yaml/parse-prompt-yaml.js";
 export {
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
 } from "./service/prompt/render-prompt.js";
 export type {
   PromptRenderContext,
+  PromptRenderDot,
   PromptLlmInput,
 } from "./service/prompt/render-prompt.js";
+export {
+  deserializeAgentDefinition,
+  type AgentDefinitionFormat,
+  type DeserializeAgentDefinitionOptions,
+} from "./infra/agent-definition-io/deserialize-agent-definition.js";
+export {
+  serializeAgentDefinition,
+  type SerializeAgentDefinitionOptions,
+} from "./infra/agent-definition-io/serialize-agent-definition.js";
+export { loadPromptBlocksFromYaml } from "./infra/agent-definition-io/load-prompt-blocks-from-yaml.js";
+export type {
+  AgentDefinition,
+  AgentModelConfig,
+  CompactConfig,
+  CompactionTriggerConfig,
+  CompactionActionConfig,
+  CompactionAbstractConfig,
+} from "./domain/agent/agent-definition.js";
+export {
+  agentDefinitionFromJson,
+  agentDefinitionToJson,
+  validateAgentDefinition,
+  type ValidateAgentDefinitionOptions,
+} from "./domain/agent/agent-definition-from-json.js";
+export { AgentConfigError } from "./errors/agent-config-errors.js";
+export type { AgentConfigErrorCode } from "./errors/agent-config-errors.js";
+export type {
+  ModelSamplingParams,
+  OpenAiSamplingParams,
+  AnthropicSamplingParams,
+  GeminiSamplingParams,
+} from "./domain/agent/model/model-sampling-params.js";
 export { formatLocalDateTime } from "./infra/date-format.js";
 
 /**
@@ -238,13 +272,13 @@ export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/do
 export { InMemoryAgentSession } from "./domain/agent/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "./domain/agent/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
-export { createAgentRunner } from "./service/agent/create-agent-runner.js";
-export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
-export type { CompactionService } from "./service/compaction/compaction.port.js";
 export {
-  DefaultCompactionService,
-  NoOpCompactionService,
-} from "./service/compaction/impl/default-compaction.service.js";
+  createAgentRunner,
+  createNoOpCompactionPipeline,
+} from "./service/agent/create-agent-runner.js";
+export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
+export type { CompactionPipeline } from "./service/compaction/compaction-pipeline.port.js";
+export { createCompactionPipeline } from "./service/compaction/create-compaction-pipeline.js";
 export { estimateTokens } from "./service/compaction/token-estimate.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";

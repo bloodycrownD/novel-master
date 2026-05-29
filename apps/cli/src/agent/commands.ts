@@ -8,14 +8,18 @@ import { readFile } from "node:fs/promises";
 import {
   ChatAgentSession,
   createAgentRunner,
-  DefaultCompactionService,
-  parsePromptYaml,
+  loadPromptBlocksFromYaml,
+  parseApplicationModelId,
   registerVfsTools,
   textBlocks,
   ToolRegistry,
+  validateAgentDefinition,
+  type AgentDefinition,
   type LlmStreamEvent,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
+import { loadAgentConfigFile } from "../config/load-agent-config-file.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -27,17 +31,63 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
-async function loadPromptBlocks(promptPath: string | undefined) {
-  if (promptPath == null) {
-    return [] as ReturnType<typeof parsePromptYaml>;
+async function resolveDefinition(
+  rt: NovelMasterRuntime,
+  flags: ReadonlyMap<string, string | true>,
+  modelId: string,
+): Promise<AgentDefinition> {
+  const agentConfigPath = flagString(flags, "agent-config");
+  const promptPath = flagString(flags, "prompt-path");
+  const modelOverride = flagString(flags, "modelId");
+
+  let definition: AgentDefinition;
+  if (agentConfigPath != null) {
+    definition = await loadAgentConfigFile(agentConfigPath);
+  } else if (promptPath != null) {
+    const source = await readFile(promptPath, "utf8");
+    const blocks = loadPromptBlocksFromYaml(source);
+    definition = buildMinimalDefinition({
+      prompts: blocks,
+      applicationModelId: modelId,
+    });
+  } else {
+    definition = buildMinimalDefinition({
+      prompts: [],
+      applicationModelId: modelId,
+    });
   }
-  const source = await readFile(promptPath, "utf8");
-  return parsePromptYaml(source);
+
+  const effectiveModelId = modelOverride ?? definition.model.applicationModelId;
+  if (effectiveModelId !== definition.model.applicationModelId) {
+    definition = {
+      ...definition,
+      model: { ...definition.model, applicationModelId: effectiveModelId },
+    };
+  } else if (agentConfigPath == null && promptPath == null) {
+    definition = {
+      ...definition,
+      model: { ...definition.model, applicationModelId: modelId },
+    };
+  }
+
+  await validateAgentDefinition(definition, {
+    getProtocolForModel: async (applicationModelId) => {
+      const { providerId } = parseApplicationModelId(applicationModelId);
+      try {
+        const provider = await rt.providers.get(providerId);
+        return provider.protocol;
+      } catch {
+        return undefined;
+      }
+    },
+  });
+
+  return definition;
 }
 
 async function resolveMaxSteps(
   flags: ReadonlyMap<string, string | true>,
-  config: NovelMasterRuntime["config"],
+  definition: AgentDefinition,
   defaultSteps: number,
 ): Promise<number> {
   const fromFlag = flagString(flags, "max-steps");
@@ -48,7 +98,7 @@ async function resolveMaxSteps(
     }
     return Math.floor(n);
   }
-  return config.getNumber("agent.maxSteps", defaultSteps);
+  return definition.runtime?.maxSteps ?? defaultSteps;
 }
 
 export async function runAgent(
@@ -62,15 +112,19 @@ export async function runAgent(
     case "run":
     case "continue": {
       const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
-      const modelId = await resolveModelId(flags, rt.config);
-      const promptPath = flagString(flags, "prompt-path");
+      const agentConfigPath = flagString(flags, "agent-config");
+      const modelId =
+        agentConfigPath != null && flagString(flags, "modelId") == null
+          ? (await loadAgentConfigFile(agentConfigPath)).model.applicationModelId
+          : await resolveModelId(flags, rt.config);
       const content = flagString(flags, "content");
       const noStream = flags.get("no-stream") === true;
 
+      const definition = await resolveDefinition(rt, flags, modelId);
       const maxSteps =
         subcommand === "continue"
           ? 1
-          : await resolveMaxSteps(flags, rt.config, 20);
+          : await resolveMaxSteps(flags, definition, 20);
 
       if (content != null) {
         await rt.messages.append(sessionId, "user", textBlocks(content));
@@ -87,9 +141,6 @@ export async function runAgent(
         }
       }
 
-      const blocks = await loadPromptBlocks(promptPath);
-      const allMessages = await rt.messages.listBySession(sessionId);
-      const messages = allMessages.filter((m) => !m.hidden);
       const worktreeDisplay = await rt
         .worktree({ kind: "session", projectId, sessionId })
         .renderDisplay();
@@ -99,17 +150,11 @@ export async function runAgent(
       registerVfsTools(registry);
 
       const session = new ChatAgentSession(rt.messages, sessionId);
-      const compaction = new DefaultCompactionService({
-        config: rt.config,
-        modelRequests: rt.modelRequests,
-      });
-
       const runner = createAgentRunner({
         session,
         modelRequests: rt.modelRequests,
         registry,
         toolCtx: { vfs },
-        compaction,
       });
 
       const onStream =
@@ -122,10 +167,9 @@ export async function runAgent(
             };
 
       const result = await runner.run({
+        definition,
         maxSteps,
-        applicationModelId: modelId,
-        promptBlocks: blocks,
-        promptContext: { worktreeDisplay, messages },
+        promptContext: { worktreeDisplay },
         stream: !noStream,
         onStream,
       });
@@ -147,7 +191,7 @@ export async function runAgent(
     }
     default:
       throw new Error(
-        "Usage: nm agent <run|continue> [--content <text>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
+        "Usage: nm agent <run|continue> [--content <text>] [--agent-config <file>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
       );
   }
 }

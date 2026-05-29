@@ -1,5 +1,5 @@
 /**
- * Agent runner: model round-trips, tools, doom loop, compaction.
+ * Agent runner: model round-trips, tools, doom loop, compaction pipeline.
  *
  * @module service/agent/impl/agent-runner
  */
@@ -13,7 +13,7 @@ import { ToolRunner } from "@/domain/tool/tool-runner.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
-import type { CompactionService } from "../../compaction/compaction.port.js";
+import type { CompactionPipeline } from "../../compaction/compaction-pipeline.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 
@@ -22,8 +22,10 @@ export interface DefaultAgentRunnerDeps {
   readonly modelRequests: ModelRequestService;
   readonly registry: ToolRegistry<VfsToolContext>;
   readonly toolCtx: VfsToolContext;
-  readonly compaction: CompactionService;
+  readonly compaction: CompactionPipeline;
 }
+
+const DEFAULT_MAX_STEPS = 20;
 
 /**
  * Executes agent loops: compaction → LLM → tools → repeat up to maxSteps.
@@ -41,22 +43,34 @@ export class DefaultAgentRunner implements AgentRunner {
     let finished = false;
     let stopReason: AgentRunResult["stopReason"] = "max_steps";
 
-    const tools = toolsFromRegistry(this.deps.registry);
+    const maxSteps =
+      options.maxSteps ??
+      options.definition.runtime?.maxSteps ??
+      DEFAULT_MAX_STEPS;
 
-    for (let step = 0; step < options.maxSteps; step++) {
-      await this.deps.compaction.maybeCompact(
+    const tools = toolsFromRegistry(this.deps.registry);
+    let compactionAbstract = "";
+
+    for (let step = 0; step < maxSteps; step++) {
+      const worktreeDisplay = options.promptContext.worktreeDisplay;
+      const nextAbstract = await this.deps.compaction.maybeCompact(
         this.deps.session,
-        options.applicationModelId,
+        options.definition,
+        worktreeDisplay,
       );
+      if (nextAbstract !== undefined) {
+        compactionAbstract = nextAbstract;
+      }
 
       const visible = await this.deps.session.list();
-      const llmInput = buildPromptLlmInput(options.promptBlocks, {
+      const llmInput = buildPromptLlmInput(options.definition.prompts, {
         ...options.promptContext,
         messages: visible,
+        abstract: compactionAbstract,
       });
 
       const result = await this.deps.modelRequests.request(
-        options.applicationModelId,
+        options.definition.model.applicationModelId,
         "",
         {
           history: llmInput.messages,
@@ -64,6 +78,7 @@ export class DefaultAgentRunner implements AgentRunner {
           tools: tools.length > 0 ? tools : undefined,
           stream: options.stream,
           onStream: options.onStream,
+          sampling: options.definition.model.params,
         },
       );
 
@@ -86,7 +101,6 @@ export class DefaultAgentRunner implements AgentRunner {
 
       rounds.push({ step, hadToolUse: true, finished: false });
 
-      // doom_loop boundary: same name + same JSON input in last 3 tool_use blocks
       assertNoDoomLoopInBlocks(result.blocks);
 
       const toolResults: ToolResultBlock[] = [];
@@ -107,11 +121,9 @@ export class DefaultAgentRunner implements AgentRunner {
         });
       }
 
-      // tool_result blocks go on a user message (Anthropic protocol alignment)
       await this.deps.session.append("user", { blocks: toolResults });
 
-      // maxSteps=1: execute tools but do not start another model round-trip
-      if (step + 1 >= options.maxSteps) {
+      if (step + 1 >= maxSteps) {
         stopReason = "max_steps";
         break;
       }
