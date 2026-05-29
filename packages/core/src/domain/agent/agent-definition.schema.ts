@@ -6,18 +6,12 @@
 
 import { z } from "zod";
 
-const promptBlockWhenSchema = z.union([
-  z.object({ present: z.string().min(1) }).strict(),
-  z.object({ absent: z.string().min(1) }).strict(),
-]);
-
 const textPromptBlockSchema = z
   .object({
     name: z.string().min(1),
     type: z.literal("text"),
     role: z.enum(["system", "user", "assistant"]),
     content: z.string(),
-    when: promptBlockWhenSchema.optional(),
   })
   .strict();
 
@@ -28,7 +22,19 @@ const chatPromptBlockSchema = z
   })
   .strict();
 
-const promptBlockSchema = z.union([textPromptBlockSchema, chatPromptBlockSchema]);
+const abstractPromptBlockSchema = z
+  .object({
+    name: z.string().min(1),
+    type: z.literal("abstract"),
+    content: z.string(),
+  })
+  .strict();
+
+const promptBlockSchema = z.union([
+  textPromptBlockSchema,
+  chatPromptBlockSchema,
+  abstractPromptBlockSchema,
+]);
 
 const openAiSamplingSchema = z
   .object({

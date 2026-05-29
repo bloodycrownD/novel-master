@@ -40,6 +40,68 @@ describe("agentDefinitionFromJson", () => {
     );
   });
 
+  it("parses abstract prompt block", () => {
+    const def = agentDefinitionFromJson({
+      schemaVersion: 1,
+      name: "writer",
+      prompts: {
+        blocks: [
+          { name: "summary", type: "abstract", content: "{{.abstract}}" },
+        ],
+      },
+      model: { applicationModelId: "openai/gpt-4" },
+    });
+    assert.equal(def.prompts[0]?.type, "abstract");
+    if (def.prompts[0]?.type === "abstract") {
+      assert.equal(def.prompts[0].content, "{{.abstract}}");
+    }
+  });
+
+  it("rejects text block with when in full document", () => {
+    assert.throws(
+      () =>
+        agentDefinitionFromJson({
+          schemaVersion: 1,
+          name: "x",
+          prompts: {
+            blocks: [
+              {
+                name: "a",
+                type: "text",
+                role: "system",
+                content: "x",
+                when: { present: "abstract" },
+              },
+            ],
+          },
+          model: { applicationModelId: "a/b" },
+        }),
+      (e: unknown) => e instanceof AgentConfigError,
+    );
+  });
+
+  it("rejects abstract block with role", () => {
+    assert.throws(
+      () =>
+        agentDefinitionFromJson({
+          schemaVersion: 1,
+          name: "x",
+          prompts: {
+            blocks: [
+              {
+                name: "a",
+                type: "abstract",
+                role: "system",
+                content: "x",
+              },
+            ],
+          },
+          model: { applicationModelId: "a/b" },
+        }),
+      (e: unknown) => e instanceof AgentConfigError,
+    );
+  });
+
   it("T8: unknown trigger key fails validation", () => {
     assert.throws(
       () =>

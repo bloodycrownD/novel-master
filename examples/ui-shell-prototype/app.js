@@ -15,6 +15,9 @@
         currentProjectName: '科幻小说创作',
         currentSessionId: 'session-1',
         currentSessionName: '第一卷创作',
+        editingAgentId: null,
+        defaultAgentId: 'agent-writer',
+        agentEditorDirty: false,
     };
 
     const pageConfig = {
@@ -28,6 +31,7 @@
         settings: { title: '扩展设置', showBack: true, showNav: false },
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
+        agentEditor: { title: 'Agent 配置', showBack: true, showNav: false },
     };
 
     const elements = {
@@ -40,6 +44,7 @@
         chatConversationView: null,
         bannerProjectName: null,
         bottomNav: null,
+        sheetBackdrop: null,
         bottomSheet: null,
         sheetContent: null,
         toast: null,
@@ -55,6 +60,7 @@
         elements.chatConversationView = document.getElementById('chatConversationView');
         elements.bannerProjectName = document.getElementById('bannerProjectName');
         elements.bottomNav = document.getElementById('bottomNav');
+        elements.sheetBackdrop = document.getElementById('sheetBackdrop');
         elements.bottomSheet = document.getElementById('bottomSheet');
         elements.sheetContent = document.getElementById('sheetContent');
         elements.toast = document.getElementById('toast');
@@ -77,6 +83,11 @@
     }
 
     function hideBottomSheet() {
+        if (elements.sheetContent) elements.sheetContent.classList.remove('sheet-content--form');
+        if (elements.sheetBackdrop) {
+            elements.sheetBackdrop.classList.add('hidden');
+            elements.sheetBackdrop.setAttribute('aria-hidden', 'true');
+        }
         if (!elements.bottomSheet) return;
         elements.bottomSheet.classList.remove('show');
         setTimeout(function () {
@@ -86,17 +97,22 @@
 
     function showBottomSheet(items, callback) {
         if (!elements.sheetContent || !elements.bottomSheet) return;
+        elements.sheetContent.classList.remove('sheet-content--form');
         elements.sheetContent.innerHTML = '';
         items.forEach(function (item) {
             const div = document.createElement('div');
             div.className = 'sheet-item' + (item.danger ? ' danger' : '');
             div.textContent = item.label;
             div.addEventListener('click', function () {
-                callback(item.action);
-                hideBottomSheet();
+                const keepOpen = callback(item.action) === false;
+                if (!keepOpen) hideBottomSheet();
             });
             elements.sheetContent.appendChild(div);
         });
+        if (elements.sheetBackdrop) {
+            elements.sheetBackdrop.classList.remove('hidden');
+            elements.sheetBackdrop.setAttribute('aria-hidden', 'false');
+        }
         elements.bottomSheet.classList.remove('hidden');
         setTimeout(function () {
             elements.bottomSheet.classList.add('show');
@@ -228,6 +244,13 @@
                 elements.pageTitle.textContent = '会话';
             }
             elements.backBtn.classList.toggle('hidden', appState.chatSubview !== 'conversation');
+            return;
+        }
+
+        if (pageId === 'agentEditor' && appState.editingAgentId) {
+            const entry = agentCatalog[appState.editingAgentId];
+            elements.pageTitle.textContent = entry ? entry.definition.name : config.title;
+            elements.backBtn.classList.toggle('hidden', !config.showBack);
             return;
         }
 
@@ -386,6 +409,35 @@
     const INCLUSION_CYCLE = ['auto', 'show', 'hide'];
     const INCLUSION_LABEL = { auto: '自动', show: '展示', hide: '隐藏' };
 
+    const DEFAULT_DIRECTORY_RULE = {
+        sortField: 'name',
+        sortDirection: 'asc',
+        headCount: 1000,
+        tailCount: 0,
+        fill: 'omit',
+    };
+
+    const DIRECTORY_RULE_LABELS = {
+        sortField: { name: '文件名称', ctime: '创建时间', mtime: '更新时间' },
+        sortDirection: { asc: '升序', desc: '降序' },
+        fill: { filename: '文件名', frontmatter: '头信息', omit: '不展示' },
+    };
+
+    /** @type {Record<string, object>} */
+    const vfsDirectoryRules = {};
+
+    function vfsRuleKey(scope, path) {
+        return scope + '::' + path;
+    }
+
+    function vfsGetDirectoryRule(scope, path) {
+        const key = vfsRuleKey(scope, path);
+        if (!vfsDirectoryRules[key]) {
+            vfsDirectoryRules[key] = Object.assign({}, DEFAULT_DIRECTORY_RULE);
+        }
+        return vfsDirectoryRules[key];
+    }
+
     function vfsEntries(scope, dirPath) {
         return (vfsCatalog[scope] && vfsCatalog[scope][dirPath]) || [];
     }
@@ -444,7 +496,7 @@
         html += '<span class="vfs-fm-path" title="' + currentPath + '">' + currentPath + '</span>';
         html += '</div>';
         html += '<div class="vfs-fm-actions">';
-        html += '<button type="button" class="vfs-fm-tool-btn" data-vfs-action="new" data-vfs-scope="' + scope + '">＋</button>';
+        html += '<button type="button" class="vfs-fm-tool-btn vfs-fm-more-btn" data-vfs-action="more" data-vfs-scope="' + scope + '" title="更多操作" aria-label="更多操作">⋯</button>';
         html += '</div></header>';
         html += '<ul class="vfs-fm-list">';
 
@@ -506,10 +558,6 @@
             showToast('纳入方式：' + INCLUSION_LABEL[entry.inclusion]);
             return;
         }
-        if (action === 'apply-strategy') {
-            showToast('打开目录策略配置（示意）');
-            return;
-        }
         if (action === 'open-slideshow') {
             showToast('目录幻灯片（示意）');
             return;
@@ -531,7 +579,6 @@
             ? [
                   { label: '进入', action: 'open' },
                   { label: '切换规则开关', action: 'toggle-status' },
-                  { label: '应用目录策略', action: 'apply-strategy' },
                   { label: '目录幻灯片', action: 'open-slideshow' },
                   { label: '重命名', action: 'rename' },
                   { label: '删除', action: 'delete', danger: true },
@@ -547,19 +594,95 @@
         });
     }
 
-    function vfsShowNewSheet(scope) {
+    function vfsShowMoreSheet(scope) {
         showBottomSheet(
             [
-                { label: '新建文件', action: 'new-file' },
-                { label: '新建文件夹', action: 'new-folder' },
-                { label: '导入压缩包', action: 'import' },
+                { label: '新建目录', action: 'create-directory' },
+                { label: '新建文件', action: 'create-file' },
+                { label: '目录纳入规则', action: 'directory-rule' },
             ],
             function (action) {
-                if (action === 'new-file') showToast('新建文件（' + scope + '）');
-                else if (action === 'new-folder') showToast('新建文件夹（' + scope + '）');
-                else if (action === 'import') showToast('导入压缩包（' + scope + '）');
+                if (action === 'create-file') {
+                    showToast('新建文件（' + scope + '）');
+                    return;
+                }
+                if (action === 'create-directory') {
+                    showToast('新建目录（' + scope + '）');
+                    return;
+                }
+                if (action === 'directory-rule') {
+                    vfsShowDirectoryRuleSheet(scope);
+                    return false;
+                }
             },
         );
+    }
+
+    function vfsShowDirectoryRuleSheet(scope) {
+        if (!elements.sheetContent || !elements.bottomSheet) return;
+
+        const currentPath = vfsNavState[scope];
+        const rule = vfsGetDirectoryRule(scope, currentPath);
+
+        let html = '<div class="sheet-form">';
+        html += '<h3 class="sheet-form-title">目录纳入规则</h3>';
+        html += '<p class="sheet-form-path">' + currentPath + '</p>';
+        html += '<label class="sheet-form-field"><span>排序方式</span><select data-rule-field="sortField">';
+        html += '<option value="name"' + (rule.sortField === 'name' ? ' selected' : '') + '>文件名称</option>';
+        html += '<option value="ctime"' + (rule.sortField === 'ctime' ? ' selected' : '') + '>创建时间</option>';
+        html += '<option value="mtime"' + (rule.sortField === 'mtime' ? ' selected' : '') + '>更新时间</option>';
+        html += '</select></label>';
+        html += '<label class="sheet-form-field"><span>排序方向</span><select data-rule-field="sortDirection">';
+        html += '<option value="asc"' + (rule.sortDirection === 'asc' ? ' selected' : '') + '>升序</option>';
+        html += '<option value="desc"' + (rule.sortDirection === 'desc' ? ' selected' : '') + '>降序</option>';
+        html += '</select></label>';
+        html += '<label class="sheet-form-field"><span>头部读取</span><input type="range" min="0" max="1000" step="1" data-rule-field="headCount" value="' + rule.headCount + '">';
+        html += '<output data-rule-output="headCount">' + rule.headCount + '</output></label>';
+        html += '<label class="sheet-form-field"><span>尾部读取</span><input type="range" min="0" max="1000" step="1" data-rule-field="tailCount" value="' + rule.tailCount + '">';
+        html += '<output data-rule-output="tailCount">' + rule.tailCount + '</output></label>';
+        html += '<label class="sheet-form-field"><span>填充策略</span><select data-rule-field="fill">';
+        html += '<option value="filename"' + (rule.fill === 'filename' ? ' selected' : '') + '>文件名</option>';
+        html += '<option value="frontmatter"' + (rule.fill === 'frontmatter' ? ' selected' : '') + '>头信息</option>';
+        html += '<option value="omit"' + (rule.fill === 'omit' ? ' selected' : '') + '>不展示</option>';
+        html += '</select></label>';
+        html += '<button type="button" class="btn-primary sheet-form-save" data-action="save-directory-rule">保存</button>';
+        html += '</div>';
+
+        elements.sheetContent.innerHTML = html;
+        elements.sheetContent.classList.add('sheet-content--form');
+        if (elements.sheetBackdrop) {
+            elements.sheetBackdrop.classList.remove('hidden');
+            elements.sheetBackdrop.setAttribute('aria-hidden', 'false');
+        }
+        elements.bottomSheet.classList.remove('hidden');
+        setTimeout(function () {
+            elements.bottomSheet.classList.add('show');
+        }, 10);
+
+        elements.sheetContent.querySelectorAll('input[type="range"]').forEach(function (input) {
+            input.addEventListener('input', function () {
+                const output = elements.sheetContent.querySelector('[data-rule-output="' + input.dataset.ruleField + '"]');
+                if (output) output.textContent = input.value;
+            });
+        });
+
+        const saveBtn = elements.sheetContent.querySelector('[data-action="save-directory-rule"]');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', function () {
+                const nextRule = Object.assign({}, rule);
+                elements.sheetContent.querySelectorAll('[data-rule-field]').forEach(function (field) {
+                    const key = field.dataset.ruleField;
+                    if (field.type === 'range') nextRule[key] = Number(field.value);
+                    else nextRule[key] = field.value;
+                });
+                vfsDirectoryRules[vfsRuleKey(scope, currentPath)] = nextRule;
+                elements.sheetContent.classList.remove('sheet-content--form');
+                hideBottomSheet();
+                renderVfsBrowser(scope);
+                const sortLabel = DIRECTORY_RULE_LABELS.sortField[nextRule.sortField] || nextRule.sortField;
+                showToast('已保存目录纳入规则（' + sortLabel + ' · head ' + nextRule.headCount + '）');
+            });
+        }
     }
 
     function setupVfsBrowsers() {
@@ -574,10 +697,10 @@
                 return;
             }
 
-            const toolBtn = e.target.closest('[data-vfs-action="new"]');
+            const toolBtn = e.target.closest('[data-vfs-action="more"]');
             if (toolBtn) {
                 e.preventDefault();
-                vfsShowNewSheet(toolBtn.dataset.vfsScope);
+                vfsShowMoreSheet(toolBtn.dataset.vfsScope);
                 return;
             }
 
@@ -642,10 +765,9 @@
     }
 
     function setupBottomSheet() {
-        if (!elements.bottomSheet) return;
-        elements.bottomSheet.addEventListener('click', function (e) {
-            if (e.target === elements.bottomSheet) hideBottomSheet();
-        });
+        if (elements.sheetBackdrop) {
+            elements.sheetBackdrop.addEventListener('click', hideBottomSheet);
+        }
     }
 
     function setupFileEditor() {
@@ -755,19 +877,766 @@
         }
     }
 
-    function setupAgentsAndProviders() {
-        document.querySelectorAll('.agent-item').forEach(function (item) {
-            item.addEventListener('click', function () {
-                showToast('编辑 Agent 配置');
+    /* ----- Agent 配置（对齐 packages/core AgentDefinition） ----- */
+    const MOCK_PROVIDERS = [
+        {
+            id: 'zhipu',
+            name: '智谱 AI',
+            protocol: 'openai',
+            models: [{ vendorModelId: 'glm-4.6', label: 'GLM-4.6' }],
+        },
+        {
+            id: 'openai',
+            name: 'OpenAI',
+            protocol: 'openai',
+            models: [{ vendorModelId: 'gpt-4o', label: 'GPT-4o' }],
+        },
+        {
+            id: 'anthropic',
+            name: 'Anthropic',
+            protocol: 'anthropic',
+            models: [{ vendorModelId: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' }],
+        },
+        {
+            id: 'google',
+            name: 'Google',
+            protocol: 'gemini',
+            models: [{ vendorModelId: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
+        },
+    ];
+
+    function parseApplicationModelId(applicationModelId) {
+        const slash = applicationModelId.indexOf('/');
+        if (slash <= 0) return { providerId: '', vendorModelId: applicationModelId };
+        return {
+            providerId: applicationModelId.substring(0, slash),
+            vendorModelId: applicationModelId.substring(slash + 1),
+        };
+    }
+
+    function buildApplicationModelId(providerId, vendorModelId) {
+        return providerId + '/' + vendorModelId;
+    }
+
+    function findProvider(providerId) {
+        return MOCK_PROVIDERS.find(function (p) { return p.id === providerId; });
+    }
+
+    function resolveModelSelection(applicationModelId) {
+        const parsed = parseApplicationModelId(applicationModelId);
+        let provider = findProvider(parsed.providerId);
+        if (!provider && MOCK_PROVIDERS.length) provider = MOCK_PROVIDERS[0];
+        let vendorModelId = parsed.vendorModelId;
+        let model = provider.models.find(function (m) { return m.vendorModelId === vendorModelId; });
+        if (!model && provider.models.length) {
+            model = provider.models[0];
+            vendorModelId = model.vendorModelId;
+        }
+        return { providerId: provider.id, vendorModelId: vendorModelId, protocol: provider.protocol };
+    }
+
+    function renderModelSelectOptions(providerId, selectedVendorModelId) {
+        const provider = findProvider(providerId);
+        if (!provider) return '';
+        return provider.models
+            .map(function (m) {
+                return (
+                    '<option value="' +
+                    m.vendorModelId +
+                    '"' +
+                    (m.vendorModelId === selectedVendorModelId ? ' selected' : '') +
+                    '>' +
+                    escapeHtml(m.label) +
+                    '</option>'
+                );
+            })
+            .join('');
+    }
+
+    function updateAgentModelIdHint(root) {
+        if (!root) return;
+        const hint = root.querySelector('[data-agent-model-id-hint]');
+        const providerSelect = root.querySelector('[data-agent-field="providerId"]');
+        const vendorSelect = root.querySelector('[data-agent-field="vendorModelId"]');
+        if (!hint || !providerSelect || !vendorSelect) return;
+        hint.textContent = buildApplicationModelId(providerSelect.value, vendorSelect.value);
+    }
+
+    function deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+    }
+
+    function createWriterDefinition() {
+        return {
+            schemaVersion: 1,
+            name: 'writer',
+            model: {
+                applicationModelId: 'zhipu/glm-4.6',
+                params: { protocol: 'openai', openai: { temperature: 0.7, top_p: 0.9 } },
+            },
+            runtime: { maxSteps: 20 },
+            compact: {
+                trigger: { tokenThreshold: 12000, floorThreshold: 20 },
+                action: { keepLastN: 6, abstract: { type: 'agent' } },
+            },
+            prompts: [
+                { name: 'system', type: 'text', role: 'system', content: 'You are a helpful assistant.' },
+                {
+                    name: 'abstract',
+                    type: 'abstract',
+                    content: '压缩后的内容如下：\n{{.abstract}}',
+                },
+                { name: 'history', type: 'chat' },
+            ],
+        };
+    }
+
+    function createCreativeDefinition() {
+        return {
+            schemaVersion: 1,
+            name: 'creative',
+            model: {
+                applicationModelId: 'anthropic/claude-3-5-sonnet',
+                params: { protocol: 'anthropic', anthropic: { temperature: 0.9, max_tokens: 4096 } },
+            },
+            runtime: { maxSteps: 15 },
+            prompts: [
+                { name: 'system', type: 'text', role: 'system', content: '你是一位创意写作助手，擅长小说与故事创作。' },
+                { name: 'history', type: 'chat' },
+            ],
+        };
+    }
+
+    /** @type {Record<string, { id: string, definition: object }>} */
+    const agentCatalog = {
+        'agent-writer': { id: 'agent-writer', definition: createWriterDefinition() },
+        'agent-creative': { id: 'agent-creative', definition: createCreativeDefinition() },
+    };
+
+    function modelProtocolForId(modelId) {
+        return resolveModelSelection(modelId).protocol;
+    }
+
+    function modelShortLabel(modelId) {
+        const sel = resolveModelSelection(modelId);
+        const provider = findProvider(sel.providerId);
+        const model = provider && provider.models.find(function (m) { return m.vendorModelId === sel.vendorModelId; });
+        return model ? model.label : sel.vendorModelId;
+    }
+
+    function agentListMeta(def) {
+        const sel = resolveModelSelection(def.model.applicationModelId);
+        const provider = findProvider(sel.providerId);
+        const parts = [(provider ? provider.name : sel.providerId) + ' · ' + sel.vendorModelId];
+        if (def.runtime && def.runtime.maxSteps) parts.push('最大 ' + def.runtime.maxSteps + ' 步');
+        else parts.push('最大 20 步');
+        if (def.compact) {
+            const t = def.compact.trigger || {};
+            const hints = [];
+            if (t.tokenThreshold) hints.push(t.tokenThreshold + ' tokens');
+            if (t.floorThreshold) hints.push(t.floorThreshold + ' 条');
+            parts.push('压缩' + (hints.length ? ' · ' + hints.join('/') : ''));
+        }
+        const temp = def.model.params && def.model.params.openai && def.model.params.openai.temperature;
+        if (temp != null) parts.push('温度 ' + temp);
+        return parts.join(' · ');
+    }
+
+    function definitionToYamlPreview(def) {
+        const doc = {
+            schemaVersion: 1,
+            name: def.name,
+            model: def.model,
+            runtime: def.runtime,
+            compact: def.compact,
+            prompts: { blocks: def.prompts },
+        };
+        if (!doc.runtime) delete doc.runtime;
+        if (!doc.compact) delete doc.compact;
+        return JSON.stringify(doc, null, 2)
+            .replace(/"([^"]+)":/g, '$1:')
+            .replace(/"/g, "'");
+    }
+
+    function renderAgentList() {
+        const host = document.getElementById('agentList');
+        if (!host) return;
+        let html = '';
+        Object.keys(agentCatalog).forEach(function (id) {
+            const entry = agentCatalog[id];
+            const def = entry.definition;
+            const isDefault = appState.defaultAgentId === id;
+            html += '<div class="agent-item" data-id="' + id + '">';
+            html += '<div class="agent-info">';
+            html += '<div class="agent-name">' + def.name + '</div>';
+            html += '<div class="agent-meta">' + agentListMeta(def) + '</div>';
+            html += '</div>';
+            if (isDefault) html += '<span class="default-badge">默认</span>';
+            html += '<button type="button" class="agent-menu-btn" data-agent-menu="' + id + '" aria-label="更多">⋮</button>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+        updateChatAgentMeta();
+    }
+
+    function updateChatAgentMeta() {
+        const entry = agentCatalog[appState.defaultAgentId];
+        if (!entry) return;
+        const def = entry.definition;
+        const agentEl = document.querySelector('.chat-meta .agent-name');
+        const modelEl = document.querySelector('.chat-meta .model-name');
+        if (agentEl) agentEl.textContent = def.name;
+        if (modelEl) modelEl.textContent = modelShortLabel(def.model.applicationModelId);
+    }
+
+    function openAgentEditor(agentId) {
+        appState.editingAgentId = agentId;
+        appState.agentEditorDirty = false;
+        renderAgentEditor(agentId);
+        navigateToPage('agentEditor', true);
+    }
+
+    function markAgentEditorDirty() {
+        appState.agentEditorDirty = true;
+        const indicator = document.querySelector('.agent-unsaved');
+        if (indicator) indicator.classList.remove('hidden');
+    }
+
+    function clearAgentEditorDirty() {
+        appState.agentEditorDirty = false;
+        const indicator = document.querySelector('.agent-unsaved');
+        if (indicator) indicator.classList.add('hidden');
+    }
+
+    function escapeHtml(text) {
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderSamplingFields(protocol, params) {
+        const p = params || {};
+        let html = '<div class="agent-sampling-fields" data-protocol="' + protocol + '">';
+        if (protocol === 'openai') {
+            const o = p.openai || {};
+            html += samplingNumberField('temperature', '温度', o.temperature, 0, 2, 0.1);
+            html += samplingNumberField('top_p', 'Top P', o.top_p, 0, 1, 0.05);
+            html += samplingIntField('max_tokens', 'Max Tokens', o.max_tokens);
+        } else if (protocol === 'anthropic') {
+            const a = p.anthropic || {};
+            html += samplingNumberField('temperature', '温度', a.temperature, 0, 1, 0.05);
+            html += samplingNumberField('top_p', 'Top P', a.top_p, 0, 1, 0.05);
+            html += samplingIntField('top_k', 'Top K', a.top_k);
+            html += samplingIntField('max_tokens', 'Max Tokens', a.max_tokens);
+        } else if (protocol === 'gemini') {
+            const g = p.gemini || {};
+            html += samplingNumberField('temperature', '温度', g.temperature, 0, 2, 0.1);
+            html += samplingNumberField('topP', 'Top P', g.topP, 0, 1, 0.05);
+            html += samplingIntField('topK', 'Top K', g.topK);
+            html += samplingIntField('maxOutputTokens', 'Max Output Tokens', g.maxOutputTokens);
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function samplingNumberField(key, label, value, min, max, step) {
+        const val = value != null ? value : '';
+        return (
+            '<label class="agent-field"><span>' +
+            label +
+            '</span><input type="number" data-sampling-key="' +
+            key +
+            '" min="' +
+            min +
+            '" max="' +
+            max +
+            '" step="' +
+            step +
+            '" value="' +
+            val +
+            '" placeholder="可选"></label>'
+        );
+    }
+
+    function samplingIntField(key, label, value) {
+        const val = value != null ? value : '';
+        return (
+            '<label class="agent-field"><span>' +
+            label +
+            '</span><input type="number" data-sampling-key="' +
+            key +
+            '" min="1" step="1" value="' +
+            val +
+            '" placeholder="可选"></label>'
+        );
+    }
+
+    function promptBlockTypeLabel(blockType) {
+        if (blockType === 'text') return '文本';
+        if (blockType === 'abstract') return '摘要';
+        return '会话';
+    }
+
+    function renderPromptBlockCard(block, index, total) {
+        const blockType = block.type;
+        let html =
+            '<div class="prompt-block-card" data-block-index="' +
+            index +
+            '" data-block-kind="' +
+            blockType +
+            '">';
+        html += '<div class="prompt-block-header">';
+        html += '<span class="prompt-block-type">' + promptBlockTypeLabel(blockType) + '</span>';
+        html += '<span class="prompt-block-name">' + escapeHtml(block.name) + '</span>';
+        html += '<div class="prompt-block-actions">';
+        if (index > 0) html += '<button type="button" data-block-action="up" title="上移">↑</button>';
+        if (index < total - 1) html += '<button type="button" data-block-action="down" title="下移">↓</button>';
+        html += '<button type="button" data-block-action="delete" title="删除">×</button>';
+        html += '</div></div>';
+
+        html += '<label class="agent-field"><span>名称</span><input type="text" data-block-field="name" value="' + escapeHtml(block.name) + '"></label>';
+
+        if (blockType === 'text') {
+            html += '<label class="agent-field"><span>角色</span><select data-block-field="role">';
+            ['system', 'user', 'assistant'].forEach(function (role) {
+                html += '<option value="' + role + '"' + (block.role === role ? ' selected' : '') + '>' + role + '</option>';
+            });
+            html += '</select></label>';
+            html += '<p class="agent-field-hint">仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。</p>';
+            html += '<label class="agent-field"><span>内容</span><textarea data-block-field="content" rows="4">' + escapeHtml(block.content || '') + '</textarea></label>';
+            html += '<p class="agent-field-hint">宏：{{.worktree}} {{$time}} {{$week_cn}}</p>';
+        } else if (blockType === 'abstract') {
+            html += '<label class="agent-field"><span>内容</span><textarea data-block-field="content" rows="4">' + escapeHtml(block.content || '') + '</textarea></label>';
+            html += '<p class="agent-field-hint">无压缩摘要时不拼接；可用 {{.abstract}}、{{.worktree}} 等宏。</p>';
+        } else {
+            html += '<p class="agent-field-hint">chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。</p>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function renderAgentEditor(agentId) {
+        const root = document.getElementById('agentEditorRoot');
+        const entry = agentCatalog[agentId];
+        if (!root || !entry) return;
+
+        const def = entry.definition;
+        const modelSel = resolveModelSelection(def.model.applicationModelId);
+        const protocol = (def.model.params && def.model.params.protocol) || modelSel.protocol;
+        const compactEnabled = Boolean(def.compact);
+        const compact = def.compact || { trigger: {}, action: { keepLastN: 6, abstract: { type: 'agent' } } };
+        const abstractType = compact.action.abstract.type || 'agent';
+
+        let html = '';
+
+        html += '<section class="agent-form-section"><h3>基本信息</h3>';
+        html += '<label class="agent-field"><span>名称</span><input type="text" data-agent-field="name" value="' + escapeHtml(def.name) + '"></label>';
+        html += '</section>';
+
+        html += '<section class="agent-form-section"><h3>模型</h3>';
+        html += '<label class="agent-field"><span>服务商</span><select data-agent-field="providerId">';
+        MOCK_PROVIDERS.forEach(function (p) {
+            html +=
+                '<option value="' +
+                p.id +
+                '" data-protocol="' +
+                p.protocol +
+                '"' +
+                (p.id === modelSel.providerId ? ' selected' : '') +
+                '>' +
+                escapeHtml(p.name) +
+                '</option>';
+        });
+        html += '</select></label>';
+        html += '<label class="agent-field"><span>模型</span><select data-agent-field="vendorModelId">';
+        html += renderModelSelectOptions(modelSel.providerId, modelSel.vendorModelId);
+        html += '</select></label>';
+        html +=
+            '<p class="agent-field-hint">applicationModelId: <code data-agent-model-id-hint>' +
+            buildApplicationModelId(modelSel.providerId, modelSel.vendorModelId) +
+            '</code></p>';
+        html += renderSamplingFields(protocol, def.model.params);
+        html += '</section>';
+
+        html += '<section class="agent-form-section"><h3>运行时</h3>';
+        html += '<label class="agent-field"><span>最大步数 maxSteps</span><input type="number" data-agent-field="maxSteps" min="1" step="1" value="' + (def.runtime && def.runtime.maxSteps != null ? def.runtime.maxSteps : 20) + '"></label>';
+        html += '<p class="agent-field-hint">每轮 run 的模型往返上限；省略时 Core 默认 20。</p>';
+        html += '</section>';
+
+        html += '<section class="agent-form-section"><h3>压缩策略 compact</h3>';
+        html += '<label class="agent-field agent-field--row"><span>启用压缩</span><input type="checkbox" class="toggle" data-agent-field="compactEnabled"' + (compactEnabled ? ' checked' : '') + '></label>';
+        html += '<div class="agent-compact-panel' + (compactEnabled ? '' : ' hidden') + '" data-compact-panel>';
+        html += '<p class="agent-field-hint">触发条件为 OR：token 估计或消息条数任一满足即压缩。</p>';
+        html += '<label class="agent-field"><span>Token 阈值</span><input type="number" data-compact-field="tokenThreshold" min="1" step="1" value="' + (compact.trigger.tokenThreshold || '') + '" placeholder="如 12000"></label>';
+        html += '<label class="agent-field"><span>消息条数阈值</span><input type="number" data-compact-field="floorThreshold" min="1" step="1" value="' + (compact.trigger.floorThreshold || '') + '" placeholder="如 20"></label>';
+        html += '<label class="agent-field"><span>保留最近 N 条</span><input type="number" data-compact-field="keepLastN" min="1" step="1" value="' + (compact.action.keepLastN || 6) + '"></label>';
+        html += '<label class="agent-field"><span>摘要方式</span><select data-compact-field="abstractType">';
+        html += '<option value="agent"' + (abstractType === 'agent' ? ' selected' : '') + '>Agent 生成</option>';
+        html += '<option value="text"' + (abstractType === 'text' ? ' selected' : '') + '>静态文本</option>';
+        html += '</select></label>';
+        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要指令 instruction</span><textarea data-compact-field="abstractInstruction" rows="2" placeholder="Summarize the following conversation history concisely:">' + escapeHtml(compact.action.abstract.instruction || '') + '</textarea></label>';
+        html += '<label class="agent-field agent-abstract-text' + (abstractType === 'text' ? '' : ' hidden') + '"><span>摘要模板 content</span><textarea data-compact-field="abstractContent" rows="3" placeholder="支持 {{.abstract}} 等宏">' + escapeHtml(compact.action.abstract.content || '') + '</textarea></label>';
+        html += '</div></section>';
+
+        html += '<section class="agent-form-section"><div class="agent-section-header"><h3>Prompt 块</h3><button type="button" class="btn-secondary btn-sm" data-action="add-prompt-block">添加</button></div>';
+        html += '<div class="prompt-block-list">';
+        def.prompts.forEach(function (block, i) {
+            html += renderPromptBlockCard(block, i, def.prompts.length);
+        });
+        html += '</div></section>';
+
+        html += '<section class="agent-form-section agent-form-section--muted"><h3>工具</h3>';
+        html += '<p class="agent-field-hint">VFS 工具（read / write / list 等）由运行时全局注册，当前 Agent 配置不可 per-agent 开关。</p>';
+        html += '</section>';
+
+        html += '<section class="agent-form-section"><details class="agent-yaml-preview"><summary>配置预览（JSON 结构示意）</summary><pre class="agent-yaml-content">' + escapeHtml(definitionToYamlPreview(def)) + '</pre></details></section>';
+
+        root.innerHTML = html;
+        clearAgentEditorDirty();
+        updateHeader('agentEditor');
+    }
+
+    function collectAgentDefinitionFromForm(options) {
+        const strict = !options || options.strict !== false;
+        const root = document.getElementById('agentEditorRoot');
+        const entry = agentCatalog[appState.editingAgentId];
+        if (!root || !entry) return null;
+
+        const nameInput = root.querySelector('[data-agent-field="name"]');
+        const providerSelect = root.querySelector('[data-agent-field="providerId"]');
+        const vendorSelect = root.querySelector('[data-agent-field="vendorModelId"]');
+        const maxStepsInput = root.querySelector('[data-agent-field="maxSteps"]');
+        const compactEnabled = root.querySelector('[data-agent-field="compactEnabled"]');
+
+        const providerId = providerSelect ? providerSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).providerId;
+        const vendorModelId = vendorSelect ? vendorSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).vendorModelId;
+
+        const def = {
+            schemaVersion: 1,
+            name: nameInput ? nameInput.value.trim() : entry.definition.name,
+            model: { applicationModelId: buildApplicationModelId(providerId, vendorModelId) },
+            prompts: [],
+        };
+
+        if (maxStepsInput && maxStepsInput.value) {
+            def.runtime = { maxSteps: Number(maxStepsInput.value) };
+        }
+
+        const protocol =
+            (providerSelect && providerSelect.selectedOptions[0] && providerSelect.selectedOptions[0].dataset.protocol) ||
+            modelProtocolForId(def.model.applicationModelId);
+        const samplingRoot = root.querySelector('.agent-sampling-fields');
+        const samplingKeys = samplingRoot ? samplingRoot.querySelectorAll('[data-sampling-key]') : [];
+        const samplingValues = {};
+        samplingKeys.forEach(function (input) {
+            if (input.value === '') return;
+            const num = Number(input.value);
+            samplingValues[input.dataset.samplingKey] = input.step && input.step.indexOf('.') >= 0 ? num : Math.round(num);
+        });
+        if (Object.keys(samplingValues).length > 0) {
+            def.model.params = { protocol: protocol };
+            if (protocol === 'openai') def.model.params.openai = samplingValues;
+            else if (protocol === 'anthropic') def.model.params.anthropic = samplingValues;
+            else if (protocol === 'gemini') def.model.params.gemini = samplingValues;
+        }
+
+        if (compactEnabled && compactEnabled.checked) {
+            const tokenEl = root.querySelector('[data-compact-field="tokenThreshold"]');
+            const floorEl = root.querySelector('[data-compact-field="floorThreshold"]');
+            const keepEl = root.querySelector('[data-compact-field="keepLastN"]');
+            const abstractTypeEl = root.querySelector('[data-compact-field="abstractType"]');
+            const trigger = {};
+            if (tokenEl && tokenEl.value) trigger.tokenThreshold = Number(tokenEl.value);
+            if (floorEl && floorEl.value) trigger.floorThreshold = Number(floorEl.value);
+            if (!trigger.tokenThreshold && !trigger.floorThreshold) {
+                if (strict) {
+                    showToast('压缩触发条件至少填一项');
+                    return null;
+                }
+            } else {
+                const abstract = { type: abstractTypeEl ? abstractTypeEl.value : 'agent' };
+                if (abstract.type === 'text') {
+                    const contentEl = root.querySelector('[data-compact-field="abstractContent"]');
+                    abstract.content = contentEl ? contentEl.value : '';
+                } else {
+                    const instrEl = root.querySelector('[data-compact-field="abstractInstruction"]');
+                    if (instrEl && instrEl.value.trim()) abstract.instruction = instrEl.value.trim();
+                }
+                def.compact = {
+                    trigger: trigger,
+                    action: {
+                        keepLastN: keepEl ? Number(keepEl.value) || 6 : 6,
+                        abstract: abstract,
+                    },
+                };
+            }
+        }
+
+        const cards = root.querySelectorAll('.prompt-block-card');
+        cards.forEach(function (card) {
+            const blockKind = card.dataset.blockKind || 'text';
+            const nameField = card.querySelector('[data-block-field="name"]');
+            const blockName = nameField ? nameField.value.trim() || 'block' : 'block';
+            if (blockKind === 'chat') {
+                def.prompts.push({ name: blockName, type: 'chat' });
+                return;
+            }
+            if (blockKind === 'abstract') {
+                const contentField = card.querySelector('[data-block-field="content"]');
+                def.prompts.push({
+                    name: blockName,
+                    type: 'abstract',
+                    content: contentField ? contentField.value : '',
+                });
+                return;
+            }
+            const roleField = card.querySelector('[data-block-field="role"]');
+            const contentField = card.querySelector('[data-block-field="content"]');
+            def.prompts.push({
+                name: blockName,
+                type: 'text',
+                role: roleField ? roleField.value : 'system',
+                content: contentField ? contentField.value : '',
             });
         });
+
+        if (def.prompts.length === 0) {
+            showToast('至少保留一个 Prompt 块');
+            return null;
+        }
+
+        return def;
+    }
+
+    function saveAgentEditor() {
+        const def = collectAgentDefinitionFromForm();
+        if (!def || !appState.editingAgentId) return;
+        if (!def.name) {
+            showToast('请填写 Agent 名称');
+            return;
+        }
+        agentCatalog[appState.editingAgentId].definition = def;
+        clearAgentEditorDirty();
+        renderAgentList();
+        renderAgentEditor(appState.editingAgentId);
+        showToast('已保存 Agent 配置');
+    }
+
+    function createNewAgent() {
+        const id = 'agent-' + Date.now();
+        agentCatalog[id] = {
+            id: id,
+            definition: {
+                schemaVersion: 1,
+                name: 'new-agent',
+                model: { applicationModelId: 'openai/gpt-4o', params: { protocol: 'openai', openai: { temperature: 0.7 } } },
+                runtime: { maxSteps: 20 },
+                prompts: [
+                    { name: 'system', type: 'text', role: 'system', content: '' },
+                    { name: 'history', type: 'chat' },
+                ],
+            },
+        };
+        renderAgentList();
+        openAgentEditor(id);
+    }
+
+    function showAgentItemMenu(agentId) {
+        const isDefault = appState.defaultAgentId === agentId;
+        showBottomSheet(
+            [
+                { label: '设为默认', action: 'set-default', disabled: isDefault },
+                { label: '复制', action: 'duplicate' },
+                { label: '删除', action: 'delete', danger: true },
+            ].filter(function (item) { return !item.disabled; }),
+            function (action) {
+                if (action === 'set-default') {
+                    appState.defaultAgentId = agentId;
+                    renderAgentList();
+                    showToast('已设为默认 Agent');
+                    return;
+                }
+                if (action === 'duplicate') {
+                    const copyId = 'agent-' + Date.now();
+                    agentCatalog[copyId] = { id: copyId, definition: deepClone(agentCatalog[agentId].definition) };
+                    agentCatalog[copyId].definition.name += '-copy';
+                    renderAgentList();
+                    showToast('已复制 Agent');
+                    return;
+                }
+                if (action === 'delete') {
+                    if (Object.keys(agentCatalog).length <= 1) {
+                        showToast('至少保留一个 Agent');
+                        return;
+                    }
+                    if (appState.defaultAgentId === agentId) {
+                        const remaining = Object.keys(agentCatalog).filter(function (k) { return k !== agentId; });
+                        appState.defaultAgentId = remaining[0];
+                    }
+                    delete agentCatalog[agentId];
+                    renderAgentList();
+                    showToast('已删除 Agent');
+                }
+            },
+        );
+    }
+
+    function setupAgentEditor() {
+        const root = document.getElementById('agentEditorRoot');
+        if (!root) return;
+
+        root.addEventListener('input', function () {
+            if (appState.currentPage === 'agentEditor') markAgentEditorDirty();
+        });
+        root.addEventListener('change', function (e) {
+            if (appState.currentPage !== 'agentEditor') return;
+            markAgentEditorDirty();
+
+            if (e.target.matches('[data-agent-field="providerId"]')) {
+                const providerId = e.target.value;
+                const protocol = e.target.selectedOptions[0].dataset.protocol;
+                const provider = findProvider(providerId);
+                const vendorModelId = provider && provider.models[0] ? provider.models[0].vendorModelId : '';
+                const entry = agentCatalog[appState.editingAgentId];
+                if (!entry) return;
+                const def = collectAgentDefinitionFromForm({ strict: false });
+                if (def) {
+                    def.model.applicationModelId = buildApplicationModelId(providerId, vendorModelId);
+                    def.model.params = { protocol: protocol };
+                    if (protocol === 'openai') def.model.params.openai = {};
+                    else if (protocol === 'anthropic') def.model.params.anthropic = {};
+                    else if (protocol === 'gemini') def.model.params.gemini = {};
+                    entry.definition = def;
+                }
+                renderAgentEditor(appState.editingAgentId);
+                markAgentEditorDirty();
+                return;
+            }
+
+            if (e.target.matches('[data-agent-field="vendorModelId"]')) {
+                updateAgentModelIdHint(root);
+                return;
+            }
+
+            if (e.target.matches('[data-agent-field="compactEnabled"]')) {
+                const panel = root.querySelector('[data-compact-panel]');
+                if (panel) panel.classList.toggle('hidden', !e.target.checked);
+                return;
+            }
+
+            if (e.target.matches('[data-compact-field="abstractType"]')) {
+                const isAgent = e.target.value === 'agent';
+                root.querySelector('.agent-abstract-agent').classList.toggle('hidden', !isAgent);
+                root.querySelector('.agent-abstract-text').classList.toggle('hidden', isAgent);
+            }
+        });
+
+        root.addEventListener('click', function (e) {
+            const addBtn = e.target.closest('[data-action="add-prompt-block"]');
+            if (addBtn) {
+                e.preventDefault();
+                const def = collectAgentDefinitionFromForm({ strict: false });
+                if (!def) return;
+                showBottomSheet(
+                    [
+                        { label: '文本块 text', action: 'add-text' },
+                        { label: '摘要块 abstract', action: 'add-abstract' },
+                        { label: '会话块 chat', action: 'add-chat' },
+                    ],
+                    function (action) {
+                        if (action === 'add-text') {
+                            def.prompts.push({ name: 'block-' + (def.prompts.length + 1), type: 'text', role: 'system', content: '' });
+                        } else if (action === 'add-abstract') {
+                            def.prompts.push({
+                                name: 'abstract',
+                                type: 'abstract',
+                                content: '压缩后的内容如下：\n{{.abstract}}',
+                            });
+                        } else {
+                            def.prompts.push({ name: 'history', type: 'chat' });
+                        }
+                        agentCatalog[appState.editingAgentId].definition = def;
+                        renderAgentEditor(appState.editingAgentId);
+                        markAgentEditorDirty();
+                    },
+                );
+                return;
+            }
+
+            const blockBtn = e.target.closest('[data-block-action]');
+            if (blockBtn) {
+                e.preventDefault();
+                const card = blockBtn.closest('.prompt-block-card');
+                const index = Number(card.dataset.blockIndex);
+                const def = collectAgentDefinitionFromForm({ strict: false });
+                if (!def) return;
+                const action = blockBtn.dataset.blockAction;
+                if (action === 'delete') {
+                    if (def.prompts.length <= 1) {
+                        showToast('至少保留一个 Prompt 块');
+                        return;
+                    }
+                    def.prompts.splice(index, 1);
+                } else if (action === 'up' && index > 0) {
+                    const tmp = def.prompts[index - 1];
+                    def.prompts[index - 1] = def.prompts[index];
+                    def.prompts[index] = tmp;
+                } else if (action === 'down' && index < def.prompts.length - 1) {
+                    const tmp = def.prompts[index + 1];
+                    def.prompts[index + 1] = def.prompts[index];
+                    def.prompts[index] = tmp;
+                }
+                agentCatalog[appState.editingAgentId].definition = def;
+                renderAgentEditor(appState.editingAgentId);
+                markAgentEditorDirty();
+            }
+        });
+
+        const saveBtn = document.querySelector('[data-action="save-agent"]');
+        if (saveBtn) saveBtn.addEventListener('click', saveAgentEditor);
+
+        if (elements.backBtn) {
+            elements.backBtn.addEventListener(
+                'click',
+                function (e) {
+                    if (appState.currentPage === 'agentEditor' && appState.agentEditorDirty) {
+                        if (!confirm('有未保存的更改，确定要离开吗？')) {
+                            e.stopImmediatePropagation();
+                        }
+                    }
+                },
+                true,
+            );
+        }
+    }
+
+    function setupAgentsAndProviders() {
+        renderAgentList();
+
+        const agentList = document.getElementById('agentList');
+        if (agentList) {
+            agentList.addEventListener('click', function (e) {
+                const menuBtn = e.target.closest('[data-agent-menu]');
+                if (menuBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showAgentItemMenu(menuBtn.dataset.agentMenu);
+                    return;
+                }
+                const item = e.target.closest('.agent-item');
+                if (item) openAgentEditor(item.dataset.id);
+            });
+        }
+
         document.querySelectorAll('.provider-item').forEach(function (item) {
             item.addEventListener('click', function () {
                 showToast('编辑服务商配置');
             });
         });
         const newAgentBtn = document.querySelector('[data-action="new-agent"]');
-        if (newAgentBtn) newAgentBtn.addEventListener('click', function () { showToast('新建 Agent'); });
+        if (newAgentBtn) newAgentBtn.addEventListener('click', createNewAgent);
         const newProviderBtn = document.querySelector('[data-action="new-provider"]');
         if (newProviderBtn) newProviderBtn.addEventListener('click', function () { showToast('添加服务商'); });
     }
@@ -784,6 +1653,7 @@
         setupCheckpoints();
         setupBottomSheet();
         setupFileEditor();
+        setupAgentEditor();
         setupProjectsAndSessions();
         setupAgentsAndProviders();
 

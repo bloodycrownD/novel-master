@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildPromptLlmInput, type PromptBlock } from "@novel-master/core";
 
-describe("buildPromptLlmInput abstract + when", () => {
+describe("buildPromptLlmInput abstract block", () => {
   const blocks: PromptBlock[] = [
     { name: "base", type: "text", role: "system", content: "base" },
     {
       name: "abstract",
-      type: "text",
-      role: "system",
+      type: "abstract",
       content: "摘要：{{.abstract}}",
-      when: { present: "abstract" },
     },
   ];
 
@@ -33,19 +31,27 @@ describe("buildPromptLlmInput abstract + when", () => {
     assert.match(input.system ?? "", /摘要：compressed history/);
   });
 
-  it("safe macro: missing abstract in template does not throw", () => {
-    const onlyAbstractMacro: PromptBlock[] = [
-      {
-        name: "a",
-        type: "text",
-        role: "system",
-        content: "{{.abstract}}",
-      },
-    ];
-    const input = buildPromptLlmInput(onlyAbstractMacro, {
-      worktreeDisplay: "WT",
+  it("skips abstract block when abstract is whitespace only", () => {
+    const input = buildPromptLlmInput(blocks, {
+      worktreeDisplay: "",
       messages: [],
+      abstract: "   ",
     });
-    assert.equal(input.system, "");
+    assert.equal(input.system, "base");
+  });
+
+  it("T6: merges system text then abstract in block order", () => {
+    const ordered: PromptBlock[] = [
+      { name: "base", type: "text", role: "system", content: "base" },
+      { name: "abstract", type: "abstract", content: "摘要：{{.abstract}}" },
+      { name: "history", type: "chat" },
+    ];
+    const input = buildPromptLlmInput(ordered, {
+      worktreeDisplay: "",
+      messages: [],
+      abstract: "hist",
+    });
+    assert.match(input.system ?? "", /^base\n摘要：hist$/);
+    assert.equal(input.messages.length, 0);
   });
 });

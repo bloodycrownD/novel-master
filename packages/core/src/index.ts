@@ -195,8 +195,6 @@ export type {
   PromptBlock,
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
-export type { PromptBlockWhen } from "./domain/prompt/model/prompt-block-when.js";
-export { evaluatePromptBlockWhen } from "./domain/prompt/model/prompt-block-when.js";
 export { messageBodyText } from "./domain/prompt/message-body.js";
 export { validatePromptBlocks } from "./domain/prompt/prompt-blocks-validate.js";
 export {

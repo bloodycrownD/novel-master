@@ -24,10 +24,7 @@ prompts:
       role: system
       content: "You are a helpful assistant."
     - name: abstract
-      when:
-        present: abstract
-      type: text
-      role: system
+      type: abstract
       content: |
         压缩后的内容如下：
         {{.abstract}}

@@ -1,5 +1,7 @@
 # Agent 配置化与压缩策略抽象 技术规格（SPEC）
 
+> **Superseded（Prompt 条件块）**：`PromptBlock.when` 已废弃，摘要段落请使用 `type: abstract` 块。见 [agent-prompt-abstract-block/spec.md](../agent-prompt-abstract-block/spec.md)。本文档中 **compact / model / runtime** 章节仍有效。
+
 ## 设计目标
 
 - **AgentDefinition**：可序列化配置（prompts、compact、model、runtime）；**Core 以对象为准**（`agentDefinitionFromJson` 为真相源）；**格式层**（YAML/JSON string）经 `agent-definition-io` 模块，**不**把「读磁盘路径」放进 Core。

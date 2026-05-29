@@ -41,10 +41,8 @@ function compactRunnerDefinition(): AgentDefinition {
       { name: "base", type: "text", role: "system", content: "base" },
       {
         name: "abs",
-        type: "text",
-        role: "system",
+        type: "abstract",
         content: "CTX={{.abstract}}",
-        when: { present: "abstract" },
       },
       { name: "c", type: "chat" },
     ],

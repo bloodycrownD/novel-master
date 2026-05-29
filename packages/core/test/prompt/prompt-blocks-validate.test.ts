@@ -80,4 +80,37 @@ describe("validatePromptBlocks", () => {
       },
     );
   });
+
+  it("accepts abstract block", () => {
+    const blocks = validatePromptBlocks([
+      {
+        name: "summary",
+        type: "abstract",
+        content: "{{.abstract}}",
+      },
+    ]);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]?.type, "abstract");
+  });
+
+  it("rejects when on text block", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks([
+          {
+            name: "a",
+            type: "text",
+            role: "system",
+            content: "x",
+            when: { present: "abstract" },
+          },
+        ]),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        assert.match(error.message, /when is no longer supported/);
+        return true;
+      },
+    );
+  });
 });

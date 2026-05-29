@@ -7,7 +7,6 @@
 import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { messageBodyText } from "../../domain/prompt/message-body.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
-import { evaluatePromptBlockWhen } from "../../domain/prompt/model/prompt-block-when.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
 import { renderMacro } from "../../infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
@@ -22,7 +21,7 @@ export interface PromptRenderDot {
 export interface PromptRenderContext {
   readonly worktreeDisplay: string;
   readonly messages: readonly ChatMessage[];
-  /** Compaction abstract for `when` + `{{.abstract}}`; default "". */
+  /** Compaction abstract for abstract blocks and `{{.abstract}}`; default "". */
   readonly abstract?: string;
   /** Defaults to `new Date()` when omitted (tests inject a fixed time). */
   readonly now?: Date;
@@ -53,8 +52,24 @@ function buildDot(ctx: PromptRenderContext): PromptRenderDot {
   };
 }
 
+function hasAbstractContent(abstract: string): boolean {
+  return abstract.trim().length > 0;
+}
+
+function renderSystemMacroContent(
+  content: string,
+  dotRecord: Readonly<Record<string, unknown>>,
+  root: { readonly time: string; readonly week_cn: string },
+): string {
+  return renderMacro(content, {
+    dot: dotRecord,
+    root,
+    optionalDotFields: ["abstract"],
+  });
+}
+
 /**
- * Builds LLM input: filter text blocks by when → render macros → merge system.
+ * Builds LLM input: merge system text + abstract blocks → render macros.
  */
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],
@@ -71,20 +86,16 @@ export function buildPromptLlmInput(
   const systemParts: string[] = [];
 
   for (const block of blocks) {
-    if (block.type !== "text" || block.role !== "system") {
+    if (block.type === "text" && block.role === "system") {
+      systemParts.push(renderSystemMacroContent(block.content, dotRecord, root));
       continue;
     }
-    // when evaluation boundary: skip block before macro render
-    if (block.when != null && !evaluatePromptBlockWhen(block.when, dotRecord)) {
-      continue;
+    if (block.type === "abstract") {
+      if (!hasAbstractContent(dot.abstract)) {
+        continue;
+      }
+      systemParts.push(renderSystemMacroContent(block.content, dotRecord, root));
     }
-    systemParts.push(
-      renderMacro(block.content, {
-        dot: dotRecord,
-        root,
-        optionalDotFields: ["abstract"],
-      }),
-    );
   }
 
   const system =
@@ -116,18 +127,16 @@ export function formatPromptLlmInputForCli(
 
   for (const block of blocks) {
     if (block.type === "text") {
-      if (
-        block.when != null &&
-        !evaluatePromptBlockWhen(block.when, dotRecord)
-      ) {
+      const content = renderSystemMacroContent(block.content, dotRecord, root);
+      segments.push(formatSegment(block.role, content));
+      continue;
+    }
+    if (block.type === "abstract") {
+      if (!hasAbstractContent(dot.abstract)) {
         continue;
       }
-      const content = renderMacro(block.content, {
-        dot: dotRecord,
-        root,
-        optionalDotFields: ["abstract"],
-      });
-      segments.push(formatSegment(block.role, content));
+      const content = renderSystemMacroContent(block.content, dotRecord, root);
+      segments.push(formatSegment("system", content));
       continue;
     }
 
