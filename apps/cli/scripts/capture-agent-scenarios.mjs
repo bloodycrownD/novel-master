@@ -15,7 +15,7 @@
  * Scenario 9 sets OPENAI_TOOL_CHOICE_REQUIRED=1 to force tool_choice=required.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -505,8 +505,30 @@ try {
     process.exit(0);
   }
 
-  const prevThreshold = configGet(dbPath, "agent.compaction.thresholdTokens");
-  const prevKeepLastN = configGet(dbPath, "agent.compaction.keepLastN");
+  const compactAgentDir = mkdtempSync(join(tmpdir(), "nm-compact-agent-"));
+  const compactAgentPath = join(compactAgentDir, "agent.yaml");
+  writeFileSync(
+    compactAgentPath,
+    [
+      "schemaVersion: 1",
+      "name: capture-compact",
+      `model:`,
+      `  applicationModelId: ${modelId}`,
+      "compact:",
+      "  trigger:",
+      "    tokenThreshold: 10",
+      "  action:",
+      "    keepLastN: 2",
+      "    abstract:",
+      "      type: agent",
+      "prompts:",
+      "  blocks:",
+      "    - name: c",
+      "      type: chat",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
 
   createCaptureScope(dbPath, COMPACT_PROJECT);
   for (let i = 0; i < 10; i++) {
@@ -521,28 +543,20 @@ try {
       dbPath,
     ]);
   }
-  configSet(dbPath, "agent.compaction.thresholdTokens", "10");
-  configSet(dbPath, "agent.compaction.keepLastN", "2");
 
   const compactionRun = run([
     "agent",
     "continue",
     "--content",
     "请简短总结上文并回复 done",
-    ...modelFlag,
+    "--agent-config",
+    compactAgentPath,
+    "--db",
+    dbPath,
   ]);
   const listAfter = run(["message", "list", "--db", dbPath]);
 
-  if (prevThreshold != null && prevThreshold !== "") {
-    configSet(dbPath, "agent.compaction.thresholdTokens", prevThreshold);
-  } else {
-    configReset(dbPath, "agent.compaction.thresholdTokens");
-  }
-  if (prevKeepLastN != null && prevKeepLastN !== "") {
-    configSet(dbPath, "agent.compaction.keepLastN", prevKeepLastN);
-  } else {
-    configReset(dbPath, "agent.compaction.keepLastN");
-  }
+  rmSync(compactAgentDir, { recursive: true, force: true });
 
   block("场景 12 — compaction（zhipu 真机）", {
     ...compactionRun,
