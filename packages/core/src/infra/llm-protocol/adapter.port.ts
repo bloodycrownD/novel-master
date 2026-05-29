@@ -4,6 +4,7 @@
  * @module infra/llm-protocol/adapter.port
  */
 
+import type { ModelSamplingParams } from "@/domain/agent/model/model-sampling-params.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 
@@ -45,6 +46,7 @@ export interface LlmChatRequest {
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
+  readonly sampling?: ModelSamplingParams;
 }
 
 export interface LlmChatResult {

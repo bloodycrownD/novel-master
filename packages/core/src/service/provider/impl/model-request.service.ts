@@ -69,6 +69,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       tools: options?.tools,
       stream: options?.stream,
       onStream: options?.onStream,
+      sampling: options?.sampling,
     });
   }
 }

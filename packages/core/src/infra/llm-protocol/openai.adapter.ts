@@ -117,6 +117,9 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       body.tools = openAiTools(req.tools);
       body.tool_choice = this.toolChoiceWhenToolsPresent();
     }
+    if (req.sampling?.protocol === "openai") {
+      Object.assign(body, req.sampling.openai);
+    }
     return body;
   }
 

@@ -93,6 +93,13 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     if (req.tools != null && req.tools.length > 0) {
       body.tools = anthropicTools(req.tools);
     }
+    if (req.sampling?.protocol === "anthropic") {
+      const s = req.sampling.anthropic;
+      if (s.temperature != null) body.temperature = s.temperature;
+      if (s.top_p != null) body.top_p = s.top_p;
+      if (s.top_k != null) body.top_k = s.top_k;
+      if (s.max_tokens != null) body.max_tokens = s.max_tokens;
+    }
     return body;
   }
 

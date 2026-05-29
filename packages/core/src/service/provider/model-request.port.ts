@@ -1,3 +1,4 @@
+import type { ModelSamplingParams } from "@/domain/agent/model/model-sampling-params.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type {
   LlmChatResult,
@@ -11,6 +12,7 @@ export interface ModelRequestOptions {
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
+  readonly sampling?: ModelSamplingParams;
 }
 
 /** Sends chat requests via protocol adapters. */
