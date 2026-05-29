@@ -1181,12 +1181,7 @@
 
     function renderPromptBlockCard(block, index, total) {
         const blockType = block.type;
-        let html =
-            '<div class="prompt-block-card" data-block-index="' +
-            index +
-            '" data-block-kind="' +
-            blockType +
-            '">';
+        let html = '<div class="prompt-block-card" data-block-index="' + index + '" data-block-kind="' + blockType + '">';
         html += '<div class="prompt-block-header">';
         html += '<span class="prompt-block-type">' + promptBlockTypeLabel(blockType) + '</span>';
         html += '<span class="prompt-block-name">' + escapeHtml(block.name) + '</span>';
@@ -1209,7 +1204,7 @@
             html += '<p class="agent-field-hint">宏：{{.worktree}} {{$time}} {{$week_cn}}</p>';
         } else if (blockType === 'abstract') {
             html += '<label class="agent-field"><span>内容</span><textarea data-block-field="content" rows="4">' + escapeHtml(block.content || '') + '</textarea></label>';
-            html += '<p class="agent-field-hint">无压缩摘要时不拼接；可用 {{.abstract}}、{{.worktree}} 等宏。</p>';
+            html += '<p class="agent-field-hint">无压缩摘要时不拼接；可用 {{.abstract}}、{{.worktree}}、{{$time}}、{{$week_cn}}</p>';
         } else {
             html += '<p class="agent-field-hint">chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。</p>';
         }
@@ -1383,8 +1378,8 @@
                 def.prompts.push({ name: blockName, type: 'chat' });
                 return;
             }
+            const contentField = card.querySelector('[data-block-field="content"]');
             if (blockKind === 'abstract') {
-                const contentField = card.querySelector('[data-block-field="content"]');
                 def.prompts.push({
                     name: blockName,
                     type: 'abstract',
@@ -1393,7 +1388,6 @@
                 return;
             }
             const roleField = card.querySelector('[data-block-field="role"]');
-            const contentField = card.querySelector('[data-block-field="content"]');
             def.prompts.push({
                 name: blockName,
                 type: 'text',
