@@ -9,6 +9,7 @@ import {
   textBlocks,
   ToolRegistry,
   type AgentDefinition,
+  type ConfigService,
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
@@ -20,6 +21,69 @@ function minimalDefinition(modelId = "anthropic/claude"): AgentDefinition {
     name: "test",
     prompts: [{ name: "c", type: "chat" }],
     model: { applicationModelId: modelId },
+  };
+}
+
+/** Agent file shape for runner compaction integration (text abstract avoids extra LLM). */
+function compactRunnerDefinition(): AgentDefinition {
+  return {
+    schemaVersion: 1,
+    name: "runner-compact",
+    model: { applicationModelId: "anthropic/claude" },
+    compact: {
+      trigger: { tokenThreshold: 10 },
+      action: {
+        keepLastN: 2,
+        abstract: { type: "text", content: "compact-abstract" },
+      },
+    },
+    prompts: [
+      { name: "base", type: "text", role: "system", content: "base" },
+      {
+        name: "abs",
+        type: "text",
+        role: "system",
+        content: "CTX={{.abstract}}",
+        when: { present: "abstract" },
+      },
+      { name: "c", type: "chat" },
+    ],
+  };
+}
+
+/** Throws if anything reads legacy agent.compaction.* keys (T11 guard). */
+function createCompactionConfigTrap(): ConfigService {
+  const forbid = (key: string): void => {
+    if (key.startsWith("agent.compaction.")) {
+      throw new Error(`T11: ConfigService must not read ${key}`);
+    }
+  };
+  return {
+    get: async (key) => {
+      forbid(key);
+      return undefined;
+    },
+    set: async (key) => {
+      forbid(key);
+    },
+    getBoolean: async (key) => {
+      forbid(key);
+      return false;
+    },
+    setBoolean: async (key) => {
+      forbid(key);
+    },
+    getNumber: async (key, defaultValue) => {
+      forbid(key);
+      return defaultValue ?? 0;
+    },
+    setNumber: async (key) => {
+      forbid(key);
+    },
+    list: async () => [],
+    reset: async (key) => {
+      forbid(key);
+    },
   };
 }
 
@@ -173,6 +237,50 @@ describe("AgentRunner", () => {
     assert.equal(model.callCount(), 3);
     assert.equal(result.finished, true);
     assert.equal(result.stopReason, "completed");
+  });
+
+  it("T11: compacts from definition.compact without ConfigService / agent.compaction.*", async () => {
+    // Intent (spec T11): createAgentRunner has no ConfigService; default pipeline uses definition.compact only.
+    const trap = createCompactionConfigTrap();
+    await assert.rejects(
+      () => trap.get("agent.compaction.thresholdTokens"),
+      /must not read/,
+    );
+
+    const session = new InMemoryAgentSession();
+    for (let i = 0; i < 10; i++) {
+      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
+    }
+
+    let mainSystem: string | undefined;
+    const model: ModelRequestService = {
+      request: mock.fn(async (_id, _content, opts) => {
+        mainSystem = opts?.system;
+        return {
+          assistantText: "done",
+          blocks: [{ type: "text", text: "done" }],
+          raw: {},
+        };
+      }),
+    };
+
+    const registry = new ToolRegistry();
+    const runner = createAgentRunner({
+      session,
+      modelRequests: model,
+      registry,
+      toolCtx: { vfs: mockVfs() },
+    });
+
+    await runner.run({
+      maxSteps: 1,
+      definition: compactRunnerDefinition(),
+      promptContext: { worktreeDisplay: "" },
+    });
+
+    const hidden = session.allMessages().filter((m) => m.hidden);
+    assert.ok(hidden.length >= 8);
+    assert.match(mainSystem ?? "", /CTX=compact-abstract/);
   });
 
   it("propagates doom_loop from identical tool_use blocks", async () => {

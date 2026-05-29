@@ -139,6 +139,37 @@ describe("CompactionPipeline", () => {
     assert.equal(abstract, undefined);
   });
 
+  it("T12: agent abstract calls modelRequests without tools", async () => {
+    // Intent (spec T12): abstract.type agent must not pass tools to the summary LLM call.
+    const session = new InMemoryAgentSession();
+    for (let i = 0; i < 10; i++) {
+      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
+    }
+
+    const modelRequests: ModelRequestService = {
+      request: mock.fn(async (_id, _content, opts) => {
+        assert.equal(opts?.tools, undefined);
+        return {
+          assistantText: "agent-only summary",
+          blocks: [{ type: "text", text: "agent-only summary" }],
+          raw: {},
+        };
+      }),
+    };
+
+    const pipeline = createCompactionPipeline({ modelRequests });
+    const def = compactDefinition({
+      action: { keepLastN: 2, abstract: { type: "agent" } },
+    });
+
+    const abstract = await pipeline.maybeCompact(session, def, "");
+    assert.equal(abstract, "agent-only summary");
+    assert.equal(
+      (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
+      1,
+    );
+  });
+
   it("T5: abstract.type text sets dot without LLM", async () => {
     const session = new InMemoryAgentSession();
     for (let i = 0; i < 10; i++) {
