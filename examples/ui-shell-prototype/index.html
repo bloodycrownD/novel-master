@@ -134,21 +134,16 @@
                     <h2>Agent</h2>
                     <button class="btn-primary" data-action="new-agent">新建</button>
                 </div>
-                <div class="agent-list">
-                    <div class="agent-item" data-id="agent-1">
-                        <div class="agent-info">
-                            <div class="agent-name">默认 Agent</div>
-                            <div class="agent-meta">GPT-4 · 最大步数: 10</div>
-                        </div>
-                        <span class="default-badge">默认</span>
-                    </div>
-                    <div class="agent-item" data-id="agent-2">
-                        <div class="agent-info">
-                            <div class="agent-name">创意写作助手</div>
-                            <div class="agent-meta">Claude-3 · 温度: 0.9</div>
-                        </div>
-                    </div>
+                <div id="agentList" class="agent-list"></div>
+            </div>
+
+            <!-- Agent 配置编辑 -->
+            <div id="agentEditorPage" class="page">
+                <div class="agent-editor-toolbar">
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-agent">保存</button>
+                    <span class="unsaved-indicator agent-unsaved hidden">未保存</span>
                 </div>
+                <div id="agentEditorRoot" class="agent-editor"></div>
             </div>
 
             <!-- 我的页面 -->
@@ -409,6 +404,7 @@ status: draft
     </aside>
 
     <!-- 底部弹出菜单 -->
+    <div id="sheetBackdrop" class="sheet-backdrop hidden" aria-hidden="true"></div>
     <div id="bottomSheet" class="bottom-sheet hidden">
         <div class="sheet-handle"></div>
         <div class="sheet-content" id="sheetContent"></div>
