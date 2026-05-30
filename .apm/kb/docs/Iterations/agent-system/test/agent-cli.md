@@ -218,10 +218,18 @@ Doom loop: tool "vfs.read" invoked 3 times with identical input
 
 ## 场景 12 — compaction（zhipu 真机）
 
-前置（`CompactZhipu` project）：10× `message append` 长文本 → `config set --key agent.compaction.thresholdTokens --value 10` → `config set --key agent.compaction.keepLastN --value 2`（捕获后恢复原 config）。
+前置（`CompactZhipu` project）：
+
+1. **Agent 注册表**（摘要 `agentId` 解析）：将 `examples/agents-registry.example.json` 复制为 `.novel-master/agents/registry.json`，并将 `examples/agents/summarizer.yaml` 复制到 `.novel-master/agents/summarizer.yaml`（见 `examples/README.md`）。
+2. 对话 Agent YAML **不含** `compact:`（例如临时 `agent.yaml` 仅含 `model` + `prompts.blocks` 的 `chat` 块，或 `examples/agent-writer.yaml`）。
+3. 全局策略：`compaction clear` → `compaction set --file`（低阈值便于触发；捕获脚本可用 `type: text` 摘要，手工验收 agent 摘要时用 `examples/compaction-policy.yaml`）。
 
 ```bash
-node --import tsx src/index.ts agent continue --content "请简短总结上文并回复 done" --modelId zhipu/glm-4.6 --db d:\Dev\Js\novel-master\.novel-master\novel.db
+cd apps/cli
+node --import tsx src/index.ts compaction clear --db d:\Dev\Js\novel-master\.novel-master\novel.db
+node --import tsx src/index.ts compaction set --file d:\Dev\Js\novel-master\examples\compaction-policy.yaml --db d:\Dev\Js\novel-master\.novel-master\novel.db
+# 10× message append 长文本（同捕获脚本 long history line …）
+node --import tsx src/index.ts agent continue --content "请简短总结上文并回复 done" --agent-config <agent.yaml> --db d:\Dev\Js\novel-master\.novel-master\novel.db
 node --import tsx src/index.ts message list --db d:\Dev\Js\novel-master\.novel-master\novel.db
 ```
 
@@ -238,4 +246,4 @@ dc64d447-1649-47bb-911e-096113cfe092	1	user	[H]	long history line 0 ...
 e00db693-b6db-4cc0-af61-456774aed15f	13	assistant		[thinking] ⏎done
 ```
 
-备注: `[H]` = `hidden: true`；seq 12 为 compaction summary user 消息。
+备注: `[H]` = `hidden: true`；seq 12 为 compaction summary user 消息。摘要 LLM 使用 registry 中 **summarizer** 的 `applicationModelId`（非对话 Agent 的 model）。捕获脚本 `capture-agent-scenarios.mjs` 场景 12 使用临时 policy（`abstract.type: text`）以免依赖 registry；与本节 agent 摘要验收互补。

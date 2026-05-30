@@ -1,0 +1,19 @@
+schemaVersion: 1
+
+name: summarizer
+
+model:
+
+  applicationModelId: zhipu/glm-4-flash
+
+  params:
+
+    protocol: openai
+
+    openai:
+
+      temperature: 0.3
+
+prompts:
+
+  blocks: []
