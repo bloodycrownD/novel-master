@@ -13,6 +13,8 @@ import type { ModelSuggestionRepository } from "@/domain/provider/repositories/m
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
 import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import { formatApplicationModelId } from "@/domain/provider/application-model-id.js";
+import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";
 
@@ -22,6 +24,7 @@ export interface DefaultProviderModelServiceDeps {
   readonly suggestions: ModelSuggestionRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
+  readonly samplingProfiles: ModelSamplingProfileService;
 }
 
 /** Model suggestion and saved-model service. */
@@ -133,6 +136,8 @@ export class DefaultProviderModelService implements ProviderModelService {
         { providerId, modelId: `${providerId}/${vendorModelId}` },
       );
     }
+    const applicationModelId = formatApplicationModelId(providerId, vendorModelId);
+    await this.deps.samplingProfiles.clearProfile(applicationModelId);
   }
 
   private async resolveApiKey(

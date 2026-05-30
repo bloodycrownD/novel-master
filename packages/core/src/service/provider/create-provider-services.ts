@@ -12,14 +12,17 @@ import { SqliteSavedModelRepository } from "@/domain/provider/repositories/impl/
 import { DefaultProviderService } from "./impl/provider.service.js";
 import { DefaultProviderModelService } from "./impl/provider-model.service.js";
 import { DefaultModelRequestService } from "./impl/model-request.service.js";
+import { createModelSamplingProfileService } from "./create-model-sampling-profile-service.js";
 import type { ProviderService } from "./provider.port.js";
 import type { ProviderModelService } from "./provider-model.port.js";
 import type { ModelRequestService } from "./model-request.port.js";
+import type { ModelSamplingProfileService } from "./model-sampling-profile.port.js";
 
 export interface ProviderServiceBundle {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
+  readonly modelSamplingProfiles: ModelSamplingProfileService;
 }
 
 /**
@@ -43,19 +46,23 @@ export function createProviderServices(
     secretStore,
   });
 
+  const modelSamplingProfiles = createModelSamplingProfileService(conn);
+
   const providerModels = new DefaultProviderModelService({
     providers,
     providerRepo,
     suggestions: suggestionRepo,
     savedModels: savedRepo,
     secretStore,
+    samplingProfiles: modelSamplingProfiles,
   });
 
   const modelRequests = new DefaultModelRequestService({
     providers: providerRepo,
     savedModels: savedRepo,
     secretStore,
+    samplingProfiles: modelSamplingProfiles,
   });
 
-  return { providers, providerModels, modelRequests };
+  return { providers, providerModels, modelRequests, modelSamplingProfiles };
 }

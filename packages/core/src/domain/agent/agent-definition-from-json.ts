@@ -4,7 +4,6 @@
  * @module domain/agent/agent-definition-from-json
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/adapter.port.js";
 import { AgentConfigError } from "../../errors/agent-config-errors.js";
 import { validatePromptBlocks } from "../prompt/prompt-blocks-validate.js";
 import type { AgentDefinition } from "./agent-definition.js";
@@ -12,7 +11,6 @@ import {
   agentDefinitionDocumentSchema,
   type AgentDefinitionDocument,
 } from "./agent-definition.schema.js";
-import { samplingProtocol } from "./model/model-sampling-params.js";
 
 function zodMessage(error: { message: string }): string {
   return error.message;
@@ -40,10 +38,7 @@ export function agentDefinitionToJson(def: AgentDefinition): AgentDefinitionDocu
     schemaVersion: 1,
     name: def.name,
     prompts: { blocks: [...def.prompts] },
-    model: {
-      applicationModelId: def.model.applicationModelId,
-      ...(def.model.params != null ? { params: def.model.params } : {}),
-    },
+    ...(def.preferredModelId != null ? { preferredModelId: def.preferredModelId } : {}),
     ...(def.runtime != null ? { runtime: def.runtime } : {}),
   };
 }
@@ -54,46 +49,28 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
     schemaVersion: 1,
     name: doc.name,
     prompts: blocks,
-    model: {
-      applicationModelId: doc.model.applicationModelId,
-      params: doc.model.params,
-    },
+    preferredModelId: doc.preferredModelId,
     runtime: doc.runtime,
   };
 }
 
 export interface ValidateAgentDefinitionOptions {
-  /** Resolves provider protocol for `applicationModelId` (CLI/tests inject). */
-  readonly getProtocolForModel: (
+  /** Ensures preferredModelId refers to a saved model (CLI injects). */
+  readonly assertSavedModel?: (
     applicationModelId: string,
-  ) => LlmProtocolKind | undefined | Promise<LlmProtocolKind | undefined>;
+  ) => void | Promise<void>;
 }
 
 /**
- * Validates model sampling protocol consistency against the resolved provider.
+ * Validates optional preferred model pin when host supplies saved-model lookup.
  */
 export async function validateAgentDefinition(
   def: AgentDefinition,
-  options: ValidateAgentDefinitionOptions,
+  options: ValidateAgentDefinitionOptions = {},
 ): Promise<void> {
-  const params = def.model.params;
-  if (params == null) {
+  const pin = def.preferredModelId;
+  if (pin == null || options.assertSavedModel == null) {
     return;
   }
-  const expected = await options.getProtocolForModel(
-    def.model.applicationModelId,
-  );
-  if (expected == null) {
-    throw new AgentConfigError(
-      "INVALID_MODEL",
-      `unknown model: ${def.model.applicationModelId}`,
-    );
-  }
-  const actual = samplingProtocol(params);
-  if (actual !== expected) {
-    throw new AgentConfigError(
-      "PROTOCOL_MISMATCH",
-      `model params protocol "${actual}" does not match provider protocol "${expected}"`,
-    );
-  }
+  await options.assertSavedModel(pin);
 }

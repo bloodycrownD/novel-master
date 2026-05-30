@@ -13,6 +13,7 @@ import type {
   CompactionAction,
   CompactionActionResult,
 } from "../compaction-action.port.js";
+import { resolveSummaryApplicationModelId } from "@/domain/agent/resolve-application-model-id.js";
 import type { CompactionContext } from "../compaction-context.js";
 
 const COMPACTION_SUMMARY_PREFIX = "[Compaction summary]\n";
@@ -66,13 +67,17 @@ export class DefaultCompactionAction implements CompactionAction {
         .join("\n\n");
       const instruction =
         abstractCfg.instruction ?? DEFAULT_AGENT_INSTRUCTION;
+      const summaryModelId = resolveSummaryApplicationModelId({
+        cliModelId: ctx.modelContext.cliModelId,
+        summaryPreferredModelId: summaryDef.preferredModelId,
+        dialogueApplicationModelId: ctx.modelContext.dialogueApplicationModelId,
+      });
       const result = await ctx.modelRequests.request(
-        summaryDef.model.applicationModelId,
+        summaryModelId,
         `${instruction}\n\n${summaryInput}`,
         {
           stream: false,
           tools: undefined,
-          sampling: summaryDef.model.params,
         },
       );
       abstractText = result.assistantText;

@@ -210,7 +210,14 @@ export {
   type SerializeAgentDefinitionOptions,
 } from "./infra/agent-definition-io/serialize-agent-definition.js";
 export { loadPromptBlocksFromYaml } from "./infra/agent-definition-io/load-prompt-blocks-from-yaml.js";
-export type { AgentDefinition, AgentModelConfig } from "./domain/agent/agent-definition.js";
+export type { AgentDefinition } from "./domain/agent/agent-definition.js";
+export {
+  resolveApplicationModelId,
+  resolveSummaryApplicationModelId,
+  type ResolveApplicationModelIdInput,
+  type ResolveSummaryApplicationModelIdInput,
+} from "./domain/agent/resolve-application-model-id.js";
+export type { CompactionModelContext } from "./domain/agent/compaction/compaction-model-context.js";
 export type {
   CompactionPolicy,
   CompactionTriggerConfig,
@@ -239,7 +246,15 @@ export type {
   OpenAiSamplingParams,
   AnthropicSamplingParams,
   GeminiSamplingParams,
-} from "./domain/agent/model/model-sampling-params.js";
+} from "./domain/provider/model/model-sampling-params.js";
+export { samplingProtocol } from "./domain/provider/model/model-sampling-params.js";
+export type { ModelSamplingProfile } from "./domain/provider/model/model-sampling-profile.js";
+export {
+  modelSamplingProfileFromJson,
+  modelSamplingProfileToJson,
+} from "./domain/provider/model/model-sampling-profile-from-json.js";
+export type { ModelSamplingProfileService } from "./service/provider/model-sampling-profile.port.js";
+export { createModelSamplingProfileService } from "./service/provider/create-model-sampling-profile-service.js";
 export { formatLocalDateTime } from "./infra/date-format.js";
 
 /**

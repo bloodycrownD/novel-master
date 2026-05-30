@@ -18,21 +18,21 @@ import {
 import { AgentError } from "../../src/domain/agent/agent-errors.js";
 import type { VfsService } from "@novel-master/core";
 
-function minimalDefinition(modelId = "anthropic/claude"): AgentDefinition {
+function minimalDefinition(): AgentDefinition {
   return {
     schemaVersion: 1,
     name: "test",
     prompts: [{ name: "c", type: "chat" }],
-    model: { applicationModelId: modelId },
   };
 }
+
+const RUN_MODEL_ID = "anthropic/claude";
 
 /** Dialogue agent for runner compaction integration (no compact on definition). */
 function compactRunnerDefinition(): AgentDefinition {
   return {
     schemaVersion: 1,
     name: "runner-compact",
-    model: { applicationModelId: "anthropic/claude" },
     prompts: [
       { name: "base", type: "text", role: "system", content: "base" },
       {
@@ -155,6 +155,7 @@ describe("AgentRunner", () => {
     const result = await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
+      applicationModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -218,6 +219,7 @@ describe("AgentRunner", () => {
     const result = await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
+      applicationModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -277,6 +279,7 @@ describe("AgentRunner", () => {
     await runner.run({
       maxSteps: 1,
       definition: compactRunnerDefinition(),
+      applicationModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -317,6 +320,7 @@ describe("AgentRunner", () => {
         runner.run({
           maxSteps: 3,
           definition: { ...minimalDefinition(), prompts: [] },
+          applicationModelId: RUN_MODEL_ID,
           promptContext: { worktreeDisplay: "" },
         }),
       (e: unknown) =>

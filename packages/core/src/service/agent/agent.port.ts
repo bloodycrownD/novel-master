@@ -11,6 +11,10 @@ import type { PromptRenderContext } from "../prompt/render-prompt.js";
 
 export interface AgentRunOptions {
   readonly definition: AgentDefinition;
+  /** Resolved applicationModelId (host reads state/flags; Core does not). */
+  readonly applicationModelId: string;
+  /** When set, compaction summary chain treats CLI `--modelId` as highest priority. */
+  readonly cliModelId?: string;
   readonly promptContext: Omit<PromptRenderContext, "messages" | "abstract">;
   readonly maxSteps?: number;
   readonly stream?: boolean;

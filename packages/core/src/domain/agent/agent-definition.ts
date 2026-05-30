@@ -1,23 +1,17 @@
 /**
- * Agent definition model (prompts, model, runtime).
+ * Agent definition model (prompts, optional model pin, runtime).
  *
  * @module domain/agent/agent-definition
  */
 
 import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
-import type { ModelSamplingParams } from "./model/model-sampling-params.js";
-
-/** Model invocation section of an agent definition. */
-export interface AgentModelConfig {
-  readonly applicationModelId: string;
-  readonly params?: ModelSamplingParams;
-}
 
 /** Serializable agent configuration (Core truth source). */
 export interface AgentDefinition {
   readonly schemaVersion: 1;
   readonly name: string;
   readonly prompts: readonly PromptBlock[];
-  readonly model: AgentModelConfig;
+  /** Optional default model pin (applicationModelId); host resolves with flag/state. */
+  readonly preferredModelId?: string;
   readonly runtime?: { readonly maxSteps?: number };
 }

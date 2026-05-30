@@ -1,4 +1,4 @@
-import type { ModelSamplingParams } from "@/domain/agent/model/model-sampling-params.js";
+import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type {
   LlmChatResult,

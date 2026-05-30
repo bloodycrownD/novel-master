@@ -53,9 +53,14 @@ export class DefaultAgentRunner implements AgentRunner {
 
     for (let step = 0; step < maxSteps; step++) {
       const worktreeDisplay = options.promptContext.worktreeDisplay;
+      const modelContext = {
+        dialogueApplicationModelId: options.applicationModelId,
+        cliModelId: options.cliModelId,
+      };
       const nextAbstract = await this.deps.compaction.maybeCompact(
         this.deps.session,
         worktreeDisplay,
+        modelContext,
       );
       if (nextAbstract !== undefined) {
         compactionAbstract = nextAbstract;
@@ -69,7 +74,7 @@ export class DefaultAgentRunner implements AgentRunner {
       });
 
       const result = await this.deps.modelRequests.request(
-        options.definition.model.applicationModelId,
+        options.applicationModelId,
         "",
         {
           history: llmInput.messages,
@@ -77,7 +82,6 @@ export class DefaultAgentRunner implements AgentRunner {
           tools: tools.length > 0 ? tools : undefined,
           stream: options.stream,
           onStream: options.onStream,
-          sampling: options.definition.model.params,
         },
       );
 

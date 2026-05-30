@@ -11,8 +11,7 @@ describe("agent-definition-io", () => {
     const yaml = `
 schemaVersion: 1
 name: test
-model:
-  applicationModelId: anthropic/claude
+preferredModelId: anthropic/claude
 prompts:
   blocks:
     - name: s
@@ -22,6 +21,7 @@ prompts:
 `;
     const def = deserializeAgentDefinition(yaml);
     assert.equal(def.name, "test");
+    assert.equal(def.preferredModelId, "anthropic/claude");
     const out = serializeAgentDefinition(def);
     const again = deserializeAgentDefinition(out);
     assert.equal(again.prompts[0]?.name, "s");

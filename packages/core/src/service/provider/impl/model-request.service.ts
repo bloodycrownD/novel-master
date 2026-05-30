@@ -12,6 +12,7 @@ import type { ProviderRepository } from "@/domain/provider/repositories/provider
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
 import type { LlmChatResult } from "@/infra/llm-protocol/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type {
   ModelRequestOptions,
   ModelRequestService,
@@ -21,6 +22,7 @@ export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
+  readonly samplingProfiles: ModelSamplingProfileService;
 }
 
 /** Sends chat requests via protocol adapters. */
@@ -57,6 +59,14 @@ export class DefaultModelRequestService implements ModelRequestService {
         { providerId },
       );
     }
+    let sampling = options?.sampling;
+    if (sampling === undefined) {
+      const profile = await this.deps.samplingProfiles.getProfile(applicationModelId);
+      if (profile?.enabled && profile.params != null) {
+        sampling = profile.params;
+      }
+    }
+
     const adapter = getProtocolAdapter(provider.protocol);
     return adapter.chat({
       baseUrl: provider.baseUrl,
@@ -69,7 +79,7 @@ export class DefaultModelRequestService implements ModelRequestService {
       tools: options?.tools,
       stream: options?.stream,
       onStream: options?.onStream,
-      sampling: options?.sampling,
+      sampling,
     });
   }
 }

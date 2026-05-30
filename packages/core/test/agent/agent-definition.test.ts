@@ -13,9 +13,22 @@ describe("agentDefinitionFromJson", () => {
       prompts: {
         blocks: [{ name: "s", type: "text", role: "system", content: "hi" }],
       },
-      model: { applicationModelId: "openai/gpt-4" },
+      preferredModelId: "openai/gpt-4",
     });
     assert.equal(def.name, "writer");
+  });
+
+  it("D1: rejects legacy model field in strict schema", () => {
+    assert.throws(
+      () =>
+        agentDefinitionFromJson({
+          schemaVersion: 1,
+          name: "x",
+          prompts: { blocks: [] },
+          model: { applicationModelId: "a/b" },
+        }),
+      (e: unknown) => e instanceof AgentConfigError && e.code === "INVALID_SCHEMA",
+    );
   });
 
   it("A1: rejects compact field in strict schema", () => {
@@ -25,7 +38,7 @@ describe("agentDefinitionFromJson", () => {
           schemaVersion: 1,
           name: "x",
           prompts: { blocks: [] },
-          model: { applicationModelId: "a/b" },
+          preferredModelId: "a/b",
           compact: {
             trigger: { tokenThreshold: 100 },
             action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
@@ -44,7 +57,7 @@ describe("agentDefinitionFromJson", () => {
           { name: "summary", type: "abstract", content: "{{.abstract}}" },
         ],
       },
-      model: { applicationModelId: "openai/gpt-4" },
+      preferredModelId: "openai/gpt-4",
     });
     assert.equal(def.prompts[0]?.type, "abstract");
     if (def.prompts[0]?.type === "abstract") {
@@ -69,7 +82,7 @@ describe("agentDefinitionFromJson", () => {
               },
             ],
           },
-          model: { applicationModelId: "a/b" },
+          preferredModelId: "a/b",
         }),
       (e: unknown) => e instanceof AgentConfigError,
     );
@@ -91,7 +104,7 @@ describe("agentDefinitionFromJson", () => {
               },
             ],
           },
-          model: { applicationModelId: "a/b" },
+          preferredModelId: "a/b",
         }),
       (e: unknown) => e instanceof AgentConfigError,
     );
@@ -107,7 +120,7 @@ describe("agentDefinitionFromJson", () => {
           { name: "history", type: "chat" },
         ],
       },
-      model: { applicationModelId: "openai/gpt-4" },
+      preferredModelId: "openai/gpt-4",
     });
     assert.equal(def.prompts.length, 2);
     assert.equal(def.prompts[0]?.type, "abstract");

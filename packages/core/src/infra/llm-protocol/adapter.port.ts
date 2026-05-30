@@ -4,7 +4,7 @@
  * @module infra/llm-protocol/adapter.port
  */
 
-import type { ModelSamplingParams } from "@/domain/agent/model/model-sampling-params.js";
+import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 
