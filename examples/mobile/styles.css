@@ -219,9 +219,18 @@ body {
 }
 
 .chat-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
     padding: 12px 16px;
     background: var(--bg-color);
     border-bottom: 1px solid var(--border-color);
+}
+
+.chat-session-actions-btn {
+    flex-shrink: 0;
+    margin-top: 2px;
 }
 
 .chat-meta {

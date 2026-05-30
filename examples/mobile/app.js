@@ -48,6 +48,7 @@
         drawerBtn: null,
         drawerOverlay: null,
         projectDrawer: null,
+        chatDrawer: null,
         sessionActionsDrawer: null,
         sessionListView: null,
         chatConversationView: null,
@@ -65,6 +66,7 @@
         elements.drawerBtn = document.getElementById('drawerBtn');
         elements.drawerOverlay = document.getElementById('drawerOverlay');
         elements.projectDrawer = document.getElementById('projectDrawer');
+        elements.chatDrawer = document.getElementById('chatDrawer');
         elements.sessionActionsDrawer = document.getElementById('sessionActionsDrawer');
         elements.sessionListView = document.getElementById('sessionListView');
         elements.chatConversationView = document.getElementById('chatConversationView');
@@ -287,7 +289,7 @@
         const inConversation = appState.chatSubview === 'conversation';
         elements.drawerBtn.setAttribute(
             'aria-label',
-            inConversation ? '打开会话操作' : '打开项目列表',
+            inConversation ? '打开聊天菜单' : '打开项目列表',
         );
     }
 
@@ -300,6 +302,16 @@
         if (elements.projectDrawer) elements.projectDrawer.classList.add('open');
     }
 
+    function openChatDrawer() {
+        closeDrawer();
+        if (elements.drawerOverlay) {
+            elements.drawerOverlay.classList.remove('hidden');
+            elements.drawerOverlay.setAttribute('aria-hidden', 'false');
+        }
+        if (elements.chatDrawer) elements.chatDrawer.classList.add('open');
+        refreshWorkspaceModelDisplays();
+    }
+
     function openSessionActionsDrawer() {
         closeDrawer();
         if (elements.drawerOverlay) {
@@ -309,10 +321,10 @@
         if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.add('open');
     }
 
-    /** chatSubview: sessions → 项目抽屉；conversation（含 realPrompt/sessionLog 栈页）→ 会话操作抽屉 */
+    /** sessions 列表 → 项目抽屉；聊天中 → 聊天抽屉（模型切换），会话操作见顶栏按钮 */
     function openDrawer() {
         if (appState.chatSubview === 'conversation') {
-            openSessionActionsDrawer();
+            openChatDrawer();
         } else {
             openProjectDrawer();
         }
@@ -324,6 +336,7 @@
             elements.drawerOverlay.setAttribute('aria-hidden', 'true');
         }
         if (elements.projectDrawer) elements.projectDrawer.classList.remove('open');
+        if (elements.chatDrawer) elements.chatDrawer.classList.remove('open');
         if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.remove('open');
     }
 
@@ -1056,6 +1069,7 @@
         return {
             schemaVersion: 1,
             name: 'creative',
+            preferredModelId: 'anthropic/claude-3-5-sonnet',
             runtime: { maxSteps: 15 },
             prompts: [
                 { name: 'system', type: 'text', role: 'system', content: '你是一位创意写作助手，擅长小说与故事创作。' },
@@ -1108,8 +1122,8 @@
 
     function refreshWorkspaceModelDisplays() {
         const label = modelShortLabel(appState.workspaceCurrentModelId);
-        const drawerEl = document.getElementById('drawerCurrentModelLabel');
-        if (drawerEl) drawerEl.textContent = label;
+        const chatDrawerEl = document.getElementById('chatDrawerCurrentModelLabel');
+        if (chatDrawerEl) chatDrawerEl.textContent = label;
         const profileEl = document.getElementById('profileCurrentModelLabel');
         if (profileEl) profileEl.textContent = label;
         updateChatAgentMeta();
@@ -1156,16 +1170,7 @@
                 closeModelPickerModal();
                 showToast('已切换工作区模型');
             });
-            const cfg = document.createElement('button');
-            cfg.type = 'button';
-            cfg.className = 'model-picker-config';
-            cfg.textContent = '采样';
-            cfg.addEventListener('click', function (e) {
-                e.stopPropagation();
-                openModelConfigModal(m.applicationModelId);
-            });
             li.appendChild(btn);
-            li.appendChild(cfg);
             list.appendChild(li);
         });
         modal.classList.remove('hidden');
@@ -1277,6 +1282,11 @@
         updateChatAgentMeta();
     }
 
+    function resolveDisplayModelIdForAgent(def) {
+        if (def.preferredModelId) return def.preferredModelId;
+        return appState.workspaceCurrentModelId;
+    }
+
     function updateChatAgentMeta() {
         const entry = agentCatalog[appState.defaultAgentId];
         if (!entry) return;
@@ -1284,7 +1294,11 @@
         const agentEl = document.querySelector('.chat-meta .agent-name');
         const modelEl = document.querySelector('.chat-meta .model-name');
         if (agentEl) agentEl.textContent = def.name;
-        if (modelEl) modelEl.textContent = modelShortLabel(appState.workspaceCurrentModelId);
+        if (modelEl) {
+            const modelId = resolveDisplayModelIdForAgent(def);
+            const suffix = def.preferredModelId ? '' : ' · 工作区';
+            modelEl.textContent = modelShortLabel(modelId) + suffix;
+        }
     }
 
     function openAgentEditor(agentId) {
@@ -1420,8 +1434,40 @@
 
         html += '<section class="agent-form-section"><h3>基本信息</h3>';
         html += '<label class="agent-field"><span>名称</span><input type="text" data-agent-field="name" value="' + escapeHtml(def.name) + '"></label>';
-        html += '<p class="agent-field-hint">执行模型由工作区「当前模型」决定（聊天抽屉 / 我的），不在 Agent 中配置。</p>';
         html += '</section>';
+
+        const modelEnabled = !!def.preferredModelId;
+        const modelSel = modelEnabled
+            ? resolveModelSelection(def.preferredModelId)
+            : resolveModelSelection(appState.workspaceCurrentModelId);
+        html += '<section class="agent-form-section" data-agent-model-section>';
+        html += '<div class="agent-section-header"><h3>模型</h3></div>';
+        html += '<label class="agent-field agent-field--row model-pin-toggle">';
+        html += '<span>启用 Agent 专属模型</span>';
+        html += '<input type="checkbox" data-agent-field="modelEnabled"' + (modelEnabled ? ' checked' : '') + '>';
+        html += '</label>';
+        html += '<p class="agent-field-hint">关闭时使用工作区当前模型（聊天页抽屉 / 我的）。温度等采样在服务商-模型配置中设置，此处仅选模型。</p>';
+        html += '<div class="agent-model-pickers' + (modelEnabled ? '' : ' hidden') + '" data-agent-model-pickers>';
+        html += '<label class="agent-field"><span>服务商</span><select data-agent-field="providerId">';
+        MOCK_PROVIDERS.forEach(function (p) {
+            html +=
+                '<option value="' +
+                p.id +
+                '"' +
+                (p.id === modelSel.providerId ? ' selected' : '') +
+                '>' +
+                escapeHtml(p.name) +
+                '</option>';
+        });
+        html += '</select></label>';
+        html += '<label class="agent-field"><span>模型</span><select data-agent-field="vendorModelId" data-agent-vendor-select>';
+        html += renderModelSelectOptions(modelSel.providerId, modelSel.vendorModelId);
+        html += '</select></label>';
+        html +=
+            '<p class="agent-field-hint">preferredModelId: <code data-agent-model-id-hint>' +
+            escapeHtml(modelEnabled ? def.preferredModelId : '（未启用）') +
+            '</code></p>';
+        html += '</div></section>';
 
         html += '<section class="agent-form-section"><h3>运行时</h3>';
         html += '<label class="agent-field"><span>最大步数 maxSteps</span><input type="number" data-agent-field="maxSteps" min="1" step="1" value="' + (def.runtime && def.runtime.maxSteps != null ? def.runtime.maxSteps : 20) + '"></label>';
@@ -1463,6 +1509,19 @@
 
         if (maxStepsInput && maxStepsInput.value) {
             def.runtime = { maxSteps: Number(maxStepsInput.value) };
+        }
+
+        const modelEnabledInput = root.querySelector('[data-agent-field="modelEnabled"]');
+        const pickers = root.querySelector('[data-agent-model-pickers]');
+        if (modelEnabledInput && modelEnabledInput.checked) {
+            const providerSelect = root.querySelector('[data-agent-field="providerId"]');
+            const vendorSelect = root.querySelector('[data-agent-field="vendorModelId"]');
+            if (providerSelect && vendorSelect) {
+                def.preferredModelId = buildApplicationModelId(
+                    providerSelect.value,
+                    vendorSelect.value,
+                );
+            }
         }
 
         const cards = root.querySelectorAll('.prompt-block-card');
@@ -1712,8 +1771,26 @@
         root.addEventListener('input', function () {
             if (appState.currentPage === 'agentEditor') markAgentEditorDirty();
         });
-        root.addEventListener('change', function () {
+        root.addEventListener('change', function (e) {
             if (appState.currentPage !== 'agentEditor') return;
+            if (e.target.matches('[data-agent-field="modelEnabled"]')) {
+                const pickers = root.querySelector('[data-agent-model-pickers]');
+                if (pickers) pickers.classList.toggle('hidden', !e.target.checked);
+                const hint = root.querySelector('[data-agent-model-id-hint]');
+                if (hint) {
+                    hint.textContent = e.target.checked ? '（保存后生成）' : '（未启用）';
+                }
+            }
+            if (e.target.matches('[data-agent-field="providerId"]')) {
+                const vendorSelect = root.querySelector('[data-agent-vendor-select]');
+                if (vendorSelect) {
+                    vendorSelect.innerHTML = renderModelSelectOptions(e.target.value, null);
+                }
+                updateAgentModelIdHint(root);
+            }
+            if (e.target.matches('[data-agent-field="vendorModelId"]')) {
+                updateAgentModelIdHint(root);
+            }
             markAgentEditorDirty();
         });
 
@@ -1828,6 +1905,11 @@
     function setupWorkspaceModel() {
         loadWorkspaceModel();
         refreshWorkspaceModelDisplays();
+        document.querySelectorAll('[data-action="open-session-actions"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                openSessionActionsDrawer();
+            });
+        });
         document.querySelectorAll('[data-action="open-model-picker"]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 openModelPickerModal();
