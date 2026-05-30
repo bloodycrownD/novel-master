@@ -11,10 +11,14 @@ import {
   loadPromptBlocksFromYaml,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { applyActiveRegexChannel } from "../regex/apply-channel.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runPrompt(
-  rt: Pick<NovelMasterRuntime, "messages" | "scope" | "worktree">,
+  rt: Pick<
+    NovelMasterRuntime,
+    "messages" | "scope" | "worktree" | "state" | "regexConfig"
+  >,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
@@ -36,8 +40,14 @@ export async function runPrompt(
   const blocks = loadPromptBlocksFromYaml(source);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const allMessages = await rt.messages.listBySession(sessionId);
-  // Filter out hidden messages from prompt rendering
-  const messages = allMessages.filter((m) => !m.hidden);
+  const activeGroupId = await rt.state.getCurrentRegexGroupId();
+  const messages = await applyActiveRegexChannel(
+    rt.regexConfig,
+    activeGroupId,
+    allMessages,
+    allMessages.filter((m) => !m.hidden),
+    "llm",
+  );
   const worktreeDisplay = await rt
     .worktree({ kind: "session", projectId, sessionId })
     .renderDisplay();

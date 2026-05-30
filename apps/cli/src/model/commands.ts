@@ -9,6 +9,11 @@ import {
   ProviderError,
   textBlocks,
 } from "@novel-master/core";
+import {
+  applyRegexChannelToMessages,
+  visibleFloorByMessageId,
+  resolveActiveCompiledRules,
+} from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -68,9 +73,22 @@ export async function runModel(
 
       if (sessionId != null) {
         await rt.messages.append(sessionId, "user", textBlocks(content));
-        const history = (await rt.messages.listBySession(sessionId)).filter(
-          (m) => !m.hidden,
+        const all = await rt.messages.listBySession(sessionId);
+        let history = all.filter((m) => !m.hidden);
+        const activeGroupId = await rt.state.getCurrentRegexGroupId();
+        const rules = await resolveActiveCompiledRules(
+          rt.regexConfig,
+          activeGroupId,
         );
+        if (rules.length > 0) {
+          const floorMap = visibleFloorByMessageId(all);
+          history = applyRegexChannelToMessages(
+            history,
+            rules,
+            "llm",
+            floorMap,
+          );
+        }
         const result = await rt.modelRequests.request(modelId, content, {
           history,
         });

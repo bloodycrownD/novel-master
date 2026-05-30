@@ -131,11 +131,14 @@ export async function runAgent(
       registerVfsTools(registry);
 
       const session = new ChatAgentSession(rt.messages, sessionId);
+      const activeRegexGroupId = await rt.state.getCurrentRegexGroupId();
       const runner = createAgentRunner({
         session,
         modelRequests: rt.modelRequests,
         registry,
         toolCtx: { vfs },
+        regexConfig: rt.regexConfig,
+        listAllSessionMessages: () => rt.messages.listBySession(sessionId),
         compaction: createCompactionPipeline({
           modelRequests: rt.modelRequests,
           policyStore: rt.compactionPolicy,
@@ -158,6 +161,7 @@ export async function runAgent(
         workspaceModelId,
         cliModelId,
         maxSteps,
+        activeRegexGroupId,
         promptContext: { worktreeDisplay },
         stream: !noStream,
         onStream,

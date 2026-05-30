@@ -14,6 +14,7 @@ import {
 import type { ChatMessage } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
+import { applyActiveRegexChannel } from "../regex/apply-channel.js";
 import { seqRangeFromFloors } from "./floor.js";
 
 const BATCH_RANGE_USAGE =
@@ -108,7 +109,7 @@ async function resolveAppendContent(
 }
 
 export async function runMessage(
-  rt: Pick<NovelMasterRuntime, "messages" | "scope">,
+  rt: Pick<NovelMasterRuntime, "messages" | "scope" | "state" | "regexConfig">,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
@@ -117,14 +118,27 @@ export async function runMessage(
 
   switch (subcommand) {
     case "list": {
-      const list = await rt.messages.listBySession(sessionId);
+      const all = await rt.messages.listBySession(sessionId);
+      const activeGroupId = await rt.state.getCurrentRegexGroupId();
+      const visible = all.filter((m) => !m.hidden);
+      const displayVisible = await applyActiveRegexChannel(
+        rt.regexConfig,
+        activeGroupId,
+        all,
+        visible,
+        "display",
+      );
+      const displayById = new Map(displayVisible.map((m) => [m.id, m]));
       const showSeq = flags.get("show-seq") === true;
       let floor = 0;
-      for (const m of list) {
-        floor++;
-        const text = formatMessageForCli(m.content).replace(/\n/g, "⏎");
+      for (const m of all) {
+        const shown = m.hidden ? m : (displayById.get(m.id) ?? m);
+        if (!m.hidden) {
+          floor += 1;
+        }
+        const text = formatMessageForCli(shown.content).replace(/\n/g, "⏎");
         const hiddenMark = m.hidden ? "[H]" : "";
-        const orderCol = showSeq ? `${floor}\t${m.seq}` : String(floor);
+        const orderCol = showSeq ? `${floor || ""}\t${m.seq}` : m.hidden ? "" : String(floor);
         console.log(`${m.id}\t${orderCol}\t${m.role}\t${hiddenMark}\t${text}`);
       }
       return;

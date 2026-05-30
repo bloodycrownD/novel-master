@@ -17,6 +17,7 @@ import {
   createSessionFsService,
   createSessionService,
   createProviderServices,
+  createRegexConfigService,
   createWorktreeService,
   open,
   type CompactionAgentResolver,
@@ -27,6 +28,7 @@ import {
   type PersistentState,
   type ProviderModelService,
   type ProviderService,
+  type RegexConfigService,
   type SecretStore,
   type MessageService,
   type ProjectService,
@@ -85,6 +87,7 @@ export interface NovelMasterRuntime {
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
   readonly modelSamplingProfiles: ModelSamplingProfileService;
+  readonly regexConfig: RegexConfigService;
   readonly compactionPolicy: CompactionPolicyStore;
   readonly resolveCompactionAgent: CompactionAgentResolver;
   readonly dbPath: string;
@@ -107,6 +110,7 @@ export async function createNovelMasterRuntime(
   await bootstrapNovelMaster(conn);
 
   const state = createPersistentState(conn);
+  const regexConfig = createRegexConfigService(conn, state);
   const preferences = createPersistentPreferences(conn);
   const scope = new CliScopeResolver(state);
 
@@ -151,5 +155,6 @@ export async function createNovelMasterRuntime(
     providerModels: providerBundle.providerModels,
     modelRequests,
     modelSamplingProfiles: providerBundle.modelSamplingProfiles,
+    regexConfig,
   };
 }
