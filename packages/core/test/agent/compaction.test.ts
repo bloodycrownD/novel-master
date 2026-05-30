@@ -224,6 +224,50 @@ describe("CompactionPipeline", () => {
     assert.equal(abstract, undefined);
   });
 
+  it("C1: summary agent without preferredModelId uses dialogueApplicationModelId", async () => {
+    const session = new InMemoryAgentSession();
+    for (let i = 0; i < 10; i++) {
+      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
+    }
+
+    const dialogueModelId = "openai/gpt-dialogue";
+
+    const modelRequests: ModelRequestService = {
+      request: mock.fn(async (applicationModelId) => {
+        assert.equal(applicationModelId, dialogueModelId);
+        return {
+          assistantText: "summary from dialogue model",
+          blocks: [{ type: "text", text: "summary from dialogue model" }],
+          raw: {},
+        };
+      }),
+    };
+
+    const resolveAgent: CompactionAgentResolver = {
+      async resolve(agentId: string) {
+        assert.equal(agentId, "summarizer");
+        return {
+          schemaVersion: 1,
+          name: "summarizer",
+          prompts: [],
+        };
+      },
+    };
+
+    const pipeline = createPipeline(modelRequests, { resolveAgent });
+    const abstract = await pipeline.maybeCompact(
+      session,
+      "",
+      compactionModelContext(dialogueModelId),
+    );
+
+    assert.equal(abstract, "summary from dialogue model");
+    assert.equal(
+      (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
+      1,
+    );
+  });
+
   it("CLI3: summary LLM uses resolved agent B model, not dialogue model A", async () => {
     const session = new InMemoryAgentSession();
     for (let i = 0; i < 10; i++) {

@@ -19,6 +19,68 @@ prompts:
       type: chat
 `;
 
+const AGENT_WITH_PINNED_MODEL = `
+schemaVersion: 1
+name: e2e-pin
+preferredModelId: mock/pinned
+prompts:
+  blocks:
+    - name: c
+      type: chat
+`;
+
+const MOCK_ENV_REPORT_MODEL = {
+  ...MOCK_ENV,
+  NM_AGENT_MOCK_REPORT_MODEL: "1",
+};
+
+function seedMockProviderAndModels(
+  dbPath: string,
+  vendorIds: readonly string[],
+): void {
+  runNm(
+    [
+      "provider",
+      "create",
+      "--providerId",
+      "mock",
+      "--protocol",
+      "openai",
+      "--baseUrl",
+      "http://127.0.0.1/v1",
+      "--apiKey",
+      "test",
+      "--db",
+      dbPath,
+    ],
+    { env: MOCK_ENV },
+  );
+  for (const vendorModelId of vendorIds) {
+    runNm(
+      [
+        "provider",
+        "model",
+        "create",
+        "--providerId",
+        "mock",
+        "--vendorModelId",
+        vendorModelId,
+        "--db",
+        dbPath,
+      ],
+      { env: MOCK_ENV },
+    );
+  }
+}
+
+function parseE2eRequestBody(stderr: string): Record<string, unknown> {
+  const prefix = "NM_LLM_E2E_BODY:";
+  const line = stderr.split(/\r?\n/).find((l) => l.includes(prefix));
+  assert.ok(line, `expected ${prefix} in stderr`);
+  const json = line!.slice(line!.indexOf(prefix) + prefix.length);
+  return JSON.parse(json) as Record<string, unknown>;
+}
+
 describe("agent config CLI", () => {
   it("E1: --agent-config without model runs after model use", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-cfg-"));
@@ -147,6 +209,56 @@ describe("agent config CLI", () => {
         { env: MOCK_ENV },
       );
       assert.equal(agent.status, 0, agent.stderr);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("E2: --modelId overrides agent preferredModelId", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-agent-e2-"));
+    const dbPath = join(dir, "novel.db");
+    const agentPath = join(dir, "agent.yaml");
+    try {
+      await writeFile(agentPath, AGENT_WITH_PINNED_MODEL, "utf8");
+
+      const projectId = runNm(
+        ["project", "create", "--name", "E2", "--db", dbPath],
+        { env: MOCK_ENV_REPORT_MODEL },
+      )
+        .stdout.trim();
+      runNm(["project", "use", "--project", projectId, "--db", dbPath], {
+        env: MOCK_ENV_REPORT_MODEL,
+      });
+      const sessionId = runNm(
+        ["session", "create", "--project", projectId, "--db", dbPath],
+        { env: MOCK_ENV_REPORT_MODEL },
+      )
+        .stdout.trim();
+      runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
+        env: MOCK_ENV_REPORT_MODEL,
+      });
+      seedMockProviderAndModels(dbPath, ["pinned", "override", "workspace"]);
+      runNm(["model", "use", "--modelId", "mock/workspace", "--db", dbPath], {
+        env: MOCK_ENV_REPORT_MODEL,
+      });
+
+      const agent = runNm(
+        [
+          "agent",
+          "continue",
+          "--content",
+          "hello",
+          "--agent-config",
+          agentPath,
+          "--modelId",
+          "mock/override",
+          "--db",
+          dbPath,
+        ],
+        { env: MOCK_ENV_REPORT_MODEL },
+      );
+      assert.equal(agent.status, 0, agent.stderr);
+      assert.match(agent.stdout, /model: mock\/override/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

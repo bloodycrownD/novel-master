@@ -66,7 +66,10 @@ export function createAgentMockModelRequests(): ModelRequestService {
 
       switch (scenario) {
         case "continue": {
-          const text = "Assistant reply (single step).";
+          const reportModel = process.env.NM_AGENT_MOCK_REPORT_MODEL === "1";
+          const text = reportModel
+            ? `Assistant reply (model: ${_applicationModelId}).`
+            : "Assistant reply (single step).";
           await emitStream(text, options);
           return textResult(text);
         }

@@ -276,6 +276,11 @@ export type {
 } from "./infra/llm-protocol/adapter.port.js";
 export { toolsFromRegistry } from "./infra/llm-protocol/tool-definitions.js";
 export { zodToJsonSchema } from "./infra/llm-protocol/zod-to-json-schema.js";
+/** @internal CLI e2e fetch capture */
+export {
+  clearProtocolAdapters,
+  getProtocolAdapter,
+} from "./infra/llm-protocol/registry.js";
 export type { AgentSession } from "./domain/agent/agent-session.port.js";
 export { AgentError } from "./domain/agent/agent-errors.js";
 export type { AgentErrorCode } from "./domain/agent/agent-errors.js";

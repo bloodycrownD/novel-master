@@ -46,6 +46,7 @@ import {
 } from "@novel-master/core/sksp";
 import { registerSkspWindowsDriver } from "@novel-master/sksp-windows";
 import { createAgentMockModelRequests } from "./agent/mock-llm.js";
+import { installE2eLlmFetchCapture } from "./test/e2e-llm-fetch.js";
 import { CliScopeResolver } from "./config/resolve-scope.js";
 import { extractDbPath } from "./vfs/parse-args.js";
 
@@ -114,6 +115,9 @@ export async function createNovelMasterRuntime(
     db: dbStore,
     env: createEnvSecretStore(),
   });
+  if (process.env.NM_LLM_E2E_FETCH === "1" && process.env.NM_AGENT_MOCK_LLM !== "1") {
+    installE2eLlmFetchCapture();
+  }
   const providerBundle = createProviderServices(conn, secretStore);
   const modelRequests =
     process.env.NM_AGENT_MOCK_LLM === "1"

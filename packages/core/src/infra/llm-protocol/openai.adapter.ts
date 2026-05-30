@@ -141,6 +141,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         model: req.vendorModelId,
         stream: false,
         messages: [{ role: "user", content: userText }],
+        ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
       }),
     });
     const record = raw as {
