@@ -324,3 +324,39 @@ export type {
 } from "./service/provider/provider.port.js";
 export type { ProviderModelService } from "./service/provider/provider-model.port.js";
 export type { ModelRequestService } from "./service/provider/model-request.port.js";
+
+/**
+ * Regex groups/rules (SQLite entities) and view-time replacement pipeline.
+ */
+export { RegexError } from "./errors/regex-errors.js";
+export type { RegexErrorCode } from "./errors/regex-errors.js";
+export type { RegexGroup } from "./domain/regex/model/regex-group.js";
+export type { RegexRule } from "./domain/regex/model/regex-rule.js";
+export type { CompiledRegexRule } from "./domain/regex/compile-regex-rule.js";
+export { compileRegexRule } from "./domain/regex/compile-regex-rule.js";
+export {
+  applyRegexRules,
+  applyRegexToMessageContent,
+  applyRegexChannelToMessages,
+} from "./domain/regex/apply-regex-rules.js";
+export type { RegexChannel } from "./domain/regex/apply-regex-rules.js";
+export {
+  listVisibleSorted,
+  visibleFloorByMessageId,
+} from "./domain/chat/message-visible-floor.js";
+export { validateRegexRule, validateRegexRuleEntity } from "./domain/regex/validate-regex-rule.js";
+export {
+  createRegexRuleSchema,
+  updateRegexRuleSchema,
+  createRegexGroupSchema,
+  updateRegexGroupSchema,
+} from "./domain/regex/regex-rule.schema.js";
+export type {
+  CreateRegexRuleInput,
+  UpdateRegexRuleInput,
+  CreateRegexGroupInput,
+  UpdateRegexGroupInput,
+} from "./domain/regex/regex-rule.schema.js";
+export { resolveActiveCompiledRules } from "./domain/regex/resolve-active-regex-rules.js";
+export { createRegexConfigService } from "./service/regex/create-regex-config-service.js";
+export type { RegexConfigService } from "./service/regex/regex-config.port.js";

@@ -21,6 +21,8 @@ export interface AgentRunOptions {
   readonly maxSteps?: number;
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
+  /** When set with runner regex deps, LLM prompt messages get llm-channel replacement. */
+  readonly activeRegexGroupId?: string;
 }
 
 /** Drives multi-step model round-trips with tool execution. */

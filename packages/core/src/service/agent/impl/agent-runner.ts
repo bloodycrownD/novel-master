@@ -4,8 +4,12 @@
  * @module service/agent/impl/agent-runner
  */
 
+import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/agent-session.port.js";
+import { visibleFloorByMessageId } from "@/domain/chat/message-visible-floor.js";
+import { applyRegexChannelToMessages } from "@/domain/regex/apply-regex-rules.js";
+import { resolveActiveCompiledRules } from "@/domain/regex/resolve-active-regex-rules.js";
 import { assertNoDoomLoopInBlocks } from "@/domain/agent/doom-loop.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/tool-registry.js";
@@ -15,6 +19,7 @@ import { toolsFromRegistry } from "@/infra/llm-protocol/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import type { CompactionPipeline } from "../../compaction/compaction-pipeline.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
+import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 
 export interface DefaultAgentRunnerDeps {
@@ -23,6 +28,10 @@ export interface DefaultAgentRunnerDeps {
   readonly registry: ToolRegistry<VfsToolContext>;
   readonly toolCtx: VfsToolContext;
   readonly compaction: CompactionPipeline;
+  /** When set with {@link AgentRunOptions.activeRegexGroupId}, applies llm regex before prompt build. */
+  readonly regexConfig?: RegexConfigService;
+  /** Full session messages (including hidden) for visible-floor indexing. */
+  readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
 
 const DEFAULT_MAX_STEPS = 20;
@@ -66,7 +75,23 @@ export class DefaultAgentRunner implements AgentRunner {
         compactionAbstract = nextAbstract;
       }
 
-      const visible = await this.deps.session.list();
+      let visible = await this.deps.session.list();
+      if (options.activeRegexGroupId && this.deps.regexConfig) {
+        const rules = await resolveActiveCompiledRules(
+          this.deps.regexConfig,
+          options.activeRegexGroupId,
+        );
+        if (rules.length > 0 && this.deps.listAllSessionMessages) {
+          const all = await this.deps.listAllSessionMessages();
+          const floorMap = visibleFloorByMessageId(all);
+          visible = applyRegexChannelToMessages(
+            visible,
+            rules,
+            "llm",
+            floorMap,
+          );
+        }
+      }
       const llmInput = buildPromptLlmInput(options.definition.prompts, {
         ...options.promptContext,
         messages: visible,
