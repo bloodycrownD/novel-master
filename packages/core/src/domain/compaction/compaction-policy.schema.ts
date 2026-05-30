@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import type { CompactionPolicy, CompactionPolicyTemplate } from "./compaction-policy.js";
 
 const compactionTriggerSchema = z
   .object({
@@ -35,7 +36,7 @@ const compactionActionSchema = z
   })
   .strict();
 
-/** Root compaction policy document schema. */
+/** Root compaction policy wire document schema. */
 export const compactionPolicyDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -46,3 +47,52 @@ export const compactionPolicyDocumentSchema = z
   .strict();
 
 export type CompactionPolicyDocument = z.infer<typeof compactionPolicyDocumentSchema>;
+
+function documentToPolicy(doc: CompactionPolicyDocument): CompactionPolicy {
+  return {
+    enabled: doc.enabled,
+    trigger: doc.trigger,
+    action: doc.action,
+  };
+}
+
+function policyToDocument(policy: CompactionPolicy): CompactionPolicyDocument {
+  return {
+    schemaVersion: 1,
+    enabled: policy.enabled,
+    trigger: policy.trigger,
+    action: policy.action,
+  };
+}
+
+/** Domain parser: wire document → {@link CompactionPolicy}. */
+export const compactionPolicySchema = Object.assign(
+  compactionPolicyDocumentSchema.transform(documentToPolicy),
+  { encode: policyToDocument },
+);
+
+/** Template wire document (no `enabled`). */
+export const compactionPolicyTemplateDocumentSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    trigger: compactionTriggerSchema,
+    action: compactionActionSchema,
+  })
+  .strict();
+
+export type CompactionPolicyTemplateDocument = z.infer<
+  typeof compactionPolicyTemplateDocumentSchema
+>;
+
+function documentToTemplate(
+  doc: CompactionPolicyTemplateDocument,
+): CompactionPolicyTemplate {
+  return {
+    trigger: doc.trigger,
+    action: doc.action,
+  };
+}
+
+/** Domain parser: template wire → {@link CompactionPolicyTemplate}. */
+export const compactionPolicyTemplateSchema =
+  compactionPolicyTemplateDocumentSchema.transform(documentToTemplate);

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  compactionPolicyFromJson,
+  compactionPolicySchema,
+  decode,
   createCompactionPolicyStore,
 } from "@novel-master/core";
 import { CompactionPolicyError } from "../../src/errors/compaction-policy-errors.js";
@@ -12,15 +13,18 @@ describe("CompactionPolicyStore", () => {
   it("P3: set/get/clear round-trip", async () => {
     const ctx = await openNovelMasterTestConnection();
     const store = createCompactionPolicyStore(ctx.conn);
-    const policy = compactionPolicyFromJson({
-      schemaVersion: 1,
-      enabled: true,
-      trigger: { tokenThreshold: 100 },
-      action: {
-        keepLastN: 3,
-        abstract: { type: "text", content: "summary" },
+    const policy = decode(
+      {
+        schemaVersion: 1,
+        enabled: true,
+        trigger: { tokenThreshold: 100 },
+        action: {
+          keepLastN: 3,
+          abstract: { type: "text", content: "summary" },
+        },
       },
-    });
+      compactionPolicySchema,
+    );
     await store.setPolicy(policy);
     const loaded = await store.getPolicy();
     assert.deepEqual(loaded, policy);

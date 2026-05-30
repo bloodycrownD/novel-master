@@ -203,53 +203,51 @@ export type {
   PromptRenderDot,
   PromptLlmInput,
 } from "./service/prompt/render-prompt.js";
+export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
+export { stringifyText } from "./infra/serialization/stringify-text.js";
+export { decode } from "./infra/serialization/decode.js";
+export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
+export { ConfigDecodeError } from "./errors/config-decode-errors.js";
+export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";
+export { loadPromptBlocksFromYaml } from "./domain/prompt/load-prompt-blocks-from-yaml.js";
+export type { AgentDefinition } from "./domain/agent/model/agent-definition.js";
 export {
-  deserializeAgentDefinition,
-  type AgentDefinitionFormat,
-  type DeserializeAgentDefinitionOptions,
-} from "./infra/agent-definition-io/deserialize-agent-definition.js";
+  agentDefinitionSchema,
+  agentDefinitionDocumentSchema,
+  promptsDocumentSchema,
+} from "./domain/agent/agent-definition.schema.js";
 export {
-  serializeAgentDefinition,
-  type SerializeAgentDefinitionOptions,
-} from "./infra/agent-definition-io/serialize-agent-definition.js";
-export { loadPromptBlocksFromYaml } from "./infra/agent-definition-io/load-prompt-blocks-from-yaml.js";
-export type { AgentDefinition } from "./domain/agent/agent-definition.js";
+  validateAgentDefinition,
+  type ValidateAgentDefinitionOptions,
+} from "./domain/agent/validate-agent-definition.js";
 export {
   resolveApplicationModelId,
   resolveSummaryApplicationModelId,
   type ResolveApplicationModelIdInput,
   type ResolveSummaryApplicationModelIdInput,
 } from "./domain/agent/resolve-application-model-id.js";
-export type { CompactionModelContext } from "./domain/agent/compaction/compaction-model-context.js";
+export type { CompactionModelContext } from "./domain/compaction/compaction-model-context.js";
 export type {
   CompactionPolicy,
+  CompactionPolicyTemplate,
   CompactionTriggerConfig,
   CompactionActionConfig,
   CompactionAbstractConfig,
 } from "./domain/compaction/compaction-policy.js";
 export {
-  compactionPolicyFromJson,
-  compactionPolicyToJson,
-} from "./domain/compaction/compaction-policy-from-json.js";
-export {
-  compactionPolicyTemplateFromJson,
-  type CompactionPolicyTemplate,
-} from "./domain/compaction/compaction-policy-template-from-json.js";
-export {
-  agentsBundleFromJson,
-  isAgentsBundleDocument,
-} from "./domain/agent/agents-bundle-from-json.js";
+  compactionPolicySchema,
+  compactionPolicyDocumentSchema,
+  compactionPolicyTemplateSchema,
+  compactionPolicyTemplateDocumentSchema,
+} from "./domain/compaction/compaction-policy.schema.js";
 export { CompactionPolicyError } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyErrorCode } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyStore } from "./service/compaction/compaction-policy-store.port.js";
 export { createCompactionPolicyStore } from "./service/compaction/create-compaction-policy-store.js";
 export type { CompactionAgentResolver } from "./service/compaction/compaction-agent-resolver.port.js";
-export {
-  agentDefinitionFromJson,
-  agentDefinitionToJson,
-  validateAgentDefinition,
-  type ValidateAgentDefinitionOptions,
-} from "./domain/agent/agent-definition-from-json.js";
+export { createDbCompactionAgentResolver } from "./service/compaction/impl/db-compaction-agent-resolver.js";
+export type { AgentRegistryService } from "./service/agent/agent-registry.port.js";
+export { createAgentRegistryService } from "./service/agent/create-agent-registry-service.js";
 export { AgentConfigError } from "./errors/agent-config-errors.js";
 export type { AgentConfigErrorCode } from "./errors/agent-config-errors.js";
 export type {
@@ -292,16 +290,16 @@ export {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "./infra/llm-protocol/registry.js";
-export type { AgentSession } from "./domain/agent/agent-session.port.js";
+export type { AgentSession } from "./domain/agent/session/agent-session.port.js";
 export { AgentError } from "./domain/agent/agent-errors.js";
 export type { AgentErrorCode } from "./domain/agent/agent-errors.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,
-} from "./domain/agent/agent-run-result.js";
+} from "./domain/agent/model/agent-run-result.js";
 export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/doom-loop.js";
-export { InMemoryAgentSession } from "./domain/agent/impl/in-memory-agent-session.js";
-export { ChatAgentSession } from "./domain/agent/impl/chat-agent-session.js";
+export { InMemoryAgentSession } from "./domain/agent/session/impl/in-memory-agent-session.js";
+export { ChatAgentSession } from "./domain/agent/session/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
 export {
   createAgentRunner,

@@ -4,7 +4,7 @@
  * @module service/agent/create-agent-runner
  */
 
-import type { AgentSession } from "@/domain/agent/agent-session.port.js";
+import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { ToolRegistry } from "@/domain/tool/tool-registry.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";

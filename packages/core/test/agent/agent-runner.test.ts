@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
-  compactionPolicyFromJson,
+  compactionPolicySchema,
+  decode,
+  type CompactionPolicy,
   createAgentRunner,
   createCompactionPipeline,
   createNoOpCompactionPipeline,
@@ -20,7 +22,6 @@ import type { VfsService } from "@novel-master/core";
 
 function minimalDefinition(): AgentDefinition {
   return {
-    schemaVersion: 1,
     name: "test",
     prompts: [{ name: "c", type: "chat" }],
   };
@@ -31,7 +32,6 @@ const RUN_MODEL_ID = "anthropic/claude";
 /** Dialogue agent for runner compaction integration (no compact on definition). */
 function compactRunnerDefinition(): AgentDefinition {
   return {
-    schemaVersion: 1,
     name: "runner-compact",
     prompts: [
       { name: "base", type: "text", role: "system", content: "base" },
@@ -46,7 +46,7 @@ function compactRunnerDefinition(): AgentDefinition {
 }
 
 class InMemoryCompactionPolicyStore implements CompactionPolicyStore {
-  constructor(private readonly policy: ReturnType<typeof compactionPolicyFromJson>) {}
+  constructor(private readonly policy: CompactionPolicy) {}
 
   async getPolicy() {
     return this.policy;
@@ -254,15 +254,18 @@ describe("AgentRunner", () => {
     };
 
     const policyStore = new InMemoryCompactionPolicyStore(
-      compactionPolicyFromJson({
-        schemaVersion: 1,
-        enabled: true,
-        trigger: { tokenThreshold: 10 },
-        action: {
-          keepLastN: 2,
-          abstract: { type: "text", content: "compact-abstract" },
+      decode(
+        {
+          schemaVersion: 1,
+          enabled: true,
+          trigger: { tokenThreshold: 10 },
+          action: {
+            keepLastN: 2,
+            abstract: { type: "text", content: "compact-abstract" },
+          },
         },
-      }),
+        compactionPolicySchema,
+      ),
     );
 
     const registry = new ToolRegistry();

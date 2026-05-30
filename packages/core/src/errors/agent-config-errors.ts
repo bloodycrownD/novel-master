@@ -9,7 +9,9 @@ export type AgentConfigErrorCode =
   | "INVALID_SCHEMA"
   | "INVALID_COMPACT"
   | "INVALID_MODEL"
-  | "PROTOCOL_MISMATCH";
+  | "PROTOCOL_MISMATCH"
+  | "AGENT_NOT_FOUND"
+  | "AGENT_IN_USE";
 
 /**
  * Unified error for agent definition parse and validation.

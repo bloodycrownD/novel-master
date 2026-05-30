@@ -4,9 +4,12 @@
  * @module service/compaction/impl/compaction-policy-store.service
  */
 
-import { compactionPolicyFromJson, compactionPolicyToJson } from "@/domain/compaction/compaction-policy-from-json.js";
+import { decode } from "@/infra/serialization/decode.js";
+import { encode } from "@/infra/serialization/encode.js";
+import { compactionPolicySchema } from "@/domain/compaction/compaction-policy.schema.js";
 import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
 import { CompactionPolicyError } from "@/errors/compaction-policy-errors.js";
+import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
 import { KkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionPolicyStore } from "../compaction-policy-store.port.js";
@@ -24,10 +27,13 @@ export class DefaultCompactionPolicyStore implements CompactionPolicyStore {
       return null;
     }
     try {
-      return compactionPolicyFromJson(JSON.parse(raw) as unknown);
+      return decode(JSON.parse(raw) as unknown, compactionPolicySchema);
     } catch (error) {
-      if (error instanceof CompactionPolicyError) {
-        throw error;
+      if (
+        error instanceof CompactionPolicyError ||
+        error instanceof ConfigDecodeError
+      ) {
+        throw new CompactionPolicyError("INVALID_SCHEMA", error.message);
       }
       throw new CompactionPolicyError(
         "INVALID_SCHEMA",
@@ -37,7 +43,8 @@ export class DefaultCompactionPolicyStore implements CompactionPolicyStore {
   }
 
   async setPolicy(policy: CompactionPolicy): Promise<void> {
-    const json = JSON.stringify(compactionPolicyToJson(policy));
+    const wire = encode(policy, compactionPolicySchema);
+    const json = JSON.stringify(wire);
     await this.kkv.set(MODULE, KEY_POLICY, json);
   }
 

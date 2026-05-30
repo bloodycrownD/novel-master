@@ -13,6 +13,7 @@ import { WORKTREE_SCHEMA_STATEMENTS } from "./worktree/worktree-schema.js";
 import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
+import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 
 /** All module DDL statements in dependency-safe execution order. */
@@ -25,6 +26,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...SKSP_SCHEMA_STATEMENTS,
   ...PROVIDER_SCHEMA_STATEMENTS,
   ...REGEX_SCHEMA_STATEMENTS,
+  ...AGENT_SCHEMA_STATEMENTS,
 ];
 
 /**

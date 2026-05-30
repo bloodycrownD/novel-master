@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  deserializeAgentDefinition,
-  serializeAgentDefinition,
+  agentDefinitionSchema,
+  decode,
+  encode,
   loadPromptBlocksFromYaml,
+  parseText,
+  stringifyText,
 } from "@novel-master/core";
 
-describe("agent-definition-io", () => {
+describe("agent definition serialization", () => {
   it("round-trips YAML with blocks map", () => {
     const yaml = `
 schemaVersion: 1
@@ -19,11 +22,11 @@ prompts:
       role: system
       content: hello
 `;
-    const def = deserializeAgentDefinition(yaml);
+    const def = decode(parseText(yaml, "yaml"), agentDefinitionSchema);
     assert.equal(def.name, "test");
     assert.equal(def.model, "anthropic/claude");
-    const out = serializeAgentDefinition(def);
-    const again = deserializeAgentDefinition(out);
+    const out = stringifyText(encode(def, agentDefinitionSchema), "yaml");
+    const again = decode(parseText(out, "yaml"), agentDefinitionSchema);
     assert.equal(again.prompts[0]?.name, "s");
   });
 

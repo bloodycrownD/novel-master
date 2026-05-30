@@ -6,12 +6,12 @@
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
-import type { AgentSession } from "@/domain/agent/agent-session.port.js";
+import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import { visibleFloorByMessageId } from "@/domain/chat/message-visible-floor.js";
 import { applyRegexChannelToMessages } from "@/domain/regex/apply-regex-rules.js";
 import { resolveActiveCompiledRules } from "@/domain/regex/resolve-active-regex-rules.js";
 import { assertNoDoomLoopInBlocks } from "@/domain/agent/doom-loop.js";
-import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/agent-run-result.js";
+import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/tool-runner.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";

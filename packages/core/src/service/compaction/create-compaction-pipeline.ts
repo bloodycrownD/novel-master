@@ -5,11 +5,11 @@
  */
 
 import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
-import { DefaultCompactionAction } from "@/domain/agent/compaction/action/default-compaction-action.js";
-import { CompositeTrigger } from "@/domain/agent/compaction/triggers/composite-trigger.js";
-import { FloorThresholdTrigger } from "@/domain/agent/compaction/triggers/floor-threshold.trigger.js";
-import { TokenThresholdTrigger } from "@/domain/agent/compaction/triggers/token-threshold.trigger.js";
-import type { CompactionTrigger } from "@/domain/agent/compaction/compaction-trigger.port.js";
+import { DefaultCompactionAction } from "@/domain/compaction/action/default-compaction-action.js";
+import { CompositeTrigger } from "@/domain/compaction/triggers/composite-trigger.js";
+import { FloorThresholdTrigger } from "@/domain/compaction/triggers/floor-threshold.trigger.js";
+import { TokenThresholdTrigger } from "@/domain/compaction/triggers/token-threshold.trigger.js";
+import type { CompactionTrigger } from "@/domain/compaction/compaction-trigger.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { CompactionAgentResolver } from "./compaction-agent-resolver.port.js";
 import type { CompactionPolicyStore } from "./compaction-policy-store.port.js";

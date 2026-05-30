@@ -27,8 +27,10 @@ export interface CompactionActionConfig {
 
 /** Global compaction policy persisted as a single KKV document. */
 export interface CompactionPolicy {
-  readonly schemaVersion: 1;
   readonly enabled: boolean;
   readonly trigger: CompactionTriggerConfig;
   readonly action: CompactionActionConfig;
 }
+
+/** Template shape (no `enabled`; CLI sets on import). */
+export type CompactionPolicyTemplate = Omit<CompactionPolicy, "enabled">;

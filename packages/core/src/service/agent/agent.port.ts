@@ -4,8 +4,8 @@
  * @module service/agent/agent.port
  */
 
-import type { AgentDefinition } from "@/domain/agent/agent-definition.js";
-import type { AgentRunResult } from "@/domain/agent/agent-run-result.js";
+import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/adapter.port.js";
 import type { PromptRenderContext } from "../prompt/render-prompt.js";
 

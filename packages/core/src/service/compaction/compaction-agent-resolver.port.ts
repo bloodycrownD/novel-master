@@ -4,7 +4,7 @@
  * @module service/compaction/compaction-agent-resolver.port
  */
 
-import type { AgentDefinition } from "@/domain/agent/agent-definition.js";
+import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 
 /** Loads an agent definition referenced by `abstract.type: agent` agentId. */
 export interface CompactionAgentResolver {
