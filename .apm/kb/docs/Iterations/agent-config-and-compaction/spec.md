@@ -1,6 +1,8 @@
 # Agent 配置化与压缩策略抽象 技术规格（SPEC）
 
-> **Superseded（Prompt 条件块）**：`PromptBlock.when` 已废弃，摘要段落请使用 `type: abstract` 块。见 [agent-prompt-abstract-block/spec.md](../agent-prompt-abstract-block/spec.md)。本文档中 **compact / model / runtime** 章节仍有效。
+> **Superseded（Prompt 条件块）**：`PromptBlock.when` 已废弃，摘要段落请使用 `type: abstract` 块。见 [agent-prompt-abstract-block/spec.md](../agent-prompt-abstract-block/spec.md)。
+>
+> **Superseded（Agent 内 compact）**：`AgentDefinition.compact` 已移除；全局策略见 [global-compaction-policy/spec.md](../global-compaction-policy/spec.md)。本文档中 **model / runtime** 与 prompt 章节仍作历史参考。
 
 ## 设计目标
 
