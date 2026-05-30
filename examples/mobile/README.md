@@ -5,7 +5,7 @@
 ## 文件结构
 
 ```text
-ui-shell-prototype/
+examples/mobile/
 ├── index.html
 ├── styles.css
 ├── app.js
@@ -19,7 +19,7 @@ ui-shell-prototype/
 ## 使用
 
 ```powershell
-start examples/ui-shell-prototype/index.html
+start examples/mobile/index.html
 ```
 
 或在资源管理器中双击 `index.html`。
