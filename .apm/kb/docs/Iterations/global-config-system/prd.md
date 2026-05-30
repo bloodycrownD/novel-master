@@ -1,5 +1,7 @@
 # 全局配置系统 PRD
 
+> **Superseded**：由 `Iterations/persistent-state-and-preferences`（PRD/SPEC）承接；勿再按本文实现。
+
 ## 背景
 
 Novel Master 当前使用 `.novel-master/config.json` 存储应用级配置（如 `currentProviderId`、`currentModelId`、`currentProjectId`、`currentSessionId`），存在以下问题：

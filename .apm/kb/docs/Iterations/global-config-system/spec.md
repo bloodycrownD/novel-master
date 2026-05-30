@@ -1,5 +1,7 @@
 # 全局配置系统 技术规格（SPEC）
 
+> **Superseded**：由 `Iterations/persistent-state-and-preferences/spec.md` 承接。
+
 ## 设计目标
 
 基于现有 KKV 系统实现应用级全局配置管理，完全替换 `config.json`，统一配置存储与访问接口，支持类型化读写（string/boolean/number）。

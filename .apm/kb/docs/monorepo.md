@@ -33,7 +33,7 @@
   npm run link:cli
   nm vfs write /template/foo.md --text "hello"
   nm vfs read /template/foo.md
-  nm project create --name "My Project"          # sets current project in .novel-master/config.json
+  nm project create --name "My Project"          # sets current project in novel.db (persistent state)
   nm session create --title "main"               # uses current project; sets current session
   nm project use --project <projectId>           # or: --name <name>
   nm project current                             # prints: id<TAB>name
