@@ -684,6 +684,138 @@ body {
     font-weight: 600;
 }
 
+.section-header-actions,
+.drawer-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-danger {
+    padding: 8px 16px;
+    background: #d32f2f;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.btn-danger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-danger:not(:disabled):active {
+    opacity: 0.85;
+}
+
+.list-batch-check {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-right: 4px;
+}
+
+.list-batch-check input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary-color);
+}
+
+.list-item--selected {
+    outline: 2px solid var(--primary-color);
+    outline-offset: -2px;
+}
+
+.list-batch-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 56px;
+    z-index: 900;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--surface-color);
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
+}
+
+body.list-batch-page-footer #sessionList,
+body.list-batch-page-footer .agent-list {
+    padding-bottom: 72px;
+}
+
+.list-batch-count,
+.batch-header-count {
+    flex: 1;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.manage-header-batch.section-header,
+.manage-header-batch.drawer-header-row {
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.drawer-header.manage-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0;
+    border-bottom: none;
+}
+
+.drawer-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+    gap: 8px;
+}
+
+.manage-header-hint {
+    margin: 0;
+    padding: 8px 16px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: var(--bg-color);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.drawer-header-hint {
+    flex-shrink: 0;
+}
+
+body[data-batch-list="sessions"] [data-batch-header="sessions"] .section-header-actions,
+body[data-batch-list="agents"] [data-batch-header="agents"] .section-header-actions {
+    visibility: hidden;
+    pointer-events: none;
+}
+
+body.list-batch-active .provider-model-item,
+body.list-batch-active .provider-item {
+    cursor: pointer;
+}
+
+body[data-batch-list="providerModels"] .provider-model-item {
+    cursor: pointer;
+}
+
+body[data-batch-list="providers"] .provider-item {
+    cursor: pointer;
+}
+
+body[data-batch-list="projects"] .project-item {
+    cursor: pointer;
+}
+
 .btn-primary {
     padding: 8px 16px;
     background: var(--primary-color);
@@ -1023,6 +1155,19 @@ body {
     border-radius: 12px;
     margin-bottom: 12px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+}
+
+.provider-model-item .agent-menu-btn {
+    cursor: pointer;
+}
+
+.model-sampling-editor {
+    padding: 16px;
+}
+
+.model-sampling-id {
+    word-break: break-all;
 }
 
 .provider-model-name {
@@ -1046,10 +1191,6 @@ body {
     font-size: 14px;
     color: var(--text-secondary);
     line-height: 1.5;
-}
-
-#modelConfigSamplingRoot.hidden {
-    display: none !important;
 }
 
 .agent-menu-btn {

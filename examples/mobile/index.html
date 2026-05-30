@@ -39,31 +39,14 @@
                         <button type="button" class="chat-top-tab" data-session-panel="template" role="tab" aria-selected="false">项目模板</button>
                     </div>
                     <div id="sessionPanelSessions" class="session-list-panel active">
-                        <div class="section-header">
+                        <div class="section-header" data-batch-header="sessions">
                             <h2>会话</h2>
-                            <button class="btn-primary" data-action="new-session">新建会话</button>
-                        </div>
-                        <div class="session-list">
-                            <div class="session-item active" data-id="session-1" data-name="第一卷创作">
-                                <div class="session-info">
-                                    <div class="session-name">第一卷创作</div>
-                                    <div class="session-meta">45条消息 · 活跃中</div>
-                                </div>
-                                <span class="current-badge">当前</span>
-                            </div>
-                            <div class="session-item" data-id="session-2" data-name="角色设定讨论">
-                                <div class="session-info">
-                                    <div class="session-name">角色设定讨论</div>
-                                    <div class="session-meta">23条消息 · 2小时前</div>
-                                </div>
-                            </div>
-                            <div class="session-item" data-id="session-3" data-name="世界观构建">
-                                <div class="session-info">
-                                    <div class="session-name">世界观构建</div>
-                                    <div class="session-meta">67条消息 · 1天前</div>
-                                </div>
+                            <div class="section-header-actions">
+                                <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="sessions">管理</button>
+                                <button class="btn-primary" data-action="new-session">新建会话</button>
                             </div>
                         </div>
+                        <div id="sessionList" class="session-list"></div>
                     </div>
                     <div id="sessionPanelTemplate" class="session-list-panel workspace-panel project-template-panel">
                         <div class="info-banner files-scope-banner">
@@ -125,9 +108,12 @@
 
             <!-- Agent 列表（底栏 Tab） -->
             <div id="agentsPage" class="page">
-                <div class="section-header">
+                <div class="section-header" data-batch-header="agents">
                     <h2>Agent</h2>
-                    <button class="btn-primary" data-action="new-agent">新建</button>
+                    <div class="section-header-actions">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="agents">管理</button>
+                        <button class="btn-primary" data-action="new-agent">新建</button>
+                    </div>
                 </div>
                 <div id="agentList" class="agent-list"></div>
             </div>
@@ -304,20 +290,50 @@ status: draft
 
             <!-- 服务商管理页面 -->
             <div id="providersPage" class="page">
-                <div class="section-header">
-                    <h2>服务商</h2>
-                    <button class="btn-primary" data-action="new-provider">添加</button>
+                <div class="manage-header" data-batch-header="providers">
+                    <div class="manage-header-normal section-header">
+                        <h2>服务商</h2>
+                        <div class="section-header-actions">
+                            <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="providers">管理</button>
+                            <button class="btn-primary" data-action="new-provider">添加</button>
+                        </div>
+                    </div>
+                    <div class="manage-header-batch section-header hidden">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                        <span class="batch-header-count">已选 0 项</span>
+                        <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="providers" disabled>删除</button>
+                    </div>
+                    <p class="manage-header-hint hidden" data-batch-hint="providers">选择要删除的服务商（将同时移除其下所有已保存模型）</p>
                 </div>
                 <div id="providerList" class="provider-list"></div>
             </div>
 
             <!-- 服务商详情：已保存模型 -->
             <div id="providerDetailPage" class="page">
-                <div class="section-header">
-                    <h2 id="providerDetailTitle">服务商</h2>
-                    <button type="button" class="btn-primary" data-action="add-provider-model">添加模型</button>
+                <div class="manage-header" data-batch-header="providerModels">
+                    <div class="manage-header-normal section-header">
+                        <h2 id="providerDetailTitle">服务商</h2>
+                        <div class="section-header-actions">
+                            <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="providerModels">管理</button>
+                            <button type="button" class="btn-primary" data-action="add-provider-model">添加模型</button>
+                        </div>
+                    </div>
+                    <div class="manage-header-batch section-header hidden">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                        <span class="batch-header-count">已选 0 项</span>
+                        <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="providerModels" disabled>删除</button>
+                    </div>
+                    <p class="manage-header-hint hidden" data-batch-hint="providerModels">选择要删除的模型（批量模式下不会进入采样配置）</p>
                 </div>
                 <div id="providerModelList" class="provider-model-list"></div>
+            </div>
+
+            <!-- 模型采样配置（独立页，无启用开关） -->
+            <div id="modelSamplingPage" class="page">
+                <div class="agent-editor-toolbar">
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-model-sampling">保存</button>
+                </div>
+                <div id="modelSamplingRoot" class="model-sampling-editor"></div>
             </div>
 
             <!-- 设置页面 -->
@@ -401,27 +417,22 @@ status: draft
     <!-- 左侧项目抽屉 -->
     <div id="drawerOverlay" class="drawer-overlay hidden" aria-hidden="true"></div>
     <aside id="projectDrawer" class="side-drawer project-drawer" aria-label="项目列表">
-        <div class="drawer-header">
-            <h2>项目</h2>
-            <button type="button" class="btn-primary drawer-new-project" data-action="new-project">新建</button>
-        </div>
-        <div class="project-list drawer-project-list">
-            <div class="project-item active" data-id="novel-1" data-name="科幻小说创作">
-                <div class="project-icon">📚</div>
-                <div class="project-info">
-                    <div class="project-name">科幻小说创作</div>
-                    <div class="project-meta">3个会话 · 更新于 2小时前</div>
-                </div>
-                <span class="current-badge">当前</span>
-            </div>
-            <div class="project-item" data-id="novel-2" data-name="历史小说">
-                <div class="project-icon">📖</div>
-                <div class="project-info">
-                    <div class="project-name">历史小说</div>
-                    <div class="project-meta">1个会话 · 更新于 1天前</div>
+        <div class="drawer-header manage-header" data-batch-header="projects">
+            <div class="manage-header-normal drawer-header-row">
+                <h2>项目</h2>
+                <div class="drawer-header-actions">
+                    <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="projects">管理</button>
+                    <button type="button" class="btn-primary" data-action="new-project">新建</button>
                 </div>
             </div>
+            <div class="manage-header-batch drawer-header-row hidden">
+                <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                <span class="batch-header-count">已选 0 项</span>
+                <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="projects" disabled>删除</button>
+            </div>
+            <p class="manage-header-hint drawer-header-hint hidden" data-batch-hint="projects">选择要删除的项目（将同时移除其下所有会话）</p>
         </div>
+        <div id="projectList" class="project-list drawer-project-list"></div>
     </aside>
     <aside id="sessionActionsDrawer" class="side-drawer session-actions-drawer" aria-label="会话操作">
         <div class="drawer-header">
@@ -467,23 +478,6 @@ status: draft
         </div>
     </div>
 
-    <!-- 模型采样配置（mock，对齐 KKV profile） -->
-    <div id="modelConfigModal" class="modal hidden" aria-hidden="true">
-        <div class="modal-backdrop" data-action="close-model-config"></div>
-        <div class="modal-panel model-config-panel" role="dialog" aria-label="模型采样配置">
-            <h3 id="modelConfigTitle">模型配置</h3>
-            <label class="agent-field agent-field--row model-config-toggle">
-                <span>启用自定义采样</span>
-                <input type="checkbox" class="toggle" id="modelConfigEnabled">
-            </label>
-            <div id="modelConfigSamplingRoot"></div>
-            <div class="modal-actions">
-                <button type="button" class="btn-primary" data-action="save-model-config">保存</button>
-                <button type="button" class="btn-secondary" data-action="close-model-config">取消</button>
-            </div>
-        </div>
-    </div>
-
     <!-- 添加已保存模型 -->
     <div id="addModelModal" class="modal hidden" aria-hidden="true">
         <div class="modal-backdrop" data-action="close-add-model"></div>
@@ -498,11 +492,36 @@ status: draft
                     <span>展示名称</span>
                     <input type="text" id="addModelLabel" placeholder="可选，默认同 ID" autocomplete="off">
                 </label>
-                <p class="agent-field-hint">对齐 CLI <code>nm provider model save --vendorModelId …</code>；保存后可配置采样。</p>
+                <p class="agent-field-hint">保存后可在模型详情中配置采样参数。</p>
             </section>
             <div class="modal-actions">
                 <button type="button" class="btn-primary" data-action="confirm-add-model">保存</button>
                 <button type="button" class="btn-secondary" data-action="close-add-model">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 全页列表批量底栏（会话 / Agent） -->
+    <div id="listBatchBar" class="list-batch-bar hidden" aria-hidden="true" data-batch-ui="page-footer">
+        <button type="button" class="btn-secondary" data-action="batch-cancel">取消</button>
+        <span id="listBatchCount" class="list-batch-count">已选 0 项</span>
+        <button type="button" class="btn-danger" data-action="batch-delete" data-batch-list="page-footer" disabled>删除</button>
+    </div>
+
+    <!-- 新建项目 -->
+    <div id="newProjectModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-new-project"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="新建项目">
+            <section class="agent-form-section model-picker-form">
+                <h3>新建项目</h3>
+                <label class="agent-field">
+                    <span>项目名称</span>
+                    <input type="text" id="newProjectName" placeholder="如 科幻小说创作" autocomplete="off">
+                </label>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="confirm-new-project">创建</button>
+                <button type="button" class="btn-secondary" data-action="close-new-project">取消</button>
             </div>
         </div>
     </div>

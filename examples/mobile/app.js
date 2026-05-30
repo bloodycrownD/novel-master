@@ -24,6 +24,7 @@
         workspaceCurrentModelId: 'zhipu/glm-4.6',
         modelSamplingProfiles: {},
         editingProviderId: null,
+        editingModelApplicationModelId: null,
     };
 
     const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
@@ -37,6 +38,7 @@
         sessionLog: { title: '会话日志', showBack: true, showNav: false },
         providers: { title: '服务商管理', showBack: true, showNav: false },
         providerDetail: { title: '模型管理', showBack: true, showNav: false },
+        modelSampling: { title: '采样配置', showBack: true, showNav: false },
         settings: { title: '扩展设置', showBack: true, showNav: false },
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
@@ -203,7 +205,7 @@
         appState.currentSessionId = sessionId;
         appState.currentSessionName = sessionName;
 
-        document.querySelectorAll('#sessionListView .session-item').forEach(function (el) {
+        document.querySelectorAll('#sessionList .session-item').forEach(function (el) {
             el.classList.toggle('active', el.dataset.id === sessionId);
             const badge = el.querySelector('.current-badge');
             if (el.dataset.id === sessionId) {
@@ -229,6 +231,8 @@
 
         if (pushToStack) appState.pageStack.push(appState.currentPage);
 
+        if (pageId !== appState.currentPage) exitBatchMode();
+
         const currentPageEl = document.getElementById(appState.currentPage + 'Page');
         if (currentPageEl) currentPageEl.classList.remove('active');
 
@@ -236,6 +240,8 @@
         if (newPageEl) newPageEl.classList.add('active');
 
         appState.currentPage = pageId;
+
+        if (pageId !== 'chat') closeDrawer();
 
         if (pageId === 'chat') restoreChatSubviewUI();
 
@@ -256,7 +262,7 @@
                 elements.pageTitle.textContent = '会话';
             }
             elements.backBtn.classList.toggle('hidden', appState.chatSubview !== 'conversation');
-            updateDrawerAriaLabel();
+            updateDrawerButton(pageId);
             return;
         }
 
@@ -264,7 +270,7 @@
             const entry = agentCatalog[appState.editingAgentId];
             elements.pageTitle.textContent = entry ? entry.definition.name : config.title;
             elements.backBtn.classList.toggle('hidden', !config.showBack);
-            updateDrawerAriaLabel();
+            updateDrawerButton(pageId);
             return;
         }
 
@@ -272,13 +278,20 @@
             const provider = findProvider(appState.editingProviderId);
             elements.pageTitle.textContent = provider ? provider.name : config.title;
             elements.backBtn.classList.toggle('hidden', !config.showBack);
-            updateDrawerAriaLabel();
+            updateDrawerButton(pageId);
+            return;
+        }
+
+        if (pageId === 'modelSampling' && appState.editingModelApplicationModelId) {
+            elements.pageTitle.textContent = modelShortLabel(appState.editingModelApplicationModelId);
+            elements.backBtn.classList.toggle('hidden', !config.showBack);
+            updateDrawerButton(pageId);
             return;
         }
 
         elements.pageTitle.textContent = config.title;
         elements.backBtn.classList.toggle('hidden', !config.showBack);
-        updateDrawerAriaLabel();
+        updateDrawerButton(pageId);
     }
 
     function updateNavBar(pageId) {
@@ -292,8 +305,11 @@
         });
     }
 
-    function updateDrawerAriaLabel() {
+    function updateDrawerButton(pageId) {
         if (!elements.drawerBtn) return;
+        const show = pageId === 'chat';
+        elements.drawerBtn.classList.toggle('hidden', !show);
+        if (!show) return;
         const inConversation = appState.chatSubview === 'conversation';
         elements.drawerBtn.setAttribute(
             'aria-label',
@@ -322,6 +338,7 @@
 
     /** 会话列表 → 项目抽屉；聊天中 → 会话操作抽屉（含切换模型、真实提示词、会话日志） */
     function openDrawer() {
+        if (appState.currentPage !== 'chat') return;
         if (appState.chatSubview === 'conversation') {
             openSessionActionsDrawer();
         } else {
@@ -330,6 +347,7 @@
     }
 
     function closeDrawer() {
+        if (batchSelection.activeList === 'projects') exitBatchMode();
         if (elements.drawerOverlay) {
             elements.drawerOverlay.classList.add('hidden');
             elements.drawerOverlay.setAttribute('aria-hidden', 'true');
@@ -899,61 +917,112 @@
         }
     }
 
+    function setupListBatchSelection() {
+        document.body.addEventListener('click', function (e) {
+            if (e.target.closest('.list-batch-check')) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            const manageBtn = e.target.closest('[data-action="batch-manage"]');
+            if (manageBtn) {
+                enterBatchMode(manageBtn.dataset.batchList);
+                return;
+            }
+
+            const cancelBtn = e.target.closest('[data-action="batch-cancel"]');
+            if (cancelBtn) {
+                exitBatchMode();
+                return;
+            }
+
+            const deleteBtn = e.target.closest('[data-action="batch-delete"]');
+            if (deleteBtn && !deleteBtn.disabled) {
+                const scope = deleteBtn.dataset.batchList;
+                if (scope && scope !== 'page-footer' && scope !== batchSelection.activeList) return;
+                executeBatchDelete();
+            }
+        });
+
+        document.body.addEventListener('change', function (e) {
+            const checkbox = e.target.closest('.list-batch-check input[type="checkbox"]');
+            if (!checkbox) return;
+            const item = checkbox.closest('[data-id], [data-provider-id], [data-vendor-model-id]');
+            if (!item || !batchSelection.activeList) return;
+            const itemId =
+                item.dataset.id || item.dataset.providerId || item.dataset.vendorModelId;
+            if (!itemId) return;
+            if (checkbox.checked) batchSelection.selectedIds.add(itemId);
+            else batchSelection.selectedIds.delete(itemId);
+            updateBatchBar();
+            batchListConfig[batchSelection.activeList].refresh();
+        });
+    }
+
+    function handleManagedListItemClick(e, listId, item, normalAction) {
+        if (e.target.closest('.list-batch-check')) return true;
+        if (isBatchMode(listId)) {
+            e.preventDefault();
+            const itemId =
+                item.dataset.id || item.dataset.providerId || item.dataset.vendorModelId;
+            if (!itemId) return true;
+            toggleBatchItem(listId, itemId);
+            return true;
+        }
+        if (normalAction) normalAction(item);
+        return true;
+    }
+
     function setupProjectsAndSessions() {
-        const projectItems = document.querySelectorAll('.drawer-project-list .project-item');
-        projectItems.forEach(function (item) {
-            item.addEventListener('click', function () {
-                const projectId = item.dataset.id;
-                const nameEl = item.querySelector('.project-name');
-                const projectName = item.dataset.name || (nameEl ? nameEl.textContent : '');
+        renderProjectList();
+        renderSessionList();
 
-                appState.currentProjectId = projectId;
-                appState.currentProjectName = projectName;
-
-                projectItems.forEach(function (el) {
-                    el.classList.toggle('active', el.dataset.id === projectId);
-                    const badge = el.querySelector('.current-badge');
-                    if (el.dataset.id === projectId) {
-                        if (!badge) {
-                            const span = document.createElement('span');
-                            span.className = 'current-badge';
-                            span.textContent = '当前';
-                            el.appendChild(span);
-                        }
-                    } else if (badge) {
-                        badge.remove();
-                    }
+        const projectList = document.getElementById('projectList');
+        if (projectList) {
+            projectList.addEventListener('click', function (e) {
+                const item = e.target.closest('.project-item');
+                if (!item) return;
+                handleManagedListItemClick(e, 'projects', item, function (el) {
+                    switchToProject(el.dataset.id, el.dataset.name);
+                    closeDrawer();
+                    showSessionListView();
+                    showToast('已切换到项目：' + el.dataset.name);
                 });
-
-                if (elements.bannerProjectName) elements.bannerProjectName.textContent = projectName;
-                closeDrawer();
-                showSessionListView();
-                showToast('已切换到项目：' + projectName);
             });
-        });
+        }
 
-        document.querySelectorAll('#sessionListView .session-item').forEach(function (item) {
-            item.addEventListener('click', function () {
-                const sessionId = item.dataset.id;
-                const nameEl = item.querySelector('.session-name');
-                const sessionName = item.dataset.name || (nameEl ? nameEl.textContent : '');
-                openChatConversation(sessionId, sessionName);
+        const sessionList = document.getElementById('sessionList');
+        if (sessionList) {
+            sessionList.addEventListener('click', function (e) {
+                const item = e.target.closest('.session-item');
+                if (!item) return;
+                handleManagedListItemClick(e, 'sessions', item, function (el) {
+                    openChatConversation(el.dataset.id, el.dataset.name);
+                });
             });
-        });
+        }
 
         const newProjectBtn = document.querySelector('[data-action="new-project"]');
         if (newProjectBtn) {
             newProjectBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                showToast('新建项目');
+                openNewProjectModal();
             });
         }
+
+        document.querySelectorAll('[data-action="close-new-project"]').forEach(function (btn) {
+            btn.addEventListener('click', closeNewProjectModal);
+        });
+
+        const confirmNewProject = document.querySelector('[data-action="confirm-new-project"]');
+        if (confirmNewProject) confirmNewProject.addEventListener('click', confirmNewProjectModal);
 
         const newSessionBtn = document.querySelector('[data-action="new-session"]');
         if (newSessionBtn) {
             newSessionBtn.addEventListener('click', function (e) {
                 e.stopPropagation();
-                showToast('新建会话');
+                createNewSession();
             });
         }
     }
@@ -989,6 +1058,448 @@
             models: [{ vendorModelId: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
         },
     ];
+
+    const MOCK_PROJECTS = [
+        { id: 'novel-1', name: '科幻小说创作', updatedLabel: '2小时前' },
+        { id: 'novel-2', name: '历史小说', updatedLabel: '1天前' },
+    ];
+
+    /** @type {Record<string, Array<{ id: string, name: string, meta: string }>>} */
+    const MOCK_SESSIONS = {
+        'novel-1': [
+            { id: 'session-1', name: '第一卷创作', meta: '45条消息 · 活跃中' },
+            { id: 'session-2', name: '角色设定讨论', meta: '23条消息 · 2小时前' },
+            { id: 'session-3', name: '世界观构建', meta: '67条消息 · 1天前' },
+        ],
+        'novel-2': [{ id: 'session-4', name: '大纲整理', meta: '12条消息 · 3天前' }],
+    };
+
+    const batchSelection = {
+        activeList: null,
+        selectedIds: new Set(),
+    };
+
+    function getProjectSessions(projectId) {
+        const pid = projectId || appState.currentProjectId;
+        if (!MOCK_SESSIONS[pid]) MOCK_SESSIONS[pid] = [];
+        return MOCK_SESSIONS[pid];
+    }
+
+    function projectMetaLine(project) {
+        const count = getProjectSessions(project.id).length;
+        return count + '个会话 · 更新于 ' + project.updatedLabel;
+    }
+
+    function projectIconForIndex(index) {
+        const icons = ['📚', '📖', '📝', '📂'];
+        return icons[index % icons.length];
+    }
+
+    function isBatchMode(listId) {
+        return batchSelection.activeList === listId;
+    }
+
+    function getBatchListCount(listId) {
+        if (listId === 'sessions') return getProjectSessions().length;
+        if (listId === 'projects') return MOCK_PROJECTS.length;
+        if (listId === 'agents') return Object.keys(agentCatalog).length;
+        if (listId === 'providers') return MOCK_PROVIDERS.length;
+        if (listId === 'providerModels') {
+            const provider = findProvider(appState.editingProviderId);
+            return provider ? provider.models.length : 0;
+        }
+        return 0;
+    }
+
+    function renderBatchCheckbox(listId, itemId) {
+        if (!isBatchMode(listId)) return '';
+        const checked = batchSelection.selectedIds.has(itemId);
+        return (
+            '<label class="list-batch-check" aria-label="选择">' +
+            '<input type="checkbox"' +
+            (checked ? ' checked' : '') +
+            ' tabindex="-1">' +
+            '</label>'
+        );
+    }
+
+    function listItemSelectedClass(listId, itemId) {
+        return isBatchMode(listId) && batchSelection.selectedIds.has(itemId) ? ' list-item--selected' : '';
+    }
+
+    function updateBatchBar() {
+        const n = batchSelection.selectedIds.size;
+        const listId = batchSelection.activeList;
+
+        if (listId) {
+            const header = document.querySelector('[data-batch-header="' + listId + '"]');
+            if (header) {
+                const countEl = header.querySelector('.batch-header-count');
+                if (countEl) countEl.textContent = '已选 ' + n + ' 项';
+                header.querySelectorAll('[data-action="batch-delete"]').forEach(function (btn) {
+                    btn.disabled = n === 0;
+                });
+            }
+        }
+
+        const pageBar = document.getElementById('listBatchBar');
+        if (pageBar && !pageBar.classList.contains('hidden')) {
+            const countEl = document.getElementById('listBatchCount');
+            if (countEl) countEl.textContent = '已选 ' + n + ' 项';
+            const deleteBtn = pageBar.querySelector('[data-action="batch-delete"]');
+            if (deleteBtn) deleteBtn.disabled = n === 0;
+        }
+    }
+
+    function updateBatchModeUI() {
+        const active = batchSelection.activeList;
+        const config = active ? batchListConfig[active] : null;
+
+        document.body.classList.toggle('list-batch-active', !!active);
+        document.body.classList.toggle('list-batch-page-footer', !!(config && config.ui === 'page-footer'));
+        if (active) {
+            document.body.dataset.batchList = active;
+        } else {
+            delete document.body.dataset.batchList;
+        }
+
+        document.querySelectorAll('[data-batch-header]').forEach(function (wrap) {
+            const listId = wrap.dataset.batchHeader;
+            const isActive = active === listId && config && config.ui !== 'page-footer';
+            const normal = wrap.querySelector('.manage-header-normal');
+            const batch = wrap.querySelector('.manage-header-batch');
+            if (normal) normal.classList.toggle('hidden', isActive);
+            if (batch) batch.classList.toggle('hidden', !isActive);
+        });
+
+        document.querySelectorAll('[data-batch-hint]').forEach(function (el) {
+            el.classList.toggle('hidden', el.dataset.batchHint !== active);
+        });
+
+        const pageBar = document.getElementById('listBatchBar');
+        const showPageFooter = !!(config && config.ui === 'page-footer');
+        if (pageBar) {
+            pageBar.classList.toggle('hidden', !showPageFooter);
+            pageBar.setAttribute('aria-hidden', showPageFooter ? 'false' : 'true');
+        }
+
+        updateBatchBar();
+    }
+
+    function enterBatchMode(listId) {
+        if (!batchListConfig[listId]) return;
+        if (listId === 'projects') openProjectDrawer();
+        batchSelection.activeList = listId;
+        batchSelection.selectedIds.clear();
+        updateBatchModeUI();
+        batchListConfig[listId].refresh();
+    }
+
+    function exitBatchMode() {
+        const prev = batchSelection.activeList;
+        batchSelection.activeList = null;
+        batchSelection.selectedIds.clear();
+        updateBatchModeUI();
+        if (prev && batchListConfig[prev]) batchListConfig[prev].refresh();
+    }
+
+    function toggleBatchItem(listId, itemId) {
+        if (!isBatchMode(listId)) return;
+        if (batchSelection.selectedIds.has(itemId)) {
+            batchSelection.selectedIds.delete(itemId);
+        } else {
+            batchSelection.selectedIds.add(itemId);
+        }
+        updateBatchBar();
+        batchListConfig[listId].refresh();
+    }
+
+    function executeBatchDelete() {
+        const listId = batchSelection.activeList;
+        if (!listId || batchSelection.selectedIds.size === 0) return;
+        const config = batchListConfig[listId];
+        const ids = Array.from(batchSelection.selectedIds);
+        const minKeep = config.minKeep || 0;
+        if (getBatchListCount(listId) - ids.length < minKeep) {
+            showToast('至少保留 ' + minKeep + ' 项');
+            return;
+        }
+        if (!confirm('确定删除选中的 ' + ids.length + ' 个' + (batchItemLabel[listId] || '项') + '？')) return;
+        config.deleteItems(ids);
+        exitBatchMode();
+        showToast('已删除 ' + ids.length + ' 项');
+    }
+
+    function batchDeleteSessions(ids) {
+        const idSet = new Set(ids);
+        const projectId = appState.currentProjectId;
+        MOCK_SESSIONS[projectId] = getProjectSessions(projectId).filter(function (s) {
+            return !idSet.has(s.id);
+        });
+        if (idSet.has(appState.currentSessionId)) {
+            const remaining = getProjectSessions(projectId);
+            if (remaining.length > 0) {
+                openChatConversation(remaining[0].id, remaining[0].name);
+            } else {
+                appState.currentSessionId = '';
+                appState.currentSessionName = '会话';
+                showSessionListView();
+            }
+        }
+        renderSessionList();
+        renderProjectList();
+    }
+
+    function batchDeleteProjects(ids) {
+        const idSet = new Set(ids);
+        MOCK_PROJECTS.splice(
+            0,
+            MOCK_PROJECTS.length,
+            ...MOCK_PROJECTS.filter(function (p) {
+                return !idSet.has(p.id);
+            }),
+        );
+        ids.forEach(function (id) {
+            delete MOCK_SESSIONS[id];
+        });
+        if (idSet.has(appState.currentProjectId)) {
+            const next = MOCK_PROJECTS[0];
+            if (next) switchToProject(next.id, next.name);
+        }
+        renderProjectList();
+        renderSessionList();
+    }
+
+    function batchDeleteAgents(ids) {
+        ids.forEach(function (agentId) {
+            delete agentCatalog[agentId];
+        });
+        if (!agentCatalog[appState.defaultAgentId]) {
+            appState.defaultAgentId = Object.keys(agentCatalog)[0];
+        }
+        if (appState.editingAgentId && !agentCatalog[appState.editingAgentId]) {
+            appState.editingAgentId = null;
+            if (appState.currentPage === 'agentEditor') {
+                navigateToPage('agents', false);
+            }
+        }
+        renderAgentList();
+    }
+
+    function batchDeleteProviders(ids) {
+        const idSet = new Set(ids);
+        for (let i = MOCK_PROVIDERS.length - 1; i >= 0; i--) {
+            if (!idSet.has(MOCK_PROVIDERS[i].id)) continue;
+            MOCK_PROVIDERS[i].models.forEach(function (m) {
+                delete appState.modelSamplingProfiles[
+                    buildApplicationModelId(MOCK_PROVIDERS[i].id, m.vendorModelId)
+                ];
+            });
+            MOCK_PROVIDERS.splice(i, 1);
+        }
+        persistModelSamplingProfiles();
+        if (appState.editingProviderId && idSet.has(appState.editingProviderId)) {
+            appState.editingProviderId = null;
+            if (appState.currentPage === 'providerDetail' || appState.currentPage === 'modelSampling') {
+                navigateToPage('providers', false);
+            }
+        }
+        renderProviderList();
+    }
+
+    function batchDeleteProviderModels(vendorModelIds) {
+        const provider = findProvider(appState.editingProviderId);
+        if (!provider) return;
+        const idSet = new Set(vendorModelIds);
+        provider.models = provider.models.filter(function (m) {
+            if (idSet.has(m.vendorModelId)) {
+                delete appState.modelSamplingProfiles[
+                    buildApplicationModelId(provider.id, m.vendorModelId)
+                ];
+                return false;
+            }
+            return true;
+        });
+        persistModelSamplingProfiles();
+        if (
+            appState.editingModelApplicationModelId &&
+            idSet.has(parseApplicationModelId(appState.editingModelApplicationModelId).vendorModelId)
+        ) {
+            appState.editingModelApplicationModelId = null;
+            if (appState.currentPage === 'modelSampling') {
+                navigateToPage('providerDetail', false);
+            }
+        }
+        renderProviderDetail();
+        renderProviderList();
+    }
+
+    const batchItemLabel = {
+        sessions: '会话',
+        projects: '项目',
+        agents: 'Agent',
+        providers: '服务商',
+        providerModels: '模型',
+    };
+
+    const batchListConfig = {
+        sessions: {
+            ui: 'page-footer',
+            minKeep: 0,
+            refresh: function () {
+                renderSessionList();
+            },
+            deleteItems: batchDeleteSessions,
+        },
+        projects: {
+            ui: 'drawer-header',
+            minKeep: 1,
+            refresh: function () {
+                renderProjectList();
+            },
+            deleteItems: batchDeleteProjects,
+        },
+        agents: {
+            ui: 'page-footer',
+            minKeep: 1,
+            refresh: function () {
+                renderAgentList();
+            },
+            deleteItems: batchDeleteAgents,
+        },
+        providers: {
+            ui: 'section-header',
+            minKeep: 1,
+            refresh: function () {
+                renderProviderList();
+            },
+            deleteItems: batchDeleteProviders,
+        },
+        providerModels: {
+            ui: 'section-header',
+            minKeep: 0,
+            refresh: function () {
+                renderProviderDetail();
+            },
+            deleteItems: batchDeleteProviderModels,
+        },
+    };
+
+    function renderProjectList() {
+        const host = document.getElementById('projectList');
+        if (!host) return;
+        let html = '';
+        MOCK_PROJECTS.forEach(function (project, index) {
+            const isCurrent = appState.currentProjectId === project.id;
+            const listId = 'projects';
+            html +=
+                '<div class="project-item' +
+                listItemSelectedClass(listId, project.id) +
+                (isCurrent && !isBatchMode(listId) ? ' active' : '') +
+                '" data-id="' +
+                escapeHtml(project.id) +
+                '" data-name="' +
+                escapeHtml(project.name) +
+                '">';
+            html += renderBatchCheckbox(listId, project.id);
+            html += '<div class="project-icon">' + projectIconForIndex(index) + '</div>';
+            html += '<div class="project-info">';
+            html += '<div class="project-name">' + escapeHtml(project.name) + '</div>';
+            html += '<div class="project-meta">' + escapeHtml(projectMetaLine(project)) + '</div>';
+            html += '</div>';
+            if (isCurrent && !isBatchMode(listId)) html += '<span class="current-badge">当前</span>';
+            if (!isBatchMode(listId)) html += '<span class="menu-arrow">›</span>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function renderSessionList() {
+        const host = document.getElementById('sessionList');
+        if (!host) return;
+        const sessions = getProjectSessions();
+        if (sessions.length === 0) {
+            host.innerHTML = '<p class="provider-empty-hint">暂无会话，点击「新建会话」开始。</p>';
+            return;
+        }
+        const listId = 'sessions';
+        let html = '';
+        sessions.forEach(function (session) {
+            const isCurrent = appState.currentSessionId === session.id;
+            html +=
+                '<div class="session-item' +
+                listItemSelectedClass(listId, session.id) +
+                (isCurrent && !isBatchMode(listId) ? ' active' : '') +
+                '" data-id="' +
+                escapeHtml(session.id) +
+                '" data-name="' +
+                escapeHtml(session.name) +
+                '">';
+            html += renderBatchCheckbox(listId, session.id);
+            html += '<div class="session-info">';
+            html += '<div class="session-name">' + escapeHtml(session.name) + '</div>';
+            html += '<div class="session-meta">' + escapeHtml(session.meta) + '</div>';
+            html += '</div>';
+            if (isCurrent && !isBatchMode(listId)) html += '<span class="current-badge">当前</span>';
+            if (!isBatchMode(listId)) html += '<span class="menu-arrow">›</span>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function switchToProject(projectId, projectName) {
+        appState.currentProjectId = projectId;
+        appState.currentProjectName = projectName;
+        renderProjectList();
+        renderSessionList();
+        if (elements.bannerProjectName) elements.bannerProjectName.textContent = projectName;
+    }
+
+    function openNewProjectModal() {
+        const modal = document.getElementById('newProjectModal');
+        const input = document.getElementById('newProjectName');
+        if (!modal) return;
+        if (input) input.value = '';
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+        if (input) input.focus();
+    }
+
+    function closeNewProjectModal() {
+        const modal = document.getElementById('newProjectModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function confirmNewProjectModal() {
+        const input = document.getElementById('newProjectName');
+        if (!input) return;
+        const name = input.value.trim();
+        if (!name) {
+            showToast('请填写项目名称');
+            return;
+        }
+        const id = 'novel-' + Date.now();
+        MOCK_PROJECTS.push({ id: id, name: name, updatedLabel: '刚刚' });
+        MOCK_SESSIONS[id] = [];
+        closeNewProjectModal();
+        switchToProject(id, name);
+        closeDrawer();
+        showSessionListView();
+        showToast('已创建项目');
+    }
+
+    function createNewSession() {
+        const sessions = getProjectSessions();
+        const id = 'session-' + Date.now();
+        const name = '新会话 ' + (sessions.length + 1);
+        sessions.push({ id: id, name: name, meta: '0条消息 · 刚刚' });
+        renderSessionList();
+        renderProjectList();
+        openChatConversation(id, name);
+        showToast('已创建会话');
+    }
 
     function parseApplicationModelId(applicationModelId) {
         const slash = applicationModelId.indexOf('/');
@@ -1098,12 +1609,20 @@
         return model ? model.label : sel.vendorModelId;
     }
 
+    function profileHasSamplingParams(profile) {
+        if (!profile || !profile.params) return false;
+        const p = profile.params;
+        if (p.openai && Object.keys(p.openai).length > 0) return true;
+        if (p.anthropic && Object.keys(p.anthropic).length > 0) return true;
+        if (p.gemini && Object.keys(p.gemini).length > 0) return true;
+        return false;
+    }
+
     function providerModelMetaLine(provider) {
         const n = provider.models.length;
         const samplingN = provider.models.filter(function (m) {
             const id = buildApplicationModelId(provider.id, m.vendorModelId);
-            const profile = getModelSamplingProfile(id);
-            return profile.enabled === true;
+            return profileHasSamplingParams(getModelSamplingProfile(id));
         }).length;
         let meta = n + ' 个已保存模型';
         if (samplingN > 0) meta += ' · ' + samplingN + ' 个已配采样';
@@ -1113,15 +1632,22 @@
     function renderProviderList() {
         const host = document.getElementById('providerList');
         if (!host) return;
+        const listId = 'providers';
         let html = '';
         MOCK_PROVIDERS.forEach(function (p) {
-            html += '<div class="provider-item" data-provider-id="' + p.id + '">';
+            html +=
+                '<div class="provider-item' +
+                listItemSelectedClass(listId, p.id) +
+                '" data-provider-id="' +
+                p.id +
+                '">';
+            html += renderBatchCheckbox(listId, p.id);
             html += '<div class="provider-icon">🟢</div>';
             html += '<div class="provider-info">';
             html += '<div class="provider-name">' + escapeHtml(p.name) + '</div>';
             html += '<div class="provider-meta">' + escapeHtml(providerModelMetaLine(p)) + '</div>';
             html += '</div>';
-            html += '<span class="menu-arrow">›</span>';
+            if (!isBatchMode(listId)) html += '<span class="menu-arrow">›</span>';
             html += '</div>';
         });
         host.innerHTML = html;
@@ -1146,21 +1672,92 @@
             return;
         }
         let html = '';
+        const listId = 'providerModels';
         provider.models.forEach(function (m) {
             const applicationModelId = buildApplicationModelId(provider.id, m.vendorModelId);
             const profile = getModelSamplingProfile(applicationModelId);
-            html += '<div class="provider-model-item" data-vendor-model-id="' + escapeHtml(m.vendorModelId) + '">';
+            html +=
+                '<div class="provider-model-item' +
+                listItemSelectedClass(listId, m.vendorModelId) +
+                '" data-vendor-model-id="' +
+                escapeHtml(m.vendorModelId) +
+                '">';
+            html += renderBatchCheckbox(listId, m.vendorModelId);
             html += '<div class="provider-model-info">';
             html += '<div class="provider-model-name">' + escapeHtml(m.label) + '</div>';
             html += '<div class="provider-model-meta">' + escapeHtml(applicationModelId);
-            if (profile.enabled) html += ' · 自定义采样';
+            if (profileHasSamplingParams(profile)) html += ' · 已配采样';
             html += '</div></div>';
-            html += '<button type="button" class="agent-menu-btn" data-provider-model-menu="' +
-                escapeHtml(m.vendorModelId) +
-                '" aria-label="模型操作">⋮</button>';
+            if (!isBatchMode(listId)) {
+                html += '<button type="button" class="agent-menu-btn" data-provider-model-menu="' +
+                    escapeHtml(m.vendorModelId) +
+                    '" aria-label="更多">⋮</button>';
+                html += '<span class="menu-arrow">›</span>';
+            }
             html += '</div>';
         });
         host.innerHTML = html;
+    }
+
+    function openModelSamplingPage(vendorModelId) {
+        const provider = findProvider(appState.editingProviderId);
+        if (!provider) return;
+        appState.editingModelApplicationModelId = buildApplicationModelId(provider.id, vendorModelId);
+        renderModelSamplingPage();
+        navigateToPage('modelSampling', true);
+    }
+
+    function renderModelSamplingPage() {
+        const root = document.getElementById('modelSamplingRoot');
+        const applicationModelId = appState.editingModelApplicationModelId;
+        if (!root || !applicationModelId) return;
+        const profile = getModelSamplingProfile(applicationModelId);
+        const protocol = modelProtocolForId(applicationModelId);
+        let html = '<section class="agent-form-section">';
+        html += '<h3>采样参数</h3>';
+        html += '<p class="agent-field-hint model-sampling-id">' + escapeHtml(applicationModelId) + '</p>';
+        html += renderSamplingFields(protocol, profile.params);
+        html += '<p class="agent-field-hint">留空表示使用协议默认参数。</p>';
+        html += '</section>';
+        root.innerHTML = html;
+    }
+
+    function collectSamplingParamsFromRoot(root, protocol) {
+        if (!root) return null;
+        const samplingValues = {};
+        root.querySelectorAll('[data-sampling-key]').forEach(function (input) {
+            if (input.value === '') return;
+            const num = Number(input.value);
+            samplingValues[input.dataset.samplingKey] =
+                input.step && input.step.indexOf('.') >= 0 ? num : Math.round(num);
+        });
+        if (Object.keys(samplingValues).length === 0) return null;
+        const params = { protocol: protocol };
+        if (protocol === 'openai') params.openai = samplingValues;
+        else if (protocol === 'anthropic') params.anthropic = samplingValues;
+        else if (protocol === 'gemini') params.gemini = samplingValues;
+        return params;
+    }
+
+    function saveModelSamplingPage() {
+        const applicationModelId = appState.editingModelApplicationModelId;
+        const root = document.getElementById('modelSamplingRoot');
+        if (!applicationModelId || !root) return;
+        const protocol = modelProtocolForId(applicationModelId);
+        const params = collectSamplingParamsFromRoot(root, protocol);
+        if (params == null) {
+            delete appState.modelSamplingProfiles[applicationModelId];
+        } else {
+            setModelSamplingProfile(applicationModelId, { enabled: true, params: params });
+        }
+        persistModelSamplingProfiles();
+        renderProviderDetail();
+        renderProviderList();
+        showToast('已保存采样配置');
+        if (appState.pageStack.length > 0) {
+            const previousPage = appState.pageStack.pop();
+            navigateToPage(previousPage, false);
+        }
     }
 
     function showProviderModelMenu(vendorModelId) {
@@ -1169,29 +1766,19 @@
         const model = provider.models.find(function (m) { return m.vendorModelId === vendorModelId; });
         if (!model) return;
         const applicationModelId = buildApplicationModelId(provider.id, vendorModelId);
-        showBottomSheet(
-            [
-                { label: '采样配置', action: 'sampling-config' },
-                { label: '删除模型', action: 'delete-model', danger: true },
-            ],
-            function (action) {
-                if (action === 'sampling-config') {
-                    openModelConfigModal(applicationModelId);
-                    return;
-                }
-                if (action === 'delete-model') {
-                    if (!confirm('确定删除已保存模型 ' + applicationModelId + '？')) return;
-                    provider.models = provider.models.filter(function (m) {
-                        return m.vendorModelId !== vendorModelId;
-                    });
-                    delete appState.modelSamplingProfiles[applicationModelId];
-                    persistModelSamplingProfiles();
-                    renderProviderDetail();
-                    renderProviderList();
-                    showToast('已删除模型');
-                }
-            },
-        );
+        showBottomSheet([{ label: '删除模型', action: 'delete-model', danger: true }], function (action) {
+            if (action === 'delete-model') {
+                if (!confirm('确定删除已保存模型 ' + applicationModelId + '？')) return;
+                provider.models = provider.models.filter(function (m) {
+                    return m.vendorModelId !== vendorModelId;
+                });
+                delete appState.modelSamplingProfiles[applicationModelId];
+                persistModelSamplingProfiles();
+                renderProviderDetail();
+                renderProviderList();
+                showToast('已删除模型');
+            }
+        });
     }
 
     function openAddModelModal() {
@@ -1234,13 +1821,6 @@
         renderProviderDetail();
         renderProviderList();
         showToast('已添加模型');
-    }
-
-    function syncModelConfigSamplingVisibility() {
-        const enabled = document.getElementById('modelConfigEnabled');
-        const root = document.getElementById('modelConfigSamplingRoot');
-        if (!enabled || !root) return;
-        root.classList.toggle('hidden', !enabled.checked);
     }
 
     function loadWorkspaceModel() {
@@ -1331,64 +1911,6 @@
         modal.setAttribute('aria-hidden', 'true');
     }
 
-    let modelConfigTargetId = null;
-
-    function openModelConfigModal(applicationModelId) {
-        modelConfigTargetId = applicationModelId;
-        const modal = document.getElementById('modelConfigModal');
-        const title = document.getElementById('modelConfigTitle');
-        const enabled = document.getElementById('modelConfigEnabled');
-        const root = document.getElementById('modelConfigSamplingRoot');
-        if (!modal || !enabled || !root) return;
-        if (title) title.textContent = '模型配置 · ' + applicationModelId;
-        const profile = getModelSamplingProfile(applicationModelId);
-        enabled.checked = profile.enabled === true;
-        const protocol = modelProtocolForId(applicationModelId);
-        root.innerHTML = renderSamplingFields(protocol, profile.params);
-        syncModelConfigSamplingVisibility();
-        modal.classList.remove('hidden');
-        modal.setAttribute('aria-hidden', 'false');
-    }
-
-    function closeModelConfigModal() {
-        const modal = document.getElementById('modelConfigModal');
-        if (!modal) return;
-        modal.classList.add('hidden');
-        modal.setAttribute('aria-hidden', 'true');
-        modelConfigTargetId = null;
-    }
-
-    function saveModelConfigFromModal() {
-        if (!modelConfigTargetId) return;
-        const enabled = document.getElementById('modelConfigEnabled');
-        const root = document.getElementById('modelConfigSamplingRoot');
-        const protocol = modelProtocolForId(modelConfigTargetId);
-        let params = null;
-        if (enabled && enabled.checked && root) {
-            const samplingValues = {};
-            root.querySelectorAll('[data-sampling-key]').forEach(function (input) {
-                if (input.value === '') return;
-                const num = Number(input.value);
-                samplingValues[input.dataset.samplingKey] =
-                    input.step && input.step.indexOf('.') >= 0 ? num : Math.round(num);
-            });
-            if (Object.keys(samplingValues).length > 0) {
-                params = { protocol: protocol };
-                if (protocol === 'openai') params.openai = samplingValues;
-                else if (protocol === 'anthropic') params.anthropic = samplingValues;
-                else if (protocol === 'gemini') params.gemini = samplingValues;
-            }
-        }
-        setModelSamplingProfile(modelConfigTargetId, {
-            enabled: !!(enabled && enabled.checked),
-            params: params,
-        });
-        closeModelConfigModal();
-        renderProviderDetail();
-        renderProviderList();
-        showToast('已保存模型采样配置');
-    }
-
     function agentListMeta(def) {
         const parts = [];
         if (def.preferredModelId) parts.push('默认模型 ' + def.preferredModelId);
@@ -1414,18 +1936,29 @@
     function renderAgentList() {
         const host = document.getElementById('agentList');
         if (!host) return;
+        const listId = 'agents';
         let html = '';
         Object.keys(agentCatalog).forEach(function (id) {
             const entry = agentCatalog[id];
             const def = entry.definition;
             const isDefault = appState.defaultAgentId === id;
-            html += '<div class="agent-item" data-id="' + id + '">';
+            html +=
+                '<div class="agent-item' +
+                listItemSelectedClass(listId, id) +
+                '" data-id="' +
+                id +
+                '">';
+            html += renderBatchCheckbox(listId, id);
             html += '<div class="agent-info">';
             html += '<div class="agent-name">' + def.name + '</div>';
             html += '<div class="agent-meta">' + agentListMeta(def) + '</div>';
             html += '</div>';
-            if (isDefault) html += '<span class="default-badge">默认</span>';
-            html += '<button type="button" class="agent-menu-btn" data-agent-menu="' + id + '" aria-label="更多">⋮</button>';
+            if (isDefault && !isBatchMode(listId)) html += '<span class="default-badge">默认</span>';
+            if (!isBatchMode(listId)) {
+                html += '<button type="button" class="agent-menu-btn" data-agent-menu="' +
+                    id +
+                    '" aria-label="更多">⋮</button>';
+            }
             html += '</div>';
         });
         host.innerHTML = html;
@@ -2047,7 +2580,10 @@
         if (providerList) {
             providerList.addEventListener('click', function (e) {
                 const item = e.target.closest('[data-provider-id]');
-                if (item) openProviderDetail(item.dataset.providerId);
+                if (!item) return;
+                handleManagedListItemClick(e, 'providers', item, function (el) {
+                    openProviderDetail(el.dataset.providerId);
+                });
             });
         }
 
@@ -2059,7 +2595,13 @@
                     e.preventDefault();
                     e.stopPropagation();
                     showProviderModelMenu(menuBtn.dataset.providerModelMenu);
+                    return;
                 }
+                const item = e.target.closest('.provider-model-item');
+                if (!item || !item.dataset.vendorModelId) return;
+                handleManagedListItemClick(e, 'providerModels', item, function (el) {
+                    openModelSamplingPage(el.dataset.vendorModelId);
+                });
             });
         }
 
@@ -2088,7 +2630,11 @@
                     return;
                 }
                 const item = e.target.closest('.agent-item');
-                if (item) openAgentEditor(item.dataset.id);
+                if (item) {
+                    handleManagedListItemClick(e, 'agents', item, function (el) {
+                        openAgentEditor(el.dataset.id);
+                    });
+                }
             });
         }
 
@@ -2114,15 +2660,8 @@
         document.querySelectorAll('[data-action="close-model-picker"]').forEach(function (btn) {
             btn.addEventListener('click', closeModelPickerModal);
         });
-        document.querySelectorAll('[data-action="close-model-config"]').forEach(function (btn) {
-            btn.addEventListener('click', closeModelConfigModal);
-        });
-        const saveCfg = document.querySelector('[data-action="save-model-config"]');
-        if (saveCfg) saveCfg.addEventListener('click', saveModelConfigFromModal);
-        const modelCfgEnabled = document.getElementById('modelConfigEnabled');
-        if (modelCfgEnabled) {
-            modelCfgEnabled.addEventListener('change', syncModelConfigSamplingVisibility);
-        }
+        const saveSampling = document.querySelector('[data-action="save-model-sampling"]');
+        if (saveSampling) saveSampling.addEventListener('click', saveModelSamplingPage);
         document.querySelectorAll('[data-action="close-add-model"]').forEach(function (btn) {
             btn.addEventListener('click', closeAddModelModal);
         });
@@ -2141,6 +2680,7 @@
         setupVfsBrowsers();
         setupMenuItems();
         setupBottomSheet();
+        setupListBatchSelection();
         setupFileEditor();
         setupAgentEditor();
         setupCompactionPolicyPage();
