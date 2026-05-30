@@ -454,12 +454,22 @@ status: draft
     <div id="modelPickerModal" class="modal hidden" aria-hidden="true">
         <div class="modal-backdrop" data-action="close-model-picker"></div>
         <div class="modal-panel model-picker-panel" role="dialog" aria-label="选择模型">
-            <h3 class="model-picker-title">选择工作区模型</h3>
-            <div class="model-picker-body">
-                <div id="modelPickerProviderSwitch" class="provider-switch" role="tablist" aria-label="服务商"></div>
-                <ul id="modelPickerList" class="model-picker-list" role="listbox" aria-label="模型"></ul>
+            <section class="agent-form-section model-picker-form">
+                <h3>选择工作区模型</h3>
+                <label class="agent-field">
+                    <span>服务商</span>
+                    <select id="modelPickerProviderId" data-model-picker-field="providerId"></select>
+                </label>
+                <label class="agent-field">
+                    <span>模型</span>
+                    <select id="modelPickerVendorModelId" data-model-picker-field="vendorModelId"></select>
+                </label>
+                <p class="agent-field-hint">与 Agent 编辑页模型区块相同；模型多时在列表内滚动选择。</p>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="confirm-model-picker">确定</button>
+                <button type="button" class="btn-secondary" data-action="close-model-picker">取消</button>
             </div>
-            <button type="button" class="btn-secondary model-picker-close" data-action="close-model-picker">关闭</button>
         </div>
     </div>
 

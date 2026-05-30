@@ -1803,91 +1803,35 @@ body {
     z-index: 1;
 }
 
-/* 模型选择弹窗：服务商 Switch + 可滚动模型列表 */
+/* 模型选择弹窗：复用 agent-form-section 下拉，避免长列表撑出视口 */
 .model-picker-panel {
     display: flex;
     flex-direction: column;
     overflow: hidden;
 }
 
-.model-picker-title {
-    flex-shrink: 0;
+.model-picker-form {
+    margin-bottom: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.model-picker-form h3 {
     margin: 0 0 12px;
     font-size: 18px;
 }
 
-.model-picker-body {
-    flex: 1;
-    min-height: 0;
+.model-picker-panel .modal-actions {
     display: flex;
-    flex-direction: column;
-    margin-bottom: 12px;
-}
-
-.provider-switch {
-    display: flex;
-    flex-wrap: wrap;
     gap: 8px;
+    margin-top: 16px;
     flex-shrink: 0;
-    margin-bottom: 12px;
 }
 
-.provider-switch-btn {
-    padding: 8px 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 999px;
-    background: var(--surface-color);
-    color: var(--text-primary);
-    font-size: 13px;
-    cursor: pointer;
-}
-
-.provider-switch-btn.active {
-    border-color: var(--primary-color);
-    background: rgba(37, 99, 235, 0.1);
-    color: var(--primary-color);
-    font-weight: 600;
-}
-
-.model-picker-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+.model-picker-panel .modal-actions .btn-primary,
+.model-picker-panel .modal-actions .btn-secondary {
     flex: 1;
-    min-height: 0;
-    max-height: min(40vh, 320px);
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-}
-
-.model-picker-list li {
-    margin-bottom: 8px;
-}
-
-.model-picker-list li:last-child {
-    margin-bottom: 0;
-}
-
-.model-picker-item {
-    display: block;
-    width: 100%;
-    text-align: left;
-    padding: 12px;
-    border: 1px solid var(--border-color, #e5e5e5);
-    border-radius: 8px;
-    background: var(--bg-surface, #fff);
-    font-size: 15px;
-    cursor: pointer;
-}
-
-.model-picker-item.active {
-    border-color: var(--primary-color, #2563eb);
-    background: rgba(37, 99, 235, 0.08);
-}
-
-.model-picker-close {
-    flex-shrink: 0;
-    width: 100%;
 }
 
 .model-config-panel .modal-actions {

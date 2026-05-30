@@ -1131,67 +1131,42 @@
         persistModelSamplingProfiles();
     }
 
-    let modelPickerProviderId = null;
+    function populateModelPickerSelects(providerId, vendorModelId) {
+        const providerSelect = document.getElementById('modelPickerProviderId');
+        const vendorSelect = document.getElementById('modelPickerVendorModelId');
+        if (!providerSelect || !vendorSelect) return;
 
-    function renderModelPickerProviderSwitch(selectedProviderId) {
-        const host = document.getElementById('modelPickerProviderSwitch');
-        if (!host) return;
-        host.innerHTML = '';
-        MOCK_PROVIDERS.forEach(function (p) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'provider-switch-btn';
-            btn.setAttribute('role', 'tab');
-            btn.setAttribute('aria-selected', p.id === selectedProviderId ? 'true' : 'false');
-            btn.dataset.providerId = p.id;
-            btn.textContent = p.name;
-            if (p.id === selectedProviderId) btn.classList.add('active');
-            btn.addEventListener('click', function () {
-                if (modelPickerProviderId === p.id) return;
-                modelPickerProviderId = p.id;
-                renderModelPickerProviderSwitch(p.id);
-                renderModelPickerModelList(p.id);
-            });
-            host.appendChild(btn);
-        });
-    }
+        providerSelect.innerHTML = MOCK_PROVIDERS.map(function (p) {
+            return (
+                '<option value="' +
+                p.id +
+                '"' +
+                (p.id === providerId ? ' selected' : '') +
+                '>' +
+                escapeHtml(p.name) +
+                '</option>'
+            );
+        }).join('');
 
-    function renderModelPickerModelList(providerId) {
-        const list = document.getElementById('modelPickerList');
-        const provider = findProvider(providerId);
-        if (!list || !provider) return;
-        list.innerHTML = '';
-        provider.models.forEach(function (m) {
-            const applicationModelId = buildApplicationModelId(providerId, m.vendorModelId);
-            const li = document.createElement('li');
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'model-picker-item';
-            btn.setAttribute('role', 'option');
-            btn.textContent = m.label;
-            if (applicationModelId === appState.workspaceCurrentModelId) {
-                btn.classList.add('active');
-                btn.setAttribute('aria-selected', 'true');
-            }
-            btn.addEventListener('click', function () {
-                setWorkspaceModel(applicationModelId);
-                closeModelPickerModal();
-                showToast('已切换工作区模型');
-            });
-            li.appendChild(btn);
-            list.appendChild(li);
-        });
+        vendorSelect.innerHTML = renderModelSelectOptions(providerId, vendorModelId);
     }
 
     function openModelPickerModal() {
         const modal = document.getElementById('modelPickerModal');
         if (!modal) return;
         const current = resolveModelSelection(appState.workspaceCurrentModelId);
-        modelPickerProviderId = current.providerId || MOCK_PROVIDERS[0].id;
-        renderModelPickerProviderSwitch(modelPickerProviderId);
-        renderModelPickerModelList(modelPickerProviderId);
+        populateModelPickerSelects(current.providerId, current.vendorModelId);
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function confirmModelPickerModal() {
+        const providerSelect = document.getElementById('modelPickerProviderId');
+        const vendorSelect = document.getElementById('modelPickerVendorModelId');
+        if (!providerSelect || !vendorSelect) return;
+        setWorkspaceModel(buildApplicationModelId(providerSelect.value, vendorSelect.value));
+        closeModelPickerModal();
+        showToast('已切换工作区模型');
     }
 
     function closeModelPickerModal() {
@@ -1939,6 +1914,17 @@
     function setupWorkspaceModel() {
         loadWorkspaceModel();
         refreshWorkspaceModelDisplays();
+        const providerSelect = document.getElementById('modelPickerProviderId');
+        if (providerSelect) {
+            providerSelect.addEventListener('change', function () {
+                const vendorSelect = document.getElementById('modelPickerVendorModelId');
+                if (vendorSelect) {
+                    vendorSelect.innerHTML = renderModelSelectOptions(providerSelect.value, null);
+                }
+            });
+        }
+        const confirmPicker = document.querySelector('[data-action="confirm-model-picker"]');
+        if (confirmPicker) confirmPicker.addEventListener('click', confirmModelPickerModal);
         document.querySelectorAll('[data-action="close-model-picker"]').forEach(function (btn) {
             btn.addEventListener('click', closeModelPickerModal);
         });
