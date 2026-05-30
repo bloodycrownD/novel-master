@@ -1193,6 +1193,53 @@ body[data-batch-list="projects"] .project-item {
     line-height: 1.5;
 }
 
+.regex-group-list {
+    padding: 0 16px 16px;
+}
+
+.regex-current-banner {
+    margin: 12px 16px 0;
+}
+
+.regex-rule-editor .agent-form-section {
+    margin-bottom: 20px;
+}
+
+.regex-test-panel {
+    margin-top: 8px;
+}
+
+.regex-test-panel pre.regex-test-output {
+    margin: 0;
+    padding: 12px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 2.5em;
+}
+
+.regex-test-panel pre.regex-test-output.regex-test-output--error {
+    color: var(--danger-color, #c62828);
+    border-color: rgba(198, 40, 40, 0.35);
+}
+
+.regex-test-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 400px) {
+    .regex-test-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 .agent-menu-btn {
     width: 36px;
     height: 36px;
