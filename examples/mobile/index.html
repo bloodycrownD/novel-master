@@ -433,14 +433,11 @@ status: draft
         <div class="drawer-header">
             <h2>会话操作</h2>
         </div>
-        <div class="drawer-workspace-model">
-            <div class="drawer-workspace-model-row">
-                <span class="drawer-workspace-model-label">当前模型</span>
-                <span id="sessionDrawerCurrentModelLabel" class="drawer-workspace-model-value">—</span>
-            </div>
-            <button type="button" class="btn-secondary btn-sm drawer-menu-item-style" data-action="open-model-picker">切换模型</button>
-        </div>
         <nav class="drawer-menu">
+            <button type="button" class="drawer-menu-item drawer-menu-item--stacked" data-session-action="switch-model">
+                <span class="drawer-menu-item-label">切换模型</span>
+                <span id="sessionDrawerCurrentModelLabel" class="drawer-menu-item-meta">—</span>
+            </button>
             <button type="button" class="drawer-menu-item" data-session-action="real-prompt">真实提示词</button>
             <button type="button" class="drawer-menu-item" data-session-action="session-log">会话日志</button>
         </nav>

@@ -378,7 +378,8 @@
             btn.addEventListener('click', function () {
                 const action = btn.dataset.sessionAction;
                 closeDrawer();
-                if (action === 'real-prompt') navigateToPage('realPrompt', true);
+                if (action === 'switch-model') openModelPickerModal();
+                else if (action === 'real-prompt') navigateToPage('realPrompt', true);
                 else if (action === 'session-log') navigateToPage('sessionLog', true);
             });
         });
@@ -1893,11 +1894,6 @@
     function setupWorkspaceModel() {
         loadWorkspaceModel();
         refreshWorkspaceModelDisplays();
-        document.querySelectorAll('[data-action="open-model-picker"]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                openModelPickerModal();
-            });
-        });
         document.querySelectorAll('[data-action="close-model-picker"]').forEach(function (btn) {
             btn.addEventListener('click', closeModelPickerModal);
         });
