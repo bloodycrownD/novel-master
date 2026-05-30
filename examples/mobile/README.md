@@ -30,7 +30,7 @@ start examples/mobile/index.html
 |------|------|
 | 对话 | 会话列表页上 Tab：**会话 / 项目模板** → 点会话进入聊天；聊天上 Tab：**聊天 / 会话工作区** |
 | Agent | Agent 配置（prompts、可选专属模型 pin、runtime；**不含**压缩策略与采样参数） |
-| 我的 | 服务商、**全局压缩策略**、全局模板、设置等 |
+| 我的 | 服务商、**正则配置**（组/规则 CRUD、双通道测试预览，localStorage mock，概念对齐 CLI `nm regex-group` / `nm regex test`）、**全局压缩策略**、全局模板、设置等 |
 
 底栏 **对话 / Agent / 我的** 互相独立：切换 Tab **不会**把对话从「聊天中」打回「会话列表」；只有顶栏返回、切换项目等操作才会。
 
