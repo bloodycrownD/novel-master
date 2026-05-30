@@ -8,6 +8,7 @@ import { readFile } from "node:fs/promises";
 import {
   ChatAgentSession,
   createAgentRunner,
+  createCompactionPipeline,
   loadPromptBlocksFromYaml,
   parseApplicationModelId,
   registerVfsTools,
@@ -155,6 +156,11 @@ export async function runAgent(
         modelRequests: rt.modelRequests,
         registry,
         toolCtx: { vfs },
+        compaction: createCompactionPipeline({
+          modelRequests: rt.modelRequests,
+          policyStore: rt.compactionPolicy,
+          resolveAgent: rt.resolveCompactionAgent,
+        }),
       });
 
       const onStream =

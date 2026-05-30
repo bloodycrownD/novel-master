@@ -7,6 +7,7 @@
 import {
   AgentError,
   ChatError,
+  CompactionPolicyError,
   PreferencesError,
   PromptError,
   ProviderError,
@@ -25,6 +26,7 @@ export function formatCliError(error: unknown): string {
   if (
     error instanceof VfsError ||
     error instanceof PreferencesError ||
+    error instanceof CompactionPolicyError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
@@ -46,6 +48,7 @@ export function exitCodeForError(error: unknown): number {
   if (
     error instanceof VfsError ||
     error instanceof PreferencesError ||
+    error instanceof CompactionPolicyError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||

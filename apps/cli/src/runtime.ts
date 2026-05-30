@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   bootstrapNovelMaster,
+  createCompactionPolicyStore,
   createMessageService,
   createPersistentPreferences,
   createPersistentState,
@@ -18,6 +19,8 @@ import {
   createProviderServices,
   createWorktreeService,
   open,
+  type CompactionAgentResolver,
+  type CompactionPolicyStore,
   type ModelRequestService,
   type PersistentPreferences,
   type PersistentState,
@@ -33,6 +36,7 @@ import {
   type VfsService,
   type WorktreeService,
 } from "@novel-master/core";
+import { createFileCompactionAgentResolver } from "./compaction/file-agent-resolver.js";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   createCompositeSecretStore,
@@ -78,6 +82,9 @@ export interface NovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
+  readonly compactionPolicy: CompactionPolicyStore;
+  readonly resolveCompactionAgent: CompactionAgentResolver;
+  readonly dbPath: string;
 }
 
 /**
@@ -115,6 +122,9 @@ export async function createNovelMasterRuntime(
     conn,
     state,
     preferences,
+    dbPath,
+    compactionPolicy: createCompactionPolicyStore(conn),
+    resolveCompactionAgent: createFileCompactionAgentResolver(dbPath),
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),

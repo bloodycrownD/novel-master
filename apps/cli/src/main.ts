@@ -14,6 +14,7 @@ import { runPrompt } from "./prompt/commands.js";
 import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
 import { runAgent } from "./agent/commands.js";
+import { runCompaction } from "./compaction/commands.js";
 import { runSession } from "./session/commands.js";
 import { createNovelMasterRuntime } from "./runtime.js";
 import {
@@ -101,7 +102,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
     top === "prompt" ||
     top === "provider" ||
     top === "model" ||
-    top === "agent"
+    top === "agent" ||
+    top === "compaction"
   ) {
     const rt = await createNovelMasterRuntime(argv);
     try {
@@ -145,6 +147,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
           break;
         case "agent":
           await runAgent(rt, sub, rest);
+          break;
+        case "compaction":
+          await runCompaction(rt, sub, rest, argv);
           break;
       }
       return 0;
