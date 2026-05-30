@@ -4,10 +4,10 @@
  * @module domain/agent/compaction/compaction-model-context
  */
 
-/** Dialogue model already resolved for this run; optional CLI override for summary chain. */
+/** Workspace + optional CLI override for compaction summary model chain. */
 export interface CompactionModelContext {
-  /** Conversation agent's resolved applicationModelId. */
-  readonly dialogueApplicationModelId: string;
-  /** Set when host resolved id from `--modelId` (summary chain reuses flag priority). */
+  /** Current workspace model id (`nm model use`); used when summary agent has no pin. */
+  readonly workspaceModelId: string;
+  /** Set when host resolved id from `--modelId` (summary chain highest priority). */
   readonly cliModelId?: string;
 }

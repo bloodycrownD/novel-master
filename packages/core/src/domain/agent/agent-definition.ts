@@ -12,6 +12,6 @@ export interface AgentDefinition {
   readonly name: string;
   readonly prompts: readonly PromptBlock[];
   /** Optional default model pin (applicationModelId); host resolves with flag/state. */
-  readonly preferredModelId?: string;
+  readonly model?: string;
   readonly runtime?: { readonly maxSteps?: number };
 }

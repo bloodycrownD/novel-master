@@ -7,33 +7,44 @@ import {
 } from "@novel-master/core";
 
 describe("agent-definition-io", () => {
-  it("round-trips YAML", () => {
+  it("round-trips YAML with blocks map", () => {
     const yaml = `
 schemaVersion: 1
 name: test
-preferredModelId: anthropic/claude
+model: anthropic/claude
 prompts:
   blocks:
-    - name: s
+    s:
       type: text
       role: system
       content: hello
 `;
     const def = deserializeAgentDefinition(yaml);
     assert.equal(def.name, "test");
-    assert.equal(def.preferredModelId, "anthropic/claude");
+    assert.equal(def.model, "anthropic/claude");
     const out = serializeAgentDefinition(def);
     const again = deserializeAgentDefinition(out);
     assert.equal(again.prompts[0]?.name, "s");
   });
 
-  it("loadPromptBlocksFromYaml reads blocks at root", () => {
+  it("loadPromptBlocksFromYaml reads blocks map at root", () => {
     const blocks = loadPromptBlocksFromYaml(`
 blocks:
-  - name: c
+  c:
     type: chat
 `);
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "chat");
+    assert.equal(blocks[0]?.name, "c");
+  });
+
+  it("loadPromptBlocksFromYaml rejects blocks array", () => {
+    assert.throws(() =>
+      loadPromptBlocksFromYaml(`
+blocks:
+  - name: c
+    type: chat
+`),
+    );
   });
 });

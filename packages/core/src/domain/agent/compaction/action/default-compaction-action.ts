@@ -69,8 +69,8 @@ export class DefaultCompactionAction implements CompactionAction {
         abstractCfg.instruction ?? DEFAULT_AGENT_INSTRUCTION;
       const summaryModelId = resolveSummaryApplicationModelId({
         cliModelId: ctx.modelContext.cliModelId,
-        summaryPreferredModelId: summaryDef.preferredModelId,
-        dialogueApplicationModelId: ctx.modelContext.dialogueApplicationModelId,
+        summaryModelId: summaryDef.model,
+        workspaceModelId: ctx.modelContext.workspaceModelId,
       });
       const result = await ctx.modelRequests.request(
         summaryModelId,

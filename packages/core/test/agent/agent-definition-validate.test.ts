@@ -6,12 +6,12 @@ import {
 } from "@novel-master/core";
 
 describe("validateAgentDefinition", () => {
-  it("D2: assertSavedModel runs for valid preferredModelId pin", async () => {
+  it("D2: assertSavedModel runs for valid model pin", async () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
       name: "pinned",
-      prompts: { blocks: [] },
-      preferredModelId: "mock/test",
+      prompts: { blocks: {} },
+      model: "mock/test",
     });
     let seen = "";
     await validateAgentDefinition(def, {
@@ -26,8 +26,8 @@ describe("validateAgentDefinition", () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
       name: "pinned",
-      prompts: { blocks: [] },
-      preferredModelId: "mock/ghost",
+      prompts: { blocks: {} },
+      model: "mock/ghost",
     });
     await assert.rejects(
       () =>
@@ -40,11 +40,11 @@ describe("validateAgentDefinition", () => {
     );
   });
 
-  it("skips assertSavedModel when preferredModelId absent", async () => {
+  it("skips assertSavedModel when model absent", async () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
       name: "bare",
-      prompts: { blocks: [] },
+      prompts: { blocks: {} },
     });
     let called = false;
     await validateAgentDefinition(def, {

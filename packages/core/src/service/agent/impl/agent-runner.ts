@@ -54,7 +54,7 @@ export class DefaultAgentRunner implements AgentRunner {
     for (let step = 0; step < maxSteps; step++) {
       const worktreeDisplay = options.promptContext.worktreeDisplay;
       const modelContext = {
-        dialogueApplicationModelId: options.applicationModelId,
+        workspaceModelId: options.workspaceModelId,
         cliModelId: options.cliModelId,
       };
       const nextAbstract = await this.deps.compaction.maybeCompact(

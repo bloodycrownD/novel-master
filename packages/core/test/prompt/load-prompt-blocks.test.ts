@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import { PromptError, loadPromptBlocksFromYaml } from "@novel-master/core";
 
 describe("loadPromptBlocksFromYaml", () => {
-  it("parses blocks array", () => {
+  it("parses blocks map", () => {
     const blocks = loadPromptBlocksFromYaml(`
 blocks:
-  - name: a
+  a:
     type: text
     role: system
     content: hi
@@ -26,6 +26,18 @@ blocks:
     assert.throws(
       () => loadPromptBlocksFromYaml("name: only"),
       (e: unknown) => e instanceof PromptError && e.code === "INVALID_YAML",
+    );
+  });
+
+  it("rejects blocks array", () => {
+    assert.throws(
+      () =>
+        loadPromptBlocksFromYaml(`
+blocks:
+  - name: a
+    type: chat
+`),
+      (e: unknown) => e instanceof PromptError,
     );
   });
 });

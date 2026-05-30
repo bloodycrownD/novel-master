@@ -156,6 +156,7 @@ describe("AgentRunner", () => {
       maxSteps: 1,
       definition: minimalDefinition(),
       applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -220,6 +221,7 @@ describe("AgentRunner", () => {
       maxSteps: 3,
       definition: minimalDefinition(),
       applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -280,6 +282,7 @@ describe("AgentRunner", () => {
       maxSteps: 1,
       definition: compactRunnerDefinition(),
       applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
       promptContext: { worktreeDisplay: "" },
     });
 
@@ -321,6 +324,7 @@ describe("AgentRunner", () => {
           maxSteps: 3,
           definition: { ...minimalDefinition(), prompts: [] },
           applicationModelId: RUN_MODEL_ID,
+          workspaceModelId: RUN_MODEL_ID,
           promptContext: { worktreeDisplay: "" },
         }),
       (e: unknown) =>

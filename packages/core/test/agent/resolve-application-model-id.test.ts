@@ -10,17 +10,17 @@ describe("resolveApplicationModelId", () => {
     assert.equal(
       resolveApplicationModelId({
         cliModelId: "zhipu/glm-4.6",
-        preferredModelId: "mock/test",
+        agentModelId: "mock/test",
         workspaceModelId: "openai/gpt-4",
       }),
       "zhipu/glm-4.6",
     );
   });
 
-  it("R1: falls back to preferredModelId then workspace", () => {
+  it("R1: falls back to agent model pin then workspace", () => {
     assert.equal(
       resolveApplicationModelId({
-        preferredModelId: "mock/test",
+        agentModelId: "mock/test",
         workspaceModelId: "openai/gpt-4",
       }),
       "mock/test",
@@ -34,27 +34,27 @@ describe("resolveApplicationModelId", () => {
 });
 
 describe("resolveSummaryApplicationModelId", () => {
-  it("R2: prefers CLI, then summary pin, then dialogue id", () => {
+  it("T6: prefers CLI, then summary pin, then workspace (not dialogue)", () => {
     assert.equal(
       resolveSummaryApplicationModelId({
         cliModelId: "flag/model",
-        summaryPreferredModelId: "pin/model",
-        dialogueApplicationModelId: "dialogue/model",
+        summaryModelId: "pin/model",
+        workspaceModelId: "workspace/model",
       }),
       "flag/model",
     );
     assert.equal(
       resolveSummaryApplicationModelId({
-        summaryPreferredModelId: "pin/model",
-        dialogueApplicationModelId: "dialogue/model",
+        summaryModelId: "pin/model",
+        workspaceModelId: "workspace/model",
       }),
       "pin/model",
     );
     assert.equal(
       resolveSummaryApplicationModelId({
-        dialogueApplicationModelId: "dialogue/model",
+        workspaceModelId: "workspace/model",
       }),
-      "dialogue/model",
+      "workspace/model",
     );
   });
 });

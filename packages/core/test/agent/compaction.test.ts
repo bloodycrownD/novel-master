@@ -49,10 +49,10 @@ function policyDefinition(
 }
 
 function compactionModelContext(
-  dialogueApplicationModelId = "openai/gpt-dialogue",
+  workspaceModelId = "openai/gpt-workspace",
   cliModelId?: string,
 ) {
-  return { dialogueApplicationModelId, cliModelId };
+  return { workspaceModelId, cliModelId };
 }
 
 function createPipeline(
@@ -70,7 +70,7 @@ function createPipeline(
     schemaVersion: 1,
     name: "summarizer",
     prompts: [],
-    preferredModelId: "anthropic/claude",
+    model: "anthropic/claude",
   };
   const resolveAgent: CompactionAgentResolver =
     options.resolveAgent ??
@@ -224,20 +224,20 @@ describe("CompactionPipeline", () => {
     assert.equal(abstract, undefined);
   });
 
-  it("C1: summary agent without preferredModelId uses dialogueApplicationModelId", async () => {
+  it("C1: summary agent without model pin uses workspaceModelId", async () => {
     const session = new InMemoryAgentSession();
     for (let i = 0; i < 10; i++) {
       await session.append("user", textBlocks(`message ${i} `.repeat(50)));
     }
 
-    const dialogueModelId = "openai/gpt-dialogue";
+    const workspaceModelId = "openai/gpt-workspace";
 
     const modelRequests: ModelRequestService = {
       request: mock.fn(async (applicationModelId) => {
-        assert.equal(applicationModelId, dialogueModelId);
+        assert.equal(applicationModelId, workspaceModelId);
         return {
-          assistantText: "summary from dialogue model",
-          blocks: [{ type: "text", text: "summary from dialogue model" }],
+          assistantText: "summary from workspace model",
+          blocks: [{ type: "text", text: "summary from workspace model" }],
           raw: {},
         };
       }),
@@ -258,10 +258,10 @@ describe("CompactionPipeline", () => {
     const abstract = await pipeline.maybeCompact(
       session,
       "",
-      compactionModelContext(dialogueModelId),
+      compactionModelContext(workspaceModelId),
     );
 
-    assert.equal(abstract, "summary from dialogue model");
+    assert.equal(abstract, "summary from workspace model");
     assert.equal(
       (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
       1,
@@ -274,7 +274,7 @@ describe("CompactionPipeline", () => {
       await session.append("user", textBlocks(`message ${i} `.repeat(50)));
     }
 
-    const dialogueModelId = "openai/gpt-dialogue";
+    const workspaceModelId = "openai/gpt-workspace";
     const summaryModelId = "anthropic/claude-summary";
 
     const modelRequests: ModelRequestService = {
@@ -295,7 +295,7 @@ describe("CompactionPipeline", () => {
           schemaVersion: 1,
           name: "summarizer",
           prompts: [],
-          preferredModelId: summaryModelId,
+          model: summaryModelId,
         };
       },
     };
@@ -304,11 +304,11 @@ describe("CompactionPipeline", () => {
     const abstract = await pipeline.maybeCompact(
       session,
       "",
-      compactionModelContext(dialogueModelId),
+      compactionModelContext(workspaceModelId),
     );
 
     assert.equal(abstract, "summary from B");
-    assert.notEqual(dialogueModelId, summaryModelId);
+    assert.notEqual(workspaceModelId, summaryModelId);
     assert.equal(
       (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
       1,

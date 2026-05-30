@@ -5,12 +5,12 @@
  */
 
 import { parse as parseYaml } from "yaml";
-import { validatePromptBlocks } from "../../domain/prompt/prompt-blocks-validate.js";
+import { validatePromptBlocksFromMap } from "../../domain/prompt/prompt-blocks-validate.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
 import { PromptError } from "../../errors/prompt-errors.js";
 
 /**
- * Parses YAML containing `blocks` at root or under `prompts.blocks`.
+ * Parses YAML containing `blocks` map at root or under `prompts.blocks`.
  */
 export function loadPromptBlocksFromYaml(source: string): readonly PromptBlock[] {
   let parsed: unknown;
@@ -28,16 +28,19 @@ export function loadPromptBlocksFromYaml(source: string): readonly PromptBlock[]
 
   const record = parsed as Record<string, unknown>;
   let blocks: unknown = record.blocks;
-  if (!Array.isArray(blocks) && record.prompts != null) {
+  if (
+    (blocks == null || typeof blocks !== "object" || Array.isArray(blocks)) &&
+    record.prompts != null
+  ) {
     const prompts = record.prompts;
     if (prompts != null && typeof prompts === "object" && !Array.isArray(prompts)) {
       blocks = (prompts as Record<string, unknown>).blocks;
     }
   }
 
-  if (!Array.isArray(blocks)) {
-    throw new PromptError("INVALID_YAML", "prompt root must contain a blocks array");
+  if (blocks == null || typeof blocks !== "object" || Array.isArray(blocks)) {
+    throw new PromptError("INVALID_YAML", "prompt root must contain a blocks mapping");
   }
 
-  return validatePromptBlocks(blocks);
+  return validatePromptBlocksFromMap(blocks);
 }

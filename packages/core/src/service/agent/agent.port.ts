@@ -13,6 +13,8 @@ export interface AgentRunOptions {
   readonly definition: AgentDefinition;
   /** Resolved applicationModelId (host reads state/flags; Core does not). */
   readonly applicationModelId: string;
+  /** Workspace current model id; compaction summary chain falls back here. */
+  readonly workspaceModelId: string;
   /** When set, compaction summary chain treats CLI `--modelId` as highest priority. */
   readonly cliModelId?: string;
   readonly promptContext: Omit<PromptRenderContext, "messages" | "abstract">;

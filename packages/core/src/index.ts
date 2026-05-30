@@ -190,7 +190,10 @@ export type {
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
 export { messageBodyText } from "./domain/prompt/message-body.js";
-export { validatePromptBlocks } from "./domain/prompt/prompt-blocks-validate.js";
+export {
+  validatePromptBlocks,
+  validatePromptBlocksFromMap,
+} from "./domain/prompt/prompt-blocks-validate.js";
 export {
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
@@ -228,6 +231,14 @@ export {
   compactionPolicyFromJson,
   compactionPolicyToJson,
 } from "./domain/compaction/compaction-policy-from-json.js";
+export {
+  compactionPolicyTemplateFromJson,
+  type CompactionPolicyTemplate,
+} from "./domain/compaction/compaction-policy-template-from-json.js";
+export {
+  agentsBundleFromJson,
+  isAgentsBundleDocument,
+} from "./domain/agent/agents-bundle-from-json.js";
 export { CompactionPolicyError } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyErrorCode } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyStore } from "./service/compaction/compaction-policy-store.port.js";

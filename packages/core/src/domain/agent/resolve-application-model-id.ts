@@ -1,8 +1,8 @@
 /**
  * Pure model id resolution for dialogue and compaction summary agents.
  *
- * Priority (dialogue): CLI flag → agent preferredModelId → workspace current model.
- * Priority (summary): CLI flag → summary preferredModelId → dialogue applicationModelId.
+ * Priority (dialogue): CLI flag → agent model pin → workspace current model.
+ * Priority (summary): CLI flag → summary agent model pin → workspace current model.
  *
  * Core does not read PersistentState; hosts pass resolved strings.
  *
@@ -11,7 +11,7 @@
 
 export interface ResolveApplicationModelIdInput {
   readonly cliModelId?: string;
-  readonly preferredModelId?: string;
+  readonly agentModelId?: string;
   readonly workspaceModelId?: string;
 }
 
@@ -24,7 +24,7 @@ export function resolveApplicationModelId(
 ): string | undefined {
   return (
     input.cliModelId ??
-    input.preferredModelId ??
+    input.agentModelId ??
     input.workspaceModelId ??
     undefined
   );
@@ -32,8 +32,8 @@ export function resolveApplicationModelId(
 
 export interface ResolveSummaryApplicationModelIdInput {
   readonly cliModelId?: string;
-  readonly summaryPreferredModelId?: string;
-  readonly dialogueApplicationModelId: string;
+  readonly summaryModelId?: string;
+  readonly workspaceModelId: string;
 }
 
 /**
@@ -44,7 +44,7 @@ export function resolveSummaryApplicationModelId(
 ): string {
   return (
     input.cliModelId ??
-    input.summaryPreferredModelId ??
-    input.dialogueApplicationModelId
+    input.summaryModelId ??
+    input.workspaceModelId
   );
 }

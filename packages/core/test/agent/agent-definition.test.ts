@@ -2,32 +2,101 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   agentDefinitionFromJson,
+  agentDefinitionToJson,
   AgentConfigError,
 } from "@novel-master/core";
 
 describe("agentDefinitionFromJson", () => {
-  it("parses valid document", () => {
+  it("parses valid document with blocks map", () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
       name: "writer",
       prompts: {
-        blocks: [{ name: "s", type: "text", role: "system", content: "hi" }],
+        blocks: {
+          s: { type: "text", role: "system", content: "hi" },
+        },
       },
-      preferredModelId: "openai/gpt-4",
+      model: "openai/gpt-4",
     });
     assert.equal(def.name, "writer");
+    assert.equal(def.model, "openai/gpt-4");
+    assert.equal(def.prompts[0]?.name, "s");
   });
 
-  it("D1: rejects legacy model field in strict schema", () => {
+  it("T1: rejects preferredModelId with friendly message", () => {
     assert.throws(
       () =>
         agentDefinitionFromJson({
           schemaVersion: 1,
           name: "x",
-          prompts: { blocks: [] },
+          prompts: { blocks: {} },
+          preferredModelId: "a/b",
+        }),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /model/.test(e.message),
+    );
+  });
+
+  it("T2: rejects legacy nested model object", () => {
+    assert.throws(
+      () =>
+        agentDefinitionFromJson({
+          schemaVersion: 1,
+          name: "x",
+          prompts: { blocks: {} },
           model: { applicationModelId: "a/b" },
         }),
-      (e: unknown) => e instanceof AgentConfigError && e.code === "INVALID_SCHEMA",
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "INVALID_SCHEMA" &&
+        /legacy nested model/.test(e.message),
+    );
+  });
+
+  it("T3: model string round-trips via toJson", () => {
+    const def = agentDefinitionFromJson({
+      schemaVersion: 1,
+      name: "x",
+      prompts: { blocks: {} },
+      model: "mock/test",
+    });
+    const doc = agentDefinitionToJson(def);
+    assert.equal(doc.model, "mock/test");
+    const again = agentDefinitionFromJson(doc);
+    assert.equal(again.model, "mock/test");
+  });
+
+  it("T4: blocks map order matches definition.prompts order", () => {
+    const def = agentDefinitionFromJson({
+      schemaVersion: 1,
+      name: "writer",
+      prompts: {
+        blocks: {
+          alpha: { type: "text", role: "system", content: "a" },
+          beta: { type: "chat" },
+          gamma: { type: "abstract", content: "{{.abstract}}" },
+        },
+      },
+    });
+    assert.deepEqual(
+      def.prompts.map((b) => b.name),
+      ["alpha", "beta", "gamma"],
+    );
+  });
+
+  it("T5: rejects blocks array at schema layer", () => {
+    assert.throws(
+      () =>
+        agentDefinitionFromJson({
+          schemaVersion: 1,
+          name: "x",
+          prompts: {
+            blocks: [{ name: "a", type: "chat" }],
+          },
+        }),
+      (e: unknown) => e instanceof AgentConfigError,
     );
   });
 
@@ -37,8 +106,8 @@ describe("agentDefinitionFromJson", () => {
         agentDefinitionFromJson({
           schemaVersion: 1,
           name: "x",
-          prompts: { blocks: [] },
-          preferredModelId: "a/b",
+          prompts: { blocks: {} },
+          model: "a/b",
           compact: {
             trigger: { tokenThreshold: 100 },
             action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
@@ -48,16 +117,15 @@ describe("agentDefinitionFromJson", () => {
     );
   });
 
-  it("parses abstract prompt block", () => {
+  it("parses abstract prompt block in map", () => {
     const def = agentDefinitionFromJson({
       schemaVersion: 1,
       name: "writer",
       prompts: {
-        blocks: [
-          { name: "summary", type: "abstract", content: "{{.abstract}}" },
-        ],
+        blocks: {
+          summary: { type: "abstract", content: "{{.abstract}}" },
+        },
       },
-      preferredModelId: "openai/gpt-4",
     });
     assert.equal(def.prompts[0]?.type, "abstract");
     if (def.prompts[0]?.type === "abstract") {
@@ -72,17 +140,15 @@ describe("agentDefinitionFromJson", () => {
           schemaVersion: 1,
           name: "x",
           prompts: {
-            blocks: [
-              {
-                name: "a",
+            blocks: {
+              a: {
                 type: "text",
                 role: "system",
                 content: "x",
                 when: { present: "abstract" },
               },
-            ],
+            },
           },
-          preferredModelId: "a/b",
         }),
       (e: unknown) => e instanceof AgentConfigError,
     );
@@ -95,34 +161,16 @@ describe("agentDefinitionFromJson", () => {
           schemaVersion: 1,
           name: "x",
           prompts: {
-            blocks: [
-              {
-                name: "a",
+            blocks: {
+              a: {
                 type: "abstract",
                 role: "system",
                 content: "x",
               },
-            ],
+            },
           },
-          preferredModelId: "a/b",
         }),
       (e: unknown) => e instanceof AgentConfigError,
     );
-  });
-
-  it("accepts abstract block in full document", () => {
-    const def = agentDefinitionFromJson({
-      schemaVersion: 1,
-      name: "writer",
-      prompts: {
-        blocks: [
-          { name: "summary", type: "abstract", content: "{{.abstract}}" },
-          { name: "history", type: "chat" },
-        ],
-      },
-      preferredModelId: "openai/gpt-4",
-    });
-    assert.equal(def.prompts.length, 2);
-    assert.equal(def.prompts[0]?.type, "abstract");
   });
 });
