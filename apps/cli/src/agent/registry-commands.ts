@@ -70,7 +70,11 @@ export async function runAgentRegistryCommand(
       if (path == null || path === "") {
         throw new Error("Usage: nm agent import <path>");
       }
-      const count = await importAgentsFromFile(registry, path);
+      const count = await importAgentsFromFile(
+        registry,
+        path,
+        createRegistryValidateOptions(rt),
+      );
       console.log(`Imported ${count} agent(s) from ${path}`);
       return;
     }
@@ -97,7 +101,11 @@ export async function runAgentRegistryCommand(
           "Agent registry is not empty; migrate only when DB has no agents",
         );
       }
-      const count = await importAgentsFromFile(registry, bundlePath);
+      const count = await importAgentsFromFile(
+        registry,
+        bundlePath,
+        createRegistryValidateOptions(rt),
+      );
       console.log(`Migrated ${count} agent(s) from ${bundlePath}`);
       return;
     }

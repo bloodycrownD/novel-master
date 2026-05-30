@@ -15,6 +15,7 @@ import {
   validatePromptBlocksFromMap,
   type AgentDefinition,
   type AgentRegistryService,
+  type ValidateAgentDefinitionOptions,
 } from "@novel-master/core";
 import {
   agentsBundleDocumentSchema,
@@ -48,6 +49,7 @@ function bundleToDefinitions(
 export async function importAgentsFromFile(
   registry: AgentRegistryService,
   path: string,
+  validateOptions: ValidateAgentDefinitionOptions = {},
 ): Promise<number> {
   const source = await readFile(path, "utf8");
   const format = formatFromPath(path);
@@ -55,7 +57,7 @@ export async function importAgentsFromFile(
   const doc = decode(raw, agentsBundleDocumentSchema);
   const bundle = bundleToDefinitions(doc);
   for (const [agentId, def] of bundle) {
-    await registry.upsert(agentId, def);
+    await registry.upsert(agentId, def, validateOptions);
   }
   return bundle.size;
 }

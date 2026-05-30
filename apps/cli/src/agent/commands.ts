@@ -22,7 +22,10 @@ import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
 import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
-import { runAgentRegistryCommand } from "./registry-commands.js";
+import {
+  createRegistryValidateOptions,
+  runAgentRegistryCommand,
+} from "./registry-commands.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { AgentConfigError } from "@novel-master/core";
 
@@ -116,7 +119,27 @@ export async function runAgent(
       const content = flagString(flags, "content");
       const noStream = flags.get("no-stream") === true;
 
-      const definition = await resolveDefinition(rt, flags);
+      const agentConfigPath = flagString(flags, "agent-config");
+      const agentId = flagString(flags, "agent-id");
+      const shouldSave = flags.get("save") === true;
+      if (shouldSave) {
+        if (agentConfigPath == null) {
+          throw new Error("--save requires --agent-config <path>");
+        }
+        if (agentId == null || agentId === "") {
+          throw new Error("--save requires --agent-id <id>");
+        }
+      }
+
+      let definition = await resolveDefinition(rt, flags);
+      if (shouldSave) {
+        await rt.agentRegistry.upsert(
+          agentId!,
+          definition,
+          createRegistryValidateOptions(rt),
+        );
+      }
+
       const { applicationModelId, workspaceModelId, cliModelId } =
         await resolveCliApplicationModelId({
           flags,
@@ -205,7 +228,7 @@ export async function runAgent(
     }
     default:
       throw new Error(
-        "Usage: nm agent <run|continue|list|show|import|export|migrate|delete> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
+        "Usage: nm agent <run|continue|list|show|import|export|migrate|delete> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--save] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
       );
   }
 }
