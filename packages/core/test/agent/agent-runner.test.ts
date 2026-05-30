@@ -9,7 +9,6 @@ import {
   textBlocks,
   ToolRegistry,
   type AgentDefinition,
-  type ConfigService,
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
@@ -49,40 +48,11 @@ function compactRunnerDefinition(): AgentDefinition {
   };
 }
 
-/** Throws if anything reads legacy agent.compaction.* keys (T11 guard). */
-function createCompactionConfigTrap(): ConfigService {
-  const forbid = (key: string): void => {
-    if (key.startsWith("agent.compaction.")) {
-      throw new Error(`T11: ConfigService must not read ${key}`);
-    }
-  };
-  return {
-    get: async (key) => {
-      forbid(key);
-      return undefined;
-    },
-    set: async (key) => {
-      forbid(key);
-    },
-    getBoolean: async (key) => {
-      forbid(key);
-      return false;
-    },
-    setBoolean: async (key) => {
-      forbid(key);
-    },
-    getNumber: async (key, defaultValue) => {
-      forbid(key);
-      return defaultValue ?? 0;
-    },
-    setNumber: async (key) => {
-      forbid(key);
-    },
-    list: async () => [],
-    reset: async (key) => {
-      forbid(key);
-    },
-  };
+/** Legacy guard: agent runner must not read agent.compaction.* from any config bucket. */
+function assertLegacyCompactionKeyForbidden(key: string): void {
+  if (key.startsWith("agent.compaction.")) {
+    throw new Error(`T11: must not read ${key}`);
+  }
 }
 
 function mockVfs(): VfsService {
@@ -237,11 +207,10 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
   });
 
-  it("T11: compacts from definition.compact without ConfigService / agent.compaction.*", async () => {
-    // Intent (spec T11): createAgentRunner has no ConfigService; default pipeline uses definition.compact only.
-    const trap = createCompactionConfigTrap();
-    await assert.rejects(
-      () => trap.get("agent.compaction.thresholdTokens"),
+  it("T11: compacts from definition.compact without legacy agent.compaction.* config", async () => {
+    // Intent (spec T11): createAgentRunner has no config reads; pipeline uses definition.compact only.
+    assert.throws(
+      () => assertLegacyCompactionKeyForbidden("agent.compaction.thresholdTokens"),
       /must not read/,
     );
 

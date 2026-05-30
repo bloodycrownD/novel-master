@@ -1,16 +1,16 @@
 import {
   bootstrapNovelMaster,
-  createConfigService,
-  createKkvService,
   createMessageService,
+  createPersistentPreferences,
+  createPersistentState,
   createProjectService,
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
   open,
-  type ConfigService,
-  type KkvService,
   type MessageService,
+  type PersistentPreferences,
+  type PersistentState,
   type ProjectService,
   type SessionFsService,
   type SessionService,
@@ -24,8 +24,8 @@ import {
 
 export interface NovelMasterTestContext {
   readonly conn: TdbcConnection;
-  readonly kkv: KkvService;
-  readonly config: ConfigService;
+  readonly state: PersistentState;
+  readonly preferences: PersistentPreferences;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -44,8 +44,8 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
   await bootstrapNovelMaster(conn);
   return {
     conn,
-    kkv: createKkvService(conn),
-    config: createConfigService(conn),
+    state: createPersistentState(conn),
+    preferences: createPersistentPreferences(conn),
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),

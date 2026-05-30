@@ -86,20 +86,14 @@ export { createVfsTools, registerVfsTools } from "./domain/tool/builtin/vfs-tool
 export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 
 /**
- * KKV module-scoped key-value store.
+ * Persistent workspace pointers and behavioral preferences (KKV-backed, modules internal).
  */
-export { KkvError } from "./errors/kkv-errors.js";
-export type { KkvErrorCode } from "./errors/kkv-errors.js";
-export { createKkvService } from "./service/kkv/create-kkv-service.js";
-export type { KkvService } from "./service/kkv/kkv.port.js";
-
-/**
- * Config: application-level global configuration.
- */
-export { ConfigError } from "./errors/config-errors.js";
-export type { ConfigErrorCode } from "./errors/config-errors.js";
-export { createConfigService } from "./service/config/create-config-service.js";
-export type { ConfigService } from "./service/config/config.port.js";
+export { PreferencesError } from "./errors/preferences-errors.js";
+export type { PreferencesErrorCode } from "./errors/preferences-errors.js";
+export { createPersistentState } from "./service/persistent-state/create-persistent-state.js";
+export type { PersistentState } from "./service/persistent-state/persistent-state.port.js";
+export { createPersistentPreferences } from "./service/persistent-preferences/create-persistent-preferences.js";
+export type { PersistentPreferences } from "./service/persistent-preferences/persistent-preferences.port.js";
 
 /**
  * Chat: projects, sessions, messages.
