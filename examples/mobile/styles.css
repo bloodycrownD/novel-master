@@ -1050,6 +1050,34 @@ body {
     margin-bottom: 0;
 }
 
+.agent-model-switch {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.agent-model-switch-label {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.agent-model-section--enabled .agent-model-pickers {
+    animation: agent-model-expand 0.2s ease-out;
+}
+
+@keyframes agent-model-expand {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .btn-sm {
     padding: 6px 12px;
     font-size: 13px;

@@ -1429,13 +1429,23 @@
         const modelSel = modelEnabled
             ? resolveModelSelection(def.preferredModelId)
             : resolveModelSelection(appState.workspaceCurrentModelId);
-        html += '<section class="agent-form-section" data-agent-model-section>';
-        html += '<div class="agent-section-header"><h3>模型</h3></div>';
-        html += '<label class="agent-field agent-field--row model-pin-toggle">';
-        html += '<span>启用 Agent 专属模型</span>';
-        html += '<input type="checkbox" data-agent-field="modelEnabled"' + (modelEnabled ? ' checked' : '') + '>';
-        html += '</label>';
-        html += '<p class="agent-field-hint">关闭时使用工作区当前模型（会话操作抽屉 / 我的）。温度等采样在服务商-模型配置中设置，此处仅选模型。</p>';
+        html +=
+            '<section class="agent-form-section agent-model-section' +
+            (modelEnabled ? ' agent-model-section--enabled' : '') +
+            '" data-agent-model-section>';
+        html += '<div class="agent-section-header">';
+        html += '<h3>模型</h3>';
+        html += '<label class="agent-model-switch">';
+        html += '<span class="agent-model-switch-label">专属模型</span>';
+        html +=
+            '<input type="checkbox" class="toggle" data-agent-field="modelEnabled"' +
+            (modelEnabled ? ' checked' : '') +
+            ' aria-label="启用 Agent 专属模型">';
+        html += '</label></div>';
+        html +=
+            '<p class="agent-field-hint agent-model-hint-off' +
+            (modelEnabled ? ' hidden' : '') +
+            '">未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。</p>';
         html += '<div class="agent-model-pickers' + (modelEnabled ? '' : ' hidden') + '" data-agent-model-pickers>';
         html += '<label class="agent-field"><span>服务商</span><select data-agent-field="providerId">';
         MOCK_PROVIDERS.forEach(function (p) {
@@ -1454,8 +1464,9 @@
         html += '</select></label>';
         html +=
             '<p class="agent-field-hint">preferredModelId: <code data-agent-model-id-hint>' +
-            escapeHtml(modelEnabled ? def.preferredModelId : '（未启用）') +
+            escapeHtml(modelEnabled ? def.preferredModelId : '—') +
             '</code></p>';
+        html += '<p class="agent-field-hint">温度等采样在服务商-模型配置中设置，此处仅选模型。</p>';
         html += '</div></section>';
 
         html += '<section class="agent-form-section"><h3>运行时</h3>';
@@ -1763,11 +1774,17 @@
         root.addEventListener('change', function (e) {
             if (appState.currentPage !== 'agentEditor') return;
             if (e.target.matches('[data-agent-field="modelEnabled"]')) {
+                const enabled = e.target.checked;
+                const section = root.querySelector('[data-agent-model-section]');
                 const pickers = root.querySelector('[data-agent-model-pickers]');
-                if (pickers) pickers.classList.toggle('hidden', !e.target.checked);
+                const hintOff = root.querySelector('.agent-model-hint-off');
+                if (section) section.classList.toggle('agent-model-section--enabled', enabled);
+                if (pickers) pickers.classList.toggle('hidden', !enabled);
+                if (hintOff) hintOff.classList.toggle('hidden', enabled);
                 const hint = root.querySelector('[data-agent-model-id-hint]');
                 if (hint) {
-                    hint.textContent = e.target.checked ? '（保存后生成）' : '（未启用）';
+                    if (!enabled) hint.textContent = '—';
+                    else updateAgentModelIdHint(root);
                 }
             }
             if (e.target.matches('[data-agent-field="providerId"]')) {
