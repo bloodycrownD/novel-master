@@ -1108,7 +1108,27 @@ body {
     color: var(--text-primary);
 }
 
-.agent-compact-panel.hidden {
+.compaction-policy-form {
+    padding: 16px;
+}
+
+.compaction-policy-toolbar {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.compaction-policy-panel.hidden {
+    display: none;
+}
+
+.compaction-agent-select {
+    width: 100%;
+}
+
+.compaction-policy-form .agent-abstract-agent.hidden,
+.compaction-policy-form .agent-abstract-text.hidden {
     display: none;
 }
 

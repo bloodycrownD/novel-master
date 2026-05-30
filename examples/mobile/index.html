@@ -149,6 +149,11 @@
                         <div class="menu-label">服务商管理</div>
                         <div class="menu-arrow">›</div>
                     </div>
+                    <div class="menu-item" data-action="compaction-policy">
+                        <div class="menu-icon">🗜️</div>
+                        <div class="menu-label">压缩策略</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
                     <div class="menu-item" data-action="global-template">
                         <div class="menu-icon">🌐</div>
                         <div class="menu-label">全局模板</div>
@@ -165,6 +170,14 @@
                         <div class="menu-arrow">›</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- 全局压缩策略（从「我的」进入） -->
+            <div id="compactionPolicyPage" class="page">
+                <div class="compaction-policy-toolbar">
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-compaction-policy">保存</button>
+                </div>
+                <div id="compactionPolicyRoot" class="compaction-policy-form"></div>
             </div>
 
             <!-- 全局模板（从「我的」进入） -->

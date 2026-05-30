@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "agents": {
+    "writer": "agents/writer.yaml",
+    "summarizer": "agents/summarizer.yaml"
+  }
+}

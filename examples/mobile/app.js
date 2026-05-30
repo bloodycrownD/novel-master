@@ -19,6 +19,7 @@
         defaultAgentId: 'agent-writer',
         agentEditorDirty: false,
         rollbackInProgress: false,
+        globalCompactionPolicy: null,
     };
 
     const pageConfig = {
@@ -32,6 +33,7 @@
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
         agentEditor: { title: 'Agent 配置', showBack: true, showNav: false },
+        compactionPolicy: { title: '压缩策略', showBack: true, showNav: false },
     };
 
     const elements = {
@@ -814,7 +816,10 @@
             item.addEventListener('click', function () {
                 const action = item.dataset.action;
                 if (action === 'providers') navigateToPage('providers', true);
-                else if (action === 'global-template') navigateToPage('globalTemplate', true);
+                else if (action === 'compaction-policy') {
+                    renderCompactionPolicyPage();
+                    navigateToPage('compactionPolicy', true);
+                } else if (action === 'global-template') navigateToPage('globalTemplate', true);
                 else if (action === 'settings') navigateToPage('settings', true);
                 else if (action === 'debug') showToast('开发调试功能');
             });
@@ -1032,10 +1037,6 @@
                 params: { protocol: 'openai', openai: { temperature: 0.7, top_p: 0.9 } },
             },
             runtime: { maxSteps: 20 },
-            compact: {
-                trigger: { tokenThreshold: 12000, floorThreshold: 20 },
-                action: { keepLastN: 6, abstract: { type: 'agent' } },
-            },
             prompts: [
                 { name: 'system', type: 'text', role: 'system', content: 'You are a helpful assistant.' },
                 {
@@ -1087,13 +1088,6 @@
         const parts = [(provider ? provider.name : sel.providerId) + ' · ' + sel.vendorModelId];
         if (def.runtime && def.runtime.maxSteps) parts.push('最大 ' + def.runtime.maxSteps + ' 步');
         else parts.push('最大 20 步');
-        if (def.compact) {
-            const t = def.compact.trigger || {};
-            const hints = [];
-            if (t.tokenThreshold) hints.push(t.tokenThreshold + ' tokens');
-            if (t.floorThreshold) hints.push(t.floorThreshold + ' 条');
-            parts.push('压缩' + (hints.length ? ' · ' + hints.join('/') : ''));
-        }
         const temp = def.model.params && def.model.params.openai && def.model.params.openai.temperature;
         if (temp != null) parts.push('温度 ' + temp);
         return parts.join(' · ');
@@ -1105,11 +1099,9 @@
             name: def.name,
             model: def.model,
             runtime: def.runtime,
-            compact: def.compact,
             prompts: { blocks: def.prompts },
         };
         if (!doc.runtime) delete doc.runtime;
-        if (!doc.compact) delete doc.compact;
         return JSON.stringify(doc, null, 2)
             .replace(/"([^"]+)":/g, '$1:')
             .replace(/"/g, "'");
@@ -1277,10 +1269,6 @@
         const def = entry.definition;
         const modelSel = resolveModelSelection(def.model.applicationModelId);
         const protocol = (def.model.params && def.model.params.protocol) || modelSel.protocol;
-        const compactEnabled = Boolean(def.compact);
-        const compact = def.compact || { trigger: {}, action: { keepLastN: 6, abstract: { type: 'agent' } } };
-        const abstractType = compact.action.abstract.type || 'agent';
-
         let html = '';
 
         html += '<section class="agent-form-section"><h3>基本信息</h3>';
@@ -1317,21 +1305,6 @@
         html += '<p class="agent-field-hint">每轮 run 的模型往返上限；省略时 Core 默认 20。</p>';
         html += '</section>';
 
-        html += '<section class="agent-form-section"><h3>压缩策略 compact</h3>';
-        html += '<label class="agent-field agent-field--row"><span>启用压缩</span><input type="checkbox" class="toggle" data-agent-field="compactEnabled"' + (compactEnabled ? ' checked' : '') + '></label>';
-        html += '<div class="agent-compact-panel' + (compactEnabled ? '' : ' hidden') + '" data-compact-panel>';
-        html += '<p class="agent-field-hint">触发条件为 OR：token 估计或消息条数任一满足即压缩。</p>';
-        html += '<label class="agent-field"><span>Token 阈值</span><input type="number" data-compact-field="tokenThreshold" min="1" step="1" value="' + (compact.trigger.tokenThreshold || '') + '" placeholder="如 12000"></label>';
-        html += '<label class="agent-field"><span>消息条数阈值</span><input type="number" data-compact-field="floorThreshold" min="1" step="1" value="' + (compact.trigger.floorThreshold || '') + '" placeholder="如 20"></label>';
-        html += '<label class="agent-field"><span>保留最近 N 条</span><input type="number" data-compact-field="keepLastN" min="1" step="1" value="' + (compact.action.keepLastN || 6) + '"></label>';
-        html += '<label class="agent-field"><span>摘要方式</span><select data-compact-field="abstractType">';
-        html += '<option value="agent"' + (abstractType === 'agent' ? ' selected' : '') + '>Agent 生成</option>';
-        html += '<option value="text"' + (abstractType === 'text' ? ' selected' : '') + '>静态文本</option>';
-        html += '</select></label>';
-        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要指令 instruction</span><textarea data-compact-field="abstractInstruction" rows="2" placeholder="Summarize the following conversation history concisely:">' + escapeHtml(compact.action.abstract.instruction || '') + '</textarea></label>';
-        html += '<label class="agent-field agent-abstract-text' + (abstractType === 'text' ? '' : ' hidden') + '"><span>摘要模板 content</span><textarea data-compact-field="abstractContent" rows="3" placeholder="支持 {{.abstract}} 等宏">' + escapeHtml(compact.action.abstract.content || '') + '</textarea></label>';
-        html += '</div></section>';
-
         html += '<section class="agent-form-section"><div class="agent-section-header"><h3>Prompt 块</h3><button type="button" class="btn-secondary btn-sm" data-action="add-prompt-block">添加</button></div>';
         html += '<div class="prompt-block-list">';
         def.prompts.forEach(function (block, i) {
@@ -1360,8 +1333,6 @@
         const providerSelect = root.querySelector('[data-agent-field="providerId"]');
         const vendorSelect = root.querySelector('[data-agent-field="vendorModelId"]');
         const maxStepsInput = root.querySelector('[data-agent-field="maxSteps"]');
-        const compactEnabled = root.querySelector('[data-agent-field="compactEnabled"]');
-
         const providerId = providerSelect ? providerSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).providerId;
         const vendorModelId = vendorSelect ? vendorSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).vendorModelId;
 
@@ -1392,38 +1363,6 @@
             if (protocol === 'openai') def.model.params.openai = samplingValues;
             else if (protocol === 'anthropic') def.model.params.anthropic = samplingValues;
             else if (protocol === 'gemini') def.model.params.gemini = samplingValues;
-        }
-
-        if (compactEnabled && compactEnabled.checked) {
-            const tokenEl = root.querySelector('[data-compact-field="tokenThreshold"]');
-            const floorEl = root.querySelector('[data-compact-field="floorThreshold"]');
-            const keepEl = root.querySelector('[data-compact-field="keepLastN"]');
-            const abstractTypeEl = root.querySelector('[data-compact-field="abstractType"]');
-            const trigger = {};
-            if (tokenEl && tokenEl.value) trigger.tokenThreshold = Number(tokenEl.value);
-            if (floorEl && floorEl.value) trigger.floorThreshold = Number(floorEl.value);
-            if (!trigger.tokenThreshold && !trigger.floorThreshold) {
-                if (strict) {
-                    showToast('压缩触发条件至少填一项');
-                    return null;
-                }
-            } else {
-                const abstract = { type: abstractTypeEl ? abstractTypeEl.value : 'agent' };
-                if (abstract.type === 'text') {
-                    const contentEl = root.querySelector('[data-compact-field="abstractContent"]');
-                    abstract.content = contentEl ? contentEl.value : '';
-                } else {
-                    const instrEl = root.querySelector('[data-compact-field="abstractInstruction"]');
-                    if (instrEl && instrEl.value.trim()) abstract.instruction = instrEl.value.trim();
-                }
-                def.compact = {
-                    trigger: trigger,
-                    action: {
-                        keepLastN: keepEl ? Number(keepEl.value) || 6 : 6,
-                        abstract: abstract,
-                    },
-                };
-            }
         }
 
         const cards = root.querySelectorAll('.prompt-block-card');
@@ -1534,6 +1473,139 @@
         );
     }
 
+    function defaultGlobalCompactionPolicy() {
+        return {
+            schemaVersion: 1,
+            enabled: true,
+            trigger: { tokenThreshold: 12000, floorThreshold: 20 },
+            action: {
+                keepLastN: 6,
+                abstract: {
+                    type: 'agent',
+                    agentId: 'agent-writer',
+                    instruction: 'Summarize the following conversation history concisely:',
+                },
+            },
+        };
+    }
+
+    function renderCompactionAgentOptions(selectedId) {
+        return Object.keys(agentCatalog)
+            .map(function (id) {
+                const def = agentCatalog[id].definition;
+                return (
+                    '<option value="' +
+                    id +
+                    '"' +
+                    (id === selectedId ? ' selected' : '') +
+                    '>' +
+                    escapeHtml(def.name + ' (' + id + ')') +
+                    '</option>'
+                );
+            })
+            .join('');
+    }
+
+    function renderCompactionPolicyPage() {
+        const root = document.getElementById('compactionPolicyRoot');
+        if (!root) return;
+        if (!appState.globalCompactionPolicy) {
+            appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
+        }
+        const policy = appState.globalCompactionPolicy;
+        const trigger = policy.trigger || {};
+        const action = policy.action || { keepLastN: 6, abstract: { type: 'agent', agentId: 'agent-writer' } };
+        const abstract = action.abstract || { type: 'agent', agentId: 'agent-writer' };
+        const abstractType = abstract.type || 'agent';
+
+        let html = '';
+        html += '<section class="agent-form-section"><h3>全局压缩策略</h3>';
+        html += '<label class="agent-field agent-field--row"><span>启用压缩</span><input type="checkbox" class="toggle" data-policy-field="enabled"' + (policy.enabled ? ' checked' : '') + '></label>';
+        html += '<div class="compaction-policy-panel' + (policy.enabled ? '' : ' hidden') + '" data-policy-panel>';
+        html += '<p class="agent-field-hint">全应用单条策略；触发条件为 OR（token 估计或消息条数）。</p>';
+        html += '<label class="agent-field"><span>Token 阈值</span><input type="number" data-policy-field="tokenThreshold" min="1" step="1" value="' + (trigger.tokenThreshold || '') + '" placeholder="如 12000"></label>';
+        html += '<label class="agent-field"><span>消息条数阈值</span><input type="number" data-policy-field="floorThreshold" min="1" step="1" value="' + (trigger.floorThreshold || '') + '" placeholder="如 20"></label>';
+        html += '<label class="agent-field"><span>保留最近 N 条</span><input type="number" data-policy-field="keepLastN" min="1" step="1" value="' + (action.keepLastN || 6) + '"></label>';
+        html += '<label class="agent-field"><span>摘要方式</span><select data-policy-field="abstractType">';
+        html += '<option value="agent"' + (abstractType === 'agent' ? ' selected' : '') + '>Agent 生成</option>';
+        html += '<option value="text"' + (abstractType === 'text' ? ' selected' : '') + '>静态文本</option>';
+        html += '</select></label>';
+        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要 Agent</span><select class="compaction-agent-select" data-policy-field="agentId">';
+        html += renderCompactionAgentOptions(abstract.type === 'agent' ? abstract.agentId : 'agent-writer');
+        html += '</select></label>';
+        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要指令 instruction</span><textarea data-policy-field="abstractInstruction" rows="2" placeholder="Summarize the following conversation history concisely:">' + escapeHtml(abstract.type === 'agent' && abstract.instruction ? abstract.instruction : '') + '</textarea></label>';
+        html += '<label class="agent-field agent-abstract-text' + (abstractType === 'text' ? '' : ' hidden') + '"><span>摘要模板 content</span><textarea data-policy-field="abstractContent" rows="3" placeholder="支持宏">' + escapeHtml(abstract.type === 'text' && abstract.content ? abstract.content : '') + '</textarea></label>';
+        html += '</div></section>';
+        root.innerHTML = html;
+    }
+
+    function collectCompactionPolicyFromForm() {
+        const root = document.getElementById('compactionPolicyRoot');
+        if (!root) return null;
+        const enabledEl = root.querySelector('[data-policy-field="enabled"]');
+        const enabled = enabledEl ? enabledEl.checked : false;
+        const trigger = {};
+        const tokenEl = root.querySelector('[data-policy-field="tokenThreshold"]');
+        const floorEl = root.querySelector('[data-policy-field="floorThreshold"]');
+        if (tokenEl && tokenEl.value) trigger.tokenThreshold = Number(tokenEl.value);
+        if (floorEl && floorEl.value) trigger.floorThreshold = Number(floorEl.value);
+        if (enabled && !trigger.tokenThreshold && !trigger.floorThreshold) {
+            showToast('压缩触发条件至少填一项');
+            return null;
+        }
+        const keepEl = root.querySelector('[data-policy-field="keepLastN"]');
+        const abstractTypeEl = root.querySelector('[data-policy-field="abstractType"]');
+        const abstractType = abstractTypeEl ? abstractTypeEl.value : 'agent';
+        const abstract = { type: abstractType };
+        if (abstractType === 'text') {
+            const contentEl = root.querySelector('[data-policy-field="abstractContent"]');
+            abstract.content = contentEl ? contentEl.value : '';
+        } else {
+            const agentIdEl = root.querySelector('[data-policy-field="agentId"]');
+            abstract.agentId = agentIdEl ? agentIdEl.value : 'agent-writer';
+            const instrEl = root.querySelector('[data-policy-field="abstractInstruction"]');
+            if (instrEl && instrEl.value.trim()) abstract.instruction = instrEl.value.trim();
+        }
+        return {
+            schemaVersion: 1,
+            enabled: enabled,
+            trigger: trigger,
+            action: {
+                keepLastN: keepEl ? Number(keepEl.value) || 6 : 6,
+                abstract: abstract,
+            },
+        };
+    }
+
+    function saveCompactionPolicy() {
+        const policy = collectCompactionPolicyFromForm();
+        if (!policy) return;
+        appState.globalCompactionPolicy = policy;
+        showToast('已保存全局压缩策略');
+    }
+
+    function setupCompactionPolicyPage() {
+        const root = document.getElementById('compactionPolicyRoot');
+        if (!root) return;
+        root.addEventListener('change', function (e) {
+            if (e.target.matches('[data-policy-field="enabled"]')) {
+                const panel = root.querySelector('[data-policy-panel]');
+                if (panel) panel.classList.toggle('hidden', !e.target.checked);
+                return;
+            }
+            if (e.target.matches('[data-policy-field="abstractType"]')) {
+                const isAgent = e.target.value === 'agent';
+                root.querySelectorAll('.agent-abstract-agent').forEach(function (el) {
+                    el.classList.toggle('hidden', !isAgent);
+                });
+                const textEl = root.querySelector('.agent-abstract-text');
+                if (textEl) textEl.classList.toggle('hidden', isAgent);
+            }
+        });
+        const saveBtn = document.querySelector('[data-action="save-compaction-policy"]');
+        if (saveBtn) saveBtn.addEventListener('click', saveCompactionPolicy);
+    }
+
     function setupAgentEditor() {
         const root = document.getElementById('agentEditorRoot');
         if (!root) return;
@@ -1571,17 +1643,6 @@
                 return;
             }
 
-            if (e.target.matches('[data-agent-field="compactEnabled"]')) {
-                const panel = root.querySelector('[data-compact-panel]');
-                if (panel) panel.classList.toggle('hidden', !e.target.checked);
-                return;
-            }
-
-            if (e.target.matches('[data-compact-field="abstractType"]')) {
-                const isAgent = e.target.value === 'agent';
-                root.querySelector('.agent-abstract-agent').classList.toggle('hidden', !isAgent);
-                root.querySelector('.agent-abstract-text').classList.toggle('hidden', isAgent);
-            }
         });
 
         root.addEventListener('click', function (e) {
@@ -1705,6 +1766,8 @@
         setupBottomSheet();
         setupFileEditor();
         setupAgentEditor();
+        setupCompactionPolicyPage();
+        appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
         setupProjectsAndSessions();
         setupAgentsAndProviders();
 

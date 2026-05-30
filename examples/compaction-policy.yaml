@@ -1,0 +1,11 @@
+schemaVersion: 1
+enabled: true
+trigger:
+  tokenThreshold: 12000
+  floorThreshold: 20
+action:
+  keepLastN: 6
+  abstract:
+    type: agent
+    agentId: summarizer
+    instruction: "Summarize the following conversation history concisely:"
