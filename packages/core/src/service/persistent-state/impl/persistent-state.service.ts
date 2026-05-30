@@ -15,6 +15,7 @@ const KEY_CURRENT_PROJECT_ID = "currentProjectId";
 const KEY_CURRENT_SESSION_ID = "currentSessionId";
 const KEY_CURRENT_PROVIDER_ID = "currentProviderId";
 const KEY_CURRENT_MODEL_ID = "currentModelId";
+const KEY_CURRENT_REGEX_GROUP_ID = "currentRegexGroupId";
 
 export class DefaultPersistentState implements PersistentState {
   constructor(private readonly kkv: KkvService) {}
@@ -65,6 +66,18 @@ export class DefaultPersistentState implements PersistentState {
 
   resetCurrentModelId(): Promise<void> {
     return this.reset(KEY_CURRENT_MODEL_ID);
+  }
+
+  getCurrentRegexGroupId(): Promise<string | undefined> {
+    return this.get(KEY_CURRENT_REGEX_GROUP_ID);
+  }
+
+  setCurrentRegexGroupId(id: string): Promise<void> {
+    return this.set(KEY_CURRENT_REGEX_GROUP_ID, id);
+  }
+
+  resetCurrentRegexGroupId(): Promise<void> {
+    return this.reset(KEY_CURRENT_REGEX_GROUP_ID);
   }
 
   private async get(key: string): Promise<string | undefined> {
