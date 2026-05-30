@@ -246,13 +246,7 @@
                 elements.pageTitle.textContent = '会话';
             }
             elements.backBtn.classList.toggle('hidden', appState.chatSubview !== 'conversation');
-            if (elements.drawerBtn) {
-                const inConversation = appState.chatSubview === 'conversation';
-                elements.drawerBtn.setAttribute(
-                    'aria-label',
-                    inConversation ? '打开会话操作' : '打开项目列表',
-                );
-            }
+            updateDrawerAriaLabel();
             return;
         }
 
@@ -260,11 +254,13 @@
             const entry = agentCatalog[appState.editingAgentId];
             elements.pageTitle.textContent = entry ? entry.definition.name : config.title;
             elements.backBtn.classList.toggle('hidden', !config.showBack);
+            updateDrawerAriaLabel();
             return;
         }
 
         elements.pageTitle.textContent = config.title;
         elements.backBtn.classList.toggle('hidden', !config.showBack);
+        updateDrawerAriaLabel();
     }
 
     function updateNavBar(pageId) {
@@ -276,6 +272,15 @@
         document.querySelectorAll('.nav-item').forEach(function (item) {
             item.classList.toggle('active', item.dataset.page === pageId);
         });
+    }
+
+    function updateDrawerAriaLabel() {
+        if (!elements.drawerBtn) return;
+        const inConversation = appState.chatSubview === 'conversation';
+        elements.drawerBtn.setAttribute(
+            'aria-label',
+            inConversation ? '打开会话操作' : '打开项目列表',
+        );
     }
 
     function openProjectDrawer() {
@@ -296,9 +301,9 @@
         if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.add('open');
     }
 
-    /** chatSubview: sessions → 项目抽屉；conversation → 会话操作抽屉 */
+    /** chatSubview: sessions → 项目抽屉；conversation（含 realPrompt/sessionLog 栈页）→ 会话操作抽屉 */
     function openDrawer() {
-        if (appState.currentPage === 'chat' && appState.chatSubview === 'conversation') {
+        if (appState.chatSubview === 'conversation') {
             openSessionActionsDrawer();
         } else {
             openProjectDrawer();
@@ -407,12 +412,6 @@
                 e.preventDefault();
                 const checkpointId = link.dataset.checkpointId || link.textContent.trim();
                 performRollback(checkpointId);
-            });
-        });
-
-        page.querySelectorAll('[data-expired="true"] .rollback-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                showToast('检查点已移除');
             });
         });
     }
