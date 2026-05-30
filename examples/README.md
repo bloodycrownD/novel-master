@@ -1,13 +1,19 @@
 # Novel Master examples
 
-## Global compaction policy + agents bundle
+## Global compaction policy + agent registry
 
-`examples/compaction-policy.yaml` references `summarizer` via `action.abstract.agentId`. The CLI resolves that id from **`{novelMasterHome}/agents.yaml`** (the directory that contains `novel.db`).
+`examples/compaction-policy.yaml` references `summarizer` via `action.abstract.agentId`. The CLI resolves that id from the **agent registry** (`agent_definition` in `novel.db`), not from `{novelMasterHome}/agents.yaml`.
 
-Copy the example bundle and policy into your Novel Master home:
+Import agents before setting compaction or running with `--agent-id`:
 
 ```bash
-cp examples/agents.yaml .novel-master/agents.yaml
+nm agent import examples/agents.yaml --db .novel-master/novel.db
+```
+
+If the registry is empty and `{novelMasterHome}/agents.yaml` already exists:
+
+```bash
+nm agent migrate --db .novel-master/novel.db
 ```
 
 Apply the policy (template has no `enabled`; import sets `enabled: true`):
@@ -30,7 +36,13 @@ nm compaction remove --db .novel-master/novel.db
 # alias: nm compaction clear
 ```
 
-Run a dialogue agent from the bundle:
+Run a dialogue agent from the registry (after import):
+
+```bash
+nm agent run --agent-id writer --db .novel-master/novel.db
+```
+
+One-off run from a file without saving to the registry:
 
 ```bash
 nm agent run --agent-config examples/agents.yaml --agent-id writer --db .novel-master/novel.db

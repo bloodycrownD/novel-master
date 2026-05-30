@@ -8,8 +8,6 @@ import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";
 import { compactionPolicySchema } from "@/domain/compaction/compaction-policy.schema.js";
 import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
-import { CompactionPolicyError } from "@/errors/compaction-policy-errors.js";
-import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
 import { KkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionPolicyStore } from "../compaction-policy-store.port.js";
@@ -21,6 +19,13 @@ const KEY_POLICY = "policy";
 export class DefaultCompactionPolicyStore implements CompactionPolicyStore {
   constructor(private readonly kkv: KkvService) {}
 
+  /**
+   * Returns stored policy, or `null` when unset.
+   *
+   * Legacy or corrupt KKV JSON that fails parse/decode is also treated as unset
+   * (upgrade safety: old policy blobs must not break reads; user rewrites via
+   * `nm compaction set`).
+   */
   async getPolicy(): Promise<CompactionPolicy | null> {
     const raw = await this.getRaw();
     if (raw === undefined) {
@@ -28,17 +33,9 @@ export class DefaultCompactionPolicyStore implements CompactionPolicyStore {
     }
     try {
       return decode(JSON.parse(raw) as unknown, compactionPolicySchema);
-    } catch (error) {
-      if (
-        error instanceof CompactionPolicyError ||
-        error instanceof ConfigDecodeError
-      ) {
-        throw new CompactionPolicyError("INVALID_SCHEMA", error.message);
-      }
-      throw new CompactionPolicyError(
-        "INVALID_SCHEMA",
-        error instanceof Error ? error.message : "invalid policy JSON",
-      );
+    } catch {
+      // nm-compaction/policy: invalid wire → unset, not INVALID_SCHEMA on read.
+      return null;
     }
   }
 
