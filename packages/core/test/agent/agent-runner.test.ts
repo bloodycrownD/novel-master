@@ -1,17 +1,21 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
-  AgentError,
+  compactionPolicyFromJson,
   createAgentRunner,
+  createCompactionPipeline,
   createNoOpCompactionPipeline,
   InMemoryAgentSession,
   registerVfsTools,
   textBlocks,
   ToolRegistry,
   type AgentDefinition,
+  type CompactionAgentResolver,
+  type CompactionPolicyStore,
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
+import { AgentError } from "../../src/domain/agent/agent-errors.js";
 import type { VfsService } from "@novel-master/core";
 
 function minimalDefinition(modelId = "anthropic/claude"): AgentDefinition {
@@ -23,19 +27,12 @@ function minimalDefinition(modelId = "anthropic/claude"): AgentDefinition {
   };
 }
 
-/** Agent file shape for runner compaction integration (text abstract avoids extra LLM). */
+/** Dialogue agent for runner compaction integration (no compact on definition). */
 function compactRunnerDefinition(): AgentDefinition {
   return {
     schemaVersion: 1,
     name: "runner-compact",
     model: { applicationModelId: "anthropic/claude" },
-    compact: {
-      trigger: { tokenThreshold: 10 },
-      action: {
-        keepLastN: 2,
-        abstract: { type: "text", content: "compact-abstract" },
-      },
-    },
     prompts: [
       { name: "base", type: "text", role: "system", content: "base" },
       {
@@ -47,6 +44,28 @@ function compactRunnerDefinition(): AgentDefinition {
     ],
   };
 }
+
+class InMemoryCompactionPolicyStore implements CompactionPolicyStore {
+  constructor(private readonly policy: ReturnType<typeof compactionPolicyFromJson>) {}
+
+  async getPolicy() {
+    return this.policy;
+  }
+
+  async setPolicy(): Promise<void> {
+    throw new Error("not implemented");
+  }
+
+  async clearPolicy(): Promise<void> {
+    throw new Error("not implemented");
+  }
+}
+
+const noopResolver: CompactionAgentResolver = {
+  async resolve(agentId: string) {
+    throw new Error(`unexpected resolve: ${agentId}`);
+  },
+};
 
 /** Legacy guard: agent runner must not read agent.compaction.* from any config bucket. */
 function assertLegacyCompactionKeyForbidden(key: string): void {
@@ -207,8 +226,7 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
   });
 
-  it("T11: compacts from definition.compact without legacy agent.compaction.* config", async () => {
-    // Intent (spec T11): createAgentRunner has no config reads; pipeline uses definition.compact only.
+  it("T11: compacts from global policy without legacy agent.compaction.* config", async () => {
     assert.throws(
       () => assertLegacyCompactionKeyForbidden("agent.compaction.thresholdTokens"),
       /must not read/,
@@ -231,12 +249,29 @@ describe("AgentRunner", () => {
       }),
     };
 
+    const policyStore = new InMemoryCompactionPolicyStore(
+      compactionPolicyFromJson({
+        schemaVersion: 1,
+        enabled: true,
+        trigger: { tokenThreshold: 10 },
+        action: {
+          keepLastN: 2,
+          abstract: { type: "text", content: "compact-abstract" },
+        },
+      }),
+    );
+
     const registry = new ToolRegistry();
     const runner = createAgentRunner({
       session,
       modelRequests: model,
       registry,
       toolCtx: { vfs: mockVfs() },
+      compaction: createCompactionPipeline({
+        modelRequests: model,
+        policyStore,
+        resolveAgent: noopResolver,
+      }),
     });
 
     await runner.run({
@@ -284,7 +319,8 @@ describe("AgentRunner", () => {
           definition: { ...minimalDefinition(), prompts: [] },
           promptContext: { worktreeDisplay: "" },
         }),
-      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+      (e: unknown) =>
+        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
     );
   });
 });

@@ -4,24 +4,25 @@
  * @module service/compaction/create-compaction-pipeline
  */
 
-import type { AgentDefinition } from "@/domain/agent/agent-definition.js";
+import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
 import { DefaultCompactionAction } from "@/domain/agent/compaction/action/default-compaction-action.js";
 import { CompositeTrigger } from "@/domain/agent/compaction/triggers/composite-trigger.js";
 import { FloorThresholdTrigger } from "@/domain/agent/compaction/triggers/floor-threshold.trigger.js";
 import { TokenThresholdTrigger } from "@/domain/agent/compaction/triggers/token-threshold.trigger.js";
 import type { CompactionTrigger } from "@/domain/agent/compaction/compaction-trigger.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
+import type { CompactionAgentResolver } from "./compaction-agent-resolver.port.js";
+import type { CompactionPolicyStore } from "./compaction-policy-store.port.js";
 import type { CompactionPipeline } from "./compaction-pipeline.port.js";
 
 export interface CreateCompactionPipelineDeps {
   readonly modelRequests: ModelRequestService;
+  readonly policyStore: CompactionPolicyStore;
+  readonly resolveAgent: CompactionAgentResolver;
 }
 
-function triggersFromDefinition(def: AgentDefinition): CompactionTrigger | null {
-  const trigger = def.compact?.trigger;
-  if (trigger == null) {
-    return null;
-  }
+function triggersFromPolicy(policy: CompactionPolicy): CompactionTrigger | null {
+  const trigger = policy.trigger;
   const parts: CompactionTrigger[] = [];
   if (trigger.tokenThreshold != null) {
     parts.push(new TokenThresholdTrigger(trigger.tokenThreshold));
@@ -36,7 +37,7 @@ function triggersFromDefinition(def: AgentDefinition): CompactionTrigger | null 
 }
 
 /**
- * Creates a pipeline that OR-combines triggers then runs the default action.
+ * Creates a pipeline that reads global policy, OR-combines triggers, then runs action.
  */
 export function createCompactionPipeline(
   deps: CreateCompactionPipelineDeps,
@@ -44,9 +45,14 @@ export function createCompactionPipeline(
   const action = new DefaultCompactionAction();
 
   return {
-    async maybeCompact(session, definition, worktreeDisplay) {
-      const trigger = triggersFromDefinition(definition);
-      if (trigger == null || definition.compact?.action == null) {
+    async maybeCompact(session, worktreeDisplay) {
+      const policy = await deps.policyStore.getPolicy();
+      if (policy == null || !policy.enabled) {
+        return undefined;
+      }
+
+      const trigger = triggersFromPolicy(policy);
+      if (trigger == null) {
         return undefined;
       }
 
@@ -57,8 +63,9 @@ export function createCompactionPipeline(
 
       const result = await action.execute({
         session,
-        definition,
+        policy,
         modelRequests: deps.modelRequests,
+        resolveAgent: deps.resolveAgent,
         worktreeDisplay,
       });
       return result.abstract;

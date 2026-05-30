@@ -210,14 +210,22 @@ export {
   type SerializeAgentDefinitionOptions,
 } from "./infra/agent-definition-io/serialize-agent-definition.js";
 export { loadPromptBlocksFromYaml } from "./infra/agent-definition-io/load-prompt-blocks-from-yaml.js";
+export type { AgentDefinition, AgentModelConfig } from "./domain/agent/agent-definition.js";
 export type {
-  AgentDefinition,
-  AgentModelConfig,
-  CompactConfig,
+  CompactionPolicy,
   CompactionTriggerConfig,
   CompactionActionConfig,
   CompactionAbstractConfig,
-} from "./domain/agent/agent-definition.js";
+} from "./domain/compaction/compaction-policy.js";
+export {
+  compactionPolicyFromJson,
+  compactionPolicyToJson,
+} from "./domain/compaction/compaction-policy-from-json.js";
+export { CompactionPolicyError } from "./errors/compaction-policy-errors.js";
+export type { CompactionPolicyErrorCode } from "./errors/compaction-policy-errors.js";
+export type { CompactionPolicyStore } from "./service/compaction/compaction-policy-store.port.js";
+export { createCompactionPolicyStore } from "./service/compaction/create-compaction-policy-store.js";
+export type { CompactionAgentResolver } from "./service/compaction/compaction-agent-resolver.port.js";
 export {
   agentDefinitionFromJson,
   agentDefinitionToJson,
@@ -270,7 +278,10 @@ export {
 } from "./service/agent/create-agent-runner.js";
 export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
 export type { CompactionPipeline } from "./service/compaction/compaction-pipeline.port.js";
-export { createCompactionPipeline } from "./service/compaction/create-compaction-pipeline.js";
+export {
+  createCompactionPipeline,
+  type CreateCompactionPipelineDeps,
+} from "./service/compaction/create-compaction-pipeline.js";
 export { estimateTokens } from "./service/compaction/token-estimate.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";

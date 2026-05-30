@@ -44,7 +44,6 @@ export function agentDefinitionToJson(def: AgentDefinition): AgentDefinitionDocu
       applicationModelId: def.model.applicationModelId,
       ...(def.model.params != null ? { params: def.model.params } : {}),
     },
-    ...(def.compact != null ? { compact: def.compact } : {}),
     ...(def.runtime != null ? { runtime: def.runtime } : {}),
   };
 }
@@ -59,7 +58,6 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
       applicationModelId: doc.model.applicationModelId,
       params: doc.model.params,
     },
-    compact: doc.compact,
     runtime: doc.runtime,
   };
 }

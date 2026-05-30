@@ -55,7 +55,6 @@ export class DefaultAgentRunner implements AgentRunner {
       const worktreeDisplay = options.promptContext.worktreeDisplay;
       const nextAbstract = await this.deps.compaction.maybeCompact(
         this.deps.session,
-        options.definition,
         worktreeDisplay,
       );
       if (nextAbstract !== undefined) {

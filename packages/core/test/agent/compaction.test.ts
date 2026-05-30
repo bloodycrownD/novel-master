@@ -1,33 +1,109 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
+  compactionPolicyFromJson,
   createCompactionPipeline,
   InMemoryAgentSession,
   textBlocks,
   type AgentDefinition,
+  type CompactionAgentResolver,
+  type CompactionPolicy,
+  type CompactionPolicyStore,
   type ModelRequestService,
 } from "@novel-master/core";
+import { CompactionPolicyError } from "../../src/errors/compaction-policy-errors.js";
 
-function compactDefinition(
-  compact?: Partial<NonNullable<AgentDefinition["compact"]>>,
-): AgentDefinition {
-  return {
+class InMemoryCompactionPolicyStore implements CompactionPolicyStore {
+  private policy: CompactionPolicy | null = null;
+
+  async getPolicy(): Promise<CompactionPolicy | null> {
+    return this.policy;
+  }
+
+  async setPolicy(policy: CompactionPolicy): Promise<void> {
+    this.policy = policy;
+  }
+
+  async clearPolicy(): Promise<void> {
+    this.policy = null;
+  }
+}
+
+function policyDefinition(
+  overrides?: Partial<CompactionPolicy> & {
+    trigger?: Partial<CompactionPolicy["trigger"]>;
+    action?: Partial<CompactionPolicy["action"]>;
+  },
+): CompactionPolicy {
+  return compactionPolicyFromJson({
     schemaVersion: 1,
-    name: "compact-test",
+    enabled: true,
+    trigger: { tokenThreshold: 10, ...overrides?.trigger },
+    action: {
+      keepLastN: 2,
+      abstract: { type: "agent", agentId: "summarizer" },
+      ...overrides?.action,
+    },
+    ...overrides,
+  });
+}
+
+function createPipeline(
+  modelRequests: ModelRequestService,
+  options: {
+    policy?: CompactionPolicy | null;
+    resolveAgent?: CompactionAgentResolver;
+  } = {},
+) {
+  const store = new InMemoryCompactionPolicyStore();
+  if (options.policy !== null) {
+    void store.setPolicy(options.policy ?? policyDefinition());
+  }
+  const summaryAgent: AgentDefinition = {
+    schemaVersion: 1,
+    name: "summarizer",
     prompts: [],
     model: { applicationModelId: "anthropic/claude" },
-    compact: {
-      trigger: { tokenThreshold: 10, ...compact?.trigger },
-      action: {
-        keepLastN: 2,
-        abstract: { type: "agent" },
-        ...compact?.action,
-      },
-    },
   };
+  const resolveAgent: CompactionAgentResolver =
+    options.resolveAgent ??
+    {
+      async resolve(agentId: string) {
+        if (agentId !== "summarizer") {
+          throw new CompactionPolicyError("AGENT_NOT_FOUND", `agent not found: ${agentId}`, {
+            agentId,
+          });
+        }
+        return summaryAgent;
+      },
+    };
+  return createCompactionPipeline({ modelRequests, policyStore: store, resolveAgent });
 }
 
 describe("CompactionPipeline", () => {
+  it("P2: enabled false does not hide", async () => {
+    const session = new InMemoryAgentSession();
+    for (let i = 0; i < 10; i++) {
+      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
+    }
+
+    const modelRequests: ModelRequestService = {
+      request: mock.fn(async () => ({
+        assistantText: "summary",
+        blocks: [{ type: "text", text: "summary" }],
+        raw: {},
+      })),
+    };
+
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({ enabled: false }),
+    });
+
+    const abstract = await pipeline.maybeCompact(session, "");
+    assert.equal(abstract, undefined);
+    assert.equal(session.allMessages().filter((m) => m.hidden).length, 0);
+  });
+
   it("T1: below token threshold does not hide or append summary", async () => {
     const session = new InMemoryAgentSession();
     for (let i = 0; i < 3; i++) {
@@ -42,10 +118,11 @@ describe("CompactionPipeline", () => {
       })),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition({ trigger: { tokenThreshold: 99999 } });
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({ trigger: { tokenThreshold: 99999 } }),
+    });
 
-    const abstract = await pipeline.maybeCompact(session, def, "");
+    const abstract = await pipeline.maybeCompact(session, "");
     assert.equal(abstract, undefined);
     assert.equal((await session.list()).length, 3);
     assert.equal(session.allMessages().filter((m) => m.hidden).length, 0);
@@ -68,10 +145,9 @@ describe("CompactionPipeline", () => {
       }),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition();
+    const pipeline = createPipeline(modelRequests);
 
-    const abstract = await pipeline.maybeCompact(session, def, "");
+    const abstract = await pipeline.maybeCompact(session, "");
     assert.equal(abstract, "summary text");
 
     const hidden = session.allMessages().filter((m) => m.hidden);
@@ -105,13 +181,14 @@ describe("CompactionPipeline", () => {
       }),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition({
-      trigger: { floorThreshold: 3 },
-      action: { keepLastN: 2, abstract: { type: "agent" } },
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({
+        trigger: { floorThreshold: 3 },
+        action: { keepLastN: 2, abstract: { type: "agent", agentId: "summarizer" } },
+      }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, def, "");
+    const abstract = await pipeline.maybeCompact(session, "");
     assert.equal(abstract, "floor summary");
     assert.equal(called, true);
   });
@@ -132,15 +209,15 @@ describe("CompactionPipeline", () => {
       })),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition({ trigger: { floorThreshold: 10 } });
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({ trigger: { floorThreshold: 10 } }),
+    });
 
-    const abstract = await pipeline.maybeCompact(session, def, "");
+    const abstract = await pipeline.maybeCompact(session, "");
     assert.equal(abstract, undefined);
   });
 
   it("T12: agent abstract calls modelRequests without tools", async () => {
-    // Intent (spec T12): abstract.type agent must not pass tools to the summary LLM call.
     const session = new InMemoryAgentSession();
     for (let i = 0; i < 10; i++) {
       await session.append("user", textBlocks(`message ${i} `.repeat(50)));
@@ -157,16 +234,46 @@ describe("CompactionPipeline", () => {
       }),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition({
-      action: { keepLastN: 2, abstract: { type: "agent" } },
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({
+        action: { keepLastN: 2, abstract: { type: "agent", agentId: "summarizer" } },
+      }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, def, "");
+    const abstract = await pipeline.maybeCompact(session, "");
     assert.equal(abstract, "agent-only summary");
     assert.equal(
       (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
       1,
+    );
+  });
+
+  it("C6: agentId resolution failure throws", async () => {
+    const session = new InMemoryAgentSession();
+    for (let i = 0; i < 10; i++) {
+      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
+    }
+
+    const modelRequests: ModelRequestService = {
+      request: mock.fn(async () => ({
+        assistantText: "x",
+        blocks: [{ type: "text", text: "x" }],
+        raw: {},
+      })),
+    };
+
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({
+        action: { keepLastN: 2, abstract: { type: "agent", agentId: "missing" } },
+      }),
+    });
+
+    await assert.rejects(
+      () => pipeline.maybeCompact(session, ""),
+      (e: unknown) =>
+        e instanceof Error &&
+        e.name === "CompactionPolicyError" &&
+        (e as CompactionPolicyError).code === "AGENT_NOT_FOUND",
     );
   });
 
@@ -182,15 +289,33 @@ describe("CompactionPipeline", () => {
       }),
     };
 
-    const pipeline = createCompactionPipeline({ modelRequests });
-    const def = compactDefinition({
-      action: {
-        keepLastN: 2,
-        abstract: { type: "text", content: "static abstract" },
-      },
+    const pipeline = createPipeline(modelRequests, {
+      policy: policyDefinition({
+        action: {
+          keepLastN: 2,
+          abstract: { type: "text", content: "static abstract" },
+        },
+      }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, def, "WT");
+    const abstract = await pipeline.maybeCompact(session, "WT");
     assert.equal(abstract, "static abstract");
+  });
+
+  it("no policy record behaves like disabled", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("hello"));
+
+    const modelRequests: ModelRequestService = {
+      request: mock.fn(async () => ({
+        assistantText: "x",
+        blocks: [{ type: "text", text: "x" }],
+        raw: {},
+      })),
+    };
+
+    const pipeline = createPipeline(modelRequests, { policy: null });
+    const abstract = await pipeline.maybeCompact(session, "");
+    assert.equal(abstract, undefined);
   });
 });

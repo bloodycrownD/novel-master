@@ -14,16 +14,11 @@ describe("agentDefinitionFromJson", () => {
         blocks: [{ name: "s", type: "text", role: "system", content: "hi" }],
       },
       model: { applicationModelId: "openai/gpt-4" },
-      compact: {
-        trigger: { tokenThreshold: 100 },
-        action: { keepLastN: 3, abstract: { type: "agent" } },
-      },
     });
     assert.equal(def.name, "writer");
-    assert.equal(def.compact?.trigger.tokenThreshold, 100);
   });
 
-  it("T8: empty trigger fails validation", () => {
+  it("A1: rejects compact field in strict schema", () => {
     assert.throws(
       () =>
         agentDefinitionFromJson({
@@ -32,11 +27,11 @@ describe("agentDefinitionFromJson", () => {
           prompts: { blocks: [] },
           model: { applicationModelId: "a/b" },
           compact: {
-            trigger: {},
-            action: { keepLastN: 1, abstract: { type: "text", content: "c" } },
+            trigger: { tokenThreshold: 100 },
+            action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },
           },
         }),
-      (e: unknown) => e instanceof AgentConfigError,
+      (e: unknown) => e instanceof AgentConfigError && e.code === "INVALID_SCHEMA",
     );
   });
 
@@ -116,22 +111,5 @@ describe("agentDefinitionFromJson", () => {
     });
     assert.equal(def.prompts.length, 2);
     assert.equal(def.prompts[0]?.type, "abstract");
-  });
-
-  it("T8: unknown trigger key fails validation", () => {
-    assert.throws(
-      () =>
-        agentDefinitionFromJson({
-          schemaVersion: 1,
-          name: "x",
-          prompts: { blocks: [] },
-          model: { applicationModelId: "a/b" },
-          compact: {
-            trigger: { tokenThreshold: 1, unknownKey: 2 },
-            action: { keepLastN: 1, abstract: { type: "text", content: "c" } },
-          },
-        }),
-      (e: unknown) => e instanceof AgentConfigError,
-    );
   });
 });

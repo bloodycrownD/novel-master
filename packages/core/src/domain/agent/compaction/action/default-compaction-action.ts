@@ -24,11 +24,8 @@ const DEFAULT_AGENT_INSTRUCTION =
  */
 export class DefaultCompactionAction implements CompactionAction {
   async execute(ctx: CompactionContext): Promise<CompactionActionResult> {
-    const { session, definition } = ctx;
-    const action = definition.compact?.action;
-    if (action == null) {
-      return { abstract: "" };
-    }
+    const { session, policy } = ctx;
+    const action = policy.action;
 
     const visible = await session.list();
     const keepLastN = action.keepLastN;
@@ -63,24 +60,24 @@ export class DefaultCompactionAction implements CompactionAction {
         optionalDotFields: ["abstract"],
       });
     } else {
+      const summaryDef = await ctx.resolveAgent.resolve(abstractCfg.agentId);
       const summaryInput = toHide
         .map((m) => `${m.role}: ${messageBodyText(m)}`)
         .join("\n\n");
       const instruction =
         abstractCfg.instruction ?? DEFAULT_AGENT_INSTRUCTION;
       const result = await ctx.modelRequests.request(
-        definition.model.applicationModelId,
+        summaryDef.model.applicationModelId,
         `${instruction}\n\n${summaryInput}`,
         {
           stream: false,
           tools: undefined,
-          sampling: definition.model.params,
+          sampling: summaryDef.model.params,
         },
       );
       abstractText = result.assistantText;
     }
 
-    // idempotency boundary: same abstractText → dot + observable session message
     await session.append(
       "user",
       textBlocks(`${COMPACTION_SUMMARY_PREFIX}${abstractText}`),
