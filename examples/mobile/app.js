@@ -954,7 +954,11 @@
             id: 'zhipu',
             name: '智谱 AI',
             protocol: 'openai',
-            models: [{ vendorModelId: 'glm-4.6', label: 'GLM-4.6' }],
+            models: [
+                { vendorModelId: 'glm-4.6', label: 'GLM-4.6' },
+                { vendorModelId: 'glm-4-flash', label: 'GLM-4 Flash' },
+                { vendorModelId: 'glm-4-air', label: 'GLM-4 Air' },
+            ],
         },
         {
             id: 'openai',
@@ -1118,19 +1122,6 @@
         updateChatAgentMeta();
     }
 
-    function listMockSavedModels() {
-        const out = [];
-        MOCK_PROVIDERS.forEach(function (p) {
-            p.models.forEach(function (m) {
-                out.push({
-                    applicationModelId: buildApplicationModelId(p.id, m.vendorModelId),
-                    label: p.name + ' · ' + m.label,
-                });
-            });
-        });
-        return out;
-    }
-
     function getModelSamplingProfile(applicationModelId) {
         return appState.modelSamplingProfiles[applicationModelId] || { enabled: false, params: null };
     }
@@ -1140,28 +1131,65 @@
         persistModelSamplingProfiles();
     }
 
-    function openModelPickerModal() {
-        const modal = document.getElementById('modelPickerModal');
+    let modelPickerProviderId = null;
+
+    function renderModelPickerProviderSwitch(selectedProviderId) {
+        const host = document.getElementById('modelPickerProviderSwitch');
+        if (!host) return;
+        host.innerHTML = '';
+        MOCK_PROVIDERS.forEach(function (p) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'provider-switch-btn';
+            btn.setAttribute('role', 'tab');
+            btn.setAttribute('aria-selected', p.id === selectedProviderId ? 'true' : 'false');
+            btn.dataset.providerId = p.id;
+            btn.textContent = p.name;
+            if (p.id === selectedProviderId) btn.classList.add('active');
+            btn.addEventListener('click', function () {
+                if (modelPickerProviderId === p.id) return;
+                modelPickerProviderId = p.id;
+                renderModelPickerProviderSwitch(p.id);
+                renderModelPickerModelList(p.id);
+            });
+            host.appendChild(btn);
+        });
+    }
+
+    function renderModelPickerModelList(providerId) {
         const list = document.getElementById('modelPickerList');
-        if (!modal || !list) return;
+        const provider = findProvider(providerId);
+        if (!list || !provider) return;
         list.innerHTML = '';
-        listMockSavedModels().forEach(function (m) {
+        provider.models.forEach(function (m) {
+            const applicationModelId = buildApplicationModelId(providerId, m.vendorModelId);
             const li = document.createElement('li');
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'model-picker-item';
+            btn.setAttribute('role', 'option');
             btn.textContent = m.label;
-            if (m.applicationModelId === appState.workspaceCurrentModelId) {
+            if (applicationModelId === appState.workspaceCurrentModelId) {
                 btn.classList.add('active');
+                btn.setAttribute('aria-selected', 'true');
             }
             btn.addEventListener('click', function () {
-                setWorkspaceModel(m.applicationModelId);
+                setWorkspaceModel(applicationModelId);
                 closeModelPickerModal();
                 showToast('已切换工作区模型');
             });
             li.appendChild(btn);
             list.appendChild(li);
         });
+    }
+
+    function openModelPickerModal() {
+        const modal = document.getElementById('modelPickerModal');
+        if (!modal) return;
+        const current = resolveModelSelection(appState.workspaceCurrentModelId);
+        modelPickerProviderId = current.providerId || MOCK_PROVIDERS[0].id;
+        renderModelPickerProviderSwitch(modelPickerProviderId);
+        renderModelPickerModelList(modelPickerProviderId);
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
     }

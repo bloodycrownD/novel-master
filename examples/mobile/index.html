@@ -453,10 +453,13 @@ status: draft
     <!-- 工作区模型选择 -->
     <div id="modelPickerModal" class="modal hidden" aria-hidden="true">
         <div class="modal-backdrop" data-action="close-model-picker"></div>
-        <div class="modal-panel" role="dialog" aria-label="选择模型">
-            <h3>选择工作区模型</h3>
-            <ul id="modelPickerList" class="model-picker-list"></ul>
-            <button type="button" class="btn-secondary" data-action="close-model-picker">关闭</button>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="选择模型">
+            <h3 class="model-picker-title">选择工作区模型</h3>
+            <div class="model-picker-body">
+                <div id="modelPickerProviderSwitch" class="provider-switch" role="tablist" aria-label="服务商"></div>
+                <ul id="modelPickerList" class="model-picker-list" role="listbox" aria-label="模型"></ul>
+            </div>
+            <button type="button" class="btn-secondary model-picker-close" data-action="close-model-picker">关闭</button>
         </div>
     </div>
 
