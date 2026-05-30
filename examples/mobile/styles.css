@@ -1701,15 +1701,20 @@ body {
     font-size: 14px;
 }
 
-.drawer-menu-item--stacked {
+.drawer-menu-item--split {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
 }
 
-.drawer-menu-item-meta {
-    font-size: 13px;
+.drawer-menu-item-value {
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
     font-weight: 500;
     color: var(--primary-color);
 }
