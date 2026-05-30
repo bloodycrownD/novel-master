@@ -144,6 +144,12 @@
             <!-- 我的页面 -->
             <div id="profilePage" class="page">
                 <div class="menu-list">
+                    <div class="menu-item" data-action="current-model">
+                        <div class="menu-icon">🤖</div>
+                        <div class="menu-label">当前模型</div>
+                        <div id="profileCurrentModelLabel" class="menu-value">—</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
                     <div class="menu-item" data-action="providers">
                         <div class="menu-icon">🔌</div>
                         <div class="menu-label">服务商管理</div>
@@ -405,6 +411,13 @@ status: draft
             <h2>项目</h2>
             <button type="button" class="btn-primary drawer-new-project" data-action="new-project">新建</button>
         </div>
+        <div class="drawer-workspace-model">
+            <div class="drawer-workspace-model-row">
+                <span class="drawer-workspace-model-label">当前模型</span>
+                <span id="drawerCurrentModelLabel" class="drawer-workspace-model-value">—</span>
+            </div>
+            <button type="button" class="btn-secondary btn-sm" data-action="open-model-picker">切换模型</button>
+        </div>
         <div class="project-list drawer-project-list">
             <div class="project-item active" data-id="novel-1" data-name="科幻小说创作">
                 <div class="project-icon">📚</div>
@@ -438,6 +451,33 @@ status: draft
     <div id="bottomSheet" class="bottom-sheet hidden">
         <div class="sheet-handle"></div>
         <div class="sheet-content" id="sheetContent"></div>
+    </div>
+
+    <!-- 工作区模型选择 -->
+    <div id="modelPickerModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-model-picker"></div>
+        <div class="modal-panel" role="dialog" aria-label="选择模型">
+            <h3>选择工作区模型</h3>
+            <ul id="modelPickerList" class="model-picker-list"></ul>
+            <button type="button" class="btn-secondary" data-action="close-model-picker">关闭</button>
+        </div>
+    </div>
+
+    <!-- 模型采样配置（mock，对齐 KKV profile） -->
+    <div id="modelConfigModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-model-config"></div>
+        <div class="modal-panel model-config-panel" role="dialog" aria-label="模型采样配置">
+            <h3 id="modelConfigTitle">模型配置</h3>
+            <label class="agent-field model-config-toggle">
+                <span>启用自定义采样</span>
+                <input type="checkbox" id="modelConfigEnabled">
+            </label>
+            <div id="modelConfigSamplingRoot"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="save-model-config">保存</button>
+                <button type="button" class="btn-secondary" data-action="close-model-config">取消</button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast 提示 -->

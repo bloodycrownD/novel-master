@@ -20,7 +20,13 @@
         agentEditorDirty: false,
         rollbackInProgress: false,
         globalCompactionPolicy: null,
+        /** Workspace current model (mock nm model use); single source for chat + profile. */
+        workspaceCurrentModelId: 'zhipu/glm-4.6',
+        modelSamplingProfiles: {},
     };
+
+    const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
+    const MODEL_SAMPLING_STORAGE_KEY = 'nm-mobile-model-sampling-profiles';
 
     const pageConfig = {
         chat: { title: '会话', showBack: false, showNav: true },
@@ -815,7 +821,8 @@
         document.querySelectorAll('.menu-item').forEach(function (item) {
             item.addEventListener('click', function () {
                 const action = item.dataset.action;
-                if (action === 'providers') navigateToPage('providers', true);
+                if (action === 'current-model') openModelPickerModal();
+                else if (action === 'providers') navigateToPage('providers', true);
                 else if (action === 'compaction-policy') {
                     renderCompactionPolicyPage();
                     navigateToPage('compactionPolicy', true);
@@ -1032,10 +1039,6 @@
         return {
             schemaVersion: 1,
             name: 'writer',
-            model: {
-                applicationModelId: 'zhipu/glm-4.6',
-                params: { protocol: 'openai', openai: { temperature: 0.7, top_p: 0.9 } },
-            },
             runtime: { maxSteps: 20 },
             prompts: [
                 { name: 'system', type: 'text', role: 'system', content: 'You are a helpful assistant.' },
@@ -1053,10 +1056,6 @@
         return {
             schemaVersion: 1,
             name: 'creative',
-            model: {
-                applicationModelId: 'anthropic/claude-3-5-sonnet',
-                params: { protocol: 'anthropic', anthropic: { temperature: 0.9, max_tokens: 4096 } },
-            },
             runtime: { maxSteps: 15 },
             prompts: [
                 { name: 'system', type: 'text', role: 'system', content: '你是一位创意写作助手，擅长小说与故事创作。' },
@@ -1082,14 +1081,164 @@
         return model ? model.label : sel.vendorModelId;
     }
 
+    function loadWorkspaceModel() {
+        try {
+            const stored = localStorage.getItem(WORKSPACE_MODEL_STORAGE_KEY);
+            if (stored) appState.workspaceCurrentModelId = stored;
+        } catch (_e) { /* file:// may block storage */ }
+        try {
+            const raw = localStorage.getItem(MODEL_SAMPLING_STORAGE_KEY);
+            if (raw) appState.modelSamplingProfiles = JSON.parse(raw);
+        } catch (_e) { /* ignore */ }
+    }
+
+    function persistModelSamplingProfiles() {
+        try {
+            localStorage.setItem(MODEL_SAMPLING_STORAGE_KEY, JSON.stringify(appState.modelSamplingProfiles));
+        } catch (_e) { /* ignore */ }
+    }
+
+    function setWorkspaceModel(applicationModelId) {
+        appState.workspaceCurrentModelId = applicationModelId;
+        try {
+            localStorage.setItem(WORKSPACE_MODEL_STORAGE_KEY, applicationModelId);
+        } catch (_e) { /* ignore */ }
+        refreshWorkspaceModelDisplays();
+    }
+
+    function refreshWorkspaceModelDisplays() {
+        const label = modelShortLabel(appState.workspaceCurrentModelId);
+        const drawerEl = document.getElementById('drawerCurrentModelLabel');
+        if (drawerEl) drawerEl.textContent = label;
+        const profileEl = document.getElementById('profileCurrentModelLabel');
+        if (profileEl) profileEl.textContent = label;
+        updateChatAgentMeta();
+    }
+
+    function listMockSavedModels() {
+        const out = [];
+        MOCK_PROVIDERS.forEach(function (p) {
+            p.models.forEach(function (m) {
+                out.push({
+                    applicationModelId: buildApplicationModelId(p.id, m.vendorModelId),
+                    label: p.name + ' · ' + m.label,
+                });
+            });
+        });
+        return out;
+    }
+
+    function getModelSamplingProfile(applicationModelId) {
+        return appState.modelSamplingProfiles[applicationModelId] || { enabled: false, params: null };
+    }
+
+    function setModelSamplingProfile(applicationModelId, profile) {
+        appState.modelSamplingProfiles[applicationModelId] = profile;
+        persistModelSamplingProfiles();
+    }
+
+    function openModelPickerModal() {
+        const modal = document.getElementById('modelPickerModal');
+        const list = document.getElementById('modelPickerList');
+        if (!modal || !list) return;
+        list.innerHTML = '';
+        listMockSavedModels().forEach(function (m) {
+            const li = document.createElement('li');
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'model-picker-item';
+            btn.textContent = m.label;
+            if (m.applicationModelId === appState.workspaceCurrentModelId) {
+                btn.classList.add('active');
+            }
+            btn.addEventListener('click', function () {
+                setWorkspaceModel(m.applicationModelId);
+                closeModelPickerModal();
+                showToast('已切换工作区模型');
+            });
+            const cfg = document.createElement('button');
+            cfg.type = 'button';
+            cfg.className = 'model-picker-config';
+            cfg.textContent = '采样';
+            cfg.addEventListener('click', function (e) {
+                e.stopPropagation();
+                openModelConfigModal(m.applicationModelId);
+            });
+            li.appendChild(btn);
+            li.appendChild(cfg);
+            list.appendChild(li);
+        });
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeModelPickerModal() {
+        const modal = document.getElementById('modelPickerModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    let modelConfigTargetId = null;
+
+    function openModelConfigModal(applicationModelId) {
+        modelConfigTargetId = applicationModelId;
+        const modal = document.getElementById('modelConfigModal');
+        const title = document.getElementById('modelConfigTitle');
+        const enabled = document.getElementById('modelConfigEnabled');
+        const root = document.getElementById('modelConfigSamplingRoot');
+        if (!modal || !enabled || !root) return;
+        if (title) title.textContent = '模型配置 · ' + applicationModelId;
+        const profile = getModelSamplingProfile(applicationModelId);
+        enabled.checked = profile.enabled === true;
+        const protocol = modelProtocolForId(applicationModelId);
+        root.innerHTML = renderSamplingFields(protocol, profile.params);
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeModelConfigModal() {
+        const modal = document.getElementById('modelConfigModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+        modelConfigTargetId = null;
+    }
+
+    function saveModelConfigFromModal() {
+        if (!modelConfigTargetId) return;
+        const enabled = document.getElementById('modelConfigEnabled');
+        const root = document.getElementById('modelConfigSamplingRoot');
+        const protocol = modelProtocolForId(modelConfigTargetId);
+        let params = null;
+        if (enabled && enabled.checked && root) {
+            const samplingValues = {};
+            root.querySelectorAll('[data-sampling-key]').forEach(function (input) {
+                if (input.value === '') return;
+                const num = Number(input.value);
+                samplingValues[input.dataset.samplingKey] =
+                    input.step && input.step.indexOf('.') >= 0 ? num : Math.round(num);
+            });
+            if (Object.keys(samplingValues).length > 0) {
+                params = { protocol: protocol };
+                if (protocol === 'openai') params.openai = samplingValues;
+                else if (protocol === 'anthropic') params.anthropic = samplingValues;
+                else if (protocol === 'gemini') params.gemini = samplingValues;
+            }
+        }
+        setModelSamplingProfile(modelConfigTargetId, {
+            enabled: !!(enabled && enabled.checked),
+            params: params,
+        });
+        closeModelConfigModal();
+        showToast('已保存模型采样配置');
+    }
+
     function agentListMeta(def) {
-        const sel = resolveModelSelection(def.model.applicationModelId);
-        const provider = findProvider(sel.providerId);
-        const parts = [(provider ? provider.name : sel.providerId) + ' · ' + sel.vendorModelId];
+        const parts = [];
+        if (def.preferredModelId) parts.push('默认模型 ' + def.preferredModelId);
         if (def.runtime && def.runtime.maxSteps) parts.push('最大 ' + def.runtime.maxSteps + ' 步');
         else parts.push('最大 20 步');
-        const temp = def.model.params && def.model.params.openai && def.model.params.openai.temperature;
-        if (temp != null) parts.push('温度 ' + temp);
         return parts.join(' · ');
     }
 
@@ -1097,10 +1246,10 @@
         const doc = {
             schemaVersion: 1,
             name: def.name,
-            model: def.model,
             runtime: def.runtime,
             prompts: { blocks: def.prompts },
         };
+        if (def.preferredModelId) doc.preferredModelId = def.preferredModelId;
         if (!doc.runtime) delete doc.runtime;
         return JSON.stringify(doc, null, 2)
             .replace(/"([^"]+)":/g, '$1:')
@@ -1135,7 +1284,7 @@
         const agentEl = document.querySelector('.chat-meta .agent-name');
         const modelEl = document.querySelector('.chat-meta .model-name');
         if (agentEl) agentEl.textContent = def.name;
-        if (modelEl) modelEl.textContent = modelShortLabel(def.model.applicationModelId);
+        if (modelEl) modelEl.textContent = modelShortLabel(appState.workspaceCurrentModelId);
     }
 
     function openAgentEditor(agentId) {
@@ -1267,37 +1416,11 @@
         if (!root || !entry) return;
 
         const def = entry.definition;
-        const modelSel = resolveModelSelection(def.model.applicationModelId);
-        const protocol = (def.model.params && def.model.params.protocol) || modelSel.protocol;
         let html = '';
 
         html += '<section class="agent-form-section"><h3>基本信息</h3>';
         html += '<label class="agent-field"><span>名称</span><input type="text" data-agent-field="name" value="' + escapeHtml(def.name) + '"></label>';
-        html += '</section>';
-
-        html += '<section class="agent-form-section"><h3>模型</h3>';
-        html += '<label class="agent-field"><span>服务商</span><select data-agent-field="providerId">';
-        MOCK_PROVIDERS.forEach(function (p) {
-            html +=
-                '<option value="' +
-                p.id +
-                '" data-protocol="' +
-                p.protocol +
-                '"' +
-                (p.id === modelSel.providerId ? ' selected' : '') +
-                '>' +
-                escapeHtml(p.name) +
-                '</option>';
-        });
-        html += '</select></label>';
-        html += '<label class="agent-field"><span>模型</span><select data-agent-field="vendorModelId">';
-        html += renderModelSelectOptions(modelSel.providerId, modelSel.vendorModelId);
-        html += '</select></label>';
-        html +=
-            '<p class="agent-field-hint">applicationModelId: <code data-agent-model-id-hint>' +
-            buildApplicationModelId(modelSel.providerId, modelSel.vendorModelId) +
-            '</code></p>';
-        html += renderSamplingFields(protocol, def.model.params);
+        html += '<p class="agent-field-hint">执行模型由工作区「当前模型」决定（聊天抽屉 / 我的），不在 Agent 中配置。</p>';
         html += '</section>';
 
         html += '<section class="agent-form-section"><h3>运行时</h3>';
@@ -1330,39 +1453,16 @@
         if (!root || !entry) return null;
 
         const nameInput = root.querySelector('[data-agent-field="name"]');
-        const providerSelect = root.querySelector('[data-agent-field="providerId"]');
-        const vendorSelect = root.querySelector('[data-agent-field="vendorModelId"]');
         const maxStepsInput = root.querySelector('[data-agent-field="maxSteps"]');
-        const providerId = providerSelect ? providerSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).providerId;
-        const vendorModelId = vendorSelect ? vendorSelect.value : resolveModelSelection(entry.definition.model.applicationModelId).vendorModelId;
 
         const def = {
             schemaVersion: 1,
             name: nameInput ? nameInput.value.trim() : entry.definition.name,
-            model: { applicationModelId: buildApplicationModelId(providerId, vendorModelId) },
             prompts: [],
         };
 
         if (maxStepsInput && maxStepsInput.value) {
             def.runtime = { maxSteps: Number(maxStepsInput.value) };
-        }
-
-        const protocol =
-            (providerSelect && providerSelect.selectedOptions[0] && providerSelect.selectedOptions[0].dataset.protocol) ||
-            modelProtocolForId(def.model.applicationModelId);
-        const samplingRoot = root.querySelector('.agent-sampling-fields');
-        const samplingKeys = samplingRoot ? samplingRoot.querySelectorAll('[data-sampling-key]') : [];
-        const samplingValues = {};
-        samplingKeys.forEach(function (input) {
-            if (input.value === '') return;
-            const num = Number(input.value);
-            samplingValues[input.dataset.samplingKey] = input.step && input.step.indexOf('.') >= 0 ? num : Math.round(num);
-        });
-        if (Object.keys(samplingValues).length > 0) {
-            def.model.params = { protocol: protocol };
-            if (protocol === 'openai') def.model.params.openai = samplingValues;
-            else if (protocol === 'anthropic') def.model.params.anthropic = samplingValues;
-            else if (protocol === 'gemini') def.model.params.gemini = samplingValues;
         }
 
         const cards = root.querySelectorAll('.prompt-block-card');
@@ -1421,7 +1521,6 @@
             definition: {
                 schemaVersion: 1,
                 name: 'new-agent',
-                model: { applicationModelId: 'openai/gpt-4o', params: { protocol: 'openai', openai: { temperature: 0.7 } } },
                 runtime: { maxSteps: 20 },
                 prompts: [
                     { name: 'system', type: 'text', role: 'system', content: '' },
@@ -1613,36 +1712,9 @@
         root.addEventListener('input', function () {
             if (appState.currentPage === 'agentEditor') markAgentEditorDirty();
         });
-        root.addEventListener('change', function (e) {
+        root.addEventListener('change', function () {
             if (appState.currentPage !== 'agentEditor') return;
             markAgentEditorDirty();
-
-            if (e.target.matches('[data-agent-field="providerId"]')) {
-                const providerId = e.target.value;
-                const protocol = e.target.selectedOptions[0].dataset.protocol;
-                const provider = findProvider(providerId);
-                const vendorModelId = provider && provider.models[0] ? provider.models[0].vendorModelId : '';
-                const entry = agentCatalog[appState.editingAgentId];
-                if (!entry) return;
-                const def = collectAgentDefinitionFromForm({ strict: false });
-                if (def) {
-                    def.model.applicationModelId = buildApplicationModelId(providerId, vendorModelId);
-                    def.model.params = { protocol: protocol };
-                    if (protocol === 'openai') def.model.params.openai = {};
-                    else if (protocol === 'anthropic') def.model.params.anthropic = {};
-                    else if (protocol === 'gemini') def.model.params.gemini = {};
-                    entry.definition = def;
-                }
-                renderAgentEditor(appState.editingAgentId);
-                markAgentEditorDirty();
-                return;
-            }
-
-            if (e.target.matches('[data-agent-field="vendorModelId"]')) {
-                updateAgentModelIdHint(root);
-                return;
-            }
-
         });
 
         root.addEventListener('click', function (e) {
@@ -1753,6 +1825,24 @@
         if (newProviderBtn) newProviderBtn.addEventListener('click', function () { showToast('添加服务商'); });
     }
 
+    function setupWorkspaceModel() {
+        loadWorkspaceModel();
+        refreshWorkspaceModelDisplays();
+        document.querySelectorAll('[data-action="open-model-picker"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                openModelPickerModal();
+            });
+        });
+        document.querySelectorAll('[data-action="close-model-picker"]').forEach(function (btn) {
+            btn.addEventListener('click', closeModelPickerModal);
+        });
+        document.querySelectorAll('[data-action="close-model-config"]').forEach(function (btn) {
+            btn.addEventListener('click', closeModelConfigModal);
+        });
+        const saveCfg = document.querySelector('[data-action="save-model-config"]');
+        if (saveCfg) saveCfg.addEventListener('click', saveModelConfigFromModal);
+    }
+
     function init() {
         setupNavigation();
         setupBackButton();
@@ -1770,6 +1860,7 @@
         appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
         setupProjectsAndSessions();
         setupAgentsAndProviders();
+        setupWorkspaceModel();
 
         navigateToPage('chat');
         if (elements.bannerProjectName) {
