@@ -1,33 +1,30 @@
 /**
- * CLI: read agent config file (single agent or bundle) via Core parsers.
+ * CLI: read agent config file (single agent or bundle) via parseText + decode.
  *
  * @module config/load-agent-config-file
  */
 
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import { parse as parseYaml } from "yaml";
 import {
-  agentDefinitionFromJson,
-  agentsBundleFromJson,
-  isAgentsBundleDocument,
+  agentDefinitionSchema,
+  decode,
+  parseText,
+  validatePromptBlocksFromMap,
   type AgentDefinition,
-  type AgentDefinitionFormat,
+  type TextFormat,
 } from "@novel-master/core";
+import {
+  agentsBundleDocumentSchema,
+  isAgentsBundleDocument,
+} from "../agent/schemas/agents-bundle.schema.js";
 
-function formatFromPath(path: string): AgentDefinitionFormat {
+function formatFromPath(path: string): TextFormat {
   const ext = extname(path).toLowerCase();
   if (ext === ".json") {
     return "json";
   }
   return "yaml";
-}
-
-function parseRaw(source: string, format: AgentDefinitionFormat): unknown {
-  if (format === "json") {
-    return JSON.parse(source) as unknown;
-  }
-  return parseYaml(source) as unknown;
 }
 
 /**
@@ -39,7 +36,7 @@ export async function loadAgentFromConfig(
 ): Promise<AgentDefinition> {
   const source = await readFile(path, "utf8");
   const format = formatFromPath(path);
-  const raw = parseRaw(source, format);
+  const raw = parseText(source, format);
 
   if (isAgentsBundleDocument(raw)) {
     if (agentId == null || agentId === "") {
@@ -47,15 +44,21 @@ export async function loadAgentFromConfig(
         "Config file is an agents bundle; use --agent-id <id> to select an agent",
       );
     }
-    const bundle = agentsBundleFromJson(raw);
-    const def = bundle.get(agentId);
-    if (def == null) {
+    const doc = decode(raw, agentsBundleDocumentSchema);
+    const entry = doc.agents[agentId];
+    if (entry == null) {
       throw new Error(`agent not found in bundle: ${agentId}`);
     }
-    return def;
+    const blocks = validatePromptBlocksFromMap(entry.prompts.blocks);
+    return {
+      name: agentId,
+      prompts: blocks,
+      model: entry.model,
+      runtime: entry.runtime,
+    };
   }
 
-  return agentDefinitionFromJson(raw);
+  return decode(raw, agentDefinitionSchema);
 }
 
 /**

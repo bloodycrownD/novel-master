@@ -6,20 +6,20 @@
 
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import { parse as parseYaml } from "yaml";
 import {
-  compactionPolicyFromJson,
-  compactionPolicyTemplateFromJson,
-  compactionPolicyToJson,
+  compactionPolicySchema,
+  compactionPolicyTemplateSchema,
+  decode,
+  encode,
+  parseText,
   CompactionPolicyError,
   type CompactionPolicy,
   type CompactionPolicyStore,
   type CompactionAgentResolver,
+  type AgentRegistryService,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
-import { resolveDbPath } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { listBundleAgentIds } from "./file-agent-resolver.js";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -32,22 +32,21 @@ function flagString(
 async function parsePolicyFile(path: string): Promise<unknown> {
   const source = await readFile(path, "utf8");
   const ext = extname(path).toLowerCase();
-  if (ext === ".json") {
-    return JSON.parse(source) as unknown;
-  }
-  return parseYaml(source) as unknown;
+  const format = ext === ".json" ? "json" : "yaml";
+  return parseText(source, format);
 }
 
 async function validateAgentIdsInPolicy(
   policy: CompactionPolicy,
-  dbPath: string,
+  registry: AgentRegistryService,
 ): Promise<void> {
   const abstract = policy.action.abstract;
   if (abstract.type !== "agent") {
     return;
   }
-  const ids = await listBundleAgentIds(dbPath);
-  if (!ids.includes(abstract.agentId)) {
+  try {
+    await registry.get(abstract.agentId);
+  } catch {
     throw new CompactionPolicyError(
       "AGENT_NOT_FOUND",
       `agent not found: ${abstract.agentId}`,
@@ -60,11 +59,10 @@ export async function runCompaction(
   rt: NovelMasterRuntime,
   subcommand: string,
   args: readonly string[],
-  argv: readonly string[],
+  _argv: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
   const store = rt.compactionPolicy;
-  const dbPath = resolveDbPath(argv);
 
   switch (subcommand) {
     case "show": {
@@ -73,7 +71,7 @@ export async function runCompaction(
         console.log("No compaction policy configured (treated as disabled).");
         return;
       }
-      console.log(JSON.stringify(compactionPolicyToJson(policy), null, 2));
+      console.log(JSON.stringify(encode(policy, compactionPolicySchema), null, 2));
       return;
     }
     case "set": {
@@ -82,12 +80,9 @@ export async function runCompaction(
         throw new Error("Usage: nm compaction set --file <path>");
       }
       const raw = await parsePolicyFile(filePath);
-      const template = compactionPolicyTemplateFromJson(raw);
-      const policy = compactionPolicyFromJson({
-        ...template,
-        enabled: true,
-      });
-      await validateAgentIdsInPolicy(policy, dbPath);
+      const template = decode(raw, compactionPolicyTemplateSchema);
+      const policy: CompactionPolicy = { ...template, enabled: true };
+      await validateAgentIdsInPolicy(policy, rt.agentRegistry);
       await store.setPolicy(policy);
       return;
     }

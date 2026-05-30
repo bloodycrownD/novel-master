@@ -8,7 +8,9 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   bootstrapNovelMaster,
+  createAgentRegistryService,
   createCompactionPolicyStore,
+  createDbCompactionAgentResolver,
   createMessageService,
   createPersistentPreferences,
   createPersistentState,
@@ -20,6 +22,7 @@ import {
   createRegexConfigService,
   createWorktreeService,
   open,
+  type AgentRegistryService,
   type CompactionAgentResolver,
   type CompactionPolicyStore,
   type ModelRequestService,
@@ -39,7 +42,6 @@ import {
   type VfsService,
   type WorktreeService,
 } from "@novel-master/core";
-import { createFileCompactionAgentResolver } from "./compaction/file-agent-resolver.js";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   createCompositeSecretStore,
@@ -89,6 +91,7 @@ export interface NovelMasterRuntime {
   readonly modelSamplingProfiles: ModelSamplingProfileService;
   readonly regexConfig: RegexConfigService;
   readonly compactionPolicy: CompactionPolicyStore;
+  readonly agentRegistry: AgentRegistryService;
   readonly resolveCompactionAgent: CompactionAgentResolver;
   readonly dbPath: string;
 }
@@ -128,13 +131,18 @@ export async function createNovelMasterRuntime(
       ? createAgentMockModelRequests()
       : providerBundle.modelRequests;
 
+  const compactionPolicy = createCompactionPolicyStore(conn);
+  const agentRegistry = createAgentRegistryService(conn, { compactionPolicy });
+  const resolveCompactionAgent = createDbCompactionAgentResolver(agentRegistry);
+
   return {
     conn,
     state,
     preferences,
     dbPath,
-    compactionPolicy: createCompactionPolicyStore(conn),
-    resolveCompactionAgent: createFileCompactionAgentResolver(dbPath),
+    compactionPolicy,
+    agentRegistry,
+    resolveCompactionAgent,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),

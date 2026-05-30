@@ -1,3 +1,4 @@
+# Import into DB: nm agent import examples/agents.yaml
 schemaVersion: 1
 agents:
   writer:

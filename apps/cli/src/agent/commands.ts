@@ -22,7 +22,9 @@ import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
 import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
+import { runAgentRegistryCommand } from "./registry-commands.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
+import { AgentConfigError } from "@novel-master/core";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -43,6 +45,17 @@ async function resolveDefinition(
   let definition: AgentDefinition;
   if (agentConfigPath != null) {
     definition = await loadAgentFromConfig(agentConfigPath, agentId);
+  } else if (agentId != null && agentId !== "") {
+    try {
+      definition = await rt.agentRegistry.get(agentId);
+    } catch (error) {
+      if (error instanceof AgentConfigError && error.code === "AGENT_NOT_FOUND") {
+        throw new Error(
+          `agent not found in registry: ${agentId} (run nm agent import first)`,
+        );
+      }
+      throw error;
+    }
   } else if (promptPath != null) {
     const source = await readFile(promptPath, "utf8");
     const blocks = loadPromptBlocksFromYaml(source);
@@ -89,6 +102,14 @@ export async function runAgent(
   const { flags } = parseCliArgs(args);
 
   switch (subcommand) {
+    case "list":
+    case "show":
+    case "import":
+    case "export":
+    case "migrate":
+    case "delete":
+      await runAgentRegistryCommand(rt, subcommand, args);
+      return;
     case "run":
     case "continue": {
       const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
@@ -184,7 +205,7 @@ export async function runAgent(
     }
     default:
       throw new Error(
-        "Usage: nm agent <run|continue> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
+        "Usage: nm agent <run|continue|list|show|import|export|migrate|delete> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
       );
   }
 }

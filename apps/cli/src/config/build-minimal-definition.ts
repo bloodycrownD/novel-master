@@ -18,7 +18,6 @@ export function buildMinimalDefinition(
   input: BuildMinimalDefinitionInput,
 ): AgentDefinition {
   return {
-    schemaVersion: 1,
     name: input.name ?? "cli-minimal",
     prompts: input.prompts,
   };
