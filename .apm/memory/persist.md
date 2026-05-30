@@ -1,6 +1,6 @@
 ---
 createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-05-30 15:30:00'
+updatedAt: '2026-05-30 18:00:00'
 ---
 ## 项目
 
@@ -14,4 +14,4 @@ Novel Master（novel-master）小说大师，npm workspaces Monorepo。
 
 ## 现状
 
-main（截至 db092dd）已含：TDBC、VFS、chat-project-vfs、virtual-worktree、prompt-engine、**sksp-provider-model**、**agent-system**（`AgentRunner`、tools/stream、`nm agent`）、**agent-config-and-compaction**（`AgentDefinition`、`CompactionPipeline`、`deserializeAgentDefinition`/`serializeAgentDefinition`；CLI `--agent-config`）、**agent-prompt-abstract-block**（`PromptBlock` 含 `type: abstract`；空 `abstract` 时不拼接；**已移除** `PromptBlock.when`）。示例 `examples/agent-writer.yaml`；UI 壳 `examples/ui-shell-prototype/` Agent 配置编辑原型。**已移除**：`parsePromptYaml`、`DefaultCompactionService`、运行时 `agent.compaction.*`、`PromptBlock.when`、`prompt-block-when.ts`。CLI `nm`；默认库 `.novel-master/novel.db`（指针/偏好在库内 KKV，不用 `config.json`）；进行中 `persistent-state-and-preferences`。布局 `kb/docs/monorepo.md`；迭代 PRD/SPEC `kb/docs/Iterations/*/`。
+main（截至 db092dd）已含：TDBC、VFS、chat-project-vfs、virtual-worktree、prompt-engine、**sksp-provider-model**、**agent-system**（`AgentRunner`、tools/stream、`nm agent`）、**agent-config-and-compaction**（`AgentDefinition`、`CompactionPipeline`、`deserializeAgentDefinition`/`serializeAgentDefinition`；CLI `--agent-config`）、**agent-prompt-abstract-block**（`PromptBlock` 含 `type: abstract`；空 `abstract` 时不拼接；**已移除** `PromptBlock.when`）。示例 `examples/agent-writer.yaml`；UI 壳 `examples/ui-shell-prototype/` Agent 配置编辑原型。**已移除**：`parsePromptYaml`、`DefaultCompactionService`、运行时 `agent.compaction.*`、`PromptBlock.when`、`prompt-block-when.ts`。CLI `nm`；默认库 `.novel-master/novel.db`（指针/偏好在库内 KKV，不用 `config.json`）；**persistent-state-and-preferences**（`feature/persistent-state-and-preferences`）：**PersistentState** / **PersistentPreferences**，`nm preferences`，无 `nm config`/`nm kkv`。见 `CHANGELOG.md`。布局 `kb/docs/monorepo.md`；迭代 PRD/SPEC `kb/docs/Iterations/*/`。

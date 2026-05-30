@@ -40,7 +40,9 @@
   nm session use --session <sessionId>           # or: --title <title> (alias: --name)
   nm session current                             # prints: id<TAB>title
   nm message append --role user --content "hi"   # uses current session when flags omitted
-  nm kkv set --module app --key cfg --value "{}"
+  nm preferences get session-fs.versionCheck     # default true when unset
+  nm preferences set session-fs.versionCheck false
+  nm preferences list                            # preferences in novel.db (nm-preferences)
   nm project vfs list /template                  # uses current project when --project omitted
   nm session vfs list /                          # uses current project + session
   nm vfs worktree list                           # global worktree TSV (template paths)

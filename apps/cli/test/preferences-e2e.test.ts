@@ -38,12 +38,55 @@ describe("preferences CLI e2e", () => {
     }
   });
 
-  it("C2: nm config is rejected with usage error", async () => {
+  it("C2: nm config and nm kkv are rejected", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
     const dbPath = join(dir, "novel.db");
     try {
-      const result = runNm(["config", "list", "--db", dbPath]);
-      assert.notEqual(result.status, 0);
+      const config = runNm(["config", "list", "--db", dbPath]);
+      assert.notEqual(config.status, 0);
+
+      const kkv = runNm([
+        "kkv",
+        "list",
+        "--module",
+        "app",
+        "--db",
+        dbPath,
+      ]);
+      assert.notEqual(kkv.status, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("preferences reset restores session-fs.versionCheck default", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm([
+        "preferences",
+        "set",
+        "session-fs.versionCheck",
+        "false",
+        "--db",
+        dbPath,
+      ]);
+      runNm([
+        "preferences",
+        "reset",
+        "session-fs.versionCheck",
+        "--db",
+        dbPath,
+      ]);
+      const get = runNm([
+        "preferences",
+        "get",
+        "session-fs.versionCheck",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(get.status, 0, get.stderr);
+      assert.equal(get.stdout.trim(), "true");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -4,7 +4,6 @@
  * @module session/commands
  */
 
-import type { VfsService } from "@novel-master/core";
 import { resolveSessionUseId } from "../config/resolve-entity.js";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { runDelete } from "../vfs/commands/delete.js";
@@ -18,18 +17,15 @@ import { runSessionTemplate } from "./template.js";
 import { runSessionWorktree } from "./worktree.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-const SESSION_VFS_COMMANDS: Record<
-  string,
-  (vfs: VfsService, args: readonly string[]) => Promise<void>
-> = {
+/** Session VFS subcommands except `write` (version check comes from preferences). */
+const SESSION_VFS_COMMANDS = {
   list: runList,
   read: runRead,
-  write: (vfs, args) => runWrite(vfs, args, { defaultNoVersionCheck: true }),
   replace: runReplace,
   glob: runGlob,
   grep: runGrep,
   delete: runDelete,
-};
+} as const;
 
 type SessionDeps = Pick<
   NovelMasterRuntime,
@@ -191,22 +187,22 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
     throw new Error("Usage: nm session vfs snapshot <list|rollback> ...");
   }
 
-  if (group == null || !(group in SESSION_VFS_COMMANDS)) {
-    throw new Error(
-      "Usage: nm session vfs <list|read|write|...> | records ... | snapshot ...",
-    );
-  }
-  
   const vfs = deps.sessionVfs(projectId, sessionId);
   const idx = args.indexOf(group);
   const subArgs = args.slice(idx + 1);
-  
-  // Special handling for write command: read versionCheck config
+
   if (group === "write") {
     const versionCheck = await deps.preferences.getSessionFsVersionCheck();
     await runWrite(vfs, subArgs, { defaultNoVersionCheck: !versionCheck });
     return;
   }
-  
-  await SESSION_VFS_COMMANDS[group]!(vfs, subArgs);
+
+  if (group == null || !(group in SESSION_VFS_COMMANDS)) {
+    throw new Error(
+      "Usage: nm session vfs <list|read|write|...> | records ... | snapshot ...",
+    );
+  }
+
+  const builtin = group as keyof typeof SESSION_VFS_COMMANDS;
+  await SESSION_VFS_COMMANDS[builtin](vfs, subArgs);
 }

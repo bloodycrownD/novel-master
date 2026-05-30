@@ -53,7 +53,7 @@ describe("provider CLI e2e", () => {
     }
   });
 
-  it("provider use and current persist to config", async () => {
+  it("provider use and current persist to state", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-provider-"));
     const dbPath = join(dir, "novel.db");
     try {

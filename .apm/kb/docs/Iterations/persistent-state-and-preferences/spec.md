@@ -333,4 +333,4 @@ apps/cli/test/
 - [x] 已体现现状、影响、迁移、测试、回滚
 - [x] 已生成 `spec.md` 并将执行 `apm kb index rebuild`
 - [x] 范围收窄：仅 core + cli（2026-05-30 确认）
-- [ ] **待用户确认 `spec.md` 后再编码**
+- [x] 实现与 Phase 3 文档（2026-05-30）
