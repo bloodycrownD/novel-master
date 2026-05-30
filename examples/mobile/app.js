@@ -25,10 +25,19 @@
         modelSamplingProfiles: {},
         editingProviderId: null,
         editingModelApplicationModelId: null,
+        regexGroups: [],
+        regexRules: [],
+        workspaceCurrentRegexGroupId: null,
+        editingRegexGroupId: null,
+        editingRegexRuleId: null,
+        regexRuleEditorDirty: false,
     };
 
     const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
     const MODEL_SAMPLING_STORAGE_KEY = 'nm-mobile-model-sampling-profiles';
+    const REGEX_GROUPS_STORAGE_KEY = 'nm-mobile-regex-groups';
+    const REGEX_RULES_STORAGE_KEY = 'nm-mobile-regex-rules';
+    const WORKSPACE_REGEX_GROUP_STORAGE_KEY = 'nm-mobile-workspace-current-regex-group';
 
     const pageConfig = {
         chat: { title: '会话', showBack: false, showNav: true },
@@ -44,6 +53,9 @@
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
         agentEditor: { title: 'Agent 配置', showBack: true, showNav: false },
         compactionPolicy: { title: '压缩策略', showBack: true, showNav: false },
+        regexGroups: { title: '正则配置', showBack: true, showNav: false },
+        regexRules: { title: '正则规则', showBack: true, showNav: false },
+        regexRuleEditor: { title: '规则详情', showBack: true, showNav: false },
     };
 
     const elements = {
@@ -284,6 +296,26 @@
 
         if (pageId === 'modelSampling' && appState.editingModelApplicationModelId) {
             elements.pageTitle.textContent = modelShortLabel(appState.editingModelApplicationModelId);
+            elements.backBtn.classList.toggle('hidden', !config.showBack);
+            updateDrawerButton(pageId);
+            return;
+        }
+
+        if (pageId === 'regexRules' && appState.editingRegexGroupId) {
+            const group = findRegexGroup(appState.editingRegexGroupId);
+            elements.pageTitle.textContent = regexGroupTitle(group);
+            elements.backBtn.classList.toggle('hidden', !config.showBack);
+            updateDrawerButton(pageId);
+            return;
+        }
+
+        if (pageId === 'regexRuleEditor') {
+            if (appState.editingRegexRuleId) {
+                const rule = findRegexRule(appState.editingRegexGroupId, appState.editingRegexRuleId);
+                elements.pageTitle.textContent = rule ? rule.name : config.title;
+            } else {
+                elements.pageTitle.textContent = '新建规则';
+            }
             elements.backBtn.classList.toggle('hidden', !config.showBack);
             updateDrawerButton(pageId);
             return;
@@ -856,6 +888,9 @@
                 else if (action === 'compaction-policy') {
                     renderCompactionPolicyPage();
                     navigateToPage('compactionPolicy', true);
+                } else if (action === 'regex-config') {
+                    renderRegexGroupList();
+                    navigateToPage('regexGroups', true);
                 } else if (action === 'global-template') navigateToPage('globalTemplate', true);
                 else if (action === 'settings') navigateToPage('settings', true);
                 else if (action === 'debug') showToast('开发调试功能');
@@ -948,10 +983,16 @@
         document.body.addEventListener('change', function (e) {
             const checkbox = e.target.closest('.list-batch-check input[type="checkbox"]');
             if (!checkbox) return;
-            const item = checkbox.closest('[data-id], [data-provider-id], [data-vendor-model-id]');
+            const item = checkbox.closest(
+                '[data-id], [data-provider-id], [data-vendor-model-id], [data-group-id], [data-rule-id]',
+            );
             if (!item || !batchSelection.activeList) return;
             const itemId =
-                item.dataset.id || item.dataset.providerId || item.dataset.vendorModelId;
+                item.dataset.id ||
+                item.dataset.providerId ||
+                item.dataset.vendorModelId ||
+                item.dataset.groupId ||
+                item.dataset.ruleId;
             if (!itemId) return;
             if (checkbox.checked) batchSelection.selectedIds.add(itemId);
             else batchSelection.selectedIds.delete(itemId);
@@ -965,7 +1006,11 @@
         if (isBatchMode(listId)) {
             e.preventDefault();
             const itemId =
-                item.dataset.id || item.dataset.providerId || item.dataset.vendorModelId;
+                item.dataset.id ||
+                item.dataset.providerId ||
+                item.dataset.vendorModelId ||
+                item.dataset.groupId ||
+                item.dataset.ruleId;
             if (!itemId) return true;
             toggleBatchItem(listId, itemId);
             return true;
@@ -1108,6 +1153,8 @@
             const provider = findProvider(appState.editingProviderId);
             return provider ? provider.models.length : 0;
         }
+        if (listId === 'regexGroups') return appState.regexGroups.length;
+        if (listId === 'regexRules') return regexRulesForGroup(appState.editingRegexGroupId).length;
         return 0;
     }
 
@@ -1340,6 +1387,8 @@
         agents: 'Agent',
         providers: '服务商',
         providerModels: '模型',
+        regexGroups: '正则组',
+        regexRules: '规则',
     };
 
     const batchListConfig = {
@@ -1382,6 +1431,22 @@
                 renderProviderDetail();
             },
             deleteItems: batchDeleteProviderModels,
+        },
+        regexGroups: {
+            ui: 'section-header',
+            minKeep: 0,
+            refresh: function () {
+                renderRegexGroupList();
+            },
+            deleteItems: batchDeleteRegexGroups,
+        },
+        regexRules: {
+            ui: 'section-header',
+            minKeep: 0,
+            refresh: function () {
+                renderRegexRuleList();
+            },
+            deleteItems: batchDeleteRegexRules,
         },
     };
 
@@ -2669,6 +2734,877 @@
         if (confirmAddModel) confirmAddModel.addEventListener('click', confirmAddModelModal);
     }
 
+    // --- Regex mock engine (align packages/core domain/regex) ---
+    // Ref: apply-regex-rules.ts, validate-regex-rule.ts, compile-regex-rule.ts
+
+    function regexRoleMatchesScope(role, rule) {
+        if (role === 'user') return rule.scopeUser;
+        if (role === 'assistant') return rule.scopeAssistant;
+        return false;
+    }
+
+    function regexDepthInRange(floor, rule) {
+        return floor >= rule.minDepth && floor <= rule.maxDepth;
+    }
+
+    /** Channel without configured replace keeps source text (Core replaceForChannel). */
+    function regexReplaceForChannel(text, rule, channel) {
+        const replacement = channel === 'llm' ? rule.llmReplace : rule.displayReplace;
+        if (replacement == null) return text;
+        return text.replace(rule.pattern, replacement);
+    }
+
+    /** Sequential apply; skip rules outside role/depth (Core applyRegexRules). */
+    function applyRegexRules(text, rules, ctx) {
+        let out = text;
+        for (let i = 0; i < rules.length; i++) {
+            const rule = rules[i];
+            if (!regexRoleMatchesScope(ctx.role, rule)) continue;
+            if (!regexDepthInRange(ctx.floor, rule)) continue;
+            out = regexReplaceForChannel(out, rule, ctx.channel);
+        }
+        return out;
+    }
+
+    /** Browser-friendly validation; mirrors validate-regex-rule.ts (no RegexError throw). */
+    function validateRegexRuleFields(fields) {
+        const hasLlm = fields.llmReplace != null && fields.llmReplace !== '';
+        const hasDisplay = fields.displayReplace != null && fields.displayReplace !== '';
+        if (!hasLlm && !hasDisplay) {
+            return { ok: false, message: '至少配置 llmReplace 或 displayReplace 之一' };
+        }
+        if (!fields.scopeUser && !fields.scopeAssistant) {
+            return { ok: false, message: '至少选择 user 或 assistant 作用范围之一' };
+        }
+        if (fields.minDepth > fields.maxDepth) {
+            return {
+                ok: false,
+                message:
+                    'minDepth (' + fields.minDepth + ') 必须 <= maxDepth (' + fields.maxDepth + ')',
+            };
+        }
+        try {
+            // eslint-disable-next-line no-new
+            new RegExp(fields.pattern, fields.flags || '');
+        } catch (e) {
+            const msg = e && e.message ? e.message : String(e);
+            return { ok: false, message: '无效的正则表达式: ' + msg };
+        }
+        return { ok: true };
+    }
+
+    function compileRegexRuleDraft(fields) {
+        const validation = validateRegexRuleFields(fields);
+        if (!validation.ok) return { ok: false, message: validation.message };
+        try {
+            const pattern = new RegExp(fields.pattern, fields.flags || '');
+            return {
+                ok: true,
+                compiled: {
+                    pattern: pattern,
+                    llmReplace: fields.llmReplace,
+                    displayReplace: fields.displayReplace,
+                    minDepth: fields.minDepth,
+                    maxDepth: fields.maxDepth,
+                    scopeUser: fields.scopeUser,
+                    scopeAssistant: fields.scopeAssistant,
+                },
+            };
+        } catch (e) {
+            const msg = e && e.message ? e.message : String(e);
+            return { ok: false, message: '无效的正则表达式: ' + msg };
+        }
+    }
+
+    /** Single-rule test (nm regex test); disabled rule returns source unchanged. */
+    function previewRegexRule(text, draftFields, ctx) {
+        if (!draftFields.enabled) return { ok: true, text: text };
+        const compiled = compileRegexRuleDraft(draftFields);
+        if (!compiled.ok) return { ok: false, message: compiled.message };
+        return { ok: true, text: applyRegexRules(text, [compiled.compiled], ctx) };
+    }
+
+    function nowMs() {
+        return Date.now();
+    }
+
+    function slugifyRegexId(name) {
+        return String(name)
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'rule';
+    }
+
+    function findRegexGroup(groupId) {
+        return appState.regexGroups.find(function (g) {
+            return g.groupId === groupId;
+        });
+    }
+
+    function regexRulesForGroup(groupId) {
+        return appState.regexRules.filter(function (r) {
+            return r.groupId === groupId;
+        });
+    }
+
+    function findRegexRule(groupId, ruleId) {
+        return appState.regexRules.find(function (r) {
+            return r.groupId === groupId && r.ruleId === ruleId;
+        });
+    }
+
+    function regexGroupTitle(group) {
+        if (!group) return '正则组';
+        if (group.displayName) return group.displayName;
+        return group.groupId;
+    }
+
+    function regexGroupMetaLine(groupId) {
+        const n = regexRulesForGroup(groupId).length;
+        return n + ' 条规则';
+    }
+
+    function regexRuleScopeLabel(rule) {
+        const parts = [];
+        if (rule.scopeUser) parts.push('user');
+        if (rule.scopeAssistant) parts.push('assistant');
+        return parts.join('/') || '—';
+    }
+
+    function regexRuleMetaLine(rule) {
+        const depth = '层数 ' + rule.minDepth + '–' + rule.maxDepth;
+        const scope = regexRuleScopeLabel(rule);
+        const enabled = rule.enabled ? '启用' : '禁用';
+        return depth + ' · ' + scope + ' · ' + enabled;
+    }
+
+    function ensureDefaultRegexSeed() {
+        try {
+            if (localStorage.getItem(REGEX_GROUPS_STORAGE_KEY) != null) return;
+        } catch (_e) {
+            return;
+        }
+        const t = nowMs();
+        appState.regexGroups = [
+            { groupId: 'strict-filter', displayName: '严格脱敏', createdAtMs: t, updatedAtMs: t },
+            { groupId: 'llm-only', displayName: '仅提示词', createdAtMs: t, updatedAtMs: t },
+        ];
+        appState.regexRules = [
+            {
+                groupId: 'strict-filter',
+                ruleId: 'mask-email',
+                sortOrder: 1,
+                name: 'mask-email',
+                pattern: '[\\w.-]+@[\\w.-]+\\.[A-Za-z]{2,}',
+                flags: '',
+                enabled: true,
+                llmReplace: '[redacted]',
+                displayReplace: '***',
+                minDepth: 1,
+                maxDepth: 99,
+                scopeUser: true,
+                scopeAssistant: true,
+                createdAtMs: t,
+                updatedAtMs: t,
+            },
+        ];
+        appState.workspaceCurrentRegexGroupId = 'strict-filter';
+        persistRegexStore();
+        persistWorkspaceRegexGroup();
+    }
+
+    function loadRegexStore() {
+        ensureDefaultRegexSeed();
+        try {
+            const groupsRaw = localStorage.getItem(REGEX_GROUPS_STORAGE_KEY);
+            if (groupsRaw) appState.regexGroups = JSON.parse(groupsRaw);
+            const rulesRaw = localStorage.getItem(REGEX_RULES_STORAGE_KEY);
+            if (rulesRaw) appState.regexRules = JSON.parse(rulesRaw);
+            const current = localStorage.getItem(WORKSPACE_REGEX_GROUP_STORAGE_KEY);
+            appState.workspaceCurrentRegexGroupId = current || null;
+            // Pointer invalid after manual storage edits: drop stale id (CLI delete reset parity).
+            if (
+                appState.workspaceCurrentRegexGroupId &&
+                !findRegexGroup(appState.workspaceCurrentRegexGroupId)
+            ) {
+                resetWorkspaceCurrentRegexGroup();
+            }
+        } catch (_e) {
+            /* file:// may block storage */
+        }
+    }
+
+    function persistRegexStore() {
+        try {
+            localStorage.setItem(REGEX_GROUPS_STORAGE_KEY, JSON.stringify(appState.regexGroups));
+            localStorage.setItem(REGEX_RULES_STORAGE_KEY, JSON.stringify(appState.regexRules));
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function persistWorkspaceRegexGroup() {
+        try {
+            if (appState.workspaceCurrentRegexGroupId) {
+                localStorage.setItem(
+                    WORKSPACE_REGEX_GROUP_STORAGE_KEY,
+                    appState.workspaceCurrentRegexGroupId,
+                );
+            } else {
+                localStorage.removeItem(WORKSPACE_REGEX_GROUP_STORAGE_KEY);
+            }
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    /** Delete current group or clear storage: remove key + null state (CLI auto-reset). */
+    function resetWorkspaceCurrentRegexGroup() {
+        appState.workspaceCurrentRegexGroupId = null;
+        try {
+            localStorage.removeItem(WORKSPACE_REGEX_GROUP_STORAGE_KEY);
+        } catch (_e) {
+            /* ignore */
+        }
+    }
+
+    function setWorkspaceCurrentRegexGroup(groupId) {
+        if (!findRegexGroup(groupId)) return;
+        appState.workspaceCurrentRegexGroupId = groupId;
+        persistWorkspaceRegexGroup();
+        renderRegexGroupList();
+        showToast('已设为当前生效正则组');
+    }
+
+    function updateRegexCurrentBanner() {
+        const banner = document.getElementById('regexCurrentBanner');
+        if (!banner) return;
+        const gid = appState.workspaceCurrentRegexGroupId;
+        if (!gid) {
+            banner.classList.add('hidden');
+            banner.textContent = '';
+            return;
+        }
+        const group = findRegexGroup(gid);
+        banner.classList.remove('hidden');
+        banner.innerHTML =
+            '<span>当前生效：' +
+            escapeHtml(gid) +
+            (group && group.displayName ? '（' + escapeHtml(group.displayName) + '）' : '') +
+            '</span>';
+    }
+
+    function renderRegexGroupList() {
+        const host = document.getElementById('regexGroupList');
+        if (!host) return;
+        updateRegexCurrentBanner();
+        const listId = 'regexGroups';
+        if (appState.regexGroups.length === 0) {
+            host.innerHTML = '<p class="provider-empty-hint">暂无正则组，点击「添加」创建。</p>';
+            return;
+        }
+        let html = '';
+        appState.regexGroups.forEach(function (group) {
+            const isCurrent =
+                group.groupId === appState.workspaceCurrentRegexGroupId && !isBatchMode(listId);
+            html +=
+                '<div class="provider-item regex-group-item' +
+                listItemSelectedClass(listId, group.groupId) +
+                (isCurrent ? ' active' : '') +
+                '" data-group-id="' +
+                escapeHtml(group.groupId) +
+                '">';
+            html += renderBatchCheckbox(listId, group.groupId);
+            html += '<div class="provider-icon">🛡️</div>';
+            html += '<div class="provider-info">';
+            html += '<div class="provider-name">' + escapeHtml(regexGroupTitle(group)) + '</div>';
+            html +=
+                '<div class="provider-meta">' +
+                escapeHtml(group.groupId) +
+                ' · ' +
+                escapeHtml(regexGroupMetaLine(group.groupId)) +
+                '</div>';
+            html += '</div>';
+            if (isCurrent) html += '<span class="current-badge">当前</span>';
+            if (!isBatchMode(listId)) {
+                html +=
+                    '<button type="button" class="agent-menu-btn" data-regex-group-menu="' +
+                    escapeHtml(group.groupId) +
+                    '" aria-label="更多">⋮</button>';
+                html += '<span class="menu-arrow">›</span>';
+            }
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function openRegexRulesPage(groupId) {
+        if (!findRegexGroup(groupId)) return;
+        appState.editingRegexGroupId = groupId;
+        renderRegexRuleList();
+        navigateToPage('regexRules', true);
+    }
+
+    function renderRegexRuleList() {
+        const group = findRegexGroup(appState.editingRegexGroupId);
+        const title = document.getElementById('regexRulesTitle');
+        const host = document.getElementById('regexRulesList');
+        if (!host) return;
+        if (title) title.textContent = regexGroupTitle(group);
+        const rules = regexRulesForGroup(appState.editingRegexGroupId).slice().sort(function (a, b) {
+            return a.sortOrder - b.sortOrder;
+        });
+        const listId = 'regexRules';
+        if (rules.length === 0) {
+            host.innerHTML = '<p class="provider-empty-hint">暂无规则，点击「添加规则」。</p>';
+            return;
+        }
+        let html = '';
+        rules.forEach(function (rule) {
+            html +=
+                '<div class="provider-model-item regex-rule-item' +
+                listItemSelectedClass(listId, rule.ruleId) +
+                '" data-rule-id="' +
+                escapeHtml(rule.ruleId) +
+                '">';
+            html += renderBatchCheckbox(listId, rule.ruleId);
+            html += '<div class="provider-model-info">';
+            html += '<div class="provider-model-name">' + escapeHtml(rule.name) + '</div>';
+            html +=
+                '<div class="provider-model-meta">' +
+                escapeHtml(rule.ruleId) +
+                ' · ' +
+                escapeHtml(regexRuleMetaLine(rule)) +
+                '</div>';
+            html += '</div>';
+            if (!isBatchMode(listId)) html += '<span class="menu-arrow">›</span>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function defaultRegexRuleDraft() {
+        return {
+            name: '',
+            pattern: '',
+            flags: '',
+            enabled: true,
+            llmReplace: null,
+            displayReplace: null,
+            minDepth: 1,
+            maxDepth: 99,
+            scopeUser: true,
+            scopeAssistant: true,
+        };
+    }
+
+    function ruleToDraftFields(rule) {
+        return {
+            name: rule.name,
+            pattern: rule.pattern,
+            flags: rule.flags || '',
+            enabled: rule.enabled,
+            llmReplace: rule.llmReplace,
+            displayReplace: rule.displayReplace,
+            minDepth: rule.minDepth,
+            maxDepth: rule.maxDepth,
+            scopeUser: rule.scopeUser,
+            scopeAssistant: rule.scopeAssistant,
+        };
+    }
+
+    function renderRegexRuleEditor() {
+        const root = document.getElementById('regexRuleEditorRoot');
+        if (!root) return;
+        const groupId = appState.editingRegexGroupId;
+        const ruleId = appState.editingRegexRuleId;
+        const existing = ruleId ? findRegexRule(groupId, ruleId) : null;
+        const draft = existing ? ruleToDraftFields(existing) : defaultRegexRuleDraft();
+
+        let html = '<section class="agent-form-section"><h3>规则</h3>';
+        html +=
+            '<label class="agent-field"><span>名称</span><input type="text" data-regex-field="name" value="' +
+            escapeHtml(draft.name) +
+            '"></label>';
+        html +=
+            '<label class="agent-field"><span>正则表达式</span><input type="text" data-regex-field="pattern" value="' +
+            escapeHtml(draft.pattern) +
+            '"></label>';
+        html +=
+            '<label class="agent-field"><span>flags</span><input type="text" data-regex-field="flags" placeholder="gim" value="' +
+            escapeHtml(draft.flags) +
+            '"></label>';
+        html +=
+            '<label class="agent-field agent-field--row"><span>启用</span><input type="checkbox" class="toggle" data-regex-field="enabled"' +
+            (draft.enabled ? ' checked' : '') +
+            '></label>';
+        html +=
+            '<label class="agent-field"><span>提示词替换 (llm)</span><input type="text" data-regex-field="llmReplace" placeholder="可空" value="' +
+            escapeHtml(draft.llmReplace != null ? draft.llmReplace : '') +
+            '"></label>';
+        html +=
+            '<label class="agent-field"><span>显示替换 (display)</span><input type="text" data-regex-field="displayReplace" placeholder="可空" value="' +
+            escapeHtml(draft.displayReplace != null ? draft.displayReplace : '') +
+            '"></label>';
+        html += '<div class="regex-test-grid">';
+        html +=
+            '<label class="agent-field"><span>最小层数</span><input type="number" min="1" data-regex-field="minDepth" value="' +
+            draft.minDepth +
+            '"></label>';
+        html +=
+            '<label class="agent-field"><span>最大层数</span><input type="number" min="1" data-regex-field="maxDepth" value="' +
+            draft.maxDepth +
+            '"></label>';
+        html += '</div>';
+        html +=
+            '<label class="agent-field agent-field--row"><span>用户消息</span><input type="checkbox" class="toggle" data-regex-field="scopeUser"' +
+            (draft.scopeUser ? ' checked' : '') +
+            '></label>';
+        html +=
+            '<label class="agent-field agent-field--row"><span>助手消息</span><input type="checkbox" class="toggle" data-regex-field="scopeAssistant"' +
+            (draft.scopeAssistant ? ' checked' : '') +
+            '></label>';
+        html += '<p class="agent-field-hint">至少配置一侧替换；作用范围至少选一。</p>';
+        html += '</section>';
+
+        html += '<section class="agent-form-section regex-test-panel"><h3>测试预览</h3>';
+        html +=
+            '<label class="agent-field"><span>样例文本</span><textarea data-regex-test="text" rows="3">' +
+            escapeHtml('mysecret@email.com') +
+            '</textarea></label>';
+        html += '<div class="regex-test-grid">';
+        html +=
+            '<label class="agent-field"><span>floor</span><input type="number" min="1" data-regex-test="floor" value="1"></label>';
+        html +=
+            '<label class="agent-field"><span>role</span><select data-regex-test="role"><option value="user" selected>user</option><option value="assistant">assistant</option></select></label>';
+        html +=
+            '<label class="agent-field"><span>channel</span><select data-regex-test="channel"><option value="display">display</option><option value="llm">llm</option></select></label>';
+        html += '</div>';
+        html += '<label class="agent-field"><span>预览输出</span></label>';
+        html += '<pre class="regex-test-output" data-regex-test-output></pre>';
+        html += '<p class="agent-field-hint">单条规则测试，对齐 <code>nm regex test</code>。</p>';
+        html += '</section>';
+
+        root.innerHTML = html;
+        clearRegexRuleEditorDirty();
+        updateRegexTestPreview();
+    }
+
+    function collectRegexRuleFromForm(options) {
+        const silent = options && options.silent;
+        const root = document.getElementById('regexRuleEditorRoot');
+        if (!root) return null;
+        function field(name) {
+            const el = root.querySelector('[data-regex-field="' + name + '"]');
+            if (!el) return null;
+            if (el.type === 'checkbox') return el.checked;
+            if (el.type === 'number') return Number(el.value);
+            return el.value;
+        }
+        function nullableReplace(name) {
+            const v = field(name);
+            if (v == null) return null;
+            const t = String(v).trim();
+            return t === '' ? null : t;
+        }
+        const name = String(field('name') || '').trim();
+        if (!name) {
+            if (!silent) showToast('请填写规则名称');
+            return null;
+        }
+        const pattern = String(field('pattern') || '').trim();
+        if (!pattern) {
+            if (!silent) showToast('请填写正则表达式');
+            return null;
+        }
+        const minDepth = Math.max(1, Number(field('minDepth')) || 1);
+        const maxDepth = Math.max(1, Number(field('maxDepth')) || 1);
+        return {
+            name: name,
+            pattern: pattern,
+            flags: String(field('flags') || '').trim(),
+            enabled: !!field('enabled'),
+            llmReplace: nullableReplace('llmReplace'),
+            displayReplace: nullableReplace('displayReplace'),
+            minDepth: minDepth,
+            maxDepth: maxDepth,
+            scopeUser: !!field('scopeUser'),
+            scopeAssistant: !!field('scopeAssistant'),
+        };
+    }
+
+    function collectRegexTestContext(root) {
+        const textEl = root.querySelector('[data-regex-test="text"]');
+        const floorEl = root.querySelector('[data-regex-test="floor"]');
+        const roleEl = root.querySelector('[data-regex-test="role"]');
+        const channelEl = root.querySelector('[data-regex-test="channel"]');
+        return {
+            text: textEl ? textEl.value : '',
+            floor: floorEl ? Number(floorEl.value) || 1 : 1,
+            role: roleEl ? roleEl.value : 'user',
+            channel: channelEl ? channelEl.value : 'display',
+        };
+    }
+
+    function updateRegexTestPreview() {
+        const root = document.getElementById('regexRuleEditorRoot');
+        const out = root && root.querySelector('[data-regex-test-output]');
+        if (!root || !out) return;
+        const fields = collectRegexRuleFromForm({ silent: true });
+        if (!fields) {
+            out.textContent = '请填写名称与正则表达式后再预览';
+            out.classList.add('regex-test-output--error');
+            return;
+        }
+        const test = collectRegexTestContext(root);
+        const validation = validateRegexRuleFields(fields);
+        if (!validation.ok) {
+            out.textContent = validation.message;
+            out.classList.add('regex-test-output--error');
+            return;
+        }
+        const result = previewRegexRule(test.text, fields, {
+            channel: test.channel,
+            floor: test.floor,
+            role: test.role,
+        });
+        if (!result.ok) {
+            out.textContent = result.message;
+            out.classList.add('regex-test-output--error');
+            return;
+        }
+        out.textContent = result.text;
+        out.classList.remove('regex-test-output--error');
+    }
+
+    function markRegexRuleEditorDirty() {
+        appState.regexRuleEditorDirty = true;
+        const indicator = document.querySelector('.regex-rule-unsaved');
+        if (indicator) indicator.classList.remove('hidden');
+    }
+
+    function clearRegexRuleEditorDirty() {
+        appState.regexRuleEditorDirty = false;
+        const indicator = document.querySelector('.regex-rule-unsaved');
+        if (indicator) indicator.classList.add('hidden');
+    }
+
+    function openRegexRuleEditor(ruleId) {
+        appState.editingRegexRuleId = ruleId;
+        renderRegexRuleEditor();
+        navigateToPage('regexRuleEditor', true);
+    }
+
+    function nextRegexRuleSortOrder(groupId) {
+        const rules = regexRulesForGroup(groupId);
+        let max = 0;
+        rules.forEach(function (r) {
+            if (r.sortOrder > max) max = r.sortOrder;
+        });
+        return max + 1;
+    }
+
+    function allocateRegexRuleId(groupId, name) {
+        let base = slugifyRegexId(name);
+        let candidate = base;
+        let n = 2;
+        while (findRegexRule(groupId, candidate)) {
+            candidate = base + '-' + n;
+            n += 1;
+        }
+        return candidate;
+    }
+
+    function saveRegexRuleEditor() {
+        const groupId = appState.editingRegexGroupId;
+        if (!groupId || !findRegexGroup(groupId)) return;
+        const fields = collectRegexRuleFromForm();
+        if (!fields) return;
+        const validation = validateRegexRuleFields(fields);
+        if (!validation.ok) {
+            showToast(validation.message);
+            return;
+        }
+        const t = nowMs();
+        let ruleId = appState.editingRegexRuleId;
+        let existing = ruleId ? findRegexRule(groupId, ruleId) : null;
+        if (!existing) {
+            ruleId = allocateRegexRuleId(groupId, fields.name);
+            existing = {
+                groupId: groupId,
+                ruleId: ruleId,
+                sortOrder: nextRegexRuleSortOrder(groupId),
+                createdAtMs: t,
+            };
+        }
+        const updated = Object.assign({}, existing, fields, {
+            groupId: groupId,
+            ruleId: ruleId,
+            flags: fields.flags,
+            updatedAtMs: t,
+        });
+        const idx = appState.regexRules.findIndex(function (r) {
+            return r.groupId === groupId && r.ruleId === ruleId;
+        });
+        if (idx >= 0) appState.regexRules[idx] = updated;
+        else appState.regexRules.push(updated);
+        appState.editingRegexRuleId = ruleId;
+        persistRegexStore();
+        clearRegexRuleEditorDirty();
+        renderRegexRuleList();
+        showToast('已保存规则');
+        if (appState.pageStack.length > 0) {
+            const previousPage = appState.pageStack.pop();
+            navigateToPage(previousPage, false);
+        }
+    }
+
+    function batchDeleteRegexGroups(ids) {
+        const idSet = new Set(ids);
+        appState.regexGroups = appState.regexGroups.filter(function (g) {
+            return !idSet.has(g.groupId);
+        });
+        appState.regexRules = appState.regexRules.filter(function (r) {
+            return !idSet.has(r.groupId);
+        });
+        if (
+            appState.workspaceCurrentRegexGroupId &&
+            idSet.has(appState.workspaceCurrentRegexGroupId)
+        ) {
+            resetWorkspaceCurrentRegexGroup();
+        }
+        if (appState.editingRegexGroupId && idSet.has(appState.editingRegexGroupId)) {
+            appState.editingRegexGroupId = null;
+            if (
+                appState.currentPage === 'regexRules' ||
+                appState.currentPage === 'regexRuleEditor'
+            ) {
+                navigateToPage('regexGroups', false);
+            }
+        }
+        persistRegexStore();
+        renderRegexGroupList();
+    }
+
+    function batchDeleteRegexRules(ruleIds) {
+        const groupId = appState.editingRegexGroupId;
+        if (!groupId) return;
+        const idSet = new Set(ruleIds);
+        appState.regexRules = appState.regexRules.filter(function (r) {
+            return !(r.groupId === groupId && idSet.has(r.ruleId));
+        });
+        if (appState.editingRegexRuleId && idSet.has(appState.editingRegexRuleId)) {
+            appState.editingRegexRuleId = null;
+            if (appState.currentPage === 'regexRuleEditor') {
+                navigateToPage('regexRules', false);
+            }
+        }
+        persistRegexStore();
+        renderRegexRuleList();
+        renderRegexGroupList();
+    }
+
+    function deleteRegexGroup(groupId) {
+        batchDeleteRegexGroups([groupId]);
+        showToast('已删除正则组');
+    }
+
+    function showRegexGroupMenu(groupId) {
+        const group = findRegexGroup(groupId);
+        if (!group) return;
+        const isCurrent = appState.workspaceCurrentRegexGroupId === groupId;
+        const items = [];
+        if (!isCurrent) items.push({ label: '设为当前', action: 'set-current' });
+        items.push({ label: '编辑展示名称', action: 'edit-display' });
+        items.push({ label: '删除组', action: 'delete-group', danger: true });
+        showBottomSheet(items, function (action) {
+            if (action === 'set-current') setWorkspaceCurrentRegexGroup(groupId);
+            else if (action === 'edit-display') openEditRegexGroupModal(groupId);
+            else if (action === 'delete-group') {
+                if (!confirm('确定删除正则组 ' + groupId + ' 及其全部规则？')) return;
+                deleteRegexGroup(groupId);
+            }
+        });
+    }
+
+    function openNewRegexGroupModal() {
+        const modal = document.getElementById('newRegexGroupModal');
+        const idInput = document.getElementById('newRegexGroupId');
+        const nameInput = document.getElementById('newRegexGroupDisplayName');
+        if (idInput) idInput.value = '';
+        if (nameInput) nameInput.value = '';
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+        if (idInput) idInput.focus();
+    }
+
+    function closeNewRegexGroupModal() {
+        const modal = document.getElementById('newRegexGroupModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function confirmNewRegexGroupModal() {
+        const idInput = document.getElementById('newRegexGroupId');
+        const nameInput = document.getElementById('newRegexGroupDisplayName');
+        if (!idInput) return;
+        const groupId = idInput.value.trim();
+        if (!groupId) {
+            showToast('请填写组 ID');
+            return;
+        }
+        if (findRegexGroup(groupId)) {
+            showToast('组 ID 已存在');
+            return;
+        }
+        const displayName =
+            nameInput && nameInput.value.trim() ? nameInput.value.trim() : null;
+        const t = nowMs();
+        appState.regexGroups.push({
+            groupId: groupId,
+            displayName: displayName,
+            createdAtMs: t,
+            updatedAtMs: t,
+        });
+        persistRegexStore();
+        closeNewRegexGroupModal();
+        renderRegexGroupList();
+        showToast('已添加正则组');
+    }
+
+    let editingRegexGroupModalId = null;
+
+    function openEditRegexGroupModal(groupId) {
+        const group = findRegexGroup(groupId);
+        if (!group) return;
+        editingRegexGroupModalId = groupId;
+        const modal = document.getElementById('editRegexGroupModal');
+        const hint = document.getElementById('editRegexGroupIdHint');
+        const nameInput = document.getElementById('editRegexGroupDisplayName');
+        if (hint) hint.textContent = '组 ID：' + groupId;
+        if (nameInput) nameInput.value = group.displayName || '';
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeEditRegexGroupModal() {
+        editingRegexGroupModalId = null;
+        const modal = document.getElementById('editRegexGroupModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function confirmEditRegexGroupModal() {
+        const group = findRegexGroup(editingRegexGroupModalId);
+        const nameInput = document.getElementById('editRegexGroupDisplayName');
+        if (!group || !nameInput) return;
+        group.displayName = nameInput.value.trim() || null;
+        group.updatedAtMs = nowMs();
+        persistRegexStore();
+        closeEditRegexGroupModal();
+        renderRegexGroupList();
+        if (appState.editingRegexGroupId === group.groupId) renderRegexRuleList();
+        showToast('已更新展示名称');
+    }
+
+    function setupRegexConfig() {
+        loadRegexStore();
+        renderRegexGroupList();
+
+        const groupList = document.getElementById('regexGroupList');
+        if (groupList) {
+            groupList.addEventListener('click', function (e) {
+                const menuBtn = e.target.closest('[data-regex-group-menu]');
+                if (menuBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showRegexGroupMenu(menuBtn.dataset.regexGroupMenu);
+                    return;
+                }
+                const item = e.target.closest('[data-group-id]');
+                if (!item) return;
+                handleManagedListItemClick(e, 'regexGroups', item, function (el) {
+                    openRegexRulesPage(el.dataset.groupId);
+                });
+            });
+        }
+
+        const rulesList = document.getElementById('regexRulesList');
+        if (rulesList) {
+            rulesList.addEventListener('click', function (e) {
+                const item = e.target.closest('[data-rule-id]');
+                if (!item) return;
+                handleManagedListItemClick(e, 'regexRules', item, function (el) {
+                    openRegexRuleEditor(el.dataset.ruleId);
+                });
+            });
+        }
+
+        const newGroupBtn = document.querySelector('[data-action="new-regex-group"]');
+        if (newGroupBtn) newGroupBtn.addEventListener('click', openNewRegexGroupModal);
+
+        const newRuleBtn = document.querySelector('[data-action="new-regex-rule"]');
+        if (newRuleBtn) {
+            newRuleBtn.addEventListener('click', function () {
+                openRegexRuleEditor(null);
+            });
+        }
+
+        const saveRuleBtn = document.querySelector('[data-action="save-regex-rule"]');
+        if (saveRuleBtn) saveRuleBtn.addEventListener('click', saveRegexRuleEditor);
+
+        document.querySelectorAll('[data-action="close-new-regex-group"]').forEach(function (btn) {
+            btn.addEventListener('click', closeNewRegexGroupModal);
+        });
+        const confirmNewGroup = document.querySelector('[data-action="confirm-new-regex-group"]');
+        if (confirmNewGroup) confirmNewGroup.addEventListener('click', confirmNewRegexGroupModal);
+
+        document.querySelectorAll('[data-action="close-edit-regex-group"]').forEach(function (btn) {
+            btn.addEventListener('click', closeEditRegexGroupModal);
+        });
+        const confirmEditGroup = document.querySelector('[data-action="confirm-edit-regex-group"]');
+        if (confirmEditGroup) confirmEditGroup.addEventListener('click', confirmEditRegexGroupModal);
+
+        const editorRoot = document.getElementById('regexRuleEditorRoot');
+        if (editorRoot) {
+            editorRoot.addEventListener('input', function () {
+                if (appState.currentPage === 'regexRuleEditor') {
+                    markRegexRuleEditorDirty();
+                    updateRegexTestPreview();
+                }
+            });
+            editorRoot.addEventListener('change', function () {
+                if (appState.currentPage === 'regexRuleEditor') {
+                    markRegexRuleEditorDirty();
+                    updateRegexTestPreview();
+                }
+            });
+        }
+
+        if (elements.backBtn) {
+            elements.backBtn.addEventListener(
+                'click',
+                function (e) {
+                    if (appState.currentPage === 'regexRuleEditor' && appState.regexRuleEditorDirty) {
+                        if (!confirm('有未保存的更改，确定要离开吗？')) {
+                            e.stopImmediatePropagation();
+                        }
+                    }
+                },
+                true,
+            );
+        }
+    }
+
     function init() {
         setupNavigation();
         setupBackButton();
@@ -2688,6 +3624,7 @@
         setupProjectsAndSessions();
         setupAgentsAndProviders();
         setupWorkspaceModel();
+        setupRegexConfig();
 
         navigateToPage('chat');
         if (elements.bannerProjectName) {
