@@ -343,13 +343,12 @@ status: draft
 
             <!-- 正则组列表 -->
             <div id="regexGroupsPage" class="page">
-                <div id="regexCurrentBanner" class="info-banner regex-current-banner hidden"></div>
                 <div class="manage-header" data-batch-header="regexGroups">
                     <div class="manage-header-normal section-header">
                         <h2>正则组</h2>
                         <div class="section-header-actions">
                             <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="regexGroups">管理</button>
-                            <button type="button" class="btn-primary" data-action="new-regex-group">添加</button>
+                            <button type="button" class="btn-primary btn-sm" data-action="new-regex-group">添加</button>
                         </div>
                     </div>
                     <div class="manage-header-batch section-header hidden">
@@ -369,7 +368,7 @@ status: draft
                         <h2 id="regexRulesTitle">正则组</h2>
                         <div class="section-header-actions">
                             <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="regexRules">管理</button>
-                            <button type="button" class="btn-primary" data-action="new-regex-rule">添加规则</button>
+                            <button type="button" class="btn-primary btn-sm" data-action="new-regex-rule">添加规则</button>
                         </div>
                     </div>
                     <div class="manage-header-batch section-header hidden">
@@ -384,10 +383,6 @@ status: draft
 
             <!-- 规则详情 + 测试预览 -->
             <div id="regexRuleEditorPage" class="page">
-                <div class="agent-editor-toolbar">
-                    <button type="button" class="toolbar-btn btn-primary" data-action="save-regex-rule">保存</button>
-                    <span class="unsaved-indicator regex-rule-unsaved hidden">未保存</span>
-                </div>
                 <div id="regexRuleEditorRoot" class="model-sampling-editor regex-rule-editor"></div>
             </div>
 

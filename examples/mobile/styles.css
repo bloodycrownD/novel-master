@@ -1193,16 +1193,88 @@ body[data-batch-list="projects"] .project-item {
     line-height: 1.5;
 }
 
-.regex-group-list {
+#regexGroupsPage .provider-list.regex-group-list {
+    flex: 1;
     padding: 0 16px 16px;
 }
 
-.regex-current-banner {
-    margin: 12px 16px 0;
+.regex-group-item .provider-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.regex-group-item .provider-name,
+.regex-group-item .provider-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.regex-group-item .provider-icon {
+    flex-shrink: 0;
+    margin-right: 0;
+    width: 32px;
+    text-align: center;
+}
+
+.provider-item-trailing {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.provider-item-trailing .current-badge {
+    flex-shrink: 0;
+}
+
+.provider-item-trailing .agent-menu-btn {
+    margin: 0 -4px;
+}
+
+.regex-rule-item .provider-model-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.regex-rule-item .provider-model-name,
+.regex-rule-item .provider-model-meta {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.regex-rule-editor {
+    padding-bottom: 24px;
 }
 
 .regex-rule-editor .agent-form-section {
     margin-bottom: 20px;
+}
+
+.regex-scope-heading {
+    margin-top: 4px;
+    margin-bottom: 0;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.regex-replace-section {
+    margin-bottom: 20px;
+}
+
+.regex-rule-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 8px 0 0;
+    margin-top: 8px;
+}
+
+.regex-rule-form-actions .unsaved-indicator {
+    margin-right: auto;
 }
 
 .regex-test-panel {

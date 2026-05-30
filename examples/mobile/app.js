@@ -2977,28 +2977,9 @@
         showToast('已设为当前生效正则组');
     }
 
-    function updateRegexCurrentBanner() {
-        const banner = document.getElementById('regexCurrentBanner');
-        if (!banner) return;
-        const gid = appState.workspaceCurrentRegexGroupId;
-        if (!gid) {
-            banner.classList.add('hidden');
-            banner.textContent = '';
-            return;
-        }
-        const group = findRegexGroup(gid);
-        banner.classList.remove('hidden');
-        banner.innerHTML =
-            '<span>当前生效：' +
-            escapeHtml(gid) +
-            (group && group.displayName ? '（' + escapeHtml(group.displayName) + '）' : '') +
-            '</span>';
-    }
-
     function renderRegexGroupList() {
         const host = document.getElementById('regexGroupList');
         if (!host) return;
-        updateRegexCurrentBanner();
         const listId = 'regexGroups';
         if (appState.regexGroups.length === 0) {
             host.innerHTML = '<p class="provider-empty-hint">暂无正则组，点击「添加」创建。</p>';
@@ -3026,13 +3007,15 @@
                 escapeHtml(regexGroupMetaLine(group.groupId)) +
                 '</div>';
             html += '</div>';
-            if (isCurrent) html += '<span class="current-badge">当前</span>';
             if (!isBatchMode(listId)) {
+                html += '<div class="provider-item-trailing">';
+                if (isCurrent) html += '<span class="current-badge">当前</span>';
                 html +=
                     '<button type="button" class="agent-menu-btn" data-regex-group-menu="' +
                     escapeHtml(group.groupId) +
                     '" aria-label="更多">⋮</button>';
                 html += '<span class="menu-arrow">›</span>';
+                html += '</div>';
             }
             html += '</div>';
         });
@@ -3122,6 +3105,10 @@
         const existing = ruleId ? findRegexRule(groupId, ruleId) : null;
         const draft = existing ? ruleToDraftFields(existing) : defaultRegexRuleDraft();
 
+        const llmReplaceEnabled = draft.llmReplace != null && draft.llmReplace !== '';
+        const displayReplaceEnabled =
+            draft.displayReplace != null && draft.displayReplace !== '';
+
         let html = '<section class="agent-form-section"><h3>规则</h3>';
         html +=
             '<label class="agent-field"><span>名称</span><input type="text" data-regex-field="name" value="' +
@@ -3136,55 +3123,103 @@
             escapeHtml(draft.flags) +
             '"></label>';
         html +=
-            '<label class="agent-field agent-field--row"><span>启用</span><input type="checkbox" class="toggle" data-regex-field="enabled"' +
+            '<label class="agent-field agent-field--row"><span>启用规则</span><input type="checkbox" class="toggle" data-regex-field="enabled"' +
             (draft.enabled ? ' checked' : '') +
             '></label>';
-        html +=
-            '<label class="agent-field"><span>提示词替换 (llm)</span><input type="text" data-regex-field="llmReplace" placeholder="可空" value="' +
-            escapeHtml(draft.llmReplace != null ? draft.llmReplace : '') +
-            '"></label>';
-        html +=
-            '<label class="agent-field"><span>显示替换 (display)</span><input type="text" data-regex-field="displayReplace" placeholder="可空" value="' +
-            escapeHtml(draft.displayReplace != null ? draft.displayReplace : '') +
-            '"></label>';
         html += '<div class="regex-test-grid">';
         html +=
-            '<label class="agent-field"><span>最小层数</span><input type="number" min="1" data-regex-field="minDepth" value="' +
+            '<label class="agent-field"><span>最小层数 (floor)</span><input type="number" min="1" data-regex-field="minDepth" value="' +
             draft.minDepth +
             '"></label>';
         html +=
-            '<label class="agent-field"><span>最大层数</span><input type="number" min="1" data-regex-field="maxDepth" value="' +
+            '<label class="agent-field"><span>最大层数 (floor)</span><input type="number" min="1" data-regex-field="maxDepth" value="' +
             draft.maxDepth +
             '"></label>';
         html += '</div>';
+        html += '<p class="agent-field-hint regex-scope-heading">作用范围 (role)</p>';
         html +=
-            '<label class="agent-field agent-field--row"><span>用户消息</span><input type="checkbox" class="toggle" data-regex-field="scopeUser"' +
+            '<label class="agent-field agent-field--row"><span>用户 (user)</span><input type="checkbox" class="toggle" data-regex-field="scopeUser"' +
             (draft.scopeUser ? ' checked' : '') +
             '></label>';
         html +=
-            '<label class="agent-field agent-field--row"><span>助手消息</span><input type="checkbox" class="toggle" data-regex-field="scopeAssistant"' +
+            '<label class="agent-field agent-field--row"><span>助手 (assistant)</span><input type="checkbox" class="toggle" data-regex-field="scopeAssistant"' +
             (draft.scopeAssistant ? ' checked' : '') +
             '></label>';
-        html += '<p class="agent-field-hint">至少配置一侧替换；作用范围至少选一。</p>';
+        html += '<p class="agent-field-hint">至少启用一侧替换；作用范围至少选一。</p>';
         html += '</section>';
+
+        html +=
+            '<section class="agent-form-section agent-model-section regex-replace-section' +
+            (llmReplaceEnabled ? ' agent-model-section--enabled' : '') +
+            '" data-regex-llm-section>';
+        html += '<div class="agent-section-header">';
+        html += '<h3>提示词替换</h3>';
+        html += '<label class="agent-model-switch">';
+        html += '<span class="agent-model-switch-label">启用</span>';
+        html +=
+            '<input type="checkbox" class="toggle" data-regex-llm-enable' +
+            (llmReplaceEnabled ? ' checked' : '') +
+            ' aria-label="启用提示词替换">';
+        html += '</label></div>';
+        html +=
+            '<p class="agent-field-hint agent-model-hint-off' +
+            (llmReplaceEnabled ? ' hidden' : '') +
+            '">关闭时不改写送入模型的文本（llm 通道）。</p>';
+        html +=
+            '<div class="agent-model-pickers' +
+            (llmReplaceEnabled ? '' : ' hidden') +
+            '" data-regex-llm-fields>';
+        html +=
+            '<label class="agent-field"><span>替换为</span><input type="text" data-regex-field="llmReplace" placeholder="如 [redacted]" value="' +
+            escapeHtml(llmReplaceEnabled ? draft.llmReplace : '') +
+            '"></label>';
+        html += '</div></section>';
+
+        html +=
+            '<section class="agent-form-section agent-model-section regex-replace-section' +
+            (displayReplaceEnabled ? ' agent-model-section--enabled' : '') +
+            '" data-regex-display-section>';
+        html += '<div class="agent-section-header">';
+        html += '<h3>显示替换</h3>';
+        html += '<label class="agent-model-switch">';
+        html += '<span class="agent-model-switch-label">启用</span>';
+        html +=
+            '<input type="checkbox" class="toggle" data-regex-display-enable' +
+            (displayReplaceEnabled ? ' checked' : '') +
+            ' aria-label="启用显示替换">';
+        html += '</label></div>';
+        html +=
+            '<p class="agent-field-hint agent-model-hint-off' +
+            (displayReplaceEnabled ? ' hidden' : '') +
+            '">关闭时不改写列表/终端展示文本（display 通道）。</p>';
+        html +=
+            '<div class="agent-model-pickers' +
+            (displayReplaceEnabled ? '' : ' hidden') +
+            '" data-regex-display-fields>';
+        html +=
+            '<label class="agent-field"><span>替换为</span><input type="text" data-regex-field="displayReplace" placeholder="如 ***" value="' +
+            escapeHtml(displayReplaceEnabled ? draft.displayReplace : '') +
+            '"></label>';
+        html += '</div></section>';
 
         html += '<section class="agent-form-section regex-test-panel"><h3>测试预览</h3>';
         html +=
             '<label class="agent-field"><span>样例文本</span><textarea data-regex-test="text" rows="3">' +
             escapeHtml('mysecret@email.com') +
             '</textarea></label>';
-        html += '<div class="regex-test-grid">';
         html +=
-            '<label class="agent-field"><span>floor</span><input type="number" min="1" data-regex-test="floor" value="1"></label>';
-        html +=
-            '<label class="agent-field"><span>role</span><select data-regex-test="role"><option value="user" selected>user</option><option value="assistant">assistant</option></select></label>';
-        html +=
-            '<label class="agent-field"><span>channel</span><select data-regex-test="channel"><option value="display">display</option><option value="llm">llm</option></select></label>';
-        html += '</div>';
+            '<label class="agent-field"><span>通道 (channel)</span><select data-regex-test="channel"><option value="display">display</option><option value="llm">llm</option></select></label>';
         html += '<label class="agent-field"><span>预览输出</span></label>';
         html += '<pre class="regex-test-output" data-regex-test-output></pre>';
-        html += '<p class="agent-field-hint">单条规则测试，对齐 <code>nm regex test</code>。</p>';
+        html +=
+            '<p class="agent-field-hint">按上方规则的作用范围与层数区间预览；floor 取最小层数。</p>';
         html += '</section>';
+
+        html += '<div class="regex-rule-form-actions">';
+        html += '<span class="unsaved-indicator regex-rule-unsaved hidden">未保存</span>';
+        html +=
+            '<button type="button" class="btn-primary" data-action="save-regex-rule">保存</button>';
+        html += '</div>';
 
         root.innerHTML = html;
         clearRegexRuleEditorDirty();
@@ -3202,12 +3237,19 @@
             if (el.type === 'number') return Number(el.value);
             return el.value;
         }
-        function nullableReplace(name) {
+        function replaceToggle(kind) {
+            const el = root.querySelector('[data-regex-' + kind + '-enable]');
+            return el ? el.checked : false;
+        }
+        function nullableReplace(name, enabled) {
+            if (!enabled) return null;
             const v = field(name);
             if (v == null) return null;
             const t = String(v).trim();
             return t === '' ? null : t;
         }
+        const llmOn = replaceToggle('llm');
+        const displayOn = replaceToggle('display');
         const name = String(field('name') || '').trim();
         if (!name) {
             if (!silent) showToast('请填写规则名称');
@@ -3225,8 +3267,8 @@
             pattern: pattern,
             flags: String(field('flags') || '').trim(),
             enabled: !!field('enabled'),
-            llmReplace: nullableReplace('llmReplace'),
-            displayReplace: nullableReplace('displayReplace'),
+            llmReplace: nullableReplace('llmReplace', llmOn),
+            displayReplace: nullableReplace('displayReplace', displayOn),
             minDepth: minDepth,
             maxDepth: maxDepth,
             scopeUser: !!field('scopeUser'),
@@ -3236,15 +3278,17 @@
 
     function collectRegexTestContext(root) {
         const textEl = root.querySelector('[data-regex-test="text"]');
-        const floorEl = root.querySelector('[data-regex-test="floor"]');
-        const roleEl = root.querySelector('[data-regex-test="role"]');
         const channelEl = root.querySelector('[data-regex-test="channel"]');
         return {
             text: textEl ? textEl.value : '',
-            floor: floorEl ? Number(floorEl.value) || 1 : 1,
-            role: roleEl ? roleEl.value : 'user',
             channel: channelEl ? channelEl.value : 'display',
         };
+    }
+
+    /** Preview role from rule scope checkboxes (not a separate test control). */
+    function regexPreviewRoleFromScope(fields) {
+        if (fields.scopeAssistant && !fields.scopeUser) return 'assistant';
+        return 'user';
     }
 
     function updateRegexTestPreview() {
@@ -3266,8 +3310,8 @@
         }
         const result = previewRegexRule(test.text, fields, {
             channel: test.channel,
-            floor: test.floor,
-            role: test.role,
+            floor: fields.minDepth,
+            role: regexPreviewRoleFromScope(fields),
         });
         if (!result.ok) {
             out.textContent = result.message;
@@ -3280,13 +3324,15 @@
 
     function markRegexRuleEditorDirty() {
         appState.regexRuleEditorDirty = true;
-        const indicator = document.querySelector('.regex-rule-unsaved');
+        const root = document.getElementById('regexRuleEditorRoot');
+        const indicator = root && root.querySelector('.regex-rule-unsaved');
         if (indicator) indicator.classList.remove('hidden');
     }
 
     function clearRegexRuleEditorDirty() {
         appState.regexRuleEditorDirty = false;
-        const indicator = document.querySelector('.regex-rule-unsaved');
+        const root = document.getElementById('regexRuleEditorRoot');
+        const indicator = root && root.querySelector('.regex-rule-unsaved');
         if (indicator) indicator.classList.add('hidden');
     }
 
@@ -3516,6 +3562,15 @@
         showToast('已更新展示名称');
     }
 
+    function toggleRegexReplaceSection(root, kind, enabled) {
+        const section = root.querySelector('[data-regex-' + kind + '-section]');
+        const fields = root.querySelector('[data-regex-' + kind + '-fields]');
+        const hintOff = section && section.querySelector('.agent-model-hint-off');
+        if (section) section.classList.toggle('agent-model-section--enabled', enabled);
+        if (fields) fields.classList.toggle('hidden', !enabled);
+        if (hintOff) hintOff.classList.toggle('hidden', enabled);
+    }
+
     function setupRegexConfig() {
         loadRegexStore();
         renderRegexGroupList();
@@ -3559,9 +3614,6 @@
             });
         }
 
-        const saveRuleBtn = document.querySelector('[data-action="save-regex-rule"]');
-        if (saveRuleBtn) saveRuleBtn.addEventListener('click', saveRegexRuleEditor);
-
         document.querySelectorAll('[data-action="close-new-regex-group"]').forEach(function (btn) {
             btn.addEventListener('click', closeNewRegexGroupModal);
         });
@@ -3576,17 +3628,27 @@
 
         const editorRoot = document.getElementById('regexRuleEditorRoot');
         if (editorRoot) {
+            editorRoot.addEventListener('click', function (e) {
+                if (e.target.closest('[data-action="save-regex-rule"]')) {
+                    saveRegexRuleEditor();
+                }
+            });
             editorRoot.addEventListener('input', function () {
                 if (appState.currentPage === 'regexRuleEditor') {
                     markRegexRuleEditorDirty();
                     updateRegexTestPreview();
                 }
             });
-            editorRoot.addEventListener('change', function () {
-                if (appState.currentPage === 'regexRuleEditor') {
-                    markRegexRuleEditorDirty();
-                    updateRegexTestPreview();
+            editorRoot.addEventListener('change', function (e) {
+                if (appState.currentPage !== 'regexRuleEditor') return;
+                if (e.target.matches('[data-regex-llm-enable]')) {
+                    toggleRegexReplaceSection(editorRoot, 'llm', e.target.checked);
                 }
+                if (e.target.matches('[data-regex-display-enable]')) {
+                    toggleRegexReplaceSection(editorRoot, 'display', e.target.checked);
+                }
+                markRegexRuleEditorDirty();
+                updateRegexTestPreview();
             });
         }
 
