@@ -21,7 +21,7 @@ import {
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentConfigFile } from "../config/load-agent-config-file.js";
-import { resolveModelId } from "../config/resolve-provider-scope.js";
+import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 function flagString(
@@ -35,11 +35,9 @@ function flagString(
 async function resolveDefinition(
   rt: NovelMasterRuntime,
   flags: ReadonlyMap<string, string | true>,
-  modelId: string,
 ): Promise<AgentDefinition> {
   const agentConfigPath = flagString(flags, "agent-config");
   const promptPath = flagString(flags, "prompt-path");
-  const modelOverride = flagString(flags, "modelId");
 
   let definition: AgentDefinition;
   if (agentConfigPath != null) {
@@ -47,38 +45,18 @@ async function resolveDefinition(
   } else if (promptPath != null) {
     const source = await readFile(promptPath, "utf8");
     const blocks = loadPromptBlocksFromYaml(source);
-    definition = buildMinimalDefinition({
-      prompts: blocks,
-      applicationModelId: modelId,
-    });
+    definition = buildMinimalDefinition({ prompts: blocks });
   } else {
-    definition = buildMinimalDefinition({
-      prompts: [],
-      applicationModelId: modelId,
-    });
-  }
-
-  const effectiveModelId = modelOverride ?? definition.model.applicationModelId;
-  if (effectiveModelId !== definition.model.applicationModelId) {
-    definition = {
-      ...definition,
-      model: { ...definition.model, applicationModelId: effectiveModelId },
-    };
-  } else if (agentConfigPath == null && promptPath == null) {
-    definition = {
-      ...definition,
-      model: { ...definition.model, applicationModelId: modelId },
-    };
+    definition = buildMinimalDefinition({ prompts: [] });
   }
 
   await validateAgentDefinition(definition, {
-    getProtocolForModel: async (applicationModelId) => {
-      const { providerId } = parseApplicationModelId(applicationModelId);
-      try {
-        const provider = await rt.providers.get(providerId);
-        return provider.protocol;
-      } catch {
-        return undefined;
+    assertSavedModel: async (applicationModelId) => {
+      const { providerId, vendorModelId } =
+        parseApplicationModelId(applicationModelId);
+      const list = await rt.providerModels.savedList(providerId);
+      if (!list.some((m) => m.vendorModelId === vendorModelId)) {
+        throw new Error(`unknown model: ${applicationModelId}`);
       }
     },
   });
@@ -113,15 +91,15 @@ export async function runAgent(
     case "run":
     case "continue": {
       const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
-      const agentConfigPath = flagString(flags, "agent-config");
-      const modelId =
-        agentConfigPath != null && flagString(flags, "modelId") == null
-          ? (await loadAgentConfigFile(agentConfigPath)).model.applicationModelId
-          : await resolveModelId(flags, rt.state);
       const content = flagString(flags, "content");
       const noStream = flags.get("no-stream") === true;
 
-      const definition = await resolveDefinition(rt, flags, modelId);
+      const definition = await resolveDefinition(rt, flags);
+      const { applicationModelId, cliModelId } = await resolveCliApplicationModelId({
+        flags,
+        definition,
+        state: rt.state,
+      });
       const maxSteps =
         subcommand === "continue"
           ? 1
@@ -174,6 +152,8 @@ export async function runAgent(
 
       const result = await runner.run({
         definition,
+        applicationModelId,
+        cliModelId,
         maxSteps,
         promptContext: { worktreeDisplay },
         stream: !noStream,

@@ -13,8 +13,6 @@ const MOCK_ENV = {
 const MINIMAL_AGENT_YAML = `
 schemaVersion: 1
 name: e2e-agent
-model:
-  applicationModelId: mock/test
 prompts:
   blocks:
     - name: c
@@ -22,7 +20,7 @@ prompts:
 `;
 
 describe("agent config CLI", () => {
-  it("C1: --agent-config runs with mock model", async () => {
+  it("E1: --agent-config without model runs after model use", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-cfg-"));
     const dbPath = join(dir, "novel.db");
     const agentPath = join(dir, "agent.yaml");
@@ -45,6 +43,42 @@ describe("agent config CLI", () => {
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV,
       });
+      const mockProvider = runNm(
+        [
+          "provider",
+          "create",
+          "--providerId",
+          "mock",
+          "--protocol",
+          "openai",
+          "--baseUrl",
+          "http://127.0.0.1/v1",
+          "--apiKey",
+          "test",
+          "--db",
+          dbPath,
+        ],
+        { env: MOCK_ENV },
+      );
+      assert.equal(mockProvider.status, 0, mockProvider.stderr);
+      runNm(
+        [
+          "provider",
+          "model",
+          "create",
+          "--providerId",
+          "mock",
+          "--vendorModelId",
+          "test",
+          "--db",
+          dbPath,
+        ],
+        { env: MOCK_ENV },
+      );
+      const modelUse = runNm(["model", "use", "--modelId", "mock/test", "--db", dbPath], {
+        env: MOCK_ENV,
+      });
+      assert.equal(modelUse.status, 0, modelUse.stderr);
 
       const agent = runNm(
         [

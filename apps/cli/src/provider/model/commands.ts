@@ -9,6 +9,7 @@ import type { NovelMasterRuntime } from "../../runtime.js";
 import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 import { parseApplicationModelId } from "@novel-master/core";
+import { runProviderModelSampling } from "./sampling-commands.js";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -37,6 +38,17 @@ export async function runProviderModel(
         `${s.vendorModelId}\t${s.displayName ?? ""}\t${s.stale ? 1 : 0}`,
       );
     }
+    return;
+  }
+
+  if (subcommand === "sampling") {
+    const samplingSub = args[0];
+    if (samplingSub == null) {
+      throw new Error(
+        "Usage: nm provider model sampling <show|set|clear> --modelId <provider>/<vendor>",
+      );
+    }
+    await runProviderModelSampling(rt, samplingSub, args.slice(1));
     return;
   }
 
@@ -107,7 +119,7 @@ export async function runProviderModel(
     }
     default:
       throw new Error(
-        "Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete> ...",
+        "Usage: nm provider model <suggest list|fetch|save|create|list|edit|delete|sampling> ...",
       );
   }
 }

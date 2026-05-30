@@ -22,6 +22,7 @@ import {
   type CompactionAgentResolver,
   type CompactionPolicyStore,
   type ModelRequestService,
+  type ModelSamplingProfileService,
   type PersistentPreferences,
   type PersistentState,
   type ProviderModelService,
@@ -82,6 +83,7 @@ export interface NovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
+  readonly modelSamplingProfiles: ModelSamplingProfileService;
   readonly compactionPolicy: CompactionPolicyStore;
   readonly resolveCompactionAgent: CompactionAgentResolver;
   readonly dbPath: string;
@@ -144,5 +146,6 @@ export async function createNovelMasterRuntime(
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
     modelRequests,
+    modelSamplingProfiles: providerBundle.modelSamplingProfiles,
   };
 }
