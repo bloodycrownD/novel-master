@@ -308,22 +308,16 @@ status: draft
                     <h2>服务商</h2>
                     <button class="btn-primary" data-action="new-provider">添加</button>
                 </div>
-                <div class="provider-list">
-                    <div class="provider-item" data-id="provider-1">
-                        <div class="provider-icon">🟢</div>
-                        <div class="provider-info">
-                            <div class="provider-name">OpenAI</div>
-                            <div class="provider-meta">已连接 · 3个模型</div>
-                        </div>
-                    </div>
-                    <div class="provider-item" data-id="provider-2">
-                        <div class="provider-icon">🟢</div>
-                        <div class="provider-info">
-                            <div class="provider-name">Anthropic</div>
-                            <div class="provider-meta">已连接 · 2个模型</div>
-                        </div>
-                    </div>
+                <div id="providerList" class="provider-list"></div>
+            </div>
+
+            <!-- 服务商详情：已保存模型 -->
+            <div id="providerDetailPage" class="page">
+                <div class="section-header">
+                    <h2 id="providerDetailTitle">服务商</h2>
+                    <button type="button" class="btn-primary" data-action="add-provider-model">添加模型</button>
                 </div>
+                <div id="providerModelList" class="provider-model-list"></div>
             </div>
 
             <!-- 设置页面 -->
@@ -478,14 +472,37 @@ status: draft
         <div class="modal-backdrop" data-action="close-model-config"></div>
         <div class="modal-panel model-config-panel" role="dialog" aria-label="模型采样配置">
             <h3 id="modelConfigTitle">模型配置</h3>
-            <label class="agent-field model-config-toggle">
+            <label class="agent-field agent-field--row model-config-toggle">
                 <span>启用自定义采样</span>
-                <input type="checkbox" id="modelConfigEnabled">
+                <input type="checkbox" class="toggle" id="modelConfigEnabled">
             </label>
             <div id="modelConfigSamplingRoot"></div>
             <div class="modal-actions">
                 <button type="button" class="btn-primary" data-action="save-model-config">保存</button>
                 <button type="button" class="btn-secondary" data-action="close-model-config">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加已保存模型 -->
+    <div id="addModelModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-add-model"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="添加模型">
+            <section class="agent-form-section model-picker-form">
+                <h3>添加已保存模型</h3>
+                <label class="agent-field">
+                    <span>厂商模型 ID</span>
+                    <input type="text" id="addModelVendorId" placeholder="如 gpt-4o-mini" autocomplete="off">
+                </label>
+                <label class="agent-field">
+                    <span>展示名称</span>
+                    <input type="text" id="addModelLabel" placeholder="可选，默认同 ID" autocomplete="off">
+                </label>
+                <p class="agent-field-hint">对齐 CLI <code>nm provider model save --vendorModelId …</code>；保存后可配置采样。</p>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="confirm-add-model">保存</button>
+                <button type="button" class="btn-secondary" data-action="close-add-model">取消</button>
             </div>
         </div>
     </div>

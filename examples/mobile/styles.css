@@ -1000,6 +1000,58 @@ body {
     gap: 8px;
 }
 
+.provider-item {
+    gap: 8px;
+}
+
+.provider-item .menu-arrow {
+    color: var(--text-secondary);
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.provider-model-list {
+    padding: 16px;
+}
+
+.provider-model-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    background: var(--surface-color);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.provider-model-name {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.provider-model-meta {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.provider-model-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.provider-empty-hint {
+    padding: 24px 16px;
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+#modelConfigSamplingRoot.hidden {
+    display: none !important;
+}
+
 .agent-menu-btn {
     width: 36px;
     height: 36px;

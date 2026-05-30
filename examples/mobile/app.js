@@ -23,6 +23,7 @@
         /** Workspace current model (mock nm model use); single source for chat + profile. */
         workspaceCurrentModelId: 'zhipu/glm-4.6',
         modelSamplingProfiles: {},
+        editingProviderId: null,
     };
 
     const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
@@ -35,6 +36,7 @@
         realPrompt: { title: '真实提示词', showBack: true, showNav: false },
         sessionLog: { title: '会话日志', showBack: true, showNav: false },
         providers: { title: '服务商管理', showBack: true, showNav: false },
+        providerDetail: { title: '模型管理', showBack: true, showNav: false },
         settings: { title: '扩展设置', showBack: true, showNav: false },
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
@@ -261,6 +263,14 @@
         if (pageId === 'agentEditor' && appState.editingAgentId) {
             const entry = agentCatalog[appState.editingAgentId];
             elements.pageTitle.textContent = entry ? entry.definition.name : config.title;
+            elements.backBtn.classList.toggle('hidden', !config.showBack);
+            updateDrawerAriaLabel();
+            return;
+        }
+
+        if (pageId === 'providerDetail' && appState.editingProviderId) {
+            const provider = findProvider(appState.editingProviderId);
+            elements.pageTitle.textContent = provider ? provider.name : config.title;
             elements.backBtn.classList.toggle('hidden', !config.showBack);
             updateDrawerAriaLabel();
             return;
@@ -1088,6 +1098,151 @@
         return model ? model.label : sel.vendorModelId;
     }
 
+    function providerModelMetaLine(provider) {
+        const n = provider.models.length;
+        const samplingN = provider.models.filter(function (m) {
+            const id = buildApplicationModelId(provider.id, m.vendorModelId);
+            const profile = getModelSamplingProfile(id);
+            return profile.enabled === true;
+        }).length;
+        let meta = n + ' 个已保存模型';
+        if (samplingN > 0) meta += ' · ' + samplingN + ' 个已配采样';
+        return meta;
+    }
+
+    function renderProviderList() {
+        const host = document.getElementById('providerList');
+        if (!host) return;
+        let html = '';
+        MOCK_PROVIDERS.forEach(function (p) {
+            html += '<div class="provider-item" data-provider-id="' + p.id + '">';
+            html += '<div class="provider-icon">🟢</div>';
+            html += '<div class="provider-info">';
+            html += '<div class="provider-name">' + escapeHtml(p.name) + '</div>';
+            html += '<div class="provider-meta">' + escapeHtml(providerModelMetaLine(p)) + '</div>';
+            html += '</div>';
+            html += '<span class="menu-arrow">›</span>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function openProviderDetail(providerId) {
+        if (!findProvider(providerId)) return;
+        appState.editingProviderId = providerId;
+        renderProviderDetail();
+        navigateToPage('providerDetail', true);
+    }
+
+    function renderProviderDetail() {
+        const provider = findProvider(appState.editingProviderId);
+        const title = document.getElementById('providerDetailTitle');
+        const host = document.getElementById('providerModelList');
+        if (!provider || !host) return;
+        if (title) title.textContent = provider.name;
+        if (provider.models.length === 0) {
+            host.innerHTML =
+                '<p class="provider-empty-hint">暂无已保存模型，点击「添加模型」登记 vendorModelId。</p>';
+            return;
+        }
+        let html = '';
+        provider.models.forEach(function (m) {
+            const applicationModelId = buildApplicationModelId(provider.id, m.vendorModelId);
+            const profile = getModelSamplingProfile(applicationModelId);
+            html += '<div class="provider-model-item" data-vendor-model-id="' + escapeHtml(m.vendorModelId) + '">';
+            html += '<div class="provider-model-info">';
+            html += '<div class="provider-model-name">' + escapeHtml(m.label) + '</div>';
+            html += '<div class="provider-model-meta">' + escapeHtml(applicationModelId);
+            if (profile.enabled) html += ' · 自定义采样';
+            html += '</div></div>';
+            html += '<button type="button" class="agent-menu-btn" data-provider-model-menu="' +
+                escapeHtml(m.vendorModelId) +
+                '" aria-label="模型操作">⋮</button>';
+            html += '</div>';
+        });
+        host.innerHTML = html;
+    }
+
+    function showProviderModelMenu(vendorModelId) {
+        const provider = findProvider(appState.editingProviderId);
+        if (!provider) return;
+        const model = provider.models.find(function (m) { return m.vendorModelId === vendorModelId; });
+        if (!model) return;
+        const applicationModelId = buildApplicationModelId(provider.id, vendorModelId);
+        showBottomSheet(
+            [
+                { label: '采样配置', action: 'sampling-config' },
+                { label: '删除模型', action: 'delete-model', danger: true },
+            ],
+            function (action) {
+                if (action === 'sampling-config') {
+                    openModelConfigModal(applicationModelId);
+                    return;
+                }
+                if (action === 'delete-model') {
+                    if (!confirm('确定删除已保存模型 ' + applicationModelId + '？')) return;
+                    provider.models = provider.models.filter(function (m) {
+                        return m.vendorModelId !== vendorModelId;
+                    });
+                    delete appState.modelSamplingProfiles[applicationModelId];
+                    persistModelSamplingProfiles();
+                    renderProviderDetail();
+                    renderProviderList();
+                    showToast('已删除模型');
+                }
+            },
+        );
+    }
+
+    function openAddModelModal() {
+        const modal = document.getElementById('addModelModal');
+        const vendorInput = document.getElementById('addModelVendorId');
+        const labelInput = document.getElementById('addModelLabel');
+        if (vendorInput) vendorInput.value = '';
+        if (labelInput) labelInput.value = '';
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.setAttribute('aria-hidden', 'false');
+        }
+    }
+
+    function closeAddModelModal() {
+        const modal = document.getElementById('addModelModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.setAttribute('aria-hidden', 'true');
+        }
+    }
+
+    function confirmAddModelModal() {
+        const provider = findProvider(appState.editingProviderId);
+        const vendorInput = document.getElementById('addModelVendorId');
+        const labelInput = document.getElementById('addModelLabel');
+        if (!provider || !vendorInput) return;
+        const vendorModelId = vendorInput.value.trim();
+        if (!vendorModelId) {
+            showToast('请填写厂商模型 ID');
+            return;
+        }
+        if (provider.models.some(function (m) { return m.vendorModelId === vendorModelId; })) {
+            showToast('该模型已存在');
+            return;
+        }
+        const label = labelInput && labelInput.value.trim() ? labelInput.value.trim() : vendorModelId;
+        provider.models.push({ vendorModelId: vendorModelId, label: label });
+        closeAddModelModal();
+        renderProviderDetail();
+        renderProviderList();
+        showToast('已添加模型');
+    }
+
+    function syncModelConfigSamplingVisibility() {
+        const enabled = document.getElementById('modelConfigEnabled');
+        const root = document.getElementById('modelConfigSamplingRoot');
+        if (!enabled || !root) return;
+        root.classList.toggle('hidden', !enabled.checked);
+    }
+
     function loadWorkspaceModel() {
         try {
             const stored = localStorage.getItem(WORKSPACE_MODEL_STORAGE_KEY);
@@ -1190,6 +1345,7 @@
         enabled.checked = profile.enabled === true;
         const protocol = modelProtocolForId(applicationModelId);
         root.innerHTML = renderSamplingFields(protocol, profile.params);
+        syncModelConfigSamplingVisibility();
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
     }
@@ -1228,6 +1384,8 @@
             params: params,
         });
         closeModelConfigModal();
+        renderProviderDetail();
+        renderProviderList();
         showToast('已保存模型采样配置');
     }
 
@@ -1882,6 +2040,40 @@
         }
     }
 
+    function setupProviders() {
+        renderProviderList();
+
+        const providerList = document.getElementById('providerList');
+        if (providerList) {
+            providerList.addEventListener('click', function (e) {
+                const item = e.target.closest('[data-provider-id]');
+                if (item) openProviderDetail(item.dataset.providerId);
+            });
+        }
+
+        const modelList = document.getElementById('providerModelList');
+        if (modelList) {
+            modelList.addEventListener('click', function (e) {
+                const menuBtn = e.target.closest('[data-provider-model-menu]');
+                if (menuBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showProviderModelMenu(menuBtn.dataset.providerModelMenu);
+                }
+            });
+        }
+
+        const addModelBtn = document.querySelector('[data-action="add-provider-model"]');
+        if (addModelBtn) addModelBtn.addEventListener('click', openAddModelModal);
+
+        const newProviderBtn = document.querySelector('[data-action="new-provider"]');
+        if (newProviderBtn) {
+            newProviderBtn.addEventListener('click', function () {
+                showToast('添加服务商（原型未实现）');
+            });
+        }
+    }
+
     function setupAgentsAndProviders() {
         renderAgentList();
 
@@ -1900,15 +2092,9 @@
             });
         }
 
-        document.querySelectorAll('.provider-item').forEach(function (item) {
-            item.addEventListener('click', function () {
-                showToast('编辑服务商配置');
-            });
-        });
+        setupProviders();
         const newAgentBtn = document.querySelector('[data-action="new-agent"]');
         if (newAgentBtn) newAgentBtn.addEventListener('click', createNewAgent);
-        const newProviderBtn = document.querySelector('[data-action="new-provider"]');
-        if (newProviderBtn) newProviderBtn.addEventListener('click', function () { showToast('添加服务商'); });
     }
 
     function setupWorkspaceModel() {
@@ -1933,6 +2119,15 @@
         });
         const saveCfg = document.querySelector('[data-action="save-model-config"]');
         if (saveCfg) saveCfg.addEventListener('click', saveModelConfigFromModal);
+        const modelCfgEnabled = document.getElementById('modelConfigEnabled');
+        if (modelCfgEnabled) {
+            modelCfgEnabled.addEventListener('change', syncModelConfigSamplingVisibility);
+        }
+        document.querySelectorAll('[data-action="close-add-model"]').forEach(function (btn) {
+            btn.addEventListener('click', closeAddModelModal);
+        });
+        const confirmAddModel = document.querySelector('[data-action="confirm-add-model"]');
+        if (confirmAddModel) confirmAddModel.addEventListener('click', confirmAddModelModal);
     }
 
     function init() {
