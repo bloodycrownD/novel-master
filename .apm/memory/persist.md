@@ -1,6 +1,6 @@
 ---
 createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-05-30 20:00:00'
+updatedAt: '2026-05-30 22:00:00'
 ---
 ## 项目
 
@@ -14,4 +14,4 @@ Novel Master（novel-master）小说大师，npm workspaces Monorepo。
 
 ## 现状
 
-main（截至 0d4e7a7）已含：TDBC、VFS、chat-project-vfs、virtual-worktree、prompt-engine、**sksp-provider-model**、**agent-system**（`AgentRunner`、tools/stream、`nm agent`）、**agent-config-and-compaction**（`AgentDefinition`、`CompactionPipeline`、`deserializeAgentDefinition`/`serializeAgentDefinition`；CLI `--agent-config`）、**agent-prompt-abstract-block**（`PromptBlock` 含 `type: abstract`；空 `abstract` 时不拼接；**已移除** `PromptBlock.when`）。示例 `examples/agent-writer.yaml`；UI 壳原型 `examples/mobile/`：**会话操作**左侧抽屉（会话内 ☰）+ **会话日志**统一时间线（已合并工具日志/检查点入口，移除 Chip）；迭代文档 `kb/docs/Iterations/mobile-prototype-session-drawer/`。**已移除**：`parsePromptYaml`、`DefaultCompactionService`、运行时 `agent.compaction.*`、`PromptBlock.when`、`prompt-block-when.ts`。CLI `nm`；默认库 `.novel-master/novel.db`（指针/偏好在库内 KKV，不用 `config.json`）；**persistent-state-and-preferences**（`feature/persistent-state-and-preferences`）：**PersistentState** / **PersistentPreferences**，`nm preferences`，无 `nm config`/`nm kkv`。见 `CHANGELOG.md`。布局 `kb/docs/monorepo.md`；迭代 PRD/SPEC `kb/docs/Iterations/*/`。
+main（截至 90f70fb）已含：TDBC、VFS、chat-project-vfs、virtual-worktree、prompt-engine、**sksp-provider-model**、**agent-system**（`AgentRunner`、tools/stream、`nm agent`）、**agent-config-and-compaction**（`AgentDefinition`、`CompactionPipeline`、`deserializeAgentDefinition`/`serializeAgentDefinition`；CLI `--agent-config`）、**agent-prompt-abstract-block**（`PromptBlock` 含 `type: abstract`；空 `abstract` 时不拼接；**已移除** `PromptBlock.when`）、**global-compaction-policy**（**CompactionPolicy** 全局单例 KKV `nm-compaction/policy`；**AgentDefinition 无 compact**；`abstract.type: agent` 用 **agentId** 引用 registry；CLI **`nm compaction`** show/set/clear；`.novel-master/agents/registry.json`）。示例 `examples/agent-writer.yaml`（无 compact）、`examples/compaction-policy.yaml`；UI 壳 `examples/mobile/`：会话操作抽屉 + 会话日志；**我的 → 压缩策略**（全局 mock）；迭代 `kb/docs/Iterations/global-compaction-policy/`、`mobile-prototype-session-drawer/`。**已移除**：`parsePromptYaml`、`DefaultCompactionService`、运行时 `agent.compaction.*`、`AgentDefinition.compact`、`PromptBlock.when`。CLI `nm`；默认库 `.novel-master/novel.db`；**PersistentState** / **PersistentPreferences**（`nm preferences`）。见 `CHANGELOG.md`；布局 `kb/docs/monorepo.md`。
