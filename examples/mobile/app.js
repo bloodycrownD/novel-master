@@ -18,6 +18,7 @@
         editingAgentId: null,
         defaultAgentId: 'agent-writer',
         agentEditorDirty: false,
+        rollbackInProgress: false,
     };
 
     const pageConfig = {
@@ -25,8 +26,7 @@
         agents: { title: 'Agent', showBack: false, showNav: true },
         profile: { title: '我的', showBack: false, showNav: true },
         realPrompt: { title: '真实提示词', showBack: true, showNav: false },
-        logs: { title: '工具日志', showBack: true, showNav: false },
-        checkpoints: { title: '检查点', showBack: true, showNav: false },
+        sessionLog: { title: '会话日志', showBack: true, showNav: false },
         providers: { title: '服务商管理', showBack: true, showNav: false },
         settings: { title: '扩展设置', showBack: true, showNav: false },
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
@@ -40,6 +40,7 @@
         drawerBtn: null,
         drawerOverlay: null,
         projectDrawer: null,
+        sessionActionsDrawer: null,
         sessionListView: null,
         chatConversationView: null,
         bannerProjectName: null,
@@ -56,6 +57,7 @@
         elements.drawerBtn = document.getElementById('drawerBtn');
         elements.drawerOverlay = document.getElementById('drawerOverlay');
         elements.projectDrawer = document.getElementById('projectDrawer');
+        elements.sessionActionsDrawer = document.getElementById('sessionActionsDrawer');
         elements.sessionListView = document.getElementById('sessionListView');
         elements.chatConversationView = document.getElementById('chatConversationView');
         elements.bannerProjectName = document.getElementById('bannerProjectName');
@@ -244,6 +246,13 @@
                 elements.pageTitle.textContent = '会话';
             }
             elements.backBtn.classList.toggle('hidden', appState.chatSubview !== 'conversation');
+            if (elements.drawerBtn) {
+                const inConversation = appState.chatSubview === 'conversation';
+                elements.drawerBtn.setAttribute(
+                    'aria-label',
+                    inConversation ? '打开会话操作' : '打开项目列表',
+                );
+            }
             return;
         }
 
@@ -269,16 +278,40 @@
         });
     }
 
-    function openDrawer() {
-        if (elements.drawerOverlay) elements.drawerOverlay.classList.remove('hidden');
+    function openProjectDrawer() {
+        closeDrawer();
+        if (elements.drawerOverlay) {
+            elements.drawerOverlay.classList.remove('hidden');
+            elements.drawerOverlay.setAttribute('aria-hidden', 'false');
+        }
         if (elements.projectDrawer) elements.projectDrawer.classList.add('open');
-        if (elements.drawerOverlay) elements.drawerOverlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function openSessionActionsDrawer() {
+        closeDrawer();
+        if (elements.drawerOverlay) {
+            elements.drawerOverlay.classList.remove('hidden');
+            elements.drawerOverlay.setAttribute('aria-hidden', 'false');
+        }
+        if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.add('open');
+    }
+
+    /** chatSubview: sessions → 项目抽屉；conversation → 会话操作抽屉 */
+    function openDrawer() {
+        if (appState.currentPage === 'chat' && appState.chatSubview === 'conversation') {
+            openSessionActionsDrawer();
+        } else {
+            openProjectDrawer();
+        }
     }
 
     function closeDrawer() {
-        if (elements.drawerOverlay) elements.drawerOverlay.classList.add('hidden');
+        if (elements.drawerOverlay) {
+            elements.drawerOverlay.classList.add('hidden');
+            elements.drawerOverlay.setAttribute('aria-hidden', 'true');
+        }
         if (elements.projectDrawer) elements.projectDrawer.classList.remove('open');
-        if (elements.drawerOverlay) elements.drawerOverlay.setAttribute('aria-hidden', 'true');
+        if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.remove('open');
     }
 
     function setupNavigation() {
@@ -326,13 +359,60 @@
         });
     }
 
-    function setupContextChips() {
-        document.querySelectorAll('.chip').forEach(function (chip) {
-            chip.addEventListener('click', function () {
-                const action = chip.dataset.action;
+    function setupSessionActionsDrawer() {
+        document.querySelectorAll('[data-session-action]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const action = btn.dataset.sessionAction;
+                closeDrawer();
                 if (action === 'real-prompt') navigateToPage('realPrompt', true);
-                else if (action === 'logs') navigateToPage('logs', true);
-                else if (action === 'checkpoints') navigateToPage('checkpoints', true);
+                else if (action === 'session-log') navigateToPage('sessionLog', true);
+            });
+        });
+    }
+
+    function performRollback(checkpointId) {
+        if (!checkpointId) return;
+        if (appState.rollbackInProgress) {
+            showToast('回滚进行中');
+            return;
+        }
+        if (!confirm('确定要回滚到检查点 ' + checkpointId + ' 吗？')) return;
+        appState.rollbackInProgress = true;
+        showToast('正在回滚...');
+        setTimeout(function () {
+            appState.rollbackInProgress = false;
+            showToast('回滚成功');
+        }, 1500);
+    }
+
+    function setupSessionLog() {
+        const page = document.getElementById('sessionLogPage');
+        if (!page) return;
+
+        page.querySelectorAll('.rollback-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                const item = btn.closest('[data-id]');
+                const expiredItem = btn.closest('[data-expired="true"]');
+                if (expiredItem || btn.disabled) {
+                    showToast('检查点已移除');
+                    return;
+                }
+                const checkpointId = item ? item.dataset.id : '';
+                performRollback(checkpointId);
+            });
+        });
+
+        page.querySelectorAll('.checkpoint-link').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                const checkpointId = link.dataset.checkpointId || link.textContent.trim();
+                performRollback(checkpointId);
+            });
+        });
+
+        page.querySelectorAll('[data-expired="true"] .rollback-btn').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                showToast('检查点已移除');
             });
         });
     }
@@ -738,28 +818,6 @@
                 else if (action === 'global-template') navigateToPage('globalTemplate', true);
                 else if (action === 'settings') navigateToPage('settings', true);
                 else if (action === 'debug') showToast('开发调试功能');
-            });
-        });
-    }
-
-    function setupCheckpoints() {
-        document.querySelectorAll('.rollback-btn').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                const checkpointItem = btn.closest('.checkpoint-item');
-                const checkpointId = checkpointItem ? checkpointItem.dataset.id : '';
-                if (!checkpointId) return;
-                if (confirm('确定要回滚到检查点 ' + checkpointId + ' 吗？')) {
-                    showToast('正在回滚...');
-                    setTimeout(function () {
-                        showToast('回滚成功');
-                    }, 1500);
-                }
-            });
-        });
-        document.querySelectorAll('.checkpoint-link').forEach(function (link) {
-            link.addEventListener('click', function (e) {
-                e.preventDefault();
-                navigateToPage('checkpoints', true);
             });
         });
     }
@@ -1641,10 +1699,10 @@
         setupDrawer();
         setupSessionListTabs();
         setupChatTopTabs();
-        setupContextChips();
+        setupSessionActionsDrawer();
+        setupSessionLog();
         setupVfsBrowsers();
         setupMenuItems();
-        setupCheckpoints();
         setupBottomSheet();
         setupFileEditor();
         setupAgentEditor();

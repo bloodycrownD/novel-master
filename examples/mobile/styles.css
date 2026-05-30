@@ -235,62 +235,14 @@ body {
     color: var(--primary-color);
 }
 
-.context-chips {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-}
-
-.context-chips::-webkit-scrollbar {
-    display: none;
-}
-
-/* 输入区上方悬浮的快捷 Chip */
 .chat-compose-dock {
-    position: relative;
     flex-shrink: 0;
-    z-index: 2;
     background: var(--surface-color);
     border-top: 1px solid var(--border-color);
 }
 
-.context-chips--floating {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 100%;
-    padding: 10px 12px 6px;
-    gap: 8px;
-    background: linear-gradient(
-        to top,
-        var(--surface-color) 55%,
-        rgba(255, 255, 255, 0.92) 100%
-    );
-    box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.06);
-    pointer-events: auto;
-}
-
-#chatPanelChat {
-    position: relative;
-}
-
 #chatPanelChat .messages {
-    padding-bottom: 52px;
-}
-
-.chip {
-    padding: 6px 12px;
-    background: var(--surface-color);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    font-size: 13px;
-    white-space: nowrap;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-}
-
-.chip:active {
-    background: var(--bg-color);
+    padding-bottom: 16px;
 }
 
 .messages {
@@ -870,9 +822,55 @@ body {
     color: #856404;
 }
 
-/* 日志列表 */
-.log-list {
+/* 会话日志时间线 */
+.session-timeline {
     padding: 16px;
+}
+
+.timeline-item {
+    position: relative;
+    padding: 16px;
+    background: var(--surface-color);
+    border-radius: 12px;
+    margin-bottom: 12px;
+}
+
+.timeline-kind {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: var(--bg-color);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+}
+
+.timeline-item--tool.log-item {
+    border-left: 4px solid var(--primary-color);
+}
+
+.timeline-item--tool.log-item.success {
+    border-left-color: var(--success-color);
+}
+
+.timeline-item--tool.log-item.failed {
+    border-left-color: var(--danger-color);
+}
+
+.timeline-item--checkpoint {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.checkpoint-expired-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.timeline-item[data-expired="true"] .rollback-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 .log-item {
@@ -920,19 +918,6 @@ body {
 .checkpoint-link {
     color: var(--primary-color);
     text-decoration: none;
-}
-
-/* 检查点列表 */
-.checkpoint-list {
-    padding: 16px;
-}
-
-.checkpoint-item {
-    padding: 16px;
-    background: var(--surface-color);
-    border-radius: 12px;
-    margin-bottom: 12px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .checkpoint-header {
@@ -1634,7 +1619,7 @@ body {
     pointer-events: auto;
 }
 
-.project-drawer {
+.side-drawer {
     position: fixed;
     top: 0;
     left: 0;
@@ -1650,8 +1635,31 @@ body {
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
 }
 
-.project-drawer.open {
+.side-drawer.open {
     transform: translateX(0);
+}
+
+.drawer-menu {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.drawer-menu-item {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--surface-color);
+    color: var(--text-primary);
+    font-size: 16px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.drawer-menu-item:active {
+    background: var(--bg-color);
 }
 
 .drawer-header {
@@ -1680,7 +1688,7 @@ body {
 }
 
 /* 防止文本选择（某些交互元素） */
-.nav-item, .chip, .file-menu-btn, .icon-btn {
+.nav-item, .file-menu-btn, .icon-btn {
     -webkit-user-select: none;
     user-select: none;
 }

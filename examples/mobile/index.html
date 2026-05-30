@@ -106,11 +106,6 @@
                         </div>
 
                         <div class="chat-compose-dock">
-                            <div class="context-chips context-chips--floating" aria-label="快捷入口">
-                                <button type="button" class="chip" data-action="real-prompt">真实提示词</button>
-                                <button type="button" class="chip" data-action="logs">工具日志</button>
-                                <button type="button" class="chip" data-action="checkpoints">检查点</button>
-                            </div>
                             <div class="input-area">
                                 <textarea placeholder="输入消息..." rows="1"></textarea>
                                 <button type="button" class="send-btn" aria-label="发送">
@@ -207,10 +202,14 @@ status: draft
                 </div>
             </div>
 
-            <!-- 工具日志页面 -->
-            <div id="logsPage" class="page">
-                <div class="log-list">
-                    <div class="log-item success">
+            <!-- 会话日志（工具执行 + 检查点统一时间线） -->
+            <div id="sessionLogPage" class="page">
+                <div class="info-banner warning">
+                    <span>⚠️ 最多保留 100 个检查点，超出后最旧的将被移除</span>
+                </div>
+                <div class="session-timeline">
+                    <article class="timeline-item timeline-item--tool log-item success" data-kind="tool">
+                        <span class="timeline-kind">工具</span>
                         <div class="log-header">
                             <span class="log-tool">read_file</span>
                             <span class="log-time">2分钟前</span>
@@ -218,10 +217,20 @@ status: draft
                         <div class="log-summary">读取 /chapters/chapter-03.md</div>
                         <div class="log-checkpoint">
                             <span>检查点: </span>
-                            <a href="#" class="checkpoint-link">cp_1234</a>
+                            <a href="#" class="checkpoint-link" data-checkpoint-id="cp_1234">cp_1234</a>
                         </div>
-                    </div>
-                    <div class="log-item success">
+                    </article>
+                    <article class="timeline-item timeline-item--checkpoint checkpoint-item" data-kind="checkpoint" data-id="cp_1234">
+                        <span class="timeline-kind">检查点</span>
+                        <div class="checkpoint-header">
+                            <span class="checkpoint-id">cp_1234</span>
+                            <span class="checkpoint-time">2分钟前</span>
+                        </div>
+                        <div class="checkpoint-source">来源: 工具执行 (read_file)</div>
+                        <button type="button" class="btn-secondary rollback-btn">回滚到此</button>
+                    </article>
+                    <article class="timeline-item timeline-item--tool log-item success" data-kind="tool">
+                        <span class="timeline-kind">工具</span>
                         <div class="log-header">
                             <span class="log-tool">write_file</span>
                             <span class="log-time">5分钟前</span>
@@ -229,49 +238,48 @@ status: draft
                         <div class="log-summary">写入 /chapters/chapter-02.md (1.2KB)</div>
                         <div class="log-checkpoint">
                             <span>检查点: </span>
-                            <a href="#" class="checkpoint-link">cp_1233</a>
+                            <a href="#" class="checkpoint-link" data-checkpoint-id="cp_1233">cp_1233</a>
                         </div>
-                    </div>
-                    <div class="log-item failed">
-                        <div class="log-header">
-                            <span class="log-tool">replace_in_file</span>
-                            <span class="log-time">10分钟前</span>
-                        </div>
-                        <div class="log-summary">替换失败: 未找到匹配内容</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 检查点页面 -->
-            <div id="checkpointsPage" class="page">
-                <div class="info-banner warning">
-                    <span>⚠️ 最多保留 100 个检查点，超出后最旧的将被移除</span>
-                </div>
-                <div class="checkpoint-list">
-                    <div class="checkpoint-item" data-id="cp_1234">
-                        <div class="checkpoint-header">
-                            <span class="checkpoint-id">cp_1234</span>
-                            <span class="checkpoint-time">2分钟前</span>
-                        </div>
-                        <div class="checkpoint-source">来源: 工具执行 (read_file)</div>
-                        <button class="btn-secondary rollback-btn">回滚到此</button>
-                    </div>
-                    <div class="checkpoint-item" data-id="cp_1233">
+                    </article>
+                    <article class="timeline-item timeline-item--checkpoint checkpoint-item" data-kind="checkpoint" data-id="cp_1233">
+                        <span class="timeline-kind">检查点</span>
                         <div class="checkpoint-header">
                             <span class="checkpoint-id">cp_1233</span>
                             <span class="checkpoint-time">5分钟前</span>
                         </div>
                         <div class="checkpoint-source">来源: 工具执行 (write_file)</div>
-                        <button class="btn-secondary rollback-btn">回滚到此</button>
-                    </div>
-                    <div class="checkpoint-item" data-id="cp_1232">
+                        <button type="button" class="btn-secondary rollback-btn">回滚到此</button>
+                    </article>
+                    <article class="timeline-item timeline-item--tool log-item failed" data-kind="tool">
+                        <span class="timeline-kind">工具</span>
+                        <div class="log-header">
+                            <span class="log-tool">replace_in_file</span>
+                            <span class="log-time">10分钟前</span>
+                        </div>
+                        <div class="log-summary">替换失败: 未找到匹配内容</div>
+                    </article>
+                    <article class="timeline-item timeline-item--tool log-item success" data-kind="tool" data-expired="true">
+                        <span class="timeline-kind">工具</span>
+                        <div class="log-header">
+                            <span class="log-tool">read_file</span>
+                            <span class="log-time">30分钟前</span>
+                        </div>
+                        <div class="log-summary">读取 /chapters/chapter-01.md</div>
+                        <div class="log-checkpoint">
+                            <span>检查点: </span>
+                            <span class="checkpoint-expired-label">cp_1200（已移除）</span>
+                        </div>
+                        <button type="button" class="btn-secondary rollback-btn" disabled>检查点已移除</button>
+                    </article>
+                    <article class="timeline-item timeline-item--checkpoint checkpoint-item" data-kind="checkpoint" data-id="cp_1232">
+                        <span class="timeline-kind">检查点</span>
                         <div class="checkpoint-header">
                             <span class="checkpoint-id">cp_1232</span>
                             <span class="checkpoint-time">1小时前</span>
                         </div>
                         <div class="checkpoint-source">来源: 手动保存</div>
-                        <button class="btn-secondary rollback-btn">回滚到此</button>
-                    </div>
+                        <button type="button" class="btn-secondary rollback-btn">回滚到此</button>
+                    </article>
                 </div>
             </div>
 
@@ -379,7 +387,7 @@ status: draft
 
     <!-- 左侧项目抽屉 -->
     <div id="drawerOverlay" class="drawer-overlay hidden" aria-hidden="true"></div>
-    <aside id="projectDrawer" class="project-drawer" aria-label="项目列表">
+    <aside id="projectDrawer" class="side-drawer project-drawer" aria-label="项目列表">
         <div class="drawer-header">
             <h2>项目</h2>
             <button type="button" class="btn-primary drawer-new-project" data-action="new-project">新建</button>
@@ -401,6 +409,15 @@ status: draft
                 </div>
             </div>
         </div>
+    </aside>
+    <aside id="sessionActionsDrawer" class="side-drawer session-actions-drawer" aria-label="会话操作">
+        <div class="drawer-header">
+            <h2>会话操作</h2>
+        </div>
+        <nav class="drawer-menu">
+            <button type="button" class="drawer-menu-item" data-session-action="real-prompt">真实提示词</button>
+            <button type="button" class="drawer-menu-item" data-session-action="session-log">会话日志</button>
+        </nav>
     </aside>
 
     <!-- 底部弹出菜单 -->
