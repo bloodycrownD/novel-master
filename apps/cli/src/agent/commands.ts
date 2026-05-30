@@ -116,7 +116,7 @@ export async function runAgent(
       const modelId =
         agentConfigPath != null && flagString(flags, "modelId") == null
           ? (await loadAgentConfigFile(agentConfigPath)).model.applicationModelId
-          : await resolveModelId(flags, rt.config);
+          : await resolveModelId(flags, rt.state);
       const content = flagString(flags, "content");
       const noStream = flags.get("no-stream") === true;
 

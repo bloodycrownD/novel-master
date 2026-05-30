@@ -8,9 +8,9 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import {
   bootstrapNovelMaster,
-  createConfigService,
-  createKkvService,
   createMessageService,
+  createPersistentPreferences,
+  createPersistentState,
   createProjectService,
   createScopedVfsService,
   createSessionFsService,
@@ -18,9 +18,9 @@ import {
   createProviderServices,
   createWorktreeService,
   open,
-  type ConfigService,
-  type KkvService,
   type ModelRequestService,
+  type PersistentPreferences,
+  type PersistentState,
   type ProviderModelService,
   type ProviderService,
   type SecretStore,
@@ -63,8 +63,8 @@ export function resolveDbPath(argv: readonly string[]): string {
 /** Open connection with all domain services wired. */
 export interface NovelMasterRuntime {
   readonly conn: TdbcConnection;
-  readonly kkv: KkvService;
-  readonly config: ConfigService;
+  readonly state: PersistentState;
+  readonly preferences: PersistentPreferences;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -96,9 +96,9 @@ export async function createNovelMasterRuntime(
   });
   await bootstrapNovelMaster(conn);
 
-  const kkv = createKkvService(conn);
-  const config = createConfigService(conn);
-  const scope = new CliScopeResolver(config);
+  const state = createPersistentState(conn);
+  const preferences = createPersistentPreferences(conn);
+  const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver("windows").createStore(conn);
   const secretStore = createCompositeSecretStore({
@@ -113,15 +113,13 @@ export async function createNovelMasterRuntime(
 
   return {
     conn,
-    kkv,
-    config,
+    state,
+    preferences,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
-    get scope() {
-      return scope;
-    },
+    scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

@@ -1,10 +1,10 @@
 /**
- * Resolves `--project` / `--session` from CLI flags or ConfigService.
+ * Resolves `--project` / `--session` from CLI flags or {@link PersistentState}.
  *
  * @module config/resolve-scope
  */
 
-import type { ConfigService } from "@novel-master/core";
+import type { PersistentState } from "@novel-master/core";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -15,35 +15,35 @@ function flagString(
 }
 
 /**
- * Priority: CLI flag > ConfigService > thrown error with usage hint.
+ * Priority: CLI flag > persistent state > thrown error with usage hint.
  */
 export class CliScopeResolver {
-  constructor(private readonly config: ConfigService) {}
+  constructor(private readonly state: PersistentState) {}
 
-  /** Flag `--project` > `config.get("currentProjectId")`. */
+  /** Flag `--project` > `getCurrentProjectId()`. */
   async resolveProjectId(flags: ReadonlyMap<string, string | true>): Promise<string> {
     const fromFlag = flagString(flags, "project");
     if (fromFlag != null) {
       return fromFlag;
     }
-    const fromConfig = await this.config.get("currentProjectId");
-    if (fromConfig != null && fromConfig !== "") {
-      return fromConfig;
+    const fromState = await this.state.getCurrentProjectId();
+    if (fromState != null && fromState !== "") {
+      return fromState;
     }
     throw new Error(
       "Missing --project <id> (or run: nm project use --project <id>)",
     );
   }
 
-  /** Flag `--session` > `config.get("currentSessionId")`. */
+  /** Flag `--session` > `getCurrentSessionId()`. */
   async resolveSessionId(flags: ReadonlyMap<string, string | true>): Promise<string> {
     const fromFlag = flagString(flags, "session");
     if (fromFlag != null) {
       return fromFlag;
     }
-    const fromConfig = await this.config.get("currentSessionId");
-    if (fromConfig != null && fromConfig !== "") {
-      return fromConfig;
+    const fromState = await this.state.getCurrentSessionId();
+    if (fromState != null && fromState !== "") {
+      return fromState;
     }
     throw new Error(
       "Missing --session <id> (or run: nm session use --session <id>)",

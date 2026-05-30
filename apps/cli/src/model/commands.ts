@@ -43,11 +43,11 @@ export async function runModel(
           { modelId },
         );
       }
-      await rt.config.set("currentModelId", modelId);
+      await rt.state.setCurrentModelId(modelId);
       return;
     }
     case "current": {
-      const modelId = await rt.config.get("currentModelId");
+      const modelId = await rt.state.getCurrentModelId();
       if (modelId == null || modelId === "") {
         throw new Error(
           "No current model (run: nm model use --modelId <provider>/<vendor>)",
@@ -63,7 +63,7 @@ export async function runModel(
           "Usage: nm model request --content <text> [--session <id>] [--modelId] [--raw]",
         );
       }
-      const modelId = await resolveModelId(flags, rt.config);
+      const modelId = await resolveModelId(flags, rt.state);
       const sessionId = flagString(flags, "session");
 
       if (sessionId != null) {

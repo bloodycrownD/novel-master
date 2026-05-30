@@ -30,20 +30,20 @@ export async function runProject(
       const name = typeof nameFlag === "string" ? nameFlag : "project";
       const p = await rt.projects.create(name);
       // Set current project and clear session
-      await rt.config.set("currentProjectId", p.id);
-      await rt.config.reset("currentSessionId");
+      await rt.state.setCurrentProjectId(p.id);
+      await rt.state.resetCurrentSessionId();
       console.log(p.id);
       return;
     }
     case "use": {
       const id = await resolveProjectUseId(rt.projects, flags);
       // Set current project and clear session
-      await rt.config.set("currentProjectId", id);
-      await rt.config.reset("currentSessionId");
+      await rt.state.setCurrentProjectId(id);
+      await rt.state.resetCurrentSessionId();
       return;
     }
     case "current": {
-      const id = await rt.config.get("currentProjectId");
+      const id = await rt.state.getCurrentProjectId();
       if (id == null || id === "") {
         throw new Error(
           "No current project (run: nm project use --project <id> or --name <name>)",
@@ -57,10 +57,10 @@ export async function runProject(
       const id = await rt.scope.resolveProjectId(flags);
       await rt.projects.delete(id);
       // Clear current project if it was deleted
-      const currentId = await rt.config.get("currentProjectId");
+      const currentId = await rt.state.getCurrentProjectId();
       if (currentId === id) {
-        await rt.config.reset("currentProjectId");
-        await rt.config.reset("currentSessionId");
+        await rt.state.resetCurrentProjectId();
+        await rt.state.resetCurrentSessionId();
       }
       return;
     }

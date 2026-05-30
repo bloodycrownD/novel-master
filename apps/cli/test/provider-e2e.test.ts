@@ -9,7 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliConfig } from "./helpers.js";
+import { readCliState } from "./helpers.js";
 import { runNm } from "./helpers.js";
 
 describe("provider CLI e2e", () => {
@@ -70,8 +70,8 @@ describe("provider CLI e2e", () => {
       const cur = runNm(["provider", "current", "--db", dbPath]);
       assert.equal(cur.status, 0, cur.stderr);
       assert.equal(cur.stdout.trim(), "openrouter");
-      const config = await readCliConfig(dbPath);
-      assert.equal(config.currentProviderId, "openrouter");
+      const state = await readCliState(dbPath);
+      assert.equal(state.currentProviderId, "openrouter");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

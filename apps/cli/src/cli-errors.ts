@@ -7,7 +7,7 @@
 import {
   AgentError,
   ChatError,
-  KkvError,
+  PreferencesError,
   PromptError,
   ProviderError,
   TdbcError,
@@ -24,7 +24,7 @@ export function formatCliError(error: unknown): string {
   }
   if (
     error instanceof VfsError ||
-    error instanceof KkvError ||
+    error instanceof PreferencesError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
@@ -45,7 +45,7 @@ export function exitCodeForError(error: unknown): number {
   }
   if (
     error instanceof VfsError ||
-    error instanceof KkvError ||
+    error instanceof PreferencesError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||

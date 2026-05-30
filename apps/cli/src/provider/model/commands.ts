@@ -30,7 +30,7 @@ export async function runProviderModel(
     if (suggestSub !== "list") {
       throw new Error("Usage: nm provider model suggest list ...");
     }
-    const providerId = await resolveProviderId(parseCliArgs(args.slice(1)).flags, rt.config);
+    const providerId = await resolveProviderId(parseCliArgs(args.slice(1)).flags, rt.state);
     const list = await rt.providerModels.suggestList(providerId);
     for (const s of list) {
       console.log(
@@ -40,7 +40,7 @@ export async function runProviderModel(
     return;
   }
 
-  const providerId = await resolveProviderId(flags, rt.config);
+  const providerId = await resolveProviderId(flags, rt.state);
 
   switch (subcommand) {
     case "fetch": {

@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliConfig, runNm } from "./helpers.js";
+import { readCliState, runNm } from "./helpers.js";
 
 const MOCK_ENV = {
   NM_AGENT_MOCK_LLM: "1",
@@ -62,7 +62,7 @@ describe("agent config CLI", () => {
       assert.equal(agent.status, 0, agent.stderr);
       assert.match(agent.stdout, /Assistant reply \(single step\)/);
 
-      const cfg = await readCliConfig(dbPath);
+      const cfg = await readCliState(dbPath);
       assert.equal(cfg.currentSessionId, sessionId);
     } finally {
       await rm(dir, { recursive: true, force: true });

@@ -30,7 +30,7 @@ function runCli(
 }
 
 describe("chat CLI smoke", () => {
-  it("project → session → message → kkv happy path", async () => {
+  it("project → session → message → preferences happy path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-chat-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -70,30 +70,24 @@ describe("chat CLI smoke", () => {
       ]);
       assert.equal(msg.status, 0, msg.stderr);
 
-      const kkv = runCli([
-        "kkv",
+      const pref = runCli([
+        "preferences",
         "set",
-        "--module",
-        "smoke",
-        "--key",
-        "k",
-        "--value",
-        "v",
+        "session-fs.versionCheck",
+        "false",
         "--db",
         dbPath,
       ]);
-      assert.equal(kkv.status, 0, kkv.stderr);
+      assert.equal(pref.status, 0, pref.stderr);
       const got = runCli([
-        "kkv",
+        "preferences",
         "get",
-        "--module",
-        "smoke",
-        "--key",
-        "k",
+        "session-fs.versionCheck",
         "--db",
         dbPath,
       ]);
-      assert.equal(got.stdout.trim(), "v");
+      assert.equal(got.status, 0, got.stderr);
+      assert.equal(got.stdout.trim(), "false");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

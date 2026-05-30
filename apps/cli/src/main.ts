@@ -5,8 +5,7 @@
  */
 
 import { greet, type VfsService } from "@novel-master/core";
-import { runConfig } from "./config-cmd/commands.js";
-import { runKkv } from "./kkv/commands.js";
+import { runPreferences } from "./preferences-cmd/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
 import { runProjectVfs } from "./project/vfs.js";
@@ -78,6 +77,13 @@ async function runVfs(argv: string[]): Promise<number> {
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const top = argv[0];
 
+  if (top === "config" || top === "kkv") {
+    console.error(
+      `Unknown command: ${top}. Use 'nm preferences' for settings; workspace pointers are set via project/session/provider/model use.`,
+    );
+    return EXIT_USAGE;
+  }
+
   if (top === "vfs") {
     try {
       return await runVfs(argv.slice(1));
@@ -88,8 +94,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 
   if (
-    top === "config" ||
-    top === "kkv" ||
+    top === "preferences" ||
     top === "project" ||
     top === "session" ||
     top === "message" ||
@@ -107,11 +112,8 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
         return EXIT_USAGE;
       }
       switch (top) {
-        case "config":
-          await runConfig(rt.config, sub, rest);
-          break;
-        case "kkv":
-          await runKkv(rt.kkv, sub, rest);
+        case "preferences":
+          await runPreferences(rt.preferences, sub, rest);
           break;
         case "project":
           if (sub === "vfs") {

@@ -98,14 +98,14 @@ export async function runProvider(
       const id = requireProviderId(flags);
       await rt.providers.delete(id);
       // Clear current provider if it was deleted
-      const currentProviderId = await rt.config.get("currentProviderId");
+      const currentProviderId = await rt.state.getCurrentProviderId();
       if (currentProviderId === id) {
-        await rt.config.reset("currentProviderId");
+        await rt.state.resetCurrentProviderId();
       }
       // Clear current model if it belongs to this provider
-      const currentModelId = await rt.config.get("currentModelId");
+      const currentModelId = await rt.state.getCurrentModelId();
       if (currentModelId?.startsWith(`${id}/`)) {
-        await rt.config.reset("currentModelId");
+        await rt.state.resetCurrentModelId();
       }
       return;
     }
@@ -152,11 +152,11 @@ export async function runProvider(
     case "use": {
       const id = requireProviderId(flags);
       await rt.providers.get(id);
-      await rt.config.set("currentProviderId", id);
+      await rt.state.setCurrentProviderId(id);
       return;
     }
     case "current": {
-      const id = await rt.config.get("currentProviderId");
+      const id = await rt.state.getCurrentProviderId();
       if (id == null || id === "") {
         throw new Error(
           "No current provider (run: nm provider use --providerId <id>)",

@@ -33,7 +33,8 @@ const SESSION_VFS_COMMANDS: Record<
 
 type SessionDeps = Pick<
   NovelMasterRuntime,
-  | "config"
+  | "state"
+  | "preferences"
   | "sessions"
   | "sessionFs"
   | "sessionVfs"
@@ -63,13 +64,13 @@ export async function runSession(
         typeof flags.get("title") === "string" ? String(flags.get("title")) : null;
       const s = await deps.sessions.create(projectId, title);
       // Set current project and session
-      await deps.config.set("currentProjectId", projectId);
-      await deps.config.set("currentSessionId", s.id);
+      await deps.state.setCurrentProjectId(projectId);
+      await deps.state.setCurrentSessionId(s.id);
       console.log(s.id);
       return;
     }
     case "use": {
-      const currentProjectId = await deps.config.get("currentProjectId");
+      const currentProjectId = await deps.state.getCurrentProjectId();
       const id = await resolveSessionUseId(
         deps.sessions,
         flags,
@@ -77,12 +78,12 @@ export async function runSession(
       );
       const session = await deps.sessions.get(id);
       // Set current project and session
-      await deps.config.set("currentProjectId", session.projectId);
-      await deps.config.set("currentSessionId", id);
+      await deps.state.setCurrentProjectId(session.projectId);
+      await deps.state.setCurrentSessionId(id);
       return;
     }
     case "current": {
-      const id = await deps.config.get("currentSessionId");
+      const id = await deps.state.getCurrentSessionId();
       if (id == null || id === "") {
         throw new Error(
           "No current session (run: nm session use --session <id> or --title <title>)",
@@ -96,9 +97,9 @@ export async function runSession(
       const sessionId = await deps.scope.resolveSessionId(flags);
       await deps.sessions.delete(sessionId);
       // Clear current session if it was deleted
-      const currentSessionId = await deps.config.get("currentSessionId");
+      const currentSessionId = await deps.state.getCurrentSessionId();
       if (currentSessionId === sessionId) {
-        await deps.config.reset("currentSessionId");
+        await deps.state.resetCurrentSessionId();
       }
       return;
     }
@@ -202,7 +203,7 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
   
   // Special handling for write command: read versionCheck config
   if (group === "write") {
-    const versionCheck = await deps.config.getBoolean("session-fs.versionCheck", true);
+    const versionCheck = await deps.preferences.getSessionFsVersionCheck();
     await runWrite(vfs, subArgs, { defaultNoVersionCheck: !versionCheck });
     return;
   }

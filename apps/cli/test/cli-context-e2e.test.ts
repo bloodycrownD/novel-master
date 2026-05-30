@@ -3,17 +3,17 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { dbDir, readCliConfig, runNm } from "./helpers.js";
+import { dbDir, readCliState, runNm } from "./helpers.js";
 
-describe("CLI config context e2e", () => {
-  it("T1: project create writes currentProjectId to config", async () => {
+describe("CLI state context e2e", () => {
+  it("T1: project create writes currentProjectId to persistent state", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
     const dbPath = join(dir, "novel.db");
     try {
       const create = runNm(["project", "create", "--name", "A", "--db", dbPath]);
       assert.equal(create.status, 0, create.stderr);
       const projectId = create.stdout.trim();
-      const config = await readCliConfig(dbPath);
+      const config = await readCliState(dbPath);
       assert.equal(config.currentProjectId, projectId);
       assert.equal(config.currentSessionId, undefined);
     } finally {
@@ -21,7 +21,7 @@ describe("CLI config context e2e", () => {
     }
   });
 
-  it("T2: session create without --project uses config project", async () => {
+  it("T2: session create without --project uses state project", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -40,7 +40,7 @@ describe("CLI config context e2e", () => {
       assert.equal(session.status, 0, session.stderr);
       const sessionId = session.stdout.trim();
 
-      const config = await readCliConfig(dbPath);
+      const config = await readCliState(dbPath);
       assert.equal(config.currentProjectId, projectId);
       assert.equal(config.currentSessionId, sessionId);
     } finally {
@@ -172,7 +172,7 @@ describe("CLI config context e2e", () => {
       const p1 = runNm(["project", "create", "--name", "P1", "--db", dbPath]).stdout
         .trim();
       runNm(["session", "create", "--db", dbPath]);
-      let config = await readCliConfig(dbPath);
+      let config = await readCliState(dbPath);
       assert.ok(config.currentSessionId);
 
       const p2 = runNm([
@@ -187,7 +187,7 @@ describe("CLI config context e2e", () => {
       const use = runNm(["project", "use", "--project", p2, "--db", dbPath]);
       assert.equal(use.status, 0, use.stderr);
 
-      config = await readCliConfig(dbPath);
+      config = await readCliState(dbPath);
       assert.equal(config.currentProjectId, p2);
       assert.equal(config.currentSessionId, undefined);
     } finally {
@@ -195,13 +195,13 @@ describe("CLI config context e2e", () => {
     }
   });
 
-  it("T7: config path follows --db directory", async () => {
+  it("T7: state path follows --db directory", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
     const subDir = join(dir, "sub");
     const dbPath = join(subDir, "db.sqlite");
     try {
       runNm(["project", "create", "--name", "A", "--db", dbPath]);
-      const config = await readCliConfig(dbPath);
+      const config = await readCliState(dbPath);
       assert.ok(config.currentProjectId);
       assert.equal(dbDir(dbPath), subDir);
     } finally {
@@ -226,7 +226,7 @@ describe("CLI config context e2e", () => {
       ]);
       assert.equal(del.status, 0, del.stderr);
 
-      const config = await readCliConfig(dbPath);
+      const config = await readCliState(dbPath);
       assert.equal(config.currentSessionId, undefined);
       assert.ok(config.currentProjectId);
     } finally {
@@ -271,12 +271,12 @@ describe("CLI config context e2e", () => {
     }
   });
 
-  it("T9: message list without config session fails with use hint", async () => {
+  it("T9: message list without state session fails with use hint", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-ctx-"));
     const dbPath = join(dir, "novel.db");
     try {
       runNm(["project", "create", "--name", "A", "--db", dbPath]);
-      const config = await readCliConfig(dbPath);
+      const config = await readCliState(dbPath);
       assert.ok(config.currentProjectId);
       assert.equal(config.currentSessionId, undefined);
 

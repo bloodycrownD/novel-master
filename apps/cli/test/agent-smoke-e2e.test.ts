@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliConfig, runNm } from "./helpers.js";
+import { readCliState, runNm } from "./helpers.js";
 
 const MOCK_ENV = {
   NM_AGENT_MOCK_LLM: "1",
@@ -58,7 +58,7 @@ describe("agent CLI smoke", () => {
       assert.equal(listed.status, 0, listed.stderr);
       assert.match(listed.stdout, /assistant/);
 
-      const cfg = await readCliConfig(dbPath);
+      const cfg = await readCliState(dbPath);
       assert.equal(cfg.currentProjectId, projectId);
       assert.equal(cfg.currentSessionId, sessionId);
     } finally {
