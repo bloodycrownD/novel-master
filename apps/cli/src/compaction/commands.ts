@@ -9,15 +9,17 @@ import { extname } from "node:path";
 import { parse as parseYaml } from "yaml";
 import {
   compactionPolicyFromJson,
+  compactionPolicyTemplateFromJson,
   compactionPolicyToJson,
   CompactionPolicyError,
+  type CompactionPolicy,
   type CompactionPolicyStore,
   type CompactionAgentResolver,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveDbPath } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { listRegistryAgentIds } from "./file-agent-resolver.js";
+import { listBundleAgentIds } from "./file-agent-resolver.js";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -37,14 +39,14 @@ async function parsePolicyFile(path: string): Promise<unknown> {
 }
 
 async function validateAgentIdsInPolicy(
-  policy: ReturnType<typeof compactionPolicyFromJson>,
+  policy: CompactionPolicy,
   dbPath: string,
 ): Promise<void> {
   const abstract = policy.action.abstract;
   if (abstract.type !== "agent") {
     return;
   }
-  const ids = await listRegistryAgentIds(dbPath);
+  const ids = await listBundleAgentIds(dbPath);
   if (!ids.includes(abstract.agentId)) {
     throw new CompactionPolicyError(
       "AGENT_NOT_FOUND",
@@ -80,17 +82,35 @@ export async function runCompaction(
         throw new Error("Usage: nm compaction set --file <path>");
       }
       const raw = await parsePolicyFile(filePath);
-      const policy = compactionPolicyFromJson(raw);
+      const template = compactionPolicyTemplateFromJson(raw);
+      const policy = compactionPolicyFromJson({
+        ...template,
+        enabled: true,
+      });
       await validateAgentIdsInPolicy(policy, dbPath);
       await store.setPolicy(policy);
       return;
     }
+    case "disable": {
+      const policy = await store.getPolicy();
+      if (policy == null) {
+        throw new CompactionPolicyError(
+          "NOT_FOUND",
+          "No compaction policy configured; nothing to disable",
+        );
+      }
+      await store.setPolicy({ ...policy, enabled: false });
+      return;
+    }
+    case "remove":
     case "clear": {
       await store.clearPolicy();
       return;
     }
     default:
-      throw new Error("Usage: nm compaction <show|set|clear> [--file <path>] [--db <path>]");
+      throw new Error(
+        "Usage: nm compaction <show|set|disable|remove|clear> [--file <path>] [--db <path>]",
+      );
   }
 }
 

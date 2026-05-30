@@ -1,0 +1,21 @@
+schemaVersion: 1
+agents:
+  writer:
+    runtime:
+      maxSteps: 20
+    prompts:
+      blocks:
+        system:
+          type: text
+          role: system
+          content: "You are a helpful assistant."
+        abstract:
+          type: abstract
+          content: |
+            压缩后的内容如下：
+            {{.abstract}}
+        history:
+          type: chat
+  summarizer:
+    prompts:
+      blocks: {}

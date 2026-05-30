@@ -25,26 +25,31 @@ export interface ResolveCliApplicationModelIdInput {
 }
 
 /**
- * Resolves model id for agent run: `--modelId` → preferredModelId → current workspace model.
- * @throws when no source is available
+ * Resolves model id for agent run: `--modelId` → agent `model` pin → workspace current model.
+ * @throws when no source is available for dialogue model
  */
 export async function resolveCliApplicationModelId(
   input: ResolveCliApplicationModelIdInput,
-): Promise<{ applicationModelId: string; cliModelId?: string }> {
+): Promise<{
+  applicationModelId: string;
+  workspaceModelId: string;
+  cliModelId?: string;
+}> {
   const cliModelId = flagString(input.flags, "modelId");
-  const workspaceModelId = await input.state.getCurrentModelId();
+  const workspaceModelId = (await input.state.getCurrentModelId()) ?? "";
   const resolved = resolveApplicationModelId({
     cliModelId,
-    preferredModelId: input.definition.preferredModelId,
-    workspaceModelId,
+    agentModelId: input.definition.model,
+    workspaceModelId: workspaceModelId || undefined,
   });
   if (resolved == null || resolved === "") {
     throw new Error(
-      "No model selected. Use --modelId <provider>/<vendor>, set preferredModelId on the agent, or run: nm model use --modelId <id>",
+      "No model selected. Use --modelId <provider>/<vendor>, set model on the agent, or run: nm model use --modelId <id>",
     );
   }
   return {
     applicationModelId: resolved,
+    workspaceModelId,
     ...(cliModelId != null ? { cliModelId } : {}),
   };
 }

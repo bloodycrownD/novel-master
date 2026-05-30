@@ -1,26 +1,41 @@
 # Novel Master examples
 
-## Global compaction policy + agent registry
+## Global compaction policy + agents bundle
 
-`examples/compaction-policy.yaml` references `summarizer` via `action.abstract.agentId`. The CLI resolves that id from a file registry under your Novel Master home (the directory that contains `novel.db`).
+`examples/compaction-policy.yaml` references `summarizer` via `action.abstract.agentId`. The CLI resolves that id from **`{novelMasterHome}/agents.yaml`** (the directory that contains `novel.db`).
 
-Copy the example registry and agents into `.novel-master/` (or set `NOVEL_MASTER_HOME` to another home directory):
+Copy the example bundle and policy into your Novel Master home:
 
 ```bash
-mkdir -p .novel-master/agents
-cp examples/agents-registry.example.json .novel-master/agents/registry.json
-cp examples/agents/summarizer.yaml .novel-master/agents/summarizer.yaml
-# optional: dialogue agent for registry key "writer"
-cp examples/agent-writer.yaml .novel-master/agents/writer.yaml
+cp examples/agents.yaml .novel-master/agents.yaml
 ```
 
-Registry paths are relative to the home directory, so `agents/summarizer.yaml` resolves to `.novel-master/agents/summarizer.yaml`.
-
-Apply the policy:
+Apply the policy (template has no `enabled`; import sets `enabled: true`):
 
 ```bash
 nm compaction set --file examples/compaction-policy.yaml --db .novel-master/novel.db
 nm compaction show --db .novel-master/novel.db
 ```
 
-Dialogue agents (for example `examples/agent-writer.yaml`) must **not** include a `compact:` block; compaction is configured globally only.
+Pause compaction without deleting the policy:
+
+```bash
+nm compaction disable --db .novel-master/novel.db
+```
+
+Remove the policy entirely:
+
+```bash
+nm compaction remove --db .novel-master/novel.db
+# alias: nm compaction clear
+```
+
+Run a dialogue agent from the bundle:
+
+```bash
+nm agent run --agent-config examples/agents.yaml --agent-id writer --db .novel-master/novel.db
+```
+
+`prompts.blocks` is an **ordered map** (YAML keys are block names). Do not use array format or per-block `name` fields.
+
+Dialogue agents must **not** include a `compact:` block; compaction is configured globally only.

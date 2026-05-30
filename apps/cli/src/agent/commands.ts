@@ -20,7 +20,7 @@ import {
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
-import { loadAgentConfigFile } from "../config/load-agent-config-file.js";
+import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
 import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
@@ -37,11 +37,12 @@ async function resolveDefinition(
   flags: ReadonlyMap<string, string | true>,
 ): Promise<AgentDefinition> {
   const agentConfigPath = flagString(flags, "agent-config");
+  const agentId = flagString(flags, "agent-id");
   const promptPath = flagString(flags, "prompt-path");
 
   let definition: AgentDefinition;
   if (agentConfigPath != null) {
-    definition = await loadAgentConfigFile(agentConfigPath);
+    definition = await loadAgentFromConfig(agentConfigPath, agentId);
   } else if (promptPath != null) {
     const source = await readFile(promptPath, "utf8");
     const blocks = loadPromptBlocksFromYaml(source);
@@ -95,11 +96,12 @@ export async function runAgent(
       const noStream = flags.get("no-stream") === true;
 
       const definition = await resolveDefinition(rt, flags);
-      const { applicationModelId, cliModelId } = await resolveCliApplicationModelId({
-        flags,
-        definition,
-        state: rt.state,
-      });
+      const { applicationModelId, workspaceModelId, cliModelId } =
+        await resolveCliApplicationModelId({
+          flags,
+          definition,
+          state: rt.state,
+        });
       const maxSteps =
         subcommand === "continue"
           ? 1
@@ -153,6 +155,7 @@ export async function runAgent(
       const result = await runner.run({
         definition,
         applicationModelId,
+        workspaceModelId,
         cliModelId,
         maxSteps,
         promptContext: { worktreeDisplay },
@@ -177,7 +180,7 @@ export async function runAgent(
     }
     default:
       throw new Error(
-        "Usage: nm agent <run|continue> [--content <text>] [--agent-config <file>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
+        "Usage: nm agent <run|continue> [--content <text>] [--agent-config <file>] [--agent-id <id>] [--prompt-path <file>] [--max-steps <n>] [--no-stream] [--session] [--project] [--modelId]",
       );
   }
 }

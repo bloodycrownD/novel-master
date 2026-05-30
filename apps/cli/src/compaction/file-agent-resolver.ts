@@ -1,59 +1,54 @@
 /**
- * File-based agent registry resolver for compaction summary agents.
+ * Resolves compaction summary agents from `{novelMasterHome}/agents.yaml` bundle.
  *
  * @module compaction/file-agent-resolver
  */
 
 import { readFile } from "node:fs/promises";
-import { isAbsolute, join, resolve } from "node:path";
+import { join } from "node:path";
+import { parse as parseYaml } from "yaml";
 import {
+  agentsBundleFromJson,
   CompactionPolicyError,
-  deserializeAgentDefinition,
   type AgentDefinition,
   type CompactionAgentResolver,
 } from "@novel-master/core";
 import { resolveNovelMasterHome } from "./novel-master-home.js";
 
-interface AgentRegistryDocument {
-  readonly schemaVersion: 1;
-  readonly agents: Record<string, string>;
-}
+const AGENTS_BUNDLE_FILE = "agents.yaml";
 
-function parseRegistry(raw: string): AgentRegistryDocument {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw) as unknown;
-  } catch {
-    throw new CompactionPolicyError("INVALID_SCHEMA", "registry.json: invalid JSON");
-  }
-  if (
-    typeof parsed !== "object" ||
-    parsed == null ||
-    (parsed as AgentRegistryDocument).schemaVersion !== 1 ||
-    typeof (parsed as AgentRegistryDocument).agents !== "object" ||
-    (parsed as AgentRegistryDocument).agents == null
-  ) {
-    throw new CompactionPolicyError("INVALID_SCHEMA", "registry.json: invalid shape");
-  }
-  return parsed as AgentRegistryDocument;
-}
-
-async function loadRegistry(home: string): Promise<AgentRegistryDocument> {
-  const path = join(home, "agents", "registry.json");
+async function loadAgentsBundle(
+  home: string,
+): Promise<ReadonlyMap<string, AgentDefinition>> {
+  const path = join(home, AGENTS_BUNDLE_FILE);
   let raw: string;
   try {
     raw = await readFile(path, "utf8");
   } catch {
     throw new CompactionPolicyError(
       "INVALID_SCHEMA",
-      `agent registry not found: ${path}`,
+      `agents bundle not found: ${path} (expected ${AGENTS_BUNDLE_FILE} with schemaVersion and agents map)`,
     );
   }
-  return parseRegistry(raw);
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(raw) as unknown;
+  } catch {
+    throw new CompactionPolicyError("INVALID_SCHEMA", `${AGENTS_BUNDLE_FILE}: invalid YAML`);
+  }
+  try {
+    return agentsBundleFromJson(parsed);
+  } catch (error) {
+    if (error instanceof CompactionPolicyError) {
+      throw error;
+    }
+    const message = error instanceof Error ? error.message : "invalid bundle";
+    throw new CompactionPolicyError("INVALID_SCHEMA", `${AGENTS_BUNDLE_FILE}: ${message}`);
+  }
 }
 
 /**
- * Creates a resolver that reads `{home}/agents/registry.json`.
+ * Creates a resolver that reads agent definitions from `{home}/agents.yaml`.
  */
 export function createFileCompactionAgentResolver(
   dbPath: string,
@@ -62,30 +57,26 @@ export function createFileCompactionAgentResolver(
 
   return {
     async resolve(agentId: string): Promise<AgentDefinition> {
-      const registry = await loadRegistry(home);
-      const relative = registry.agents[agentId];
-      if (relative == null) {
+      const bundle = await loadAgentsBundle(home);
+      const def = bundle.get(agentId);
+      if (def == null) {
         throw new CompactionPolicyError(
           "AGENT_NOT_FOUND",
           `agent not found: ${agentId}`,
           { agentId },
         );
       }
-      const agentPath = isAbsolute(relative)
-        ? relative
-        : resolve(home, relative);
-      const source = await readFile(agentPath, "utf8");
-      return deserializeAgentDefinition(source);
+      return def;
     },
   };
 }
 
-/** Returns registered agent ids from registry.json (empty when missing). */
-export async function listRegistryAgentIds(dbPath: string): Promise<readonly string[]> {
+/** Returns agent ids from `{home}/agents.yaml` (empty when bundle is missing). */
+export async function listBundleAgentIds(dbPath: string): Promise<readonly string[]> {
   const home = resolveNovelMasterHome(dbPath);
   try {
-    const registry = await loadRegistry(home);
-    return Object.keys(registry.agents).sort();
+    const bundle = await loadAgentsBundle(home);
+    return [...bundle.keys()].sort();
   } catch (error) {
     if (error instanceof CompactionPolicyError) {
       return [];

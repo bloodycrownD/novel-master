@@ -15,17 +15,17 @@ schemaVersion: 1
 name: e2e-agent
 prompts:
   blocks:
-    - name: c
+    c:
       type: chat
 `;
 
 const AGENT_WITH_PINNED_MODEL = `
 schemaVersion: 1
 name: e2e-pin
-preferredModelId: mock/pinned
+model: mock/pinned
 prompts:
   blocks:
-    - name: c
+    c:
       type: chat
 `;
 
@@ -172,7 +172,7 @@ describe("agent config CLI", () => {
     try {
       await writeFile(
         promptPath,
-        `blocks:\n  - name: c\n    type: chat\n`,
+        `blocks:\n  c:\n    type: chat\n`,
         "utf8",
       );
 
@@ -214,7 +214,7 @@ describe("agent config CLI", () => {
     }
   });
 
-  it("E2: --modelId overrides agent preferredModelId", async () => {
+  it("E2: --modelId overrides agent model pin", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-e2-"));
     const dbPath = join(dir, "novel.db");
     const agentPath = join(dir, "agent.yaml");
