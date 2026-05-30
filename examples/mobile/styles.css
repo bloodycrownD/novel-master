@@ -71,8 +71,22 @@ body {
     background: rgba(0,0,0,0.05);
 }
 
+.hidden {
+    display: none !important;
+}
+
 .icon-btn.hidden {
     visibility: hidden;
+    display: none !important;
+}
+
+/* Agent 模型：未启用专属模型时不展示服务商/模型选择 */
+.agent-model-section:not(.agent-model-section--enabled) .agent-model-pickers {
+    display: none !important;
+}
+
+.agent-model-section.agent-model-section--enabled .agent-model-hint-off {
+    display: none !important;
 }
 
 /* 主内容区 */
