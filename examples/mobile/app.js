@@ -48,7 +48,6 @@
         drawerBtn: null,
         drawerOverlay: null,
         projectDrawer: null,
-        chatDrawer: null,
         sessionActionsDrawer: null,
         sessionListView: null,
         chatConversationView: null,
@@ -66,7 +65,6 @@
         elements.drawerBtn = document.getElementById('drawerBtn');
         elements.drawerOverlay = document.getElementById('drawerOverlay');
         elements.projectDrawer = document.getElementById('projectDrawer');
-        elements.chatDrawer = document.getElementById('chatDrawer');
         elements.sessionActionsDrawer = document.getElementById('sessionActionsDrawer');
         elements.sessionListView = document.getElementById('sessionListView');
         elements.chatConversationView = document.getElementById('chatConversationView');
@@ -289,7 +287,7 @@
         const inConversation = appState.chatSubview === 'conversation';
         elements.drawerBtn.setAttribute(
             'aria-label',
-            inConversation ? '打开聊天菜单' : '打开项目列表',
+            inConversation ? '打开会话操作' : '打开项目列表',
         );
     }
 
@@ -302,16 +300,6 @@
         if (elements.projectDrawer) elements.projectDrawer.classList.add('open');
     }
 
-    function openChatDrawer() {
-        closeDrawer();
-        if (elements.drawerOverlay) {
-            elements.drawerOverlay.classList.remove('hidden');
-            elements.drawerOverlay.setAttribute('aria-hidden', 'false');
-        }
-        if (elements.chatDrawer) elements.chatDrawer.classList.add('open');
-        refreshWorkspaceModelDisplays();
-    }
-
     function openSessionActionsDrawer() {
         closeDrawer();
         if (elements.drawerOverlay) {
@@ -319,12 +307,13 @@
             elements.drawerOverlay.setAttribute('aria-hidden', 'false');
         }
         if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.add('open');
+        refreshWorkspaceModelDisplays();
     }
 
-    /** sessions 列表 → 项目抽屉；聊天中 → 聊天抽屉（模型切换），会话操作见顶栏按钮 */
+    /** 会话列表 → 项目抽屉；聊天中 → 会话操作抽屉（含切换模型、真实提示词、会话日志） */
     function openDrawer() {
         if (appState.chatSubview === 'conversation') {
-            openChatDrawer();
+            openSessionActionsDrawer();
         } else {
             openProjectDrawer();
         }
@@ -336,7 +325,6 @@
             elements.drawerOverlay.setAttribute('aria-hidden', 'true');
         }
         if (elements.projectDrawer) elements.projectDrawer.classList.remove('open');
-        if (elements.chatDrawer) elements.chatDrawer.classList.remove('open');
         if (elements.sessionActionsDrawer) elements.sessionActionsDrawer.classList.remove('open');
     }
 
@@ -1122,8 +1110,8 @@
 
     function refreshWorkspaceModelDisplays() {
         const label = modelShortLabel(appState.workspaceCurrentModelId);
-        const chatDrawerEl = document.getElementById('chatDrawerCurrentModelLabel');
-        if (chatDrawerEl) chatDrawerEl.textContent = label;
+        const sessionDrawerEl = document.getElementById('sessionDrawerCurrentModelLabel');
+        if (sessionDrawerEl) sessionDrawerEl.textContent = label;
         const profileEl = document.getElementById('profileCurrentModelLabel');
         if (profileEl) profileEl.textContent = label;
         updateChatAgentMeta();
@@ -1446,7 +1434,7 @@
         html += '<span>启用 Agent 专属模型</span>';
         html += '<input type="checkbox" data-agent-field="modelEnabled"' + (modelEnabled ? ' checked' : '') + '>';
         html += '</label>';
-        html += '<p class="agent-field-hint">关闭时使用工作区当前模型（聊天页抽屉 / 我的）。温度等采样在服务商-模型配置中设置，此处仅选模型。</p>';
+        html += '<p class="agent-field-hint">关闭时使用工作区当前模型（会话操作抽屉 / 我的）。温度等采样在服务商-模型配置中设置，此处仅选模型。</p>';
         html += '<div class="agent-model-pickers' + (modelEnabled ? '' : ' hidden') + '" data-agent-model-pickers>';
         html += '<label class="agent-field"><span>服务商</span><select data-agent-field="providerId">';
         MOCK_PROVIDERS.forEach(function (p) {
@@ -1905,11 +1893,6 @@
     function setupWorkspaceModel() {
         loadWorkspaceModel();
         refreshWorkspaceModelDisplays();
-        document.querySelectorAll('[data-action="open-session-actions"]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                openSessionActionsDrawer();
-            });
-        });
         document.querySelectorAll('[data-action="open-model-picker"]').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 openModelPickerModal();
