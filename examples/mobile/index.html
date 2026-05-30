@@ -146,6 +146,11 @@
                         <div class="menu-label">压缩策略</div>
                         <div class="menu-arrow">›</div>
                     </div>
+                    <div class="menu-item" data-action="regex-config">
+                        <div class="menu-icon">🛡️</div>
+                        <div class="menu-label">正则配置</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
                     <div class="menu-item" data-action="global-template">
                         <div class="menu-icon">🌐</div>
                         <div class="menu-label">全局模板</div>
@@ -336,6 +341,56 @@ status: draft
                 <div id="modelSamplingRoot" class="model-sampling-editor"></div>
             </div>
 
+            <!-- 正则组列表 -->
+            <div id="regexGroupsPage" class="page">
+                <div id="regexCurrentBanner" class="info-banner regex-current-banner hidden"></div>
+                <div class="manage-header" data-batch-header="regexGroups">
+                    <div class="manage-header-normal section-header">
+                        <h2>正则组</h2>
+                        <div class="section-header-actions">
+                            <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="regexGroups">管理</button>
+                            <button type="button" class="btn-primary" data-action="new-regex-group">添加</button>
+                        </div>
+                    </div>
+                    <div class="manage-header-batch section-header hidden">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                        <span class="batch-header-count">已选 0 项</span>
+                        <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="regexGroups" disabled>删除</button>
+                    </div>
+                    <p class="manage-header-hint hidden" data-batch-hint="regexGroups">选择要删除的正则组（将同时移除组内全部规则）</p>
+                </div>
+                <div id="regexGroupList" class="provider-list regex-group-list"></div>
+            </div>
+
+            <!-- 组内规则列表 -->
+            <div id="regexRulesPage" class="page">
+                <div class="manage-header" data-batch-header="regexRules">
+                    <div class="manage-header-normal section-header">
+                        <h2 id="regexRulesTitle">正则组</h2>
+                        <div class="section-header-actions">
+                            <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="regexRules">管理</button>
+                            <button type="button" class="btn-primary" data-action="new-regex-rule">添加规则</button>
+                        </div>
+                    </div>
+                    <div class="manage-header-batch section-header hidden">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                        <span class="batch-header-count">已选 0 项</span>
+                        <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="regexRules" disabled>删除</button>
+                    </div>
+                    <p class="manage-header-hint hidden" data-batch-hint="regexRules">选择要删除的规则</p>
+                </div>
+                <div id="regexRulesList" class="provider-model-list regex-rules-list"></div>
+            </div>
+
+            <!-- 规则详情 + 测试预览 -->
+            <div id="regexRuleEditorPage" class="page">
+                <div class="agent-editor-toolbar">
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-regex-rule">保存</button>
+                    <span class="unsaved-indicator regex-rule-unsaved hidden">未保存</span>
+                </div>
+                <div id="regexRuleEditorRoot" class="model-sampling-editor regex-rule-editor"></div>
+            </div>
+
             <!-- 设置页面 -->
             <div id="settingsPage" class="page">
                 <div class="settings-group">
@@ -506,6 +561,48 @@ status: draft
         <button type="button" class="btn-secondary" data-action="batch-cancel">取消</button>
         <span id="listBatchCount" class="list-batch-count">已选 0 项</span>
         <button type="button" class="btn-danger" data-action="batch-delete" data-batch-list="page-footer" disabled>删除</button>
+    </div>
+
+    <!-- 新建正则组 -->
+    <div id="newRegexGroupModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-new-regex-group"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="添加正则组">
+            <section class="agent-form-section model-picker-form">
+                <h3>添加正则组</h3>
+                <label class="agent-field">
+                    <span>组 ID</span>
+                    <input type="text" id="newRegexGroupId" placeholder="如 demo-filter" autocomplete="off">
+                </label>
+                <label class="agent-field">
+                    <span>展示名称</span>
+                    <input type="text" id="newRegexGroupDisplayName" placeholder="可选" autocomplete="off">
+                </label>
+                <p class="agent-field-hint">组 ID 创建后不可改；用于与 CLI <code>--regexGroup</code> 对齐。</p>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="confirm-new-regex-group">创建</button>
+                <button type="button" class="btn-secondary" data-action="close-new-regex-group">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 编辑正则组展示名 -->
+    <div id="editRegexGroupModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-edit-regex-group"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="编辑正则组">
+            <section class="agent-form-section model-picker-form">
+                <h3>编辑展示名称</h3>
+                <p class="agent-field-hint" id="editRegexGroupIdHint"></p>
+                <label class="agent-field">
+                    <span>展示名称</span>
+                    <input type="text" id="editRegexGroupDisplayName" autocomplete="off">
+                </label>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-primary" data-action="confirm-edit-regex-group">保存</button>
+                <button type="button" class="btn-secondary" data-action="close-edit-regex-group">取消</button>
+            </div>
+        </div>
     </div>
 
     <!-- 新建项目 -->
