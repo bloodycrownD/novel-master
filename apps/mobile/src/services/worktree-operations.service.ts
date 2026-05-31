@@ -93,3 +93,39 @@ export function vfsScopeRootPath(
 ): string {
   return worktreeRootLogicalPath(scope);
 }
+
+function pathUnderDir(dirPath: string, candidate: string): boolean {
+  return candidate === dirPath || candidate.startsWith(`${dirPath}/`);
+}
+
+/**
+ * Copy worktree dir/file rules from oldDir prefix onto newDir after a VFS rename.
+ * Old rule rows may remain until Core exposes delete; new paths get matching rules.
+ */
+export async function migrateWorktreeDirRename(
+  worktree: WorktreeService,
+  oldDir: string,
+  newDir: string,
+): Promise<void> {
+  const rows = await worktree.buildListRows();
+  for (const row of rows) {
+    if (!pathUnderDir(oldDir, row.path)) {
+      continue;
+    }
+    const targetPath =
+      row.path === oldDir
+        ? newDir
+        : `${newDir}${row.path.slice(oldDir.length)}`;
+    if (row.kind === 'dir') {
+      const rule = await worktree.getDirRule(row.path);
+      if (rule != null) {
+        await worktree.setDirRule({...dirRuleToForm(rule), logicalPath: targetPath});
+      }
+    } else {
+      await worktree.setFileRule({
+        logicalPath: targetPath,
+        inclusionMode: inclusionLabelToMode(row.inclusionMode),
+      });
+    }
+  }
+}

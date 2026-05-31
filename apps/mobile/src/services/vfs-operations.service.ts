@@ -46,3 +46,49 @@ export async function renameVfsFile(
   await vfs.write(newPath, existing.content, {versionCheck: false});
   await vfs.delete(oldPath);
 }
+
+function normalizeDirPath(path: string): string {
+  if (path.endsWith('/') && path !== '/') {
+    return path.slice(0, -1);
+  }
+  return path;
+}
+
+/** Remap a path under oldDir to the same relative location under newDir. */
+export function remapPathUnderDir(
+  path: string,
+  oldDir: string,
+  newDir: string,
+): string {
+  const normalizedOld = normalizeDirPath(oldDir);
+  const normalizedNew = normalizeDirPath(newDir);
+  if (path === normalizedOld) {
+    return normalizedNew;
+  }
+  const prefix = `${normalizedOld}/`;
+  if (!path.startsWith(prefix)) {
+    return path;
+  }
+  return `${normalizedNew}${path.slice(normalizedOld.length)}`;
+}
+
+/**
+ * Rename a directory by moving every file under its prefix (deepest paths first).
+ * VFS stores files only; directory nodes are inferred from paths.
+ */
+export async function renameVfsDirectory(
+  vfs: VfsService,
+  oldPath: string,
+  newPath: string,
+): Promise<void> {
+  const oldDir = normalizeDirPath(oldPath);
+  const newDir = normalizeDirPath(newPath);
+  const files = await vfs.list(oldDir, {recursive: true});
+  const sorted = [...files].sort(
+    (a, b) => b.split('/').length - a.split('/').length,
+  );
+  for (const filePath of sorted) {
+    const target = remapPathUnderDir(filePath, oldDir, newDir);
+    await renameVfsFile(vfs, filePath, target);
+  }
+}
