@@ -6,6 +6,7 @@ import {ScrollView, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
+import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
@@ -26,9 +27,14 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-const WORKSPACE_MENU = {
+const WORKSPACE_MODEL_MENU = {
   icon: '🤖',
   label: '当前模型',
+} as const;
+
+const WORKSPACE_REGEX_GROUP_MENU = {
+  icon: '🛡️',
+  label: '当前正则组',
 } as const;
 
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
@@ -45,9 +51,12 @@ export function ProfileTabScreen() {
   const {appUi} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
+  const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [pickerVisible, setPickerVisible] = useState(false);
+  const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [regexGroupPickerVisible, setRegexGroupPickerVisible] =
+    useState(false);
 
   const refreshModelLabel = useCallback(async () => {
     const currentId = await runtime.state.getCurrentModelId();
@@ -59,6 +68,20 @@ export function ProfileTabScreen() {
       setModelLabel(await resolveModelDisplayLabel(runtime, currentId));
     } catch {
       setModelLabel(currentId);
+    }
+  }, [runtime]);
+
+  const refreshRegexGroupLabel = useCallback(async () => {
+    const currentId = await runtime.state.getCurrentRegexGroupId();
+    if (!currentId) {
+      setRegexGroupLabel('不启用');
+      return;
+    }
+    try {
+      const group = await runtime.regexConfig.getGroup(currentId);
+      setRegexGroupLabel(group.displayName?.trim() || group.groupId);
+    } catch {
+      setRegexGroupLabel('不启用');
     }
   }, [runtime]);
 
@@ -79,9 +102,15 @@ export function ProfileTabScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
+      refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
       refreshStreamPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
-    }, [refreshModelLabel, refreshStreamPref, refreshChatRichTextPref]),
+    }, [
+      refreshModelLabel,
+      refreshRegexGroupLabel,
+      refreshStreamPref,
+      refreshChatRichTextPref,
+    ]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -100,11 +129,18 @@ export function ProfileTabScreen() {
         keyboardShouldPersistTaps="handled">
         <ListSectionTitle title="工作区" tokens={tokens} />
         <ProfileMenuItem
-          icon={WORKSPACE_MENU.icon}
-          label={WORKSPACE_MENU.label}
+          icon={WORKSPACE_MODEL_MENU.icon}
+          label={WORKSPACE_MODEL_MENU.label}
           value={modelLabel}
           tokens={tokens}
-          onPress={() => setPickerVisible(true)}
+          onPress={() => setModelPickerVisible(true)}
+        />
+        <ProfileMenuItem
+          icon={WORKSPACE_REGEX_GROUP_MENU.icon}
+          label={WORKSPACE_REGEX_GROUP_MENU.label}
+          value={regexGroupLabel}
+          tokens={tokens}
+          onPress={() => setRegexGroupPickerVisible(true)}
         />
         <ProfileSwitchItem
           icon="⚡"
@@ -128,8 +164,8 @@ export function ProfileTabScreen() {
           label="富文本消息"
           subtitle={
             chatRichTextEnabled
-              ? '助手回复解析 Markdown/HTML'
-              : '助手回复显示为纯文本'
+              ? '用户与助手消息解析 Markdown/HTML'
+              : '聊天消息显示为纯文本'
           }
           value={chatRichTextEnabled}
           tokens={tokens}
@@ -152,9 +188,14 @@ export function ProfileTabScreen() {
         ))}
       </ScrollView>
       <ModelPickerModal
-        visible={pickerVisible}
-        onClose={() => setPickerVisible(false)}
+        visible={modelPickerVisible}
+        onClose={() => setModelPickerVisible(false)}
         onSelected={() => refreshModelLabel().catch(() => undefined)}
+      />
+      <RegexGroupPickerModal
+        visible={regexGroupPickerVisible}
+        onClose={() => setRegexGroupPickerVisible(false)}
+        onSelected={() => refreshRegexGroupLabel().catch(() => undefined)}
       />
     </View>
   );

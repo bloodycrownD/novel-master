@@ -2,15 +2,20 @@ import {StyleSheet} from 'react-native';
 import type {MixedStyleRecord} from 'react-native-render-html';
 import type {ThemeTokens} from '../../theme/tokens';
 
-export type RichContentVariant = 'chat-assistant' | 'file-preview';
+export type RichContentVariant =
+  | 'chat-assistant'
+  | 'chat-user'
+  | 'file-preview';
 
 const VARIANT_BODY = {
   'chat-assistant': {fontSize: 15, lineHeight: 22},
+  'chat-user': {fontSize: 15, lineHeight: 22},
   'file-preview': {fontSize: 16, lineHeight: 24},
 } as const;
 
 const VARIANT_HEADING = {
   'chat-assistant': {h1: 22, h2: 19, h3: 17},
+  'chat-user': {h1: 22, h2: 19, h3: 17},
   'file-preview': {h1: 26, h2: 22, h3: 18},
 } as const;
 
@@ -28,32 +33,35 @@ export function buildRichContentStyles(
 ): RichContentStyles {
   const body = VARIANT_BODY[variant];
   const headings = VARIANT_HEADING[variant];
+  const textColor = variant === 'chat-user' ? '#ffffff' : tokens.text;
+  const linkColor = variant === 'chat-user' ? '#e3f2ff' : tokens.primary;
+  const codeBg =
+    variant === 'chat-user' ? 'rgba(255,255,255,0.18)' : tokens.bgSecondary;
 
   const baseStyle: MixedStyleRecord = {
-    color: tokens.text,
     fontSize: body.fontSize,
     lineHeight: body.lineHeight,
   };
 
   const tagsStyles: Record<string, MixedStyleRecord> = {
-    body: baseStyle,
+    body: {...baseStyle, color: textColor},
     p: {marginTop: 0, marginBottom: 10},
     h1: {
-      color: tokens.text,
+      color: textColor,
       fontSize: headings.h1,
       fontWeight: '700',
       marginTop: 8,
       marginBottom: 8,
     },
     h2: {
-      color: tokens.text,
+      color: textColor,
       fontSize: headings.h2,
       fontWeight: '600',
       marginTop: 8,
       marginBottom: 6,
     },
     h3: {
-      color: tokens.text,
+      color: textColor,
       fontSize: headings.h3,
       fontWeight: '600',
       marginTop: 6,
@@ -63,16 +71,16 @@ export function buildRichContentStyles(
     ol: {marginBottom: 8},
     li: {marginBottom: 4},
     code: {
-      backgroundColor: tokens.bgSecondary,
-      color: tokens.text,
+      backgroundColor: codeBg,
+      color: textColor,
       fontFamily: 'monospace',
       fontSize: 14,
       paddingHorizontal: 4,
       borderRadius: 4,
     },
     pre: {
-      backgroundColor: tokens.bgSecondary,
-      color: tokens.text,
+      backgroundColor: codeBg,
+      color: textColor,
       fontFamily: 'monospace',
       fontSize: 13,
       padding: 10,
@@ -80,14 +88,14 @@ export function buildRichContentStyles(
       marginVertical: 8,
     },
     blockquote: {
-      backgroundColor: tokens.bgSecondary,
-      borderLeftColor: tokens.primary,
+      backgroundColor: codeBg,
+      borderLeftColor: variant === 'chat-user' ? '#ffffff' : tokens.primary,
       borderLeftWidth: 3,
       paddingLeft: 12,
       paddingVertical: 4,
       marginVertical: 8,
     },
-    a: {color: tokens.primary, textDecorationLine: 'underline'},
+    a: {color: linkColor, textDecorationLine: 'underline'},
     strong: {fontWeight: '700'},
     em: {fontStyle: 'italic'},
     hr: {
@@ -103,7 +111,7 @@ export function buildRichContentStyles(
       marginVertical: 8,
     },
     th: {
-      backgroundColor: tokens.bgSecondary,
+      backgroundColor: codeBg,
       padding: 6,
       fontWeight: '600',
     },

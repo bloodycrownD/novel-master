@@ -1,6 +1,8 @@
 import MarkdownIt from 'markdown-it';
 import type {MixedStyleRecord} from 'react-native-render-html';
 import {extractStyleBlocksFromHtml} from './extract-style-classes';
+import {liftInlineColorToInnerSpan} from './lift-inline-color';
+import {materializeInlineColors} from './materialize-inline-colors';
 import {sanitizeRichHtml} from './sanitize-rich-html';
 
 const markdown = new MarkdownIt({html: true, linkify: true});
@@ -17,8 +19,11 @@ export interface PreparedRichHtml {
 export function prepareRichHtml(content: string): PreparedRichHtml {
   const rawHtml = markdown.render(content);
   const {htmlWithoutStyle, classesStyles} = extractStyleBlocksFromHtml(rawHtml);
+  const sanitized = liftInlineColorToInnerSpan(
+    sanitizeRichHtml(htmlWithoutStyle),
+  );
   return {
-    html: sanitizeRichHtml(htmlWithoutStyle),
+    html: materializeInlineColors(sanitized, classesStyles),
     classesStyles,
   };
 }

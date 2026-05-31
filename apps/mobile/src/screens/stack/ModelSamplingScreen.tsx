@@ -2,14 +2,7 @@
  * Per-model sampling profile CRUD (modelSamplingProfiles KKV).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {ActivityIndicator} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {LlmProtocolKind, ModelSamplingParams} from '@novel-master/core';
@@ -17,7 +10,11 @@ import {
   mergeSamplingWithDefaults,
   parseApplicationModelId,
 } from '@novel-master/core';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
+import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SamplingForm} from '../../components/provider/SamplingForm';
+import {resolveModelShortLabel} from '../../provider/model-display-label';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -52,6 +49,7 @@ export function ModelSamplingScreen() {
 
   const [protocol, setProtocol] = useState<LlmProtocolKind>('openai');
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
+  const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +63,12 @@ export function ModelSamplingScreen() {
       const {providerId} = parseApplicationModelId(applicationModelId);
       const provider = await runtime.providers.get(providerId);
       setProtocol(provider.protocol);
+      try {
+        const short = await resolveModelShortLabel(runtime, applicationModelId);
+        setModelSubtitle(`${short}\n${applicationModelId}`);
+      } catch {
+        setModelSubtitle(applicationModelId);
+      }
       const profile =
         await runtime.modelSamplingProfiles.getProfile(applicationModelId);
       const stored =
@@ -75,7 +79,7 @@ export function ModelSamplingScreen() {
     } finally {
       setLoading(false);
     }
-  }, [runtime, applicationModelId]);
+  }, [runtime, applicationModelId, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -113,48 +117,32 @@ export function ModelSamplingScreen() {
   };
 
   if (loading) {
-    return <ActivityIndicator style={styles.loader} />;
+    return <ActivityIndicator style={{marginTop: 32}} />;
   }
 
+  const sectionHint = modelSubtitle
+    ? `${modelSubtitle}\n\n展示协议推荐默认值；保存后以本页为准。`
+    : '展示协议推荐默认值；保存后以本页为准。';
+
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-          采样参数
-        </Text>
-        <Text style={[styles.idHint, {color: tokens.textSecondary}]}>
-          {applicationModelId}
-        </Text>
-        <SamplingForm protocol={protocol} params={params} onChange={setParams} />
-      </ScrollView>
-      <View style={[styles.footer, {borderTopColor: tokens.border}]}>
-        <Pressable
-          style={[styles.saveBtn, {backgroundColor: tokens.primary}]}
+    <ScreenFormLayout
+      tokens={tokens}
+      footer={
+        <StickyFormFooter
+          tokens={tokens}
+          label="保存"
+          loading={saving}
           onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving}>
-          <Text style={styles.saveBtnText}>
-            {saving ? '保存中…' : '保存'}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+        />
+      }>
+      <FormSectionCard title="采样参数" tokens={tokens} hint={sectionHint}>
+        <SamplingForm
+          tokens={tokens}
+          protocol={protocol}
+          params={params}
+          onChange={setParams}
+        />
+      </FormSectionCard>
+    </ScreenFormLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {flex: 1},
-  loader: {marginTop: 32},
-  scroll: {padding: 16, gap: 12},
-  sectionTitle: {fontSize: 18, fontWeight: '600'},
-  idHint: {fontSize: 13, marginBottom: 8},
-  footer: {
-    padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  saveBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  saveBtnText: {color: '#fff', fontWeight: '600', fontSize: 16},
-});

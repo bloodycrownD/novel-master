@@ -18,34 +18,38 @@ type Props = {
   streamingText?: string;
   streamingThinking?: string;
   showFullToolParams?: boolean;
-  /** When true, assistant bubbles use RichContentBody (streaming tail stays plain Text). */
-  assistantRichTextEnabled?: boolean;
+  /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
+  chatRichTextEnabled?: boolean;
   batchMode?: boolean;
   selectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (message: ChatMessage) => void;
 };
 
-interface AssistantMessageBodyProps {
+interface ChatMessageBodyProps {
   body: string;
   tokens: ThemeTokens;
+  isUser: boolean;
   richTextEnabled: boolean;
 }
 
-/** Assistant bubble body: plain Text when pref off, else shared rich renderer. */
-const AssistantMessageBody = React.memo(function AssistantMessageBody({
+/** Chat bubble body: plain Text when pref off, else shared rich renderer. */
+const ChatMessageBody = React.memo(function ChatMessageBody({
   body,
   tokens,
+  isUser,
   richTextEnabled,
-}: AssistantMessageBodyProps) {
+}: ChatMessageBodyProps) {
+  const plainColor = isUser ? '#fff' : tokens.text;
   if (!richTextEnabled || isRichContentOverLimit(body)) {
-    return <Text style={{color: tokens.text}}>{body}</Text>;
+    return <Text style={{color: plainColor}}>{body}</Text>;
   }
   return (
     <RichContentBody
       content={body}
       tokens={tokens}
-      variant="chat-assistant"
+      variant={isUser ? 'chat-user' : 'chat-assistant'}
+      fallbackTextColor={plainColor}
     />
   );
 });
@@ -55,7 +59,7 @@ export function MessageList({
   streamingText,
   streamingThinking,
   showFullToolParams,
-  assistantRichTextEnabled = false,
+  chatRichTextEnabled = false,
   batchMode = false,
   selectedMessageIds,
   onToggleMessageSelect,
@@ -93,15 +97,14 @@ export function MessageList({
           borderWidth: 2,
         },
       ]}>
-      {isUser ? (
-        <Text style={{color: '#fff'}}>{body}</Text>
-      ) : forcePlainText ? (
-        <Text style={{color: tokens.text}}>{body}</Text>
+      {forcePlainText ? (
+        <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
       ) : (
-        <AssistantMessageBody
+        <ChatMessageBody
           body={body}
           tokens={tokens}
-          richTextEnabled={assistantRichTextEnabled}
+          isUser={isUser}
+          richTextEnabled={chatRichTextEnabled}
         />
       )}
     </View>

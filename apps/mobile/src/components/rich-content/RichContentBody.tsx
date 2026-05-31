@@ -22,12 +22,15 @@ export interface RichContentBodyProps {
   content: string;
   tokens: ThemeTokens;
   variant: RichContentVariant;
+  /** Plain-text fallback when over limit or prepare fails (default tokens.text). */
+  fallbackTextColor?: string;
 }
 
 function RichContentBodyInner({
   content,
   tokens,
   variant,
+  fallbackTextColor,
 }: RichContentBodyProps) {
   const {width: windowWidth} = useWindowDimensions();
   const overLimit = isRichContentOverLimit(content);
@@ -60,6 +63,7 @@ function RichContentBodyInner({
         Math.floor(windowWidth - FILE_PREVIEW_HORIZONTAL_PADDING * 2),
       );
     }
+    // chat-assistant and chat-user share bubble width math
     const bubbleOuter =
       windowWidth * BUBBLE_MAX_WIDTH_RATIO -
       LIST_HORIZONTAL_PADDING * 2 -
@@ -67,11 +71,13 @@ function RichContentBodyInner({
     return Math.max(200, Math.floor(bubbleOuter));
   }, [windowWidth, variant]);
 
+  const plainColor = fallbackTextColor ?? tokens.text;
+
   // Length guard or pipeline failure → plain text (never blank bubble).
   if (overLimit || prepared == null) {
     return (
       <View>
-        <Text style={[styles.fallbackText, {color: tokens.text}]}>
+        <Text style={[styles.fallbackText, {color: plainColor}]}>
           {content}
         </Text>
         {overLimit ? (
@@ -91,6 +97,7 @@ function RichContentBodyInner({
         baseStyle={baseStyle}
         tagsStyles={tagsStyles}
         classesStyles={classesStyles ?? undefined}
+        enableCSSInlineProcessing
         defaultTextProps={{selectable: true}}
       />
     </View>

@@ -77,12 +77,6 @@ export function RegexGroupsScreen() {
     }, [reload]),
   );
 
-  const setCurrent = async (groupId: string) => {
-    await runtime.state.setCurrentRegexGroupId(groupId);
-    await reload();
-    showToast('已设为当前生效正则组');
-  };
-
   const confirmBatchDelete = () => {
     const ids = Array.from(batch.selectedIds);
     if (ids.length === 0) {
@@ -200,9 +194,6 @@ export function RegexGroupsScreen() {
       <BottomSheetMenu
         visible={menuGroupId != null}
         items={[
-          ...(rows.find(r => r.groupId === menuGroupId && !r.isCurrent)
-            ? [{label: '设为当前', action: 'set-current'}]
-            : []),
           {label: '编辑名称', action: 'edit'},
           {label: '删除', action: 'delete', danger: true},
         ]}
@@ -213,9 +204,7 @@ export function RegexGroupsScreen() {
           if (!id) {
             return;
           }
-          if (action === 'set-current') {
-            setCurrent(id).catch(() => undefined);
-          } else if (action === 'edit') {
+          if (action === 'edit') {
             setEditGroupId(id);
           } else if (action === 'delete') {
             deleteGroup(id).catch(() => undefined);

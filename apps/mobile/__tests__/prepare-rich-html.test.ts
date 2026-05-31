@@ -8,9 +8,19 @@ describe('prepareRichHtml', () => {
     expect(html).toContain('Body');
   });
 
+  it('preserves inline style on p with single-quoted attribute', () => {
+    const {html, classesStyles} = prepareRichHtml(
+      "<p style='color:red'>hi</p>33",
+    );
+    expect(html).toContain('nm-inline-c-0');
+    expect(Object.values(classesStyles)).toContainEqual({color: 'red'});
+    expect(html).toContain('hi');
+  });
+
   it('preserves sanitized inline style on div', () => {
-    const {html} = prepareRichHtml('<div style="color:red">x</div>');
-    expect(html).toMatch(/color:\s*red/i);
+    const {html, classesStyles} = prepareRichHtml('<div style="color:red">x</div>');
+    expect(html).toContain('nm-inline-c-0');
+    expect(Object.values(classesStyles)).toContainEqual({color: 'red'});
     expect(html).toContain('x');
   });
 

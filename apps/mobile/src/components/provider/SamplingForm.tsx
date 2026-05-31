@@ -2,15 +2,18 @@
  * Protocol-specific model sampling fields (openai / anthropic / gemini).
  */
 import React, {useMemo} from 'react';
-import {StyleSheet, Text, TextInput, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {
   mergeSamplingWithDefaults,
   type LlmProtocolKind,
   type ModelSamplingParams,
 } from '@novel-master/core';
-import {useTheme} from '../../theme/ThemeProvider';
+import {FormField} from '../form/FormField';
+import {FormTextInput} from '../form/FormTextInput';
+import type {ThemeTokens} from '../../theme/tokens';
 
 type Props = {
+  tokens: ThemeTokens;
   protocol: LlmProtocolKind;
   params: ModelSamplingParams | undefined;
   onChange: (params: ModelSamplingParams | undefined) => void;
@@ -30,25 +33,25 @@ function parseNumber(raw: string): number | undefined {
 }
 
 function NumberField({
+  tokens,
   label,
   value,
   onChangeText,
 }: {
+  tokens: ThemeTokens;
   label: string;
   value: string;
   onChangeText: (v: string) => void;
 }) {
-  const {tokens} = useTheme();
   return (
-    <View style={styles.field}>
-      <Text style={[styles.label, {color: tokens.textSecondary}]}>{label}</Text>
-      <TextInput
-        style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
+    <FormField label={label} tokens={tokens}>
+      <FormTextInput
+        tokens={tokens}
         value={value}
         onChangeText={onChangeText}
         keyboardType="decimal-pad"
       />
-    </View>
+    </FormField>
   );
 }
 
@@ -85,8 +88,7 @@ function patchGemini(
   };
 }
 
-export function SamplingForm({protocol, params, onChange}: Props) {
-  const {tokens} = useTheme();
+export function SamplingForm({tokens, protocol, params, onChange}: Props) {
   const effective = useMemo(
     () => mergeSamplingWithDefaults(protocol, params),
     [protocol, params],
@@ -97,12 +99,10 @@ export function SamplingForm({protocol, params, onChange}: Props) {
 
   return (
     <View style={styles.root}>
-      <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-        展示协议推荐默认值；保存后以本页为准。
-      </Text>
       {protocol === 'openai' ? (
         <>
           <NumberField
+            tokens={tokens}
             label="温度"
             value={numStr(openai.temperature)}
             onChangeText={v =>
@@ -110,6 +110,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Top P"
             value={numStr(openai.top_p)}
             onChangeText={v =>
@@ -117,6 +118,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Max Tokens"
             value={numStr(openai.max_tokens)}
             onChangeText={v =>
@@ -128,6 +130,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
       {protocol === 'anthropic' ? (
         <>
           <NumberField
+            tokens={tokens}
             label="温度"
             value={numStr(anthropic.temperature)}
             onChangeText={v =>
@@ -137,6 +140,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Top P"
             value={numStr(anthropic.top_p)}
             onChangeText={v =>
@@ -144,6 +148,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Top K"
             value={numStr(anthropic.top_k)}
             onChangeText={v =>
@@ -151,6 +156,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Max Tokens"
             value={numStr(anthropic.max_tokens)}
             onChangeText={v =>
@@ -164,6 +170,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
       {protocol === 'gemini' ? (
         <>
           <NumberField
+            tokens={tokens}
             label="温度"
             value={numStr(gemini.temperature)}
             onChangeText={v =>
@@ -171,6 +178,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Top P"
             value={numStr(gemini.topP)}
             onChangeText={v =>
@@ -178,6 +186,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Top K"
             value={numStr(gemini.topK)}
             onChangeText={v =>
@@ -185,6 +194,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             }
           />
           <NumberField
+            tokens={tokens}
             label="Max Output Tokens"
             value={numStr(gemini.maxOutputTokens)}
             onChangeText={v =>
@@ -202,15 +212,5 @@ export function SamplingForm({protocol, params, onChange}: Props) {
 }
 
 const styles = StyleSheet.create({
-  root: {gap: 12},
-  hint: {fontSize: 13, marginBottom: 4},
-  field: {gap: 4},
-  label: {fontSize: 13},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
+  root: {gap: 10},
 });

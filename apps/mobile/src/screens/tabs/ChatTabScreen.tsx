@@ -95,8 +95,7 @@ export function ChatTabScreen() {
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
   const [showFullToolParams, setShowFullToolParams] = useState(false);
-  const [assistantRichTextEnabled, setAssistantRichTextEnabled] =
-    useState(false);
+  const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
@@ -188,7 +187,7 @@ export function ChatTabScreen() {
     if (appUi == null) {
       return;
     }
-    setAssistantRichTextEnabled(await readChatRichTextEnabled(appUi));
+    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
   useFocusEffect(
@@ -513,7 +512,7 @@ export function ChatTabScreen() {
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
                 showFullToolParams={showFullToolParams}
-                assistantRichTextEnabled={assistantRichTextEnabled}
+                chatRichTextEnabled={chatRichTextEnabled}
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
                 onToggleMessageSelect={messageBatch.toggle}
