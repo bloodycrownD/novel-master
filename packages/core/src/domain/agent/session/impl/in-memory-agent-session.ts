@@ -4,7 +4,7 @@
  * @module domain/agent/session/impl/in-memory-agent-session
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
 import type { AgentSession } from "../agent-session.port.js";
 

@@ -4,7 +4,7 @@
  * @module service/session-fs/impl/session-fs.service
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VfsError, vfsNotFound } from "@/errors/vfs-errors.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";

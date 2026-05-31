@@ -4,7 +4,7 @@
  * @module service/chat/impl/message.service
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";

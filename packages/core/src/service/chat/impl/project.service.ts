@@ -4,7 +4,7 @@
  * @module service/chat/impl/project.service
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
