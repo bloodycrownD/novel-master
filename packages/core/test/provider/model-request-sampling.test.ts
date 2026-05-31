@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/openai.adapter.js";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/anthropic.adapter.js";
+import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
+import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 
 describe("adapter sampling", () => {
   it("T9: OpenAI sampling merged into request body", async () => {

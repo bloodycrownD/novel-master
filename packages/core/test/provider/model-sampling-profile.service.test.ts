@@ -5,7 +5,7 @@ import {
   createProviderServices,
   modelSamplingProfileFromJson,
 } from "@novel-master/core";
-import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function memorySecretStore(): SecretStore {

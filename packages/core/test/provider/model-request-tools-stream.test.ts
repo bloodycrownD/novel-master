@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/anthropic.adapter.js";
-import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/openai.adapter.js";
-import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/gemini.adapter.js";
+import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
+import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
+import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
 import { toolsFromRegistry, ToolRegistry, registerVfsTools } from "@novel-master/core";
 import { ProviderError } from "../../src/errors/provider-errors.js";
 

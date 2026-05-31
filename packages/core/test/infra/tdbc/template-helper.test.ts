@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "@/infra/tdbc/template-helper.js";
+} from "@/infra/tdbc/logic/template-helper.js";
 
 describe("template-helper", () => {
   const parser = new SqlTemplateParser();

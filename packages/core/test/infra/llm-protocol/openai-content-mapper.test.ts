@@ -6,10 +6,10 @@ import {
   blocksToOpenAiMessageContent,
   chatMessagesToOpenAi,
   openAiChoiceToBlocks,
-} from "../../../src/infra/llm-protocol/openai-content-mapper.js";
+} from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
 
 describe("openai-content-mapper", () => {
-  it("O1: text + tool_use â†’ assistant message with tool_calls", () => {
+  it("O1: text + tool_use â†?assistant message with tool_calls", () => {
     const messages: ChatMessage[] = [
       {
         id: "a1",
@@ -52,7 +52,7 @@ describe("openai-content-mapper", () => {
     });
   });
 
-  it("O2: OpenAI tool_calls response â†’ tool_use blocks", () => {
+  it("O2: OpenAI tool_calls response â†?tool_use blocks", () => {
     const blocks = openAiChoiceToBlocks({
       role: "assistant",
       content: null,
@@ -78,7 +78,7 @@ describe("openai-content-mapper", () => {
     assert.deepEqual(blocks[0].input, { path: "/out.txt", content: "hi" });
   });
 
-  it("O3: tool_result â†’ role tool messages with tool_call_id", () => {
+  it("O3: tool_result â†?role tool messages with tool_call_id", () => {
     const messages: ChatMessage[] = [
       {
         id: "u1",
@@ -108,7 +108,7 @@ describe("openai-content-mapper", () => {
     assert.equal(out[0]!.content, "file contents here");
   });
 
-  it("O6: image url block â†’ vision image_url part", () => {
+  it("O6: image url block â†?vision image_url part", () => {
     const content = blocksToOpenAiMessageContent([
       { type: "text", text: "describe this" },
       {

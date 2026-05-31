@@ -1,6 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
-import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/gemini.adapter.js";
+import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
 
 describe("GeminiProtocolAdapter HTTP", () => {
   it("listModels uses GET /models with key query param", async () => {

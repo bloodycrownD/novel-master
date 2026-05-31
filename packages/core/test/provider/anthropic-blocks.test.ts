@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/anthropic.adapter.js";
+import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 import {
   anthropicContentToBlocks,
   blocksToAnthropicContent,
-} from "../../src/infra/llm-protocol/anthropic-content-mapper.js";
+} from "../../src/infra/llm-protocol/logic/anthropic-content-mapper.js";
 
 describe("anthropic content mapper", () => {
   it("drops empty text segments from API response", () => {

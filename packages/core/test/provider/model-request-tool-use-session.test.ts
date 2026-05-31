@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks } from "@novel-master/core";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
-import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
   getProtocolAdapter,
-} from "../../src/infra/llm-protocol/registry.js";
+} from "../../src/infra/llm-protocol/logic/registry.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function memorySecretStore(): SecretStore {

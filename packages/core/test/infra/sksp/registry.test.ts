@@ -4,7 +4,7 @@ import {
   clearSkspDrivers,
   registerSkspDriver,
   resolveSkspDriver,
-} from "../../../src/infra/sksp/registry.js";
+} from "../../../src/infra/sksp/logic/registry.js";
 import { SkspError } from "../../../src/infra/sksp/sksp-error.js";
 
 describe("SKSP registry", () => {

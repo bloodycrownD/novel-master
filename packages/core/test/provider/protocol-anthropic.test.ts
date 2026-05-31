@@ -1,6 +1,6 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
-import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/anthropic.adapter.js";
+import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 
 describe("AnthropicProtocolAdapter HTTP", () => {
   it("listModels uses GET /v1/models with anthropic headers", async () => {

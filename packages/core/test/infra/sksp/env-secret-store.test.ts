@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { refToEnvVar } from "../../../src/infra/sksp/ref-to-env.js";
-import { EnvSecretStore } from "../../../src/infra/sksp/env-secret-store.js";
+import { refToEnvVar } from "../../../src/infra/sksp/logic/ref-to-env.js";
+import { EnvSecretStore } from "../../../src/infra/sksp/impl/env-secret-store.js";
 
 describe("refToEnvVar", () => {
   it("maps provider apiKey refs", () => {

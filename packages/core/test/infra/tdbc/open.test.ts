@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import { TdbcError } from "@/infra/tdbc/errors.js";
-import { open, parseUrl } from "@/infra/tdbc/open.js";
+import { open, parseUrl } from "@/infra/tdbc/logic/open.js";
 import {
   clearDrivers,
   registerDriver,
-} from "@/infra/tdbc/registry.js";
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
-import type { TdbcDriver } from "@/infra/tdbc/driver.js";
+} from "@/infra/tdbc/logic/registry.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import type { TdbcDriver } from "@/infra/tdbc/ports/driver.port.js";
 
 function mockDriver(name: string, connection: TdbcConnection): TdbcDriver {
   return {

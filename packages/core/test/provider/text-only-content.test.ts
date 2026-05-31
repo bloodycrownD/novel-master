@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ProviderError } from "../../src/errors/provider-errors.js";
-import { blocksToTextOnly } from "../../src/infra/llm-protocol/text-only-content.js";
+import { blocksToTextOnly } from "../../src/infra/llm-protocol/logic/text-only-content.js";
 
 describe("blocksToTextOnly", () => {
   it("throws UNSUPPORTED_CONTENT for image blocks", () => {

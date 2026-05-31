@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { normalizeBindings } from "@/infra/tdbc/normalize-bindings.js";
+import { normalizeBindings } from "@/infra/tdbc/logic/normalize-bindings.js";
 
 describe("normalizeBindings", () => {
   it("maps undefined to null", () => {

@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
-import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function memorySecretStore(): SecretStore {
