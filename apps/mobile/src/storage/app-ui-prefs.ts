@@ -9,6 +9,7 @@ import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
   APP_UI_KEY_CHECKPOINT_RETENTION,
+  APP_UI_KEY_LLM_STREAM,
   APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
   APP_UI_KEY_THEME,
 } from './app-ui-keys';
@@ -62,4 +63,5 @@ export const appUiKeys = {
   theme: APP_UI_KEY_THEME,
   checkpointRetention: APP_UI_KEY_CHECKPOINT_RETENTION,
   showFullToolParams: APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
+  llmStream: APP_UI_KEY_LLM_STREAM,
 } as const;

@@ -180,9 +180,11 @@ export async function runAgent(
         }
       }
 
-      const worktreeDisplay = await rt
-        .worktree({ kind: "session", projectId, sessionId })
-        .renderDisplay();
+      const wt = rt.worktree({ kind: "session", projectId, sessionId });
+      const [worktreeDisplay, filetreeDisplay] = await Promise.all([
+        wt.renderDisplay(),
+        wt.renderFileTree(),
+      ]);
 
       const registry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
@@ -226,7 +228,7 @@ export async function runAgent(
         cliModelId,
         maxSteps,
         activeRegexGroupId,
-        promptContext: { worktreeDisplay },
+        promptContext: { worktreeDisplay, filetreeDisplay },
         stream: !noStream,
         onStream,
       });

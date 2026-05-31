@@ -20,7 +20,7 @@ describe('vfs-row-mapper', () => {
     kind: 'file',
     path: '/template/readme.md',
     ruleState: '',
-    inclusionMode: '自动',
+    inclusionMode: '继承',
     displayState: '全内容',
   };
 
@@ -40,24 +40,25 @@ describe('vfs-row-mapper', () => {
     displayState: '不展示',
   };
 
-  it('maps directory subtitle with file count', () => {
+  it('maps directory badge and file count subtitle', () => {
     const mapped = mapWorktreeRow(dirRow, 3);
-    expect(mapped.subtitle).toBe('规则·开 | 3个文件');
-    expect(mapped.badge).toBeNull();
+    expect(mapped.subtitle).toBe('3个文件');
+    expect(mapped.badge).toEqual({label: '开启', tone: 'in'});
     expect(mapped.ruleEnabled).toBe(true);
   });
 
-  it('maps directory rule off without count suffix when zero files', () => {
+  it('maps directory rule off badge without count subtitle when zero files', () => {
     const off: WorktreeListRow = {...dirRow, ruleState: '规则·关'};
     const mapped = mapWorktreeRow(off, 0);
-    expect(mapped.subtitle).toBe('规则·关');
+    expect(mapped.subtitle).toBe('');
+    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
     expect(mapped.ruleEnabled).toBe(false);
   });
 
-  it('maps auto file badge as follow tone with display label', () => {
+  it('maps inherit file badge as follow tone without expanding display', () => {
     const mapped = mapWorktreeRow(fileRowAuto);
-    expect(mapped.subtitle).toBe('自动·全内容');
-    expect(mapped.badge).toEqual({label: '全内容', tone: 'follow'});
+    expect(mapped.subtitle).toBe('继承·全内容');
+    expect(mapped.badge).toEqual({label: '继承', tone: 'follow'});
   });
 
   it('maps show file badge as in tone', () => {
@@ -78,7 +79,7 @@ describe('vfs-row-mapper', () => {
         kind: 'file',
         path: '/template/shared/nested.md',
         ruleState: '',
-        inclusionMode: '自动',
+        inclusionMode: '继承',
         displayState: '文件名',
       },
     ];
@@ -94,6 +95,6 @@ describe('vfs-row-mapper', () => {
   it('fallback vfs file path mapping', () => {
     const mapped: MappedVfsRow = mapVfsFilePath('/template/new.md');
     expect(mapped.name).toBe('new.md');
-    expect(mapped.subtitle).toBe('自动·全内容');
+    expect(mapped.subtitle).toBe('继承·全内容');
   });
 });

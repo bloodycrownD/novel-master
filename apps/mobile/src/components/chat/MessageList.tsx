@@ -7,11 +7,13 @@ import type {ChatMessage} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {useTheme} from '../../theme/ThemeProvider';
 import {buildChatListItems, type ChatListItem} from './message-blocks';
+import {ThinkingBlockCard} from './ThinkingBlockCard';
 import {ToolCallCard} from './ToolCallCard';
 
 type Props = {
   messages: readonly ChatMessage[];
   streamingText?: string;
+  streamingThinking?: string;
   showFullToolParams?: boolean;
   batchMode?: boolean;
   selectedMessageIds?: ReadonlySet<string>;
@@ -22,6 +24,7 @@ type Props = {
 export function MessageList({
   messages,
   streamingText,
+  streamingThinking,
   showFullToolParams,
   batchMode = false,
   selectedMessageIds,
@@ -33,11 +36,34 @@ export function MessageList({
 
   const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
-    if (streamingText && streamingText.length > 0) {
+    if (
+      (streamingText && streamingText.length > 0) ||
+      (streamingThinking && streamingThinking.length > 0)
+    ) {
       list.push({kind: 'stream'});
     }
     return list;
-  }, [items, streamingText]);
+  }, [items, streamingText, streamingThinking]);
+
+  const renderBubble = (
+    isUser: boolean,
+    body: string,
+    selected: boolean,
+  ) => (
+    <View
+      style={[
+        styles.bubble,
+        {
+          backgroundColor: isUser ? tokens.primary : tokens.surface,
+        },
+        batchMode && selected && {
+          borderColor: tokens.primary,
+          borderWidth: 2,
+        },
+      ]}>
+      <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
+    </View>
+  );
 
   return (
     <FlatList
@@ -63,13 +89,16 @@ export function MessageList({
       renderItem={({item}) => {
         if ('kind' in item && item.kind === 'stream') {
           return (
-            <View
-              style={[
-                styles.bubble,
-                styles.assistantBubble,
-                {backgroundColor: tokens.surface},
-              ]}>
-              <Text style={{color: tokens.text}}>{streamingText}</Text>
+            <View style={styles.rowAlignAssistant}>
+              {streamingThinking && streamingThinking.length > 0 ? (
+                <ThinkingBlockCard
+                  text={streamingThinking}
+                  defaultExpanded
+                />
+              ) : null}
+              {streamingText && streamingText.length > 0
+                ? renderBubble(false, streamingText, false)
+                : null}
             </View>
           );
         }
@@ -84,47 +113,52 @@ export function MessageList({
         }
         const isUser = row.message.role === 'user';
         const body = row.textParts.join('\n\n');
-        if (!body) {
+        const thinking = row.thinkingParts.join('\n\n');
+        if (!body && !thinking) {
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
-        const bubble = (
-          <View
-            style={[
-              styles.bubble,
-              isUser ? styles.userBubble : styles.assistantBubble,
-              {
-                backgroundColor: isUser ? tokens.primary : tokens.surface,
-                alignSelf: isUser ? 'flex-end' : 'flex-start',
-              },
-              batchMode && selected && {
-                borderColor: tokens.primary,
-                borderWidth: 2,
-              },
-            ]}>
-            <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
-          </View>
+        const content = (
+          <>
+            {!isUser && thinking ? (
+              <ThinkingBlockCard text={thinking} />
+            ) : null}
+            {body ? renderBubble(isUser, body, selected) : null}
+          </>
         );
 
         if (batchMode) {
           return (
             <Pressable
-              style={styles.messageRow}
+              style={styles.batchRow}
               onPress={() => onToggleMessageSelect?.(row.message.id)}>
-              <BatchCheckbox
-                checked={selected}
-                onToggle={() => onToggleMessageSelect?.(row.message.id)}
-              />
-              {bubble}
+              <View style={styles.batchCheckboxCol}>
+                <BatchCheckbox
+                  checked={selected}
+                  onToggle={() => onToggleMessageSelect?.(row.message.id)}
+                />
+              </View>
+              <View
+                style={[
+                  styles.batchBubbleCol,
+                  isUser
+                    ? styles.batchBubbleColUser
+                    : styles.batchBubbleColAssistant,
+                ]}>
+                {content}
+              </View>
             </Pressable>
           );
         }
 
         return (
           <Pressable
-            style={styles.messageRowPlain}
+            style={[
+              styles.rowAlign,
+              isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
+            ]}
             onLongPress={() => onMessageLongPress?.(row.message)}>
-            {bubble}
+            {content}
           </Pressable>
         );
       }}
@@ -135,21 +169,44 @@ export function MessageList({
 const styles = StyleSheet.create({
   list: {flex: 1},
   empty: {textAlign: 'center', marginTop: 32, paddingHorizontal: 24},
-  messageRow: {
+  rowAlign: {
+    width: '100%',
+    paddingHorizontal: 12,
+  },
+  rowAlignUser: {
+    alignItems: 'flex-end',
+  },
+  rowAlignAssistant: {
+    alignItems: 'flex-start',
+  },
+  /** Checkbox column fixed at screen left; bubble aligns in the remaining width. */
+  batchRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingHorizontal: 8,
-    gap: 4,
+    paddingLeft: 4,
+    paddingRight: 12,
   },
-  messageRowPlain: {paddingHorizontal: 0},
-  bubble: {
+  batchCheckboxCol: {
+    width: 36,
+    paddingTop: 10,
+    alignItems: 'center',
+  },
+  batchBubbleCol: {
     flex: 1,
+    minWidth: 0,
+  },
+  batchBubbleColUser: {
+    alignItems: 'flex-end',
+  },
+  batchBubbleColAssistant: {
+    alignItems: 'flex-start',
+  },
+  bubble: {
     maxWidth: '85%',
-    marginHorizontal: 4,
     marginVertical: 6,
     padding: 12,
     borderRadius: 12,
+    flexShrink: 1,
   },
-  userBubble: {},
-  assistantBubble: {},
 });

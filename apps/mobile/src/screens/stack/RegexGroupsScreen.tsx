@@ -6,12 +6,9 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
-  Pressable,
   RefreshControl,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
@@ -22,10 +19,14 @@ import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
+import {deriveRegexGroupId} from '../../utils/regex-group-id';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -40,6 +41,7 @@ function groupTitle(group: RegexGroup): string {
 
 export function RegexGroupsScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const [rows, setRows] = useState<GroupRow[]>([]);
@@ -47,8 +49,6 @@ export function RegexGroupsScreen() {
   const [menuGroupId, setMenuGroupId] = useState<string | undefined>();
   const [createVisible, setCreateVisible] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | undefined>();
-  const [formGroupId, setFormGroupId] = useState('');
-  const [formDisplayName, setFormDisplayName] = useState('');
   const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
@@ -77,67 +77,10 @@ export function RegexGroupsScreen() {
     }, [reload]),
   );
 
-  const openCreate = () => {
-    setFormGroupId('');
-    setFormDisplayName('');
-    setCreateVisible(true);
-  };
-
-  const openEdit = (groupId: string) => {
-    const group = rows.find(g => g.groupId === groupId);
-    if (!group) {
-      return;
-    }
-    setFormGroupId(group.groupId);
-    setFormDisplayName(group.displayName ?? '');
-    setEditGroupId(groupId);
-  };
-
-  const confirmCreate = async () => {
-    const groupId = formGroupId.trim();
-    if (!groupId) {
-      Alert.alert('请填写组 ID');
-      return;
-    }
-    try {
-      await runtime.regexConfig.createGroup({
-        groupId,
-        displayName: formDisplayName.trim() || null,
-      });
-      setCreateVisible(false);
-      await reload();
-      Alert.alert('已添加正则组');
-    } catch (error) {
-      Alert.alert(
-        '创建失败',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  };
-
-  const confirmEdit = async () => {
-    if (!editGroupId) {
-      return;
-    }
-    try {
-      await runtime.regexConfig.updateGroup(editGroupId, {
-        displayName: formDisplayName.trim() || null,
-      });
-      setEditGroupId(undefined);
-      await reload();
-      Alert.alert('已更新展示名称');
-    } catch (error) {
-      Alert.alert(
-        '更新失败',
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  };
-
   const setCurrent = async (groupId: string) => {
     await runtime.state.setCurrentRegexGroupId(groupId);
     await reload();
-    Alert.alert('已设为当前生效正则组');
+    showToast('已设为当前生效正则组');
   };
 
   const confirmBatchDelete = () => {
@@ -158,10 +101,7 @@ export function RegexGroupsScreen() {
             batch.exit();
             await reload();
           })().catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },
@@ -169,7 +109,8 @@ export function RegexGroupsScreen() {
   };
 
   const deleteGroup = async (groupId: string) => {
-    Alert.alert('删除正则组', `确定删除 ${groupId}？`, [
+    const title = groupTitle(rows.find(g => g.groupId === groupId) ?? {groupId});
+    Alert.alert('删除正则组', `确定删除「${title}」？`, [
       {text: '取消', style: 'cancel'},
       {
         text: '删除',
@@ -179,82 +120,18 @@ export function RegexGroupsScreen() {
             await runtime.regexConfig.deleteGroup(groupId);
             await reload();
           })().catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },
     ]);
   };
 
-  const GroupModal = ({
-    visible,
-    title,
-    idEditable,
-    onClose,
-    onConfirm,
-  }: {
-    visible: boolean;
-    title: string;
-    idEditable: boolean;
-    onClose: () => void;
-    onConfirm: () => void;
-  }) => (
-    <Modal visible={visible} transparent animationType="slide">
-      <Pressable style={styles.modalBackdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.modalSheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
-          <Text style={[styles.modalTitle, {color: tokens.text}]}>
-            {title}
-          </Text>
-          {idEditable ? (
-            <>
-              <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                组 ID
-              </Text>
-              <TextInput
-                style={[
-                  styles.input,
-                  {color: tokens.text, borderColor: tokens.border},
-                ]}
-                value={formGroupId}
-                onChangeText={setFormGroupId}
-                autoCapitalize="none"
-              />
-            </>
-          ) : (
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              组 ID：{formGroupId}
-            </Text>
-          )}
-          <Text style={[styles.label, {color: tokens.textSecondary}]}>
-            展示名称
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {color: tokens.text, borderColor: tokens.border},
-            ]}
-            value={formDisplayName}
-            onChangeText={setFormDisplayName}
-          />
-          <View style={styles.modalActions}>
-            <Pressable onPress={onClose}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
-            </Pressable>
-            <Pressable onPress={onConfirm}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                确定
-              </Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
+  const editInitialName =
+    editGroupId != null
+      ? (rows.find(g => g.groupId === editGroupId)?.displayName ??
+        groupTitle(rows.find(g => g.groupId === editGroupId)!))
+      : '';
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
@@ -267,7 +144,11 @@ export function RegexGroupsScreen() {
         onDelete={confirmBatchDelete}
         hint="选择要删除的正则组"
         normalActions={
-          <PrimaryButton label="添加" tokens={tokens} onPress={openCreate} />
+          <PrimaryButton
+            label="添加"
+            tokens={tokens}
+            onPress={() => setCreateVisible(true)}
+          />
         }
       />
       {loading && rows.length === 0 ? (
@@ -307,7 +188,7 @@ export function RegexGroupsScreen() {
                 )
               }
               title={groupTitle(item)}
-              subtitle={`${item.groupId} · ${item.ruleCount} 条规则`}
+              subtitle={`${item.ruleCount} 条规则`}
               badge={item.isCurrent && !batch.active ? '当前' : undefined}
               onMenuPress={
                 batch.active ? undefined : () => setMenuGroupId(item.groupId)
@@ -335,25 +216,48 @@ export function RegexGroupsScreen() {
           if (action === 'set-current') {
             setCurrent(id).catch(() => undefined);
           } else if (action === 'edit') {
-            openEdit(id);
+            setEditGroupId(id);
           } else if (action === 'delete') {
             deleteGroup(id).catch(() => undefined);
           }
         }}
       />
-      <GroupModal
+      <TextPromptModal
         visible={createVisible}
         title="新建正则组"
-        idEditable
+        label="名称"
+        placeholder="如 对话清洗"
+        confirmLabel="创建"
         onClose={() => setCreateVisible(false)}
-        onConfirm={() => confirmCreate().catch(() => undefined)}
+        onConfirm={async name => {
+          const taken = new Set(rows.map(r => r.groupId));
+          const groupId = deriveRegexGroupId(name, taken);
+          await runtime.regexConfig.createGroup({
+            groupId,
+            displayName: name,
+          });
+          await reload();
+          showToast('已添加正则组');
+        }}
       />
-      <GroupModal
+      <TextPromptModal
         visible={editGroupId != null}
-        title="编辑正则组"
-        idEditable={false}
+        title="编辑名称"
+        label="名称"
+        placeholder="正则组名称"
+        initialValue={editInitialName}
+        confirmLabel="保存"
         onClose={() => setEditGroupId(undefined)}
-        onConfirm={() => confirmEdit().catch(() => undefined)}
+        onConfirm={async name => {
+          if (editGroupId == null) {
+            return;
+          }
+          await runtime.regexConfig.updateGroup(editGroupId, {
+            displayName: name,
+          });
+          await reload();
+          showToast('已更新名称');
+        }}
       />
     </View>
   );
@@ -361,41 +265,8 @@ export function RegexGroupsScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
   empty: {textAlign: 'center', padding: 32},
   icon: {fontSize: 22},
-  modalBackdrop: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
-  },
-  modalSheet: {
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-    padding: 20,
-    gap: 8,
-  },
-  modalTitle: {fontSize: 18, fontWeight: '600', textAlign: 'center'},
-  label: {fontSize: 13},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  hint: {fontSize: 13},
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 16,
-    marginTop: 12,
-  },
 });

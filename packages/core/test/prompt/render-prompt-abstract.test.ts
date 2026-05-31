@@ -15,6 +15,7 @@ describe("buildPromptLlmInput abstract block", () => {
   it("T6: skips abstract block when empty", () => {
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "",
+      filetreeDisplay: "",
       messages: [],
       abstract: "",
     });
@@ -25,6 +26,7 @@ describe("buildPromptLlmInput abstract block", () => {
   it("T7: includes rendered abstract when present", () => {
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "",
+      filetreeDisplay: "",
       messages: [],
       abstract: "compressed history",
     });
@@ -34,6 +36,7 @@ describe("buildPromptLlmInput abstract block", () => {
   it("skips abstract block when abstract is whitespace only", () => {
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "",
+      filetreeDisplay: "",
       messages: [],
       abstract: "   ",
     });
@@ -48,6 +51,7 @@ describe("buildPromptLlmInput abstract block", () => {
     ];
     const input = buildPromptLlmInput(ordered, {
       worktreeDisplay: "",
+      filetreeDisplay: "",
       messages: [],
       abstract: "hist",
     });

@@ -6,6 +6,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { CompactionModelContext } from "@/domain/compaction/model/compaction-model-context.js";
+import type { PromptMacroContext } from "../prompt/render-prompt.js";
 
 /** Evaluates triggers and optionally runs compaction action before each model step. */
 export interface CompactionPipeline {
@@ -15,7 +16,7 @@ export interface CompactionPipeline {
    */
   maybeCompact(
     session: AgentSession,
-    worktreeDisplay: string,
+    macroContext: PromptMacroContext,
     modelContext: CompactionModelContext,
   ): Promise<string | undefined>;
 }

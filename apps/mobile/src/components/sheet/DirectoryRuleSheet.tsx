@@ -40,6 +40,7 @@ const SORT_ORDERS: {value: SortOrder; label: string}[] = [
 ];
 
 const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
+  {value: 'full', label: '全文本'},
   {value: 'filename', label: '文件名'},
   {value: 'header', label: '头信息'},
   {value: 'hidden', label: '不展示'},
@@ -106,7 +107,7 @@ export function DirectoryRuleSheet({
             },
           ]}>
           <Text style={[styles.heading, {color: tokens.text}]}>
-            目录纳入规则
+            目录规则
           </Text>
           <Text style={[styles.path, {color: tokens.textSecondary}]}>
             {logicalPath}

@@ -2,7 +2,7 @@
  * Global compaction policy editor (compactionPolicy store).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Alert, Text} from 'react-native';
+import {ActivityIndicator, Text} from 'react-native';
 import type {CompactionPolicy} from '@novel-master/core';
 import {FormChipGroup} from '../../components/form/FormChipGroup';
 import {FormField} from '../../components/form/FormField';
@@ -13,6 +13,8 @@ import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 const DEFAULT_POLICY: CompactionPolicy = {
   enabled: false,
@@ -25,6 +27,7 @@ const DEFAULT_POLICY: CompactionPolicy = {
 
 export function CompactionPolicyScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,7 +82,7 @@ export function CompactionPolicyScreen() {
     const token = tokenThreshold.trim() ? Number(tokenThreshold) : undefined;
     const floor = floorThreshold.trim() ? Number(floorThreshold) : undefined;
     if (enabled && token == null && floor == null) {
-      Alert.alert('压缩触发条件至少填一项');
+      showToast('压缩触发条件至少填一项');
       return null;
     }
     const keep = Number(keepLastN) || 6;
@@ -113,12 +116,9 @@ export function CompactionPolicyScreen() {
     setSaving(true);
     try {
       await runtime.compactionPolicy.setPolicy(policy);
-      Alert.alert('已保存全局压缩策略');
+      showToast('已保存全局压缩策略');
     } catch (error) {
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
     }

@@ -16,7 +16,7 @@ export interface MappedVfsRow {
   readonly kind: 'dir' | 'file';
   readonly subtitle: string;
   readonly badge: VfsRowBadge | null;
-  /** Directory rule lamp (规则·开). */
+  /** Directory rule enabled (for toggle menu). */
   readonly ruleEnabled: boolean;
 }
 
@@ -64,16 +64,18 @@ export function mapWorktreeRow(
   const name = entryName(row.path);
   if (row.kind === 'dir') {
     const ruleEnabled = row.ruleState === '规则·开';
-    const countSuffix =
+    const subtitle =
       childFileCount != null && childFileCount > 0
-        ? ` | ${childFileCount}个文件`
+        ? `${childFileCount}个文件`
         : '';
     return {
       path: row.path,
       name,
       kind: 'dir',
-      subtitle: `${row.ruleState}${countSuffix}`,
-      badge: null,
+      subtitle,
+      badge: ruleEnabled
+        ? {label: '开启', tone: 'in'}
+        : {label: '关闭', tone: 'muted'},
       ruleEnabled,
     };
   }
@@ -85,7 +87,7 @@ export function mapWorktreeRow(
   } else if (row.inclusionMode === '展示') {
     badge = {label: '展示', tone: 'in'};
   } else {
-    badge = {label: row.displayState, tone: 'follow'};
+    badge = {label: '继承', tone: 'follow'};
   }
 
   return {
@@ -104,8 +106,8 @@ export function mapVfsFilePath(path: string): MappedVfsRow {
     path,
     name: entryName(path),
     kind: 'file',
-    subtitle: '自动·全内容',
-    badge: {label: '全内容', tone: 'follow'},
+    subtitle: '继承·全内容',
+    badge: {label: '继承', tone: 'follow'},
     ruleEnabled: false,
   };
 }

@@ -116,7 +116,7 @@ function parseFillPolicy(
   if (typeof value !== "string") {
     return undefined;
   }
-  if (value === "hidden" || value === "filename" || value === "header") {
+  if (value === "hidden" || value === "filename" || value === "header" || value === "full") {
     return value;
   }
   throw new Error(`invalid --fill: ${value}`);

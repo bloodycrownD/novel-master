@@ -5,7 +5,7 @@
  */
 
 import type { ChatMessage } from "../../domain/chat/model/message.js";
-import { messageBodyText } from "../../domain/prompt/logic/message-body.js";
+import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
 import { renderMacro } from "../../infra/prompt-template/macro-render.js";
@@ -14,12 +14,21 @@ import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
 /** Dot fields available during prompt macro expansion. */
 export interface PromptRenderDot {
   readonly worktree: string;
+  readonly filetree: string;
   readonly abstract: string;
 }
+
+/** Worktree strings for prompt/compaction macros (excludes chat messages). */
+export type PromptMacroContext = Omit<
+  PromptRenderContext,
+  "messages" | "abstract"
+>;
 
 /** Inputs required to build LLM input from prompt blocks. */
 export interface PromptRenderContext {
   readonly worktreeDisplay: string;
+  /** ASCII tree from {@link WorktreeService.renderFileTree}; macro `{{.filetree}}`. */
+  readonly filetreeDisplay: string;
   readonly messages: readonly ChatMessage[];
   /** Compaction abstract for abstract blocks and `{{.abstract}}`; default "". */
   readonly abstract?: string;
@@ -48,6 +57,7 @@ function formatSegment(role: string, body: string): string {
 function buildDot(ctx: PromptRenderContext): PromptRenderDot {
   return {
     worktree: ctx.worktreeDisplay,
+    filetree: ctx.filetreeDisplay,
     abstract: ctx.abstract ?? "",
   };
 }
@@ -141,7 +151,9 @@ export function formatPromptLlmInputForCli(
     }
 
     for (const message of input.messages) {
-      segments.push(formatSegment(message.role, messageBodyText(message)));
+      for (const segment of formatChatMessageForCliPreview(message)) {
+        segments.push(formatSegment(segment.role, segment.body));
+      }
     }
   }
 

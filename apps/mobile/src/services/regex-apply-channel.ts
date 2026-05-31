@@ -9,6 +9,7 @@ import {
   type RegexChannel,
   type RegexConfigService,
 } from '@novel-master/core';
+import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export async function applyActiveRegexChannel(
   config: RegexConfigService,
@@ -27,5 +28,22 @@ export async function applyActiveRegexChannel(
     rules,
     channel,
     floorMap,
+  );
+}
+
+/** Visible session messages with display-channel regex (chat UI; DB unchanged). */
+export async function loadSessionMessagesForDisplay(
+  runtime: MobileNovelMasterRuntime,
+  sessionId: string,
+): Promise<ChatMessage[]> {
+  const all = await runtime.messages.listBySession(sessionId);
+  const visible = all.filter(m => !m.hidden);
+  const activeGroupId = await runtime.state.getCurrentRegexGroupId();
+  return applyActiveRegexChannel(
+    runtime.regexConfig,
+    activeGroupId,
+    all,
+    visible,
+    'display',
   );
 }

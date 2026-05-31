@@ -20,5 +20,7 @@ export interface CompactionContext {
   readonly modelContext: CompactionModelContext;
   /** Worktree display for text abstract macro expansion (excludes dot.abstract). */
   readonly worktreeDisplay: string;
+  /** ASCII file tree for `{{.filetree}}` in compaction abstract templates. */
+  readonly filetreeDisplay: string;
   readonly now?: Date;
 }

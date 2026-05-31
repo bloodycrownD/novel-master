@@ -51,6 +51,20 @@ npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn
 
 `prestart` and `preandroid` in this package run the same build automatically.
 
+## App launcher icon
+
+Source: repo root [`icon.webp`](../../icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
+
+The generator scales artwork to **72%** of the canvas (inside Material / iOS safe zone) on a **corner-sampled brown background**, so circle, squircle, and rounded-square launcher masks do not clip the book. Android **8+** also gets adaptive icon layers (`foreground` + `background`) via `mipmap-anydpi-v26`.
+
+After changing the artwork:
+
+```bash
+npm run icons -w @novel-master/mobile
+```
+
+Then **uninstall and reinstall** the app (`npm run mobile:android`). Launcher icon caches often ignore over-install updates.
+
 ## Install
 
 From the monorepo root:

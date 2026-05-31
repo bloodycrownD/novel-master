@@ -38,6 +38,7 @@ describe("buildPromptLlmInput", () => {
     const messages = [message("user", "{{literal}}", 1)];
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "WT",
+      filetreeDisplay: "TREE",
       messages,
       now: fixedNow,
     });
@@ -46,16 +47,22 @@ describe("buildPromptLlmInput", () => {
     assert.equal(input.messages[0]!.content.blocks[0]!.type, "text");
   });
 
-  it("omits system when no system text blocks", () => {
+  it("expands {{.filetree}} in system blocks", () => {
     const blocks: PromptBlock[] = [
-      { name: "c", type: "chat" },
+      {
+        name: "tree",
+        type: "text",
+        role: "system",
+        content: "Files:\n{{ .filetree }}",
+      },
     ];
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "",
+      filetreeDisplay: "workspace/\n└── README.md",
       messages: [],
       now: fixedNow,
     });
-    assert.equal(input.system, undefined);
+    assert.equal(input.system, "Files:\nworkspace/\n└── README.md");
   });
 });
 
@@ -67,7 +74,7 @@ describe("formatPromptLlmInputForCli", () => {
       { name: "u", type: "text", role: "user", content: "ask" },
     ];
     const messages = [message("user", "{{literal}}", 1)];
-    const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
+    const ctx = { worktreeDisplay: "WT", filetreeDisplay: "TREE", messages, now: fixedNow };
     const input = buildPromptLlmInput(blocks, ctx);
     const out = formatPromptLlmInputForCli(blocks, input, ctx);
     assert.equal(out, "system: ctx\nuser: {{literal}}\nuser: ask");
@@ -78,7 +85,7 @@ describe("formatPromptLlmInputForCli", () => {
       { name: "a", type: "text", role: "system", content: "one" },
       { name: "b", type: "text", role: "user", content: "two" },
     ];
-    const ctx = { worktreeDisplay: "", messages: [], now: fixedNow };
+    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages: [], now: fixedNow };
     const input = buildPromptLlmInput(blocks, ctx);
     const out = formatPromptLlmInputForCli(blocks, input, ctx);
     assert.equal(out, "system: one\nuser: two");
@@ -90,9 +97,62 @@ describe("formatPromptLlmInputForCli", () => {
     const blocks: PromptBlock[] = [
       { name: "m", type: "text", role: "system", content: "line1\nline2" },
     ];
-    const ctx = { worktreeDisplay: "", messages: [], now: fixedNow };
+    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages: [], now: fixedNow };
     const input = buildPromptLlmInput(blocks, ctx);
     const out = formatPromptLlmInputForCli(blocks, input, ctx);
     assert.equal(out, "system: line1\nline2");
+  });
+
+  it("renders tool_use input and tool role results in chat preview", () => {
+    const blocks: PromptBlock[] = [{ name: "c", type: "chat" }];
+    const messages: ChatMessage[] = [
+      message("user", "write a file", 1),
+      {
+        id: "m2",
+        sessionId: "s1",
+        seq: 2,
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "tool-1",
+              name: "vfs.write",
+              input: { path: "/love_message.txt", content: "hi" },
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 2,
+        hidden: false,
+      },
+      {
+        id: "m3",
+        sessionId: "s1",
+        seq: 3,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "tool-1",
+              content: '{\n  "version": 1\n}',
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 3,
+        hidden: false,
+      },
+    ];
+    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages, now: fixedNow };
+    const input = buildPromptLlmInput(blocks, ctx);
+    const out = formatPromptLlmInputForCli(blocks, input, ctx);
+    assert.match(out, /assistant: \[tool_use name=vfs\.write id=tool-1\]/);
+    assert.match(out, /"path": "\/love_message\.txt"/);
+    assert.match(out, /tool: ok/);
+    assert.ok(!out.includes("user: [tool_result"));
   });
 });

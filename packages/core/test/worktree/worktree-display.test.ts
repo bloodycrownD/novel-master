@@ -4,6 +4,7 @@ import {
   joinFileBlocks,
   parseMarkdownFrontMatter,
   renderFileBlock,
+  splitMarkdownFrontMatter,
 } from "@novel-master/core";
 
 describe("worktree display", () => {
@@ -22,6 +23,20 @@ describe("worktree display", () => {
   it("parses valid front matter", () => {
     const lines = parseMarkdownFrontMatter("---\ntitle: x\n---\nbody");
     assert.deepEqual(lines, ["1|title: x"]);
+  });
+
+  it("splits front matter from markdown body", () => {
+    const split = splitMarkdownFrontMatter("---\ntitle: x\n---\n# Hi\n");
+    assert.equal(split.closed, true);
+    assert.deepEqual(split.frontMatterLines, ["title: x"]);
+    assert.equal(split.body, "# Hi\n");
+  });
+
+  it("split without front matter returns full body", () => {
+    const split = splitMarkdownFrontMatter("# Only\n");
+    assert.equal(split.frontMatterLines, null);
+    assert.equal(split.body, "# Only\n");
+    assert.equal(split.closed, true);
   });
 
   it("degrades invalid front matter", () => {

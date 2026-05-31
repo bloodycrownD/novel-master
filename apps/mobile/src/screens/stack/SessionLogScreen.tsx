@@ -6,7 +6,7 @@ import {Alert, StyleSheet, Text, View} from 'react-native';
 import {CheckpointFifoBanner} from '../../components/session-log/CheckpointFifoBanner';
 import {SessionTimeline} from '../../components/session-log/SessionTimeline';
 import {useToast} from '../../components/chrome/ToastHost';
-import {formatError} from '../../errors/format-error';
+import {toastMessage} from '../../errors/toast-message';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -59,11 +59,11 @@ export function SessionLogScreen() {
       });
       setTimeline(snap.timeline);
     } catch (error) {
-      Alert.alert('加载失败', formatError(error));
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
-  }, [runtime, sessionId, appUi]);
+  }, [runtime, sessionId, appUi, showToast]);
 
   useEffect(() => {
     reload().catch(() => undefined);
@@ -86,7 +86,7 @@ export function SessionLogScreen() {
                 showToast('已回滚检查点');
                 return reload();
               })
-              .catch(err => Alert.alert('回滚失败', formatError(err)))
+              .catch(err => showToast(toastMessage('回滚失败', err)))
               .finally(() => setRollbackInProgress(false));
           },
         },

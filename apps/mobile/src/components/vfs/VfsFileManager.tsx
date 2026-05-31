@@ -45,8 +45,9 @@ import {
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
-import {formatError} from '../../errors/format-error';
+import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
 
 export type VfsFileManagerProps = {
   scope: VfsScope;
@@ -71,6 +72,7 @@ export function VfsFileManager({
   rootPath,
 }: VfsFileManagerProps) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const root = rootPath ?? vfsScopeRootPath(scope);
   const [currentPath, setCurrentPath] = useState(root);
   const [rows, setRows] = useState<MappedVfsRow[]>([]);
@@ -128,7 +130,7 @@ export function VfsFileManager({
         });
       setRows(mapped);
     } catch (error) {
-      Alert.alert('加载失败', formatError(error));
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -156,13 +158,13 @@ export function VfsFileManager({
     ? menuRow.kind === 'dir'
       ? [
           {label: '进入', action: 'open'},
-          {label: '切换规则开关', action: 'toggle-status'},
+          {label: '规则开关', action: 'toggle-status'},
           {label: '重命名', action: 'rename'},
           {label: '删除', action: 'delete', danger: true},
         ]
       : [
           {label: '打开', action: 'open'},
-          {label: '切换纳入方式', action: 'toggle-include'},
+          {label: '状态变更', action: 'toggle-include'},
           {label: '重命名', action: 'rename'},
           {label: '删除', action: 'delete', danger: true},
         ]
@@ -171,7 +173,7 @@ export function VfsFileManager({
   const moreMenuItems: SheetMenuItem[] = [
     {label: '新建目录', action: 'create-directory'},
     {label: '新建文件', action: 'create-file'},
-    {label: '目录纳入规则', action: 'directory-rule'},
+    {label: '目录规则', action: 'directory-rule'},
   ];
 
   const openPrompt = (state: PromptState) => {
@@ -199,7 +201,7 @@ export function VfsFileManager({
           menuPath,
           menuRow.ruleEnabled,
         );
-        Alert.alert('目录规则', next ? '已开启' : '已关闭');
+        showToast(next ? '目录规则已开启' : '目录规则已关闭');
         await reload();
         return;
       }
@@ -251,7 +253,7 @@ export function VfsFileManager({
                 deleteVfsEntry(vfs, menuPath, {recursive: true})
                   .then(() => reload())
                   .catch(err =>
-                    Alert.alert('删除失败', formatError(err)),
+                    showToast(toastMessage('删除失败', err)),
                   );
               },
             },
@@ -259,7 +261,7 @@ export function VfsFileManager({
         );
       }
     } catch (error) {
-      Alert.alert('操作失败', formatError(error));
+      showToast(toastMessage('操作失败', error));
     }
   };
 
@@ -315,7 +317,7 @@ export function VfsFileManager({
           );
           setDirRuleOpen(true);
         } catch (error) {
-          Alert.alert('加载规则失败', formatError(error));
+          showToast(toastMessage('加载规则失败', error));
         }
       })();
     }
@@ -415,17 +417,6 @@ export function VfsFileManager({
                   </View>
                 ) : null}
               </Pressable>
-              {item.kind === 'dir' ? (
-                <Text
-                  style={[
-                    styles.lamp,
-                    item.ruleEnabled ? styles.lampOn : styles.lampOff,
-                  ]}>
-                  💡
-                </Text>
-              ) : (
-                <View style={styles.lampPlaceholder} />
-              )}
               <Pressable
                 onPress={() => setMenuPath(item.path)}
                 style={styles.menuBtn}
@@ -500,7 +491,7 @@ export function VfsFileManager({
                     .onSubmit(promptValue)
                     .then(() => reload())
                     .catch(err =>
-                      Alert.alert('失败', formatError(err)),
+                      showToast(toastMessage('失败', err)),
                     );
                 }}>
                 <Text style={{color: tokens.primary}}>确定</Text>
@@ -536,10 +527,6 @@ const styles = StyleSheet.create({
   kind: {fontSize: 18, marginRight: 8},
   textBlock: {flex: 1, minWidth: 0},
   badge: {borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2},
-  lamp: {fontSize: 14, marginRight: 4},
-  lampOn: {opacity: 1},
-  lampOff: {opacity: 0.25},
-  lampPlaceholder: {width: 18},
   menuBtn: {paddingHorizontal: 12, paddingVertical: 8},
   empty: {textAlign: 'center', marginTop: 32},
   promptBackdrop: {

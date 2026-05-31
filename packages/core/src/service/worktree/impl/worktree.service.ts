@@ -29,6 +29,7 @@ import {
   type WorktreeFileSortMeta,
 } from "@/domain/worktree/logic/worktree-eval.js";
 import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
+import { renderWorktreeFileTree } from "@/domain/worktree/logic/worktree-file-tree.js";
 import {
   isWorktreeRootPath,
   worktreeRootLogicalPath,
@@ -122,6 +123,17 @@ export class DefaultWorktreeService implements WorktreeService {
     const blocks: string[] = [];
     await this.walkDir(ctx, worktreeRootLogicalPath(this.scope), [], blocks);
     return joinFileBlocks(blocks);
+  }
+
+  async renderFileTree(): Promise<string> {
+    const ctx = await this.loadContext();
+    return renderWorktreeFileTree({
+      scope: this.scope,
+      allDirs: ctx.allDirs,
+      fileSet: ctx.fileSet,
+      dirRuleMap: ctx.dirRuleMap,
+      mtimeByPath: ctx.mtimeByPath,
+    });
   }
 
   private async loadContext(): Promise<TreeContext> {

@@ -1,11 +1,12 @@
 /**
  * Protocol-specific model sampling fields (openai / anthropic / gemini).
  */
-import React from 'react';
+import React, {useMemo} from 'react';
 import {StyleSheet, Text, TextInput, View} from 'react-native';
-import type {
-  LlmProtocolKind,
-  ModelSamplingParams,
+import {
+  mergeSamplingWithDefaults,
+  type LlmProtocolKind,
+  type ModelSamplingParams,
 } from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -19,7 +20,7 @@ function numStr(value: number | undefined): string {
   return value != null ? String(value) : '';
 }
 
-function parseOptionalNumber(raw: string): number | undefined {
+function parseNumber(raw: string): number | undefined {
   const t = raw.trim();
   if (!t) {
     return undefined;
@@ -32,12 +33,10 @@ function NumberField({
   label,
   value,
   onChangeText,
-  step = '1',
 }: {
   label: string;
   value: string;
   onChangeText: (v: string) => void;
-  step?: string;
 }) {
   const {tokens} = useTheme();
   return (
@@ -48,8 +47,6 @@ function NumberField({
         value={value}
         onChangeText={onChangeText}
         keyboardType="decimal-pad"
-        placeholder="可选"
-        placeholderTextColor={tokens.textSecondary}
       />
     </View>
   );
@@ -58,67 +55,50 @@ function NumberField({
 function patchOpenAi(
   prev: ModelSamplingParams | undefined,
   patch: Record<string, number | undefined>,
-): ModelSamplingParams | undefined {
+): ModelSamplingParams {
   const base = prev?.protocol === 'openai' ? {...prev.openai} : {};
-  const merged = {...base, ...patch};
-  const keys = Object.keys(merged).filter(
-    k => merged[k as keyof typeof merged] != null,
-  );
-  if (keys.length === 0) {
-    return undefined;
-  }
   return {
     protocol: 'openai',
-    openai: merged,
+    openai: {...base, ...patch},
   };
 }
 
 function patchAnthropic(
   prev: ModelSamplingParams | undefined,
   patch: Record<string, number | undefined>,
-): ModelSamplingParams | undefined {
+): ModelSamplingParams {
   const base = prev?.protocol === 'anthropic' ? {...prev.anthropic} : {};
-  const merged = {...base, ...patch};
-  const keys = Object.keys(merged).filter(
-    k => merged[k as keyof typeof merged] != null,
-  );
-  if (keys.length === 0) {
-    return undefined;
-  }
   return {
     protocol: 'anthropic',
-    anthropic: merged,
+    anthropic: {...base, ...patch},
   };
 }
 
 function patchGemini(
   prev: ModelSamplingParams | undefined,
   patch: Record<string, number | undefined>,
-): ModelSamplingParams | undefined {
+): ModelSamplingParams {
   const base = prev?.protocol === 'gemini' ? {...prev.gemini} : {};
-  const merged = {...base, ...patch};
-  const keys = Object.keys(merged).filter(
-    k => merged[k as keyof typeof merged] != null,
-  );
-  if (keys.length === 0) {
-    return undefined;
-  }
   return {
     protocol: 'gemini',
-    gemini: merged,
+    gemini: {...base, ...patch},
   };
 }
 
 export function SamplingForm({protocol, params, onChange}: Props) {
   const {tokens} = useTheme();
-  const openai = params?.protocol === 'openai' ? params.openai : {};
-  const anthropic = params?.protocol === 'anthropic' ? params.anthropic : {};
-  const gemini = params?.protocol === 'gemini' ? params.gemini : {};
+  const effective = useMemo(
+    () => mergeSamplingWithDefaults(protocol, params),
+    [protocol, params],
+  );
+  const openai = effective.protocol === 'openai' ? effective.openai : {};
+  const anthropic = effective.protocol === 'anthropic' ? effective.anthropic : {};
+  const gemini = effective.protocol === 'gemini' ? effective.gemini : {};
 
   return (
     <View style={styles.root}>
       <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-        留空表示使用协议默认参数。
+        展示协议推荐默认值；保存后以本页为准。
       </Text>
       {protocol === 'openai' ? (
         <>
@@ -126,23 +106,21 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             label="温度"
             value={numStr(openai.temperature)}
             onChangeText={v =>
-              onChange(patchOpenAi(params, {temperature: parseOptionalNumber(v)}))
+              onChange(patchOpenAi(params, {temperature: parseNumber(v)}))
             }
           />
           <NumberField
             label="Top P"
             value={numStr(openai.top_p)}
             onChangeText={v =>
-              onChange(patchOpenAi(params, {top_p: parseOptionalNumber(v)}))
+              onChange(patchOpenAi(params, {top_p: parseNumber(v)}))
             }
           />
           <NumberField
             label="Max Tokens"
             value={numStr(openai.max_tokens)}
             onChangeText={v =>
-              onChange(
-                patchOpenAi(params, {max_tokens: parseOptionalNumber(v)}),
-              )
+              onChange(patchOpenAi(params, {max_tokens: parseNumber(v)}))
             }
           />
         </>
@@ -154,7 +132,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             value={numStr(anthropic.temperature)}
             onChangeText={v =>
               onChange(
-                patchAnthropic(params, {temperature: parseOptionalNumber(v)}),
+                patchAnthropic(params, {temperature: parseNumber(v)}),
               )
             }
           />
@@ -162,14 +140,14 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             label="Top P"
             value={numStr(anthropic.top_p)}
             onChangeText={v =>
-              onChange(patchAnthropic(params, {top_p: parseOptionalNumber(v)}))
+              onChange(patchAnthropic(params, {top_p: parseNumber(v)}))
             }
           />
           <NumberField
             label="Top K"
             value={numStr(anthropic.top_k)}
             onChangeText={v =>
-              onChange(patchAnthropic(params, {top_k: parseOptionalNumber(v)}))
+              onChange(patchAnthropic(params, {top_k: parseNumber(v)}))
             }
           />
           <NumberField
@@ -177,7 +155,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             value={numStr(anthropic.max_tokens)}
             onChangeText={v =>
               onChange(
-                patchAnthropic(params, {max_tokens: parseOptionalNumber(v)}),
+                patchAnthropic(params, {max_tokens: parseNumber(v)}),
               )
             }
           />
@@ -189,21 +167,21 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             label="温度"
             value={numStr(gemini.temperature)}
             onChangeText={v =>
-              onChange(patchGemini(params, {temperature: parseOptionalNumber(v)}))
+              onChange(patchGemini(params, {temperature: parseNumber(v)}))
             }
           />
           <NumberField
             label="Top P"
             value={numStr(gemini.topP)}
             onChangeText={v =>
-              onChange(patchGemini(params, {topP: parseOptionalNumber(v)}))
+              onChange(patchGemini(params, {topP: parseNumber(v)}))
             }
           />
           <NumberField
             label="Top K"
             value={numStr(gemini.topK)}
             onChangeText={v =>
-              onChange(patchGemini(params, {topK: parseOptionalNumber(v)}))
+              onChange(patchGemini(params, {topK: parseNumber(v)}))
             }
           />
           <NumberField
@@ -212,7 +190,7 @@ export function SamplingForm({protocol, params, onChange}: Props) {
             onChangeText={v =>
               onChange(
                 patchGemini(params, {
-                  maxOutputTokens: parseOptionalNumber(v),
+                  maxOutputTokens: parseNumber(v),
                 }),
               )
             }

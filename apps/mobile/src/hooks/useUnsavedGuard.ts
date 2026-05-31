@@ -1,7 +1,7 @@
 /**
  * Blocks navigation when the editor has unsaved changes.
  */
-import {useEffect} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import {Alert} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 
@@ -9,11 +9,16 @@ import {useNavigation} from '@react-navigation/native';
 export function useUnsavedGuard(
   isDirty: boolean,
   message = '有未保存的更改，确定离开？',
-): void {
+): {allowLeaveWithoutPrompt: () => void} {
   const navigation = useNavigation();
+  const allowLeaveRef = useRef(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', event => {
+      if (allowLeaveRef.current) {
+        allowLeaveRef.current = false;
+        return;
+      }
       if (!isDirty) {
         return;
       }
@@ -29,4 +34,10 @@ export function useUnsavedGuard(
     });
     return unsubscribe;
   }, [navigation, isDirty, message]);
+
+  const allowLeaveWithoutPrompt = useCallback(() => {
+    allowLeaveRef.current = true;
+  }, []);
+
+  return {allowLeaveWithoutPrompt};
 }

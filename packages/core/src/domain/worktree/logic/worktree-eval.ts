@@ -114,6 +114,9 @@ export function evaluateFileDisplay(params: {
   if (fill === "hidden") {
     return "hidden";
   }
+  if (fill === "full") {
+    return "full";
+  }
   if (fill === "filename") {
     return "filename";
   }

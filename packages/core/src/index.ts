@@ -178,7 +178,15 @@ export {
   joinFileBlocks,
   formatLocalMtime,
 } from "./domain/worktree/logic/worktree-display.js";
-export { parseMarkdownFrontMatter } from "./domain/worktree/logic/front-matter.js";
+export {
+  renderWorktreeFileTree,
+  worktreeFileTreeRootLabel,
+} from "./domain/worktree/logic/worktree-file-tree.js";
+export {
+  parseMarkdownFrontMatter,
+  splitMarkdownFrontMatter,
+  type MarkdownFrontMatterSplit,
+} from "./domain/worktree/logic/front-matter.js";
 export { replaceVfsSubtree } from "./domain/vfs/logic/vfs-tree-copy.js";
 export { createWorktreeService } from "./service/worktree/create-worktree-service.js";
 export type { WorktreeService } from "./service/worktree/worktree.port.js";
@@ -206,6 +214,7 @@ export {
 export type {
   PromptRenderContext,
   PromptRenderDot,
+  PromptMacroContext,
   PromptLlmInput,
 } from "./service/prompt/render-prompt.js";
 export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
@@ -262,6 +271,13 @@ export type {
   GeminiSamplingParams,
 } from "./domain/provider/model/model-sampling-params.js";
 export { samplingProtocol } from "./domain/provider/model/model-sampling-params.js";
+export {
+  mergeSamplingWithDefaults,
+  maxOutputTokensFromSampling,
+  OPENAI_SAMPLING_DEFAULTS,
+  ANTHROPIC_SAMPLING_DEFAULTS,
+  GEMINI_SAMPLING_DEFAULTS,
+} from "./domain/provider/model/protocol-sampling-defaults.js";
 export type { ModelSamplingProfile } from "./domain/provider/model/model-sampling-profile.js";
 export {
   modelSamplingProfileFromJson,

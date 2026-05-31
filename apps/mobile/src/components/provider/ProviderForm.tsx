@@ -2,7 +2,7 @@
  * Shared provider create/edit form (§14 M6).
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ActivityIndicator, Alert, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import type {LlmProtocolKind} from '@novel-master/core';
 import {FormChipGroup} from '../form/FormChipGroup';
 import {FormField} from '../form/FormField';
@@ -11,6 +11,8 @@ import {FormTextInput} from '../form/FormTextInput';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
 
@@ -117,6 +119,7 @@ export function ProviderForm({
   onSubmit,
 }: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const [values, setValues] = useState<ProviderFormValues>({
     ...EMPTY_PROVIDER_FORM,
     ...initial,
@@ -144,10 +147,7 @@ export function ProviderForm({
     try {
       await onSubmit(values);
     } catch (error) {
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('保存失败', error));
     }
   };
 

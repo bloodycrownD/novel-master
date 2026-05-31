@@ -11,6 +11,7 @@ import { visibleFloorByMessageId } from "@/domain/chat/logic/message-visible-flo
 import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
 import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
 import { assertNoDoomLoopInBlocks } from "@/domain/agent/logic/doom-loop.js";
+import { formatToolOutputForLlm } from "@/domain/tool/logic/format-tool-output.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
@@ -37,7 +38,7 @@ export interface DefaultAgentRunnerDeps {
 const DEFAULT_MAX_STEPS = 20;
 
 /**
- * Executes agent loops: compaction â†?LLM â†?tools â†?repeat up to maxSteps.
+ * Executes agent loops: compaction ??LLM ??tools ??repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<VfsToolContext>;
@@ -61,14 +62,13 @@ export class DefaultAgentRunner implements AgentRunner {
     let compactionAbstract = "";
 
     for (let step = 0; step < maxSteps; step++) {
-      const worktreeDisplay = options.promptContext.worktreeDisplay;
       const modelContext = {
         workspaceModelId: options.workspaceModelId,
         cliModelId: options.cliModelId,
       };
       const nextAbstract = await this.deps.compaction.maybeCompact(
         this.deps.session,
-        worktreeDisplay,
+        options.promptContext,
         modelContext,
       );
       if (nextAbstract !== undefined) {
@@ -146,8 +146,7 @@ export class DefaultAgentRunner implements AgentRunner {
         let content: string;
         try {
           const out = await this.toolRunner.call(tu.name, tu.input, this.deps.toolCtx);
-          content =
-            typeof out === "string" ? out : JSON.stringify(out, null, 2);
+          content = formatToolOutputForLlm(out);
         } catch (e: unknown) {
           const msg = e instanceof Error ? e.message : String(e);
           content = `Error: ${msg}`;

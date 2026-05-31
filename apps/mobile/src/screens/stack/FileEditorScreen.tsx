@@ -4,7 +4,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Keyboard,
   Pressable,
   ScrollView,
@@ -17,13 +16,16 @@ import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import {formatError} from '../../errors/format-error';
+import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {FileMarkdownPreview} from '../../components/vfs/FileMarkdownPreview';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
 export function FileEditorScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<FileEditorRoute>();
   const {path, scopeKind, projectId, sessionId} = route.params;
@@ -70,7 +72,7 @@ export function FileEditorScreen() {
         setVersion(result.version);
       } catch (error) {
         if (!cancelled) {
-          Alert.alert('读取失败', formatError(error));
+          showToast(toastMessage('读取失败', error));
         }
       } finally {
         if (!cancelled) {
@@ -112,9 +114,9 @@ export function FileEditorScreen() {
       const vfs = resolveVfs();
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);
-      Alert.alert('已保存');
+      showToast('已保存');
     } catch (error) {
-      Alert.alert('保存失败', formatError(error));
+      showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -165,13 +167,7 @@ export function FileEditorScreen() {
           style={[styles.preview, {backgroundColor: tokens.surface}]}
           contentContainerStyle={styles.previewContent}
           keyboardShouldPersistTaps="handled">
-          <Text
-            style={[
-              styles.previewText,
-              {color: tokens.text},
-            ]}>
-            {content || '（空文件）'}
-          </Text>
+          <FileMarkdownPreview path={path} content={content} tokens={tokens} />
         </ScrollView>
       ) : (
         <TextInput
@@ -210,9 +206,4 @@ const styles = StyleSheet.create({
   },
   preview: {flex: 1},
   previewContent: {padding: 12},
-  previewText: {
-    fontFamily: 'monospace',
-    fontSize: 14,
-    lineHeight: 20,
-  },
 });

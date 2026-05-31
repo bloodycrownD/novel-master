@@ -45,7 +45,10 @@ export class DefaultCompactionAction implements CompactionAction {
     await session.hideRange(fromSeq, toSeq);
 
     const now = ctx.now ?? new Date();
-    const dotForMacro = { worktree: ctx.worktreeDisplay };
+    const dotForMacro = {
+      worktree: ctx.worktreeDisplay,
+      filetree: ctx.filetreeDisplay,
+    };
     const root = {
       time: formatLocalDateTime(now),
       week_cn: formatWeekCn(now),

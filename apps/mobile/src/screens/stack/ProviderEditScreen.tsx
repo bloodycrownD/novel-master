@@ -4,7 +4,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   StyleSheet,
   Text,
   View,
@@ -21,12 +20,15 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type EditRoute = RouteProp<RootStackParamList, 'ProviderEdit'>;
 
 export function ProviderEditScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const route = useRoute<EditRoute>();
@@ -67,15 +69,12 @@ export function ProviderEditScreen() {
         apiKey: '',
       });
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-        [{text: '返回', onPress: () => navigation.goBack()}],
-      );
+      showToast(toastMessage('加载失败', error));
+      navigation.goBack();
     } finally {
       setLoading(false);
     }
-  }, [runtime, providerId, navigation, setStackOverride]);
+  }, [runtime, providerId, navigation, setStackOverride, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -84,11 +83,10 @@ export function ProviderEditScreen() {
 
   useEffect(() => {
     if (!providerId) {
-      Alert.alert('错误', '缺少 providerId', [
-        {text: '返回', onPress: () => navigation.goBack()},
-      ]);
+      showToast(toastMessage('错误', '缺少 providerId'));
+      navigation.goBack();
     }
-  }, [providerId, navigation]);
+  }, [providerId, navigation, showToast]);
 
   if (loading || !initial || !providerId) {
     return (
@@ -123,9 +121,8 @@ export function ProviderEditScreen() {
             } else {
               await runtime.providers.edit(providerId, patch);
             }
-            Alert.alert('已保存', undefined, [
-              {text: '确定', onPress: () => navigation.goBack()},
-            ]);
+            showToast('已保存');
+            navigation.goBack();
           } finally {
             setSaving(false);
           }

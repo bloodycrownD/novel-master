@@ -14,6 +14,8 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
 import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';
 import {useRuntime} from '../../hooks/useRuntime';
+import {useNovelMaster} from '../../runtime/novel-master-context';
+import {readLlmStreamEnabled} from '../../storage/llm-stream-pref';
 
 type Props = {
   scope: AgentRunScope;
@@ -21,6 +23,7 @@ type Props = {
   running: boolean;
   onRunningChange: (running: boolean) => void;
   onStreamText: (delta: string) => void;
+  onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void;
   onNeedModel: () => void;
@@ -32,12 +35,14 @@ export function ChatComposer({
   running,
   onRunningChange,
   onStreamText,
+  onStreamThinking,
   onStreamReset,
   onMessagesChanged,
   onNeedModel,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
+  const {appUi} = useNovelMaster();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | undefined>();
 
@@ -58,9 +63,20 @@ export function ChatComposer({
     onRunningChange(true);
     setText('');
     try {
-      await runAgentTurn(runtime, scope, content, {
-        onStreamText,
-      });
+      const stream =
+        appUi != null ? await readLlmStreamEnabled(appUi) : true;
+      await runAgentTurn(
+        runtime,
+        scope,
+        content,
+        stream
+          ? {
+              onStreamText,
+              onStreamThinking,
+            }
+          : undefined,
+        {stream},
+      );
       onMessagesChanged();
     } catch (err) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -81,8 +97,10 @@ export function ChatComposer({
     onNeedModel,
     onRunningChange,
     onStreamText,
+    onStreamThinking,
     onStreamReset,
     onMessagesChanged,
+    appUi,
   ]);
 
   const disabled = !hasModel || running;

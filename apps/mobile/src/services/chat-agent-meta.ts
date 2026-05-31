@@ -13,6 +13,8 @@ export interface ChatAgentMeta {
   readonly agentId: string | undefined;
   readonly agentName: string;
   readonly modelLabel: string;
+  /** Full prompt token estimate (e.g. `2.5K / 12K tokens`). */
+  readonly tokenLabel: string;
   /** Agent has dedicated model pin (no workspace suffix). */
   readonly hasDedicatedModel: boolean;
 }
@@ -26,6 +28,7 @@ export async function loadChatAgentMeta(
       agentId: undefined,
       agentName: '未配置 Agent',
       modelLabel: '—',
+      tokenLabel: '',
       hasDedicatedModel: false,
     };
   }
@@ -49,14 +52,12 @@ export async function loadChatAgentMeta(
       } catch {
         modelLabel = applicationModelId;
       }
-      if (!hasDedicatedModel) {
-        modelLabel = `${modelLabel} · 工作区`;
-      }
     }
     return {
       agentId,
       agentName: definition.name,
       modelLabel,
+      tokenLabel: '',
       hasDedicatedModel,
     };
   } catch {
@@ -64,6 +65,7 @@ export async function loadChatAgentMeta(
       agentId,
       agentName: agentId,
       modelLabel: '—',
+      tokenLabel: '',
       hasDedicatedModel: false,
     };
   }

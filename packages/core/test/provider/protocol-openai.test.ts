@@ -356,15 +356,31 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.equal(result.assistantText, "pong");
   });
 
-  it("rejects thinking in full mapper path", async () => {
-    const adapter = new OpenAiProtocolAdapter(async () => new Response("{}"));
+  it("omits thinking blocks from outbound history", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { role: "assistant", content: "ok" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
     const history: ChatMessage[] = [
       {
         id: "m1",
         sessionId: "s1",
         seq: 1,
         role: "assistant",
-        content: { blocks: [{ type: "thinking", text: "secret" }] },
+        content: {
+          blocks: [
+            { type: "thinking", text: "internal reasoning" },
+            { type: "text", text: "visible reply" },
+          ],
+        },
         provider: null,
         raw: null,
         createdAtMs: 0,
@@ -372,21 +388,20 @@ describe("OpenAiProtocolAdapter HTTP", () => {
       },
     ];
 
-    await assert.rejects(
-      () =>
-        adapter.chat({
-          baseUrl: "https://api.openai.com/v1",
-          apiKey: "sk-test",
-          vendorModelId: "gpt-4o",
-          userContent: "hi",
-          history,
-          tools: [{ name: "t", description: "d", inputSchema: {} }],
-        }),
-      (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "UNSUPPORTED_CONTENT");
-        return true;
-      },
-    );
+    await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hi",
+      history,
+      tools: [{ name: "t", description: "d", inputSchema: {} }],
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      messages?: Array<{ role: string; content?: string }>;
+    };
+    const assistant = parsed.messages?.find((m) => m.role === "assistant");
+    assert.equal(assistant?.content, "visible reply");
+    assert.ok(!JSON.stringify(parsed).includes("internal reasoning"));
   });
 });

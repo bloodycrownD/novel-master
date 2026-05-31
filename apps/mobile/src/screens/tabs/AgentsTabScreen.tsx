@@ -2,11 +2,13 @@
  * Agents tab: registry list + create new agent.
  */
 import React from 'react';
-import {Alert, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentList} from '../../components/agent/AgentList';
 import {AppHeader} from '../../components/chrome/AppHeader';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -15,6 +17,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function AgentsTabScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
 
@@ -31,10 +34,7 @@ export function AgentsTabScreen() {
       });
       navigation.navigate('AgentEditor', {agentId: id});
     } catch (error) {
-      Alert.alert(
-        '创建失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('创建失败', error));
     }
   };
 

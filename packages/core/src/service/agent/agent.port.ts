@@ -7,7 +7,7 @@
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
-import type { PromptRenderContext } from "../prompt/render-prompt.js";
+import type { PromptMacroContext } from "../prompt/render-prompt.js";
 
 export interface AgentRunOptions {
   readonly definition: AgentDefinition;
@@ -17,7 +17,7 @@ export interface AgentRunOptions {
   readonly workspaceModelId: string;
   /** When set, compaction summary chain treats CLI `--modelId` as highest priority. */
   readonly cliModelId?: string;
-  readonly promptContext: Omit<PromptRenderContext, "messages" | "abstract">;
+  readonly promptContext: PromptMacroContext;
   readonly maxSteps?: number;
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;

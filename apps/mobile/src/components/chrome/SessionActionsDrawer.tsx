@@ -69,10 +69,9 @@ export function SessionActionsDrawer({
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable
-          style={[styles.panel, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+      <View style={styles.overlay}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" />
+        <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
           <View style={[styles.modelInfo, {borderBottomColor: tokens.border}]}>
             <Text style={[styles.modelInfoLabel, {color: tokens.textSecondary}]}>
               当前模型
@@ -89,14 +88,20 @@ export function SessionActionsDrawer({
               key={item.label}
               style={styles.row}
               onPress={() => {
-                item.action?.();
                 onClose();
-              }}>
-              <Text style={{color: tokens.text}}>{item.label}</Text>
+                item.action?.();
+              }}
+              disabled={item.action == null}>
+              <Text
+                style={{
+                  color: item.action == null ? tokens.textTertiary : tokens.text,
+                }}>
+                {item.label}
+              </Text>
             </Pressable>
           ))}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -107,7 +112,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
-  panel: {padding: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16},
+  panel: {
+    padding: 20,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
   modelInfo: {
     flexDirection: 'row',
     alignItems: 'center',

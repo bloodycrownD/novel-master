@@ -56,11 +56,13 @@ export async function runPrompt(
     allMessages.filter((m) => !m.hidden),
     "llm",
   );
-  const worktreeDisplay = await rt
-    .worktree({ kind: "session", projectId, sessionId })
-    .renderDisplay();
+  const wt = rt.worktree({ kind: "session", projectId, sessionId });
+  const [worktreeDisplay, filetreeDisplay] = await Promise.all([
+    wt.renderDisplay(),
+    wt.renderFileTree(),
+  ]);
 
-  const ctx = { worktreeDisplay, messages };
+  const ctx = { worktreeDisplay, filetreeDisplay, messages };
   const input = buildPromptLlmInput(blocks, ctx);
   const text = formatPromptLlmInputForCli(blocks, input, ctx);
   if (text.length > 0) {

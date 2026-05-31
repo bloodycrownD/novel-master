@@ -4,7 +4,6 @@
 import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,11 +13,16 @@ import {
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {LlmProtocolKind, ModelSamplingParams} from '@novel-master/core';
-import {parseApplicationModelId} from '@novel-master/core';
+import {
+  mergeSamplingWithDefaults,
+  parseApplicationModelId,
+} from '@novel-master/core';
 import {SamplingForm} from '../../components/provider/SamplingForm';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type SamplingRoute = RouteProp<RootStackParamList, 'ModelSampling'>;
 
@@ -40,6 +44,7 @@ function paramsEmpty(params: ModelSamplingParams | undefined): boolean {
 
 export function ModelSamplingScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation();
   const route = useRoute<SamplingRoute>();
@@ -62,12 +67,11 @@ export function ModelSamplingScreen() {
       setProtocol(provider.protocol);
       const profile =
         await runtime.modelSamplingProfiles.getProfile(applicationModelId);
-      setParams(profile?.params);
+      const stored =
+        profile?.enabled && profile.params != null ? profile.params : undefined;
+      setParams(mergeSamplingWithDefaults(provider.protocol, stored));
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -79,11 +83,10 @@ export function ModelSamplingScreen() {
 
   useEffect(() => {
     if (!applicationModelId) {
-      Alert.alert('错误', '缺少 applicationModelId', [
-        {text: '返回', onPress: () => navigation.goBack()},
-      ]);
+      showToast(toastMessage('错误', '缺少 applicationModelId'));
+      navigation.goBack();
     }
-  }, [applicationModelId, navigation]);
+  }, [applicationModelId, navigation, showToast]);
 
   const handleSave = async () => {
     if (!applicationModelId) {
@@ -100,13 +103,10 @@ export function ModelSamplingScreen() {
           params,
         });
       }
-      Alert.alert('已保存采样配置');
+      showToast('已保存采样配置');
       navigation.goBack();
     } catch (error) {
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
     }

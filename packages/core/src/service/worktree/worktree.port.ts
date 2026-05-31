@@ -27,4 +27,7 @@ export interface WorktreeService {
 
   /** Renders `<file>` blocks for visible files. */
   renderDisplay(): Promise<string>;
+
+  /** Renders ASCII directory tree for prompt macro `{{.filetree}}`. */
+  renderFileTree(): Promise<string>;
 }

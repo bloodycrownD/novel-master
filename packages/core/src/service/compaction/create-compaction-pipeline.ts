@@ -50,7 +50,7 @@ export function createCompactionPipeline(
   const action = new DefaultCompactionAction();
 
   return {
-    async maybeCompact(session, worktreeDisplay, modelContext) {
+    async maybeCompact(session, macroContext, modelContext) {
       const policy = await deps.policyStore.getPolicy();
       if (policy == null || !policy.enabled) {
         return undefined;
@@ -72,7 +72,8 @@ export function createCompactionPipeline(
         modelRequests: deps.modelRequests,
         resolveAgent: deps.resolveAgent,
         modelContext,
-        worktreeDisplay,
+        worktreeDisplay: macroContext.worktreeDisplay,
+        filetreeDisplay: macroContext.filetreeDisplay,
       });
       return result.abstract;
     },
@@ -84,7 +85,7 @@ export function createNoOpCompactionPipeline(): CompactionPipeline {
   return {
     async maybeCompact(
       _session,
-      _worktreeDisplay,
+      _macroContext,
       _modelContext,
     ): Promise<string | undefined> {
       return undefined;

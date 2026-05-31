@@ -9,7 +9,13 @@ import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
+import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {useRuntime} from '../../hooks/useRuntime';
+import {useNovelMaster} from '../../runtime/novel-master-context';
+import {
+  readLlmStreamEnabled,
+  writeLlmStreamEnabled,
+} from '../../storage/llm-stream-pref';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -32,8 +38,10 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
 export function ProfileTabScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
+  const {appUi} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
+  const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const refreshModelLabel = useCallback(async () => {
@@ -49,10 +57,18 @@ export function ProfileTabScreen() {
     }
   }, [runtime]);
 
+  const refreshStreamPref = useCallback(async () => {
+    if (appUi == null) {
+      return;
+    }
+    setLlmStreamEnabled(await readLlmStreamEnabled(appUi));
+  }, [appUi]);
+
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
-    }, [refreshModelLabel]),
+      refreshStreamPref().catch(() => undefined);
+    }, [refreshModelLabel, refreshStreamPref]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -76,6 +92,23 @@ export function ProfileTabScreen() {
           value={modelLabel}
           tokens={tokens}
           onPress={() => setPickerVisible(true)}
+        />
+        <ProfileSwitchItem
+          icon="⚡"
+          label="流式输出"
+          subtitle={
+            llmStreamEnabled
+              ? '边生成边显示（推荐）'
+              : '完成后一次性显示回复'
+          }
+          value={llmStreamEnabled}
+          tokens={tokens}
+          onValueChange={enabled => {
+            setLlmStreamEnabled(enabled);
+            if (appUi) {
+              writeLlmStreamEnabled(appUi, enabled).catch(() => undefined);
+            }
+          }}
         />
         <ListSectionTitle title="配置" tokens={tokens} />
         {CONFIG_MENU.map(item => (

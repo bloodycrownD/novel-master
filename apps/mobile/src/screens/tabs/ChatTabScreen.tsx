@@ -19,6 +19,8 @@ import {
   type ChatSession,
 } from '@novel-master/core';
 import {AppHeader} from '../../components/chrome/AppHeader';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 import {ChatComposer} from '../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
 import {editableTextFromMessage} from '../../components/chat/message-edit';
@@ -28,7 +30,6 @@ import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {TemplatePullButton} from '../../components/template/TemplatePullButton';
-import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
@@ -46,6 +47,8 @@ import {
   loadChatAgentMeta,
   type ChatAgentMeta,
 } from '../../services/chat-agent-meta';
+import {loadChatPromptTokenLabelResilient} from '../../services/chat-prompt-tokens.service';
+import {loadSessionMessagesForDisplay} from '../../services/regex-apply-channel';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -57,6 +60,7 @@ type ConversationPanel = 'chat' | 'workspace';
 
 export function ChatTabScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const {projectId, sessionId, setCurrentProject, setCurrentSession, refreshScope} =
     useMobileScope();
@@ -81,12 +85,14 @@ export function ChatTabScreen() {
     agentId: undefined,
     agentName: '—',
     modelLabel: '—',
+    tokenLabel: '',
     hasDedicatedModel: false,
   });
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
   const [streamingText, setStreamingText] = useState('');
+  const [streamingThinking, setStreamingThinking] = useState('');
   const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
@@ -127,24 +133,35 @@ export function ChatTabScreen() {
     const modelId = await runtime.state.getCurrentModelId();
     setHasWorkspaceModel(modelId != null && modelId !== '');
     try {
-      setAgentMeta(await loadChatAgentMeta(runtime));
+      const meta = await loadChatAgentMeta(runtime);
+      setAgentMeta({...meta, tokenLabel: '…'});
+      if (projectId != null && sessionId != null) {
+        const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
+          projectId,
+          sessionId,
+        });
+        setAgentMeta(prev => ({...prev, tokenLabel}));
+      } else {
+        setAgentMeta(prev => ({...prev, tokenLabel: ''}));
+      }
     } catch {
       setAgentMeta({
         agentId: undefined,
         agentName: '—',
         modelLabel: '—',
+        tokenLabel: '',
         hasDedicatedModel: false,
       });
     }
-  }, [runtime]);
+  }, [runtime, projectId, sessionId]);
 
   const reloadMessages = useCallback(async () => {
     if (sessionId == null) {
       setChatMessages([]);
       return;
     }
-    const list = await runtime.messages.listBySession(sessionId);
-    setChatMessages(list.filter(m => !m.hidden));
+    const list = await loadSessionMessagesForDisplay(runtime, sessionId);
+    setChatMessages(list);
   }, [runtime, sessionId]);
 
   useEffect(() => {
@@ -203,13 +220,10 @@ export function ChatTabScreen() {
         await refreshScope();
         await reloadLists();
       } catch (error) {
-        Alert.alert(
-          '创建失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('创建失败', error));
       }
     },
-    [runtime, setCurrentProject, refreshScope, reloadLists],
+    [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
   );
 
   const handleRenameProject = useCallback(
@@ -218,13 +232,10 @@ export function ChatTabScreen() {
         await runtime.projects.rename(projectId, name);
         await reloadLists();
       } catch (error) {
-        Alert.alert(
-          '重命名失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('重命名失败', error));
       }
     },
-    [runtime, reloadLists],
+    [runtime, reloadLists, showToast],
   );
 
   const handleCreateSession = useCallback(async () => {
@@ -237,12 +248,9 @@ export function ChatTabScreen() {
       await runtime.sessions.create(projectId, title);
       await reloadLists();
     } catch (error) {
-      Alert.alert(
-        '创建失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('创建失败', error));
     }
-  }, [runtime, projectId, reloadLists]);
+  }, [runtime, projectId, reloadLists, showToast]);
 
   const handleRenameSession = useCallback(
     async (targetSessionId: string, title: string) => {
@@ -250,13 +258,10 @@ export function ChatTabScreen() {
         await runtime.sessions.rename(targetSessionId, title);
         await reloadLists();
       } catch (error) {
-        Alert.alert(
-          '重命名失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('重命名失败', error));
       }
     },
-    [runtime, reloadLists],
+    [runtime, reloadLists, showToast],
   );
 
   const openSessionRenamePrompt = useCallback(
@@ -289,15 +294,12 @@ export function ChatTabScreen() {
       try {
         const copy = await runtime.sessions.copy(sourceSessionId);
         await reloadLists();
-        Alert.alert('已复制会话', copy.title ?? copy.id);
+        showToast(`已复制会话：${copy.title ?? copy.id}`);
       } catch (error) {
-        Alert.alert(
-          '复制失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('复制失败', error));
       }
     },
-    [runtime, reloadLists],
+    [runtime, reloadLists, showToast],
   );
 
   const bumpVfsRefresh = useCallback(() => {
@@ -311,6 +313,7 @@ export function ChatTabScreen() {
     }
     messageBatch.exit();
     setStreamingText('');
+    setStreamingThinking('');
     await reloadMessages();
   }, [runtime, messageBatch, reloadMessages]);
 
@@ -338,35 +341,30 @@ export function ChatTabScreen() {
       try {
         await runtime.messages.delete(messageId);
         setStreamingText('');
+        setStreamingThinking('');
         await reloadMessages();
       } catch (error) {
-        Alert.alert(
-          '删除失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('删除失败', error));
       }
     },
-    [runtime, reloadMessages],
+    [runtime, reloadMessages, showToast],
   );
 
   const handleSaveMessageEdit = useCallback(
     async (messageId: string, text: string) => {
       const trimmed = text.trim();
       if (trimmed === '') {
-        Alert.alert('无法保存', '消息内容不能为空');
+        showToast(toastMessage('无法保存', '消息内容不能为空'));
         return;
       }
       try {
         await runtime.messages.updateContent(messageId, textBlocks(trimmed));
         await reloadMessages();
       } catch (error) {
-        Alert.alert(
-          '保存失败',
-          error instanceof Error ? error.message : String(error),
-        );
+        showToast(toastMessage('保存失败', error));
       }
     },
-    [runtime, reloadMessages],
+    [runtime, reloadMessages, showToast],
   );
 
   const confirmBatchDelete = useCallback(() => {
@@ -497,6 +495,7 @@ export function ChatTabScreen() {
               <MessageList
                 messages={chatMessages}
                 streamingText={streamingText}
+                streamingThinking={streamingThinking}
                 showFullToolParams={showFullToolParams}
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
@@ -516,7 +515,13 @@ export function ChatTabScreen() {
                 onStreamText={delta =>
                   setStreamingText(prev => prev + delta)
                 }
-                onStreamReset={() => setStreamingText('')}
+                onStreamThinking={delta =>
+                  setStreamingThinking(prev => prev + delta)
+                }
+                onStreamReset={() => {
+                  setStreamingText('');
+                  setStreamingThinking('');
+                }}
                 onMessagesChanged={() => {
                   reloadMessages().catch(() => undefined);
                   refreshChatMeta().catch(() => undefined);
@@ -573,7 +578,7 @@ export function ChatTabScreen() {
           onBatchDeleteMessages={() => {
             setSessionDrawerOpen(false);
             if (agentRunning) {
-              Alert.alert('请稍候', 'Agent 运行中无法批量删除消息');
+              showToast(toastMessage('请稍候', 'Agent 运行中无法批量删除消息'));
               return;
             }
             messageBatch.enter();
@@ -598,7 +603,7 @@ export function ChatTabScreen() {
             if (action === 'edit') {
               const initial = editableTextFromMessage(target);
               if (initial == null) {
-                Alert.alert('无法编辑', '该消息包含工具调用，暂不支持编辑');
+                showToast(toastMessage('无法编辑', '该消息包含工具调用，暂不支持编辑'));
                 return;
               }
               setMessageEditPrompt({

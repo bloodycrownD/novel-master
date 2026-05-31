@@ -5,6 +5,8 @@ import React, {useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text} from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Props = {
   scope:
@@ -22,6 +24,7 @@ function confirmMessage(scope: Props['scope']): string {
 
 export function TemplatePullButton({scope, onPulled}: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const [pulling, setPulling] = useState(false);
 
@@ -34,12 +37,9 @@ export function TemplatePullButton({scope, onPulled}: Props) {
         await runtime.sessions.pullTemplate(scope.sessionId);
       }
       onPulled?.();
-      Alert.alert('同步完成');
+      showToast('同步完成');
     } catch (error) {
-      Alert.alert(
-        '同步失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('同步失败', error));
     } finally {
       setPulling(false);
     }

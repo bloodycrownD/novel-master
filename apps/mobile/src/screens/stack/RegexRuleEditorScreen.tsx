@@ -2,19 +2,16 @@
  * Create/edit regex rule with test preview.
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
+import {FormField} from '../../components/form/FormField';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {FormSwitchRow} from '../../components/form/FormSwitchRow';
+import {FormTextInput} from '../../components/form/FormTextInput';
+import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
+import {StickyFormFooter} from '../../components/form/StickyFormFooter';
+import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {
   previewRegexRule,
   regexPreviewRoleFromScope,
@@ -23,9 +20,11 @@ import {
   type RegexRuleDraftFields,
 } from '../../services/regex-test.service';
 import {useRuntime} from '../../hooks/useRuntime';
+import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import type {RootStackParamList} from '../../navigation/types';
-import {useTheme} from '../../theme/ThemeProvider';
 
 type EditorRoute = RouteProp<RootStackParamList, 'RegexRuleEditor'>;
 
@@ -42,7 +41,7 @@ function slugifyRuleId(name: string): string {
 const DEFAULT_DRAFT: RegexRuleDraftFields = {
   name: '',
   pattern: '',
-  flags: '',
+  flags: 'gim',
   enabled: true,
   llmReplace: null,
   displayReplace: null,
@@ -52,8 +51,14 @@ const DEFAULT_DRAFT: RegexRuleDraftFields = {
   scopeAssistant: true,
 };
 
+const CHANNEL_OPTIONS = [
+  {value: 'display' as const, label: '显示'},
+  {value: 'llm' as const, label: '模型'},
+];
+
 export function RegexRuleEditorScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation();
   const route = useRoute<EditorRoute>();
@@ -81,7 +86,7 @@ export function RegexRuleEditorScreen() {
     [draft, llmEnabled, displayEnabled],
   );
   const dirty = snapshot !== baseline;
-  useUnsavedGuard(dirty);
+  const {allowLeaveWithoutPrompt} = useUnsavedGuard(dirty);
 
   const patchDraft = (patch: Partial<RegexRuleDraftFields>) => {
     setDraft(prev => ({...prev, ...patch}));
@@ -89,7 +94,13 @@ export function RegexRuleEditorScreen() {
 
   const load = useCallback(async () => {
     if (!groupId || !ruleId) {
-      setBaseline(JSON.stringify({draft: DEFAULT_DRAFT, llmEnabled: false, displayEnabled: false}));
+      setBaseline(
+        JSON.stringify({
+          draft: DEFAULT_DRAFT,
+          llmEnabled: false,
+          displayEnabled: false,
+        }),
+      );
       setLoading(false);
       return;
     }
@@ -121,10 +132,7 @@ export function RegexRuleEditorScreen() {
         }),
       );
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -136,19 +144,18 @@ export function RegexRuleEditorScreen() {
 
   useEffect(() => {
     if (!groupId) {
-      Alert.alert('错误', '缺少 groupId', [
-        {text: '返回', onPress: () => navigation.goBack()},
-      ]);
+      showToast(toastMessage('错误', '缺少 groupId'));
+      navigation.goBack();
     }
-  }, [groupId, navigation]);
+  }, [groupId, navigation, showToast]);
 
   const collectFields = (): RegexRuleDraftFields | null => {
     if (!draft.name.trim()) {
-      Alert.alert('请填写规则名称');
+      showToast('请填写规则名称');
       return null;
     }
     if (!draft.pattern.trim()) {
-      Alert.alert('请填写正则表达式');
+      showToast('请填写正则表达式');
       return null;
     }
     return {
@@ -209,7 +216,7 @@ export function RegexRuleEditorScreen() {
     }
     const validation = validateRegexRuleDraft(fields);
     if (!validation.ok) {
-      Alert.alert(validation.message);
+      showToast(validation.message);
       return;
     }
     setSaving(true);
@@ -225,13 +232,11 @@ export function RegexRuleEditorScreen() {
         });
       }
       setBaseline(snapshot);
-      Alert.alert('已保存规则');
+      showToast('已保存规则');
+      allowLeaveWithoutPrompt();
       navigation.goBack();
     } catch (error) {
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -242,280 +247,208 @@ export function RegexRuleEditorScreen() {
   }
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>规则</Text>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>名称</Text>
-        <TextInput
-          style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
-          value={draft.name}
-          onChangeText={v => patchDraft({name: v})}
-        />
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          正则表达式
-        </Text>
-        <TextInput
-          style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
-          value={draft.pattern}
-          onChangeText={v => patchDraft({pattern: v})}
-          autoCapitalize="none"
-        />
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>flags</Text>
-        <TextInput
-          style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
-          value={draft.flags}
-          onChangeText={v => patchDraft({flags: v})}
-          placeholder="gim"
-          placeholderTextColor={tokens.textSecondary}
-          autoCapitalize="none"
-        />
-        <View style={styles.switchRow}>
-          <Text style={{color: tokens.text}}>启用规则</Text>
-          <Switch
-            value={draft.enabled}
-            onValueChange={v => patchDraft({enabled: v})}
-            trackColor={{false: tokens.border, true: tokens.primary}}
-          />
-        </View>
-        <View style={styles.grid}>
-          <View style={styles.gridCell}>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              最小层数
+    <ScreenFormLayout
+      tokens={tokens}
+      footer={
+        <View>
+          {dirty ? (
+            <Text style={[styles.unsaved, {color: tokens.danger}]}>
+              未保存的更改
             </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={String(draft.minDepth)}
-              onChangeText={v =>
-                patchDraft({minDepth: Math.max(1, Number(v) || 1)})
-              }
-              keyboardType="number-pad"
-            />
-          </View>
-          <View style={styles.gridCell}>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              最大层数
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={String(draft.maxDepth)}
-              onChangeText={v =>
-                patchDraft({maxDepth: Math.max(1, Number(v) || 1)})
-              }
-              keyboardType="number-pad"
-            />
-          </View>
-        </View>
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          作用范围 (role)
-        </Text>
-        <View style={styles.switchRow}>
-          <Text style={{color: tokens.text}}>用户 (user)</Text>
-          <Switch
-            value={draft.scopeUser}
-            onValueChange={v => patchDraft({scopeUser: v})}
-            trackColor={{false: tokens.border, true: tokens.primary}}
+          ) : null}
+          <StickyFormFooter
+            tokens={tokens}
+            label="保存"
+            loading={saving}
+            onPress={() => handleSave().catch(() => undefined)}
           />
         </View>
-        <View style={styles.switchRow}>
-          <Text style={{color: tokens.text}}>助手 (assistant)</Text>
-          <Switch
-            value={draft.scopeAssistant}
-            onValueChange={v => patchDraft({scopeAssistant: v})}
-            trackColor={{false: tokens.border, true: tokens.primary}}
+      }>
+      <FormSectionCard title="规则" tokens={tokens}>
+        <FormField label="名称" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={draft.name}
+            onChangeText={v => patchDraft({name: v})}
+            placeholder="如 隐藏邮箱"
           />
-        </View>
+        </FormField>
+        <FormField label="正则表达式" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={draft.pattern}
+            onChangeText={v => patchDraft({pattern: v})}
+            placeholder="如 [a-z]+@[a-z]+\\.[a-z]+"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </FormField>
+        <FormField
+          label="Flags"
+          tokens={tokens}
+          hint="常用 gim：全局、忽略大小写、多行。">
+          <FormTextInput
+            tokens={tokens}
+            value={draft.flags}
+            onChangeText={v => patchDraft({flags: v})}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </FormField>
+        <FormSwitchRow
+          tokens={tokens}
+          label="启用规则"
+          value={draft.enabled}
+          onValueChange={v => patchDraft({enabled: v})}
+        />
+      </FormSectionCard>
 
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-            提示词替换
-          </Text>
-          <Switch
-            value={llmEnabled}
-            onValueChange={setLlmEnabled}
-            trackColor={{false: tokens.border, true: tokens.primary}}
-          />
+      <FormSectionCard
+        title="深度范围"
+        tokens={tokens}
+        hint="匹配消息在会话中的层级区间（含端点）。">
+        <View style={styles.row2}>
+          <View style={styles.cell}>
+            <FormField label="最小层数" tokens={tokens}>
+              <FormTextInput
+                tokens={tokens}
+                value={String(draft.minDepth)}
+                onChangeText={v =>
+                  patchDraft({minDepth: Math.max(1, Number(v) || 1)})
+                }
+                keyboardType="number-pad"
+              />
+            </FormField>
+          </View>
+          <View style={styles.cell}>
+            <FormField label="最大层数" tokens={tokens}>
+              <FormTextInput
+                tokens={tokens}
+                value={String(draft.maxDepth)}
+                onChangeText={v =>
+                  patchDraft({maxDepth: Math.max(1, Number(v) || 1)})
+                }
+                keyboardType="number-pad"
+              />
+            </FormField>
+          </View>
         </View>
+      </FormSectionCard>
+
+      <FormSectionCard title="作用范围" tokens={tokens} hint="按消息角色生效。">
+        <FormSwitchRow
+          tokens={tokens}
+          label="用户消息"
+          value={draft.scopeUser}
+          onValueChange={v => patchDraft({scopeUser: v})}
+        />
+        <FormSwitchRow
+          tokens={tokens}
+          label="助手消息"
+          value={draft.scopeAssistant}
+          onValueChange={v => patchDraft({scopeAssistant: v})}
+        />
+      </FormSectionCard>
+
+      <FormSectionCard title="提示词替换" tokens={tokens}>
+        <FormSwitchRow
+          tokens={tokens}
+          label="改写送入模型的文本"
+          description="对应 llm 通道；关闭时不替换。"
+          value={llmEnabled}
+          onValueChange={setLlmEnabled}
+        />
         {llmEnabled ? (
-          <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              替换为
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
+          <FormField label="替换为" tokens={tokens}>
+            <FormTextInput
+              tokens={tokens}
               value={draft.llmReplace ?? ''}
               onChangeText={v => patchDraft({llmReplace: v})}
               placeholder="如 [redacted]"
-              placeholderTextColor={tokens.textSecondary}
             />
-          </>
-        ) : (
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            关闭时不改写送入模型的文本（llm 通道）。
-          </Text>
-        )}
+          </FormField>
+        ) : null}
+      </FormSectionCard>
 
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-            显示替换
-          </Text>
-          <Switch
-            value={displayEnabled}
-            onValueChange={setDisplayEnabled}
-            trackColor={{false: tokens.border, true: tokens.primary}}
-          />
-        </View>
+      <FormSectionCard title="显示替换" tokens={tokens}>
+        <FormSwitchRow
+          tokens={tokens}
+          label="改写界面展示文本"
+          description="对应 display 通道；关闭时不替换。"
+          value={displayEnabled}
+          onValueChange={setDisplayEnabled}
+        />
         {displayEnabled ? (
-          <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              替换为
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
+          <FormField label="替换为" tokens={tokens}>
+            <FormTextInput
+              tokens={tokens}
               value={draft.displayReplace ?? ''}
               onChangeText={v => patchDraft({displayReplace: v})}
               placeholder="如 ***"
-              placeholderTextColor={tokens.textSecondary}
             />
-          </>
-        ) : (
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            关闭时不改写列表/终端展示文本（display 通道）。
-          </Text>
-        )}
-
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-          测试预览
-        </Text>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          样例文本
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            styles.textArea,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={testText}
-          onChangeText={setTestText}
-          multiline
-        />
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          通道 (channel)
-        </Text>
-        <View style={styles.chips}>
-          {(['display', 'llm'] as const).map(ch => (
-            <Pressable
-              key={ch}
-              style={[
-                styles.chip,
-                {
-                  borderColor: tokens.border,
-                  backgroundColor:
-                    testChannel === ch ? tokens.primary : tokens.surface,
-                },
-              ]}
-              onPress={() => setTestChannel(ch)}>
-              <Text
-                style={{color: testChannel === ch ? '#fff' : tokens.text}}>
-                {ch}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          预览输出
-        </Text>
-        <Text
-          style={[
-            styles.preview,
-            {
-              color: previewError ? tokens.danger : tokens.text,
-              borderColor: tokens.border,
-              backgroundColor: tokens.surface,
-            },
-          ]}>
-          {previewOutput}
-        </Text>
-      </ScrollView>
-      <View style={[styles.footer, {borderTopColor: tokens.border}]}>
-        {dirty ? (
-          <Text style={[styles.unsaved, {color: tokens.danger}]}>未保存</Text>
+          </FormField>
         ) : null}
-        <Pressable
-          style={[styles.saveBtn, {backgroundColor: tokens.primary}]}
-          onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving}>
-          <Text style={styles.saveBtnText}>
-            {saving ? '保存中…' : '保存'}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+      </FormSectionCard>
+
+      <FormSectionCard title="测试预览" tokens={tokens} hint="保存前可本地试跑。">
+        <FormField label="样例文本" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            multiline
+            value={testText}
+            onChangeText={setTestText}
+          />
+        </FormField>
+        <FormField label="预览通道" tokens={tokens}>
+          <SegmentedControl
+            tokens={tokens}
+            options={CHANNEL_OPTIONS}
+            value={testChannel}
+            onChange={setTestChannel}
+          />
+        </FormField>
+        <FormField label="预览结果" tokens={tokens}>
+          <View
+            style={[
+              styles.previewBox,
+              {
+                backgroundColor: tokens.bgSecondary,
+                borderColor: tokens.borderLight,
+              },
+            ]}>
+            <Text
+              style={[
+                styles.previewText,
+                {color: previewError ? tokens.danger : tokens.text},
+              ]}>
+              {previewOutput}
+            </Text>
+          </View>
+        </FormField>
+      </FormSectionCard>
+    </ScreenFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
   loader: {marginTop: 32},
-  scroll: {padding: 16, gap: 6, paddingBottom: 24},
-  sectionTitle: {fontSize: 17, fontWeight: '600', marginTop: 12},
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
+  unsaved: {
+    fontSize: 13,
+    textAlign: 'center',
+    marginBottom: 4,
+    paddingHorizontal: 16,
   },
-  label: {fontSize: 13, marginTop: 4},
-  input: {
+  row2: {flexDirection: 'row', gap: 12},
+  cell: {flex: 1},
+  previewBox: {
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
+    borderRadius: 12,
+    padding: 14,
+    minHeight: 56,
   },
-  textArea: {minHeight: 72, textAlignVertical: 'top'},
-  hint: {fontSize: 12},
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  grid: {flexDirection: 'row', gap: 12},
-  gridCell: {flex: 1},
-  chips: {flexDirection: 'row', gap: 8, marginTop: 4},
-  chip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  preview: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    padding: 12,
+  previewText: {
     fontFamily: 'monospace',
     fontSize: 14,
-    minHeight: 48,
+    lineHeight: 20,
   },
-  footer: {padding: 12, borderTopWidth: StyleSheet.hairlineWidth, gap: 8},
-  unsaved: {fontSize: 13, textAlign: 'center'},
-  saveBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  saveBtnText: {color: '#fff', fontWeight: '600', fontSize: 16},
 });

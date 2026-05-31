@@ -74,6 +74,29 @@ describe("worktree eval", () => {
     );
   });
 
+  it("fill full shows full content for non-priority auto file", () => {
+    assert.equal(
+      evaluateFileDisplay({
+        inclusion: "auto",
+        parentRuleOn: true,
+        dirRule: {
+          scopeKey: "global",
+          logicalPath: "/template",
+          ruleEnabled: true,
+          sortField: "name",
+          sortOrder: "asc",
+          headCount: 1,
+          tailCount: 0,
+          fillPolicy: "full",
+        },
+        indexInSortedAutoFiles: 1,
+        autoFileCount: 2,
+        logicalPath: "/template/b.txt",
+      }),
+      "full",
+    );
+  });
+
   it("fill filename for non-priority auto file", () => {
     assert.equal(
       evaluateFileDisplay({

@@ -25,6 +25,8 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type RulesRoute = RouteProp<RootStackParamList, 'RegexRules'>;
@@ -45,6 +47,7 @@ function ruleMeta(rule: RegexRule): string {
 
 export function RegexRulesScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const route = useRoute<RulesRoute>();
@@ -72,14 +75,11 @@ export function RegexRulesScreen() {
         [...list].sort((a, b) => a.sortOrder - b.sortOrder),
       );
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
-  }, [runtime, groupId, setStackOverride]);
+  }, [runtime, groupId, setStackOverride, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -116,10 +116,7 @@ export function RegexRulesScreen() {
             batch.exit();
             await reload();
           })().catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },

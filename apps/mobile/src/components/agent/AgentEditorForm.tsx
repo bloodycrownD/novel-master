@@ -2,7 +2,7 @@
  * Agent definition editor: name, model pin, maxSteps, prompt blocks.
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
 import type {AgentDefinition, PromptBlock, PromptBlockRole} from '@novel-master/core';
 import {
   formatApplicationModelId,
@@ -17,6 +17,8 @@ import {StickyFormFooter} from '../form/StickyFormFooter';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Props = {
   agentId: string;
@@ -37,8 +39,32 @@ function blockTypeLabel(type: PromptBlock['type']): string {
   return '会话';
 }
 
+/** Stable JSON for dirty check; omits model ids when专属模型 is off. */
+function formSnapshotJson(input: {
+  name: string;
+  maxSteps: string;
+  modelEnabled: boolean;
+  providerId: string;
+  vendorModelId: string;
+  prompts: readonly PromptBlock[];
+}): string {
+  return JSON.stringify({
+    name: input.name,
+    maxSteps: input.maxSteps,
+    modelEnabled: input.modelEnabled,
+    ...(input.modelEnabled
+      ? {
+          providerId: input.providerId,
+          vendorModelId: input.vendorModelId,
+        }
+      : {}),
+    prompts: input.prompts,
+  });
+}
+
 export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const [name, setName] = useState('');
   const [maxSteps, setMaxSteps] = useState('20');
@@ -52,13 +78,13 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [savedModels, setSavedModels] = useState<
     Awaited<ReturnType<typeof runtime.providerModels.savedList>>
   >([]);
-  const [savedBaseline, setSavedBaseline] = useState('');
+  const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [addBlockVisible, setAddBlockVisible] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const snapshot = useMemo(
     () =>
-      JSON.stringify({
+      formSnapshotJson({
         name,
         maxSteps,
         modelEnabled,
@@ -70,6 +96,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   );
 
   useEffect(() => {
+    if (savedBaseline == null) {
+      onDirtyChange?.(false);
+      return;
+    }
     onDirtyChange?.(snapshot !== savedBaseline);
   }, [snapshot, savedBaseline, onDirtyChange]);
 
@@ -130,30 +160,33 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         }
       }
     }
+    const modelEnabled = Boolean(def.model);
+    let baselineProviderId = '';
+    let baselineVendorModelId = '';
+    if (modelEnabled && def.model) {
+      try {
+        const parsed = parseApplicationModelId(def.model);
+        baselineProviderId = parsed.providerId;
+        baselineVendorModelId = parsed.vendorModelId;
+      } catch {
+        /* treat as no dedicated model */
+      }
+    }
     setSavedBaseline(
-      JSON.stringify({
+      formSnapshotJson({
         name: def.name,
         maxSteps: String(def.runtime?.maxSteps ?? 20),
-        modelEnabled: Boolean(def.model),
-        providerId: def.model
-          ? parseApplicationModelId(def.model).providerId
-          : providerList[0]?.id ?? '',
-        vendorModelId: def.model
-          ? parseApplicationModelId(def.model).vendorModelId
-          : '',
-        prompts: [...def.prompts],
+        modelEnabled,
+        providerId: baselineProviderId,
+        vendorModelId: baselineVendorModelId,
+        prompts: def.prompts,
       }),
     );
   }, [agentId, runtime, loadProviders, loadSavedModels]);
 
   useEffect(() => {
-    loadAgent().catch(err =>
-      Alert.alert(
-        '加载失败',
-        err instanceof Error ? err.message : String(err),
-      ),
-    );
-  }, [loadAgent]);
+    loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
+  }, [loadAgent, showToast]);
 
   const preferredModelId = modelEnabled
     ? formatApplicationModelId(providerId, vendorModelId)
@@ -161,11 +194,11 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
   const buildDefinition = (): AgentDefinition | null => {
     if (!name.trim()) {
-      Alert.alert('请填写 Agent 名称');
+      showToast('请填写 Agent 名称');
       return null;
     }
     if (prompts.length === 0) {
-      Alert.alert('至少保留一个 Prompt 块');
+      showToast('至少保留一个 Prompt 块');
       return null;
     }
     const steps = Number(maxSteps);
@@ -194,12 +227,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       await runtime.agentRegistry.upsert(agentId, def);
       setSavedBaseline(snapshot);
       onSaved?.();
-      Alert.alert('已保存 Agent 配置');
+      showToast('已保存 Agent 配置');
     } catch (error) {
-      Alert.alert(
-        '保存失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
     }
@@ -229,7 +259,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
   const deleteBlock = (index: number) => {
     if (prompts.length <= 1) {
-      Alert.alert('至少保留一个 Prompt 块');
+      showToast('至少保留一个 Prompt 块');
       return;
     }
     setPrompts(prev => prev.filter((_, i) => i !== index));
@@ -481,7 +511,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                     </FormField>
                     <Text
                       style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      宏：{'{{.worktree}}'} {'{{$time}}'} {'{{$week_cn}}'}
+                      宏：{'{{.worktree}}'} {'{{.filetree}}'} {'{{$time}}'} {'{{$week_cn}}'}
                     </Text>
                   </>
                 ) : null}
@@ -499,7 +529,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                     </FormField>
                     <Text
                       style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      无压缩摘要时不拼接；可用 {'{{.abstract}}'}、{'{{.worktree}}'}
+                      无压缩摘要时不拼接；可用 {'{{.abstract}}'}、{'{{.worktree}}'}、{'{{.filetree}}'}
                       、{'{{$time}}'}、{'{{$week_cn}}'}
                     </Text>
                   </>
@@ -524,9 +554,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       <BottomSheetMenu
         visible={addBlockVisible}
         items={[
-          {label: '文本块 text', action: 'text'},
-          {label: '摘要块 abstract', action: 'abstract'},
-          {label: '会话块 chat', action: 'chat'},
+          {label: '文本块', action: 'text'},
+          {label: '摘要块', action: 'abstract'},
+          {label: '会话块', action: 'chat'},
         ]}
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {

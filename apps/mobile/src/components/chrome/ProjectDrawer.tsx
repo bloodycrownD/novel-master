@@ -21,6 +21,8 @@ import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
 
@@ -50,6 +52,7 @@ export function ProjectDrawer({
   onDeleteSelected,
 }: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const insets = useSafeAreaInsets();
   const batch = useBatchSelection();
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
@@ -259,10 +262,7 @@ export function ProjectDrawer({
                   onPress: () => {
                     void Promise.resolve(onDeleteSelected([project.id])).catch(
                       err =>
-                        Alert.alert(
-                          '删除失败',
-                          err instanceof Error ? err.message : String(err),
-                        ),
+                        showToast(toastMessage('删除失败', err)),
                     );
                   },
                 },

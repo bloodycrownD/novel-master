@@ -25,6 +25,8 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -49,6 +51,7 @@ type Props = {
 
 export function AgentList({onCreate}: Props) {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const [rows, setRows] = useState<AgentRow[]>([]);
@@ -144,10 +147,7 @@ export function AgentList({onCreate}: Props) {
             }
             await reload();
           })().catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },
@@ -183,10 +183,7 @@ export function AgentList({onCreate}: Props) {
             batch.exit();
             await reload();
           })().catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },

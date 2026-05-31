@@ -3,7 +3,7 @@
  */
 import type {ChatMessage} from '@novel-master/core';
 
-/** Returns joined text when message has only text/thinking blocks; otherwise null. */
+/** Returns user-visible text for edit (excludes thinking / tools). */
 export function editableTextFromMessage(message: ChatMessage): string | null {
   const blocks = message.content.blocks ?? [];
   if (blocks.length === 0) {
@@ -13,8 +13,8 @@ export function editableTextFromMessage(message: ChatMessage): string | null {
     return null;
   }
   const parts = blocks
-    .map(b => (b.type === 'text' || b.type === 'thinking' ? b.text : ''))
-    .map(t => t.trim())
+    .filter((b): b is Extract<typeof b, {type: 'text'}> => b.type === 'text')
+    .map(b => b.text.trim())
     .filter(Boolean);
-  return parts.length > 0 ? parts.join('\n\n') : '';
+  return parts.length > 0 ? parts.join('\n\n') : null;
 }

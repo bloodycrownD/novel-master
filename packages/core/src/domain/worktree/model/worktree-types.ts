@@ -25,7 +25,7 @@ export type SortField = "name" | "created" | "updated";
 export type SortOrder = "asc" | "desc";
 
 /** Fill policy for auto files outside head/tail set. */
-export type FillPolicy = "hidden" | "filename" | "header";
+export type FillPolicy = "hidden" | "filename" | "header" | "full";
 
 /** Persisted directory rule row. */
 export interface WorktreeDirRule {

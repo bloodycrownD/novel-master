@@ -22,6 +22,8 @@ export interface MessageListItem {
   readonly kind: 'message';
   readonly message: ChatMessage;
   readonly textParts: readonly string[];
+  /** Model reasoning (`thinking` blocks); shown separately from reply text. */
+  readonly thinkingParts: readonly string[];
   readonly toolUses: readonly ToolUseBlock[];
 }
 
@@ -127,6 +129,7 @@ export function buildChatListItems(
   for (const message of visible) {
     const blocks = blocksForMessage(message);
     const textParts: string[] = [];
+    const thinkingParts: string[] = [];
     const toolUses: ToolUseBlock[] = [];
 
     for (const block of blocks) {
@@ -138,7 +141,7 @@ export function buildChatListItems(
           break;
         case 'thinking':
           if (block.text.trim()) {
-            textParts.push(block.text);
+            thinkingParts.push(block.text);
           }
           break;
         case 'tool_use':
@@ -151,11 +154,12 @@ export function buildChatListItems(
       }
     }
 
-    if (textParts.length > 0) {
+    if (textParts.length > 0 || thinkingParts.length > 0) {
       items.push({
         kind: 'message',
         message,
         textParts,
+        thinkingParts,
         toolUses: [],
       });
     }

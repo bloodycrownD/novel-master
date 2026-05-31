@@ -25,6 +25,8 @@ import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -35,6 +37,7 @@ interface ProviderRow extends ProviderListItem {
 
 export function ProvidersScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const [rows, setRows] = useState<ProviderRow[]>([]);
@@ -121,10 +124,7 @@ export function ProvidersScreen() {
                 batch.exit();
               })
               .catch(err =>
-                Alert.alert(
-                  '删除失败',
-                  err instanceof Error ? err.message : String(err),
-                ),
+                showToast(toastMessage('删除失败', err)),
               );
           },
         },
@@ -145,10 +145,7 @@ export function ProvidersScreen() {
             (async () => {
               await deleteProviders([providerId]);
             })().catch(err =>
-              Alert.alert(
-                '删除失败',
-                err instanceof Error ? err.message : String(err),
-              ),
+              showToast(toastMessage('删除失败', err)),
             );
           },
         },

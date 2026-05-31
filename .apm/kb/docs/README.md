@@ -6,7 +6,7 @@ Add Markdown (`.md`) files here. Nested directories are allowed.
 
 | 迭代 | 路径 | 说明 |
 |------|------|------|
-| **mobile-fix-v2** | [Iterations/mobile-fix-v2/](Iterations/mobile-fix-v2/) | Mobile 缺陷修复第二轮（PRD/SPEC 待填；`feature/mobile-fix-v2`） |
+| **mobile-fix-v2** | [Iterations/mobile-fix-v2/](Iterations/mobile-fix-v2/) | 消息管理、思考卡片、流式开关、Agent 脏状态修复、图标脚本（`feature/mobile-fix-v2`） |
 | **mobile-fix** | [Iterations/mobile-fix/](Iterations/mobile-fix/) | 会话默认名/重命名/新建不自动进对话（`apps/mobile` + Core `rename`） |
 | **mobile-llm-streaming** | [Iterations/mobile-llm-streaming/](Iterations/mobile-llm-streaming/) | RN 聊天 SSE 流式（Core `postSse`，OpenAI 兼容；App 无传输代码） |
 | **mobile-app** | [Iterations/mobile-app/](Iterations/mobile-app/) | Android 产品 App（C0–M6）；`apps/mobile` |

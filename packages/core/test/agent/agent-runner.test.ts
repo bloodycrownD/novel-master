@@ -201,7 +201,7 @@ describe("AgentRunner", () => {
       definition: minimalDefinition(),
       applicationModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "" },
+      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
     });
 
     assert.equal(model.callCount(), 1);
@@ -266,7 +266,7 @@ describe("AgentRunner", () => {
       definition: minimalDefinition(),
       applicationModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "" },
+      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
     });
 
     assert.equal(model.callCount(), 3);
@@ -331,7 +331,7 @@ describe("AgentRunner", () => {
       definition: compactRunnerDefinition(),
       applicationModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "" },
+      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
     });
 
     const hidden = session.allMessages().filter((m) => m.hidden);
@@ -373,7 +373,7 @@ describe("AgentRunner", () => {
           definition: { ...minimalDefinition(), prompts: [] },
           applicationModelId: RUN_MODEL_ID,
           workspaceModelId: RUN_MODEL_ID,
-          promptContext: { worktreeDisplay: "" },
+          promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
         }),
       (e: unknown) =>
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",

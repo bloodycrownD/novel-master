@@ -121,7 +121,7 @@ describe("CompactionPipeline", () => {
       policy: policyDefinition({ enabled: false }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, undefined);
     assert.equal(session.allMessages().filter((m) => m.hidden).length, 0);
   });
@@ -144,7 +144,7 @@ describe("CompactionPipeline", () => {
       policy: policyDefinition({ trigger: { tokenThreshold: 99999 } }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, undefined);
     assert.equal((await session.list()).length, 3);
     assert.equal(session.allMessages().filter((m) => m.hidden).length, 0);
@@ -169,7 +169,7 @@ describe("CompactionPipeline", () => {
 
     const pipeline = createPipeline(modelRequests);
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, "summary text");
 
     const hidden = session.allMessages().filter((m) => m.hidden);
@@ -210,7 +210,7 @@ describe("CompactionPipeline", () => {
       }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, "floor summary");
     assert.equal(called, true);
   });
@@ -235,7 +235,7 @@ describe("CompactionPipeline", () => {
       policy: policyDefinition({ trigger: { floorThreshold: 10 } }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, undefined);
   });
 
@@ -271,7 +271,7 @@ describe("CompactionPipeline", () => {
     const pipeline = createPipeline(modelRequests, { resolveAgent });
     const abstract = await pipeline.maybeCompact(
       session,
-      "",
+      { worktreeDisplay: "", filetreeDisplay: "" },
       compactionModelContext(workspaceModelId),
     );
 
@@ -316,7 +316,7 @@ describe("CompactionPipeline", () => {
     const pipeline = createPipeline(modelRequests, { resolveAgent });
     const abstract = await pipeline.maybeCompact(
       session,
-      "",
+      { worktreeDisplay: "", filetreeDisplay: "" },
       compactionModelContext(workspaceModelId),
     );
 
@@ -351,7 +351,7 @@ describe("CompactionPipeline", () => {
       }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, "agent-only summary");
     assert.equal(
       (modelRequests.request as ReturnType<typeof mock.fn>).mock.callCount(),
@@ -380,7 +380,7 @@ describe("CompactionPipeline", () => {
     });
 
     await assert.rejects(
-      () => pipeline.maybeCompact(session, "", compactionModelContext()),
+      () => pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext()),
       (e: unknown) =>
         e instanceof Error &&
         e.name === "CompactionPolicyError" &&
@@ -409,7 +409,7 @@ describe("CompactionPipeline", () => {
       }),
     });
 
-    const abstract = await pipeline.maybeCompact(session, "WT", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "WT", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, "static abstract");
   });
 
@@ -426,7 +426,7 @@ describe("CompactionPipeline", () => {
     };
 
     const pipeline = createPipeline(modelRequests, { policy: null });
-    const abstract = await pipeline.maybeCompact(session, "", compactionModelContext());
+    const abstract = await pipeline.maybeCompact(session, { worktreeDisplay: "", filetreeDisplay: "" }, compactionModelContext());
     assert.equal(abstract, undefined);
   });
 });

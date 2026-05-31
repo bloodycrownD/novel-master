@@ -1,12 +1,11 @@
 /**
  * Bidirectional mapping between NM content blocks and OpenAI Chat Completions wire format.
  *
- * Pure serialization �?no HTTP. Used by {@link OpenAiProtocolAdapter} only.
+ * Pure serialization â€?no HTTP. Used by {@link OpenAiProtocolAdapter} only.
  *
  * @module infra/llm-protocol/logic/openai-content-mapper
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
@@ -27,7 +26,7 @@ function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): str
 }
 
 /**
- * NM blocks �?OpenAI message `content` (string or multimodal parts array).
+ * NM blocks â†?OpenAI message `content` (string or multimodal parts array).
  * `tool_use` / `tool_result` are handled at the message level by {@link chatMessagesToOpenAi}.
  */
 export function blocksToOpenAiMessageContent(
@@ -55,10 +54,8 @@ export function blocksToOpenAiMessageContent(
         });
         break;
       case "thinking":
-        throw new ProviderError(
-          "UNSUPPORTED_CONTENT",
-          "OpenAI chat completions do not support thinking blocks in outbound requests",
-        );
+        // Reasoning from providers (e.g. GLM `reasoning_content`) is stored for audit/UI only.
+        break;
       default:
         break;
     }
@@ -87,7 +84,7 @@ function toolCallsFromBlocks(
 }
 
 /**
- * Session history �?OpenAI `messages[]` (`tool_result` �?`role: tool`; assistant `tool_use` �?`tool_calls`).
+ * Session history â†?OpenAI `messages[]` (`tool_result` â†?`role: tool`; assistant `tool_use` â†?`tool_calls`).
  */
 export function chatMessagesToOpenAi(
   messages: readonly ChatMessage[],
@@ -98,7 +95,10 @@ export function chatMessagesToOpenAi(
     const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
     const toolUses = msg.content.blocks.filter((b) => b.type === "tool_use");
     const other = msg.content.blocks.filter(
-      (b) => b.type !== "tool_result" && b.type !== "tool_use",
+      (b) =>
+        b.type !== "tool_result" &&
+        b.type !== "tool_use" &&
+        b.type !== "thinking",
     );
 
     for (const tr of toolResults) {
@@ -135,7 +135,7 @@ export function chatMessagesToOpenAi(
 }
 
 /**
- * OpenAI `choices[0].message` (or equivalent) �?NM {@link ContentBlock} array.
+ * OpenAI `choices[0].message` (or equivalent) â†?NM {@link ContentBlock} array.
  */
 export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   if (!isRecord(message)) {

@@ -23,6 +23,7 @@ export interface AgentRunScope {
 
 export interface AgentRunCallbacks {
   readonly onStreamText?: (delta: string) => void;
+  readonly onStreamThinking?: (delta: string) => void;
 }
 
 export class AgentRunError extends Error {
@@ -91,7 +92,9 @@ export async function runAgentTurn(
   scope: AgentRunScope,
   userContent: string,
   callbacks?: AgentRunCallbacks,
+  options?: {readonly stream?: boolean},
 ): Promise<AgentRunResult> {
+  const stream = options?.stream !== false;
   const trimmed = userContent.trim();
   if (trimmed === '') {
     throw new AgentRunError('消息不能为空');
@@ -109,13 +112,15 @@ export async function runAgentTurn(
 
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
-  const worktreeDisplay = await runtime
-    .worktree({
-      kind: 'session',
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    })
-    .renderDisplay();
+  const wt = runtime.worktree({
+    kind: 'session',
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
+  });
+  const [worktreeDisplay, filetreeDisplay] = await Promise.all([
+    wt.renderDisplay(),
+    wt.renderFileTree(),
+  ]);
 
   const runner = createAgentRunner({
     session,
@@ -138,11 +143,15 @@ export async function runAgentTurn(
     }),
   });
 
-  const onStream = (ev: LlmStreamEvent) => {
-    if (ev.type === 'text-delta') {
-      callbacks?.onStreamText?.(ev.text);
-    }
-  };
+  const onStream = stream
+    ? (ev: LlmStreamEvent) => {
+        if (ev.type === 'text-delta') {
+          callbacks?.onStreamText?.(ev.text);
+        } else if (ev.type === 'thinking-delta') {
+          callbacks?.onStreamThinking?.(ev.text);
+        }
+      }
+    : undefined;
 
   return runner.run({
     definition,
@@ -150,8 +159,8 @@ export async function runAgentTurn(
     workspaceModelId,
     maxSteps: definition.runtime?.maxSteps ?? 20,
     activeRegexGroupId,
-    promptContext: {worktreeDisplay},
-    stream: true,
+    promptContext: {worktreeDisplay, filetreeDisplay},
+    stream,
     onStream,
   });
 }

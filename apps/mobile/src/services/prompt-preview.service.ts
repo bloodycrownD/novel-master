@@ -1,13 +1,9 @@
 /**
  * Real prompt preview: agent prompts + llm-channel regex + formatPromptLlmInputForCli.
  */
-import {
-  buildPromptLlmInput,
-  formatPromptLlmInputForCli,
-  type AgentDefinition,
-} from '@novel-master/core';
+import {formatPromptLlmInputForCli, type AgentDefinition} from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {applyActiveRegexChannel} from './regex-apply-channel';
+import {buildSessionPromptInput} from './session-prompt-input.service';
 import {resolveCurrentAgentDefinition} from './agent-run.service';
 
 export interface PromptPreviewScope {
@@ -29,25 +25,10 @@ async function buildPromptPreviewForDefinition(
   scope: PromptPreviewScope,
   definition: AgentDefinition,
 ): Promise<string> {
-  const allMessages = await runtime.messages.listBySession(scope.sessionId);
-  const visible = allMessages.filter(m => !m.hidden);
-  const activeGroupId = await runtime.state.getCurrentRegexGroupId();
-  const messages = await applyActiveRegexChannel(
-    runtime.regexConfig,
-    activeGroupId,
-    allMessages,
-    visible,
-    'llm',
+  const {ctx, input} = await buildSessionPromptInput(
+    runtime,
+    scope,
+    definition,
   );
-  const worktreeDisplay = await runtime
-    .worktree({
-      kind: 'session',
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    })
-    .renderDisplay();
-
-  const ctx = {worktreeDisplay, messages};
-  const input = buildPromptLlmInput(definition.prompts, ctx);
   return formatPromptLlmInputForCli(definition.prompts, input, ctx);
 }

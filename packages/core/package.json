@@ -17,6 +17,10 @@
     "./sksp": {
       "types": "./dist/infra/sksp/index.d.ts",
       "import": "./dist/infra/sksp/index.js"
+    },
+    "./front-matter": {
+      "types": "./dist/domain/worktree/logic/front-matter.d.ts",
+      "import": "./dist/domain/worktree/logic/front-matter.js"
     }
   },
   "scripts": {

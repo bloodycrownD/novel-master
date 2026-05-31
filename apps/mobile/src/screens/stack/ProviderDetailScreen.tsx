@@ -32,6 +32,8 @@ import {useHeaderContext} from '../../navigation/HeaderContext';
 import {resolveModelShortLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'ProviderDetail'>;
@@ -45,6 +47,7 @@ interface ModelRow {
 
 export function ProviderDetailScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
   const route = useRoute<DetailRoute>();
@@ -93,10 +96,7 @@ export function ProviderDetailScreen() {
       }
       setRows(enriched);
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
@@ -111,11 +111,10 @@ export function ProviderDetailScreen() {
 
   useEffect(() => {
     if (!providerId) {
-      Alert.alert('错误', '缺少 providerId', [
-        {text: '返回', onPress: () => navigation.goBack()},
-      ]);
+      showToast(toastMessage('错误', '缺少 providerId'));
+      navigation.goBack();
     }
-  }, [providerId, navigation]);
+  }, [providerId, navigation, showToast]);
 
   const handleAdd = async (vendorModelId: string, displayName?: string) => {
     if (!providerId) {
@@ -123,7 +122,7 @@ export function ProviderDetailScreen() {
     }
     await runtime.providerModels.save(providerId, vendorModelId, displayName);
     await reload();
-    Alert.alert('已添加模型');
+    showToast('已添加模型');
   };
 
   const deleteModels = async (vendorModelIds: string[]) => {
@@ -157,10 +156,7 @@ export function ProviderDetailScreen() {
               batch.exit();
             })
             .catch(err =>
-              Alert.alert(
-                '删除失败',
-                err instanceof Error ? err.message : String(err),
-              ),
+              showToast(toastMessage('删除失败', err)),
             );
         },
       },
@@ -182,10 +178,7 @@ export function ProviderDetailScreen() {
         style: 'destructive',
         onPress: () => {
           deleteModels([vendorModelId]).catch(err =>
-            Alert.alert(
-              '删除失败',
-              err instanceof Error ? err.message : String(err),
-            ),
+            showToast(toastMessage('删除失败', err)),
           );
         },
       },

@@ -9,10 +9,18 @@ const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
 describe("renderMacro", () => {
   it("substitutes .worktree", () => {
     const out = renderMacro("wt={{ .worktree }}", {
-      dot: { worktree: "DISPLAY" },
+      dot: { worktree: "DISPLAY", filetree: "" },
       root: { time: "t", week_cn: "w" },
     });
     assert.equal(out, "wt=DISPLAY");
+  });
+
+  it("substitutes .filetree", () => {
+    const out = renderMacro("tree:\n{{ .filetree }}", {
+      dot: { worktree: "", filetree: "workspace/\n└── a.md" },
+      root: { time: "t", week_cn: "w" },
+    });
+    assert.equal(out, "tree:\nworkspace/\n└── a.md");
   });
 
   it("substitutes $.time with fixed now", () => {
