@@ -6,43 +6,58 @@ export type ThemeMode = 'light' | 'dark';
 export interface ThemeTokens {
   background: string;
   surface: string;
+  surfaceElevated: string;
   text: string;
   textSecondary: string;
+  textTertiary: string;
   border: string;
   primary: string;
   headerBackground: string;
   tabBarBackground: string;
   tabBarActive: string;
   tabBarInactive: string;
+  success: string;
+  warning: string;
+  warningMuted: string;
   danger: string;
 }
 
 export const lightTheme: ThemeTokens = {
-  background: '#f5f5f5',
-  surface: '#ffffff',
-  text: '#1a1a1a',
-  textSecondary: '#666666',
-  border: '#e0e0e0',
-  primary: '#2563eb',
-  headerBackground: '#ffffff',
-  tabBarBackground: '#ffffff',
-  tabBarActive: '#2563eb',
-  tabBarInactive: '#888888',
-  danger: '#dc2626',
+  background: '#F2F2F7',
+  surface: '#FFFFFF',
+  surfaceElevated: '#FFFFFF',
+  text: '#000000',
+  textSecondary: '#8E8E93',
+  textTertiary: '#C7C7CC',
+  border: '#C6C6C8',
+  primary: '#007AFF',
+  headerBackground: '#FFFFFF',
+  tabBarBackground: '#FFFFFF',
+  tabBarActive: '#007AFF',
+  tabBarInactive: '#8E8E93',
+  success: '#34C759',
+  warning: '#FF9500',
+  warningMuted: 'rgba(255, 149, 0, 0.12)',
+  danger: '#FF3B30',
 };
 
 export const darkTheme: ThemeTokens = {
-  background: '#121212',
-  surface: '#1e1e1e',
-  text: '#f0f0f0',
-  textSecondary: '#aaaaaa',
-  border: '#333333',
-  primary: '#60a5fa',
-  headerBackground: '#1e1e1e',
-  tabBarBackground: '#1e1e1e',
-  tabBarActive: '#60a5fa',
-  tabBarInactive: '#888888',
-  danger: '#f87171',
+  background: '#000000',
+  surface: '#1C1C1E',
+  surfaceElevated: '#2C2C2E',
+  text: '#FFFFFF',
+  textSecondary: '#98989D',
+  textTertiary: '#48484A',
+  border: '#38383A',
+  primary: '#0A84FF',
+  headerBackground: '#1C1C1E',
+  tabBarBackground: '#1C1C1E',
+  tabBarActive: '#0A84FF',
+  tabBarInactive: '#98989D',
+  success: '#30D158',
+  warning: '#FF9F0A',
+  warningMuted: 'rgba(255, 159, 10, 0.18)',
+  danger: '#FF453A',
 };
 
 export function tokensForMode(mode: ThemeMode): ThemeTokens {
