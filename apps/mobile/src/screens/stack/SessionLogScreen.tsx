@@ -5,6 +5,8 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, StyleSheet, Text, View} from 'react-native';
 import {CheckpointFifoBanner} from '../../components/session-log/CheckpointFifoBanner';
 import {SessionTimeline} from '../../components/session-log/SessionTimeline';
+import {useToast} from '../../components/chrome/ToastHost';
+import {formatError} from '../../errors/format-error';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -29,6 +31,7 @@ export function SessionLogScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
+  const {showToast} = useToast();
   const {projectId, sessionId} = useMobileScope();
 
   const [timeline, setTimeline] = useState<readonly TimelineItem[]>([]);
@@ -56,10 +59,7 @@ export function SessionLogScreen() {
       });
       setTimeline(snap.timeline);
     } catch (error) {
-      Alert.alert(
-        '加载失败',
-        error instanceof Error ? error.message : String(error),
-      );
+      Alert.alert('加载失败', formatError(error));
     } finally {
       setLoading(false);
     }
@@ -82,19 +82,17 @@ export function SessionLogScreen() {
           onPress: () => {
             setRollbackInProgress(true);
             rollbackSessionBatch(runtime, sessionId, projectId, batchId)
-              .then(() => reload())
-              .catch(err =>
-                Alert.alert(
-                  '回滚失败',
-                  err instanceof Error ? err.message : String(err),
-                ),
-              )
+              .then(() => {
+                showToast('已回滚检查点');
+                return reload();
+              })
+              .catch(err => Alert.alert('回滚失败', formatError(err)))
               .finally(() => setRollbackInProgress(false));
           },
         },
       ]);
     },
-    [projectId, sessionId, rollbackInProgress, runtime, reload],
+    [projectId, sessionId, rollbackInProgress, runtime, reload, showToast],
   );
 
   if (sessionId == null || projectId == null) {
