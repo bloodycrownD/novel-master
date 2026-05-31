@@ -158,6 +158,48 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.ok(done);
   });
 
+  it("O5b: stream requests include_usage and parses usage from final SSE chunk", async () => {
+    const calls: Array<{ body: string }> = [];
+    const sse = [
+      'data: {"choices":[{"delta":{"content":"Hi"}}]}',
+      "",
+      'data: {"choices":[],"usage":{"prompt_tokens":11,"completion_tokens":3,"total_tokens":14}}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hi",
+      stream: true,
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      stream?: boolean;
+      stream_options?: { include_usage?: boolean };
+    };
+    assert.equal(parsed.stream, true);
+    assert.equal(parsed.stream_options?.include_usage, true);
+    assert.equal(result.assistantText, "Hi");
+    assert.deepEqual(result.usage, {
+      promptTokens: 11,
+      completionTokens: 3,
+      totalTokens: 14,
+    });
+  });
+
   it("M1: stream accumulates delta.tool_calls by index", async () => {
     const chunk1 = {
       choices: [

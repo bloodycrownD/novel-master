@@ -114,6 +114,10 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       messages: this.buildMessages(req),
       stream,
     };
+    // OpenAI only emits `usage` on the final stream chunk when include_usage is set.
+    if (stream) {
+      body.stream_options = { include_usage: true };
+    }
     if (req.tools != null && req.tools.length > 0) {
       body.tools = openAiTools(req.tools);
       body.tool_choice = this.toolChoiceWhenToolsPresent();
@@ -219,6 +223,8 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       emittedToolIndices: new Set<number>(),
     };
     let lastEvent: Record<string, unknown> | undefined;
+    /** Final chunk with `usage` (often empty `choices`); preferred over last content delta. */
+    let lastUsageEvent: Record<string, unknown> | undefined;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -244,6 +250,9 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
           continue;
         }
         lastEvent = event;
+        if (isRecord(event.usage)) {
+          lastUsageEvent = event;
+        }
         const choices = event.choices;
         if (!Array.isArray(choices) || choices.length === 0) {
           continue;
@@ -258,7 +267,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
 
     return {
       blocks: openAiStreamAccumulatorsToBlocks(state, onStream),
-      streamRaw: lastEvent,
+      streamRaw: lastUsageEvent ?? lastEvent,
     };
   }
 }

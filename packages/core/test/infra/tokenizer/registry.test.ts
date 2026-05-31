@@ -23,6 +23,14 @@ describe("TokenCounterRegistry", () => {
     assert.ok(counter instanceof TiktokenTokenCounter);
   });
 
+  it("R2b: forApplicationModel openai/gpt-4o with openai protocol → tiktoken", () => {
+    const registry = createDefaultTokenCounterRegistry({
+      resolveProviderProtocol: (id) => (id === "openai" ? "openai" : undefined),
+    });
+    const counter = registry.forApplicationModel("openai/gpt-4o");
+    assert.ok(counter instanceof TiktokenTokenCounter);
+  });
+
   it("gemini protocol → heuristic even for gemini model name", () => {
     const registry = createDefaultTokenCounterRegistry({
       resolveProviderProtocol: (id) => (id === "gemini" ? "gemini" : undefined),
