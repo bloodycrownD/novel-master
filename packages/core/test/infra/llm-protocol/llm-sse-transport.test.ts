@@ -119,6 +119,51 @@ describe("llm-sse-transport", () => {
     }
   });
 
+  it("TRANS-03b: XHR HTTP 401 throws ProviderError", async () => {
+    setShouldUseXhrForSseOverrideForTests(true);
+
+    class MockXMLHttpRequest {
+      open = mock.fn();
+      setRequestHeader = mock.fn();
+      send = mock.fn(function (this: MockXMLHttpRequest) {
+        this.responseText = "Unauthorized";
+        this.status = 401;
+        this.onload?.();
+      });
+      onprogress: (() => void) | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      responseText = "";
+      status = 0;
+      getResponseHeader = mock.fn(() => "application/json");
+    }
+
+    const origXhr = globalThis.XMLHttpRequest;
+    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+    try {
+      await assert.rejects(
+        () =>
+          postSse(
+            "https://api.example.com/v1/chat/completions",
+            { method: "POST", body: "{}" },
+            () => {},
+            "openai-test",
+          ),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderError);
+          assert.equal(err.code, "HTTP_ERROR");
+          assert.match(String(err.message), /401/);
+          return true;
+        },
+      );
+    } finally {
+      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+        origXhr;
+    }
+  });
+
   it("TRANS-03: HTTP 401 throws ProviderError", async () => {
     setShouldUseXhrForSseOverrideForTests(false);
 
