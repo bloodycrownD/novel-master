@@ -103,6 +103,7 @@ export class DefaultSessionFsService implements SessionFsService {
             action.path,
             action.content,
             versionCheck,
+            options?.expectedVersion,
           );
           await this.appendPostSnapshot(
             sessionId,
@@ -357,9 +358,14 @@ export class DefaultSessionFsService implements SessionFsService {
     path: string,
     content: string,
     versionCheck: boolean,
+    expectedVersion?: number,
   ): Promise<number> {
     if (!versionCheck) {
       const result = await vfs.write(path, content, { versionCheck: false });
+      return result.version;
+    }
+    if (expectedVersion != null) {
+      const result = await vfs.write(path, content, { expectedVersion });
       return result.version;
     }
     try {

@@ -17,6 +17,8 @@ export type SessionFsAction =
 export interface SessionFsExecuteOptions {
   /** Default true; when false, writes skip optimistic version checks. */
   readonly versionCheck?: boolean;
+  /** CAS version for writes; forwarded to VFS when set (e.g. from `vfs.write` tool). */
+  readonly expectedVersion?: number;
 }
 
 /** Result of a successful execute batch. */

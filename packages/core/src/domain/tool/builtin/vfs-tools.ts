@@ -73,7 +73,12 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
         ctx.projectId,
         [{ function: "write", path: input.path, content: input.content }],
         "assistant",
-        { versionCheck },
+        {
+          versionCheck,
+          ...(input.options?.expectedVersion != null
+            ? { expectedVersion: input.options.expectedVersion }
+            : {}),
+        },
       );
       const writeResult = result.results.find((r) => r.function === "write");
       if (writeResult == null || writeResult.function !== "write") {

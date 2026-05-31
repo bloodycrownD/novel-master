@@ -91,6 +91,34 @@ describe("Builtin vfs.* tools (integration)", () => {
     await ctx.conn.close();
   });
 
+  it("vfs.write forwards options.expectedVersion to sessionFs.execute", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    const execute = mock.fn(async () => ({
+      batchId: "batch-2",
+      results: [{ function: "write" as const, path: "/t.txt", version: 4 }],
+    }));
+    const sessionFs = { execute } as unknown as SessionFsService;
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+
+    await runner.call<{ version: number }>(
+      "vfs.write",
+      { path: "/t.txt", content: "y", options: { expectedVersion: 3 } },
+      toolCtx(vfs, sessionFs, project.id, session.id),
+    );
+
+    assert.equal(execute.mock.callCount(), 1);
+    const [, , , , options] = execute.mock.calls[0]!.arguments;
+    assert.deepEqual(options, { versionCheck: true, expectedVersion: 3 });
+    await ctx.conn.close();
+  });
+
   it("list/glob/grep flow", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("p");

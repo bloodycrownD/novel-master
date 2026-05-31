@@ -24,6 +24,7 @@ describe("PersistentState", () => {
     const ctx = await openNovelMasterTestConnection();
     assert.equal(await ctx.state.getCurrentProjectId(), undefined);
     assert.equal(await ctx.state.getCurrentSessionId(), undefined);
+    assert.equal(await ctx.state.getCurrentAgentId(), undefined);
     await ctx.conn.close();
   });
 
