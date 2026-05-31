@@ -10,11 +10,13 @@ import {
   type RichContentVariant,
 } from './build-rich-content-styles';
 import {prepareRichHtml} from './prepare-rich-html';
-import {RICH_CONTENT_MAX_CHARS} from './rich-content-limits';
+import {isRichContentOverLimit} from './rich-content-limits';
 
 const BUBBLE_HORIZONTAL_INSET = 12;
 const LIST_HORIZONTAL_PADDING = 12;
 const BUBBLE_MAX_WIDTH_RATIO = 0.85;
+/** Matches FileEditorScreen previewContent horizontal padding. */
+const FILE_PREVIEW_HORIZONTAL_PADDING = 12;
 
 export interface RichContentBodyProps {
   content: string;
@@ -28,10 +30,10 @@ function RichContentBodyInner({
   variant,
 }: RichContentBodyProps) {
   const {width: windowWidth} = useWindowDimensions();
-  const overLimit = content.length > RICH_CONTENT_MAX_CHARS;
+  const overLimit = isRichContentOverLimit(content);
 
-  const html = useMemo(
-    () => (overLimit ? '' : prepareRichHtml(content)),
+  const prepared = useMemo(
+    () => (overLimit ? null : prepareRichHtml(content)),
     [content, overLimit],
   );
 
@@ -40,13 +42,21 @@ function RichContentBodyInner({
     [tokens, variant],
   );
 
+  const classesStyles = prepared?.classesStyles;
+
   const contentWidth = useMemo(() => {
+    if (variant === 'file-preview') {
+      return Math.max(
+        200,
+        Math.floor(windowWidth - FILE_PREVIEW_HORIZONTAL_PADDING * 2),
+      );
+    }
     const bubbleOuter =
       windowWidth * BUBBLE_MAX_WIDTH_RATIO -
       LIST_HORIZONTAL_PADDING * 2 -
       BUBBLE_HORIZONTAL_INSET * 2;
     return Math.max(200, Math.floor(bubbleOuter));
-  }, [windowWidth]);
+  }, [windowWidth, variant]);
 
   // Length guard: skip RenderHTML to avoid FlatList jank on huge bodies.
   if (overLimit) {
@@ -65,9 +75,10 @@ function RichContentBodyInner({
   return (
     <RenderHTML
       contentWidth={contentWidth}
-      source={{html}}
+      source={{html: prepared?.html ?? ''}}
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}
+      classesStyles={classesStyles ?? undefined}
       defaultTextProps={{selectable: true}}
     />
   );

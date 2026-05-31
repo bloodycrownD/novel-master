@@ -18,4 +18,25 @@ describe('sanitizeRichHtml', () => {
     expect(out).not.toMatch(/iframe/i);
     expect(out).toContain('a');
   });
+
+  it('removes embed and object', () => {
+    const out = sanitizeRichHtml(
+      '<embed src="x"><object data="y"></object><p>keep</p>',
+    );
+    expect(out).not.toMatch(/embed|object/i);
+    expect(out).toContain('keep');
+  });
+
+  it('removes form controls', () => {
+    const out = sanitizeRichHtml(
+      '<form><input name="q"><textarea></textarea><button>go</button></form><p>z</p>',
+    );
+    expect(out).not.toMatch(/form|input|textarea|button/i);
+    expect(out).toContain('z');
+  });
+
+  it('strips javascript: href', () => {
+    const out = sanitizeRichHtml('<a href="javascript:alert(1)">link</a>');
+    expect(out).not.toMatch(/javascript:/i);
+  });
 });

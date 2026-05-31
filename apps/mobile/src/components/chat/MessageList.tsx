@@ -6,6 +6,7 @@ import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import type {ChatMessage} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {RichContentBody} from '../rich-content/RichContentBody';
+import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
 import {buildChatListItems, type ChatListItem} from './message-blocks';
@@ -37,7 +38,7 @@ const AssistantMessageBody = React.memo(function AssistantMessageBody({
   tokens,
   richTextEnabled,
 }: AssistantMessageBodyProps) {
-  if (!richTextEnabled) {
+  if (!richTextEnabled || isRichContentOverLimit(body)) {
     return <Text style={{color: tokens.text}}>{body}</Text>;
   }
   return (

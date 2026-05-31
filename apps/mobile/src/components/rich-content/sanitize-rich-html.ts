@@ -18,9 +18,10 @@ const DISALLOWED_TAGS = [
 export function sanitizeRichHtml(html: string): string {
   return sanitizeHtml(html, {
     disallowedTagsMode: 'discard',
-    nonTextTags: ['style', 'script', 'textarea', 'option'],
+    // style tags stripped upstream in extractStyleBlocksFromHtml; keep script out of text flow
+    nonTextTags: ['script', 'textarea', 'option'],
     allowedTags: sanitizeHtml.defaults.allowedTags
-      .concat(['img', 'style', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'])
+      .concat(['img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'])
       .filter(tag => !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number])),
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,

@@ -26,7 +26,6 @@
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-gesture-handler": "^2.24.0",
-    "react-native-markdown-display": "^7.0.2",
     "react-native-render-html": "^6.3.4",
     "sanitize-html": "^2.14.0",
     "react-native-quick-sqlite": "^8.2.7",
