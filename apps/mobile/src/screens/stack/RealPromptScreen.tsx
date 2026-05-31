@@ -9,7 +9,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import {AppHeader} from '../../components/chrome/AppHeader';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {useRuntime} from '../../hooks/useRuntime';
 import {buildRealPromptPreview} from '../../services/prompt-preview.service';
@@ -59,7 +58,6 @@ export function RealPromptScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AppHeader pageKey="RealPrompt" />
       {loading ? (
         <ActivityIndicator style={styles.loader} />
       ) : error ? (

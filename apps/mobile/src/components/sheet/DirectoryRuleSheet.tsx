@@ -11,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {
   FillPolicy,
   SetDirRuleInput,
@@ -52,6 +53,7 @@ export function DirectoryRuleSheet({
   onSave,
 }: Props) {
   const {tokens} = useTheme();
+  const insets = useSafeAreaInsets();
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [headCount, setHeadCount] = useState('0');
@@ -95,14 +97,24 @@ export function DirectoryRuleSheet({
       animationType="slide"
       onRequestClose={onClose}>
       <View style={styles.backdrop}>
-        <View style={[styles.sheet, {backgroundColor: tokens.surface}]}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: tokens.surface,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}>
           <Text style={[styles.heading, {color: tokens.text}]}>
             目录纳入规则
           </Text>
           <Text style={[styles.path, {color: tokens.textSecondary}]}>
             {logicalPath}
           </Text>
-          <ScrollView style={styles.form}>
+          <ScrollView
+            style={styles.form}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}>
             <FieldLabel tokens={tokens} text="排序字段" />
             <OptionRow
               options={SORT_FIELDS}
@@ -119,17 +131,25 @@ export function DirectoryRuleSheet({
             />
             <FieldLabel tokens={tokens} text="头部数量 (0–1000)" />
             <TextInput
-              style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
+              style={[
+                styles.input,
+                {borderColor: tokens.border, color: tokens.text},
+              ]}
               keyboardType="number-pad"
               value={headCount}
               onChangeText={setHeadCount}
+              underlineColorAndroid="transparent"
             />
             <FieldLabel tokens={tokens} text="尾部数量 (0–1000)" />
             <TextInput
-              style={[styles.input, {borderColor: tokens.border, color: tokens.text}]}
+              style={[
+                styles.input,
+                {borderColor: tokens.border, color: tokens.text},
+              ]}
               keyboardType="number-pad"
               value={tailCount}
               onChangeText={setTailCount}
+              underlineColorAndroid="transparent"
             />
             <FieldLabel tokens={tokens} text="其余文件填充" />
             <OptionRow
@@ -139,7 +159,7 @@ export function DirectoryRuleSheet({
               tokens={tokens}
             />
           </ScrollView>
-          <View style={styles.actions}>
+          <View style={[styles.actions, {borderTopColor: tokens.border}]}>
             <Pressable onPress={onClose} style={styles.actionBtn}>
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
@@ -224,7 +244,9 @@ const styles = StyleSheet.create({
     maxHeight: '85%',
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    overflow: 'hidden',
   },
   heading: {fontSize: 18, fontWeight: '600', marginBottom: 4},
   path: {fontSize: 12, marginBottom: 12},
@@ -246,8 +268,9 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 16,
+    marginTop: 8,
     paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   actionBtn: {padding: 8},
 });

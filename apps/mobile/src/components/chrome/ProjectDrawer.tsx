@@ -231,7 +231,10 @@ export function ProjectDrawer({
 
       <BottomSheetMenu
         visible={menuProjectId != null}
-        items={[{label: '重命名', action: 'rename'}]}
+        items={[
+          {label: '重命名', action: 'rename'},
+          {label: '删除', action: 'delete', danger: true},
+        ]}
         onClose={() => setMenuProjectId(undefined)}
         onSelect={action => {
           const project = menuProject;
@@ -242,6 +245,29 @@ export function ProjectDrawer({
               projectId: project.id,
               initialName: project.name,
             });
+            return;
+          }
+          if (action === 'delete' && project) {
+            Alert.alert(
+              '确认删除',
+              `确定删除项目「${project.name}」？将同时移除其下所有会话。`,
+              [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '删除',
+                  style: 'destructive',
+                  onPress: () => {
+                    void Promise.resolve(onDeleteSelected([project.id])).catch(
+                      err =>
+                        Alert.alert(
+                          '删除失败',
+                          err instanceof Error ? err.message : String(err),
+                        ),
+                    );
+                  },
+                },
+              ],
+            );
           }
         }}
       />
@@ -290,7 +316,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   listContent: {
-    paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 16,
   },
@@ -303,9 +328,10 @@ const styles = StyleSheet.create({
   projectCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginHorizontal: 5,
+    marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    marginBottom: 12,
     gap: 8,
   },
   projectIcon: {

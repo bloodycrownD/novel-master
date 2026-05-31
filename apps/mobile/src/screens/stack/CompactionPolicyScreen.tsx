@@ -2,18 +2,15 @@
  * Global compaction policy editor (compactionPolicy store).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Alert, Text} from 'react-native';
 import type {CompactionPolicy} from '@novel-master/core';
+import {FormChipGroup} from '../../components/form/FormChipGroup';
+import {FormField} from '../../components/form/FormField';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {FormSwitchRow} from '../../components/form/FormSwitchRow';
+import {FormTextInput} from '../../components/form/FormTextInput';
+import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
+import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -128,205 +125,115 @@ export function CompactionPolicyScreen() {
   };
 
   if (loading) {
-    return <ActivityIndicator style={styles.loader} />;
+    return <ActivityIndicator style={{marginTop: 32}} />;
   }
 
+  const agentChipOptions = agentOptions.map(id => ({value: id, label: id}));
+
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-          全局压缩策略
-        </Text>
-        <View style={styles.switchRow}>
-          <Text style={{color: tokens.text}}>启用压缩</Text>
-          <Switch
-            value={enabled}
-            onValueChange={setEnabled}
-            trackColor={{false: tokens.border, true: tokens.primary}}
-          />
-        </View>
-        {enabled ? (
-          <>
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              全应用单条策略；触发条件为 OR（token 估计或消息条数）。
-            </Text>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              Token 阈值
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={tokenThreshold}
-              onChangeText={setTokenThreshold}
-              keyboardType="number-pad"
-              placeholder="如 12000"
-              placeholderTextColor={tokens.textSecondary}
-            />
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              消息条数阈值
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={floorThreshold}
-              onChangeText={setFloorThreshold}
-              keyboardType="number-pad"
-              placeholder="如 20"
-              placeholderTextColor={tokens.textSecondary}
-            />
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              保留最近 N 条
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={keepLastN}
-              onChangeText={setKeepLastN}
-              keyboardType="number-pad"
-            />
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              摘要方式
-            </Text>
-            <View style={styles.chips}>
-              {(['agent', 'text'] as const).map(type => (
-                <Pressable
-                  key={type}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: tokens.border,
-                      backgroundColor:
-                        abstractType === type ? tokens.primary : tokens.surface,
-                    },
-                  ]}
-                  onPress={() => setAbstractType(type)}>
-                  <Text
-                    style={{
-                      color: abstractType === type ? '#fff' : tokens.text,
-                    }}>
-                    {type === 'agent' ? 'Agent 生成' : '静态文本'}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
+    <ScreenFormLayout
+      tokens={tokens}
+      footer={
+        <StickyFormFooter
+          tokens={tokens}
+          label="保存"
+          loading={saving}
+          onPress={() => handleSave().catch(() => undefined)}
+        />
+      }>
+      <FormSectionCard
+        title="全局压缩"
+        tokens={tokens}
+        hint="全应用单条策略；启用后按触发条件（OR）自动压缩上下文。">
+        <FormSwitchRow
+          label="启用压缩"
+          tokens={tokens}
+          value={enabled}
+          onValueChange={setEnabled}
+        />
+      </FormSectionCard>
+
+      {enabled ? (
+        <>
+          <FormSectionCard title="触发条件" tokens={tokens}>
+            <FormField label="Token 阈值" tokens={tokens} hint="与消息条数阈值为 OR 关系">
+              <FormTextInput
+                tokens={tokens}
+                value={tokenThreshold}
+                onChangeText={setTokenThreshold}
+                keyboardType="number-pad"
+                placeholder="如 12000"
+              />
+            </FormField>
+            <FormField label="消息条数阈值" tokens={tokens}>
+              <FormTextInput
+                tokens={tokens}
+                value={floorThreshold}
+                onChangeText={setFloorThreshold}
+                keyboardType="number-pad"
+                placeholder="如 20"
+              />
+            </FormField>
+            <FormField label="保留最近 N 条" tokens={tokens}>
+              <FormTextInput
+                tokens={tokens}
+                value={keepLastN}
+                onChangeText={setKeepLastN}
+                keyboardType="number-pad"
+              />
+            </FormField>
+          </FormSectionCard>
+
+          <FormSectionCard title="摘要" tokens={tokens}>
+            <FormField label="摘要方式" tokens={tokens}>
+              <FormChipGroup
+                tokens={tokens}
+                value={abstractType}
+                onChange={setAbstractType}
+                options={[
+                  {value: 'agent', label: 'Agent 生成'},
+                  {value: 'text', label: '静态文本'},
+                ]}
+              />
+            </FormField>
             {abstractType === 'agent' ? (
               <>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  摘要 Agent
-                </Text>
-                <View style={styles.chips}>
-                  {agentOptions.map(id => (
-                    <Pressable
-                      key={id}
-                      style={[
-                        styles.chip,
-                        {
-                          borderColor: tokens.border,
-                          backgroundColor:
-                            agentId === id ? tokens.primary : tokens.surface,
-                        },
-                      ]}
-                      onPress={() => setAgentId(id)}>
-                      <Text
-                        style={{
-                          color: agentId === id ? '#fff' : tokens.text,
-                        }}>
-                        {id}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  摘要指令 instruction
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {color: tokens.text, borderColor: tokens.border},
-                  ]}
-                  value={instruction}
-                  onChangeText={setInstruction}
-                  multiline
-                  placeholder="Summarize the following conversation history concisely:"
-                  placeholderTextColor={tokens.textSecondary}
-                />
+                <FormField label="摘要 Agent" tokens={tokens}>
+                  <FormChipGroup
+                    tokens={tokens}
+                    value={agentId}
+                    onChange={setAgentId}
+                    options={
+                      agentChipOptions.length > 0
+                        ? agentChipOptions
+                        : [{value: 'agent-writer', label: 'agent-writer'}]
+                    }
+                  />
+                </FormField>
+                <FormField label="摘要指令 instruction" tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={instruction}
+                    onChangeText={setInstruction}
+                    multiline
+                    placeholder="Summarize the following conversation history concisely:"
+                  />
+                </FormField>
               </>
             ) : (
-              <>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  摘要模板 content
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {color: tokens.text, borderColor: tokens.border},
-                  ]}
+              <FormField label="摘要模板 content" tokens={tokens}>
+                <FormTextInput
+                  tokens={tokens}
                   value={abstractContent}
                   onChangeText={setAbstractContent}
                   multiline
                   placeholder="支持宏"
-                  placeholderTextColor={tokens.textSecondary}
                 />
-              </>
+              </FormField>
             )}
-          </>
-        ) : null}
-      </ScrollView>
-      <View style={[styles.footer, {borderTopColor: tokens.border}]}>
-        <Pressable
-          style={[styles.saveBtn, {backgroundColor: tokens.primary}]}
-          onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving}>
-          <Text style={styles.saveBtnText}>
-            {saving ? '保存中…' : '保存'}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+          </FormSectionCard>
+        </>
+      ) : null}
+    </ScreenFormLayout>
   );
 }
-
-const styles = StyleSheet.create({
-  root: {flex: 1},
-  loader: {marginTop: 32},
-  scroll: {padding: 16, gap: 8},
-  sectionTitle: {fontSize: 18, fontWeight: '600'},
-  switchRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  label: {fontSize: 13, marginTop: 8},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  textArea: {minHeight: 72, textAlignVertical: 'top'},
-  hint: {fontSize: 12},
-  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4},
-  chip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  footer: {padding: 12, borderTopWidth: StyleSheet.hairlineWidth},
-  saveBtn: {
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  saveBtnText: {color: '#fff', fontWeight: '600', fontSize: 16},
-});

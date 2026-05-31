@@ -32,11 +32,7 @@ import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
-import {SettingsScreen} from '../screens/stack/SettingsScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
-import {DevMenuScreen} from '../screens/dev/DevMenuScreen';
-import {VfsDevNavScreen} from '../screens/dev/VfsDevNavScreen';
-import {SkspDevNavScreen} from '../screens/dev/SkspDevNavScreen';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -189,16 +185,9 @@ export function RootNavigator() {
             component={withStackLayout('RegexRuleEditor', RegexRuleEditorScreen)}
           />
           <Stack.Screen
-            name="Settings"
-            component={withStackLayout('Settings', SettingsScreen)}
-          />
-          <Stack.Screen
             name="FileEditor"
             component={withStackLayout('FileEditor', FileEditorScreen)}
           />
-          <Stack.Screen name="DevMenu" component={DevMenuScreen} />
-          <Stack.Screen name="VfsDev" component={VfsDevNavScreen} />
-          <Stack.Screen name="SkspDev" component={SkspDevNavScreen} />
         </Stack.Navigator>
       </HeaderProvider>
     </NavigationContainer>

@@ -12,6 +12,18 @@ function isReadQuery(sql: string): boolean {
   return trimmed.startsWith("SELECT") || trimmed.startsWith("WITH");
 }
 
+function normalizeMockParams(params: unknown[]): unknown[] {
+  return params.map((value) => {
+    if (value instanceof ArrayBuffer) {
+      return Buffer.from(value);
+    }
+    if (value instanceof Uint8Array) {
+      return Buffer.from(value);
+    }
+    return value;
+  });
+}
+
 /**
  * Mock adapter with SQLite semantics for conformance tests in Node.
  */
@@ -34,11 +46,13 @@ export class MockRnSqliteAdapter implements RnSqliteAdapter {
     }
 
     if (isReadQuery(sql)) {
-      const rows = db.prepare(sql).all(...params) as Record<string, unknown>[];
+      const rows = db
+        .prepare(sql)
+        .all(...normalizeMockParams(params)) as Record<string, unknown>[];
       return { rows, rowsAffected: 0 };
     }
 
-    const info = db.prepare(sql).run(...params);
+    const info = db.prepare(sql).run(...normalizeMockParams(params));
     return {
       rowsAffected: info.changes,
       insertId: Number(info.lastInsertRowid),

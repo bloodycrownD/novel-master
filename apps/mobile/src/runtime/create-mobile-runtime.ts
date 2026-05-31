@@ -25,12 +25,14 @@ import {
 import {createCompositeSecretStore} from '@novel-master/core/sksp';
 import {createAndroidSecretStore} from '@novel-master/sksp-android';
 import {getMobileConnection} from '../db/connection';
+import {ensureLlmFetchConfigured} from './setup-llm-fetch';
 import type {MobileNovelMasterRuntime} from './types';
 
 /**
  * Opens the app DB once and returns service handles aligned with CLI runtime.
  */
 export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMasterRuntime> {
+  ensureLlmFetchConfigured();
   const conn = await getMobileConnection();
 
   const state = createPersistentState(conn);

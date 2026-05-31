@@ -18,6 +18,8 @@ import type {RouteProp} from '@react-navigation/native';
 import type {RegexGroup, RegexRule} from '@novel-master/core';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
+import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
@@ -113,7 +115,6 @@ export function RegexRulesScreen() {
             }
             batch.exit();
             await reload();
-            Alert.alert('已删除规则');
           })().catch(err =>
             Alert.alert(
               '删除失败',
@@ -136,11 +137,7 @@ export function RegexRulesScreen() {
         onDelete={confirmBatchDelete}
         hint="选择要删除的规则"
         normalActions={
-          <Pressable
-            style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-            onPress={createRule}>
-            <Text style={styles.addBtnText}>添加</Text>
-          </Pressable>
+          <PrimaryButton label="添加" tokens={tokens} onPress={createRule} />
         }
       />
       {loading && rules.length === 0 ? (
@@ -149,6 +146,7 @@ export function RegexRulesScreen() {
         <FlatList
           data={rules}
           keyExtractor={item => item.ruleId}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
@@ -158,8 +156,9 @@ export function RegexRulesScreen() {
             </Text>
           }
           renderItem={({item}) => (
-            <Pressable
-              style={[styles.row, {borderBottomColor: tokens.border}]}
+            <ConfigListCard
+              tokens={tokens}
+              selected={batch.isSelected(item.ruleId)}
               onPress={() => {
                 if (batch.active) {
                   batch.toggle(item.ruleId);
@@ -169,25 +168,19 @@ export function RegexRulesScreen() {
                     ruleId: item.ruleId,
                   });
                 }
-              }}>
-              {batch.active ? (
-                <BatchCheckbox
-                  checked={batch.isSelected(item.ruleId)}
-                  onToggle={() => batch.toggle(item.ruleId)}
-                />
-              ) : null}
-              <View style={styles.info}>
-                <Text style={[styles.name, {color: tokens.text}]}>
-                  {item.name}
-                </Text>
-                <Text style={[styles.meta, {color: tokens.textSecondary}]}>
-                  {item.ruleId} · {ruleMeta(item)}
-                </Text>
-              </View>
-              {!batch.active ? (
-                <Text style={{color: tokens.textSecondary}}>›</Text>
-              ) : null}
-            </Pressable>
+              }}
+              leading={
+                batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(item.ruleId)}
+                    onToggle={() => batch.toggle(item.ruleId)}
+                  />
+                ) : undefined
+              }
+              title={item.name}
+              subtitle={`${item.ruleId} · ${ruleMeta(item)}`}
+              showChevron={!batch.active}
+            />
           )}
         />
       )}
@@ -202,19 +195,7 @@ export function RegexRulesScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  addBtn: {paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8},
-  addBtnText: {color: '#fff', fontWeight: '600'},
+  listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  info: {flex: 1, gap: 2},
-  name: {fontSize: 16, fontWeight: '500'},
-  meta: {fontSize: 12},
+  empty: {textAlign: 'center', padding: 32},
 });

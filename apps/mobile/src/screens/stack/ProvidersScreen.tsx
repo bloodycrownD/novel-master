@@ -19,6 +19,8 @@ import {formatApplicationModelId} from '@novel-master/core';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
@@ -117,7 +119,6 @@ export function ProvidersScreen() {
             deleteProviders(ids)
               .then(() => {
                 batch.exit();
-                Alert.alert('已删除服务商');
               })
               .catch(err =>
                 Alert.alert(
@@ -143,7 +144,6 @@ export function ProvidersScreen() {
           onPress: () => {
             (async () => {
               await deleteProviders([providerId]);
-              Alert.alert('已删除服务商');
             })().catch(err =>
               Alert.alert(
                 '删除失败',
@@ -167,11 +167,11 @@ export function ProvidersScreen() {
         onDelete={confirmBatchDelete}
         hint="选择要删除的服务商（将同时移除其下所有已保存模型）"
         normalActions={
-          <Pressable
-            style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-            onPress={() => navigation.navigate('ProviderCreate')}>
-            <Text style={styles.addBtnText}>添加</Text>
-          </Pressable>
+          <PrimaryButton
+            label="添加"
+            tokens={tokens}
+            onPress={() => navigation.navigate('ProviderCreate')}
+          />
         }
       />
       {loading && rows.length === 0 ? (
@@ -180,6 +180,7 @@ export function ProvidersScreen() {
         <FlatList
           data={rows}
           keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
@@ -189,47 +190,32 @@ export function ProvidersScreen() {
             </Text>
           }
           renderItem={({item}) => (
-            <Pressable
-              style={[styles.row, {borderBottomColor: tokens.border}]}
+            <ConfigListCard
+              tokens={tokens}
+              selected={batch.isSelected(item.id)}
               onPress={() => {
                 if (batch.active) {
                   batch.toggle(item.id);
                 } else {
                   navigation.navigate('ProviderDetail', {providerId: item.id});
                 }
-              }}>
-              {batch.active ? (
-                <BatchCheckbox
-                  checked={batch.isSelected(item.id)}
-                  onToggle={() => batch.toggle(item.id)}
-                />
-              ) : (
-                <Text style={styles.icon}>🟢</Text>
-              )}
-              <View style={styles.info}>
-                <Text style={[styles.name, {color: tokens.text}]}>
-                  {item.displayName?.trim() || item.id}
-                </Text>
-                <Text style={[styles.meta, {color: tokens.textSecondary}]}>
-                  {metaLine(item)}
-                </Text>
-              </View>
-              {!batch.active ? (
-                <>
-                  <Pressable
-                    hitSlop={8}
-                    onPress={e => {
-                      e.stopPropagation?.();
-                      setMenuProviderId(item.id);
-                    }}>
-                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                      ⋮
-                    </Text>
-                  </Pressable>
-                  <Text style={{color: tokens.textSecondary}}>›</Text>
-                </>
-              ) : null}
-            </Pressable>
+              }}
+              leading={
+                batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(item.id)}
+                    onToggle={() => batch.toggle(item.id)}
+                  />
+                ) : (
+                  <Text style={styles.icon}>🟢</Text>
+                )
+              }
+              title={item.displayName?.trim() || item.id}
+              subtitle={metaLine(item)}
+              onMenuPress={
+                batch.active ? undefined : () => setMenuProviderId(item.id)
+              }
+            />
           )}
         />
       )}
@@ -259,24 +245,8 @@ export function ProvidersScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  addBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addBtnText: {color: '#fff', fontWeight: '600'},
+  listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 12,
-  },
-  icon: {fontSize: 20},
-  info: {flex: 1, gap: 2},
-  name: {fontSize: 16, fontWeight: '500'},
-  meta: {fontSize: 13},
+  empty: {textAlign: 'center', padding: 32},
+  icon: {fontSize: 22},
 });

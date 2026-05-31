@@ -2,17 +2,14 @@
  * Shared provider create/edit form (§14 M6).
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {ActivityIndicator, Alert, StyleSheet, Text, View} from 'react-native';
 import type {LlmProtocolKind} from '@novel-master/core';
+import {FormChipGroup} from '../form/FormChipGroup';
+import {FormField} from '../form/FormField';
+import {FormSectionCard} from '../form/FormSectionCard';
+import {FormTextInput} from '../form/FormTextInput';
+import {ScreenFormLayout} from '../form/ScreenFormLayout';
+import {StickyFormFooter} from '../form/StickyFormFooter';
 import {useTheme} from '../../theme/ThemeProvider';
 
 const PROTOCOLS: LlmProtocolKind[] = ['openai', 'anthropic', 'gemini'];
@@ -154,190 +151,122 @@ export function ProviderForm({
     }
   };
 
+  const protocolOptions = PROTOCOLS.map(p => ({
+    value: p,
+    label: p,
+    disabled: mode === 'edit' && isBuiltin,
+  }));
+
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
+    <ScreenFormLayout
+      tokens={tokens}
+      footer={
+        saving ? (
+          <View style={styles.savingFooter}>
+            <ActivityIndicator color={tokens.primary} />
+          </View>
+        ) : (
+          <StickyFormFooter
+            tokens={tokens}
+            label={mode === 'create' ? '创建' : '保存'}
+            disabled={!canSave}
+            onPress={() => handleSave().catch(() => undefined)}
+          />
+        )
+      }>
+      <FormSectionCard title="连接" tokens={tokens}>
         {mode === 'create' ? (
-          <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              Provider ID
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
+          <FormField label="Provider ID" tokens={tokens}>
+            <FormTextInput
+              tokens={tokens}
               value={values.id}
               onChangeText={text => patch({id: text})}
               autoCapitalize="none"
               autoCorrect={false}
               placeholder="例如 my-openai"
-              placeholderTextColor={tokens.textSecondary}
             />
-          </>
+          </FormField>
         ) : (
           <Text style={[styles.readonlyId, {color: tokens.text}]}>
             ID: {values.id}
           </Text>
         )}
+        <FormField label="协议" tokens={tokens}>
+          <FormChipGroup
+            tokens={tokens}
+            value={values.protocol}
+            onChange={p => patch({protocol: p})}
+            options={protocolOptions}
+          />
+        </FormField>
+        <FormField label="Base URL" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={values.baseUrl}
+            onChangeText={text => patch({baseUrl: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="https://api.example.com/v1"
+          />
+        </FormField>
+        <FormField label="显示名称" tokens={tokens} hint="可选">
+          <FormTextInput
+            tokens={tokens}
+            value={values.displayName}
+            onChangeText={text => patch({displayName: text})}
+            placeholder="可选"
+          />
+        </FormField>
+        <FormField label="默认模型 ID" tokens={tokens} hint="可选">
+          <FormTextInput
+            tokens={tokens}
+            value={values.defaultModelId}
+            onChangeText={text => patch({defaultModelId: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="provider/vendorModelId"
+          />
+        </FormField>
+      </FormSectionCard>
 
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>协议</Text>
-        <View style={styles.chips}>
-          {PROTOCOLS.map(protocol => {
-            const active = values.protocol === protocol;
-            const disabled = mode === 'edit' && isBuiltin;
-            return (
-              <Pressable
-                key={protocol}
-                disabled={disabled}
-                style={[
-                  styles.chip,
-                  {
-                    borderColor: tokens.border,
-                    backgroundColor: active ? tokens.primary : tokens.surface,
-                    opacity: disabled && !active ? 0.5 : 1,
-                  },
-                ]}
-                onPress={() => patch({protocol})}>
-                <Text style={{color: active ? '#fff' : tokens.text}}>
-                  {protocol}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      <FormSectionCard title="认证" tokens={tokens}>
+        <FormField
+          label="API Key"
+          tokens={tokens}
+          hint={
+            mode === 'edit' && apiKeyStatus
+              ? `当前：${apiKeyStatus}；留空则不修改`
+              : '可选，写入 SKSP 安全存储'
+          }>
+          <FormTextInput
+            tokens={tokens}
+            value={values.apiKey}
+            onChangeText={text => patch({apiKey: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+          />
+        </FormField>
+      </FormSectionCard>
 
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          Base URL
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={values.baseUrl}
-          onChangeText={text => patch({baseUrl: text})}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="https://api.example.com/v1"
-          placeholderTextColor={tokens.textSecondary}
-        />
-
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          显示名称（可选）
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={values.displayName}
-          onChangeText={text => patch({displayName: text})}
-          placeholder="可选"
-          placeholderTextColor={tokens.textSecondary}
-        />
-
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          默认模型 ID（可选）
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={values.defaultModelId}
-          onChangeText={text => patch({defaultModelId: text})}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="provider/vendorModelId"
-          placeholderTextColor={tokens.textSecondary}
-        />
-
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          API Key
-          {mode === 'edit' && apiKeyStatus ? `（当前：${apiKeyStatus}）` : ''}
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={values.apiKey}
-          onChangeText={text => patch({apiKey: text})}
-          autoCapitalize="none"
-          autoCorrect={false}
-          secureTextEntry
-          placeholder={
-            mode === 'edit' ? '留空则不修改' : '可选，写入 SKSP 安全存储'
-          }
-          placeholderTextColor={tokens.textSecondary}
-        />
-
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          Headers JSON（可选）
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            styles.multiline,
-            {color: tokens.text, borderColor: tokens.border},
-          ]}
-          value={values.headersJson}
-          onChangeText={text => patch({headersJson: text})}
-          autoCapitalize="none"
-          autoCorrect={false}
-          multiline
-          placeholder='{"X-Custom":"value"}'
-          placeholderTextColor={tokens.textSecondary}
-        />
-      </ScrollView>
-
-      <Pressable
-        style={[
-          styles.saveBtn,
-          {
-            backgroundColor: canSave ? tokens.primary : tokens.border,
-          },
-        ]}
-        disabled={!canSave || saving}
-        onPress={() => handleSave().catch(() => undefined)}>
-        {saving ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.saveBtnText}>
-            {mode === 'create' ? '创建' : '保存'}
-          </Text>
-        )}
-      </Pressable>
-    </View>
+      <FormSectionCard title="高级" tokens={tokens}>
+        <FormField label="Headers JSON" tokens={tokens} hint="可选，JSON 对象">
+          <FormTextInput
+            tokens={tokens}
+            value={values.headersJson}
+            onChangeText={text => patch({headersJson: text})}
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            placeholder='{"X-Custom":"value"}'
+          />
+        </FormField>
+      </FormSectionCard>
+    </ScreenFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  scroll: {padding: 16, gap: 8, paddingBottom: 24},
-  label: {fontSize: 13, marginTop: 8},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  multiline: {minHeight: 72, textAlignVertical: 'top'},
-  readonlyId: {fontSize: 16, fontWeight: '600', marginBottom: 4},
-  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
-  chip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  saveBtn: {
-    margin: 16,
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveBtnText: {color: '#fff', fontWeight: '600', fontSize: 16},
+  readonlyId: {fontSize: 16, fontWeight: '600'},
+  savingFooter: {padding: 16, alignItems: 'center'},
 });

@@ -1,0 +1,33 @@
+/**
+ * Scrollable form screen with optional sticky footer.
+ */
+import React, {type ReactNode} from 'react';
+import {ScrollView, StyleSheet, View} from 'react-native';
+import type {ThemeTokens} from '../../theme/tokens';
+import {FormOverlayProvider} from './FormOverlayHost';
+
+type Props = {
+  tokens: ThemeTokens;
+  children: ReactNode;
+  footer?: ReactNode;
+};
+
+export function ScreenFormLayout({tokens, children, footer}: Props) {
+  return (
+    <FormOverlayProvider>
+      <View style={[styles.root, {backgroundColor: tokens.background}]}>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled">
+          {children}
+        </ScrollView>
+        {footer}
+      </View>
+    </FormOverlayProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  root: {flex: 1},
+  scroll: {paddingTop: 16, paddingBottom: 24},
+});

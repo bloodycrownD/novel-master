@@ -8,9 +8,7 @@ import {KkvError, type KkvService} from '@novel-master/core';
 import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
-  APP_UI_KEY_AUTO_FIX_JSON,
   APP_UI_KEY_CHECKPOINT_RETENTION,
-  APP_UI_KEY_ENABLE_VFS,
   APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
   APP_UI_KEY_THEME,
 } from './app-ui-keys';
@@ -64,6 +62,4 @@ export const appUiKeys = {
   theme: APP_UI_KEY_THEME,
   checkpointRetention: APP_UI_KEY_CHECKPOINT_RETENTION,
   showFullToolParams: APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
-  autoFixJson: APP_UI_KEY_AUTO_FIX_JSON,
-  enableVfs: APP_UI_KEY_ENABLE_VFS,
 } as const;

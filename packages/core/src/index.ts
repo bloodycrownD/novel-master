@@ -280,6 +280,7 @@ export type { SecretStore } from "./infra/sksp/index.js";
 export {
   parseApplicationModelId,
   formatApplicationModelId,
+  normalizeVendorModelId,
 } from "./domain/provider/logic/application-model-id.js";
 export type { LlmProvider } from "./domain/provider/model/provider.js";
 export { providerApiKeyRef } from "./domain/provider/model/provider.js";
@@ -294,8 +295,13 @@ export { zodToJsonSchema } from "./infra/serialization/zod-to-json-schema.js";
 /** @internal CLI e2e fetch capture */
 export {
   clearProtocolAdapters,
+  configureLlmFetch,
   getProtocolAdapter,
 } from "./infra/llm-protocol/logic/registry.js";
+export {
+  createLoggingFetch,
+  isLlmFetchDebugEnabled,
+} from "./infra/llm-protocol/logic/debug-fetch.js";
 export type { AgentSession } from "./domain/agent/session/agent-session.port.js";
 export { AgentError } from "./errors/agent-runtime-errors.js";
 export type { AgentErrorCode } from "./errors/agent-runtime-errors.js";

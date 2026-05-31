@@ -1,5 +1,5 @@
 /**
- * Session actions drawer (modal shell; M1 menu + current workspace model label).
+ * Session actions drawer: read-only current model + action rows.
  */
 import React, {useEffect, useState} from 'react';
 import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
@@ -70,14 +70,14 @@ export function SessionActionsDrawer({
         <Pressable
           style={[styles.panel, {backgroundColor: tokens.surface}]}
           onPress={e => e.stopPropagation()}>
-          <Text style={[styles.heading, {color: tokens.text}]}>会话操作</Text>
-          <View style={[styles.modelRow, {borderBottomColor: tokens.border}]}>
-            <Text style={[styles.modelCaption, {color: tokens.textSecondary}]}>
+          <View style={[styles.modelInfo, {borderBottomColor: tokens.border}]}>
+            <Text style={[styles.modelInfoLabel, {color: tokens.textSecondary}]}>
               当前模型
             </Text>
             <Text
-              style={[styles.modelValue, {color: tokens.text}]}
-              numberOfLines={2}>
+              style={[styles.modelInfoValue, {color: tokens.textSecondary}]}
+              numberOfLines={1}
+              ellipsizeMode="middle">
               {modelLabel}
             </Text>
           </View>
@@ -105,13 +105,16 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   panel: {padding: 20, borderTopLeftRadius: 16, borderTopRightRadius: 16},
-  heading: {fontSize: 16, fontWeight: '600', marginBottom: 8},
-  modelRow: {
-    paddingVertical: 12,
+  modelInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 12,
     marginBottom: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  modelCaption: {fontSize: 12, marginBottom: 4},
-  modelValue: {fontSize: 15, fontWeight: '500'},
+  modelInfoLabel: {fontSize: 14, flexShrink: 0},
+  modelInfoValue: {fontSize: 14, flex: 1, textAlign: 'right'},
   row: {paddingVertical: 14},
 });

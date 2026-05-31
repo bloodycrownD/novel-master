@@ -10,8 +10,9 @@ import type {
   Row,
   TdbcConnection,
 } from "@novel-master/core";
-import { TdbcError, normalizeBindings } from "@novel-master/core";
+import { TdbcError } from "@novel-master/core";
 import type { RnSqliteAdapter } from "./adapter.js";
+import { normalizeQuickSqliteBindings } from "./bindings.js";
 import { AsyncMutex } from "./mutex.js";
 import { rowsFromResult } from "./row-mapper.js";
 
@@ -93,7 +94,7 @@ export class RnConnection implements TdbcConnection {
     try {
       const result = await this.adapter.execute(
         sql,
-        normalizeBindings(parameters),
+        normalizeQuickSqliteBindings(parameters),
       );
       return rowsFromResult(result) as T[];
     } catch (cause) {
@@ -110,7 +111,7 @@ export class RnConnection implements TdbcConnection {
     try {
       const result = await this.adapter.execute(
         sql,
-        normalizeBindings(parameters),
+        normalizeQuickSqliteBindings(parameters),
       );
       return {
         changes: result.rowsAffected ?? 0,
@@ -136,7 +137,7 @@ export class RnConnection implements TdbcConnection {
       for (const params of parametersList) {
         const result = await this.adapter.execute(
           sql,
-          normalizeBindings(params),
+          normalizeQuickSqliteBindings(params),
         );
         totalChanges += result.rowsAffected ?? 0;
       }

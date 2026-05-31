@@ -7,6 +7,7 @@ Add Markdown (`.md`) files here. Nested directories are allowed.
 | 迭代 | 路径 | 说明 |
 |------|------|------|
 | **mobile-fix** | [Iterations/mobile-fix/](Iterations/mobile-fix/) | 会话默认名/重命名/新建不自动进对话（`apps/mobile` + Core `rename`） |
+| **mobile-llm-streaming** | [Iterations/mobile-llm-streaming/](Iterations/mobile-llm-streaming/) | RN 聊天 SSE 流式（Core `postSse`，OpenAI 兼容；App 无传输代码） |
 | **mobile-app** | [Iterations/mobile-app/](Iterations/mobile-app/) | Android 产品 App（C0–M6）；`apps/mobile` |
 | mobile-app-scaffold | [Iterations/mobile-app-scaffold/](Iterations/mobile-app-scaffold/) | RN 脚手架 + VFS Dev |
 | core-package-structure | [Iterations/core-package-structure/](Iterations/core-package-structure/) | Core 目录分层 |

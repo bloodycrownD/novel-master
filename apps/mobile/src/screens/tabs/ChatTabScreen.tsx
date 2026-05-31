@@ -697,7 +697,7 @@ const styles = StyleSheet.create({
   bannerLabel: {fontSize: 12},
   bannerName: {fontSize: 15, fontWeight: '600'},
   sessionList: {flex: 1},
-  sessionListContent: {paddingHorizontal: 16, paddingBottom: 16},
+  sessionListContent: {paddingBottom: 16},
   pullToolbar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -709,9 +709,10 @@ const styles = StyleSheet.create({
   sessionCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginHorizontal: 5,
+    marginBottom: 12,
     padding: 16,
     borderRadius: 16,
-    marginBottom: 12,
     borderWidth: StyleSheet.hairlineWidth,
     gap: 8,
     shadowColor: '#000',

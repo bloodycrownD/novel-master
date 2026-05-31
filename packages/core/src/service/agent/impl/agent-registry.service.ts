@@ -38,7 +38,14 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     options: ValidateAgentDefinitionOptions = {},
   ): Promise<void> {
     await validateAgentDefinition(def, options);
-    const normalized: AgentDefinition = { ...def, name: agentId };
+    const trimmedName = def.name.trim();
+    if (trimmedName.length === 0) {
+      throw new AgentConfigError(
+        "INVALID_SCHEMA",
+        "agent name must not be empty",
+      );
+    }
+    const normalized: AgentDefinition = { ...def, name: trimmedName };
     await this.repository.upsert(agentId, normalized);
   }
 

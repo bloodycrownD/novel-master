@@ -6,6 +6,7 @@ import {StyleSheet, Text, View} from 'react-native';
 import {useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {AgentEditorForm} from '../../components/agent/AgentEditorForm';
+import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -33,7 +34,13 @@ export function AgentEditorScreen() {
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       {dirty ? (
-        <Text style={[styles.unsaved, {color: tokens.danger}]}>未保存</Text>
+        <View style={styles.unsavedWrap}>
+          <FormSectionCard tokens={tokens}>
+            <Text style={[styles.unsaved, {color: tokens.danger}]}>
+              有未保存的更改
+            </Text>
+          </FormSectionCard>
+        </View>
       ) : null}
       <AgentEditorForm
         agentId={agentId}
@@ -46,5 +53,6 @@ export function AgentEditorScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  unsaved: {paddingHorizontal: 16, paddingTop: 8, fontSize: 13},
+  unsavedWrap: {marginHorizontal: 5, paddingTop: 8},
+  unsaved: {fontSize: 14, fontWeight: '600'},
 });

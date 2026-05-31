@@ -1,6 +1,7 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { formatApplicationModelId } from "../../src/domain/provider/logic/application-model-id.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
@@ -52,6 +53,42 @@ describe("ProviderModelService fetch", () => {
     );
     const saved = await bundle.providerModels.savedList("openai");
     assert.equal(saved.length, 0);
+
+    await ctx.conn.close();
+    clearProtocolAdapters();
+  });
+
+  it("normalizes prefixed vendor ids when saving fetched models", async () => {
+    clearProtocolAdapters();
+    const fetchFn = mock.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "zhipu/glm-4-flash" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+    const ctx = await openNovelMasterTestConnection();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    await bundle.providers.create({
+      id: "zhipu",
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      apiKey: "sk-test",
+    });
+
+    await bundle.providerModels.fetch("zhipu");
+    await bundle.providerModels.save("zhipu", "zhipu/glm-4-flash");
+    const saved = await bundle.providerModels.savedList("zhipu");
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.vendorModelId, "glm-4-flash");
+    assert.equal(
+      formatApplicationModelId(saved[0]!.providerId, saved[0]!.vendorModelId),
+      "zhipu/glm-4-flash",
+    );
 
     await ctx.conn.close();
     clearProtocolAdapters();

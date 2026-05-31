@@ -19,11 +19,17 @@ import {formatApplicationModelId} from '@novel-master/core';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {AddModelModal} from '../../components/provider/AddModelModal';
+import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {
+  PrimaryButton,
+  SecondaryButton,
+} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
-import {resolveModelDisplayLabel} from '../../provider/model-display-label';
+import {resolveModelShortLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -48,8 +54,8 @@ export function ProviderDetailScreen() {
   const [rows, setRows] = useState<ModelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [addVisible, setAddVisible] = useState(false);
+  const [fetchVisible, setFetchVisible] = useState(false);
   const [menuVendorId, setMenuVendorId] = useState<string | undefined>();
-  const [fetching, setFetching] = useState(false);
   const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
@@ -74,7 +80,7 @@ export function ProviderDetailScreen() {
         const hasSampling = Boolean(profile?.enabled && profile.params);
         let label = model.displayName?.trim() || model.vendorModelId;
         try {
-          label = await resolveModelDisplayLabel(runtime, applicationModelId);
+          label = await resolveModelShortLabel(runtime, applicationModelId);
         } catch {
           /* fallback */
         }
@@ -120,24 +126,6 @@ export function ProviderDetailScreen() {
     Alert.alert('已添加模型');
   };
 
-  const handleFetchModels = async () => {
-    if (!providerId || fetching) {
-      return;
-    }
-    setFetching(true);
-    try {
-      await runtime.providerModels.fetch(providerId);
-      Alert.alert('已拉取模型列表', '可在添加模型时从建议列表选择。');
-    } catch (error) {
-      Alert.alert(
-        '拉取失败',
-        error instanceof Error ? error.message : String(error),
-      );
-    } finally {
-      setFetching(false);
-    }
-  };
-
   const deleteModels = async (vendorModelIds: string[]) => {
     if (!providerId) {
       return;
@@ -167,7 +155,6 @@ export function ProviderDetailScreen() {
           deleteModels(ids)
             .then(() => {
               batch.exit();
-              Alert.alert('已删除模型');
             })
             .catch(err =>
               Alert.alert(
@@ -194,9 +181,7 @@ export function ProviderDetailScreen() {
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          deleteModels([vendorModelId])
-            .then(() => Alert.alert('已删除模型'))
-            .catch(err =>
+          deleteModels([vendorModelId]).catch(err =>
             Alert.alert(
               '删除失败',
               err instanceof Error ? err.message : String(err),
@@ -219,23 +204,16 @@ export function ProviderDetailScreen() {
         hint="选择要删除的模型（批量模式下不会进入采样配置）"
         normalActions={
           <>
-            <Pressable
-              style={[styles.secondaryBtn, {borderColor: tokens.border}]}
-              disabled={fetching}
-              onPress={() => handleFetchModels().catch(() => undefined)}>
-              {fetching ? (
-                <ActivityIndicator size="small" />
-              ) : (
-                <Text style={{color: tokens.text, fontWeight: '600'}}>
-                  拉取
-                </Text>
-              )}
-            </Pressable>
-            <Pressable
-              style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-              onPress={() => setAddVisible(true)}>
-              <Text style={styles.addBtnText}>添加</Text>
-            </Pressable>
+            <SecondaryButton
+              label="远程"
+              tokens={tokens}
+              onPress={() => setFetchVisible(true)}
+            />
+            <PrimaryButton
+              label="添加"
+              tokens={tokens}
+              onPress={() => setAddVisible(true)}
+            />
           </>
         }
       />
@@ -245,17 +223,21 @@ export function ProviderDetailScreen() {
         <FlatList
           data={rows}
           keyExtractor={item => item.vendorModelId}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
           ListEmptyComponent={
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              暂无已保存模型，点击「拉取模型」或「添加模型」。
-            </Text>
+            <View style={styles.emptyWrap}>
+              <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                暂无已保存模型
+              </Text>
+            </View>
           }
           renderItem={({item}) => (
-            <Pressable
-              style={[styles.row, {borderBottomColor: tokens.border}]}
+            <ConfigListCard
+              tokens={tokens}
+              selected={batch.isSelected(item.vendorModelId)}
               onPress={() => {
                 if (batch.active) {
                   batch.toggle(item.vendorModelId);
@@ -264,38 +246,25 @@ export function ProviderDetailScreen() {
                     applicationModelId: item.applicationModelId,
                   });
                 }
-              }}>
-              {batch.active ? (
-                <BatchCheckbox
-                  checked={batch.isSelected(item.vendorModelId)}
-                  onToggle={() => batch.toggle(item.vendorModelId)}
-                />
-              ) : null}
-              <View style={styles.info}>
-                <Text style={[styles.name, {color: tokens.text}]}>
-                  {item.label}
-                </Text>
-                <Text style={[styles.meta, {color: tokens.textSecondary}]}>
-                  {item.applicationModelId}
-                  {item.hasSampling ? ' · 已配采样' : ''}
-                </Text>
-              </View>
-              {!batch.active ? (
-                <>
-                  <Pressable
-                    hitSlop={8}
-                    onPress={e => {
-                      e.stopPropagation?.();
-                      setMenuVendorId(item.vendorModelId);
-                    }}>
-                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                      ⋮
-                    </Text>
-                  </Pressable>
-                  <Text style={{color: tokens.textSecondary}}>›</Text>
-                </>
-              ) : null}
-            </Pressable>
+              }}
+              leading={
+                batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(item.vendorModelId)}
+                    onToggle={() => batch.toggle(item.vendorModelId)}
+                  />
+                ) : (
+                  <Text style={styles.modelIcon}>🧠</Text>
+                )
+              }
+              title={item.label}
+              subtitle={`${item.applicationModelId}${item.hasSampling ? ' · 已配采样' : ''}`}
+              onMenuPress={
+                batch.active
+                  ? undefined
+                  : () => setMenuVendorId(item.vendorModelId)
+              }
+            />
           )}
         />
       )}
@@ -304,6 +273,15 @@ export function ProviderDetailScreen() {
         onClose={() => setAddVisible(false)}
         onConfirm={handleAdd}
       />
+      {providerId ? (
+        <FetchModelsSheet
+          visible={fetchVisible}
+          providerId={providerId}
+          savedVendorIds={rows.map(r => r.vendorModelId)}
+          onClose={() => setFetchVisible(false)}
+          onSaved={() => reload().catch(() => undefined)}
+        />
+      ) : null}
       <BottomSheetMenu
         visible={menuVendorId != null}
         items={[{label: '删除模型', action: 'delete', danger: true}]}
@@ -320,31 +298,9 @@ export function ProviderDetailScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  addBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addBtnText: {color: '#fff', fontWeight: '600'},
-  secondaryBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    minWidth: 72,
-    alignItems: 'center',
-  },
+  listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  info: {flex: 1, gap: 2},
-  name: {fontSize: 16, fontWeight: '500'},
-  meta: {fontSize: 12},
+  emptyWrap: {alignItems: 'center', padding: 32, gap: 16},
+  empty: {textAlign: 'center'},
+  modelIcon: {fontSize: 22},
 });

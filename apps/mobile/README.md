@@ -90,6 +90,8 @@ npm run log-android -w @novel-master/mobile
 adb logcat *:S ReactNative:V ReactNativeJS:V
 ```
 
+开发构建下，在 runtime 启动时会注册 LLM 日志 fetch；`mobile:log` 或 Metro 里搜 **`[novel-master/llm]`**、**`[novel-master/chat]`**。发送一条聊天消息即可看到请求与 `hasBody`。
+
 **注意**：若开启 Chrome 远程调试，quick-sqlite（JSI）会失败；请用 on-device 调试。
 
 若报 `quick-sqlite is not installed or failed to load`：先 `npm run mobile:start -- --reset-cache`，再 `npm run mobile:android` 重装（需 Metro 把 native 模块打进 bundle）。

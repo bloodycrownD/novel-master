@@ -20,6 +20,8 @@ import type {RegexGroup} from '@novel-master/core';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
@@ -155,7 +157,6 @@ export function RegexGroupsScreen() {
             }
             batch.exit();
             await reload();
-            Alert.alert('已删除正则组');
           })().catch(err =>
             Alert.alert(
               '删除失败',
@@ -177,7 +178,6 @@ export function RegexGroupsScreen() {
           (async () => {
             await runtime.regexConfig.deleteGroup(groupId);
             await reload();
-            Alert.alert('已删除正则组');
           })().catch(err =>
             Alert.alert(
               '删除失败',
@@ -267,11 +267,7 @@ export function RegexGroupsScreen() {
         onDelete={confirmBatchDelete}
         hint="选择要删除的正则组"
         normalActions={
-          <Pressable
-            style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-            onPress={openCreate}>
-            <Text style={styles.addBtnText}>添加</Text>
-          </Pressable>
+          <PrimaryButton label="添加" tokens={tokens} onPress={openCreate} />
         }
       />
       {loading && rows.length === 0 ? (
@@ -280,6 +276,7 @@ export function RegexGroupsScreen() {
         <FlatList
           data={rows}
           keyExtractor={item => item.groupId}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
@@ -289,52 +286,33 @@ export function RegexGroupsScreen() {
             </Text>
           }
           renderItem={({item}) => (
-            <Pressable
-              style={[styles.row, {borderBottomColor: tokens.border}]}
+            <ConfigListCard
+              tokens={tokens}
+              selected={batch.isSelected(item.groupId)}
               onPress={() => {
                 if (batch.active) {
                   batch.toggle(item.groupId);
                 } else {
                   navigation.navigate('RegexRules', {groupId: item.groupId});
                 }
-              }}>
-              {batch.active ? (
-                <BatchCheckbox
-                  checked={batch.isSelected(item.groupId)}
-                  onToggle={() => batch.toggle(item.groupId)}
-                />
-              ) : (
-                <Text style={styles.icon}>🛡️</Text>
-              )}
-              <View style={styles.info}>
-                <Text style={[styles.name, {color: tokens.text}]}>
-                  {groupTitle(item)}
-                </Text>
-                <Text style={[styles.meta, {color: tokens.textSecondary}]}>
-                  {item.groupId} · {item.ruleCount} 条规则
-                </Text>
-              </View>
-              {item.isCurrent ? (
-                <Text style={[styles.badge, {color: tokens.primary}]}>
-                  当前
-                </Text>
-              ) : null}
-              {!batch.active ? (
-                <>
-                  <Pressable
-                    hitSlop={8}
-                    onPress={e => {
-                      e.stopPropagation?.();
-                      setMenuGroupId(item.groupId);
-                    }}>
-                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                      ⋮
-                    </Text>
-                  </Pressable>
-                  <Text style={{color: tokens.textSecondary}}>›</Text>
-                </>
-              ) : null}
-            </Pressable>
+              }}
+              leading={
+                batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(item.groupId)}
+                    onToggle={() => batch.toggle(item.groupId)}
+                  />
+                ) : (
+                  <Text style={styles.icon}>🛡️</Text>
+                )
+              }
+              title={groupTitle(item)}
+              subtitle={`${item.groupId} · ${item.ruleCount} 条规则`}
+              badge={item.isCurrent && !batch.active ? '当前' : undefined}
+              onMenuPress={
+                batch.active ? undefined : () => setMenuGroupId(item.groupId)
+              }
+            />
           )}
         />
       )}
@@ -389,23 +367,10 @@ const styles = StyleSheet.create({
     padding: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  addBtn: {paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8},
-  addBtnText: {color: '#fff', fontWeight: '600'},
+  listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-  },
-  icon: {fontSize: 20},
-  info: {flex: 1, gap: 2},
-  name: {fontSize: 16, fontWeight: '500'},
-  meta: {fontSize: 12},
-  badge: {fontSize: 12, fontWeight: '600'},
+  empty: {textAlign: 'center', padding: 32},
+  icon: {fontSize: 22},
   modalBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',

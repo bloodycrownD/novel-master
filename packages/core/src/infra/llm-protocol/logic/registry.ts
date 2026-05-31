@@ -15,9 +15,21 @@ function ensureDefaults(fetchFn?: FetchFn): void {
   if (adapters.size > 0) {
     return;
   }
-  adapters.set("openai", new OpenAiProtocolAdapter(fetchFn));
-  adapters.set("anthropic", new AnthropicProtocolAdapter(fetchFn));
-  adapters.set("gemini", new GeminiProtocolAdapter(fetchFn));
+  const fn = fetchFn ?? globalThis.fetch;
+  adapters.set("openai", new OpenAiProtocolAdapter(fn));
+  adapters.set("anthropic", new AnthropicProtocolAdapter(fn));
+  adapters.set("gemini", new GeminiProtocolAdapter(fn));
+}
+
+/**
+ * Replaces protocol adapters (call once at app startup before any LLM request).
+ */
+export function configureLlmFetch(fetchFn: FetchFn = globalThis.fetch): void {
+  adapters.clear();
+  const fn = fetchFn;
+  adapters.set("openai", new OpenAiProtocolAdapter(fn));
+  adapters.set("anthropic", new AnthropicProtocolAdapter(fn));
+  adapters.set("gemini", new GeminiProtocolAdapter(fn));
 }
 
 /** Returns the adapter for a protocol kind. */

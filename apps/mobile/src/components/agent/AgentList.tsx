@@ -18,6 +18,8 @@ import type {AgentDefinition} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {ElevatedCard} from '../ui/ElevatedCard';
+import {PrimaryButton} from '../ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
@@ -32,6 +34,8 @@ interface AgentRow {
   meta: string;
   isDefault: boolean;
 }
+
+const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
 
 function agentMeta(def: AgentDefinition, modelLabel: string, workspace: boolean): string {
   const steps = def.runtime?.maxSteps ?? 20;
@@ -211,11 +215,7 @@ export function AgentList({onCreate}: Props) {
         hint="选择要删除的 Agent"
         normalActions={
           onCreate ? (
-            <Pressable
-              style={[styles.createBtn, {backgroundColor: tokens.primary}]}
-              onPress={onCreate}>
-              <Text style={styles.createBtnText}>新建</Text>
-            </Pressable>
+            <PrimaryButton label="新建" tokens={tokens} onPress={onCreate} />
           ) : null
         }
       />
@@ -225,6 +225,7 @@ export function AgentList({onCreate}: Props) {
         <FlatList
           data={rows}
           keyExtractor={item => item.id}
+          contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
           }
@@ -233,9 +234,10 @@ export function AgentList({onCreate}: Props) {
               暂无 Agent，点击「新建」创建。
             </Text>
           }
-          renderItem={({item}) => (
-            <Pressable
-              style={[styles.row, {borderBottomColor: tokens.border}]}
+          renderItem={({item, index}) => (
+            <ElevatedCard
+              tokens={tokens}
+              selected={batch.isSelected(item.id)}
               onPress={() => {
                 if (batch.active) {
                   batch.toggle(item.id);
@@ -248,33 +250,54 @@ export function AgentList({onCreate}: Props) {
                   checked={batch.isSelected(item.id)}
                   onToggle={() => batch.toggle(item.id)}
                 />
-              ) : null}
+              ) : (
+                <View
+                  style={[
+                    styles.avatar,
+                    {backgroundColor: tokens.bgSecondary},
+                  ]}>
+                  <Text style={styles.avatarIcon}>
+                    {AGENT_ICONS[index % AGENT_ICONS.length]}
+                  </Text>
+                </View>
+              )}
               <View style={styles.info}>
-                <Text style={[styles.name, {color: tokens.text}]}>
+                <Text
+                  style={[styles.name, {color: tokens.text}]}
+                  numberOfLines={1}>
                   {item.def.name}
                 </Text>
-                <Text style={[styles.meta, {color: tokens.textSecondary}]}>
+                <Text
+                  style={[styles.meta, {color: tokens.textSecondary}]}
+                  numberOfLines={2}>
                   {item.meta}
                 </Text>
               </View>
-              {item.isDefault ? (
-                <Text style={[styles.badge, {color: tokens.primary}]}>
-                  默认
-                </Text>
+              {item.isDefault && !batch.active ? (
+                <View
+                  style={[styles.defaultBadge, {backgroundColor: tokens.primary}]}>
+                  <Text style={styles.defaultBadgeText}>默认</Text>
+                </View>
               ) : null}
               {!batch.active ? (
-                <Pressable
-                  hitSlop={8}
-                  onPress={e => {
-                    e.stopPropagation?.();
-                    setMenuAgentId(item.id);
-                  }}>
-                  <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                    ⋮
+                <>
+                  <Pressable
+                    hitSlop={8}
+                    onPress={e => {
+                      e.stopPropagation?.();
+                      setMenuAgentId(item.id);
+                    }}>
+                    <Text
+                      style={[styles.menuDots, {color: tokens.textSecondary}]}>
+                      ⋮
+                    </Text>
+                  </Pressable>
+                  <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+                    ›
                   </Text>
-                </Pressable>
+                </>
               ) : null}
-            </Pressable>
+            </ElevatedCard>
           )}
         />
       )}
@@ -310,24 +333,26 @@ export function AgentList({onCreate}: Props) {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  createBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  createBtnText: {color: '#fff', fontWeight: '600'},
+  listContent: {paddingBottom: 24},
   loader: {marginTop: 32},
-  empty: {textAlign: 'center', padding: 24},
-  row: {
-    flexDirection: 'row',
+  empty: {textAlign: 'center', padding: 32},
+  avatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 8,
+    justifyContent: 'center',
   },
-  info: {flex: 1, gap: 2},
-  name: {fontSize: 16, fontWeight: '500'},
-  meta: {fontSize: 12},
-  badge: {fontSize: 12, fontWeight: '600'},
+  avatarIcon: {fontSize: 22},
+  info: {flex: 1, minWidth: 0, gap: 4},
+  name: {fontSize: 16, fontWeight: '600'},
+  meta: {fontSize: 13, lineHeight: 18},
+  defaultBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  defaultBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
+  menuDots: {fontSize: 18, paddingHorizontal: 4},
+  chevron: {fontSize: 22, fontWeight: '300'},
 });

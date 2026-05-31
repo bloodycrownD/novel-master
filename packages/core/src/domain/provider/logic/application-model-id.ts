@@ -30,5 +30,39 @@ export function formatApplicationModelId(
   providerId: string,
   vendorModelId: string,
 ): string {
-  return `${providerId}/${vendorModelId}`;
+  return `${providerId}/${normalizeVendorModelId(providerId, vendorModelId)}`;
+}
+
+/**
+ * Normalizes vendor model ids from remote APIs or pasted application ids.
+ * Strips `{providerId}/` prefix and OpenAI-style `models/` path segments.
+ */
+export function normalizeVendorModelId(
+  providerId: string,
+  raw: string,
+): string {
+  let value = raw.trim();
+  if (!value) {
+    return value;
+  }
+
+  const providerPrefix = `${providerId}/`;
+  if (value.startsWith(providerPrefix)) {
+    return value.slice(providerPrefix.length);
+  }
+
+  try {
+    const parsed = parseApplicationModelId(value);
+    if (parsed.providerId === providerId) {
+      return parsed.vendorModelId;
+    }
+  } catch {
+    /* not a full application model id */
+  }
+
+  if (value.startsWith("models/")) {
+    value = value.slice("models/".length);
+  }
+
+  return value;
 }

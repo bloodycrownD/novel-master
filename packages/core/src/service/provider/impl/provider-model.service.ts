@@ -13,7 +13,10 @@ import type { ModelSuggestionRepository } from "@/domain/provider/repositories/m
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import { formatApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
+import {
+  formatApplicationModelId,
+  normalizeVendorModelId,
+} from "@/domain/provider/logic/application-model-id.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";
@@ -47,10 +50,11 @@ export class DefaultProviderModelService implements ProviderModelService {
     });
     const seen = new Set<string>();
     for (const m of result.models) {
-      seen.add(m.vendorModelId);
+      const vendorModelId = normalizeVendorModelId(providerId, m.vendorModelId);
+      seen.add(vendorModelId);
       await this.deps.suggestions.upsert({
         providerId,
-        vendorModelId: m.vendorModelId,
+        vendorModelId,
         displayName: m.displayName ?? null,
         stale: false,
         lastSeenAtMs: Date.now(),
@@ -65,18 +69,23 @@ export class DefaultProviderModelService implements ProviderModelService {
     displayName?: string,
   ): Promise<SavedModel> {
     await this.deps.providers.get(providerId);
+    const normalizedVendorModelId = normalizeVendorModelId(
+      providerId,
+      vendorModelId,
+    );
     const suggestion = (
       await this.deps.suggestions.listByProvider(providerId)
-    ).find((s) => s.vendorModelId === vendorModelId);
+    ).find((s) => s.vendorModelId === normalizedVendorModelId);
     const now = Date.now();
     const existing = await this.deps.savedModels.find(
       providerId,
-      vendorModelId,
+      normalizedVendorModelId,
     );
     if (existing) {
       const updated: SavedModel = {
         ...existing,
-        displayName: displayName ?? suggestion?.displayName ?? existing.displayName,
+        displayName:
+          displayName ?? suggestion?.displayName ?? existing.displayName,
         updatedAtMs: now,
       };
       await this.deps.savedModels.update(updated);
@@ -84,7 +93,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     }
     const model: SavedModel = {
       providerId,
-      vendorModelId,
+      vendorModelId: normalizedVendorModelId,
       displayName: displayName ?? suggestion?.displayName ?? null,
       createdAtMs: now,
       updatedAtMs: now,

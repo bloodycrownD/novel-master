@@ -29,9 +29,5 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   RegexGroups: {title: '正则配置', showBack: true, showNav: false},
   RegexRules: {title: '正则规则', showBack: true, showNav: false},
   RegexRuleEditor: {title: '规则详情', showBack: true, showNav: false},
-  Settings: {title: '扩展设置', showBack: true, showNav: false},
   FileEditor: {title: '编辑文件', showBack: true, showNav: false},
-  DevMenu: {title: '开发调试', showBack: true, showNav: false},
-  VfsDev: {title: 'VFS 开发', showBack: true, showNav: false},
-  SkspDev: {title: 'SKSP 开发', showBack: true, showNav: false},
 };

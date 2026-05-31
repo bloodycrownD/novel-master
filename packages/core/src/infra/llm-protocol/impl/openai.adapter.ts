@@ -3,7 +3,7 @@
  *
  * Wire serialization lives in {@link ./openai-content-mapper.js}; this module handles HTTP/SSE only.
  *
- * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` ù?when tools are sent, set `tool_choice` to `"required"`
+ * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` ¬ù?when tools are sent, set `tool_choice` to `"required"`
  * instead of `"auto"` (E2E capture / providers that need forced tool calls).
  *
  * @module infra/llm-protocol/impl/openai.adapter
@@ -189,7 +189,11 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     });
     await assertOk(response);
     if (response.body == null) {
-      throw new ProviderError("HTTP_ERROR", "Empty streaming response body");
+      const contentType = response.headers.get("content-type") ?? "none";
+      throw new ProviderError(
+        "HTTP_ERROR",
+        `Empty streaming response body (HTTP ${response.status}, content-type: ${contentType}). On React Native, fetch may not expose a stream body; try non-streaming or check provider SSE support.`,
+      );
     }
 
     const { blocks, streamRaw } = await this.parseSseStream(response.body, req.onStream);

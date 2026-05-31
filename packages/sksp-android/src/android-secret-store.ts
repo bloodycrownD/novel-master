@@ -24,13 +24,25 @@ function decodeBlob(value: unknown): Uint8Array {
     return value;
   }
   if (typeof value === "string") {
-    return Uint8Array.from(atob(value), (c) => c.charCodeAt(0));
+    return base64ToBytes(value);
   }
   throw new SkspError("DB_ERROR", "Invalid blob column");
 }
 
 function encodeBlob(bytes: Uint8Array): Uint8Array {
   return bytes;
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
 }
 
 /** Android SKSP store backed by Keystore and `sksp_secrets`. */
@@ -66,8 +78,8 @@ export class AndroidSecretStore implements SecretStore {
     try {
       const plain = await native.decrypt(
         ref,
-        Buffer.from(decodeBlob(row.ciphertext)).toString("base64"),
-        Buffer.from(decodeBlob(iv)).toString("base64"),
+        bytesToBase64(decodeBlob(row.ciphertext)),
+        bytesToBase64(decodeBlob(iv)),
       );
       return plain;
     } catch (cause) {
@@ -102,10 +114,8 @@ export class AndroidSecretStore implements SecretStore {
         cause,
       });
     }
-    const ciphertext = encodeBlob(
-      Uint8Array.from(Buffer.from(enc.ciphertext, "base64")),
-    );
-    const iv = encodeBlob(Uint8Array.from(Buffer.from(enc.iv, "base64")));
+    const ciphertext = encodeBlob(base64ToBytes(enc.ciphertext));
+    const iv = encodeBlob(base64ToBytes(enc.iv));
     const now = Date.now();
     await executeTemplate(
       this.conn,

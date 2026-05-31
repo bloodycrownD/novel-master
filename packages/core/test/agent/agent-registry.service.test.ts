@@ -11,20 +11,20 @@ import {
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("AgentRegistryService", () => {
-  it("upsert and get normalizes name to agentId", async () => {
+  it("upsert preserves display name separate from agentId", async () => {
     const ctx = await openNovelMasterTestConnection();
     const registry = createAgentRegistryService(ctx.conn);
     const def = decode(
       {
         schemaVersion: 1,
-        name: "ignored",
+        name: "写作助手",
         prompts: { blocks: {} },
       },
       agentDefinitionSchema,
     );
     await registry.upsert("writer", def);
     const loaded = await registry.get("writer");
-    assert.equal(loaded.name, "writer");
+    assert.equal(loaded.name, "写作助手");
     await ctx.conn.close();
   });
 

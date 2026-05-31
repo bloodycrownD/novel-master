@@ -29,4 +29,14 @@ describe("rowsFromResult", () => {
     });
     assert.deepEqual(rows, [{ path: "/dev/note.md" }]);
   });
+
+  it("maps ArrayBuffer blob columns to Uint8Array", () => {
+    const blob = new Uint8Array([0, 255, 128]).buffer;
+    const rows = rowsFromResult({
+      columnNames: ["data"],
+      rows: [[blob]],
+    });
+    assert.ok(rows[0]!.data instanceof Uint8Array);
+    assert.deepEqual([...(rows[0]!.data as Uint8Array)], [0, 255, 128]);
+  });
 });

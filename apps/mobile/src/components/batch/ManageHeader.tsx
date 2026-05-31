@@ -3,6 +3,7 @@
  */
 import React, {type ReactNode} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {SecondaryButton} from '../ui/PrototypeButtons';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -52,9 +53,11 @@ export function ManageHeader({
         <View style={styles.normalRow}>
           <Text style={[styles.title, {color: tokens.text}]}>{title}</Text>
           <View style={styles.actions}>
-            <Pressable onPress={onEnterBatch}>
-              <Text style={{color: tokens.text}}>管理</Text>
-            </Pressable>
+            <SecondaryButton
+              label="管理"
+              tokens={tokens}
+              onPress={onEnterBatch}
+            />
             {normalActions}
           </View>
         </View>
@@ -68,7 +71,7 @@ export function ManageHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 5,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 8,
@@ -79,7 +82,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   title: {fontSize: 18, fontWeight: '600'},
-  actions: {flexDirection: 'row', alignItems: 'center', gap: 12},
+  actions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   batchRow: {
     flexDirection: 'row',
     alignItems: 'center',

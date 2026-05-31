@@ -63,6 +63,9 @@ export function ChatComposer({
       });
       onMessagesChanged();
     } catch (err) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.error('[novel-master/chat]', err);
+      }
       setError(formatError(err));
       onMessagesChanged();
     } finally {

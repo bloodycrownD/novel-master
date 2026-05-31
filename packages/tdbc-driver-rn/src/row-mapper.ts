@@ -21,6 +21,9 @@ function mapValue(value: unknown): SqlValue {
   if (value instanceof Uint8Array) {
     return value;
   }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
   if (Buffer.isBuffer(value)) {
     return new Uint8Array(value);
   }

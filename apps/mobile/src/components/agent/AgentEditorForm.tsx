@@ -2,21 +2,18 @@
  * Agent definition editor: name, model pin, maxSteps, prompt blocks.
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import type {AgentDefinition, PromptBlock} from '@novel-master/core';
+import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import type {AgentDefinition, PromptBlock, PromptBlockRole} from '@novel-master/core';
 import {
   formatApplicationModelId,
   parseApplicationModelId,
 } from '@novel-master/core';
+import {FormField} from '../form/FormField';
+import {FormSectionCard} from '../form/FormSectionCard';
+import {FormSelectField} from '../form/FormSelectField';
+import {FormTextInput} from '../form/FormTextInput';
+import {ScreenFormLayout} from '../form/ScreenFormLayout';
+import {StickyFormFooter} from '../form/StickyFormFooter';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -28,6 +25,7 @@ type Props = {
 };
 
 const ROLES = ['system', 'user', 'assistant'] as const;
+const ROLE_OPTIONS = ROLES.map(role => ({value: role, label: role}));
 
 function blockTypeLabel(type: PromptBlock['type']): string {
   if (type === 'text') {
@@ -269,245 +267,260 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setVendorModelId(saved[0]?.vendorModelId ?? '');
   };
 
+  const providerSelectOptions = providers.map(p => ({
+    value: p.id,
+    label: p.label,
+  }));
+  const modelSelectOptions = savedModels.map(m => ({
+    value: m.vendorModelId,
+    label: m.displayName?.trim() || m.vendorModelId,
+  }));
+
   return (
-    <View style={styles.root}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-          基本信息
-        </Text>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>名称</Text>
-        <TextInput
-          style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
-          value={name}
-          onChangeText={setName}
-        />
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, {color: tokens.text}]}>模型</Text>
-          <View style={styles.switchRow}>
-            <Text style={{color: tokens.textSecondary}}>专属模型</Text>
-            <Switch
-              value={modelEnabled}
-              onValueChange={setModelEnabled}
-              trackColor={{false: tokens.border, true: tokens.primary}}
+    <>
+      <ScreenFormLayout
+        tokens={tokens}
+        footer={
+          <StickyFormFooter
+            tokens={tokens}
+            label="保存"
+            loading={saving}
+            onPress={() => handleSave().catch(() => undefined)}
+          />
+        }>
+        <FormSectionCard title="基本信息" tokens={tokens}>
+          <FormField label="名称" tokens={tokens}>
+            <FormTextInput
+              tokens={tokens}
+              value={name}
+              onChangeText={setName}
             />
-          </View>
-        </View>
-        {!modelEnabled ? (
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
-          </Text>
-        ) : (
-          <>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              服务商
-            </Text>
-            <View style={styles.chips}>
-              {providers.map(p => (
-                <Pressable
-                  key={p.id}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: tokens.border,
-                      backgroundColor:
-                        p.id === providerId ? tokens.primary : tokens.surface,
-                    },
-                  ]}
-                  onPress={() => handleProviderChange(p.id)}>
-                  <Text
-                    style={{
-                      color: p.id === providerId ? '#fff' : tokens.text,
-                    }}>
-                    {p.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              模型
-            </Text>
-            <View style={styles.chips}>
-              {savedModels.map(m => (
-                <Pressable
-                  key={m.vendorModelId}
-                  style={[
-                    styles.chip,
-                    {
-                      borderColor: tokens.border,
-                      backgroundColor:
-                        m.vendorModelId === vendorModelId
-                          ? tokens.primary
-                          : tokens.surface,
-                    },
-                  ]}
-                  onPress={() => setVendorModelId(m.vendorModelId)}>
-                  <Text
-                    style={{
-                      color:
-                        m.vendorModelId === vendorModelId
-                          ? '#fff'
-                          : tokens.text,
-                    }}>
-                    {m.displayName?.trim() || m.vendorModelId}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              model: {preferredModelId ?? '—'}
-            </Text>
-          </>
-        )}
+          </FormField>
+        </FormSectionCard>
 
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>运行时</Text>
-        <Text style={[styles.label, {color: tokens.textSecondary}]}>
-          最大步数 maxSteps
-        </Text>
-        <TextInput
-          style={[styles.input, {color: tokens.text, borderColor: tokens.border}]}
-          value={maxSteps}
-          onChangeText={setMaxSteps}
-          keyboardType="number-pad"
-        />
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          每轮 run 的模型往返上限；省略时 Core 默认 20。
-        </Text>
-
-        <View style={styles.sectionHeader}>
-          <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-            Prompt 块
-          </Text>
-          <Pressable onPress={() => setAddBlockVisible(true)}>
-            <Text style={{color: tokens.primary}}>添加</Text>
-          </Pressable>
-        </View>
-        {prompts.map((block, index) => (
-          <View
-            key={`${block.name}-${index}`}
-            style={[styles.blockCard, {borderColor: tokens.border}]}>
-            <View style={styles.blockHeader}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                {blockTypeLabel(block.type)}
+        <FormSectionCard
+          title="模型"
+          tokens={tokens}
+          rightAction={
+            <View style={styles.switchRow}>
+              <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                专属模型
               </Text>
-              <View style={styles.blockActions}>
-                {index > 0 ? (
-                  <Pressable onPress={() => moveBlock(index, -1)}>
-                    <Text style={{color: tokens.textSecondary}}>↑</Text>
-                  </Pressable>
-                ) : null}
-                {index < prompts.length - 1 ? (
-                  <Pressable onPress={() => moveBlock(index, 1)}>
-                    <Text style={{color: tokens.textSecondary}}>↓</Text>
-                  </Pressable>
-                ) : null}
-                <Pressable onPress={() => deleteBlock(index)}>
-                  <Text style={{color: tokens.danger}}>×</Text>
-                </Pressable>
-              </View>
+              <Switch
+                value={modelEnabled}
+                onValueChange={setModelEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
             </View>
-            <Text style={[styles.label, {color: tokens.textSecondary}]}>
-              名称
+          }>
+          {!modelEnabled ? (
+            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+              未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
             </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {color: tokens.text, borderColor: tokens.border},
-              ]}
-              value={block.name}
-              onChangeText={v => updateBlock(index, {name: v})}
+          ) : (
+            <>
+              <FormField label="服务商" tokens={tokens}>
+                <FormSelectField
+                  tokens={tokens}
+                  value={providerId}
+                  onChange={handleProviderChange}
+                  options={providerSelectOptions}
+                  sheetTitle="选择服务商"
+                  placeholder="选择服务商"
+                  emptyLabel="请先在「服务商」页添加"
+                />
+              </FormField>
+              <FormField label="模型" tokens={tokens}>
+                <FormSelectField
+                  tokens={tokens}
+                  value={vendorModelId}
+                  onChange={setVendorModelId}
+                  options={modelSelectOptions}
+                  sheetTitle="选择模型"
+                  placeholder="选择模型"
+                  emptyLabel={
+                    providerId ? '该服务商下暂无已保存模型' : '请先选择服务商'
+                  }
+                  disabled={!providerId}
+                />
+              </FormField>
+              <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+                model: {preferredModelId ?? '—'}
+              </Text>
+            </>
+          )}
+        </FormSectionCard>
+
+        <FormSectionCard title="运行时" tokens={tokens}>
+          <FormField
+            label="最大步数 maxSteps"
+            tokens={tokens}
+            hint="每轮 run 的模型往返上限；省略时 Core 默认 20。">
+            <FormTextInput
+              tokens={tokens}
+              value={maxSteps}
+              onChangeText={setMaxSteps}
+              keyboardType="number-pad"
             />
-            {block.type === 'text' ? (
-              <>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  角色
-                </Text>
-                <View style={styles.chips}>
-                  {ROLES.map(role => (
+          </FormField>
+        </FormSectionCard>
+
+        <FormSectionCard
+          title="Prompt 块"
+          tokens={tokens}
+          rightAction={
+            <Pressable onPress={() => setAddBlockVisible(true)}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                添加
+              </Text>
+            </Pressable>
+          }>
+          <View style={styles.blockList}>
+            {prompts.map((block, index) => (
+              <View
+                key={`${block.name}-${index}`}
+                style={[
+                  styles.blockCard,
+                  {
+                    backgroundColor: tokens.surface,
+                    borderColor: tokens.border,
+                  },
+                ]}>
+                <View style={styles.blockHeader}>
+                  <View
+                    style={[
+                      styles.typeBadge,
+                      {backgroundColor: `${tokens.primary}1A`},
+                    ]}>
+                    <Text
+                      style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                      {blockTypeLabel(block.type)}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[styles.blockName, {color: tokens.text}]}
+                    numberOfLines={1}>
+                    {block.name}
+                  </Text>
+                  <View style={styles.blockActions}>
+                    {index > 0 ? (
+                      <Pressable
+                        style={[
+                          styles.actionBtn,
+                          {
+                            borderColor: tokens.border,
+                            backgroundColor: tokens.surface,
+                          },
+                        ]}
+                        onPress={() => moveBlock(index, -1)}>
+                        <Text style={{color: tokens.textSecondary}}>↑</Text>
+                      </Pressable>
+                    ) : null}
+                    {index < prompts.length - 1 ? (
+                      <Pressable
+                        style={[
+                          styles.actionBtn,
+                          {
+                            borderColor: tokens.border,
+                            backgroundColor: tokens.surface,
+                          },
+                        ]}
+                        onPress={() => moveBlock(index, 1)}>
+                        <Text style={{color: tokens.textSecondary}}>↓</Text>
+                      </Pressable>
+                    ) : null}
                     <Pressable
-                      key={role}
                       style={[
-                        styles.chip,
+                        styles.actionBtn,
                         {
                           borderColor: tokens.border,
-                          backgroundColor:
-                            block.role === role
-                              ? tokens.primary
-                              : tokens.surface,
+                          backgroundColor: tokens.surface,
                         },
                       ]}
-                      onPress={() =>
-                        updateBlock(index, {type: 'text', role})
-                      }>
-                      <Text
-                        style={{
-                          color: block.role === role ? '#fff' : tokens.text,
-                        }}>
-                        {role}
-                      </Text>
+                      onPress={() => deleteBlock(index)}>
+                      <Text style={{color: tokens.danger}}>×</Text>
                     </Pressable>
-                  ))}
+                  </View>
                 </View>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  内容
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {color: tokens.text, borderColor: tokens.border},
-                  ]}
-                  value={block.content}
-                  onChangeText={v =>
-                    updateBlock(index, {type: 'text', content: v})
-                  }
-                  multiline
-                />
-              </>
-            ) : null}
-            {block.type === 'abstract' ? (
-              <>
-                <Text style={[styles.label, {color: tokens.textSecondary}]}>
-                  内容
-                </Text>
-                <TextInput
-                  style={[
-                    styles.input,
-                    styles.textArea,
-                    {color: tokens.text, borderColor: tokens.border},
-                  ]}
-                  value={block.content}
-                  onChangeText={v =>
-                    updateBlock(index, {type: 'abstract', content: v})
-                  }
-                  multiline
-                />
-              </>
-            ) : null}
-            {block.type === 'chat' ? (
-              <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-                chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。
-              </Text>
-            ) : null}
+                <FormField label="名称" tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={block.name}
+                    onChangeText={v => updateBlock(index, {name: v})}
+                  />
+                </FormField>
+                {block.type === 'text' ? (
+                  <>
+                    <FormField label="角色" tokens={tokens}>
+                      <FormSelectField
+                        tokens={tokens}
+                        value={block.role}
+                        onChange={role =>
+                          updateBlock(index, {
+                            type: 'text',
+                            role: role as PromptBlockRole,
+                          })
+                        }
+                        options={ROLE_OPTIONS}
+                        sheetTitle="选择角色"
+                      />
+                    </FormField>
+                    <Text
+                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                      仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
+                    </Text>
+                    <FormField label="内容" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.content}
+                        onChangeText={v =>
+                          updateBlock(index, {type: 'text', content: v})
+                        }
+                        multiline
+                      />
+                    </FormField>
+                    <Text
+                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                      宏：{'{{.worktree}}'} {'{{$time}}'} {'{{$week_cn}}'}
+                    </Text>
+                  </>
+                ) : null}
+                {block.type === 'abstract' ? (
+                  <>
+                    <FormField label="内容" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.content}
+                        onChangeText={v =>
+                          updateBlock(index, {type: 'abstract', content: v})
+                        }
+                        multiline
+                      />
+                    </FormField>
+                    <Text
+                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                      无压缩摘要时不拼接；可用 {'{{.abstract}}'}、{'{{.worktree}}'}
+                      、{'{{$time}}'}、{'{{$week_cn}}'}
+                    </Text>
+                  </>
+                ) : null}
+                {block.type === 'chat' ? (
+                  <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                    chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。
+                  </Text>
+                ) : null}
+              </View>
+            ))}
           </View>
-        ))}
+        </FormSectionCard>
 
-        <Text style={[styles.sectionTitle, {color: tokens.text}]}>工具</Text>
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          VFS 工具（read / write / list 等）由运行时全局注册，当前 Agent
-          配置不可 per-agent 开关。
-        </Text>
-      </ScrollView>
-      <View style={[styles.footer, {borderTopColor: tokens.border}]}>
-        <Pressable
-          style={[styles.saveBtn, {backgroundColor: tokens.primary}]}
-          onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving}>
-          <Text style={styles.saveBtnText}>
-            {saving ? '保存中…' : '保存'}
+        <FormSectionCard title="工具" tokens={tokens}>
+          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+            VFS 工具（read / write / list 等）由运行时全局注册，当前 Agent
+            配置不可 per-agent 开关。
           </Text>
-        </Pressable>
-      </View>
+        </FormSectionCard>
+      </ScreenFormLayout>
       <BottomSheetMenu
         visible={addBlockVisible}
         items={[
@@ -522,59 +535,49 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           }
         }}
       />
-    </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
-  scroll: {padding: 16, gap: 8, paddingBottom: 32},
-  sectionTitle: {fontSize: 17, fontWeight: '600', marginTop: 12},
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  label: {fontSize: 13, marginTop: 4},
-  input: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-  },
-  textArea: {minHeight: 80, textAlignVertical: 'top'},
-  hint: {fontSize: 12, marginTop: 4},
+  hint: {fontSize: 13, lineHeight: 18},
+  fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  chips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4},
-  chip: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
+  blockList: {gap: 12},
   blockCard: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderRadius: 10,
     padding: 12,
-    marginTop: 8,
-    gap: 4,
+    gap: 10,
   },
   blockHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
+    marginBottom: 2,
   },
-  blockActions: {flexDirection: 'row', gap: 12},
-  footer: {
-    padding: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  typeBadge: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
   },
-  saveBtn: {
+  typeBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  blockName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  blockActions: {flexDirection: 'row', gap: 4},
+  actionBtn: {
+    width: 28,
+    height: 28,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
     alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 8,
+    justifyContent: 'center',
   },
-  saveBtnText: {color: '#fff', fontWeight: '600', fontSize: 16},
 });

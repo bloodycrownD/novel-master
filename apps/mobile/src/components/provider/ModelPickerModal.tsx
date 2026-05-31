@@ -48,11 +48,11 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
             provider.id,
             model.vendorModelId,
           );
-          let label = model.displayName?.trim() || model.vendorModelId;
+          let label = applicationModelId;
           try {
             label = await resolveModelDisplayLabel(runtime, applicationModelId);
           } catch {
-            /* use displayName fallback */
+            /* keep applicationModelId */
           }
           collected.push({applicationModelId, label});
         }
