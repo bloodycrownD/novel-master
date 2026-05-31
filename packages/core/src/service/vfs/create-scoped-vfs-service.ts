@@ -4,7 +4,7 @@
  * @module service/vfs/create-scoped-vfs-service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { DefaultVfsService } from "./impl/vfs.service.js";

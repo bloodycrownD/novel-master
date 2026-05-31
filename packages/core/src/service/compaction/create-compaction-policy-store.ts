@@ -4,7 +4,7 @@
  * @module service/compaction/create-compaction-policy-store
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { DefaultCompactionPolicyStore } from "./impl/compaction-policy-store.service.js";
 import type { CompactionPolicyStore } from "./compaction-policy-store.port.js";

@@ -1,7 +1,7 @@
 /**
  * LLM protocol adapter port.
  *
- * @module infra/llm-protocol/adapter.port
+ * @module infra/llm-protocol/ports/adapter.port
  */
 
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";

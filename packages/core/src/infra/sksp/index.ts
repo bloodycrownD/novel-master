@@ -8,7 +8,7 @@
  * @module infra/sksp
  */
 
-export type { SecretStore } from "./secret-store.port.js";
+export type { SecretStore } from "./ports/secret-store.port.js";
 export { SkspError, assertValidRef } from "./sksp-error.js";
 export type { SkspErrorCode } from "./sksp-error.js";
 export {
@@ -16,11 +16,11 @@ export {
   getSkspDriver,
   resolveSkspDriver,
   clearSkspDrivers,
-} from "./registry.js";
-export type { SkspDriver } from "./registry.js";
+} from "./logic/registry.js";
+export type { SkspDriver } from "./logic/registry.js";
 export {
   createCompositeSecretStore,
-} from "./composite-secret-store.js";
-export type { EnvSecretStoreLike } from "./composite-secret-store.js";
-export { refToEnvVar } from "./ref-to-env.js";
-export { EnvSecretStore, createEnvSecretStore } from "./env-secret-store.js";
+} from "./impl/composite-secret-store.js";
+export type { EnvSecretStoreLike } from "./impl/composite-secret-store.js";
+export { refToEnvVar } from "./logic/ref-to-env.js";
+export { EnvSecretStore, createEnvSecretStore } from "./impl/env-secret-store.js";

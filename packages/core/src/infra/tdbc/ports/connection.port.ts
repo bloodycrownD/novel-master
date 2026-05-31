@@ -1,10 +1,10 @@
 /**
  * TDBC connection contract: async execute, query, batch, and transaction.
  *
- * @module infra/tdbc/connection
+ * @module infra/tdbc/ports/connection.port
  */
 
-import type { BatchResult, ExecuteResult, Row } from "./types.js";
+import type { BatchResult, ExecuteResult, Row } from "../types.js";
 
 /**
  * Async database connection. Implementations must reject with

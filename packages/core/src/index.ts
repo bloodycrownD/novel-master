@@ -282,14 +282,14 @@ export type {
   LlmProtocolKind,
   LlmToolDefinition,
   LlmStreamEvent,
-} from "./infra/llm-protocol/adapter.port.js";
-export { toolsFromRegistry } from "./infra/llm-protocol/tool-definitions.js";
-export { zodToJsonSchema } from "./infra/llm-protocol/zod-to-json-schema.js";
+} from "./infra/llm-protocol/ports/adapter.port.js";
+export { toolsFromRegistry } from "./infra/llm-protocol/logic/tool-definitions.js";
+export { zodToJsonSchema } from "./infra/llm-protocol/logic/zod-to-json-schema.js";
 /** @internal CLI e2e fetch capture */
 export {
   clearProtocolAdapters,
   getProtocolAdapter,
-} from "./infra/llm-protocol/registry.js";
+} from "./infra/llm-protocol/logic/registry.js";
 export type { AgentSession } from "./domain/agent/session/agent-session.port.js";
 export { AgentError } from "./errors/agent-runtime-errors.js";
 export type { AgentErrorCode } from "./errors/agent-runtime-errors.js";

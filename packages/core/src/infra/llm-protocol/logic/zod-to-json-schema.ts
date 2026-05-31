@@ -1,7 +1,7 @@
 /**
- * Minimal Zod â†’ JSON Schema conversion for tool definitions.
+ * Minimal Zod â†?JSON Schema conversion for tool definitions.
  *
- * @module infra/llm-protocol/zod-to-json-schema
+ * @module infra/llm-protocol/logic/zod-to-json-schema
  */
 
 import { z } from "zod";

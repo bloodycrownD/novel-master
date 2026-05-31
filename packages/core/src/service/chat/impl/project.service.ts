@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";

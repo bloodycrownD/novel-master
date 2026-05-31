@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";

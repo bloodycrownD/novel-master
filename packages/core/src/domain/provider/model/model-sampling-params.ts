@@ -4,7 +4,7 @@
  * @module domain/provider/model/model-sampling-params
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/adapter.port.js";
+import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 /** OpenAI-compatible sampling fields. */
 export interface OpenAiSamplingParams {

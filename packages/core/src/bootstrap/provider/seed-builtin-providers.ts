@@ -4,9 +4,9 @@
  * @module bootstrap/provider/seed-builtin-providers
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
-import { executeTemplate } from "@/infra/tdbc/template-helper.js";
+import { executeTemplate } from "@/infra/tdbc/logic/template-helper.js";
 
 const BUILTIN = [
   {

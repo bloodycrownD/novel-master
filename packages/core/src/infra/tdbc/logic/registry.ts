@@ -1,12 +1,12 @@
 /**
  * Driver registry: register and resolve TDBC drivers by name.
  *
- * @module infra/tdbc/registry
+ * @module infra/tdbc/logic/registry
  * @invariant Driver names are unique; last registration wins.
  */
 
-import type { TdbcDriver } from "./driver.js";
-import { TdbcError } from "./errors.js";
+import type { TdbcDriver } from "../ports/driver.port.js";
+import { TdbcError } from "../errors.js";
 
 const drivers = new Map<string, TdbcDriver>();
 

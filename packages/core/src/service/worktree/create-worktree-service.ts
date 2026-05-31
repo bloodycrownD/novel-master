@@ -4,7 +4,7 @@
  * @module service/worktree/create-worktree-service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
 import type { WorktreeScope } from "@/domain/worktree/model/worktree-types.js";

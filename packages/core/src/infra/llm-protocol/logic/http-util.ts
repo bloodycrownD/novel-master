@@ -1,11 +1,11 @@
 /**
  * Shared HTTP helpers for LLM adapters.
  *
- * @module infra/llm-protocol/http-util
+ * @module infra/llm-protocol/logic/http-util
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";
-import type { FetchFn } from "./adapter.port.js";
+import type { FetchFn } from "../ports/adapter.port.js";
 
 /** Trims trailing slashes from base URL. */
 export function normalizeBaseUrl(url: string): string {

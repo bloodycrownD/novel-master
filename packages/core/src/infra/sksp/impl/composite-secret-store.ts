@@ -1,10 +1,10 @@
 /**
  * Composite secret store: env overrides DB for reads.
  *
- * @module infra/sksp/composite-secret-store
+ * @module infra/sksp/impl/composite-secret-store
  */
 
-import type { SecretStore } from "./secret-store.port.js";
+import type { SecretStore } from "../ports/secret-store.port.js";
 
 /** Env-backed store: get/has only (no set/delete). */
 export interface EnvSecretStoreLike {
@@ -14,7 +14,7 @@ export interface EnvSecretStoreLike {
 
 /**
  * Combines env (read-only override) with a DB-backed store.
- * Read order: env hit â†’ DB; writes go to DB only.
+ * Read order: env hit â†?DB; writes go to DB only.
  */
 export function createCompositeSecretStore(options: {
   db: SecretStore;

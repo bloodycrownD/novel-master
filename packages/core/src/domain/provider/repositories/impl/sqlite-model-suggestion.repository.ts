@@ -4,12 +4,12 @@
  * @module domain/provider/repositories/impl/sqlite-model-suggestion.repository
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "@/infra/tdbc/template-helper.js";
+} from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { ModelSuggestion } from "../../model/model-suggestion.js";
 import type { ModelSuggestionRepository } from "../model-suggestion.port.js";

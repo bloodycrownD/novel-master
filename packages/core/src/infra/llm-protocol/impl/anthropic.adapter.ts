@@ -1,7 +1,7 @@
 /**
  * Anthropic protocol adapter (multi-block request/response, tools, streaming).
  *
- * @module infra/llm-protocol/anthropic.adapter
+ * @module infra/llm-protocol/impl/anthropic.adapter
  */
 
 import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
@@ -16,13 +16,13 @@ import type {
   LlmProtocolAdapter,
   LlmStreamEvent,
   LlmToolDefinition,
-} from "./adapter.port.js";
+} from "../ports/adapter.port.js";
 import {
   anthropicContentToBlocks,
   blocksToAnthropicContent,
   chatMessagesToAnthropic,
-} from "./anthropic-content-mapper.js";
-import { assertOk, fetchJson, joinUrl } from "./http-util.js";
+} from "../logic/anthropic-content-mapper.js";
+import { assertOk, fetchJson, joinUrl } from "../logic/http-util.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

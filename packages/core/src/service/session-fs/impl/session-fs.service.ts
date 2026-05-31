@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VfsError, vfsNotFound } from "@/errors/vfs-errors.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
 import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";

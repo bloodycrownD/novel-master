@@ -1,10 +1,10 @@
 /**
  * Environment-variable secret store (read-only).
  *
- * @module infra/sksp/env-secret-store
+ * @module infra/sksp/impl/env-secret-store
  */
 
-import { refToEnvVar } from "./ref-to-env.js";
+import { refToEnvVar } from "../logic/ref-to-env.js";
 
 /** Reads provider API keys from `NOVEL_MASTER_PROVIDER_*_API_KEY` env vars. */
 export class EnvSecretStore {

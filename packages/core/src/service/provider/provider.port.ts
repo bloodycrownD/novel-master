@@ -1,5 +1,5 @@
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import type { LlmProtocolKind } from "@/infra/llm-protocol/adapter.port.js";
+import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface CreateProviderInput {
   readonly id: string;

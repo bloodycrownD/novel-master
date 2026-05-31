@@ -4,7 +4,7 @@
  * @module service/agent/create-agent-registry-service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteAgentDefinitionRepository } from "@/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import type { CompactionPolicyStore } from "@/service/compaction/compaction-policy-store.port.js";
 import { DefaultAgentRegistryService } from "./impl/agent-registry.service.js";

@@ -4,7 +4,7 @@
  * @module service/regex/create-regex-config-service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteRegexGroupRepository } from "@/domain/regex/repositories/impl/sqlite-regex-group.repository.js";
 import { SqliteRegexRuleRepository } from "@/domain/regex/repositories/impl/sqlite-regex-rule.repository.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";

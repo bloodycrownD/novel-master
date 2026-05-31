@@ -1,7 +1,7 @@
 /**
  * Bidirectional mapping between NM content blocks and Anthropic API content arrays.
  *
- * @module infra/llm-protocol/anthropic-content-mapper
+ * @module infra/llm-protocol/logic/anthropic-content-mapper
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
@@ -13,7 +13,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** NM blocks â†’ Anthropic message `content` array. */
+/** NM blocks â†?Anthropic message `content` array. */
 export function blocksToAnthropicContent(
   blocks: readonly ContentBlock[],
 ): AnthropicContentItem[] {
@@ -57,7 +57,7 @@ export function blocksToAnthropicContent(
   });
 }
 
-/** Anthropic API `content[]` â†’ NM blocks (unknown types are skipped). */
+/** Anthropic API `content[]` â†?NM blocks (unknown types are skipped). */
 export function anthropicContentToBlocks(
   content: readonly unknown[],
 ): ContentBlock[] {
@@ -140,7 +140,7 @@ export function anthropicContentToBlocks(
   return blocks;
 }
 
-/** Session history â†’ Anthropic `messages[]` (tool_result â†’ user role). */
+/** Session history â†?Anthropic `messages[]` (tool_result â†?user role). */
 export function chatMessagesToAnthropic(
   messages: readonly ChatMessage[],
 ): Array<{ role: string; content: AnthropicContentItem[] }> {

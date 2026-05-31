@@ -1,7 +1,7 @@
 /**
  * Canonical parameter binding: null and undefined both map to SQL NULL.
  *
- * @module infra/tdbc/normalize-bindings
+ * @module infra/tdbc/logic/normalize-bindings
  */
 
 /**

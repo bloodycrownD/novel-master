@@ -4,7 +4,7 @@
  * @module domain/provider/model/provider
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/adapter.port.js";
+import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface LlmProvider {
   readonly id: string;

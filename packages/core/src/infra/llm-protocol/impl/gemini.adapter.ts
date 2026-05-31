@@ -1,7 +1,7 @@
 /**
  * Google Gemini protocol adapter (text-only content blocks).
  *
- * @module infra/llm-protocol/gemini.adapter
+ * @module infra/llm-protocol/impl/gemini.adapter
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";
@@ -12,9 +12,9 @@ import type {
   LlmChatResult,
   LlmListModelsResult,
   LlmProtocolAdapter,
-} from "./adapter.port.js";
-import { blocksToTextOnly, chatMessagesToTextOnly } from "./text-only-content.js";
-import { fetchJson, joinUrl } from "./http-util.js";
+} from "../ports/adapter.port.js";
+import { blocksToTextOnly, chatMessagesToTextOnly } from "../logic/text-only-content.js";
+import { fetchJson, joinUrl } from "../logic/http-util.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
   readonly kind = "gemini" as const;

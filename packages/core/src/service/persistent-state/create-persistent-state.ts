@@ -4,7 +4,7 @@
  * @module service/persistent-state/create-persistent-state
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { DefaultPersistentState } from "./impl/persistent-state.service.js";
 import type { PersistentState } from "./persistent-state.port.js";

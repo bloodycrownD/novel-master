@@ -1,11 +1,11 @@
 /**
  * Tool registry â†?LLM tool definitions.
  *
- * @module infra/llm-protocol/tool-definitions
+ * @module infra/llm-protocol/logic/tool-definitions
  */
 
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import type { LlmToolDefinition } from "./adapter.port.js";
+import type { LlmToolDefinition } from "../ports/adapter.port.js";
 import { zodToJsonSchema } from "./zod-to-json-schema.js";
 
 /** Maps all tools in a registry to LLM-facing definitions. */

@@ -4,7 +4,7 @@ import type {
   LlmChatResult,
   LlmStreamEvent,
   LlmToolDefinition,
-} from "@/infra/llm-protocol/adapter.port.js";
+} from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface ModelRequestOptions {
   readonly history?: readonly ChatMessage[];

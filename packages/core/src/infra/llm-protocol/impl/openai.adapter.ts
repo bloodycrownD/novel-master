@@ -3,10 +3,10 @@
  *
  * Wire serialization lives in {@link ./openai-content-mapper.js}; this module handles HTTP/SSE only.
  *
- * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` â€” when tools are sent, set `tool_choice` to `"required"`
+ * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` â€?when tools are sent, set `tool_choice` to `"required"`
  * instead of `"auto"` (E2E capture / providers that need forced tool calls).
  *
- * @module infra/llm-protocol/openai.adapter
+ * @module infra/llm-protocol/impl/openai.adapter
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";
@@ -21,19 +21,19 @@ import type {
   LlmProtocolAdapter,
   LlmStreamEvent,
   LlmToolDefinition,
-} from "./adapter.port.js";
+} from "../ports/adapter.port.js";
 import {
   chatMessagesToOpenAi,
   openAiChoiceToBlocks,
   openAiStreamAccumulatorsToBlocks,
   openAiStreamDeltaToEvents,
-} from "./openai-content-mapper.js";
+} from "../logic/openai-content-mapper.js";
 import {
   blocksToTextOnly,
   chatMessagesToTextOnly,
   isTextOnlyHistory,
-} from "./text-only-content.js";
-import { assertOk, fetchJson, joinUrl } from "./http-util.js";
+} from "../logic/text-only-content.js";
+import { assertOk, fetchJson, joinUrl } from "../logic/http-util.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

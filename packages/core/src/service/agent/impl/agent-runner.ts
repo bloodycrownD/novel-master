@@ -15,7 +15,7 @@ import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/age
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
-import { toolsFromRegistry } from "@/infra/llm-protocol/tool-definitions.js";
+import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import type { CompactionPipeline } from "../../compaction/compaction-pipeline.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";

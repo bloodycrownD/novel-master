@@ -9,9 +9,9 @@ import { parseApplicationModelId } from "@/domain/provider/logic/application-mod
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
-import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
-import type { LlmChatResult } from "@/infra/llm-protocol/adapter.port.js";
-import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
+import type { LlmChatResult } from "@/infra/llm-protocol/ports/adapter.port.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type {
   ModelRequestOptions,

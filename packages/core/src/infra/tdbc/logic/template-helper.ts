@@ -1,12 +1,12 @@
 /**
  * Optional bridge from SqlTemplateParser output to TDBC connections.
  *
- * @module infra/tdbc/template-helper
+ * @module infra/tdbc/logic/template-helper
  */
 
-import type { SqlTemplateParser } from "../sql-template/index.js";
-import type { TdbcConnection } from "./connection.js";
-import type { ExecuteResult, Row } from "./types.js";
+import type { SqlTemplateParser } from "../../sql-template/index.js";
+import type { TdbcConnection } from "../ports/connection.port.js";
+import type { ExecuteResult, Row } from "../types.js";
 
 /**
  * Parses a template and runs {@link TdbcConnection.execute}.

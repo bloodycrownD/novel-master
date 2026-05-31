@@ -1,11 +1,11 @@
 /**
  * SKSP driver registry (mirrors TDBC registry semantics).
  *
- * @module infra/sksp/registry
+ * @module infra/sksp/logic/registry
  */
 
-import type { SecretStore } from "./secret-store.port.js";
-import { SkspError } from "./sksp-error.js";
+import type { SecretStore } from "../ports/secret-store.port.js";
+import { SkspError } from "../sksp-error.js";
 
 /** Factory for platform-specific {@link SecretStore} instances. */
 export interface SkspDriver {

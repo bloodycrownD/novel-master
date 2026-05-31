@@ -1,14 +1,14 @@
 /**
  * URL parsing and connection factory for TDBC.
  *
- * @module infra/tdbc/open
+ * @module infra/tdbc/logic/open
  * @invariant Only `tdbc:sqlite:…` URLs are supported in v1.
  */
 
-import type { TdbcConnection } from "./connection.js";
-import { TdbcError } from "./errors.js";
+import type { TdbcConnection } from "../ports/connection.port.js";
+import { TdbcError } from "../errors.js";
 import { resolveDriver } from "./registry.js";
-import type { OpenOptions } from "./types.js";
+import type { OpenOptions } from "../types.js";
 
 const TDBC_SCHEME = "tdbc:";
 

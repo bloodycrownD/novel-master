@@ -1,13 +1,13 @@
 /**
  * LLM protocol adapter registry.
  *
- * @module infra/llm-protocol/registry
+ * @module infra/llm-protocol/logic/registry
  */
 
-import type { FetchFn, LlmProtocolAdapter, LlmProtocolKind } from "./adapter.port.js";
-import { AnthropicProtocolAdapter } from "./anthropic.adapter.js";
-import { GeminiProtocolAdapter } from "./gemini.adapter.js";
-import { OpenAiProtocolAdapter } from "./openai.adapter.js";
+import type { FetchFn, LlmProtocolAdapter, LlmProtocolKind } from "../ports/adapter.port.js";
+import { AnthropicProtocolAdapter } from "../impl/anthropic.adapter.js";
+import { GeminiProtocolAdapter } from "../impl/gemini.adapter.js";
+import { OpenAiProtocolAdapter } from "../impl/openai.adapter.js";
 
 const adapters = new Map<LlmProtocolKind, LlmProtocolAdapter>();
 

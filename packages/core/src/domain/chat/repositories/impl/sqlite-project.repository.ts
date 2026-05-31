@@ -4,12 +4,12 @@
  * @module domain/chat/repositories/impl/sqlite-project.repository
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "@/infra/tdbc/template-helper.js";
+} from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import type { ChatProject } from "../../model/project.js";
 import type { ProjectRepository } from "../project.port.js";

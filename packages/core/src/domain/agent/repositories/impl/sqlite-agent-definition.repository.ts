@@ -4,12 +4,12 @@
  * @module domain/agent/repositories/impl/sqlite-agent-definition.repository
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   executeTemplate,
   queryTemplate,
-} from "@/infra/tdbc/template-helper.js";
+} from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";

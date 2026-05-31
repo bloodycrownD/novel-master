@@ -4,7 +4,7 @@
  * @module service/provider/impl/provider.service
  */
 
-import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
@@ -15,7 +15,7 @@ import {
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import { normalizeBaseUrl } from "@/infra/llm-protocol/http-util.js";
+import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
 import type {
   CreateProviderInput,
   EditProviderPatch,

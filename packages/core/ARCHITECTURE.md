@@ -74,3 +74,44 @@ service/<ctx>/
 Persistent session adapters (e.g. `ChatAgentSession` over `MessageService`) belong in **service**, not domain.
 
 Builtin tools under `domain/tool/builtin/` depend on **domain ports** (e.g. `VfsService`), never on `service/*` types.
+
+## Infra module templates
+
+Infra is split by **shape**, not one flat rule for every folder.
+
+### Adapter 型（多实现、可替换）
+
+Same idea as domain `ports/` + `impl/`, but names reflect vendors/protocols (not `sqlite-*`).
+
+```text
+infra/<capability>/
+├── ports/
+│   └── *.port.ts           # LlmProtocolAdapter, SecretStore, TdbcDriver, TdbcConnection…
+├── impl/
+│   └── <vendor>.*.ts       # openai.adapter.ts, env-secret-store.ts
+├── logic/                  # registry, mappers, http helpers (no second impl)
+├── index.ts                # optional public barrel (sksp, tdbc)
+└── errors.ts               # optional; infra-local errors only
+```
+
+**Current layout:**
+
+| Module | ports | impl | logic |
+|--------|-------|------|-------|
+| `llm-protocol/` | `adapter.port.ts` | `openai`, `anthropic`, `gemini` adapters | registry, mappers, http-util, tool-definitions, … |
+| `sksp/` | `secret-store.port.ts` | `env-secret-store`, `composite-secret-store` | registry, ref-to-env |
+| `tdbc/` | `driver.port.ts`, `connection.port.ts` | (drivers register from external packages) | open, registry, template-helper, normalize-bindings |
+
+### Library 型（纯函数 / 解析器，无 port）
+
+Keep flat or use `logic/` / `tags/` only when it helps navigation:
+
+```text
+infra/serialization/       # decode, encode, parse-text, stringify-text
+infra/prompt-template/     # macro-render, macro-scan, week-cn
+infra/sql-template/        # parser, evaluator, tags/
+infra/date-format.ts
+infra/kkv-value-codec.ts
+```
+
+Do **not** add empty `ports/` + `impl/` here.

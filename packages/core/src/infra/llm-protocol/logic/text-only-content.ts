@@ -1,7 +1,7 @@
 /**
  * Text-only extraction for OpenAI/Gemini adapters (non-text blocks error).
  *
- * @module infra/llm-protocol/text-only-content
+ * @module infra/llm-protocol/logic/text-only-content
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";

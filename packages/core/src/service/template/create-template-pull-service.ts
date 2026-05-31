@@ -4,7 +4,7 @@
  * @module service/template/create-template-pull-service
  */
 
-import type { TdbcConnection } from "@/infra/tdbc/connection.js";
+import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { DefaultTemplatePullService } from "./impl/template-pull.service.js";
 import type { TemplatePullService } from "./template-pull.port.js";
 

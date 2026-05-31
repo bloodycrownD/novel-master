@@ -1,15 +1,15 @@
 /**
  * Bidirectional mapping between NM content blocks and OpenAI Chat Completions wire format.
  *
- * Pure serialization â€” no HTTP. Used by {@link OpenAiProtocolAdapter} only.
+ * Pure serialization â€?no HTTP. Used by {@link OpenAiProtocolAdapter} only.
  *
- * @module infra/llm-protocol/openai-content-mapper
+ * @module infra/llm-protocol/logic/openai-content-mapper
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { LlmStreamEvent } from "./adapter.port.js";
+import type { LlmStreamEvent } from "../ports/adapter.port.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -27,7 +27,7 @@ function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): str
 }
 
 /**
- * NM blocks â†’ OpenAI message `content` (string or multimodal parts array).
+ * NM blocks â†?OpenAI message `content` (string or multimodal parts array).
  * `tool_use` / `tool_result` are handled at the message level by {@link chatMessagesToOpenAi}.
  */
 export function blocksToOpenAiMessageContent(
@@ -87,7 +87,7 @@ function toolCallsFromBlocks(
 }
 
 /**
- * Session history â†’ OpenAI `messages[]` (`tool_result` â†’ `role: tool`; assistant `tool_use` â†’ `tool_calls`).
+ * Session history â†?OpenAI `messages[]` (`tool_result` â†?`role: tool`; assistant `tool_use` â†?`tool_calls`).
  */
 export function chatMessagesToOpenAi(
   messages: readonly ChatMessage[],
@@ -135,7 +135,7 @@ export function chatMessagesToOpenAi(
 }
 
 /**
- * OpenAI `choices[0].message` (or equivalent) â†’ NM {@link ContentBlock} array.
+ * OpenAI `choices[0].message` (or equivalent) â†?NM {@link ContentBlock} array.
  */
 export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   if (!isRecord(message)) {

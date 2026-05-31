@@ -1,11 +1,11 @@
 /**
  * Maps SKSP refs to environment variable names.
  *
- * @module infra/sksp/ref-to-env
+ * @module infra/sksp/logic/ref-to-env
  */
 
 /**
- * `provider/<id>/apiKey` â†’ `NOVEL_MASTER_PROVIDER_<ID>_API_KEY`.
+ * `provider/<id>/apiKey` â†?`NOVEL_MASTER_PROVIDER_<ID>_API_KEY`.
  * Returns `null` when ref is not a provider apiKey ref.
  */
 export function refToEnvVar(ref: string): string | null {
