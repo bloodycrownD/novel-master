@@ -20,9 +20,14 @@ import {MessageList} from '../../components/chat/MessageList';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
+import {TemplatePullButton} from '../../components/template/TemplatePullButton';
+import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
+import {ListBatchBar} from '../../components/batch/ListBatchBar';
+import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {
@@ -56,10 +61,7 @@ export function ChatTabScreen() {
     useState<ConversationPanel>('chat');
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
-  const [batchMode, setBatchMode] = useState(false);
-  const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
-    new Set(),
-  );
+  const sessionBatch = useBatchSelection();
   const {appUi} = useNovelMaster();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
@@ -73,6 +75,8 @@ export function ChatTabScreen() {
   const [agentRunning, setAgentRunning] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [showFullToolParams, setShowFullToolParams] = useState(false);
+  const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
+  const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();
@@ -187,26 +191,41 @@ export function ChatTabScreen() {
   }, [runtime, projectId, setCurrentSession, reloadLists, openConversation]);
 
   const deleteSelectedSessions = useCallback(async () => {
-    for (const id of selectedSessionIds) {
+    const ids = [...sessionBatch.selectedIds];
+    for (const id of ids) {
       await runtime.sessions.delete(id);
     }
-    setSelectedSessionIds(new Set());
-    setBatchMode(false);
-    if (sessionId && selectedSessionIds.has(sessionId)) {
+    const deletedCurrent = sessionId != null && ids.includes(sessionId);
+    sessionBatch.exit();
+    if (deletedCurrent) {
       setChatSubview('sessions');
     }
     await refreshScope();
     await reloadLists();
-  }, [
-    runtime,
-    selectedSessionIds,
-    sessionId,
-    refreshScope,
-    reloadLists,
-  ]);
+  }, [runtime, sessionBatch, sessionId, refreshScope, reloadLists]);
+
+  const handleCopySession = useCallback(
+    async (sourceSessionId: string) => {
+      try {
+        const copy = await runtime.sessions.copy(sourceSessionId);
+        await reloadLists();
+        Alert.alert('已复制会话', copy.title ?? copy.id);
+      } catch (error) {
+        Alert.alert(
+          '复制失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, reloadLists],
+  );
+
+  const bumpVfsRefresh = useCallback(() => {
+    setVfsRefreshKey(key => key + 1);
+  }, []);
 
   const confirmBatchDelete = useCallback(() => {
-    const count = selectedSessionIds.size;
+    const count = sessionBatch.selectedCount;
     if (count === 0) {
       return;
     }
@@ -222,7 +241,7 @@ export function ChatTabScreen() {
         },
       ],
     );
-  }, [selectedSessionIds.size, deleteSelectedSessions]);
+  }, [sessionBatch.selectedCount, deleteSelectedSessions]);
 
   const handleDeleteProjects = useCallback(
     async (ids: string[]) => {
@@ -331,18 +350,27 @@ export function ChatTabScreen() {
               <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
             </View>
           )
-        ) : sessionVfs && sessionWorktree ? (
-          <VfsFileManager
-            scope={{
-              kind: 'session',
-              projectId: projectId!,
-              sessionId: sessionId!,
-            }}
-            vfs={sessionVfs}
-            worktree={sessionWorktree}
-            rootPath="/"
-            onOpenFile={path => openFileEditor(path, 'session')}
-          />
+        ) : sessionVfs && sessionWorktree && sessionId != null ? (
+          <View style={styles.flexFill}>
+            <View style={[styles.pullToolbar, {borderBottomColor: tokens.border}]}>
+              <TemplatePullButton
+                scope={{kind: 'session', sessionId}}
+                onPulled={bumpVfsRefresh}
+              />
+            </View>
+            <VfsFileManager
+              key={`session-vfs-${vfsRefreshKey}`}
+              scope={{
+                kind: 'session',
+                projectId: projectId!,
+                sessionId,
+              }}
+              vfs={sessionVfs}
+              worktree={sessionWorktree}
+              rootPath="/"
+              onOpenFile={path => openFileEditor(path, 'session')}
+            />
+          </View>
         ) : (
           <View style={styles.placeholder}>
             <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
@@ -392,14 +420,23 @@ export function ChatTabScreen() {
         />
       </View>
       {sessionListPanel === 'template' ? (
-        projectVfs && projectWorktree ? (
-          <VfsFileManager
-            scope={{kind: 'project', projectId: projectId!}}
-            vfs={projectVfs}
-            worktree={projectWorktree}
-            rootPath="/template"
-            onOpenFile={path => openFileEditor(path, 'project')}
-          />
+        projectVfs && projectWorktree && projectId != null ? (
+          <View style={styles.flexFill}>
+            <View style={[styles.pullToolbar, {borderBottomColor: tokens.border}]}>
+              <TemplatePullButton
+                scope={{kind: 'project', projectId}}
+                onPulled={bumpVfsRefresh}
+              />
+            </View>
+            <VfsFileManager
+              key={`project-template-${vfsRefreshKey}`}
+              scope={{kind: 'project', projectId}}
+              vfs={projectVfs}
+              worktree={projectWorktree}
+              rootPath="/template"
+              onOpenFile={path => openFileEditor(path, 'project')}
+            />
+          </View>
         ) : (
           <View style={styles.placeholder}>
             <Text style={{color: tokens.textSecondary}}>请先选择项目</Text>
@@ -407,26 +444,18 @@ export function ChatTabScreen() {
         )
       ) : (
         <>
-          <View style={styles.toolbar}>
-            <Pressable onPress={handleCreateSession}>
-              <Text style={{color: tokens.primary}}>新建会话</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                setBatchMode(m => !m);
-                setSelectedSessionIds(new Set());
-              }}>
-              <Text style={{color: tokens.text}}>
-                {batchMode ? '取消' : '批量'}
-              </Text>
-            </Pressable>
-            {batchMode ? (
-              <Pressable onPress={confirmBatchDelete}>
-                <Text style={{color: tokens.danger}}>删除</Text>
+          {!sessionBatch.active ? (
+            <View style={styles.toolbar}>
+              <Pressable onPress={handleCreateSession}>
+                <Text style={{color: tokens.primary}}>新建会话</Text>
               </Pressable>
-            ) : null}
-          </View>
+              <Pressable onPress={sessionBatch.enter}>
+                <Text style={{color: tokens.text}}>批量</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <FlatList
+            style={sessionBatch.active ? styles.listWithBar : undefined}
             data={sessions}
             keyExtractor={item => item.id}
             ListEmptyComponent={
@@ -438,32 +467,60 @@ export function ChatTabScreen() {
               <Pressable
                 style={[styles.sessionRow, {borderBottomColor: tokens.border}]}
                 onPress={() => {
-                  if (batchMode) {
-                    setSelectedSessionIds(prev => {
-                      const next = new Set(prev);
-                      if (next.has(item.id)) {
-                        next.delete(item.id);
-                      } else {
-                        next.add(item.id);
-                      }
-                      return next;
-                    });
+                  if (sessionBatch.active) {
+                    sessionBatch.toggle(item.id);
                   } else {
                     openConversation(item.id);
                   }
                 }}
                 onLongPress={() => {
-                  setBatchMode(true);
-                  setSelectedSessionIds(new Set([item.id]));
+                  sessionBatch.enter();
+                  sessionBatch.toggle(item.id);
                 }}>
-                <Text style={{color: tokens.text}}>
+                {sessionBatch.active ? (
+                  <BatchCheckbox
+                    checked={sessionBatch.isSelected(item.id)}
+                    onToggle={() => sessionBatch.toggle(item.id)}
+                  />
+                ) : null}
+                <Text style={{color: tokens.text, flex: 1}}>
                   {item.title ?? item.id}
                   {item.id === sessionId ? ' · 当前' : ''}
-                  {batchMode && selectedSessionIds.has(item.id) ? ' ✓' : ''}
                 </Text>
+                {!sessionBatch.active ? (
+                  <Pressable
+                    hitSlop={8}
+                    onPress={e => {
+                      e.stopPropagation?.();
+                      setMenuSessionId(item.id);
+                    }}>
+                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
+                      ⋮
+                    </Text>
+                  </Pressable>
+                ) : null}
               </Pressable>
             )}
           />
+          <BottomSheetMenu
+            visible={menuSessionId != null}
+            items={[{label: '复制会话', action: 'copy'}]}
+            onClose={() => setMenuSessionId(undefined)}
+            onSelect={action => {
+              const sid = menuSessionId;
+              setMenuSessionId(undefined);
+              if (action === 'copy' && sid) {
+                handleCopySession(sid).catch(() => undefined);
+              }
+            }}
+          />
+          {sessionBatch.active ? (
+            <ListBatchBar
+              selectedCount={sessionBatch.selectedCount}
+              onCancel={sessionBatch.exit}
+              onDelete={confirmBatchDelete}
+            />
+          ) : null}
         </>
       )}
       <ProjectDrawer
@@ -518,7 +575,22 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 12,
   },
-  sessionRow: {padding: 16, borderBottomWidth: StyleSheet.hairlineWidth},
+  pullToolbar: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  flexFill: {flex: 1},
+  sessionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 8,
+  },
+  listWithBar: {marginBottom: 56},
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   chatPanel: {flex: 1},

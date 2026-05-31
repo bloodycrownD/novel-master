@@ -2,7 +2,7 @@
  * Global template VFS browser (profile → 全局模板).
  */
 import React, {useCallback} from 'react';
-import {View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
@@ -29,6 +29,11 @@ export function GlobalTemplateScreen() {
 
   return (
     <View style={{flex: 1, backgroundColor: tokens.background}}>
+      <View style={[styles.banner, {backgroundColor: tokens.surface}]}>
+        <Text style={[styles.bannerText, {color: tokens.textSecondary}]}>
+          全应用共享；项目可通过「从上级同步」拉取此处模板。
+        </Text>
+      </View>
       <VfsFileManager
         scope={{kind: 'global'}}
         vfs={runtime.globalVfs()}
@@ -39,3 +44,14 @@ export function GlobalTemplateScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  banner: {
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 8,
+  },
+  bannerText: {fontSize: 13, lineHeight: 18},
+});
