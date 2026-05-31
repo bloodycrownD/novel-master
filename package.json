@@ -5,8 +5,7 @@
   "description": "Novel Master monorepo",
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "scripts/*"
+    "apps/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
@@ -14,10 +13,6 @@
     "test": "npm run test --workspaces --if-present",
     "clean": "npm run clean --workspaces --if-present",
     "link:cli": "npm run build -w @novel-master/cli && npm link -w @novel-master/cli",
-    "vfs:sync": "node scripts/vfs-test-sync/dist/main.js",
-    "vfs:watch": "node scripts/vfs-test-sync/dist/main.js watch --mirror ./tmp/mirror",
-    "vfs:push": "node scripts/vfs-test-sync/dist/main.js push --mirror ./tmp/mirror",
-    "vfs:pull": "node scripts/vfs-test-sync/dist/main.js pull --mirror ./tmp/mirror",
     "mobile:start": "npm run start -w @novel-master/mobile",
     "mobile:android": "npm run android -w @novel-master/mobile",
     "mobile:log": "npm run log-android -w @novel-master/mobile"
