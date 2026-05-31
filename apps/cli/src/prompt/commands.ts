@@ -96,6 +96,7 @@ export async function runPrompt(
       JSON.stringify({
         tokenCount,
         model: modelId,
+        counter: counter.kind,
         counterKind: counter.kind,
       }),
     );
