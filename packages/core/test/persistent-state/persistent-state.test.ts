@@ -10,11 +10,13 @@ describe("PersistentState", () => {
     await ctx.state.setCurrentProviderId("prov1");
     await ctx.state.setCurrentModelId("prov1/model");
     await ctx.state.setCurrentRegexGroupId("regex-g1");
+    await ctx.state.setCurrentAgentId("agent-1");
     assert.equal(await ctx.state.getCurrentProjectId(), "p1");
     assert.equal(await ctx.state.getCurrentSessionId(), "s1");
     assert.equal(await ctx.state.getCurrentProviderId(), "prov1");
     assert.equal(await ctx.state.getCurrentModelId(), "prov1/model");
     assert.equal(await ctx.state.getCurrentRegexGroupId(), "regex-g1");
+    assert.equal(await ctx.state.getCurrentAgentId(), "agent-1");
     await ctx.conn.close();
   });
 
@@ -41,9 +43,17 @@ describe("PersistentState", () => {
     await ctx.conn.close();
   });
 
-  it("reset is idempotent (no error on missing key)", async () => {
+  it("resetCurrentAgentId clears agent pointer", async () => {
     const ctx = await openNovelMasterTestConnection();
-    await ctx.state.resetCurrentSessionId();
+    await ctx.state.setCurrentAgentId("a1");
+    await ctx.state.resetCurrentAgentId();
+    assert.equal(await ctx.state.getCurrentAgentId(), undefined);
+    await ctx.conn.close();
+  });
+
+  it("resetCurrentAgentId is idempotent", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    await ctx.state.resetCurrentAgentId();
     await ctx.conn.close();
   });
 });

@@ -64,7 +64,21 @@ async function resolveDefinition(
     const blocks = loadPromptBlocksFromYaml(source);
     definition = buildMinimalDefinition({ prompts: blocks });
   } else {
-    definition = buildMinimalDefinition({ prompts: [] });
+    const currentAgentId = await rt.state.getCurrentAgentId();
+    if (currentAgentId != null && currentAgentId !== "") {
+      try {
+        definition = await rt.agentRegistry.get(currentAgentId);
+      } catch (error) {
+        if (error instanceof AgentConfigError && error.code === "AGENT_NOT_FOUND") {
+          throw new Error(
+            `agent not found in registry: ${currentAgentId} (run nm agent import first)`,
+          );
+        }
+        throw error;
+      }
+    } else {
+      definition = buildMinimalDefinition({ prompts: [] });
+    }
   }
 
   await validateAgentDefinition(definition, {
@@ -180,7 +194,12 @@ export async function runAgent(
         session,
         modelRequests: rt.modelRequests,
         registry,
-        toolCtx: { vfs },
+        toolCtx: {
+          vfs,
+          sessionFs: rt.sessionFs,
+          projectId,
+          sessionId,
+        },
         regexConfig: rt.regexConfig,
         listAllSessionMessages: () => rt.messages.listBySession(sessionId),
         compaction: createCompactionPipeline({

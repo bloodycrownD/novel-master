@@ -29,4 +29,8 @@ export interface PersistentState {
   getCurrentRegexGroupId(): Promise<string | undefined>;
   setCurrentRegexGroupId(id: string): Promise<void>;
   resetCurrentRegexGroupId(): Promise<void>;
+
+  getCurrentAgentId(): Promise<string | undefined>;
+  setCurrentAgentId(id: string): Promise<void>;
+  resetCurrentAgentId(): Promise<void>;
 }
