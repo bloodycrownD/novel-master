@@ -22,6 +22,9 @@ export interface MessageService {
 
   delete(id: string): Promise<void>;
 
+  /** Replaces message content (e.g. user edit in mobile). */
+  updateContent(messageId: string, content: MessageContent): Promise<ChatMessage>;
+
   /**
    * Creates a new session with source session VFS and messages up to `upToMessageId`.
    */

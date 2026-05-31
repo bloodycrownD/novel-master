@@ -79,6 +79,16 @@ export class SqliteMessageRepository implements MessageRepository {
     return maxSeq == null ? 1 : Number(maxSeq) + 1;
   }
 
+  async updateContent(id: string, contentJson: string): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_message SET content_json = #{contentJson} WHERE id = #{id}`,
+      { id, contentJson },
+    );
+    return result.changes > 0;
+  }
+
   async insert(message: ChatMessage): Promise<void> {
     await executeTemplate(
       this.conn,

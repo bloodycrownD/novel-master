@@ -12,11 +12,18 @@ import {
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {ChatMessage, ChatProject, ChatSession} from '@novel-master/core';
+import {
+  textBlocks,
+  type ChatMessage,
+  type ChatProject,
+  type ChatSession,
+} from '@novel-master/core';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {ChatComposer} from '../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
+import {editableTextFromMessage} from '../../components/chat/message-edit';
 import {MessageList} from '../../components/chat/MessageList';
+import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
@@ -67,6 +74,7 @@ export function ChatTabScreen() {
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const sessionBatch = useBatchSelection();
+  const messageBatch = useBatchSelection();
   const {appUi} = useNovelMaster();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
@@ -84,6 +92,12 @@ export function ChatTabScreen() {
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
     {sessionId: string; initialTitle: string} | undefined
+  >();
+  const [messageMenuTarget, setMessageMenuTarget] = useState<
+    ChatMessage | undefined
+  >();
+  const [messageEditPrompt, setMessageEditPrompt] = useState<
+    {messageId: string; initialText: string} | undefined
   >();
 
   const reloadLists = useCallback(async () => {
@@ -290,6 +304,71 @@ export function ChatTabScreen() {
     setVfsRefreshKey(key => key + 1);
   }, []);
 
+  const deleteSelectedMessages = useCallback(async () => {
+    const ids = [...messageBatch.selectedIds];
+    for (const id of ids) {
+      await runtime.messages.delete(id);
+    }
+    messageBatch.exit();
+    setStreamingText('');
+    await reloadMessages();
+  }, [runtime, messageBatch, reloadMessages]);
+
+  const confirmMessageBatchDelete = useCallback(() => {
+    const count = messageBatch.selectedCount;
+    if (count === 0) {
+      return;
+    }
+    Alert.alert(
+      '确认删除',
+      `确定删除选中的 ${count} 条消息？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => deleteSelectedMessages().catch(() => undefined),
+        },
+      ],
+    );
+  }, [messageBatch.selectedCount, deleteSelectedMessages]);
+
+  const handleDeleteMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await runtime.messages.delete(messageId);
+        setStreamingText('');
+        await reloadMessages();
+      } catch (error) {
+        Alert.alert(
+          '删除失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, reloadMessages],
+  );
+
+  const handleSaveMessageEdit = useCallback(
+    async (messageId: string, text: string) => {
+      const trimmed = text.trim();
+      if (trimmed === '') {
+        Alert.alert('无法保存', '消息内容不能为空');
+        return;
+      }
+      try {
+        await runtime.messages.updateContent(messageId, textBlocks(trimmed));
+        await reloadMessages();
+      } catch (error) {
+        Alert.alert(
+          '保存失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, reloadMessages],
+  );
+
   const confirmBatchDelete = useCallback(() => {
     const count = sessionBatch.selectedCount;
     if (count === 0) {
@@ -404,10 +483,30 @@ export function ChatTabScreen() {
           projectId != null && sessionId != null ? (
             <View style={styles.chatPanel}>
               <ChatMetaBar meta={agentMeta} />
+              {messageBatch.active ? (
+                <ManageHeader
+                  title="消息"
+                  batchMode
+                  selectedCount={messageBatch.selectedCount}
+                  onEnterBatch={() => undefined}
+                  onCancelBatch={messageBatch.exit}
+                  onDelete={confirmMessageBatchDelete}
+                  hint="选择要删除的消息"
+                />
+              ) : null}
               <MessageList
                 messages={chatMessages}
                 streamingText={streamingText}
                 showFullToolParams={showFullToolParams}
+                batchMode={messageBatch.active}
+                selectedMessageIds={messageBatch.selectedIds}
+                onToggleMessageSelect={messageBatch.toggle}
+                onMessageLongPress={msg => {
+                  if (agentRunning) {
+                    return;
+                  }
+                  setMessageMenuTarget(msg);
+                }}
               />
               <ChatComposer
                 scope={{projectId, sessionId}}
@@ -471,6 +570,69 @@ export function ChatTabScreen() {
           }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
           onSessionLog={() => navigation.navigate('SessionLog')}
+          onBatchDeleteMessages={() => {
+            setSessionDrawerOpen(false);
+            if (agentRunning) {
+              Alert.alert('请稍候', 'Agent 运行中无法批量删除消息');
+              return;
+            }
+            messageBatch.enter();
+          }}
+        />
+        <BottomSheetMenu
+          visible={messageMenuTarget != null}
+          items={[
+            ...(messageMenuTarget &&
+            editableTextFromMessage(messageMenuTarget) != null
+              ? [{label: '编辑', action: 'edit'}]
+              : []),
+            {label: '删除', action: 'delete', danger: true},
+          ]}
+          onClose={() => setMessageMenuTarget(undefined)}
+          onSelect={action => {
+            const target = messageMenuTarget;
+            setMessageMenuTarget(undefined);
+            if (target == null) {
+              return;
+            }
+            if (action === 'edit') {
+              const initial = editableTextFromMessage(target);
+              if (initial == null) {
+                Alert.alert('无法编辑', '该消息包含工具调用，暂不支持编辑');
+                return;
+              }
+              setMessageEditPrompt({
+                messageId: target.id,
+                initialText: initial,
+              });
+            } else if (action === 'delete') {
+              Alert.alert('删除消息', '确定删除这条消息？', [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '删除',
+                  style: 'destructive',
+                  onPress: () =>
+                    handleDeleteMessage(target.id).catch(() => undefined),
+                },
+              ]);
+            }
+          }}
+        />
+        <TextPromptModal
+          visible={messageEditPrompt != null}
+          title="编辑消息"
+          label="内容"
+          placeholder="输入消息内容"
+          initialValue={messageEditPrompt?.initialText ?? ''}
+          confirmLabel="保存"
+          onClose={() => setMessageEditPrompt(undefined)}
+          onConfirm={async value => {
+            const prompt = messageEditPrompt;
+            setMessageEditPrompt(undefined);
+            if (prompt) {
+              await handleSaveMessageEdit(prompt.messageId, value);
+            }
+          }}
         />
         <ModelPickerModal
           visible={modelPickerOpen}

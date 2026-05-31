@@ -96,6 +96,32 @@ describe("Chat services", () => {
     await ctx.conn.close();
   });
 
+  it("message delete removes row", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const m = await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.delete(m.id);
+    const list = await ctx.messages.listBySession(session.id);
+    assert.equal(list.length, 0);
+    await ctx.conn.close();
+  });
+
+  it("message updateContent replaces text", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const m = await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    const updated = await ctx.messages.updateContent(
+      m.id,
+      textBlocks("edited"),
+    );
+    assert.equal(firstTextBlock(updated.content), "edited");
+    const loaded = await ctx.messages.get(m.id);
+    assert.equal(firstTextBlock(loaded.content), "edited");
+    await ctx.conn.close();
+  });
+
   it("message append preserves seq order", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");

@@ -5,7 +5,8 @@
 
 ## 设计目标
 
-（待补充）
+- 会话内消息可 **编辑**（纯文本/thinking）、**删除**、**批量删除**。
+- Core 提供 `MessageService.updateContent`；Mobile 不新增独立 HTTP/存储层。
 
 ---
 

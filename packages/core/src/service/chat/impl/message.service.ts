@@ -89,6 +89,21 @@ export class DefaultMessageService implements MessageService {
     }
   }
 
+  async updateContent(
+    messageId: string,
+    content: MessageContent,
+  ): Promise<ChatMessage> {
+    assertMessageContent(content);
+    const updated = await this.deps.messages.updateContent(
+      messageId,
+      JSON.stringify(content),
+    );
+    if (!updated) {
+      throw chatNotFound("message", messageId);
+    }
+    return this.get(messageId);
+  }
+
   async fork(sessionId: string, upToMessageId: string): Promise<ChatSession> {
     const source = await this.deps.sessions.findById(sessionId);
     if (source == null) {

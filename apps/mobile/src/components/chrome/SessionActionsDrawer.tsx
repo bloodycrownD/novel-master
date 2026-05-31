@@ -14,6 +14,7 @@ type Props = {
   onSwitchModel?: () => void;
   onRealPrompt?: () => void;
   onSessionLog?: () => void;
+  onBatchDeleteMessages?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -23,6 +24,7 @@ export function SessionActionsDrawer({
   onSwitchModel,
   onRealPrompt,
   onSessionLog,
+  onBatchDeleteMessages,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
@@ -62,6 +64,7 @@ export function SessionActionsDrawer({
     {label: '切换模型', action: onSwitchModel},
     {label: '真实提示词', action: onRealPrompt},
     {label: '会话日志', action: onSessionLog},
+    {label: '批量删除消息', action: onBatchDeleteMessages},
   ];
 
   return (

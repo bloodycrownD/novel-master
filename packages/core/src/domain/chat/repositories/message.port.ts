@@ -16,6 +16,9 @@ export interface MessageRepository {
 
   insert(message: ChatMessage): Promise<void>;
 
+  /** Replaces stored content JSON. Returns false when the row is missing. */
+  updateContent(id: string, contentJson: string): Promise<boolean>;
+
   delete(id: string): Promise<boolean>;
 
   deleteBySession(sessionId: string): Promise<void>;
