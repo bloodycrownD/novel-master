@@ -10,6 +10,8 @@ import {
   bootstrapNovelMaster,
   createAgentRegistryService,
   createCompactionPolicyStore,
+  createDefaultTokenCounterRegistry,
+  buildTokenCounterRegistryDeps,
   createSqliteCompactionAgentResolver,
   createMessageService,
   createPersistentPreferences,
@@ -41,6 +43,7 @@ import {
   type VfsScope,
   type VfsService,
   type WorktreeService,
+  type TokenCounterRegistry,
 } from "@novel-master/core";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
@@ -93,6 +96,7 @@ export interface NovelMasterRuntime {
   readonly compactionPolicy: CompactionPolicyStore;
   readonly agentRegistry: AgentRegistryService;
   readonly resolveCompactionAgent: CompactionAgentResolver;
+  readonly tokenCounters: TokenCounterRegistry;
   readonly dbPath: string;
 }
 
@@ -134,6 +138,11 @@ export async function createNovelMasterRuntime(
   const compactionPolicy = createCompactionPolicyStore(conn);
   const agentRegistry = createAgentRegistryService(conn, { compactionPolicy });
   const resolveCompactionAgent = createSqliteCompactionAgentResolver(agentRegistry);
+  const registryDeps = await buildTokenCounterRegistryDeps(
+    providerBundle.providerRepo,
+    providerBundle.savedModelRepo,
+  );
+  const tokenCounters = createDefaultTokenCounterRegistry(registryDeps);
 
   return {
     conn,
@@ -143,6 +152,7 @@ export async function createNovelMasterRuntime(
     compactionPolicy,
     agentRegistry,
     resolveCompactionAgent,
+    tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),

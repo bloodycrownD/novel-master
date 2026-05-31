@@ -187,6 +187,7 @@ export async function runAgent(
           modelRequests: rt.modelRequests,
           policyStore: rt.compactionPolicy,
           resolveAgent: rt.resolveCompactionAgent,
+          tokenCounters: rt.tokenCounters,
         }),
       });
 
@@ -221,6 +222,7 @@ export async function runAgent(
             stepsExecuted: result.stepsExecuted,
             finished: result.finished,
             stopReason: result.stopReason,
+            rounds: result.rounds,
           }),
         );
       }
