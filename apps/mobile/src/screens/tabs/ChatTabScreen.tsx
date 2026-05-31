@@ -168,6 +168,54 @@ export function ChatTabScreen() {
     [runtime, refreshScope, reloadLists],
   );
 
+  const openFileEditor = useCallback(
+    (
+      path: string,
+      scopeKind: 'project' | 'session',
+    ) => {
+      if (projectId == null) {
+        return;
+      }
+      if (scopeKind === 'session') {
+        if (sessionId == null) {
+          return;
+        }
+        navigation.navigate('FileEditor', {
+          path,
+          scopeKind: 'session',
+          projectId,
+          sessionId,
+        });
+      } else {
+        navigation.navigate('FileEditor', {
+          path,
+          scopeKind: 'project',
+          projectId,
+        });
+      }
+    },
+    [navigation, projectId, sessionId],
+  );
+
+  const sessionVfs =
+    projectId != null && sessionId != null
+      ? runtime.sessionVfs(projectId, sessionId)
+      : null;
+  const sessionWorktree =
+    projectId != null && sessionId != null
+      ? runtime.worktree({
+          kind: 'session',
+          projectId,
+          sessionId,
+        })
+      : null;
+  const projectVfs =
+    projectId != null ? runtime.projectVfs(projectId) : null;
+  const projectWorktree =
+    projectId != null
+      ? runtime.worktree({kind: 'project', projectId})
+      : null;
+
   if (chatSubview === 'conversation') {
     return (
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
@@ -190,8 +238,22 @@ export function ChatTabScreen() {
           <View style={styles.placeholder}>
             <Text style={{color: tokens.textSecondary}}>消息流（M3）</Text>
           </View>
+        ) : sessionVfs && sessionWorktree ? (
+          <VfsFileManager
+            scope={{
+              kind: 'session',
+              projectId: projectId!,
+              sessionId: sessionId!,
+            }}
+            vfs={sessionVfs}
+            worktree={sessionWorktree}
+            rootPath="/"
+            onOpenFile={path => openFileEditor(path, 'session')}
+          />
         ) : (
-          <VfsFileManager />
+          <View style={styles.placeholder}>
+            <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
+          </View>
         )}
         <SessionActionsDrawer
           visible={sessionDrawerOpen}
@@ -228,11 +290,19 @@ export function ChatTabScreen() {
         />
       </View>
       {sessionListPanel === 'template' ? (
-        <View style={styles.placeholder}>
-          <Text style={{color: tokens.textSecondary}}>
-            项目模板 VFS（M2）
-          </Text>
-        </View>
+        projectVfs && projectWorktree ? (
+          <VfsFileManager
+            scope={{kind: 'project', projectId: projectId!}}
+            vfs={projectVfs}
+            worktree={projectWorktree}
+            rootPath="/template"
+            onOpenFile={path => openFileEditor(path, 'project')}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <Text style={{color: tokens.textSecondary}}>请先选择项目</Text>
+          </View>
+        )
       ) : (
         <>
           <View style={styles.toolbar}>
