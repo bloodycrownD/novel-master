@@ -4,7 +4,7 @@
  * Wire serialization lives in {@link ./openai-content-mapper.js}; streaming uses
  * {@link postSse} (fetch or RN XHR) plus {@link openai-sse-parser.js}.
  *
- * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` ? when tools are sent, set `tool_choice` to `"required"`
+ * When `OPENAI_TOOL_CHOICE_REQUIRED=1` and tools are sent, set `tool_choice` to `"required"`
  * instead of `"auto"` (E2E capture / providers that need forced tool calls).
  *
  * @module infra/llm-protocol/impl/openai.adapter
