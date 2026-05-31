@@ -1,5 +1,5 @@
 /**
- * Rules list for one regex group.
+ * Rules list for one regex group with batch delete.
  */
 import React, {useCallback, useState} from 'react';
 import {
@@ -16,6 +16,9 @@ import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native'
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
 import type {RegexGroup, RegexRule} from '@novel-master/core';
+import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {ManageHeader} from '../../components/batch/ManageHeader';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
@@ -48,6 +51,7 @@ export function RegexRulesScreen() {
   const [group, setGroup] = useState<RegexGroup | undefined>();
   const [rules, setRules] = useState<RegexRule[]>([]);
   const [loading, setLoading] = useState(true);
+  const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
     if (!groupId) {
@@ -89,15 +93,56 @@ export function RegexRulesScreen() {
     navigation.navigate('RegexRuleEditor', {groupId});
   };
 
+  const confirmBatchDelete = () => {
+    if (!groupId) {
+      return;
+    }
+    const ids = Array.from(batch.selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Alert.alert('删除规则', `确定删除选中的 ${ids.length} 条规则？`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          (async () => {
+            for (const ruleId of ids) {
+              await runtime.regexConfig.deleteRule(groupId, ruleId);
+            }
+            batch.exit();
+            await reload();
+            Alert.alert('已删除规则');
+          })().catch(err =>
+            Alert.alert(
+              '删除失败',
+              err instanceof Error ? err.message : String(err),
+            ),
+          );
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
-        <Pressable
-          style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-          onPress={createRule}>
-          <Text style={styles.addBtnText}>添加规则</Text>
-        </Pressable>
-      </View>
+      <ManageHeader
+        title="规则"
+        batchMode={batch.active}
+        selectedCount={batch.selectedCount}
+        onEnterBatch={batch.enter}
+        onCancelBatch={batch.exit}
+        onDelete={confirmBatchDelete}
+        hint="选择要删除的规则"
+        normalActions={
+          <Pressable
+            style={[styles.addBtn, {backgroundColor: tokens.primary}]}
+            onPress={createRule}>
+            <Text style={styles.addBtnText}>添加</Text>
+          </Pressable>
+        }
+      />
       {loading && rules.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
@@ -109,18 +154,28 @@ export function RegexRulesScreen() {
           }
           ListEmptyComponent={
             <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-              暂无规则，点击「添加规则」。
+              暂无规则，点击「添加」创建。
             </Text>
           }
           renderItem={({item}) => (
             <Pressable
               style={[styles.row, {borderBottomColor: tokens.border}]}
-              onPress={() =>
-                navigation.navigate('RegexRuleEditor', {
-                  groupId: groupId!,
-                  ruleId: item.ruleId,
-                })
-              }>
+              onPress={() => {
+                if (batch.active) {
+                  batch.toggle(item.ruleId);
+                } else {
+                  navigation.navigate('RegexRuleEditor', {
+                    groupId: groupId!,
+                    ruleId: item.ruleId,
+                  });
+                }
+              }}>
+              {batch.active ? (
+                <BatchCheckbox
+                  checked={batch.isSelected(item.ruleId)}
+                  onToggle={() => batch.toggle(item.ruleId)}
+                />
+              ) : null}
               <View style={styles.info}>
                 <Text style={[styles.name, {color: tokens.text}]}>
                   {item.name}
@@ -129,7 +184,9 @@ export function RegexRulesScreen() {
                   {item.ruleId} · {ruleMeta(item)}
                 </Text>
               </View>
-              <Text style={{color: tokens.textSecondary}}>›</Text>
+              {!batch.active ? (
+                <Text style={{color: tokens.textSecondary}}>›</Text>
+              ) : null}
             </Pressable>
           )}
         />
@@ -145,12 +202,6 @@ export function RegexRulesScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   addBtn: {paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8},
   addBtnText: {color: '#fff', fontWeight: '600'},
   loader: {marginTop: 32},
