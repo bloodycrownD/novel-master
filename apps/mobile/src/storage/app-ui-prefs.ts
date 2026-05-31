@@ -8,6 +8,7 @@ import {KkvError, type KkvService} from '@novel-master/core';
 import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,
+  APP_UI_KEY_CHAT_RICH_TEXT,
   APP_UI_KEY_CHECKPOINT_RETENTION,
   APP_UI_KEY_LLM_STREAM,
   APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
@@ -64,4 +65,5 @@ export const appUiKeys = {
   checkpointRetention: APP_UI_KEY_CHECKPOINT_RETENTION,
   showFullToolParams: APP_UI_KEY_SHOW_FULL_TOOL_PARAMS,
   llmStream: APP_UI_KEY_LLM_STREAM,
+  chatRichText: APP_UI_KEY_CHAT_RICH_TEXT,
 } as const;
