@@ -282,6 +282,7 @@ export type {
   LlmProtocolKind,
   LlmToolDefinition,
   LlmStreamEvent,
+  LlmTokenUsage,
 } from "./infra/llm-protocol/ports/adapter.port.js";
 export { toolsFromRegistry } from "./infra/llm-protocol/logic/tool-definitions.js";
 export { zodToJsonSchema } from "./infra/serialization/zod-to-json-schema.js";
@@ -312,6 +313,16 @@ export {
   type CreateCompactionPipelineDeps,
 } from "./service/compaction/create-compaction-pipeline.js";
 export { estimateTokens } from "./domain/compaction/logic/token-estimate.js";
+export {
+  createDefaultTokenCounterRegistry,
+  HeuristicTokenCounter,
+  serializePromptLlmInput,
+  buildTokenCounterRegistryDeps,
+  type TokenCounter,
+  type TokenCounterRegistry,
+  type TokenCounterKind,
+  type CreateDefaultTokenCounterRegistryDeps,
+} from "./infra/tokenizer/index.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";
 export type {

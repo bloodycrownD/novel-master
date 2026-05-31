@@ -49,10 +49,18 @@ export interface LlmChatRequest {
   readonly sampling?: ModelSamplingParams;
 }
 
+/** Normalized token usage from provider responses. */
+export interface LlmTokenUsage {
+  readonly promptTokens?: number;
+  readonly completionTokens?: number;
+  readonly totalTokens?: number;
+}
+
 export interface LlmChatResult {
   readonly assistantText: string;
   readonly blocks: readonly ContentBlock[];
   readonly raw: unknown;
+  readonly usage?: LlmTokenUsage;
 }
 
 export interface LlmProtocolAdapter {
