@@ -13,6 +13,10 @@ import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
+  readChatRichTextEnabled,
+  writeChatRichTextEnabled,
+} from '../../storage/chat-rich-text-pref';
+import {
   readLlmStreamEnabled,
   writeLlmStreamEnabled,
 } from '../../storage/llm-stream-pref';
@@ -42,6 +46,7 @@ export function ProfileTabScreen() {
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
+  const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
 
   const refreshModelLabel = useCallback(async () => {
@@ -64,11 +69,19 @@ export function ProfileTabScreen() {
     setLlmStreamEnabled(await readLlmStreamEnabled(appUi));
   }, [appUi]);
 
+  const refreshChatRichTextPref = useCallback(async () => {
+    if (appUi == null) {
+      return;
+    }
+    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
+  }, [appUi]);
+
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
       refreshStreamPref().catch(() => undefined);
-    }, [refreshModelLabel, refreshStreamPref]),
+      refreshChatRichTextPref().catch(() => undefined);
+    }, [refreshModelLabel, refreshStreamPref, refreshChatRichTextPref]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -107,6 +120,23 @@ export function ProfileTabScreen() {
             setLlmStreamEnabled(enabled);
             if (appUi) {
               writeLlmStreamEnabled(appUi, enabled).catch(() => undefined);
+            }
+          }}
+        />
+        <ProfileSwitchItem
+          icon="📝"
+          label="富文本消息"
+          subtitle={
+            chatRichTextEnabled
+              ? '助手回复解析 Markdown/HTML'
+              : '助手回复显示为纯文本'
+          }
+          value={chatRichTextEnabled}
+          tokens={tokens}
+          onValueChange={enabled => {
+            setChatRichTextEnabled(enabled);
+            if (appUi) {
+              writeChatRichTextEnabled(appUi, enabled).catch(() => undefined);
             }
           }}
         />

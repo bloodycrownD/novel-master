@@ -5,7 +5,9 @@ import React, {useMemo} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import type {ChatMessage} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {RichContentBody} from '../rich-content/RichContentBody';
 import {useTheme} from '../../theme/ThemeProvider';
+import type {ThemeTokens} from '../../theme/tokens';
 import {buildChatListItems, type ChatListItem} from './message-blocks';
 import {ThinkingBlockCard} from './ThinkingBlockCard';
 import {ToolCallCard} from './ToolCallCard';
@@ -15,17 +17,44 @@ type Props = {
   streamingText?: string;
   streamingThinking?: string;
   showFullToolParams?: boolean;
+  /** When true, assistant bubbles use RichContentBody (streaming tail stays plain Text). */
+  assistantRichTextEnabled?: boolean;
   batchMode?: boolean;
   selectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (message: ChatMessage) => void;
 };
 
+interface AssistantMessageBodyProps {
+  body: string;
+  tokens: ThemeTokens;
+  richTextEnabled: boolean;
+}
+
+/** Assistant bubble body: plain Text when pref off, else shared rich renderer. */
+const AssistantMessageBody = React.memo(function AssistantMessageBody({
+  body,
+  tokens,
+  richTextEnabled,
+}: AssistantMessageBodyProps) {
+  if (!richTextEnabled) {
+    return <Text style={{color: tokens.text}}>{body}</Text>;
+  }
+  return (
+    <RichContentBody
+      content={body}
+      tokens={tokens}
+      variant="chat-assistant"
+    />
+  );
+});
+
 export function MessageList({
   messages,
   streamingText,
   streamingThinking,
   showFullToolParams,
+  assistantRichTextEnabled = false,
   batchMode = false,
   selectedMessageIds,
   onToggleMessageSelect,
@@ -49,6 +78,8 @@ export function MessageList({
     isUser: boolean,
     body: string,
     selected: boolean,
+    /** Streaming tail always plain Text even when assistant rich text is on. */
+    forcePlainText = false,
   ) => (
     <View
       style={[
@@ -61,7 +92,17 @@ export function MessageList({
           borderWidth: 2,
         },
       ]}>
-      <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
+      {isUser ? (
+        <Text style={{color: '#fff'}}>{body}</Text>
+      ) : forcePlainText ? (
+        <Text style={{color: tokens.text}}>{body}</Text>
+      ) : (
+        <AssistantMessageBody
+          body={body}
+          tokens={tokens}
+          richTextEnabled={assistantRichTextEnabled}
+        />
+      )}
     </View>
   );
 
@@ -97,7 +138,7 @@ export function MessageList({
                 />
               ) : null}
               {streamingText && streamingText.length > 0
-                ? renderBubble(false, streamingText, false)
+                ? renderBubble(false, streamingText, false, true)
                 : null}
             </View>
           );

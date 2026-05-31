@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
   textBlocks,
@@ -49,6 +49,7 @@ import {
 } from '../../services/chat-agent-meta';
 import {loadChatPromptTokenLabelResilient} from '../../services/chat-prompt-tokens.service';
 import {loadSessionMessagesForDisplay} from '../../services/regex-apply-channel';
+import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -94,6 +95,8 @@ export function ChatTabScreen() {
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
   const [showFullToolParams, setShowFullToolParams] = useState(false);
+  const [assistantRichTextEnabled, setAssistantRichTextEnabled] =
+    useState(false);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
@@ -180,6 +183,19 @@ export function ChatTabScreen() {
       .then(v => setShowFullToolParams(v === 'true'))
       .catch(() => undefined);
   }, [appUi]);
+
+  const refreshChatRichTextPref = useCallback(async () => {
+    if (appUi == null) {
+      return;
+    }
+    setAssistantRichTextEnabled(await readChatRichTextEnabled(appUi));
+  }, [appUi]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshChatRichTextPref().catch(() => undefined);
+    }, [refreshChatRichTextPref]),
+  );
 
   useEffect(() => {
     setChat({
@@ -497,6 +513,7 @@ export function ChatTabScreen() {
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
                 showFullToolParams={showFullToolParams}
+                assistantRichTextEnabled={assistantRichTextEnabled}
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
                 onToggleMessageSelect={messageBatch.toggle}
