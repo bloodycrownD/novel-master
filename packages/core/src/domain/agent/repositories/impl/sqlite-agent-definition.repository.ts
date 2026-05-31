@@ -13,7 +13,7 @@ import {
 import type { Row } from "@/infra/tdbc/types.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";
-import { agentDefinitionSchema } from "../../agent-definition.schema.js";
+import { agentDefinitionSchema } from "../../model/agent-definition.schema.js";
 import type { AgentDefinition } from "../../model/agent-definition.js";
 import type { AgentDefinitionRepository } from "../agent-definition.port.js";
 

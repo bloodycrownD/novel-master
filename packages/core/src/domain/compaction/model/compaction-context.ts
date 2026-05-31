@@ -6,15 +6,15 @@
 
 import type { CompactionPolicy } from "./compaction-policy.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { CompactionAgentResolver } from "@/service/compaction/compaction-agent-resolver.port.js";
-import type { ModelRequestService } from "@/service/provider/model-request.port.js";
+import type { CompactionAgentResolver } from "@/domain/compaction/ports/compaction-agent-resolver.port.js";
+import type { CompactionModelRequest } from "@/domain/compaction/ports/compaction-model-request.port.js";
 import type { CompactionModelContext } from "./compaction-model-context.js";
 
 /** Runtime context passed to compaction action (no file I/O). */
 export interface CompactionContext {
   readonly session: AgentSession;
   readonly policy: CompactionPolicy;
-  readonly modelRequests: ModelRequestService;
+  readonly modelRequests: CompactionModelRequest;
   readonly resolveAgent: CompactionAgentResolver;
   /** Dialogue model + optional CLI flag for summary id resolution. */
   readonly modelContext: CompactionModelContext;
