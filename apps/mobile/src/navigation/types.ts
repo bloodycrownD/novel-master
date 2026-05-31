@@ -23,7 +23,12 @@ export type RootStackParamList = {
   RegexRules: {groupId?: string} | undefined;
   RegexRuleEditor: {groupId?: string; ruleId?: string} | undefined;
   Settings: undefined;
-  FileEditor: {path?: string} | undefined;
+  FileEditor: {
+    path: string;
+    scopeKind: 'global' | 'project' | 'session';
+    projectId?: string;
+    sessionId?: string;
+  };
   DevMenu: undefined;
   VfsDev: undefined;
   SkspDev: undefined;
