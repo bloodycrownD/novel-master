@@ -1,7 +1,7 @@
 /**
- * Project picker drawer (modal shell; M1 lists projects + batch delete).
+ * Project picker drawer (modal shell; lists projects + batch delete).
  */
-import React, {useEffect, useState} from 'react';
+import React, {useEffect} from 'react';
 import {
   Alert,
   Modal,
@@ -12,6 +12,9 @@ import {
   View,
 } from 'react-native';
 import type {ChatProject} from '@novel-master/core';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {ManageHeader} from '../batch/ManageHeader';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -34,30 +37,17 @@ export function ProjectDrawer({
   onDeleteSelected,
 }: Props) {
   const {tokens} = useTheme();
-  const [batchMode, setBatchMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const batch = useBatchSelection();
 
   useEffect(() => {
     if (!visible) {
-      setBatchMode(false);
-      setSelectedIds(new Set());
+      batch.exit();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset when drawer closes
   }, [visible]);
 
-  const toggleSelect = (projectId: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
-      return next;
-    });
-  };
-
   const confirmBatchDelete = () => {
-    const ids = Array.from(selectedIds);
+    const ids = Array.from(batch.selectedIds);
     if (ids.length === 0) {
       return;
     }
@@ -71,8 +61,7 @@ export function ProjectDrawer({
           style: 'destructive',
           onPress: () => {
             void Promise.resolve(onDeleteSelected(ids)).then(() => {
-              setBatchMode(false);
-              setSelectedIds(new Set());
+              batch.exit();
             });
           },
         },
@@ -86,65 +75,42 @@ export function ProjectDrawer({
         <Pressable
           style={[styles.panel, {backgroundColor: tokens.surface}]}
           onPress={e => e.stopPropagation()}>
-          {batchMode ? (
-            <View style={styles.headerRow}>
-              <Pressable
-                onPress={() => {
-                  setBatchMode(false);
-                  setSelectedIds(new Set());
-                }}>
-                <Text style={{color: tokens.text}}>取消</Text>
+          <ManageHeader
+            title="项目"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            onDelete={confirmBatchDelete}
+            hint="选择要删除的项目（将同时移除其下所有会话）"
+            normalActions={
+              <Pressable onPress={onCreate}>
+                <Text style={{color: tokens.primary}}>新建</Text>
               </Pressable>
-              <Text style={{color: tokens.textSecondary}}>
-                已选 {selectedIds.size} 项
-              </Text>
-              <Pressable
-                onPress={confirmBatchDelete}
-                disabled={selectedIds.size === 0}>
-                <Text
-                  style={{
-                    color:
-                      selectedIds.size > 0 ? tokens.danger : tokens.textSecondary,
-                  }}>
-                  删除
-                </Text>
-              </Pressable>
-            </View>
-          ) : (
-            <View style={styles.headerRow}>
-              <Text style={[styles.heading, {color: tokens.text}]}>项目</Text>
-              <View style={styles.headerActions}>
-                <Pressable onPress={() => setBatchMode(true)}>
-                  <Text style={{color: tokens.text}}>管理</Text>
-                </Pressable>
-                <Pressable onPress={onCreate}>
-                  <Text style={{color: tokens.primary}}>新建</Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-          {batchMode ? (
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              选择要删除的项目（将同时移除其下所有会话）
-            </Text>
-          ) : null}
+            }
+          />
           <ScrollView>
             {projects.map(p => (
               <Pressable
                 key={p.id}
                 style={styles.row}
                 onPress={() => {
-                  if (batchMode) {
-                    toggleSelect(p.id);
+                  if (batch.active) {
+                    batch.toggle(p.id);
                   } else {
                     onSelect(p.id);
                     onClose();
                   }
                 }}>
-                <Text style={{color: tokens.text}}>
-                  {batchMode && selectedIds.has(p.id) ? '✓ ' : ''}
+                {batch.active ? (
+                  <BatchCheckbox
+                    checked={batch.isSelected(p.id)}
+                    onToggle={() => batch.toggle(p.id)}
+                  />
+                ) : null}
+                <Text style={{color: tokens.text, flex: 1}}>
                   {p.name}
-                  {!batchMode && p.id === currentProjectId ? ' · 当前' : ''}
+                  {!batch.active && p.id === currentProjectId ? ' · 当前' : ''}
                 </Text>
               </Pressable>
             ))}
@@ -164,19 +130,14 @@ const styles = StyleSheet.create({
   panel: {
     marginTop: 56,
     maxHeight: '80%',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
     borderBottomLeftRadius: 12,
     borderBottomRightRadius: 12,
   },
-  heading: {fontSize: 18, fontWeight: '600'},
-  headerRow: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-    gap: 8,
+    paddingVertical: 12,
   },
-  headerActions: {flexDirection: 'row', gap: 16},
-  hint: {fontSize: 12, marginBottom: 8},
-  row: {paddingVertical: 12},
 });

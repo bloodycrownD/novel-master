@@ -17,7 +17,10 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RegexGroup} from '@novel-master/core';
+import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -44,6 +47,7 @@ export function RegexGroupsScreen() {
   const [editGroupId, setEditGroupId] = useState<string | undefined>();
   const [formGroupId, setFormGroupId] = useState('');
   const [formDisplayName, setFormDisplayName] = useState('');
+  const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -132,6 +136,35 @@ export function RegexGroupsScreen() {
     await runtime.state.setCurrentRegexGroupId(groupId);
     await reload();
     Alert.alert('已设为当前生效正则组');
+  };
+
+  const confirmBatchDelete = () => {
+    const ids = Array.from(batch.selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Alert.alert('删除正则组', `确定删除选中的 ${ids.length} 个正则组？`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          (async () => {
+            for (const groupId of ids) {
+              await runtime.regexConfig.deleteGroup(groupId);
+            }
+            batch.exit();
+            await reload();
+            Alert.alert('已删除正则组');
+          })().catch(err =>
+            Alert.alert(
+              '删除失败',
+              err instanceof Error ? err.message : String(err),
+            ),
+          );
+        },
+      },
+    ]);
   };
 
   const deleteGroup = async (groupId: string) => {
@@ -225,13 +258,22 @@ export function RegexGroupsScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
-        <Pressable
-          style={[styles.addBtn, {backgroundColor: tokens.primary}]}
-          onPress={openCreate}>
-          <Text style={styles.addBtnText}>添加</Text>
-        </Pressable>
-      </View>
+      <ManageHeader
+        title="正则组"
+        batchMode={batch.active}
+        selectedCount={batch.selectedCount}
+        onEnterBatch={batch.enter}
+        onCancelBatch={batch.exit}
+        onDelete={confirmBatchDelete}
+        hint="选择要删除的正则组"
+        normalActions={
+          <Pressable
+            style={[styles.addBtn, {backgroundColor: tokens.primary}]}
+            onPress={openCreate}>
+            <Text style={styles.addBtnText}>添加</Text>
+          </Pressable>
+        }
+      />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
@@ -249,10 +291,21 @@ export function RegexGroupsScreen() {
           renderItem={({item}) => (
             <Pressable
               style={[styles.row, {borderBottomColor: tokens.border}]}
-              onPress={() =>
-                navigation.navigate('RegexRules', {groupId: item.groupId})
-              }>
-              <Text style={styles.icon}>🛡️</Text>
+              onPress={() => {
+                if (batch.active) {
+                  batch.toggle(item.groupId);
+                } else {
+                  navigation.navigate('RegexRules', {groupId: item.groupId});
+                }
+              }}>
+              {batch.active ? (
+                <BatchCheckbox
+                  checked={batch.isSelected(item.groupId)}
+                  onToggle={() => batch.toggle(item.groupId)}
+                />
+              ) : (
+                <Text style={styles.icon}>🛡️</Text>
+              )}
               <View style={styles.info}>
                 <Text style={[styles.name, {color: tokens.text}]}>
                   {groupTitle(item)}
@@ -266,17 +319,21 @@ export function RegexGroupsScreen() {
                   当前
                 </Text>
               ) : null}
-              <Pressable
-                hitSlop={8}
-                onPress={e => {
-                  e.stopPropagation?.();
-                  setMenuGroupId(item.groupId);
-                }}>
-                <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                  ⋮
-                </Text>
-              </Pressable>
-              <Text style={{color: tokens.textSecondary}}>›</Text>
+              {!batch.active ? (
+                <>
+                  <Pressable
+                    hitSlop={8}
+                    onPress={e => {
+                      e.stopPropagation?.();
+                      setMenuGroupId(item.groupId);
+                    }}>
+                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
+                      ⋮
+                    </Text>
+                  </Pressable>
+                  <Text style={{color: tokens.textSecondary}}>›</Text>
+                </>
+              ) : null}
             </Pressable>
           )}
         />

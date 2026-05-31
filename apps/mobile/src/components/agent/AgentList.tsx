@@ -15,7 +15,10 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {AgentDefinition} from '@novel-master/core';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
@@ -47,6 +50,7 @@ export function AgentList({onCreate}: Props) {
   const [rows, setRows] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuAgentId, setMenuAgentId] = useState<string | undefined>();
+  const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -146,6 +150,45 @@ export function AgentList({onCreate}: Props) {
     ]);
   };
 
+  const confirmBatchDelete = () => {
+    const ids = Array.from(batch.selectedIds);
+    if (ids.length === 0) {
+      return;
+    }
+    Alert.alert('删除 Agent', `确定删除选中的 ${ids.length} 个 Agent？`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          (async () => {
+            const currentId = await runtime.state.getCurrentAgentId();
+            for (const agentId of ids) {
+              await runtime.agentRegistry.delete(agentId);
+            }
+            if (currentId && ids.includes(currentId)) {
+              const remaining = (await runtime.agentRegistry.listAgentIds()).filter(
+                id => !ids.includes(id),
+              );
+              if (remaining.length > 0) {
+                await runtime.state.setCurrentAgentId(remaining[0]!);
+              } else {
+                await runtime.state.resetCurrentAgentId();
+              }
+            }
+            batch.exit();
+            await reload();
+          })().catch(err =>
+            Alert.alert(
+              '删除失败',
+              err instanceof Error ? err.message : String(err),
+            ),
+          );
+        },
+      },
+    ]);
+  };
+
   const menuItems = (agentId: string, isDefault: boolean) => {
     const items = [];
     if (!isDefault) {
@@ -158,15 +201,24 @@ export function AgentList({onCreate}: Props) {
 
   return (
     <View style={styles.root}>
-      {onCreate ? (
-        <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
-          <Pressable
-            style={[styles.createBtn, {backgroundColor: tokens.primary}]}
-            onPress={onCreate}>
-            <Text style={styles.createBtnText}>新建</Text>
-          </Pressable>
-        </View>
-      ) : null}
+      <ManageHeader
+        title="Agent"
+        batchMode={batch.active}
+        selectedCount={batch.selectedCount}
+        onEnterBatch={batch.enter}
+        onCancelBatch={batch.exit}
+        onDelete={confirmBatchDelete}
+        hint="选择要删除的 Agent"
+        normalActions={
+          onCreate ? (
+            <Pressable
+              style={[styles.createBtn, {backgroundColor: tokens.primary}]}
+              onPress={onCreate}>
+              <Text style={styles.createBtnText}>新建</Text>
+            </Pressable>
+          ) : null
+        }
+      />
       {loading && rows.length === 0 ? (
         <ActivityIndicator style={styles.loader} />
       ) : (
@@ -184,9 +236,19 @@ export function AgentList({onCreate}: Props) {
           renderItem={({item}) => (
             <Pressable
               style={[styles.row, {borderBottomColor: tokens.border}]}
-              onPress={() =>
-                navigation.navigate('AgentEditor', {agentId: item.id})
-              }>
+              onPress={() => {
+                if (batch.active) {
+                  batch.toggle(item.id);
+                } else {
+                  navigation.navigate('AgentEditor', {agentId: item.id});
+                }
+              }}>
+              {batch.active ? (
+                <BatchCheckbox
+                  checked={batch.isSelected(item.id)}
+                  onToggle={() => batch.toggle(item.id)}
+                />
+              ) : null}
               <View style={styles.info}>
                 <Text style={[styles.name, {color: tokens.text}]}>
                   {item.def.name}
@@ -200,16 +262,18 @@ export function AgentList({onCreate}: Props) {
                   默认
                 </Text>
               ) : null}
-              <Pressable
-                hitSlop={8}
-                onPress={e => {
-                  e.stopPropagation?.();
-                  setMenuAgentId(item.id);
-                }}>
-                <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                  ⋮
-                </Text>
-              </Pressable>
+              {!batch.active ? (
+                <Pressable
+                  hitSlop={8}
+                  onPress={e => {
+                    e.stopPropagation?.();
+                    setMenuAgentId(item.id);
+                  }}>
+                  <Text style={{color: tokens.textSecondary, fontSize: 18}}>
+                    ⋮
+                  </Text>
+                </Pressable>
+              ) : null}
             </Pressable>
           )}
         />
@@ -246,12 +310,6 @@ export function AgentList({onCreate}: Props) {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    padding: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   createBtn: {
     paddingHorizontal: 16,
     paddingVertical: 8,
