@@ -90,6 +90,16 @@ export class DefaultWorktreeService implements WorktreeService {
     await this.deps.worktree.upsertDirRule(rule);
   }
 
+  async getDirRule(logicalPath: string): Promise<WorktreeDirRule | undefined> {
+    const normalized = normalizePath(logicalPath);
+    assertLogicalPathAllowed(this.scope, normalized);
+    const rule = await this.deps.worktree.findDirRule(
+      worktreeScopeKey(this.scope),
+      normalized,
+    );
+    return rule ?? undefined;
+  }
+
   async setFileRule(input: SetFileRuleInput): Promise<void> {
     const logicalPath = normalizePath(input.logicalPath);
     assertLogicalPathAllowed(this.scope, logicalPath);

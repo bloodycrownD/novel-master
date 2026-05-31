@@ -1,7 +1,13 @@
 /**
  * Worktree rule toggles for VFS file manager row actions.
  */
-import type {InclusionMode, VfsScope, WorktreeService} from '@novel-master/core';
+import type {
+  InclusionMode,
+  SetDirRuleInput,
+  VfsScope,
+  WorktreeDirRule,
+  WorktreeService,
+} from '@novel-master/core';
 
 function worktreeRootLogicalPath(scope: VfsScope): string {
   return scope.kind === 'session' ? '/' : '/template';
@@ -53,6 +59,19 @@ export async function toggleDirRuleEnabled(
     ruleEnabled: nextEnabled,
   });
   return nextEnabled;
+}
+
+/** Map persisted directory rule to sheet form input. */
+export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
+  return {
+    logicalPath: rule.logicalPath,
+    sortField: rule.sortField,
+    sortOrder: rule.sortOrder,
+    headCount: rule.headCount,
+    tailCount: rule.tailCount,
+    fillPolicy: rule.fillPolicy,
+    ruleEnabled: rule.ruleEnabled,
+  };
 }
 
 /** Default form values for directory rule sheet (Core merge semantics). */

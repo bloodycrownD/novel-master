@@ -38,6 +38,7 @@ import {
 import {
   cycleFileInclusion,
   defaultDirRuleForm,
+  dirRuleToForm,
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
@@ -295,8 +296,19 @@ export function VfsFileManager({
       return;
     }
     if (action === 'directory-rule') {
-      setDirRuleInitial(defaultDirRuleForm(currentPath));
-      setDirRuleOpen(true);
+      void (async () => {
+        try {
+          const existing = await worktree.getDirRule(currentPath);
+          setDirRuleInitial(
+            existing != null
+              ? dirRuleToForm(existing)
+              : defaultDirRuleForm(currentPath),
+          );
+          setDirRuleOpen(true);
+        } catch (error) {
+          Alert.alert('加载规则失败', formatVfsError(error));
+        }
+      })();
     }
   };
 

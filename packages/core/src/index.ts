@@ -160,6 +160,7 @@ export type {
   SortOrder,
   FillPolicy,
   WorktreeListRow,
+  WorktreeDirRule,
   SetDirRuleInput,
   SetFileRuleInput,
 } from "./domain/worktree/model/worktree-types.js";

@@ -7,6 +7,7 @@
 import type {
   SetDirRuleInput,
   SetFileRuleInput,
+  WorktreeDirRule,
   WorktreeListRow,
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
@@ -16,6 +17,8 @@ export interface WorktreeService {
   readonly scope: WorktreeScope;
 
   setDirRule(input: SetDirRuleInput): Promise<void>;
+
+  getDirRule(logicalPath: string): Promise<WorktreeDirRule | undefined>;
 
   setFileRule(input: SetFileRuleInput): Promise<void>;
 
