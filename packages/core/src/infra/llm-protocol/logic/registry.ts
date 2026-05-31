@@ -1,6 +1,9 @@
 /**
  * LLM protocol adapter registry.
  *
+ * OpenAI streaming uses Core `postSse` inside the adapter (fetch on Node/CLI,
+ * XMLHttpRequest on React Native). `configureLlmFetch` only wraps non-streaming fetch.
+ *
  * @module infra/llm-protocol/logic/registry
  */
 
