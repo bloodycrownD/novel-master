@@ -67,6 +67,21 @@ export class SqliteProjectRepository implements ProjectRepository {
     );
   }
 
+  async updateName(
+    id: string,
+    name: string,
+    updatedAtMs: number,
+  ): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_project SET name = #{name}, updated_at_ms = #{updatedAtMs}
+       WHERE id = #{id}`,
+      { id, name, updatedAtMs },
+    );
+    return result.changes > 0;
+  }
+
   async delete(id: string): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,

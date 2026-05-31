@@ -4,6 +4,7 @@
 import React, {useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {BackIcon, MenuIcon, MoonIcon, SunIcon} from '../icons/TabIcons';
 import {PAGE_HEADER_CONFIG} from '../../navigation/header-config';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -16,7 +17,7 @@ type Props = {
 
 export function AppHeader({pageKey, onBack, onMenu}: Props) {
   const insets = useSafeAreaInsets();
-  const {tokens, toggleMode} = useTheme();
+  const {tokens, mode, toggleMode} = useTheme();
   const {chat, stackOverride} = useHeaderContext();
 
   const resolved = useMemo(() => {
@@ -74,7 +75,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
       <View style={styles.row}>
         {resolved.showBack ? (
           <Pressable onPress={resolved.onBack} style={styles.iconBtn}>
-            <Text style={[styles.icon, {color: tokens.primary}]}>←</Text>
+            <BackIcon color={tokens.primary} />
           </Pressable>
         ) : (
           <View style={styles.iconPlaceholder} />
@@ -86,14 +87,18 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
           {resolved.title}
         </Text>
         <Pressable onPress={() => toggleMode()} style={styles.iconBtn}>
-          <Text style={[styles.icon, {color: tokens.text}]}>◐</Text>
+          {mode === 'dark' ? (
+            <SunIcon color={tokens.text} />
+          ) : (
+            <MoonIcon color={tokens.text} />
+          )}
         </Pressable>
         {resolved.showMenu ? (
           <Pressable
             onPress={resolved.onMenu}
             style={styles.iconBtn}
             accessibilityLabel={menuLabel}>
-            <Text style={[styles.icon, {color: tokens.text}]}>☰</Text>
+            <MenuIcon color={tokens.text} />
           </Pressable>
         ) : (
           <View style={styles.iconPlaceholder} />
@@ -113,7 +118,12 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   title: {flex: 1, fontSize: 18, fontWeight: '600', textAlign: 'center'},
-  iconBtn: {width: 40, alignItems: 'center', justifyContent: 'center'},
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
   iconPlaceholder: {width: 40},
-  icon: {fontSize: 22},
 });

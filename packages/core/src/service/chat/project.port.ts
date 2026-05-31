@@ -14,6 +14,8 @@ export interface ProjectService {
 
   create(name: string): Promise<ChatProject>;
 
+  rename(id: string, name: string): Promise<ChatProject>;
+
   delete(id: string): Promise<void>;
 
   /** Copies project metadata and project-domain template VFS only. */

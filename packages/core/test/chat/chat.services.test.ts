@@ -64,6 +64,38 @@ describe("Chat services", () => {
     await ctx.conn.close();
   });
 
+  it("project rename updates name and updatedAtMs", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("Old Name");
+    const renamed = await ctx.projects.rename(project.id, "New Name");
+    assert.equal(renamed.name, "New Name");
+    assert.ok(renamed.updatedAtMs >= project.updatedAtMs);
+    const loaded = await ctx.projects.get(project.id);
+    assert.equal(loaded.name, "New Name");
+    await ctx.conn.close();
+  });
+
+  it("project rename rejects empty name", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    await assert.rejects(
+      () => ctx.projects.rename(project.id, "   "),
+      (err: unknown) =>
+        err instanceof Error && err.message.includes("must not be empty"),
+    );
+    await ctx.conn.close();
+  });
+
+  it("project create rejects empty name", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    await assert.rejects(
+      () => ctx.projects.create("  "),
+      (err: unknown) =>
+        err instanceof Error && err.message.includes("must not be empty"),
+    );
+    await ctx.conn.close();
+  });
+
   it("message append preserves seq order", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");

@@ -5,12 +5,14 @@ export type ThemeMode = 'light' | 'dark';
 
 export interface ThemeTokens {
   background: string;
+  bgSecondary: string;
   surface: string;
   surfaceElevated: string;
   text: string;
   textSecondary: string;
   textTertiary: string;
   border: string;
+  borderLight: string;
   primary: string;
   headerBackground: string;
   tabBarBackground: string;
@@ -24,12 +26,14 @@ export interface ThemeTokens {
 
 export const lightTheme: ThemeTokens = {
   background: '#F2F2F7',
+  bgSecondary: '#E5E5EA',
   surface: '#FFFFFF',
   surfaceElevated: '#FFFFFF',
   text: '#000000',
   textSecondary: '#8E8E93',
   textTertiary: '#C7C7CC',
   border: '#C6C6C8',
+  borderLight: '#E5E5EA',
   primary: '#007AFF',
   headerBackground: '#FFFFFF',
   tabBarBackground: '#FFFFFF',
@@ -43,12 +47,14 @@ export const lightTheme: ThemeTokens = {
 
 export const darkTheme: ThemeTokens = {
   background: '#000000',
+  bgSecondary: '#1C1C1E',
   surface: '#1C1C1E',
   surfaceElevated: '#2C2C2E',
   text: '#FFFFFF',
   textSecondary: '#98989D',
   textTertiary: '#48484A',
   border: '#38383A',
+  borderLight: '#2C2C2E',
   primary: '#0A84FF',
   headerBackground: '#1C1C1E',
   tabBarBackground: '#1C1C1E',

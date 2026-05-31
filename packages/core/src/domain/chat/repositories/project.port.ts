@@ -14,5 +14,7 @@ export interface ProjectRepository {
 
   insert(project: ChatProject): Promise<void>;
 
+  updateName(id: string, name: string, updatedAtMs: number): Promise<boolean>;
+
   delete(id: string): Promise<boolean>;
 }

@@ -6,8 +6,4 @@ plugins { id("com.facebook.react.settings") }
 extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
 rootProject.name = 'NovelMaster'
 include ':app'
-// Monorepo workspace package; not picked up by RN autolink in this layout.
-def monorepoRoot = file("../../..").canonicalFile
-include ':sksp-android'
-project(':sksp-android').projectDir = new File(monorepoRoot, 'packages/sksp-android/android')
 includeBuild("../../../node_modules/@react-native/gradle-plugin")

@@ -27,7 +27,13 @@ import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {ListBatchBar} from '../../components/batch/ListBatchBar';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
+import {SegmentedControl} from '../../components/ui/SegmentedControl';
+import {
+  PrimaryButton,
+  SecondaryButton,
+} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {
@@ -173,12 +179,37 @@ export function ChatTabScreen() {
     [projectId, setCurrentSession],
   );
 
-  const handleCreateProject = useCallback(async () => {
-    const created = await runtime.projects.create(`项目 ${Date.now()}`);
-    await setCurrentProject(created.id);
-    await refreshScope();
-    await reloadLists();
-  }, [runtime, setCurrentProject, refreshScope, reloadLists]);
+  const handleCreateProject = useCallback(
+    async (name: string) => {
+      try {
+        const created = await runtime.projects.create(name);
+        await setCurrentProject(created.id);
+        await refreshScope();
+        await reloadLists();
+      } catch (error) {
+        Alert.alert(
+          '创建失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, setCurrentProject, refreshScope, reloadLists],
+  );
+
+  const handleRenameProject = useCallback(
+    async (projectId: string, name: string) => {
+      try {
+        await runtime.projects.rename(projectId, name);
+        await reloadLists();
+      } catch (error) {
+        Alert.alert(
+          '重命名失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, reloadLists],
+  );
 
   const handleCreateSession = useCallback(async () => {
     if (projectId == null) {
@@ -306,20 +337,15 @@ export function ChatTabScreen() {
     return (
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
         <AppHeader pageKey="chat" />
-        <View style={styles.subTabs}>
-          <SubTab
-            label="聊天"
-            active={conversationPanel === 'chat'}
-            onPress={() => setConversationPanel('chat')}
-            tokens={tokens}
-          />
-          <SubTab
-            label="会话工作区"
-            active={conversationPanel === 'workspace'}
-            onPress={() => setConversationPanel('workspace')}
-            tokens={tokens}
-          />
-        </View>
+        <SegmentedControl
+          tokens={tokens}
+          value={conversationPanel}
+          onChange={setConversationPanel}
+          options={[
+            {value: 'chat', label: '聊天'},
+            {value: 'workspace', label: '会话工作区'},
+          ]}
+        />
         {conversationPanel === 'chat' ? (
           projectId != null && sessionId != null ? (
             <View style={styles.chatPanel}>
@@ -400,25 +426,31 @@ export function ChatTabScreen() {
       <AppHeader pageKey="chat" />
       {currentProject ? (
         <Pressable
-          style={[styles.banner, {backgroundColor: tokens.surface}]}
+          style={[
+            styles.projectBanner,
+            {
+              backgroundColor: tokens.surfaceElevated,
+              borderBottomColor: tokens.borderLight,
+            },
+          ]}
           onPress={() => setProjectDrawerOpen(true)}>
-          <Text style={{color: tokens.text}}>{currentProject.name}</Text>
+          <Text style={[styles.bannerLabel, {color: tokens.textSecondary}]}>
+            当前项目
+          </Text>
+          <Text style={[styles.bannerName, {color: tokens.primary}]}>
+            {currentProject.name}
+          </Text>
         </Pressable>
       ) : null}
-      <View style={styles.subTabs}>
-        <SubTab
-          label="会话"
-          active={sessionListPanel === 'sessions'}
-          onPress={() => setSessionListPanel('sessions')}
-          tokens={tokens}
-        />
-        <SubTab
-          label="项目模板"
-          active={sessionListPanel === 'template'}
-          onPress={() => setSessionListPanel('template')}
-          tokens={tokens}
-        />
-      </View>
+      <SegmentedControl
+        tokens={tokens}
+        value={sessionListPanel}
+        onChange={setSessionListPanel}
+        options={[
+          {value: 'sessions', label: '会话'},
+          {value: 'template', label: '项目模板'},
+        ]}
+      />
       {sessionListPanel === 'template' ? (
         projectVfs && projectWorktree && projectId != null ? (
           <View style={styles.flexFill}>
@@ -445,17 +477,31 @@ export function ChatTabScreen() {
       ) : (
         <>
           {!sessionBatch.active ? (
-            <View style={styles.toolbar}>
-              <Pressable onPress={handleCreateSession}>
-                <Text style={{color: tokens.primary}}>新建会话</Text>
-              </Pressable>
-              <Pressable onPress={sessionBatch.enter}>
-                <Text style={{color: tokens.text}}>批量</Text>
-              </Pressable>
+            <View
+              style={[
+                styles.sectionHeader,
+                {backgroundColor: tokens.surface},
+              ]}>
+              <Text style={[styles.sectionTitle, {color: tokens.text}]}>
+                会话
+              </Text>
+              <View style={styles.sectionActions}>
+                <SecondaryButton
+                  label="管理"
+                  tokens={tokens}
+                  onPress={sessionBatch.enter}
+                />
+                <PrimaryButton
+                  label="新建会话"
+                  tokens={tokens}
+                  onPress={() => handleCreateSession().catch(() => undefined)}
+                />
+              </View>
             </View>
           ) : null}
           <FlatList
-            style={sessionBatch.active ? styles.listWithBar : undefined}
+            style={sessionBatch.active ? styles.listWithBar : styles.sessionList}
+            contentContainerStyle={styles.sessionListContent}
             data={sessions}
             keyExtractor={item => item.id}
             ListEmptyComponent={
@@ -463,44 +509,86 @@ export function ChatTabScreen() {
                 暂无会话
               </Text>
             }
-            renderItem={({item}) => (
-              <Pressable
-                style={[styles.sessionRow, {borderBottomColor: tokens.border}]}
-                onPress={() => {
-                  if (sessionBatch.active) {
+            renderItem={({item}) => {
+              const isCurrent = item.id === sessionId;
+              return (
+                <Pressable
+                  style={[
+                    styles.sessionCard,
+                    {
+                      backgroundColor: tokens.surfaceElevated,
+                      borderColor: tokens.borderLight,
+                    },
+                    sessionBatch.isSelected(item.id) && {
+                      borderColor: tokens.primary,
+                      borderWidth: 2,
+                    },
+                  ]}
+                  onPress={() => {
+                    if (sessionBatch.active) {
+                      sessionBatch.toggle(item.id);
+                    } else {
+                      openConversation(item.id);
+                    }
+                  }}
+                  onLongPress={() => {
+                    sessionBatch.enter();
                     sessionBatch.toggle(item.id);
-                  } else {
-                    openConversation(item.id);
-                  }
-                }}
-                onLongPress={() => {
-                  sessionBatch.enter();
-                  sessionBatch.toggle(item.id);
-                }}>
-                {sessionBatch.active ? (
-                  <BatchCheckbox
-                    checked={sessionBatch.isSelected(item.id)}
-                    onToggle={() => sessionBatch.toggle(item.id)}
-                  />
-                ) : null}
-                <Text style={{color: tokens.text, flex: 1}}>
-                  {item.title ?? item.id}
-                  {item.id === sessionId ? ' · 当前' : ''}
-                </Text>
-                {!sessionBatch.active ? (
-                  <Pressable
-                    hitSlop={8}
-                    onPress={e => {
-                      e.stopPropagation?.();
-                      setMenuSessionId(item.id);
-                    }}>
-                    <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                      ⋮
+                  }}>
+                  {sessionBatch.active ? (
+                    <BatchCheckbox
+                      checked={sessionBatch.isSelected(item.id)}
+                      onToggle={() => sessionBatch.toggle(item.id)}
+                    />
+                  ) : null}
+                  <View style={styles.sessionInfo}>
+                    <Text
+                      style={[styles.sessionTitle, {color: tokens.text}]}
+                      numberOfLines={1}>
+                      {item.title ?? item.id}
                     </Text>
-                  </Pressable>
-                ) : null}
-              </Pressable>
-            )}
+                    <Text
+                      style={[
+                        styles.sessionMeta,
+                        {color: tokens.textSecondary},
+                      ]}>
+                      {formatRelativeTimeMs(item.updatedAtMs)}
+                      {isCurrent ? ' · 活跃中' : ''}
+                    </Text>
+                  </View>
+                  {isCurrent && !sessionBatch.active ? (
+                    <View
+                      style={[
+                        styles.currentBadge,
+                        {backgroundColor: tokens.primary},
+                      ]}>
+                      <Text style={styles.currentBadgeText}>当前</Text>
+                    </View>
+                  ) : null}
+                  {!sessionBatch.active ? (
+                    <>
+                      <Pressable
+                        hitSlop={8}
+                        onPress={e => {
+                          e.stopPropagation?.();
+                          setMenuSessionId(item.id);
+                        }}>
+                        <Text
+                          style={[
+                            styles.menuDots,
+                            {color: tokens.textSecondary},
+                          ]}>
+                          ⋮
+                        </Text>
+                      </Pressable>
+                      <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
+                        ›
+                      </Text>
+                    </>
+                  ) : null}
+                </Pressable>
+              );
+            }}
           />
           <BottomSheetMenu
             visible={menuSessionId != null}
@@ -532,49 +620,37 @@ export function ChatTabScreen() {
           await setCurrentProject(id);
           await reloadLists();
         }}
-        onCreate={handleCreateProject}
+        onCreateProject={handleCreateProject}
+        onRenameProject={handleRenameProject}
         onDeleteSelected={handleDeleteProjects}
       />
     </View>
   );
 }
 
-function SubTab({
-  label,
-  active,
-  onPress,
-  tokens,
-}: {
-  label: string;
-  active: boolean;
-  onPress: () => void;
-  tokens: {primary: string; text: string; border: string};
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        styles.subTab,
-        active && {borderBottomColor: tokens.primary, borderBottomWidth: 2},
-      ]}>
-      <Text style={{color: active ? tokens.primary : tokens.text}}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   root: {flex: 1},
-  banner: {padding: 12, marginHorizontal: 12, marginTop: 8, borderRadius: 8},
-  subTabs: {flexDirection: 'row', marginTop: 8},
-  subTab: {flex: 1, alignItems: 'center', paddingVertical: 10},
-  toolbar: {
+  projectBanner: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: 12,
-    gap: 12,
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  bannerLabel: {fontSize: 12},
+  bannerName: {fontSize: 15, fontWeight: '600'},
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  sectionTitle: {fontSize: 18, fontWeight: '600'},
+  sectionActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  sessionList: {flex: 1},
+  sessionListContent: {paddingHorizontal: 16, paddingBottom: 16},
   pullToolbar: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -583,13 +659,32 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   flexFill: {flex: 1},
-  sessionRow: {
+  sessionCard: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderRadius: 16,
+    marginBottom: 12,
+    borderWidth: StyleSheet.hairlineWidth,
     gap: 8,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 1},
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
   },
+  sessionInfo: {flex: 1, minWidth: 0},
+  sessionTitle: {fontSize: 16, fontWeight: '600', marginBottom: 4},
+  sessionMeta: {fontSize: 13},
+  currentBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 4,
+  },
+  currentBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
+  menuDots: {fontSize: 18, paddingHorizontal: 4},
+  chevron: {fontSize: 22, fontWeight: '300'},
   listWithBar: {marginBottom: 56},
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},

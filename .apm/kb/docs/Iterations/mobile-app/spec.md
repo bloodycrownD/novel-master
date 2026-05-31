@@ -600,4 +600,4 @@ Tab：`Chat` | `Agents` | `Profile`（无 `pageId` 后缀）。
 
 ---
 
-*用户已定案 C0（randomUUID / currentAgentId / Agent→sessionFs）；确认其余 Mobile 里程碑后可开 M1。*
+*C0–M6 已于 `feature/mobile-app-c0` 交付并合并 main；Android 手工冒烟见 PRD 验收章 A–L。*

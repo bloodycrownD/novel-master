@@ -1,7 +1,9 @@
 ---
 createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-05-31 12:00:00'
+updatedAt: '2026-05-31 19:30:00'
 ---
+2026-05-31: **mobile-app**（`feature/mobile-app-c0`）合并至 **main**：C0 Core 前置 + `apps/mobile` M1–M6 Android 产品 App（3 Tab、VFS、Chat、配置、SessionLog、§14）；Metro tiktoken/js-tiktoken + zod CJS shim；左侧项目抽屉 + 项目新建/重命名；Gradle sksp autolink 去重。PRD/SPEC：`.apm/kb/docs/Iterations/mobile-app/`。
+
 2026-05-31: **core-package-structure** 已 fast-forward 合并至 **main**（`bf3fba1`）：core 包 domain/infra 目录规整、`ARCHITECTURE.md`、Breaking `createSqliteCompactionAgentResolver`。PRD/SPEC：`.apm/kb/docs/Iterations/core-package-structure/`。
 
 2026-05-31: **core-package-structure** 分支开发完成（合并前记录）：`packages/core/ARCHITECTURE.md` 落地；domain 统一 `model/` / `logic/` / `ports/`、errors 收拢；infra adapter 型（llm-protocol、sksp、tdbc）→ `ports/` + `impl/` + `logic/`；`VfsService` port 下沉 `domain/vfs/ports/`；`zodToJsonSchema` 迁至 `infra/serialization/`。

@@ -13,7 +13,7 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { projectVfsPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { chatNotFound } from "@/errors/chat-errors.js";
+import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -59,15 +59,33 @@ export class DefaultProjectService implements ProjectService {
   }
 
   async create(name: string): Promise<ChatProject> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw chatInvalidArgument("project name must not be empty");
+    }
     const now = Date.now();
     const project: ChatProject = {
       id: randomUUID(),
-      name,
+      name: trimmed,
       createdAtMs: now,
       updatedAtMs: now,
     };
     await this.deps.projects.insert(project);
     return project;
+  }
+
+  async rename(id: string, name: string): Promise<ChatProject> {
+    const trimmed = name.trim();
+    if (trimmed.length === 0) {
+      throw chatInvalidArgument("project name must not be empty");
+    }
+    const existing = await this.get(id);
+    const updatedAtMs = Date.now();
+    const updated = await this.deps.projects.updateName(id, trimmed, updatedAtMs);
+    if (!updated) {
+      throw chatNotFound("project", id);
+    }
+    return { ...existing, name: trimmed, updatedAtMs };
   }
 
   async delete(id: string): Promise<void> {
