@@ -11,11 +11,8 @@ import {
   View,
 } from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
-import {
-  AgentRunError,
-  runAgentTurn,
-  type AgentRunScope,
-} from '../../services/agent-run.service';
+import {formatError} from '../../errors/format-error';
+import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';
 import {useRuntime} from '../../hooks/useRuntime';
 
 type Props = {
@@ -66,13 +63,7 @@ export function ChatComposer({
       });
       onMessagesChanged();
     } catch (err) {
-      const message =
-        err instanceof AgentRunError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : String(err);
-      setError(message);
+      setError(formatError(err));
       onMessagesChanged();
     } finally {
       onRunningChange(false);

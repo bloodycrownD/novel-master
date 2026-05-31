@@ -5,7 +5,9 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -15,7 +17,7 @@ import {useRoute, type RouteProp} from '@react-navigation/native';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
-import {formatVfsError} from '../../vfs/errors';
+import {formatError} from '../../errors/format-error';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
@@ -31,6 +33,7 @@ export function FileEditorScreen() {
   const [version, setVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewMode, setPreviewMode] = useState(false);
 
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);
@@ -67,7 +70,7 @@ export function FileEditorScreen() {
         setVersion(result.version);
       } catch (error) {
         if (!cancelled) {
-          Alert.alert('读取失败', formatVfsError(error));
+          Alert.alert('读取失败', formatError(error));
         }
       } finally {
         if (!cancelled) {
@@ -111,10 +114,17 @@ export function FileEditorScreen() {
       setVersion(refreshed.version);
       Alert.alert('已保存');
     } catch (error) {
-      Alert.alert('保存失败', formatVfsError(error));
+      Alert.alert('保存失败', formatError(error));
     } finally {
       setSaving(false);
     }
+  };
+
+  const togglePreview = () => {
+    if (!previewMode) {
+      Keyboard.dismiss();
+    }
+    setPreviewMode(prev => !prev);
   };
 
   if (loading) {
@@ -130,10 +140,13 @@ export function FileEditorScreen() {
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
           onPress={() => handleSave().catch(() => undefined)}
-          disabled={saving || !isDirty}>
+          disabled={saving || !isDirty || previewMode}>
           <Text
             style={{
-              color: isDirty && !saving ? tokens.primary : tokens.textSecondary,
+              color:
+                isDirty && !saving && !previewMode
+                  ? tokens.primary
+                  : tokens.textSecondary,
             }}>
             {saving ? '保存中…' : '保存'}
           </Text>
@@ -141,22 +154,39 @@ export function FileEditorScreen() {
         <Text style={{color: isDirty ? tokens.danger : tokens.textSecondary}}>
           {isDirty ? '未保存' : path}
         </Text>
-        <Pressable onPress={() => Alert.alert('预览', '预览模式（M2 占位）')}>
-          <Text style={{color: tokens.textSecondary}}>预览</Text>
+        <Pressable onPress={togglePreview}>
+          <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
+            {previewMode ? '编辑' : '预览'}
+          </Text>
         </Pressable>
       </View>
-      <TextInput
-        style={[
-          styles.editor,
-          {color: tokens.text, backgroundColor: tokens.surface},
-        ]}
-        multiline
-        value={content}
-        onChangeText={setContent}
-        autoCapitalize="none"
-        autoCorrect={false}
-        textAlignVertical="top"
-      />
+      {previewMode ? (
+        <ScrollView
+          style={[styles.preview, {backgroundColor: tokens.surface}]}
+          contentContainerStyle={styles.previewContent}
+          keyboardShouldPersistTaps="handled">
+          <Text
+            style={[
+              styles.previewText,
+              {color: tokens.text},
+            ]}>
+            {content || '（空文件）'}
+          </Text>
+        </ScrollView>
+      ) : (
+        <TextInput
+          style={[
+            styles.editor,
+            {color: tokens.text, backgroundColor: tokens.surface},
+          ]}
+          multiline
+          value={content}
+          onChangeText={setContent}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textAlignVertical="top"
+        />
+      )}
     </View>
   );
 }
@@ -177,5 +207,12 @@ const styles = StyleSheet.create({
     padding: 12,
     fontFamily: 'monospace',
     fontSize: 14,
+  },
+  preview: {flex: 1},
+  previewContent: {padding: 12},
+  previewText: {
+    fontFamily: 'monospace',
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

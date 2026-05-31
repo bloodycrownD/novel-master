@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import {VfsError, type VfsService, type WriteOptions} from '@novel-master/core';
-import {formatVfsError} from '../vfs/errors';
+import {formatError} from '../errors/format-error';
 import {getVfs} from '../vfs/runtime';
 
 type Props = {
@@ -74,7 +74,7 @@ export function VfsDevScreen({onBack}: Props) {
       const out = await fn(vfs);
       setResult(out);
     } catch (e) {
-      setResult(formatVfsError(e));
+      setResult(formatError(e));
     }
   }, []);
 

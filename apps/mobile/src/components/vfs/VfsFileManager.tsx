@@ -33,16 +33,19 @@ import {
   createVfsDirectory,
   createVfsFile,
   deleteVfsEntry,
+  remapPathUnderDir,
+  renameVfsDirectory,
   renameVfsFile,
 } from '../../services/vfs-operations.service';
 import {
   cycleFileInclusion,
   defaultDirRuleForm,
   dirRuleToForm,
+  migrateWorktreeDirRename,
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
-import {formatVfsError} from '../../vfs/errors';
+import {formatError} from '../../errors/format-error';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export type VfsFileManagerProps = {
@@ -125,7 +128,7 @@ export function VfsFileManager({
         });
       setRows(mapped);
     } catch (error) {
-      Alert.alert('加载失败', formatVfsError(error));
+      Alert.alert('加载失败', formatError(error));
     } finally {
       setLoading(false);
     }
@@ -221,8 +224,14 @@ export function VfsFileManager({
             if (menuRow.kind === 'file') {
               await renameVfsFile(vfs, menuPath, newPath);
             } else {
-              Alert.alert('暂不支持', '目录重命名尚未实现');
-              return;
+              await renameVfsDirectory(vfs, menuPath, newPath);
+              await migrateWorktreeDirRename(worktree, menuPath, newPath);
+              if (
+                currentPath === menuPath ||
+                currentPath.startsWith(`${menuPath}/`)
+              ) {
+                setCurrentPath(remapPathUnderDir(currentPath, menuPath, newPath));
+              }
             }
             await reload();
           },
@@ -242,7 +251,7 @@ export function VfsFileManager({
                 deleteVfsEntry(vfs, menuPath, {recursive: true})
                   .then(() => reload())
                   .catch(err =>
-                    Alert.alert('删除失败', formatVfsError(err)),
+                    Alert.alert('删除失败', formatError(err)),
                   );
               },
             },
@@ -250,7 +259,7 @@ export function VfsFileManager({
         );
       }
     } catch (error) {
-      Alert.alert('操作失败', formatVfsError(error));
+      Alert.alert('操作失败', formatError(error));
     }
   };
 
@@ -306,7 +315,7 @@ export function VfsFileManager({
           );
           setDirRuleOpen(true);
         } catch (error) {
-          Alert.alert('加载规则失败', formatVfsError(error));
+          Alert.alert('加载规则失败', formatError(error));
         }
       })();
     }
@@ -491,7 +500,7 @@ export function VfsFileManager({
                     .onSubmit(promptValue)
                     .then(() => reload())
                     .catch(err =>
-                      Alert.alert('失败', formatVfsError(err)),
+                      Alert.alert('失败', formatError(err)),
                     );
                 }}>
                 <Text style={{color: tokens.primary}}>确定</Text>

@@ -13,5 +13,9 @@
 export { VfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
 export { TdbcError } from "../../../packages/core/dist/infra/tdbc/errors.js";
 export { KkvError } from "../../../packages/core/dist/errors/kkv-errors.js";
+export { ProviderError } from "../../../packages/core/dist/errors/provider-errors.js";
+export { ChatError } from "../../../packages/core/dist/errors/chat-errors.js";
+export { ToolError } from "../../../packages/core/dist/errors/tool-errors.js";
+export { AgentError } from "../../../packages/core/dist/errors/agent-runtime-errors.js";
 export type { KkvService } from "../../../packages/core/dist/service/kkv/kkv.port.js";
 
