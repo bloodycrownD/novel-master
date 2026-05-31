@@ -1,5 +1,5 @@
 /**
- * Prompt ï¿½?LLM input and CLI formatting.
+ * Prompt â†?LLM input and CLI formatting.
  *
  * @module service/prompt/render-prompt
  */
@@ -69,7 +69,7 @@ function renderSystemMacroContent(
 }
 
 /**
- * Builds LLM input: merge system text + abstract blocks ï¿½?render macros.
+ * Builds LLM input: merge system text + abstract blocks â†?render macros.
  */
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],
