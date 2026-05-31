@@ -11,7 +11,7 @@ import type {
   VfsReadResult,
   VfsService,
   WriteOptions,
-} from "../../../service/vfs/vfs.port.js";
+} from "@/domain/vfs/ports/vfs-service.port.js";
 import type { ToolRegistry } from "../logic/tool-registry.js";
 
 export type VfsToolContext = { readonly vfs: VfsService };

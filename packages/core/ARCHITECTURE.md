@@ -60,6 +60,7 @@ domain/<ctx>/
 - **`domain/provider/model/model-sampling-profile-from-json.ts`** — wire encode/decode helper; stays beside schema in `model/`.
 - **`infra/sksp/sksp-error.ts`**, **`infra/sql-template/errors.ts`**, **`infra/tdbc/errors.ts`** — infra-internal errors, not in `errors/`.
 - **`service/prompt/render-prompt.ts`** — single-file application service; no `impl/` subdir.
+- **`domain/vfs/ports/vfs-service.port.ts`** — `VfsService` contract; `service/vfs` implements it; builtin `vfs-tools` depend on domain port only.
 
 ## Service module template
 
@@ -71,3 +72,5 @@ service/<ctx>/
 ```
 
 Persistent session adapters (e.g. `ChatAgentSession` over `MessageService`) belong in **service**, not domain.
+
+Builtin tools under `domain/tool/builtin/` depend on **domain ports** (e.g. `VfsService`), never on `service/*` types.
