@@ -317,7 +317,6 @@ export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,
   serializePromptLlmInput,
-  buildTokenCounterRegistryDeps,
   type TokenCounter,
   type TokenCounterRegistry,
   type TokenCounterKind,

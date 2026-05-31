@@ -99,7 +99,7 @@ export interface TokenCounterRegistry {
    * Loads provider.protocol from DB; openai → tiktoken; else heuristic.
    * Model not saved / provider missing → heuristic.
    */
-  forApplicationModel(applicationModelId: string): TokenCounter;
+  forApplicationModel(applicationModelId: string): Promise<TokenCounter>;
   /** Tests: skip DB, pass protocol explicitly. */
   forVendorModel(vendorModelId: string, protocol: LlmProtocolKind): TokenCounter;
 }
@@ -163,7 +163,7 @@ applicationModelId (= workspaceModelId for compaction)
 **Compaction 接线**：
 
 - `maybeCompact(..., modelContext)` 内：`counter = registry.forApplicationModel(modelContext.workspaceModelId)`。
-- Registry 需 **`ProviderRepository` + `SavedModelRepository`**（或注入 `resolveProtocol(applicationModelId)` 回调）以读 protocol；**不能**仅凭 modelId 字符串猜协议。
+- Registry 需 **`ProviderRepository` + `SavedModelRepository`** 注入 registry；**每次** `forApplicationModel` 调用 `findById` / `find`，provider 变更无需重启进程。
 
 ### OpenAI messages overhead（tiktoken countMessages）
 
@@ -289,8 +289,8 @@ packages/core/test/
    - `countText`：`encoding.encode(text).length`
    - `countMessages`：调 `openai-message-token-count.ts`
 3. `tiktoken-model-map.ts` + 懒加载 encoding（模块级 cache，避免重复 `encoding_for_model`）。
-4. `DefaultTokenCounterRegistry` 构造依赖 `ProviderRepository`（+ 可选 `SavedModelRepository` 校验 model 已 save）：
-   - `forApplicationModel(id)`：`parseApplicationModelId` → `providers.findById` → L1/L2 规则。
+4. `DefaultTokenCounterRegistry` 构造注入 `ProviderRepository`（+ 可选 `SavedModelRepository`）：
+   - `forApplicationModel(id)`：每次 `findById` → L1/L2；`savedModels.find` 校验已 save。
    - CLI `--model` 与 compaction 共用同一 registry（runtime 注入 DB repos）。
 
 **Tiktoken 加载失败**：catch 并回退 heuristic，`console.debug` 一次。
@@ -356,10 +356,10 @@ packages/core/test/
      const modelId = flags.get("model");
      const counter =
        typeof modelId === "string"
-         ? registry.forApplicationModel(modelId)
+         ? await registry.forApplicationModel(modelId)
          : registry.heuristic;
      const tokenCount = counter.countText(text);
-     console.error(JSON.stringify({ tokenCount, model: modelId ?? null, counter: "..." }));
+     console.error(JSON.stringify({ tokenCount, model: modelId ?? null, counter: counter.kind }));
    }
    ```
 3. Usage 字符串更新。
@@ -392,7 +392,8 @@ packages/core/test/
 | T1 | Tiktoken 固定字符串 token 数（英文、中文各 1） |
 | T2 | OpenAI message overhead：单条 user message 计数 > 纯 text 计数 |
 | R1 | Registry 未知模型 → heuristic |
-| R2 | Registry `gpt-4o` vendor → tiktoken 路径（长度 < heuristic 或 != heuristic 至少可区分） |
+| R2 | Registry `gpt-4o` vendor → tiktoken 路径 |
+| R3 | provider protocol 变更后下一次 `forApplicationModel` 立即生效 |
 | S1 | `serializePromptLlmInput` 含 system + 两条 message |
 | U1 | parseOpenAiUsage 标准 JSON |
 | U2 | parseAnthropicUsage |
@@ -406,6 +407,7 @@ packages/core/test/
 |----|------|
 | CLI1 | `prompt render --tokens` stderr 含 JSON `tokenCount` |
 | CLI2 | 无 `--tokens` 时 stderr 无 token 行 |
+| CLI3 | `--tokens --model openai/gpt-4o`（已 save）→ `counter: "tiktoken"` |
 
 ### 回归
 

@@ -13,10 +13,9 @@ export interface TokenCounterRegistry {
   readonly heuristic: TokenCounter;
   /**
    * Resolve counter for `applicationModelId` (`providerId/vendorModelId`).
-   * Loads provider protocol from injected lookup; openai → tiktoken; else heuristic.
-   * Unknown provider or unsaved model (when validated) → heuristic.
+   * Reads provider protocol from the repository on each call; openai → tiktoken; else heuristic.
    */
-  forApplicationModel(applicationModelId: string): TokenCounter;
-  /** Tests: skip DB, pass protocol explicitly. */
+  forApplicationModel(applicationModelId: string): Promise<TokenCounter>;
+  /** Tests: pass protocol explicitly without DB. */
   forVendorModel(vendorModelId: string, protocol: LlmProtocolKind): TokenCounter;
 }

@@ -39,7 +39,7 @@ async function setupSession(dbPath: string): Promise<{
 function parseTokenJsonLine(stderr: string): {
   tokenCount: number;
   counter?: string;
-  counterKind?: string;
+  model?: string | null;
 } {
   const line = stderr
     .split(/\r?\n/)
@@ -49,7 +49,7 @@ function parseTokenJsonLine(stderr: string): {
   return JSON.parse(line) as {
     tokenCount: number;
     counter?: string;
-    counterKind?: string;
+    model?: string | null;
   };
 }
 
@@ -92,7 +92,8 @@ describe("prompt render --tokens CLI e2e", () => {
 
       const tokens = parseTokenJsonLine(render.stderr);
       assert.ok(tokens.tokenCount > 0);
-      assert.equal(tokens.counter ?? tokens.counterKind, "heuristic");
+      assert.equal(tokens.counter, "heuristic");
+      assert.doesNotMatch(render.stderr, /"counterKind"/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -133,6 +134,65 @@ describe("prompt render --tokens CLI e2e", () => {
       assert.equal(render.status, 0, render.stderr);
       assert.match(render.stdout, /plain render/);
       assert.doesNotMatch(render.stderr, /"tokenCount"\s*:/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("CLI3: --tokens --model openai/gpt-4o uses tiktoken when model is saved", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-prompt-tokens-tiktoken-"));
+    const dbPath = join(dir, "novel.db");
+    const promptPath = join(dir, "prompt.yaml");
+    try {
+      await writeFile(promptPath, PROMPT_YAML, "utf8");
+      runNm(["provider", "list", "--db", dbPath]);
+      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "model",
+        "create",
+        "--vendorModelId",
+        "gpt-4o",
+        "--db",
+        dbPath,
+      ]);
+
+      const { projectId, sessionId } = await setupSession(dbPath);
+      runNm([
+        "message",
+        "append",
+        "--session",
+        sessionId,
+        "--role",
+        "user",
+        "--content",
+        "tiktoken path",
+        "--db",
+        dbPath,
+      ]);
+
+      const render = runNm([
+        "prompt",
+        "render",
+        "--path",
+        promptPath,
+        "--tokens",
+        "--model",
+        "openai/gpt-4o",
+        "--project",
+        projectId,
+        "--session",
+        sessionId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(render.status, 0, render.stderr);
+      assert.match(render.stdout, /tiktoken path/);
+
+      const tokens = parseTokenJsonLine(render.stderr);
+      assert.ok(tokens.tokenCount > 0);
+      assert.equal(tokens.counter, "tiktoken");
+      assert.equal(tokens.model, "openai/gpt-4o");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

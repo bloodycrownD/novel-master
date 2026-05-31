@@ -21,7 +21,7 @@ export class TokenThresholdTrigger implements CompactionTrigger {
     modelContext: CompactionModelContext,
   ): Promise<boolean> {
     const visible = await session.list();
-    const counter = this.tokenCounters.forApplicationModel(
+    const counter = await this.tokenCounters.forApplicationModel(
       modelContext.workspaceModelId,
     );
     return counter.countMessages(visible) > this.tokenThreshold;

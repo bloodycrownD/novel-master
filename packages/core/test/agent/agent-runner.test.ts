@@ -19,6 +19,7 @@ import {
   type ModelRequestService,
 } from "@novel-master/core";
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
+import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 import type { VfsService } from "@novel-master/core";
 
 function minimalDefinition(): AgentDefinition {
@@ -279,9 +280,7 @@ describe("AgentRunner", () => {
         modelRequests: model,
         policyStore,
         resolveAgent: noopResolver,
-        tokenCounters: createDefaultTokenCounterRegistry({
-          resolveProviderProtocol: () => undefined,
-        }),
+        tokenCounters: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
       }),
     });
 

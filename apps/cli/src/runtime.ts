@@ -11,7 +11,6 @@ import {
   createAgentRegistryService,
   createCompactionPolicyStore,
   createDefaultTokenCounterRegistry,
-  buildTokenCounterRegistryDeps,
   createSqliteCompactionAgentResolver,
   createMessageService,
   createPersistentPreferences,
@@ -138,11 +137,10 @@ export async function createNovelMasterRuntime(
   const compactionPolicy = createCompactionPolicyStore(conn);
   const agentRegistry = createAgentRegistryService(conn, { compactionPolicy });
   const resolveCompactionAgent = createSqliteCompactionAgentResolver(agentRegistry);
-  const registryDeps = await buildTokenCounterRegistryDeps(
-    providerBundle.providerRepo,
-    providerBundle.savedModelRepo,
-  );
-  const tokenCounters = createDefaultTokenCounterRegistry(registryDeps);
+  const tokenCounters = createDefaultTokenCounterRegistry({
+    providers: providerBundle.providerRepo,
+    savedModels: providerBundle.savedModelRepo,
+  });
 
   return {
     conn,

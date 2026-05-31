@@ -82,7 +82,7 @@ export async function runPrompt(
             `warning: model ${modelId} not saved; using heuristic counter`,
           );
         } else {
-          counter = rt.tokenCounters.forApplicationModel(modelId);
+          counter = await rt.tokenCounters.forApplicationModel(modelId);
         }
       } catch {
         console.error(
@@ -97,7 +97,6 @@ export async function runPrompt(
         tokenCount,
         model: modelId,
         counter: counter.kind,
-        counterKind: counter.kind,
       }),
     );
   }

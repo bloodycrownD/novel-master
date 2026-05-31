@@ -18,4 +18,3 @@ export {
   isGpt0301TiktokenModel,
 } from "./logic/tiktoken-model-map.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
-export { buildTokenCounterRegistryDeps } from "./logic/build-registry-deps.js";

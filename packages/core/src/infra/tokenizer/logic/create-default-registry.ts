@@ -1,10 +1,15 @@
 /**
- * Default token counter registry — protocol routing + tiktoken fallback.
+ * Default token counter registry — live provider lookup + tiktoken fallback.
+ *
+ * Resolves protocol from {@link ProviderRepository} on every {@link forApplicationModel}
+ * call so CLI provider edits apply without restarting the process.
  *
  * @module infra/tokenizer/logic/create-default-registry
  */
 
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
+import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { HeuristicTokenCounter } from "../impl/heuristic-token-counter.js";
 import { TiktokenTokenCounter } from "../impl/tiktoken-token-counter.js";
@@ -13,12 +18,11 @@ import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.
 
 let tiktokenLoadFailed = false;
 
-/** Sync lookups populated at runtime from provider / saved-model repos. */
+/** Repositories for live protocol / saved-model lookups (no snapshot at init). */
 export interface CreateDefaultTokenCounterRegistryDeps {
-  /** Provider protocol by id; missing → heuristic for that model. */
-  readonly resolveProviderProtocol: (providerId: string) => LlmProtocolKind | undefined;
-  /** When set, unsaved models fall back to heuristic. */
-  readonly isSavedModel?: (providerId: string, vendorModelId: string) => boolean;
+  readonly providers: ProviderRepository;
+  /** When set, unsaved application models fall back to heuristic. */
+  readonly savedModels?: SavedModelRepository;
 }
 
 class DefaultTokenCounterRegistry implements TokenCounterRegistry {
@@ -27,27 +31,26 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
 
   constructor(private readonly deps: CreateDefaultTokenCounterRegistryDeps) {}
 
-  forApplicationModel(applicationModelId: string): TokenCounter {
+  async forApplicationModel(applicationModelId: string): Promise<TokenCounter> {
     try {
       const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
-      const protocol = this.deps.resolveProviderProtocol(providerId);
-      if (protocol == null) {
+      const provider = await this.deps.providers.findById(providerId);
+      if (provider == null) {
         return this.heuristic;
       }
-      if (
-        this.deps.isSavedModel != null &&
-        !this.deps.isSavedModel(providerId, vendorModelId)
-      ) {
-        return this.heuristic;
+      if (this.deps.savedModels != null) {
+        const saved = await this.deps.savedModels.find(providerId, vendorModelId);
+        if (saved == null) {
+          return this.heuristic;
+        }
       }
-      return this.forVendorModel(vendorModelId, protocol);
+      return this.forVendorModel(vendorModelId, provider.protocol);
     } catch {
       return this.heuristic;
     }
   }
 
   forVendorModel(vendorModelId: string, protocol: LlmProtocolKind): TokenCounter {
-    // L1: non-openai protocols always use heuristic (gemini/anthropic this iteration).
     if (protocol !== "openai") {
       return this.heuristic;
     }
@@ -75,9 +78,7 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   }
 }
 
-/**
- * Creates a registry with heuristic fallback and OpenAI-protocol tiktoken routing.
- */
+/** Creates a registry with heuristic fallback and OpenAI-protocol tiktoken routing. */
 export function createDefaultTokenCounterRegistry(
   deps: CreateDefaultTokenCounterRegistryDeps,
 ): TokenCounterRegistry {

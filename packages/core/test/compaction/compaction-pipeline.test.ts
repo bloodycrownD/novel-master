@@ -14,6 +14,7 @@ import {
   type ModelRequestService,
 } from "@novel-master/core";
 import { CompactionPolicyError } from "../../src/errors/compaction-policy-errors.js";
+import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 
 class InMemoryCompactionPolicyStore implements CompactionPolicyStore {
   private policy: CompactionPolicy | null = null;
@@ -62,9 +63,7 @@ function compactionModelContext(
 }
 
 function heuristicTokenCounters() {
-  return createDefaultTokenCounterRegistry({
-    resolveProviderProtocol: () => undefined,
-  });
+  return createDefaultTokenCounterRegistry(emptyRegistryDeps());
 }
 
 function createPipeline(

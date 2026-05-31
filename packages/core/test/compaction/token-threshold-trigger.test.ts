@@ -13,7 +13,7 @@ function mockRegistry(fixedCount: number): TokenCounterRegistry {
   };
   return {
     heuristic: counter,
-    forApplicationModel: () => counter,
+    forApplicationModel: async () => counter,
     forVendorModel: () => counter,
   };
 }
