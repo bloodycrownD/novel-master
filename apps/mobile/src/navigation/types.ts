@@ -38,6 +38,8 @@ export type ChatHeaderContext = {
   chatSubview: 'sessions' | 'conversation';
   sessionListPanel: 'sessions' | 'template';
   sessionTitle?: string;
+  agentName?: string;
+  modelLabel?: string;
   onBackFromConversation?: () => void;
   onOpenDrawer?: () => void;
 };

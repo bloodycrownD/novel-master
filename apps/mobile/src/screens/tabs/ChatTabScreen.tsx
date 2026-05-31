@@ -12,15 +12,25 @@ import {
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {ChatProject, ChatSession} from '@novel-master/core';
+import type {ChatMessage, ChatProject, ChatSession} from '@novel-master/core';
 import {AppHeader} from '../../components/chrome/AppHeader';
+import {ChatComposer} from '../../components/chat/ChatComposer';
+import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
+import {MessageList} from '../../components/chat/MessageList';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
+import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
+import {
+  loadChatAgentMeta,
+  type ChatAgentMeta,
+} from '../../services/chat-agent-meta';
+import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
+import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
@@ -50,6 +60,19 @@ export function ChatTabScreen() {
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     new Set(),
   );
+  const {appUi} = useNovelMaster();
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
+    agentId: undefined,
+    agentName: '—',
+    modelLabel: '—',
+    hasDedicatedModel: false,
+  });
+  const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [agentRunning, setAgentRunning] = useState(false);
+  const [streamingText, setStreamingText] = useState('');
+  const [showFullToolParams, setShowFullToolParams] = useState(false);
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();
@@ -74,11 +97,55 @@ export function ChatTabScreen() {
 
   const currentSession = sessions.find(s => s.id === sessionId);
 
+  const refreshChatMeta = useCallback(async () => {
+    const modelId = await runtime.state.getCurrentModelId();
+    setHasWorkspaceModel(modelId != null && modelId !== '');
+    try {
+      setAgentMeta(await loadChatAgentMeta(runtime));
+    } catch {
+      setAgentMeta({
+        agentId: undefined,
+        agentName: '—',
+        modelLabel: '—',
+        hasDedicatedModel: false,
+      });
+    }
+  }, [runtime]);
+
+  const reloadMessages = useCallback(async () => {
+    if (sessionId == null) {
+      setChatMessages([]);
+      return;
+    }
+    const list = await runtime.messages.listBySession(sessionId);
+    setChatMessages(list.filter(m => !m.hidden));
+  }, [runtime, sessionId]);
+
+  useEffect(() => {
+    if (chatSubview === 'conversation' && sessionId != null) {
+      reloadMessages().catch(() => undefined);
+      refreshChatMeta().catch(() => undefined);
+    }
+  }, [chatSubview, sessionId, reloadMessages, refreshChatMeta]);
+
+  useEffect(() => {
+    if (!appUi) {
+      return;
+    }
+    appUi
+      .get(APP_UI_KEY_SHOW_FULL_TOOL_PARAMS)
+      .then(v => setShowFullToolParams(v === 'true'))
+      .catch(() => undefined);
+  }, [appUi]);
+
   useEffect(() => {
     setChat({
       chatSubview,
       sessionListPanel,
       sessionTitle: currentSession?.title ?? currentSession?.id,
+      agentName: chatSubview === 'conversation' ? agentMeta.agentName : undefined,
+      modelLabel:
+        chatSubview === 'conversation' ? agentMeta.modelLabel : undefined,
       onBackFromConversation: () => setChatSubview('sessions'),
       onOpenDrawer: () => {
         if (chatSubview === 'conversation') {
@@ -88,7 +155,7 @@ export function ChatTabScreen() {
         }
       },
     });
-  }, [chatSubview, sessionListPanel, currentSession, setChat]);
+  }, [chatSubview, sessionListPanel, currentSession, agentMeta, setChat]);
 
   const openConversation = useCallback(
     async (sid: string) => {
@@ -235,9 +302,35 @@ export function ChatTabScreen() {
           />
         </View>
         {conversationPanel === 'chat' ? (
-          <View style={styles.placeholder}>
-            <Text style={{color: tokens.textSecondary}}>消息流（M3）</Text>
-          </View>
+          projectId != null && sessionId != null ? (
+            <View style={styles.chatPanel}>
+              <ChatMetaBar meta={agentMeta} />
+              <MessageList
+                messages={chatMessages}
+                streamingText={streamingText}
+                showFullToolParams={showFullToolParams}
+              />
+              <ChatComposer
+                scope={{projectId, sessionId}}
+                hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
+                running={agentRunning}
+                onRunningChange={setAgentRunning}
+                onStreamText={delta =>
+                  setStreamingText(prev => prev + delta)
+                }
+                onStreamReset={() => setStreamingText('')}
+                onMessagesChanged={() => {
+                  reloadMessages().catch(() => undefined);
+                  refreshChatMeta().catch(() => undefined);
+                }}
+                onNeedModel={() => setModelPickerOpen(true)}
+              />
+            </View>
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
+            </View>
+          )
         ) : sessionVfs && sessionWorktree ? (
           <VfsFileManager
             scope={{
@@ -258,8 +351,17 @@ export function ChatTabScreen() {
         <SessionActionsDrawer
           visible={sessionDrawerOpen}
           onClose={() => setSessionDrawerOpen(false)}
+          onSwitchModel={() => {
+            setSessionDrawerOpen(false);
+            setModelPickerOpen(true);
+          }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
           onSessionLog={() => navigation.navigate('SessionLog')}
+        />
+        <ModelPickerModal
+          visible={modelPickerOpen}
+          onClose={() => setModelPickerOpen(false)}
+          onSelected={() => refreshChatMeta().catch(() => undefined)}
         />
       </View>
     );
@@ -419,4 +521,5 @@ const styles = StyleSheet.create({
   sessionRow: {padding: 16, borderBottomWidth: StyleSheet.hairlineWidth},
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  chatPanel: {flex: 1},
 });
