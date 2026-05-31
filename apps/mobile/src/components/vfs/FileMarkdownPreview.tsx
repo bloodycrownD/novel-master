@@ -3,9 +3,9 @@
  */
 import React, {useMemo} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import {splitMarkdownFrontMatter} from '@novel-master/core/front-matter';
 import type {ThemeTokens} from '../../theme/tokens';
+import {RichContentBody} from '../rich-content/RichContentBody';
 import {parseFrontMatterFields} from './front-matter-fields';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
@@ -30,7 +30,6 @@ export function FileMarkdownPreview({
     () => (useMarkdown ? splitMarkdownFrontMatter(content) : null),
     [content, useMarkdown],
   );
-  const markdownStyles = useMemo(() => buildMarkdownStyles(tokens), [tokens]);
 
   const fmLines = split?.frontMatterLines ?? null;
   const showFrontMatter = useMarkdown && fmLines !== null;
@@ -72,7 +71,11 @@ export function FileMarkdownPreview({
         </Text>
       ) : null}
       {body ? (
-        <Markdown style={markdownStyles}>{body}</Markdown>
+        <RichContentBody
+          content={body}
+          tokens={tokens}
+          variant="file-preview"
+        />
       ) : split?.closed && showFrontMatter ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           （正文为空）
@@ -146,66 +149,6 @@ function FrontMatterCard({
         : null}
     </View>
   );
-}
-
-function buildMarkdownStyles(tokens: ThemeTokens) {
-  return {
-    body: {color: tokens.text, fontSize: 16, lineHeight: 24},
-    heading1: {
-      color: tokens.text,
-      fontSize: 26,
-      fontWeight: '700' as const,
-      marginTop: 8,
-      marginBottom: 8,
-    },
-    heading2: {
-      color: tokens.text,
-      fontSize: 22,
-      fontWeight: '600' as const,
-      marginTop: 8,
-      marginBottom: 6,
-    },
-    heading3: {
-      color: tokens.text,
-      fontSize: 18,
-      fontWeight: '600' as const,
-      marginTop: 6,
-      marginBottom: 4,
-    },
-    paragraph: {marginTop: 0, marginBottom: 10},
-    bullet_list: {marginBottom: 8},
-    ordered_list: {marginBottom: 8},
-    list_item: {marginBottom: 4},
-    code_inline: {
-      backgroundColor: tokens.bgSecondary,
-      color: tokens.text,
-      fontFamily: 'monospace',
-      fontSize: 14,
-      paddingHorizontal: 4,
-      borderRadius: 4,
-    },
-    fence: {
-      backgroundColor: tokens.bgSecondary,
-      color: tokens.text,
-      fontFamily: 'monospace',
-      fontSize: 13,
-      padding: 10,
-      borderRadius: 8,
-      marginVertical: 8,
-    },
-    blockquote: {
-      backgroundColor: tokens.bgSecondary,
-      borderLeftColor: tokens.primary,
-      borderLeftWidth: 3,
-      paddingLeft: 12,
-      paddingVertical: 4,
-      marginVertical: 8,
-    },
-    link: {color: tokens.primary},
-    strong: {fontWeight: '700' as const},
-    em: {fontStyle: 'italic' as const},
-    hr: {backgroundColor: tokens.border, height: StyleSheet.hairlineWidth},
-  };
 }
 
 const styles = StyleSheet.create({

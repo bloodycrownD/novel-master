@@ -127,6 +127,13 @@ nm vfs read /dev/note.md
 nm vfs list / -r
 ```
 
+## Rich text (chat + `.md` preview)
+
+- **我的 → 工作区 → 富文本消息** (`chatRichText` KKV, default **off**): when on, **assistant** chat bubbles render Markdown/HTML via `RichContentBody`; user messages and the **streaming tail** stay plain `Text`.
+- **工作区 `.md` / `.markdown` 预览** (`FileMarkdownPreview`): always uses `RichContentBody` (not controlled by the chat switch).
+- Acceptance fixtures: `apps/mobile/__fixtures__/rich-content/` (`sample-assistant.md`, `sample-assistant.html-snippet.md`).
+- Manual check (Android/iOS): toggle off → assistant HTML shows raw characters; toggle on → re-enter chat → styled; open `.md` preview in editor with switch off → still formatted.
+
 ## Tests
 
 ```bash
