@@ -32,10 +32,19 @@ function RichContentBodyInner({
   const {width: windowWidth} = useWindowDimensions();
   const overLimit = isRichContentOverLimit(content);
 
-  const prepared = useMemo(
-    () => (overLimit ? null : prepareRichHtml(content)),
-    [content, overLimit],
-  );
+  const prepared = useMemo(() => {
+    if (overLimit) {
+      return null;
+    }
+    try {
+      return prepareRichHtml(content);
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[RichContentBody] prepare failed, showing plain text', error);
+      }
+      return null;
+    }
+  }, [content, overLimit]);
 
   const {baseStyle, tagsStyles} = useMemo(
     () => buildRichContentStyles(tokens, variant),
@@ -58,29 +67,33 @@ function RichContentBodyInner({
     return Math.max(200, Math.floor(bubbleOuter));
   }, [windowWidth, variant]);
 
-  // Length guard: skip RenderHTML to avoid FlatList jank on huge bodies.
-  if (overLimit) {
+  // Length guard or pipeline failure → plain text (never blank bubble).
+  if (overLimit || prepared == null) {
     return (
       <View>
         <Text style={[styles.fallbackText, {color: tokens.text}]}>
           {content}
         </Text>
-        <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-          内容过长，已显示原文
-        </Text>
+        {overLimit ? (
+          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+            内容过长，已显示原文
+          </Text>
+        ) : null}
       </View>
     );
   }
 
   return (
-    <RenderHTML
-      contentWidth={contentWidth}
-      source={{html: prepared?.html ?? ''}}
-      baseStyle={baseStyle}
-      tagsStyles={tagsStyles}
-      classesStyles={classesStyles ?? undefined}
-      defaultTextProps={{selectable: true}}
-    />
+    <View style={{width: contentWidth, maxWidth: '100%'}}>
+      <RenderHTML
+        contentWidth={contentWidth}
+        source={{html: prepared.html}}
+        baseStyle={baseStyle}
+        tagsStyles={tagsStyles}
+        classesStyles={classesStyles ?? undefined}
+        defaultTextProps={{selectable: true}}
+      />
+    </View>
   );
 }
 

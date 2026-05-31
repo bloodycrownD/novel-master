@@ -10,6 +10,14 @@ const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
 const zodCjs = path.resolve(zodRoot, 'index.cjs');
 /** markdown-it@10 pins entities@2; hoisted entities@4 lacks lib/maps/entities.json */
+const entitiesDecode = path.resolve(
+  monorepoRoot,
+  'node_modules/entities/lib/decode.js',
+);
+const entitiesDecodeCodepoint = path.resolve(
+  monorepoRoot,
+  'node_modules/entities/lib/decode_codepoint.js',
+);
 const markdownEntitiesJson = path.resolve(
   monorepoRoot,
   'node_modules/markdown-it/node_modules/entities/lib/maps/entities.json',
@@ -73,6 +81,16 @@ const config = {
         fs.existsSync(markdownEntitiesJson)
       ) {
         return {type: 'sourceFile', filePath: markdownEntitiesJson};
+      }
+
+      if (moduleName === 'entities/lib/decode' && fs.existsSync(entitiesDecode)) {
+        return {type: 'sourceFile', filePath: entitiesDecode};
+      }
+      if (
+        moduleName === 'entities/lib/decode_codepoint' &&
+        fs.existsSync(entitiesDecodeCodepoint)
+      ) {
+        return {type: 'sourceFile', filePath: entitiesDecodeCodepoint};
       }
 
       if (defaultResolveRequest != null) {

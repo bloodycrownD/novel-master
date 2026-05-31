@@ -18,7 +18,8 @@ const DISALLOWED_TAGS = [
 export function sanitizeRichHtml(html: string): string {
   return sanitizeHtml(html, {
     disallowedTagsMode: 'discard',
-    // style tags stripped upstream in extractStyleBlocksFromHtml; keep script out of text flow
+    // PostCSS needs Node; Hermes cannot parse inline style — keep style attrs as-is.
+    parseStyleAttributes: false,
     nonTextTags: ['script', 'textarea', 'option'],
     allowedTags: sanitizeHtml.defaults.allowedTags
       .concat(['img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'])

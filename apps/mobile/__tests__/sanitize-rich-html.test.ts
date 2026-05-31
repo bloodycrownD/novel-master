@@ -35,6 +35,11 @@ describe('sanitizeRichHtml', () => {
     expect(out).toContain('z');
   });
 
+  it('preserves inline style when parseStyleAttributes is off', () => {
+    const out = sanitizeRichHtml('<p style="color:red">x</p>');
+    expect(out).toMatch(/color:\s*red/i);
+  });
+
   it('strips javascript: href', () => {
     const out = sanitizeRichHtml('<a href="javascript:alert(1)">link</a>');
     expect(out).not.toMatch(/javascript:/i);
