@@ -14,6 +14,7 @@ import type {
   LlmProtocolAdapter,
 } from "../ports/adapter.port.js";
 import { blocksToTextOnly, chatMessagesToTextOnly } from "../logic/text-only-content.js";
+import { parseGeminiUsage } from "../logic/usage-parser.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
@@ -90,6 +91,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     };
     const text = record.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
     const blocks = [{ type: "text" as const, text }];
-    return { assistantText: text, blocks, raw };
+    const usage = parseGeminiUsage(raw);
+    return { assistantText: text, blocks, raw, usage };
   }
 }

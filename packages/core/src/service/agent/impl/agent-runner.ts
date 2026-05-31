@@ -123,11 +123,21 @@ export class DefaultAgentRunner implements AgentRunner {
       if (toolUses.length === 0) {
         finished = true;
         stopReason = "completed";
-        rounds.push({ step, hadToolUse: false, finished: true });
+        rounds.push({
+          step,
+          hadToolUse: false,
+          finished: true,
+          usage: result.usage,
+        });
         break;
       }
 
-      rounds.push({ step, hadToolUse: true, finished: false });
+      rounds.push({
+        step,
+        hadToolUse: true,
+        finished: false,
+        usage: result.usage,
+      });
 
       assertNoDoomLoopInBlocks(result.blocks);
 

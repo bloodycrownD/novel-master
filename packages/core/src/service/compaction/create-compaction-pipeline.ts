@@ -14,18 +14,23 @@ import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { CompactionAgentResolver } from "@/domain/compaction/ports/compaction-agent-resolver.port.js";
 import type { CompactionPolicyStore } from "./compaction-policy-store.port.js";
 import type { CompactionPipeline } from "./compaction-pipeline.port.js";
+import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 
 export interface CreateCompactionPipelineDeps {
   readonly modelRequests: ModelRequestService;
   readonly policyStore: CompactionPolicyStore;
   readonly resolveAgent: CompactionAgentResolver;
+  readonly tokenCounters: TokenCounterRegistry;
 }
 
-function triggersFromPolicy(policy: CompactionPolicy): CompactionTrigger | null {
+function triggersFromPolicy(
+  policy: CompactionPolicy,
+  tokenCounters: TokenCounterRegistry,
+): CompactionTrigger | null {
   const trigger = policy.trigger;
   const parts: CompactionTrigger[] = [];
   if (trigger.tokenThreshold != null) {
-    parts.push(new TokenThresholdTrigger(trigger.tokenThreshold));
+    parts.push(new TokenThresholdTrigger(trigger.tokenThreshold, tokenCounters));
   }
   if (trigger.floorThreshold != null) {
     parts.push(new FloorThresholdTrigger(trigger.floorThreshold));
@@ -51,12 +56,12 @@ export function createCompactionPipeline(
         return undefined;
       }
 
-      const trigger = triggersFromPolicy(policy);
+      const trigger = triggersFromPolicy(policy, deps.tokenCounters);
       if (trigger == null) {
         return undefined;
       }
 
-      const shouldRun = await trigger.shouldCompact(session);
+      const shouldRun = await trigger.shouldCompact(session, modelContext);
       if (!shouldRun) {
         return undefined;
       }

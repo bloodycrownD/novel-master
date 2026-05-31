@@ -6,6 +6,7 @@ import {
   type CompactionPolicy,
   createAgentRunner,
   createCompactionPipeline,
+  createDefaultTokenCounterRegistry,
   createNoOpCompactionPipeline,
   InMemoryAgentSession,
   registerVfsTools,
@@ -278,6 +279,9 @@ describe("AgentRunner", () => {
         modelRequests: model,
         policyStore,
         resolveAgent: noopResolver,
+        tokenCounters: createDefaultTokenCounterRegistry({
+          resolveProviderProtocol: () => undefined,
+        }),
       }),
     });
 

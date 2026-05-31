@@ -23,6 +23,7 @@ import {
   chatMessagesToAnthropic,
 } from "../logic/anthropic-content-mapper.js";
 import { assertOk, fetchJson, joinUrl } from "../logic/http-util.js";
+import { parseAnthropicUsage } from "../logic/usage-parser.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -118,7 +119,8 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? []);
     const assistantText = messageBodyTextFromContent({ blocks });
-    return { assistantText, blocks, raw };
+    const usage = parseAnthropicUsage(raw);
+    return { assistantText, blocks, raw, usage };
   }
 
   private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
@@ -138,9 +140,15 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       throw new ProviderError("HTTP_ERROR", "Empty streaming response body");
     }
 
-    const blocks = await this.parseSseStream(response.body, req.onStream);
+    const { blocks, streamRaw } = await this.parseSseStream(response.body, req.onStream);
     const assistantText = messageBodyTextFromContent({ blocks });
-    const result: LlmChatResult = { assistantText, blocks, raw: { streamed: true } };
+    const usage = parseAnthropicUsage(streamRaw);
+    const result: LlmChatResult = {
+      assistantText,
+      blocks,
+      raw: streamRaw ?? { streamed: true },
+      usage,
+    };
     req.onStream?.({ type: "done", result });
     return result;
   }
@@ -148,7 +156,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   private async parseSseStream(
     body: ReadableStream<Uint8Array>,
     onStream?: (event: LlmStreamEvent) => void,
-  ): Promise<ContentBlock[]> {
+  ): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -161,6 +169,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       inputJson: string;
     }> = [];
     let currentToolIndex = -1;
+    let streamRaw: unknown;
 
     const flushBlock = () => {
       currentToolIndex = -1;
@@ -190,6 +199,9 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
           continue;
         }
         const type = event.type;
+        if (type === "message_start" || type === "message_delta") {
+          streamRaw = event;
+        }
         if (type === "content_block_start") {
           const block = event.content_block;
           if (isRecord(block) && block.type === "tool_use") {
@@ -256,6 +268,6 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
         input,
       });
     }
-    return blocks;
+    return { blocks, streamRaw };
   }
 }

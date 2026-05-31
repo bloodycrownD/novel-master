@@ -1,17 +1,19 @@
 /**
- * Token estimation for compaction triggers.
+ * Token estimation for compaction triggers (deprecated — use TokenCounterRegistry).
  *
  * @module domain/compaction/logic/token-estimate
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
+import { HeuristicTokenCounter } from "@/infra/tokenizer/impl/heuristic-token-counter.js";
 
-/** Rough token estimate: character count / 4 (integer). */
+const _heuristic = new HeuristicTokenCounter();
+
+/**
+ * Rough token estimate: character count / 4 (integer).
+ *
+ * @deprecated Use {@link TokenCounterRegistry} or {@link HeuristicTokenCounter} instead.
+ */
 export function estimateTokens(messages: readonly ChatMessage[]): number {
-  let chars = 0;
-  for (const m of messages) {
-    chars += messageBodyText(m).length;
-  }
-  return Math.floor(chars / 4);
+  return _heuristic.countMessages(messages);
 }

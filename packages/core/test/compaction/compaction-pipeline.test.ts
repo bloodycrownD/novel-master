@@ -4,6 +4,7 @@ import {
   compactionPolicySchema,
   decode,
   createCompactionPipeline,
+  createDefaultTokenCounterRegistry,
   InMemoryAgentSession,
   textBlocks,
   type AgentDefinition,
@@ -60,6 +61,12 @@ function compactionModelContext(
   return { workspaceModelId, cliModelId };
 }
 
+function heuristicTokenCounters() {
+  return createDefaultTokenCounterRegistry({
+    resolveProviderProtocol: () => undefined,
+  });
+}
+
 function createPipeline(
   modelRequests: ModelRequestService,
   options: {
@@ -88,7 +95,12 @@ function createPipeline(
         return summaryAgent;
       },
     };
-  return createCompactionPipeline({ modelRequests, policyStore: store, resolveAgent });
+  return createCompactionPipeline({
+    modelRequests,
+    policyStore: store,
+    resolveAgent,
+    tokenCounters: heuristicTokenCounters(),
+  });
 }
 
 describe("CompactionPipeline", () => {

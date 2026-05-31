@@ -23,6 +23,8 @@ export interface ProviderServiceBundle {
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
   readonly modelSamplingProfiles: ModelSamplingProfileService;
+  readonly providerRepo: SqliteProviderRepository;
+  readonly savedModelRepo: SqliteSavedModelRepository;
 }
 
 /**
@@ -64,5 +66,12 @@ export function createProviderServices(
     samplingProfiles: modelSamplingProfiles,
   });
 
-  return { providers, providerModels, modelRequests, modelSamplingProfiles };
+  return {
+    providers,
+    providerModels,
+    modelRequests,
+    modelSamplingProfiles,
+    providerRepo,
+    savedModelRepo: savedRepo,
+  };
 }

@@ -3,7 +3,7 @@
  *
  * Wire serialization lives in {@link ./openai-content-mapper.js}; this module handles HTTP/SSE only.
  *
- * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` ‚Ä?when tools are sent, set `tool_choice` to `"required"`
+ * Env: `OPENAI_TOOL_CHOICE_REQUIRED=1` ù?when tools are sent, set `tool_choice` to `"required"`
  * instead of `"auto"` (E2E capture / providers that need forced tool calls).
  *
  * @module infra/llm-protocol/impl/openai.adapter
@@ -33,6 +33,7 @@ import {
   chatMessagesToTextOnly,
   isTextOnlyHistory,
 } from "../logic/text-only-content.js";
+import { parseOpenAiUsage } from "../logic/usage-parser.js";
 import { assertOk, fetchJson, joinUrl } from "../logic/http-util.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -149,7 +150,8 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
     const assistantText = messageBodyTextFromContent({ blocks });
-    return { assistantText, blocks, raw };
+    const usage = parseOpenAiUsage(raw);
+    return { assistantText, blocks, raw, usage };
   }
 
   private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
@@ -166,7 +168,8 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
     const assistantText = messageBodyTextFromContent({ blocks });
-    return { assistantText, blocks, raw };
+    const usage = parseOpenAiUsage(raw);
+    return { assistantText, blocks, raw, usage };
   }
 
   private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
@@ -185,9 +188,15 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       throw new ProviderError("HTTP_ERROR", "Empty streaming response body");
     }
 
-    const blocks = await this.parseSseStream(response.body, req.onStream);
+    const { blocks, streamRaw } = await this.parseSseStream(response.body, req.onStream);
     const assistantText = messageBodyTextFromContent({ blocks });
-    const result: LlmChatResult = { assistantText, blocks, raw: { streamed: true } };
+    const usage = parseOpenAiUsage(streamRaw);
+    const result: LlmChatResult = {
+      assistantText,
+      blocks,
+      raw: streamRaw ?? { streamed: true },
+      usage,
+    };
     req.onStream?.({ type: "done", result });
     return result;
   }
@@ -195,7 +204,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
   private async parseSseStream(
     body: ReadableStream<Uint8Array>,
     onStream?: (event: LlmStreamEvent) => void,
-  ): Promise<ContentBlock[]> {
+  ): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -209,6 +218,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       >(),
       emittedToolIndices: new Set<number>(),
     };
+    let lastEvent: Record<string, unknown> | undefined;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -233,6 +243,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         } catch {
           continue;
         }
+        lastEvent = event;
         const choices = event.choices;
         if (!Array.isArray(choices) || choices.length === 0) {
           continue;
@@ -245,6 +256,9 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       }
     }
 
-    return openAiStreamAccumulatorsToBlocks(state, onStream);
+    return {
+      blocks: openAiStreamAccumulatorsToBlocks(state, onStream),
+      streamRaw: lastEvent,
+    };
   }
 }

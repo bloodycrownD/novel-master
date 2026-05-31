@@ -5,13 +5,17 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
+import type { CompactionModelContext } from "../model/compaction-model-context.js";
 import type { CompactionTrigger } from "../ports/compaction-trigger.port.js";
 
 /** Fires when visible message count exceeds floor (hidden messages excluded). */
 export class FloorThresholdTrigger implements CompactionTrigger {
   constructor(private readonly floorThreshold: number) {}
 
-  async shouldCompact(session: AgentSession): Promise<boolean> {
+  async shouldCompact(
+    session: AgentSession,
+    _modelContext: CompactionModelContext,
+  ): Promise<boolean> {
     const visible = await session.list();
     return visible.length > this.floorThreshold;
   }
