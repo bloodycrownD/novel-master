@@ -1,7 +1,7 @@
 /**
- * Minimal Zod â†?JSON Schema conversion for tool definitions.
+ * Minimal Zod ? JSON Schema conversion (tool parameters, wire schemas).
  *
- * @module infra/llm-protocol/logic/zod-to-json-schema
+ * @module infra/serialization/zod-to-json-schema
  */
 
 import { z } from "zod";

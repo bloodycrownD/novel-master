@@ -107,7 +107,7 @@ infra/<capability>/
 Keep flat or use `logic/` / `tags/` only when it helps navigation:
 
 ```text
-infra/serialization/       # decode, encode, parse-text, stringify-text
+infra/serialization/       # decode, encode, parse-text, stringify-text, zod-to-json-schema
 infra/prompt-template/     # macro-render, macro-scan, week-cn
 infra/sql-template/        # parser, evaluator, tags/
 infra/date-format.ts

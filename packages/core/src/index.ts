@@ -284,7 +284,7 @@ export type {
   LlmStreamEvent,
 } from "./infra/llm-protocol/ports/adapter.port.js";
 export { toolsFromRegistry } from "./infra/llm-protocol/logic/tool-definitions.js";
-export { zodToJsonSchema } from "./infra/llm-protocol/logic/zod-to-json-schema.js";
+export { zodToJsonSchema } from "./infra/serialization/zod-to-json-schema.js";
 /** @internal CLI e2e fetch capture */
 export {
   clearProtocolAdapters,

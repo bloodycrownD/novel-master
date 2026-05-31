@@ -6,7 +6,7 @@
 
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { LlmToolDefinition } from "../ports/adapter.port.js";
-import { zodToJsonSchema } from "./zod-to-json-schema.js";
+import { zodToJsonSchema } from "@/infra/serialization/zod-to-json-schema.js";
 
 /** Maps all tools in a registry to LLM-facing definitions. */
 export function toolsFromRegistry<Ctx>(
