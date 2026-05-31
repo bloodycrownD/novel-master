@@ -10,7 +10,7 @@ import {
   bootstrapNovelMaster,
   createAgentRegistryService,
   createCompactionPolicyStore,
-  createDbCompactionAgentResolver,
+  createSqliteCompactionAgentResolver,
   createMessageService,
   createPersistentPreferences,
   createPersistentState,
@@ -133,7 +133,7 @@ export async function createNovelMasterRuntime(
 
   const compactionPolicy = createCompactionPolicyStore(conn);
   const agentRegistry = createAgentRegistryService(conn, { compactionPolicy });
-  const resolveCompactionAgent = createDbCompactionAgentResolver(agentRegistry);
+  const resolveCompactionAgent = createSqliteCompactionAgentResolver(agentRegistry);
 
   return {
     conn,

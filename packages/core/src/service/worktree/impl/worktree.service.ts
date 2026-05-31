@@ -8,7 +8,7 @@ import {
   assertLogicalPathAllowed,
   scopePhysicalPrefix,
   toLogicalPath,
-} from "@/domain/vfs/vfs-path-mapper.js";
+} from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorktreeRepository } from "@/domain/worktree/repositories/worktree.port.js";
@@ -16,24 +16,24 @@ import {
   displayStateLabel,
   inclusionModeLabel,
   ruleStateLabel,
-} from "@/domain/worktree/worktree-labels.js";
+} from "@/domain/worktree/logic/worktree-labels.js";
 import {
   buildWorktreeDirSet,
   directChildDirs,
   directChildFiles,
-} from "@/domain/worktree/worktree-tree.js";
+} from "@/domain/worktree/logic/worktree-tree.js";
 import {
   evaluateFileDisplay,
   sortDirPaths,
   sortFilesForDir,
   type WorktreeFileSortMeta,
-} from "@/domain/worktree/worktree-eval.js";
-import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/worktree-display.js";
+} from "@/domain/worktree/logic/worktree-eval.js";
+import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
 import {
   isWorktreeRootPath,
   worktreeRootLogicalPath,
   worktreeScopeKey,
-} from "@/domain/worktree/worktree-scope.js";
+} from "@/domain/worktree/logic/worktree-scope.js";
 import type {
   DisplayState,
   InclusionMode,

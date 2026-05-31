@@ -11,7 +11,7 @@ import type {
   SortField,
   SortOrder,
   WorktreeDirRule,
-} from "./model/worktree-types.js";
+} from "../model/worktree-types.js";
 
 /** File metadata used for sorting within a directory. */
 export interface WorktreeFileSortMeta {

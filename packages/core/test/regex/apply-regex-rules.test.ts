@@ -5,7 +5,7 @@ import {
   applyRegexToMessageContent,
   textBlocks,
 } from "@novel-master/core";
-import type { CompiledRegexRule } from "../../src/domain/regex/compile-regex-rule.js";
+import type { CompiledRegexRule } from "../../src/domain/regex/logic/compile-regex-rule.js";
 
 function rule(
   partial: Partial<CompiledRegexRule> & Pick<CompiledRegexRule, "pattern">,

@@ -5,7 +5,7 @@
  */
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import type { ValidateAgentDefinitionOptions } from "@/domain/agent/validate-agent-definition.js";
+import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 
 /** Workspace agent registry (SQL-backed). */
 export interface AgentRegistryService {

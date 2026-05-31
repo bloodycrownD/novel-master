@@ -5,7 +5,7 @@
  */
 
 import { vfsInvalidPath } from "@/errors/vfs-errors.js";
-import { normalizePath } from "./repositories/impl/normalize-path.js";
+import { normalizePath } from "../repositories/impl/normalize-path.js";
 
 /** VFS visibility scope (global, project, or session). */
 export type VfsScope =

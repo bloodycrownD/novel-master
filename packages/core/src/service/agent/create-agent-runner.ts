@@ -5,7 +5,7 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { ToolRegistry } from "@/domain/tool/tool-registry.js";
+import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";

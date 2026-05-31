@@ -4,14 +4,14 @@
  * @module service/compaction/create-compaction-pipeline
  */
 
-import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
+import type { CompactionPolicy } from "@/domain/compaction/model/compaction-policy.js";
 import { DefaultCompactionAction } from "@/domain/compaction/action/default-compaction-action.js";
 import { CompositeTrigger } from "@/domain/compaction/triggers/composite-trigger.js";
 import { FloorThresholdTrigger } from "@/domain/compaction/triggers/floor-threshold.trigger.js";
 import { TokenThresholdTrigger } from "@/domain/compaction/triggers/token-threshold.trigger.js";
-import type { CompactionTrigger } from "@/domain/compaction/compaction-trigger.port.js";
+import type { CompactionTrigger } from "@/domain/compaction/ports/compaction-trigger.port.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
-import type { CompactionAgentResolver } from "./compaction-agent-resolver.port.js";
+import type { CompactionAgentResolver } from "@/domain/compaction/ports/compaction-agent-resolver.port.js";
 import type { CompactionPolicyStore } from "./compaction-policy-store.port.js";
 import type { CompactionPipeline } from "./compaction-pipeline.port.js";
 

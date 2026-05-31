@@ -4,7 +4,7 @@
  * @module domain/vfs/vfs-tree-copy
  */
 
-import type { VfsEntryRepository } from "./repositories/vfs-entry.port.js";
+import type { VfsEntryRepository } from "../repositories/vfs-entry.port.js";
 
 function normalizePrefix(prefix: string): string {
   if (prefix === "/") {

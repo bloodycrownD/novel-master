@@ -4,7 +4,7 @@
  * @module service/compaction/compaction-policy-store.port
  */
 
-import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
+import type { CompactionPolicy } from "@/domain/compaction/model/compaction-policy.js";
 
 /** Reads and writes the single global compaction policy document. */
 export interface CompactionPolicyStore {

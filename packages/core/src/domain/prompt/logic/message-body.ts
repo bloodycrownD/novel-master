@@ -7,4 +7,4 @@
 export {
   messageBodyText,
   messageBodyTextFromContent,
-} from "../chat/content/message-body-text.js";
+} from "@/domain/chat/content/message-body-text.js";

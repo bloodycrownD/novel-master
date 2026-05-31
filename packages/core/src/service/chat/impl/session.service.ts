@@ -11,10 +11,10 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/vfs-tree-copy.js";
+import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
-import { mapProjectWorktreePathToSession } from "@/domain/worktree/worktree-path-map.js";
-import { worktreeScopeKey } from "@/domain/worktree/worktree-scope.js";
+import { mapProjectWorktreePathToSession } from "@/domain/worktree/logic/worktree-path-map.js";
+import { worktreeScopeKey } from "@/domain/worktree/logic/worktree-scope.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";

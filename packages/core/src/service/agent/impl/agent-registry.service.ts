@@ -10,7 +10,7 @@ import type { AgentDefinitionRepository } from "@/domain/agent/repositories/agen
 import {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
-} from "@/domain/agent/validate-agent-definition.js";
+} from "@/domain/agent/logic/validate-agent-definition.js";
 import type { CompactionPolicyStore } from "@/service/compaction/compaction-policy-store.port.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
 

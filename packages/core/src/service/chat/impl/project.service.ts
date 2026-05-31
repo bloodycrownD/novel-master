@@ -11,8 +11,8 @@ import type { ProjectRepository } from "@/domain/chat/repositories/project.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { projectVfsPrefix } from "@/domain/vfs/vfs-path-mapper.js";
-import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/vfs-tree-copy.js";
+import { projectVfsPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
+import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";

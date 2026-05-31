@@ -4,7 +4,7 @@
  * @module domain/agent/doom-loop
  */
 
-import type { ContentBlock, ToolUseBlock } from "../chat/model/content-block.js";
+import type { ContentBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import { agentDoomLoop, AgentError } from "@/errors/agent-runtime-errors.js";
 
 /** Consecutive identical tool_use invocations before abort. */

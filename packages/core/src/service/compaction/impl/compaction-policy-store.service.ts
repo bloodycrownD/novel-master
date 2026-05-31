@@ -6,8 +6,8 @@
 
 import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";
-import { compactionPolicySchema } from "@/domain/compaction/compaction-policy.schema.js";
-import type { CompactionPolicy } from "@/domain/compaction/compaction-policy.js";
+import { compactionPolicySchema } from "@/domain/compaction/model/compaction-policy.schema.js";
+import type { CompactionPolicy } from "@/domain/compaction/model/compaction-policy.js";
 import { KkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { CompactionPolicyStore } from "../compaction-policy-store.port.js";
@@ -34,7 +34,7 @@ export class DefaultCompactionPolicyStore implements CompactionPolicyStore {
     try {
       return decode(JSON.parse(raw) as unknown, compactionPolicySchema);
     } catch {
-      // nm-compaction/policy: invalid wire â†’ unset, not INVALID_SCHEMA on read.
+      // nm-compaction/policy: invalid wire â†?unset, not INVALID_SCHEMA on read.
       return null;
     }
   }

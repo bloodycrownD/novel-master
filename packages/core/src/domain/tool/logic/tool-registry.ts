@@ -4,7 +4,7 @@
  * @module domain/tool/tool-registry
  */
 
-import type { Tool } from "./model/tool.js";
+import type { Tool } from "../model/tool.js";
 import { toolConflict } from "@/errors/tool-errors.js";
 
 /**

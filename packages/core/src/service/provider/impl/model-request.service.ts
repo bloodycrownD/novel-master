@@ -5,7 +5,7 @@
  */
 
 import { ProviderError } from "@/errors/provider-errors.js";
-import { parseApplicationModelId } from "@/domain/provider/application-model-id.js";
+import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";

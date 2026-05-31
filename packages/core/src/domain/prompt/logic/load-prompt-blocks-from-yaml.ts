@@ -5,8 +5,8 @@
  */
 
 import { parseText } from "@/infra/serialization/parse-text.js";
-import { validatePromptBlocksFromMap } from "./prompt-blocks-validate.js";
-import type { PromptBlock } from "./model/prompt-block.js";
+import { validatePromptBlocksFromMap } from "./validate-prompt-blocks.js";
+import type { PromptBlock } from "../model/prompt-block.js";
 import { PromptError } from "@/errors/prompt-errors.js";
 
 /**

@@ -1,11 +1,11 @@
 /**
- * Prompt â†’ LLM input and CLI formatting.
+ * Prompt â†?LLM input and CLI formatting.
  *
  * @module service/prompt/render-prompt
  */
 
 import type { ChatMessage } from "../../domain/chat/model/message.js";
-import { messageBodyText } from "../../domain/prompt/message-body.js";
+import { messageBodyText } from "../../domain/prompt/logic/message-body.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
 import { renderMacro } from "../../infra/prompt-template/macro-render.js";
@@ -69,7 +69,7 @@ function renderSystemMacroContent(
 }
 
 /**
- * Builds LLM input: merge system text + abstract blocks â†’ render macros.
+ * Builds LLM input: merge system text + abstract blocks â†?render macros.
  */
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],

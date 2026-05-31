@@ -4,7 +4,7 @@
  * @module service/regex/regex-config.port
  */
 
-import type { CompiledRegexRule } from "@/domain/regex/compile-regex-rule.js";
+import type { CompiledRegexRule } from "@/domain/regex/logic/compile-regex-rule.js";
 import type { RegexGroup } from "@/domain/regex/model/regex-group.js";
 import type { RegexRule } from "@/domain/regex/model/regex-rule.js";
 import type {
@@ -12,7 +12,7 @@ import type {
   CreateRegexRuleInput,
   UpdateRegexGroupInput,
   UpdateRegexRuleInput,
-} from "@/domain/regex/regex-rule.schema.js";
+} from "@/domain/regex/model/regex-rule.schema.js";
 
 /** Application service for regex groups and rules. */
 export interface RegexConfigService {

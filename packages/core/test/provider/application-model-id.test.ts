@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   formatApplicationModelId,
   parseApplicationModelId,
-} from "../../src/domain/provider/application-model-id.js";
+} from "../../src/domain/provider/logic/application-model-id.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
 
 describe("application model id", () => {

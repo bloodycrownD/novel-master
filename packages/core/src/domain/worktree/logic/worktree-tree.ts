@@ -5,7 +5,7 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import type { WorktreeScope } from "./model/worktree-types.js";
+import type { WorktreeScope } from "../model/worktree-types.js";
 import { worktreeRootLogicalPath } from "./worktree-scope.js";
 
 function parentDir(logicalPath: string): string | null {

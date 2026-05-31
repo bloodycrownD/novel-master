@@ -6,10 +6,10 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/connection.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import { replaceVfsSubtree } from "@/domain/vfs/vfs-tree-copy.js";
+import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
-import { mapProjectWorktreePathToSession } from "@/domain/worktree/worktree-path-map.js";
-import { worktreeScopeKey } from "@/domain/worktree/worktree-scope.js";
+import { mapProjectWorktreePathToSession } from "@/domain/worktree/logic/worktree-path-map.js";
+import { worktreeScopeKey } from "@/domain/worktree/logic/worktree-scope.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";

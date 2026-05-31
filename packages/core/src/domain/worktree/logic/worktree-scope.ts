@@ -4,7 +4,7 @@
  * @module domain/worktree/worktree-scope
  */
 
-import type { WorktreeScope } from "./model/worktree-types.js";
+import type { WorktreeScope } from "../model/worktree-types.js";
 
 /**
  * Stable storage key for a worktree scope.

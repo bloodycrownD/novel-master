@@ -4,7 +4,7 @@
  * @module domain/worktree/model/worktree-types
  */
 
-import type { VfsScope } from "@/domain/vfs/vfs-path-mapper.js";
+import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
 /** Worktree configuration scope (aligned with VFS scope). */
 export type WorktreeScope = VfsScope;

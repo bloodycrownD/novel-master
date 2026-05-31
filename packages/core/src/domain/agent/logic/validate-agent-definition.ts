@@ -4,7 +4,7 @@
  * @module domain/agent/validate-agent-definition
  */
 
-import type { AgentDefinition } from "./model/agent-definition.js";
+import type { AgentDefinition } from "../model/agent-definition.js";
 
 export interface ValidateAgentDefinitionOptions {
   /** Ensures model pin refers to a saved model (CLI injects). */

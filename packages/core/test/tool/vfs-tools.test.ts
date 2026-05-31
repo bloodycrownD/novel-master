@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { openVfsTestConnection } from "../vfs/helpers.js";
-import { ToolRegistry } from "../../src/domain/tool/tool-registry.js";
-import { ToolRunner } from "../../src/domain/tool/tool-runner.js";
+import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
+import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import {
   registerVfsTools,
   type VfsToolContext,

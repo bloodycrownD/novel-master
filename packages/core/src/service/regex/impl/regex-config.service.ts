@@ -5,8 +5,8 @@
  */
 
 import { RegexError } from "@/errors/regex-errors.js";
-import { compileRegexRule } from "@/domain/regex/compile-regex-rule.js";
-import type { CompiledRegexRule } from "@/domain/regex/compile-regex-rule.js";
+import { compileRegexRule } from "@/domain/regex/logic/compile-regex-rule.js";
+import type { CompiledRegexRule } from "@/domain/regex/logic/compile-regex-rule.js";
 import type { RegexGroup } from "@/domain/regex/model/regex-group.js";
 import type { RegexRule } from "@/domain/regex/model/regex-rule.js";
 import type { RegexGroupRepository } from "@/domain/regex/repositories/regex-group.port.js";
@@ -20,8 +20,8 @@ import {
   type CreateRegexRuleInput,
   type UpdateRegexGroupInput,
   type UpdateRegexRuleInput,
-} from "@/domain/regex/regex-rule.schema.js";
-import { validateRegexRule } from "@/domain/regex/validate-regex-rule.js";
+} from "@/domain/regex/model/regex-rule.schema.js";
+import { validateRegexRule } from "@/domain/regex/logic/validate-regex-rule.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import type { RegexConfigService } from "../regex-config.port.js";
 

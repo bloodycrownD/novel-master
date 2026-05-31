@@ -13,7 +13,7 @@ import type { ModelSuggestionRepository } from "@/domain/provider/repositories/m
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/registry.js";
 import type { SecretStore } from "@/infra/sksp/secret-store.port.js";
-import { formatApplicationModelId } from "@/domain/provider/application-model-id.js";
+import { formatApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type { ProviderModelService } from "../provider-model.port.js";
 import type { ProviderService } from "../provider.port.js";

@@ -5,7 +5,7 @@
  */
 
 import { RegexError } from "@/errors/regex-errors.js";
-import type { RegexRule } from "./model/regex-rule.js";
+import type { RegexRule } from "../model/regex-rule.js";
 import { validateRegexRuleEntity } from "./validate-regex-rule.js";
 
 /** Runtime-ready rule (enabled rules only should be passed to apply). */

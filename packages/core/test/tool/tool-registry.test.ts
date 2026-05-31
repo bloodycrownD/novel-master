@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ToolRegistry } from "../../src/domain/tool/tool-registry.js";
+import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { z } from "zod";
 

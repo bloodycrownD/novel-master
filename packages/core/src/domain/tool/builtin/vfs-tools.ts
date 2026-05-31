@@ -12,7 +12,7 @@ import type {
   VfsService,
   WriteOptions,
 } from "../../../service/vfs/vfs.port.js";
-import type { ToolRegistry } from "../tool-registry.js";
+import type { ToolRegistry } from "../logic/tool-registry.js";
 
 export type VfsToolContext = { readonly vfs: VfsService };
 

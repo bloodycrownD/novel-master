@@ -4,8 +4,8 @@
  * @module domain/worktree/worktree-display
  */
 
-import { formatLocalDateTime } from "../../infra/date-format.js";
-import type { DisplayState } from "./model/worktree-types.js";
+import { formatLocalDateTime } from "@/infra/date-format.js";
+import type { DisplayState } from "../model/worktree-types.js";
 import { parseMarkdownFrontMatter } from "./front-matter.js";
 
 function escapeXmlAttr(value: string): string {

@@ -72,16 +72,16 @@ export type {
   WriteOptions,
   VfsGrepMatch,
 } from "./service/vfs/vfs.port.js";
-export type { VfsScope } from "./domain/vfs/vfs-path-mapper.js";
+export type { VfsScope } from "./domain/vfs/logic/vfs-path-mapper.js";
 
 /**
  * Tool system: schema-validated registry + runner, plus builtin `vfs.*` tools.
  */
 export type { Tool } from "./domain/tool/model/tool.js";
-export { ToolError } from "./domain/tool/tool-errors.js";
-export type { ToolErrorCode } from "./domain/tool/tool-errors.js";
-export { ToolRegistry } from "./domain/tool/tool-registry.js";
-export { ToolRunner } from "./domain/tool/tool-runner.js";
+export { ToolError } from "./errors/tool-errors.js";
+export type { ToolErrorCode } from "./errors/tool-errors.js";
+export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
+export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
 export { createVfsTools, registerVfsTools } from "./domain/tool/builtin/vfs-tools.js";
 export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 
@@ -162,19 +162,19 @@ export type {
 export {
   mapProjectWorktreePathToSession,
   mapSessionWorktreePathToProject,
-} from "./domain/worktree/worktree-path-map.js";
+} from "./domain/worktree/logic/worktree-path-map.js";
 export {
   evaluateFileDisplay,
   computeHeadTailIndices,
   sortFilesForDir,
-} from "./domain/worktree/worktree-eval.js";
+} from "./domain/worktree/logic/worktree-eval.js";
 export {
   renderFileBlock,
   joinFileBlocks,
   formatLocalMtime,
-} from "./domain/worktree/worktree-display.js";
-export { parseMarkdownFrontMatter } from "./domain/worktree/front-matter.js";
-export { replaceVfsSubtree } from "./domain/vfs/vfs-tree-copy.js";
+} from "./domain/worktree/logic/worktree-display.js";
+export { parseMarkdownFrontMatter } from "./domain/worktree/logic/front-matter.js";
+export { replaceVfsSubtree } from "./domain/vfs/logic/vfs-tree-copy.js";
 export { createWorktreeService } from "./service/worktree/create-worktree-service.js";
 export type { WorktreeService } from "./service/worktree/worktree.port.js";
 export { createTemplatePullService } from "./service/template/create-template-pull-service.js";
@@ -189,11 +189,11 @@ export type {
   PromptBlock,
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
-export { messageBodyText } from "./domain/prompt/message-body.js";
+export { messageBodyText } from "./domain/prompt/logic/message-body.js";
 export {
   validatePromptBlocks,
   validatePromptBlocksFromMap,
-} from "./domain/prompt/prompt-blocks-validate.js";
+} from "./domain/prompt/logic/validate-prompt-blocks.js";
 export {
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
@@ -209,43 +209,43 @@ export { decode } from "./infra/serialization/decode.js";
 export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
 export { ConfigDecodeError } from "./errors/config-decode-errors.js";
 export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";
-export { loadPromptBlocksFromYaml } from "./domain/prompt/load-prompt-blocks-from-yaml.js";
+export { loadPromptBlocksFromYaml } from "./domain/prompt/logic/load-prompt-blocks-from-yaml.js";
 export type { AgentDefinition } from "./domain/agent/model/agent-definition.js";
 export {
   agentDefinitionSchema,
   agentDefinitionDocumentSchema,
   promptsDocumentSchema,
-} from "./domain/agent/agent-definition.schema.js";
+} from "./domain/agent/model/agent-definition.schema.js";
 export {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
-} from "./domain/agent/validate-agent-definition.js";
+} from "./domain/agent/logic/validate-agent-definition.js";
 export {
   resolveApplicationModelId,
   resolveSummaryApplicationModelId,
   type ResolveApplicationModelIdInput,
   type ResolveSummaryApplicationModelIdInput,
-} from "./domain/agent/resolve-application-model-id.js";
-export type { CompactionModelContext } from "./domain/compaction/compaction-model-context.js";
+} from "./domain/agent/logic/resolve-application-model-id.js";
+export type { CompactionModelContext } from "./domain/compaction/model/compaction-model-context.js";
 export type {
   CompactionPolicy,
   CompactionPolicyTemplate,
   CompactionTriggerConfig,
   CompactionActionConfig,
   CompactionAbstractConfig,
-} from "./domain/compaction/compaction-policy.js";
+} from "./domain/compaction/model/compaction-policy.js";
 export {
   compactionPolicySchema,
   compactionPolicyDocumentSchema,
   compactionPolicyTemplateSchema,
   compactionPolicyTemplateDocumentSchema,
-} from "./domain/compaction/compaction-policy.schema.js";
+} from "./domain/compaction/model/compaction-policy.schema.js";
 export { CompactionPolicyError } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyErrorCode } from "./errors/compaction-policy-errors.js";
 export type { CompactionPolicyStore } from "./service/compaction/compaction-policy-store.port.js";
 export { createCompactionPolicyStore } from "./service/compaction/create-compaction-policy-store.js";
-export type { CompactionAgentResolver } from "./service/compaction/compaction-agent-resolver.port.js";
-export { createDbCompactionAgentResolver } from "./service/compaction/impl/db-compaction-agent-resolver.js";
+export type { CompactionAgentResolver } from "./domain/compaction/ports/compaction-agent-resolver.port.js";
+export { createSqliteCompactionAgentResolver } from "./service/compaction/impl/sqlite-compaction-agent-resolver.js";
 export type { AgentRegistryService } from "./service/agent/agent-registry.port.js";
 export { createAgentRegistryService } from "./service/agent/create-agent-registry-service.js";
 export { AgentConfigError } from "./errors/agent-config-errors.js";
@@ -275,7 +275,7 @@ export type { SecretStore } from "./infra/sksp/index.js";
 export {
   parseApplicationModelId,
   formatApplicationModelId,
-} from "./domain/provider/application-model-id.js";
+} from "./domain/provider/logic/application-model-id.js";
 export type { LlmProvider } from "./domain/provider/model/provider.js";
 export { providerApiKeyRef } from "./domain/provider/model/provider.js";
 export type {
@@ -291,15 +291,15 @@ export {
   getProtocolAdapter,
 } from "./infra/llm-protocol/registry.js";
 export type { AgentSession } from "./domain/agent/session/agent-session.port.js";
-export { AgentError } from "./domain/agent/agent-errors.js";
-export type { AgentErrorCode } from "./domain/agent/agent-errors.js";
+export { AgentError } from "./errors/agent-runtime-errors.js";
+export type { AgentErrorCode } from "./errors/agent-runtime-errors.js";
 export type {
   AgentRunResult,
   ModelRoundSummary,
 } from "./domain/agent/model/agent-run-result.js";
-export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/doom-loop.js";
+export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/logic/doom-loop.js";
 export { InMemoryAgentSession } from "./domain/agent/session/impl/in-memory-agent-session.js";
-export { ChatAgentSession } from "./domain/agent/session/impl/chat-agent-session.js";
+export { ChatAgentSession } from "./service/agent/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
 export {
   createAgentRunner,
@@ -311,7 +311,7 @@ export {
   createCompactionPipeline,
   type CreateCompactionPipelineDeps,
 } from "./service/compaction/create-compaction-pipeline.js";
-export { estimateTokens } from "./service/compaction/token-estimate.js";
+export { estimateTokens } from "./domain/compaction/logic/token-estimate.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";
 export type {
@@ -330,31 +330,31 @@ export { RegexError } from "./errors/regex-errors.js";
 export type { RegexErrorCode } from "./errors/regex-errors.js";
 export type { RegexGroup } from "./domain/regex/model/regex-group.js";
 export type { RegexRule } from "./domain/regex/model/regex-rule.js";
-export type { CompiledRegexRule } from "./domain/regex/compile-regex-rule.js";
-export { compileRegexRule } from "./domain/regex/compile-regex-rule.js";
+export type { CompiledRegexRule } from "./domain/regex/logic/compile-regex-rule.js";
+export { compileRegexRule } from "./domain/regex/logic/compile-regex-rule.js";
 export {
   applyRegexRules,
   applyRegexToMessageContent,
   applyRegexChannelToMessages,
-} from "./domain/regex/apply-regex-rules.js";
-export type { RegexChannel } from "./domain/regex/apply-regex-rules.js";
+} from "./domain/regex/logic/apply-regex-rules.js";
+export type { RegexChannel } from "./domain/regex/logic/apply-regex-rules.js";
 export {
   listVisibleSorted,
   visibleFloorByMessageId,
-} from "./domain/chat/message-visible-floor.js";
-export { validateRegexRule, validateRegexRuleEntity } from "./domain/regex/validate-regex-rule.js";
+} from "./domain/chat/logic/message-visible-floor.js";
+export { validateRegexRule, validateRegexRuleEntity } from "./domain/regex/logic/validate-regex-rule.js";
 export {
   createRegexRuleSchema,
   updateRegexRuleSchema,
   createRegexGroupSchema,
   updateRegexGroupSchema,
-} from "./domain/regex/regex-rule.schema.js";
+} from "./domain/regex/model/regex-rule.schema.js";
 export type {
   CreateRegexRuleInput,
   UpdateRegexRuleInput,
   CreateRegexGroupInput,
   UpdateRegexGroupInput,
-} from "./domain/regex/regex-rule.schema.js";
-export { resolveActiveCompiledRules } from "./domain/regex/resolve-active-regex-rules.js";
+} from "./domain/regex/model/regex-rule.schema.js";
+export { resolveActiveCompiledRules } from "./domain/regex/logic/resolve-active-regex-rules.js";
 export { createRegexConfigService } from "./service/regex/create-regex-config-service.js";
 export type { RegexConfigService } from "./service/regex/regex-config.port.js";

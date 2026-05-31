@@ -7,13 +7,13 @@
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import { visibleFloorByMessageId } from "@/domain/chat/message-visible-floor.js";
-import { applyRegexChannelToMessages } from "@/domain/regex/apply-regex-rules.js";
-import { resolveActiveCompiledRules } from "@/domain/regex/resolve-active-regex-rules.js";
-import { assertNoDoomLoopInBlocks } from "@/domain/agent/doom-loop.js";
+import { visibleFloorByMessageId } from "@/domain/chat/logic/message-visible-floor.js";
+import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
+import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
+import { assertNoDoomLoopInBlocks } from "@/domain/agent/logic/doom-loop.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
-import type { ToolRegistry } from "@/domain/tool/tool-registry.js";
-import { ToolRunner } from "@/domain/tool/tool-runner.js";
+import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
+import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
@@ -37,7 +37,7 @@ export interface DefaultAgentRunnerDeps {
 const DEFAULT_MAX_STEPS = 20;
 
 /**
- * Executes agent loops: compaction â†’ LLM â†’ tools â†’ repeat up to maxSteps.
+ * Executes agent loops: compaction â†?LLM â†?tools â†?repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<VfsToolContext>;

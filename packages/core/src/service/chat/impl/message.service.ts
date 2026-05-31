@@ -13,7 +13,7 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { copyVfsTree } from "@/domain/vfs/vfs-tree-copy.js";
+import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";

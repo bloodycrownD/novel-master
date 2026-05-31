@@ -5,7 +5,7 @@
  */
 
 import { RegexError } from "@/errors/regex-errors.js";
-import type { RegexRule } from "./model/regex-rule.js";
+import type { RegexRule } from "../model/regex-rule.js";
 
 export interface RegexRuleValidationFields {
   readonly pattern: string;

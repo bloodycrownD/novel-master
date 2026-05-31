@@ -5,7 +5,7 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import {
   listVisibleSorted,
   visibleFloorByMessageId,
-} from "../../src/domain/chat/message-visible-floor.js";
+} from "../../src/domain/chat/logic/message-visible-floor.js";
 
 function msg(
   id: string,

@@ -11,7 +11,7 @@ import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 import {
   formatApplicationModelId,
   parseApplicationModelId,
-} from "@/domain/provider/application-model-id.js";
+} from "@/domain/provider/logic/application-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";

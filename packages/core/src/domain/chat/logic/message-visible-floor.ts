@@ -4,7 +4,7 @@
  * @module domain/chat/message-visible-floor
  */
 
-import type { ChatMessage } from "./model/message.js";
+import type { ChatMessage } from "../model/message.js";
 
 /**
  * Session messages visible to LLM/prompt, sorted by `seq` ascending.
