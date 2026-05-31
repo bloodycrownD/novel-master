@@ -12,4 +12,6 @@
 
 export { VfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
 export { TdbcError } from "../../../packages/core/dist/infra/tdbc/errors.js";
+export { KkvError } from "../../../packages/core/dist/errors/kkv-errors.js";
+export type { KkvService } from "../../../packages/core/dist/service/kkv/kkv.port.js";
 
