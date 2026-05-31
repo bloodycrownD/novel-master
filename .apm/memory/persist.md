@@ -15,22 +15,15 @@ Novel Master（novel-master）小说大师，npm workspaces Monorepo。
 
 ## 现状
 
-### main（截至 b809bf2）
-
-- TDBC、VFS、chat-project-vfs、virtual-worktree、prompt-engine
-- sksp-provider-model、agent-system（`AgentRunner`、tools/stream、`nm agent`）
-- agent-config-and-compaction、agent-prompt-abstract-block（`PromptBlock` 含 `type: abstract`；**已移除** `PromptBlock.when`）
-- global-compaction-policy（**CompactionPolicy** KKV `nm-compaction/policy`；**AgentDefinition 无 compact**；`abstract.type: agent` 用 **agentId**；CLI **`nm compaction`**；agents registry）
-- examples/mobile：会话操作抽屉、会话日志、「我的 → 压缩策略」mock
-- CLI `nm`；默认库 `.novel-master/novel.db`；**PersistentState** / **PersistentPreferences**（`nm preferences`）
-
-### 进行中：feature/core-package-structure（未 merge）
+### 已合并：core-package-structure（main @ bf3fba1）
 
 - domain 模块模板：`model/`、`logic/`、`ports/`、`repositories/`；errors 统一到 `errors/`
-- infra adapter 型：`llm-protocol` / `sksp` / `tdbc` 使用 `ports/` + `impl/` + `logic/`
+- infra adapter 型：`llm-protocol` / `sksp` / `tdbc` → `ports/` + `impl/` + `logic/`
 - `VfsService` 契约在 `domain/vfs/ports/`；`zodToJsonSchema` 在 `infra/serialization/`
 - Breaking API：`createSqliteCompactionAgentResolver`（原 `createDbCompactionAgentResolver`）
-- 文档：`.apm/kb/docs/Iterations/core-package-structure/{prd,spec}.md`
+- 文档：`packages/core/ARCHITECTURE.md`；`.apm/kb/docs/Iterations/core-package-structure/{prd,spec}.md`
+
+### main 其他能力（截至 b809bf2 基线之上）
 
 ### 参考
 
