@@ -1,0 +1,306 @@
+/* 主题增强样式 - 额外的优化和过渡效果 */
+
+/* VFS 文件管理器增强 */
+.vfs-fm-header {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.vfs-fm-icon-btn:hover:not(:disabled),
+.vfs-fm-tool-btn:hover {
+    background: var(--bg-secondary);
+    border-color: var(--primary-color);
+    transform: translateY(-1px);
+}
+
+.vfs-fm-row:hover {
+    background: var(--bg-secondary);
+}
+
+/* Agent 列表和服务商列表增强 */
+.agent-item:hover,
+.provider-item:hover,
+.provider-model-item:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+/* 时间线项目增强 */
+.timeline-item {
+    transition: all var(--transition-speed) ease;
+}
+
+.timeline-item:hover {
+    box-shadow: var(--shadow);
+    transform: translateX(2px);
+}
+
+/* 代码编辑器增强 */
+.code-editor,
+.real-prompt-content,
+.worktree-content {
+    background: var(--code-bg);
+    color: var(--code-text);
+    transition: all var(--transition-speed) ease;
+}
+
+/* 信息横幅增强 */
+.info-banner {
+    transition: all var(--transition-speed) ease;
+}
+
+.info-banner.warning {
+    background: rgba(255, 149, 0, 0.1);
+    color: var(--warning-color);
+    border: 1px solid rgba(255, 149, 0, 0.2);
+}
+
+[data-theme="dark"] .info-banner.warning {
+    background: rgba(255, 159, 10, 0.15);
+    border-color: rgba(255, 159, 10, 0.3);
+}
+
+/* 徽章增强 */
+.current-badge,
+.default-badge {
+    transition: all var(--transition-speed) ease;
+    box-shadow: var(--shadow-sm);
+}
+
+/* 工具调用卡片增强 */
+.tool-call {
+    transition: all var(--transition-speed) ease;
+    border-left-width: 4px;
+}
+
+.tool-call:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateX(2px);
+}
+
+/* 模态框增强 */
+.modal-backdrop {
+    background: var(--overlay);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    transition: opacity 0.3s ease;
+}
+
+.modal-panel {
+    background: var(--surface-elevated);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    transition: all var(--transition-speed) ease;
+}
+
+/* 切换开关增强 */
+.toggle {
+    transition: background-color 0.3s ease;
+}
+
+.toggle::before {
+    box-shadow: var(--shadow-sm);
+}
+
+/* 批量选择增强 */
+.list-batch-bar {
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    transition: all var(--transition-speed) ease;
+}
+
+/* 危险按钮增强 */
+.btn-danger {
+    background: var(--danger-color);
+    border-radius: 10px;
+    font-weight: 600;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--transition-speed) ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background: #c62828;
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+.btn-danger:active:not(:disabled) {
+    transform: scale(0.98);
+}
+
+/* Prompt 块卡片增强 */
+.prompt-block-card {
+    transition: all var(--transition-speed) ease;
+    background: var(--surface-elevated);
+    border-color: var(--border-light);
+}
+
+.prompt-block-card:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-1px);
+}
+
+/* 设置组增强 */
+.settings-group {
+    transition: all var(--transition-speed) ease;
+    border: 1px solid var(--border-light);
+}
+
+.settings-title {
+    background: var(--bg-secondary);
+    transition: all var(--transition-speed) ease;
+}
+
+.setting-item {
+    transition: all var(--transition-speed) ease;
+    border-bottom-color: var(--border-light);
+}
+
+/* 编辑器工具栏增强 */
+.editor-toolbar,
+.agent-editor-toolbar {
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    transition: all var(--transition-speed) ease;
+}
+
+.toolbar-btn {
+    transition: all var(--transition-speed) ease;
+}
+
+.toolbar-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow);
+}
+
+/* 未保存指示器增强 */
+.unsaved-indicator {
+    color: var(--warning-color);
+    font-weight: 600;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+/* 加载动画 */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 空状态增强 */
+.empty-state {
+    transition: all var(--transition-speed) ease;
+}
+
+.empty-state-icon {
+    transition: all var(--transition-speed) ease;
+}
+
+/* 响应式优化 */
+@media (max-width: 375px) {
+    .btn-primary,
+    .btn-secondary,
+    .btn-danger {
+        padding: 7px 14px;
+        font-size: 13px;
+    }
+    
+    .menu-item,
+    .project-item,
+    .session-item {
+        padding: 14px;
+    }
+    
+    .agent-form-section {
+        padding: 14px;
+    }
+}
+
+/* 深色主题特定增强 */
+[data-theme="dark"] {
+    /* 增强深色模式下的对比度 */
+}
+
+[data-theme="dark"] .message.assistant .message-content {
+    background: var(--surface-elevated);
+    border-color: var(--border-color);
+}
+
+[data-theme="dark"] .tool-call {
+    background: var(--surface-elevated);
+}
+
+[data-theme="dark"] .vfs-fm-row:hover {
+    background: var(--surface-elevated);
+}
+
+/* 焦点可见性增强（无障碍） */
+*:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+.icon-btn:focus-visible {
+    outline-offset: 2px;
+}
+
+/* 减少动画（尊重用户偏好） */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+    :root {
+        --border-color: #000000;
+        --border-light: #000000;
+    }
+    
+    [data-theme="dark"] {
+        --border-color: #FFFFFF;
+        --border-light: #FFFFFF;
+    }
+}
+
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+    .icon-btn,
+    .nav-item,
+    .menu-item,
+    .project-item,
+    .session-item,
+    .agent-item,
+    .provider-item {
+        min-height: 44px; /* iOS 推荐的最小触摸目标 */
+    }
+}

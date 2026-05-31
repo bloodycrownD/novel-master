@@ -38,6 +38,28 @@
     const REGEX_GROUPS_STORAGE_KEY = 'nm-mobile-regex-groups';
     const REGEX_RULES_STORAGE_KEY = 'nm-mobile-regex-rules';
     const WORKSPACE_REGEX_GROUP_STORAGE_KEY = 'nm-mobile-workspace-current-regex-group';
+    const THEME_STORAGE_KEY = 'nm-mobile-theme';
+
+    // 主题管理
+    function initTheme() {
+        const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+
+    function toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+        const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+        showToast(newTheme === 'dark' ? '已切换到深色模式' : '已切换到浅色模式', 1500);
+    }
+
+    function setupThemeToggle() {
+        const themeToggle = document.getElementById('themeToggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', toggleTheme);
+        }
+    }
 
     const pageConfig = {
         chat: { title: '会话', showBack: false, showNav: true },
@@ -3668,6 +3690,8 @@
     }
 
     function init() {
+        initTheme();
+        setupThemeToggle();
         setupNavigation();
         setupBackButton();
         setupDrawer();

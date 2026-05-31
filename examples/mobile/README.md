@@ -1,50 +1,288 @@
-# 工作区与协作 — 移动端 UI 原型
+# 工作区与协作 - 移动端 UI 原型
 
-基于 [`docs/feature-inventory.md`](docs/feature-inventory.md) 的静态原型，**直接双击 `index.html` 即可**（无需本地服务器）。
+这是一个基于 [功能清单](./docs/feature-inventory.md) 创建的移动端 UI 原型，用于 React Native 实现参考。
+
+## ✨ 新功能：主题系统
+
+### 🎨 双主题支持
+- **浅色主题**：清新明亮的日间模式
+- **深色主题**：护眼舒适的夜间模式
+- **一键切换**：点击顶部导航栏右侧的主题按钮
+- **自动保存**：主题偏好自动保存到 localStorage
+
+### 🚀 视觉优化
+- 改进的颜色系统和对比度
+- 平滑的过渡动画（0.2s）
+- 增强的交互反馈（hover/active/focus）
+- 毛玻璃效果（backdrop-filter）
+- 分层阴影系统（sm/md/lg）
+- 更圆润的圆角设计（10-20px）
+
+### ♿ 无障碍支持
+- 焦点可见性增强
+- 支持 `prefers-reduced-motion`
+- 支持 `prefers-contrast: high`
+- 触摸目标优化（最小 44px）
 
 ## 文件结构
 
-```text
-examples/mobile/
-├── index.html
-├── styles.css
-├── app.js
-├── README.md
-├── docs/
-│   └── feature-inventory.md
-└── archive/
-    └── mobile.html          # 旧版单文件原型（不维护）
+```
+mobile/
+├── index.html              # 主应用页面
+├── theme-demo.html         # 主题演示页面
+├── css/
+│   ├── styles.css          # 核心样式文件
+│   └── theme-enhancements.css  # 主题增强样式
+├── js/
+│   └── app.js              # 应用逻辑
+├── docs/                   # 文档目录
+│   ├── INDEX.md            # 文档导航
+│   ├── quickstart.md       # 快速开始
+│   ├── theme-guide.md      # 主题系统详细文档
+│   ├── feature-inventory.md # 功能清单
+│   └── ...
+└── README.md               # 本文件
 ```
 
-## 使用
+## 如何使用
 
-```powershell
-start examples/mobile/index.html
+### 方式 1：直接打开
+```bash
+# 主应用
+start index.html
+
+# 主题演示
+start theme-demo.html
 ```
 
-或在资源管理器中双击 `index.html`。
+### 方式 2：本地服务器
+```bash
+# 使用 Python
+python -m http.server 8000
 
-## 信息架构（摘要）
+# 使用 Node.js
+npx serve
 
-| 底栏 | 说明 |
-|------|------|
-| 对话 | 会话列表页上 Tab：**会话 / 项目模板** → 点会话进入聊天；聊天上 Tab：**聊天 / 会话工作区** |
-| Agent | Agent 配置（prompts、可选专属模型 pin、runtime；**不含**压缩策略与采样参数） |
-| 我的 | 服务商、**正则配置**（组/规则 CRUD、双通道测试预览，localStorage mock，概念对齐 CLI `nm regex-group` / `nm regex test`）、**全局压缩策略**、全局模板、设置等 |
+# 访问
+http://localhost:8000/index.html
+http://localhost:8000/theme-demo.html
+```
 
-底栏 **对话 / Agent / 我的** 互相独立：切换 Tab **不会**把对话从「聊天中」打回「会话列表」；只有顶栏返回、切换项目等操作才会。
+### 方式 3：Live Server（VS Code）
+1. 安装 Live Server 扩展
+2. 右键点击 `index.html`
+3. 选择 "Open with Live Server"
 
-**VFS 三域**（`session` / `project` / `global`）共用浏览器组件，交互参考 st-virtual-file-system：路径栏、返回上级、工作树徽标/规则灯、行菜单（纳入三态/目录策略等）。
+## 主题切换
 
-顶栏 **☰**（按对话上下文分流）：
+### 用户操作
+点击顶部导航栏右侧的主题切换按钮：
+- 🌞 太阳图标 = 浅色主题
+- 🌙 月亮图标 = 深色主题
 
-- **会话列表**（未进入某会话）：左侧 **项目** 抽屉（项目列表、新建、切换项目）。
-- **会话内**（聊天或会话工作区 Tab）：左侧 **会话操作** 抽屉三项同级菜单：**切换模型**（点击弹出模型选择）、**真实提示词**、**会话日志**。
+### 编程方式
+```javascript
+// 切换主题
+document.documentElement.setAttribute('data-theme', 'dark'); // 或 'light'
 
-聊天输入区 **不再展示** 真实提示词 / 工具日志 / 检查点 Chip；上述能力仅从会话操作抽屉进入。
+// 保存偏好
+localStorage.setItem('nm-mobile-theme', 'dark');
+```
 
-## 维护
+## 主要页面
 
-- 交互逻辑：编辑 `app.js`（单文件，按功能分块注释）
-- 样式：编辑 `styles.css`
-- 结构：编辑 `index.html`
+### 1. 对话页面（默认首页）
+- 会话列表与项目模板切换
+- AI 对话消息流
+- 工具调用卡片展示
+- 会话工作区文件管理
+
+### 2. Agent 页面
+- Agent 列表与管理
+- Agent 配置编辑器
+- 模型选择与采样配置
+
+### 3. 我的页面
+- 当前模型显示
+- 服务商管理
+- 压缩策略配置
+- 正则配置
+- 全局模板
+- 扩展设置
+
+### 二级页面
+- 真实提示词预览
+- 会话日志（工具+检查点时间线）
+- 服务商详情
+- 模型采样配置
+- 正则组管理
+- 文件编辑器
+
+## 颜色系统
+
+### 浅色主题
+```css
+--primary-color: #007AFF;
+--success-color: #34C759;
+--warning-color: #FF9500;
+--danger-color: #FF3B30;
+--bg-color: #F2F2F7;
+--surface-color: #FFFFFF;
+--text-primary: #000000;
+--text-secondary: #8E8E93;
+```
+
+### 深色主题
+```css
+--primary-color: #0A84FF;
+--success-color: #30D158;
+--warning-color: #FF9F0A;
+--danger-color: #FF453A;
+--bg-color: #000000;
+--surface-color: #1C1C1E;
+--text-primary: #FFFFFF;
+--text-secondary: #98989D;
+```
+
+## 设计规范
+
+### 颜色
+- 主色：iOS 蓝（浅色 #007AFF / 深色 #0A84FF）
+- 成功：绿色
+- 警告：橙色
+- 危险：红色
+
+### 字体
+- 系统字体栈（iOS/Android 原生）
+- 代码：`ui-monospace`, `Courier New`
+
+### 间距
+- 基础单位：4px
+- 常用间距：8px, 12px, 16px, 24px
+
+### 圆角
+- 小：8-10px（按钮、输入框）
+- 中：12-16px（卡片）
+- 大：20-28px（模态框、Toast）
+- 圆形：50%（FAB、头像）
+
+### 阴影
+- sm: `0 1px 3px rgba(0,0,0,0.08)`
+- md: `0 2px 8px rgba(0,0,0,0.1)`
+- lg: `0 4px 16px rgba(0,0,0,0.12)`
+
+## React Native 实现建议
+
+### 主题实现
+```javascript
+import { useColorScheme } from 'react-native';
+
+// 使用系统主题
+const colorScheme = useColorScheme();
+
+// 或使用 Context
+const ThemeContext = React.createContext();
+```
+
+### 推荐库
+- **@react-navigation/native** - 导航
+- **react-native-reanimated** - 动画
+- **react-native-gesture-handler** - 手势
+- **@gorhom/bottom-sheet** - 底部弹出
+- **react-native-vector-icons** - 图标
+
+### 样式转换
+```javascript
+const styles = StyleSheet.create({
+  container: {
+    backgroundColor: theme.surface,
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3, // Android
+  },
+});
+```
+
+## 功能覆盖
+
+本原型覆盖了功能清单中的以下部分：
+
+- ✅ 全局导航与信息架构
+- ✅ 项目空间（项目列表、会话列表）
+- ✅ AI 对话（消息流、工具调用、输入区）
+- ✅ 虚拟文件（浏览、作用域切换、状态显示）
+- ✅ 虚拟工作树（预览）
+- ✅ 工具日志与检查点
+- ✅ Agent 配置（列表与编辑）
+- ✅ 服务商管理（列表与模型）
+- ✅ 扩展设置
+- ✅ 文件编辑器（基础版）
+- ✅ 通用反馈（Toast、底部弹出菜单）
+- ✅ **主题系统（浅色/深色）**
+
+## 浏览器兼容性
+
+- ✅ Chrome/Edge 88+
+- ✅ Safari 14+
+- ✅ Firefox 85+
+- ✅ iOS Safari 14+
+- ✅ Chrome Android 88+
+
+## 性能优化
+
+- 使用 CSS 变量实现主题切换
+- 硬件加速动画（transform/opacity）
+- 条件动画（尊重用户偏好）
+- 优化的滚动性能
+
+## 开发建议
+
+### 添加新组件
+1. 使用 CSS 变量定义颜色
+2. 添加过渡动画
+3. 考虑深色主题
+4. 测试无障碍性
+
+### 示例
+```css
+.my-component {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    transition: all var(--transition-speed) ease;
+}
+
+.my-component:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+```
+
+## 相关文档
+
+- [文档索引](./docs/INDEX.md) - 全部文档导航
+- [主题指南](./docs/theme-guide.md) - 主题系统详细文档
+- [功能清单](./docs/feature-inventory.md) - 功能清单
+- [主题演示](./theme-demo.html) - 主题演示页面
+
+## 后续改进
+
+- [ ] 自动跟随系统主题
+- [ ] 更多主题选项
+- [ ] 主题编辑器
+- [ ] 动画性能优化
+- [ ] 更多组件示例
+
+## 许可
+
+本原型仅供内部开发参考使用。
+
+---
+
+**版本**: 2.0.0（新增主题系统）  
+**最后更新**: 2024
