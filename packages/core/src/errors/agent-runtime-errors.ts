@@ -1,7 +1,7 @@
 /**
  * Agent domain errors.
  *
- * @module domain/agent/agent-errors
+ * @module errors/agent-runtime-errors
  */
 
 /** Discriminant codes for {@link AgentError}. */

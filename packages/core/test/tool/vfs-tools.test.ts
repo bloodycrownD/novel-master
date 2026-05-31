@@ -7,7 +7,7 @@ import {
   registerVfsTools,
   type VfsToolContext,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { ToolError } from "../../src/domain/tool/tool-errors.js";
+import { ToolError } from "../../src/errors/tool-errors.js";
 import { VfsError } from "@novel-master/core";
 
 describe("Builtin vfs.* tools (integration)", () => {

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { ToolRegistry } from "../../src/domain/tool/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/tool-runner.js";
-import { ToolError } from "../../src/domain/tool/tool-errors.js";
+import { ToolError } from "../../src/errors/tool-errors.js";
 
 describe("ToolRunner", () => {
   it("throws NOT_FOUND for missing tool", async () => {

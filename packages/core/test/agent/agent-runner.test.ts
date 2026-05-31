@@ -17,7 +17,7 @@ import {
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
-import { AgentError } from "../../src/domain/agent/agent-errors.js";
+import { AgentError } from "../../src/errors/agent-runtime-errors.js";
 import type { VfsService } from "@novel-master/core";
 
 function minimalDefinition(): AgentDefinition {

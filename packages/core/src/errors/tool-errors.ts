@@ -1,7 +1,7 @@
 /**
  * Tool error model: typed, machine-readable error codes for tool dispatch.
  *
- * @module domain/tool/tool-errors
+ * @module errors/tool-errors
  */
 
 import type { ZodIssue } from "zod";

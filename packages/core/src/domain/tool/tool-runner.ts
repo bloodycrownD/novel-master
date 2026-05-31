@@ -10,7 +10,7 @@ import {
   toolInvalidArgument,
   toolNotFound,
   type ToolError,
-} from "./tool-errors.js";
+} from "@/errors/tool-errors.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
 /**

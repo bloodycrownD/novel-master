@@ -5,7 +5,7 @@
  */
 
 import type { Tool } from "./model/tool.js";
-import { toolConflict } from "./tool-errors.js";
+import { toolConflict } from "@/errors/tool-errors.js";
 
 /**
  * In-memory registry for tools.
