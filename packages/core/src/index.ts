@@ -88,6 +88,10 @@ export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 /**
  * Persistent workspace pointers and behavioral preferences (KKV-backed, modules internal).
  */
+export { KkvError } from "./errors/kkv-errors.js";
+export type { KkvErrorCode } from "./errors/kkv-errors.js";
+export { createKkvService } from "./service/kkv/create-kkv-service.js";
+export type { KkvService } from "./service/kkv/kkv.port.js";
 export { PreferencesError } from "./errors/preferences-errors.js";
 export type { PreferencesErrorCode } from "./errors/preferences-errors.js";
 export { createPersistentState } from "./service/persistent-state/create-persistent-state.js";
