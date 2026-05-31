@@ -5,8 +5,8 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import { estimateTokens } from "@/service/compaction/token-estimate.js";
-import type { CompactionTrigger } from "../compaction-trigger.port.js";
+import { estimateTokens } from "@/domain/compaction/logic/token-estimate.js";
+import type { CompactionTrigger } from "../ports/compaction-trigger.port.js";
 
 /** Fires when estimated visible tokens exceed threshold. */
 export class TokenThresholdTrigger implements CompactionTrigger {

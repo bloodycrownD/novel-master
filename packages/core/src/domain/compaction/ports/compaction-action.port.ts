@@ -4,7 +4,7 @@
  * @module domain/compaction/compaction-action.port
  */
 
-import type { CompactionContext } from "./compaction-context.js";
+import type { CompactionContext } from "../model/compaction-context.js";
 
 /** Result of a compaction action run. */
 export interface CompactionActionResult {

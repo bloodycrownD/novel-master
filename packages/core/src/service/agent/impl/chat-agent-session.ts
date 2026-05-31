@@ -1,13 +1,13 @@
 /**
  * Chat-backed agent session (SQLite via MessageService).
  *
- * @module domain/agent/session/impl/chat-agent-session
+ * @module service/agent/impl/chat-agent-session
  */
 
 import type { MessageContent } from "@/domain/chat/model/message.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageService } from "@/service/chat/message.port.js";
-import type { AgentSession } from "../agent-session.port.js";
+import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 
 /**
  * Agent session adapter over {@link MessageService}.

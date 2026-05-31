@@ -5,7 +5,7 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { CompactionTrigger } from "../compaction-trigger.port.js";
+import type { CompactionTrigger } from "../ports/compaction-trigger.port.js";
 
 /** Fires when visible message count exceeds floor (hidden messages excluded). */
 export class FloorThresholdTrigger implements CompactionTrigger {

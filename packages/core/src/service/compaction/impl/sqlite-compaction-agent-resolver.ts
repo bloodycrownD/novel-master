@@ -1,19 +1,19 @@
 /**
  * Resolves compaction summary agents from SQL agent registry.
  *
- * @module service/compaction/impl/db-compaction-agent-resolver
+ * @module service/compaction/impl/sqlite-compaction-agent-resolver
  */
 
 import { CompactionPolicyError } from "@/errors/compaction-policy-errors.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
-import type { CompactionAgentResolver } from "../compaction-agent-resolver.port.js";
+import type { CompactionAgentResolver } from "@/domain/compaction/ports/compaction-agent-resolver.port.js";
 
 /**
  * Loads agent definitions from {@link AgentRegistryService}.
  */
-export function createDbCompactionAgentResolver(
+export function createSqliteCompactionAgentResolver(
   registry: AgentRegistryService,
 ): CompactionAgentResolver {
   return {

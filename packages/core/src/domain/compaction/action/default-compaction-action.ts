@@ -5,16 +5,16 @@
  */
 
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import { messageBodyText } from "@/domain/prompt/message-body.js";
+import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
 import { formatLocalDateTime } from "@/infra/date-format.js";
 import { renderMacro } from "@/infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
-import { resolveSummaryApplicationModelId } from "@/domain/agent/resolve-application-model-id.js";
+import { resolveSummaryApplicationModelId } from "@/domain/agent/logic/resolve-application-model-id.js";
 import type {
   CompactionAction,
   CompactionActionResult,
-} from "../compaction-action.port.js";
-import type { CompactionContext } from "../compaction-context.js";
+} from "../ports/compaction-action.port.js";
+import type { CompactionContext } from "../model/compaction-context.js";
 
 const COMPACTION_SUMMARY_PREFIX = "[Compaction summary]\n";
 const DEFAULT_AGENT_INSTRUCTION =

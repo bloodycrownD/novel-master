@@ -5,7 +5,7 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { CompactionTrigger } from "../compaction-trigger.port.js";
+import type { CompactionTrigger } from "../ports/compaction-trigger.port.js";
 
 /** compaction OR boundary: any child trigger satisfied → compact. */
 export class CompositeTrigger implements CompactionTrigger {

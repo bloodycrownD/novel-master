@@ -1,7 +1,7 @@
 /**
  * Resolves summary agents by registry id for compaction actions.
  *
- * @module service/compaction/compaction-agent-resolver.port
+ * @module domain/compaction/ports/compaction-agent-resolver.port
  */
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
