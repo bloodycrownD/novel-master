@@ -1,0 +1,71 @@
+import type {ChatMessage} from '@novel-master/core';
+import {
+  buildChatListItems,
+  buildToolResultByUseId,
+  toolCallViewFromUse,
+} from '../src/components/chat/message-blocks';
+
+function msg(
+  id: string,
+  role: string,
+  blocks: ChatMessage['content']['blocks'],
+  seq: number,
+): ChatMessage {
+  return {
+    id,
+    sessionId: 's1',
+    seq,
+    role,
+    content: {blocks},
+    provider: null,
+    raw: null,
+    createdAtMs: seq,
+    hidden: false,
+  };
+}
+
+describe('message-blocks', () => {
+  it('pairs tool_result with tool_use id', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
+      ], 1),
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 2),
+    ];
+    const map = buildToolResultByUseId(messages);
+    const view = toolCallViewFromUse(
+      {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
+      map,
+    );
+    expect(view.status).toBe('success');
+    expect(view.resultContent).toBe('ok');
+  });
+
+  it('marks pending tool_use without result', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {}},
+      ], 1),
+    ];
+    const items = buildChatListItems(messages);
+    const tool = items.find(i => i.kind === 'tool');
+    expect(tool?.kind).toBe('tool');
+    if (tool?.kind === 'tool') {
+      expect(tool.tool.status).toBe('pending');
+    }
+  });
+
+  it('emits text bubbles and tool cards in order', () => {
+    const messages = [
+      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
+      msg('a1', 'assistant', [
+        {type: 'text', text: 'hello'},
+        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/x'}},
+      ], 2),
+    ];
+    const items = buildChatListItems(messages);
+    expect(items.map(i => i.kind)).toEqual(['message', 'message', 'tool']);
+  });
+});
