@@ -47,9 +47,6 @@ export function ChatTabScreen() {
   const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
-  const [selectedProjectIds, setSelectedProjectIds] = useState<Set<string>>(
-    new Set(),
-  );
   const [selectedSessionIds, setSelectedSessionIds] = useState<Set<string>>(
     new Set(),
   );
@@ -122,16 +119,6 @@ export function ChatTabScreen() {
     await openConversation(created.id);
   }, [runtime, projectId, setCurrentSession, reloadLists, openConversation]);
 
-  const deleteSelectedProjects = useCallback(async () => {
-    for (const id of selectedProjectIds) {
-      await runtime.projects.delete(id);
-    }
-    setSelectedProjectIds(new Set());
-    setBatchMode(false);
-    await refreshScope();
-    await reloadLists();
-  }, [runtime, selectedProjectIds, refreshScope, reloadLists]);
-
   const deleteSelectedSessions = useCallback(async () => {
     for (const id of selectedSessionIds) {
       await runtime.sessions.delete(id);
@@ -152,36 +139,34 @@ export function ChatTabScreen() {
   ]);
 
   const confirmBatchDelete = useCallback(() => {
-    const count =
-      chatSubview === 'sessions' && sessionListPanel === 'sessions'
-        ? selectedSessionIds.size
-        : selectedProjectIds.size;
+    const count = selectedSessionIds.size;
     if (count === 0) {
       return;
     }
-    Alert.alert('确认删除', `删除 ${count} 项？`, [
-      {text: '取消', style: 'cancel'},
-      {
-        text: '删除',
-        style: 'destructive',
-        onPress: () => {
-          if (chatSubview === 'sessions' && sessionListPanel === 'sessions') {
-            deleteSelectedSessions();
-          } else if (projectDrawerOpen) {
-            deleteSelectedProjects();
-          }
+    Alert.alert(
+      '确认删除',
+      `确定删除选中的 ${count} 个会话？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => deleteSelectedSessions(),
         },
-      },
-    ]);
-  }, [
-    chatSubview,
-    sessionListPanel,
-    selectedSessionIds.size,
-    selectedProjectIds.size,
-    deleteSelectedSessions,
-    deleteSelectedProjects,
-    projectDrawerOpen,
-  ]);
+      ],
+    );
+  }, [selectedSessionIds.size, deleteSelectedSessions]);
+
+  const handleDeleteProjects = useCallback(
+    async (ids: string[]) => {
+      for (const id of ids) {
+        await runtime.projects.delete(id);
+      }
+      await refreshScope();
+      await reloadLists();
+    },
+    [runtime, refreshScope, reloadLists],
+  );
 
   if (chatSubview === 'conversation') {
     return (
@@ -319,6 +304,7 @@ export function ChatTabScreen() {
           await reloadLists();
         }}
         onCreate={handleCreateProject}
+        onDeleteSelected={handleDeleteProjects}
       />
     </View>
   );
