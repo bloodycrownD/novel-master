@@ -20,7 +20,8 @@ import {
 } from "@novel-master/core";
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
-import type { VfsService } from "@novel-master/core";
+import type { VfsService, VfsToolContext } from "@novel-master/core";
+import type { SessionFsService } from "../../src/service/session-fs/session-fs.port.js";
 
 function minimalDefinition(): AgentDefinition {
   return {
@@ -107,6 +108,47 @@ function mockVfs(): VfsService {
   } as unknown as VfsService;
 }
 
+const MOCK_PROJECT_ID = "test-project";
+const MOCK_SESSION_ID = "test-session";
+
+function mockSessionFs(vfs: VfsService): SessionFsService {
+  return {
+    async execute(_sessionId, _projectId, actions, _actor, options) {
+      const results: Array<
+        | { function: "read"; path: string; content: string }
+        | { function: "write"; path: string; version: number }
+        | { function: "delete"; path: string }
+      > = [];
+      for (const action of actions) {
+        if (action.function === "write") {
+          const r = await vfs.write(action.path, action.content, {
+            versionCheck: options?.versionCheck ?? true,
+          });
+          results.push({ function: "write", path: action.path, version: r.version });
+        }
+      }
+      return { batchId: "mock-batch", results };
+    },
+    async listBatches() {
+      return [];
+    },
+    async rollbackBatch() {},
+    async listSnapshots() {
+      return [];
+    },
+    async rollbackSnapshot() {},
+  };
+}
+
+function mockToolCtx(vfs: VfsService): VfsToolContext {
+  return {
+    vfs,
+    sessionFs: mockSessionFs(vfs),
+    projectId: MOCK_PROJECT_ID,
+    sessionId: MOCK_SESSION_ID,
+  };
+}
+
 function createMockModel(
   responses: LlmChatResult[],
 ): ModelRequestService & { callCount: () => number } {
@@ -150,7 +192,7 @@ describe("AgentRunner", () => {
       session,
       modelRequests: model,
       registry,
-      toolCtx: { vfs: mockVfs() },
+      toolCtx: mockToolCtx(mockVfs()),
       compaction: createNoOpCompactionPipeline(),
     });
 
@@ -215,7 +257,7 @@ describe("AgentRunner", () => {
       session,
       modelRequests: model,
       registry,
-      toolCtx: { vfs: mockVfs() },
+      toolCtx: mockToolCtx(mockVfs()),
       compaction: createNoOpCompactionPipeline(),
     });
 
@@ -275,7 +317,7 @@ describe("AgentRunner", () => {
       session,
       modelRequests: model,
       registry,
-      toolCtx: { vfs: mockVfs() },
+      toolCtx: mockToolCtx(mockVfs()),
       compaction: createCompactionPipeline({
         modelRequests: model,
         policyStore,
@@ -320,7 +362,7 @@ describe("AgentRunner", () => {
       session,
       modelRequests: model,
       registry,
-      toolCtx: { vfs: mockVfs() },
+      toolCtx: mockToolCtx(mockVfs()),
       compaction: createNoOpCompactionPipeline(),
     });
 

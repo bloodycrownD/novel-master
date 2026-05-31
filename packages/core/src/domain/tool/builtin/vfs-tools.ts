@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { vfsReplaceNotFound } from "@/errors/vfs-errors.js";
 import type { Tool } from "../model/tool.js";
 import type {
   VfsGrepMatch,
@@ -12,16 +13,24 @@ import type {
   VfsService,
   WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
+import type { SessionFsService } from "@/service/session-fs/session-fs.port.js";
 import type { ToolRegistry } from "../logic/tool-registry.js";
 
-export type VfsToolContext = { readonly vfs: VfsService };
+/** Context for builtin VFS tools: read-only ops use `vfs`; mutations use `sessionFs`. */
+export type VfsToolContext = {
+  readonly vfs: VfsService;
+  readonly sessionFs: SessionFsService;
+  readonly projectId: string;
+  readonly sessionId: string;
+};
 
 /**
  * Creates the builtin VFS tools.
  *
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
- * (e.g. session-scoped VFS). Tools themselves do not implement scoping.
+ * (e.g. session-scoped VFS). Mutating tools route through `sessionFs.execute`
+ * so each tool call produces a rollback-able batch (actor `assistant`).
  */
 export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
   const read: Tool<{ path: string }, VfsReadResult, VfsToolContext> = {
@@ -58,7 +67,19 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
-      return await ctx.vfs.write(input.path, input.content, input.options);
+      const versionCheck = input.options?.versionCheck ?? true;
+      const result = await ctx.sessionFs.execute(
+        ctx.sessionId,
+        ctx.projectId,
+        [{ function: "write", path: input.path, content: input.content }],
+        "assistant",
+        { versionCheck },
+      );
+      const writeResult = result.results.find((r) => r.function === "write");
+      if (writeResult == null || writeResult.function !== "write") {
+        throw new Error("sessionFs.execute did not return a write result");
+      }
+      return { version: writeResult.version };
     },
   };
 
@@ -85,12 +106,41 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       replacements: z.number().int(),
     }),
     async run(input, ctx) {
-      return await ctx.vfs.replace(
-        input.path,
-        input.oldString,
-        input.newString,
-        input.options,
+      const current = await ctx.vfs.read(input.path);
+      let replacements = 0;
+      let nextContent = current.content;
+
+      if (input.options?.replaceAll) {
+        if (!current.content.includes(input.oldString)) {
+          throw vfsReplaceNotFound(input.path);
+        }
+        const parts = current.content.split(input.oldString);
+        replacements = parts.length - 1;
+        nextContent = parts.join(input.newString);
+      } else {
+        const index = current.content.indexOf(input.oldString);
+        if (index === -1) {
+          throw vfsReplaceNotFound(input.path);
+        }
+        replacements = 1;
+        nextContent =
+          current.content.slice(0, index) +
+          input.newString +
+          current.content.slice(index + input.oldString.length);
+      }
+
+      // Single write batch after in-memory replace (read stays outside the batch).
+      const result = await ctx.sessionFs.execute(
+        ctx.sessionId,
+        ctx.projectId,
+        [{ function: "write", path: input.path, content: nextContent }],
+        "assistant",
       );
+      const writeResult = result.results.find((r) => r.function === "write");
+      if (writeResult == null || writeResult.function !== "write") {
+        throw new Error("sessionFs.execute did not return a write result");
+      }
+      return { version: writeResult.version, replacements };
     },
   };
 
@@ -170,4 +220,3 @@ export function registerVfsTools(registry: ToolRegistry<VfsToolContext>): void {
     registry.register(tool);
   }
 }
-
