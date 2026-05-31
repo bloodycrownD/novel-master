@@ -102,13 +102,6 @@
     box-shadow: var(--shadow-sm);
 }
 
-/* 批量选择增强 */
-.list-batch-bar {
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    transition: all var(--transition-speed) ease;
-}
-
 /* 危险按钮增强 */
 .btn-danger {
     background: var(--danger-color);

@@ -56,12 +56,20 @@
                         <button type="button" class="chat-top-tab" data-session-panel="template" role="tab" aria-selected="false">项目模板</button>
                     </div>
                     <div id="sessionPanelSessions" class="session-list-panel active">
-                        <div class="section-header" data-batch-header="sessions">
-                            <h2>会话</h2>
-                            <div class="section-header-actions">
-                                <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="sessions">管理</button>
-                                <button class="btn-primary" data-action="new-session">新建会话</button>
+                        <div class="manage-header" data-batch-header="sessions">
+                            <div class="manage-header-normal section-header">
+                                <h2>会话</h2>
+                                <div class="section-header-actions">
+                                    <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="sessions">管理</button>
+                                    <button class="btn-primary" data-action="new-session">新建会话</button>
+                                </div>
                             </div>
+                            <div class="manage-header-batch section-header hidden">
+                                <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                                <span class="batch-header-count">已选 0 项</span>
+                                <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="sessions" disabled>删除</button>
+                            </div>
+                            <p class="manage-header-hint hidden" data-batch-hint="sessions">选择要删除的会话</p>
                         </div>
                         <div id="sessionList" class="session-list"></div>
                     </div>
@@ -125,12 +133,20 @@
 
             <!-- Agent 列表（底栏 Tab） -->
             <div id="agentsPage" class="page">
-                <div class="section-header" data-batch-header="agents">
-                    <h2>Agent</h2>
-                    <div class="section-header-actions">
-                        <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="agents">管理</button>
-                        <button class="btn-primary" data-action="new-agent">新建</button>
+                <div class="manage-header" data-batch-header="agents">
+                    <div class="manage-header-normal section-header">
+                        <h2>Agent</h2>
+                        <div class="section-header-actions">
+                            <button type="button" class="btn-secondary btn-sm" data-action="batch-manage" data-batch-list="agents">管理</button>
+                            <button class="btn-primary" data-action="new-agent">新建</button>
+                        </div>
                     </div>
+                    <div class="manage-header-batch section-header hidden">
+                        <button type="button" class="btn-secondary btn-sm" data-action="batch-cancel">取消</button>
+                        <span class="batch-header-count">已选 0 项</span>
+                        <button type="button" class="btn-danger btn-sm" data-action="batch-delete" data-batch-list="agents" disabled>删除</button>
+                    </div>
+                    <p class="manage-header-hint hidden" data-batch-hint="agents">选择要删除的 Agent</p>
                 </div>
                 <div id="agentList" class="agent-list"></div>
             </div>
@@ -566,13 +582,6 @@ status: draft
                 <button type="button" class="btn-secondary" data-action="close-add-model">取消</button>
             </div>
         </div>
-    </div>
-
-    <!-- 全页列表批量底栏（会话 / Agent） -->
-    <div id="listBatchBar" class="list-batch-bar hidden" aria-hidden="true" data-batch-ui="page-footer">
-        <button type="button" class="btn-secondary" data-action="batch-cancel">取消</button>
-        <span id="listBatchCount" class="list-batch-count">已选 0 项</span>
-        <button type="button" class="btn-danger" data-action="batch-delete" data-batch-list="page-footer" disabled>删除</button>
     </div>
 
     <!-- 新建正则组 -->

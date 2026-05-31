@@ -14,6 +14,12 @@ export interface SessionRepository {
 
   insert(session: ChatSession): Promise<void>;
 
+  updateTitle(
+    id: string,
+    title: string,
+    updatedAtMs: number,
+  ): Promise<boolean>;
+
   delete(id: string): Promise<boolean>;
 
   deleteByProject(projectId: string): Promise<void>;

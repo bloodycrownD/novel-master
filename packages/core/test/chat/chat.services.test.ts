@@ -220,6 +220,17 @@ describe("Chat services", () => {
     await ctx.conn.close();
   });
 
+  it("session rename updates title", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id, "旧名");
+    const renamed = await ctx.sessions.rename(session.id, "新名");
+    assert.equal(renamed.title, "新名");
+    const loaded = await ctx.sessions.get(session.id);
+    assert.equal(loaded.title, "新名");
+    await ctx.conn.close();
+  });
+
   it("project copy copies template only", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");

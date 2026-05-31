@@ -997,7 +997,7 @@
             const deleteBtn = e.target.closest('[data-action="batch-delete"]');
             if (deleteBtn && !deleteBtn.disabled) {
                 const scope = deleteBtn.dataset.batchList;
-                if (scope && scope !== 'page-footer' && scope !== batchSelection.activeList) return;
+                if (scope && scope !== batchSelection.activeList) return;
                 executeBatchDelete();
             }
         });
@@ -1210,22 +1210,12 @@
                 });
             }
         }
-
-        const pageBar = document.getElementById('listBatchBar');
-        if (pageBar && !pageBar.classList.contains('hidden')) {
-            const countEl = document.getElementById('listBatchCount');
-            if (countEl) countEl.textContent = '已选 ' + n + ' 项';
-            const deleteBtn = pageBar.querySelector('[data-action="batch-delete"]');
-            if (deleteBtn) deleteBtn.disabled = n === 0;
-        }
     }
 
     function updateBatchModeUI() {
         const active = batchSelection.activeList;
-        const config = active ? batchListConfig[active] : null;
 
         document.body.classList.toggle('list-batch-active', !!active);
-        document.body.classList.toggle('list-batch-page-footer', !!(config && config.ui === 'page-footer'));
         if (active) {
             document.body.dataset.batchList = active;
         } else {
@@ -1234,23 +1224,21 @@
 
         document.querySelectorAll('[data-batch-header]').forEach(function (wrap) {
             const listId = wrap.dataset.batchHeader;
-            const isActive = active === listId && config && config.ui !== 'page-footer';
+            const headerConfig = batchListConfig[listId];
+            const inlineBatch =
+                active === listId &&
+                headerConfig &&
+                (headerConfig.ui === 'section-header' ||
+                    headerConfig.ui === 'drawer-header');
             const normal = wrap.querySelector('.manage-header-normal');
             const batch = wrap.querySelector('.manage-header-batch');
-            if (normal) normal.classList.toggle('hidden', isActive);
-            if (batch) batch.classList.toggle('hidden', !isActive);
+            if (normal) normal.classList.toggle('hidden', inlineBatch);
+            if (batch) batch.classList.toggle('hidden', !inlineBatch);
         });
 
         document.querySelectorAll('[data-batch-hint]').forEach(function (el) {
             el.classList.toggle('hidden', el.dataset.batchHint !== active);
         });
-
-        const pageBar = document.getElementById('listBatchBar');
-        const showPageFooter = !!(config && config.ui === 'page-footer');
-        if (pageBar) {
-            pageBar.classList.toggle('hidden', !showPageFooter);
-            pageBar.setAttribute('aria-hidden', showPageFooter ? 'false' : 'true');
-        }
 
         updateBatchBar();
     }
@@ -1415,7 +1403,7 @@
 
     const batchListConfig = {
         sessions: {
-            ui: 'page-footer',
+            ui: 'section-header',
             minKeep: 0,
             refresh: function () {
                 renderSessionList();
@@ -1431,7 +1419,7 @@
             deleteItems: batchDeleteProjects,
         },
         agents: {
-            ui: 'page-footer',
+            ui: 'section-header',
             minKeep: 1,
             refresh: function () {
                 renderAgentList();

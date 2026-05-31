@@ -15,6 +15,8 @@ export interface SessionService {
   /** Creates session and copies project template VFS into session domain. */
   create(projectId: string, title?: string | null): Promise<ChatSession>;
 
+  rename(id: string, title: string): Promise<ChatSession>;
+
   delete(id: string): Promise<void>;
 
   /** Copies session VFS tree and all messages to a new session. */

@@ -71,6 +71,21 @@ export class SqliteSessionRepository implements SessionRepository {
     );
   }
 
+  async updateTitle(
+    id: string,
+    title: string,
+    updatedAtMs: number,
+  ): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_session SET title = #{title}, updated_at_ms = #{updatedAtMs}
+       WHERE id = #{id}`,
+      { id, title, updatedAtMs },
+    );
+    return result.changes > 0;
+  }
+
   async delete(id: string): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,

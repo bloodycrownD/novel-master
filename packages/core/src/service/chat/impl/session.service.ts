@@ -16,7 +16,7 @@ import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sq
 import { mapProjectWorktreePathToSession } from "@/domain/worktree/logic/worktree-path-map.js";
 import { worktreeScopeKey } from "@/domain/worktree/logic/worktree-scope.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
-import { chatNotFound } from "@/errors/chat-errors.js";
+import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -94,6 +94,24 @@ export class DefaultSessionService implements SessionService {
       );
       return session;
     });
+  }
+
+  async rename(id: string, title: string): Promise<ChatSession> {
+    const trimmed = title.trim();
+    if (trimmed.length === 0) {
+      throw chatInvalidArgument("session title must not be empty");
+    }
+    const existing = await this.get(id);
+    const updatedAtMs = Date.now();
+    const updated = await this.deps.sessions.updateTitle(
+      id,
+      trimmed,
+      updatedAtMs,
+    );
+    if (!updated) {
+      throw chatNotFound("session", id);
+    }
+    return { ...existing, title: trimmed, updatedAtMs };
   }
 
   async delete(id: string): Promise<void> {

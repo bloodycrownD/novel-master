@@ -10,6 +10,7 @@ import {useTheme} from '../../theme/ThemeProvider';
 type Props = {
   visible: boolean;
   onClose: () => void;
+  onRename?: () => void;
   onSwitchModel?: () => void;
   onRealPrompt?: () => void;
   onSessionLog?: () => void;
@@ -18,6 +19,7 @@ type Props = {
 export function SessionActionsDrawer({
   visible,
   onClose,
+  onRename,
   onSwitchModel,
   onRealPrompt,
   onSessionLog,
@@ -56,6 +58,7 @@ export function SessionActionsDrawer({
   }, [visible, runtime]);
 
   const items = [
+    {label: '重命名', action: onRename},
     {label: '切换模型', action: onSwitchModel},
     {label: '真实提示词', action: onRealPrompt},
     {label: '会话日志', action: onSessionLog},

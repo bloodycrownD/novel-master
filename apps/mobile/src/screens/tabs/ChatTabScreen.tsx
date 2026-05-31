@@ -25,15 +25,14 @@ import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
-import {ListBatchBar} from '../../components/batch/ListBatchBar';
+import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {
-  PrimaryButton,
-  SecondaryButton,
-} from '../../components/ui/PrototypeButtons';
+import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';
+import {nextDefaultSessionTitle} from '../../utils/session-default-title';
+import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {
@@ -83,6 +82,9 @@ export function ChatTabScreen() {
   const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
+  const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
+    {sessionId: string; initialTitle: string} | undefined
+  >();
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();
@@ -215,11 +217,44 @@ export function ChatTabScreen() {
     if (projectId == null) {
       return;
     }
-    const created = await runtime.sessions.create(projectId, '新会话');
-    await setCurrentSession(created.id);
-    await reloadLists();
-    await openConversation(created.id);
-  }, [runtime, projectId, setCurrentSession, reloadLists, openConversation]);
+    try {
+      const list = await runtime.sessions.listByProject(projectId);
+      const title = nextDefaultSessionTitle(list.map(s => s.title));
+      await runtime.sessions.create(projectId, title);
+      await reloadLists();
+    } catch (error) {
+      Alert.alert(
+        '创建失败',
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }, [runtime, projectId, reloadLists]);
+
+  const handleRenameSession = useCallback(
+    async (targetSessionId: string, title: string) => {
+      try {
+        await runtime.sessions.rename(targetSessionId, title);
+        await reloadLists();
+      } catch (error) {
+        Alert.alert(
+          '重命名失败',
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    },
+    [runtime, reloadLists],
+  );
+
+  const openSessionRenamePrompt = useCallback(
+    (targetSessionId: string) => {
+      const session = sessions.find(s => s.id === targetSessionId);
+      setSessionRenamePrompt({
+        sessionId: targetSessionId,
+        initialTitle: session?.title ?? '',
+      });
+    },
+    [sessions],
+  );
 
   const deleteSelectedSessions = useCallback(async () => {
     const ids = [...sessionBatch.selectedIds];
@@ -333,6 +368,25 @@ export function ChatTabScreen() {
       ? runtime.worktree({kind: 'project', projectId})
       : null;
 
+  const sessionRenameModal = (
+    <TextPromptModal
+      visible={sessionRenamePrompt != null}
+      title="重命名会话"
+      label="会话名称"
+      placeholder="输入会话名称"
+      initialValue={sessionRenamePrompt?.initialTitle ?? ''}
+      confirmLabel="保存"
+      onClose={() => setSessionRenamePrompt(undefined)}
+      onConfirm={async value => {
+        const prompt = sessionRenamePrompt;
+        setSessionRenamePrompt(undefined);
+        if (prompt) {
+          await handleRenameSession(prompt.sessionId, value);
+        }
+      }}
+    />
+  );
+
   if (chatSubview === 'conversation') {
     return (
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
@@ -405,6 +459,12 @@ export function ChatTabScreen() {
         <SessionActionsDrawer
           visible={sessionDrawerOpen}
           onClose={() => setSessionDrawerOpen(false)}
+          onRename={() => {
+            if (sessionId != null) {
+              setSessionDrawerOpen(false);
+              openSessionRenamePrompt(sessionId);
+            }
+          }}
           onSwitchModel={() => {
             setSessionDrawerOpen(false);
             setModelPickerOpen(true);
@@ -417,6 +477,7 @@ export function ChatTabScreen() {
           onClose={() => setModelPickerOpen(false)}
           onSelected={() => refreshChatMeta().catch(() => undefined)}
         />
+        {sessionRenameModal}
       </View>
     );
   }
@@ -476,31 +537,24 @@ export function ChatTabScreen() {
         )
       ) : (
         <>
-          {!sessionBatch.active ? (
-            <View
-              style={[
-                styles.sectionHeader,
-                {backgroundColor: tokens.surface},
-              ]}>
-              <Text style={[styles.sectionTitle, {color: tokens.text}]}>
-                会话
-              </Text>
-              <View style={styles.sectionActions}>
-                <SecondaryButton
-                  label="管理"
-                  tokens={tokens}
-                  onPress={sessionBatch.enter}
-                />
-                <PrimaryButton
-                  label="新建会话"
-                  tokens={tokens}
-                  onPress={() => handleCreateSession().catch(() => undefined)}
-                />
-              </View>
-            </View>
-          ) : null}
+          <ManageHeader
+            title="会话"
+            batchMode={sessionBatch.active}
+            selectedCount={sessionBatch.selectedCount}
+            onEnterBatch={sessionBatch.enter}
+            onCancelBatch={sessionBatch.exit}
+            onDelete={confirmBatchDelete}
+            hint="选择要删除的会话"
+            normalActions={
+              <PrimaryButton
+                label="新建会话"
+                tokens={tokens}
+                onPress={() => handleCreateSession().catch(() => undefined)}
+              />
+            }
+          />
           <FlatList
-            style={sessionBatch.active ? styles.listWithBar : styles.sessionList}
+            style={styles.sessionList}
             contentContainerStyle={styles.sessionListContent}
             data={sessions}
             keyExtractor={item => item.id}
@@ -592,23 +646,25 @@ export function ChatTabScreen() {
           />
           <BottomSheetMenu
             visible={menuSessionId != null}
-            items={[{label: '复制会话', action: 'copy'}]}
+            items={[
+              {label: '重命名', action: 'rename'},
+              {label: '复制会话', action: 'copy'},
+            ]}
             onClose={() => setMenuSessionId(undefined)}
             onSelect={action => {
               const sid = menuSessionId;
               setMenuSessionId(undefined);
-              if (action === 'copy' && sid) {
+              if (sid == null) {
+                return;
+              }
+              if (action === 'rename') {
+                openSessionRenamePrompt(sid);
+              } else if (action === 'copy') {
                 handleCopySession(sid).catch(() => undefined);
               }
             }}
           />
-          {sessionBatch.active ? (
-            <ListBatchBar
-              selectedCount={sessionBatch.selectedCount}
-              onCancel={sessionBatch.exit}
-              onDelete={confirmBatchDelete}
-            />
-          ) : null}
+          {sessionRenameModal}
         </>
       )}
       <ProjectDrawer
@@ -640,15 +696,6 @@ const styles = StyleSheet.create({
   },
   bannerLabel: {fontSize: 12},
   bannerName: {fontSize: 15, fontWeight: '600'},
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  sectionTitle: {fontSize: 18, fontWeight: '600'},
-  sectionActions: {flexDirection: 'row', alignItems: 'center', gap: 8},
   sessionList: {flex: 1},
   sessionListContent: {paddingHorizontal: 16, paddingBottom: 16},
   pullToolbar: {
@@ -685,7 +732,6 @@ const styles = StyleSheet.create({
   currentBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},
-  listWithBar: {marginBottom: 56},
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   chatPanel: {flex: 1},

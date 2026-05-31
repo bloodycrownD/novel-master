@@ -884,28 +884,6 @@ body {
     outline-offset: -2px;
 }
 
-.list-batch-bar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 56px;
-    z-index: 900;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 16px;
-    background: var(--surface-color);
-    border-top: 1px solid var(--border-color);
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
-}
-
-body.list-batch-page-footer #sessionList,
-body.list-batch-page-footer .agent-list {
-    padding-bottom: 72px;
-}
-
-.list-batch-count,
 .batch-header-count {
     flex: 1;
     text-align: center;
