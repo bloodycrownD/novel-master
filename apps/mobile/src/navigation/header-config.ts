@@ -20,6 +20,8 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   RealPrompt: {title: '真实提示词', showBack: true, showNav: false},
   SessionLog: {title: '会话日志', showBack: true, showNav: false},
   Providers: {title: '服务商管理', showBack: true, showNav: false},
+  ProviderCreate: {title: '添加服务商', showBack: true, showNav: false},
+  ProviderEdit: {title: '编辑服务商', showBack: true, showNav: false},
   ProviderDetail: {title: '模型管理', showBack: true, showNav: false},
   ModelSampling: {title: '采样配置', showBack: true, showNav: false},
   CompactionPolicy: {title: '压缩策略', showBack: true, showNav: false},

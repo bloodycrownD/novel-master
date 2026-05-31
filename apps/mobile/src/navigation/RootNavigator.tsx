@@ -16,6 +16,8 @@ import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {SessionLogScreen} from '../screens/stack/SessionLogScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
+import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
+import {ProviderEditScreen} from '../screens/stack/ProviderEditScreen';
 import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 import {CompactionPolicyScreen} from '../screens/stack/CompactionPolicyScreen';
@@ -103,6 +105,14 @@ export function RootNavigator() {
           <Stack.Screen
             name="Providers"
             component={withStackLayout('Providers', ProvidersScreen)}
+          />
+          <Stack.Screen
+            name="ProviderCreate"
+            component={withStackLayout('ProviderCreate', ProviderCreateScreen)}
+          />
+          <Stack.Screen
+            name="ProviderEdit"
+            component={withStackLayout('ProviderEdit', ProviderEditScreen)}
           />
           <Stack.Screen
             name="ProviderDetail"
