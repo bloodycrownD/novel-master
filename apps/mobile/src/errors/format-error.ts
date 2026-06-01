@@ -8,6 +8,7 @@ import {
   TdbcError,
   ToolError,
   VfsError,
+  VfsZipError,
 } from '@novel-master/core';
 
 function formatCause(cause: unknown): string | undefined {
@@ -28,6 +29,7 @@ function readCause(error: Error): unknown {
 export function formatError(error: unknown): string {
   if (
     error instanceof VfsError ||
+    error instanceof VfsZipError ||
     error instanceof ProviderError ||
     error instanceof ChatError ||
     error instanceof AgentError

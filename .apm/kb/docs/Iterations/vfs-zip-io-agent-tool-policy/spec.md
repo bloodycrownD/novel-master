@@ -18,12 +18,12 @@
 | 域路径规则 | global/project 仅 `/template/…`；session 任意 `/…`（`normalizePath` 拒绝 `..`） | 导入校验复用 `assertLogicalPathAllowed` |
 | 批量树操作 | `copyVfsTree` / `deleteVfsPrefix` / `replaceVfsSubtree`（`vfs-tree-copy.ts`，repository 级） | 导入写入可复用 `deleteVfsPrefix` + 批量 insert |
 | `VfsEntryRepository` | `scanContents` / `listAllPaths` **仅 file 行**（`entry_kind = 'file'`）；含 `storage_kind` | 导出 scan file；导入 `insert` + **`ensureParentDirectories`**（见 [vfs-directory-nodes](../vfs-directory-nodes/spec.md)） |
-| `vfs_entry` | `entry_kind: file \| directory`；`storage_kind: inline \| external` | 导出/import 仅 **file + inline UTF-8**；`directory` / `external` 行不参与 ZIP |
+| `vfs_entry` | `entry_kind: file \| directory`；`storage_kind: inline \| external` | 导出 **inline 文件** + **显式 directory 行**（ZIP `dir/`）；`external` 不参与 ZIP |
 | Core 分层 | `ARCHITECTURE.md` / [core-package-structure](../core-package-structure/spec.md)：`errors/` 包级；`domain/*/ports` 放契约 | 本 SPEC 结构与之对齐（见下） |
 | 事务 | `TdbcConnection.transaction(fn)` | 导入写入阶段包在单事务内 |
 | ZIP 库 | **无**（全仓库未引用 jszip/fflate 等） | Core 新增 **`fflate`**（纯 JS，Node + RN 可用） |
 | CLI VFS | `nm vfs …`（global）、`nm project vfs …`、`nm session vfs …`（list/read/write/…） | 各域 vfs 子命名空间增加 `export-zip` / `import-zip` |
-| 移动端 VFS | `VfsFileManager`（global / project template / session 三入口）；`vfs-operations.service.ts` 仅 CRUD | `moreMenu` 增加导出/导入；需新增**文件选择 / 分享**依赖 |
+| 移动端 VFS | `VfsFileManager`（global / project template / session 三入口）；`vfs-operations.service.ts` 仅 CRUD | `moreMenu` 增加导出/导入；**导入**用系统文件选择器，**导出**用系统「另存为」保存到本地 |
 | `ToolRegistry` | 全量 register；`toolsFromRegistry` 映射全部工具到 LLM | 新增 **policy 解析 + 过滤 registry** |
 | `DefaultAgentRunner` | 构造时注入 `registry`；`toolsFromRegistry(registry)` + `ToolRunner(registry)` | **调用方**注入已过滤 registry（Runner 本身不改签名） |
 | `AgentDefinition` | `name` / `prompts` / `model?` / `runtime?`；Zod strict；**无 tools 字段** | 扩展可选 `tools` 块；校验互斥与工具名 |
@@ -88,7 +88,7 @@ flowchart TB
 |----|------|
 | ZIP 范围 | **单域**；一条 ZIP 只对应一个 `VfsScope` |
 | 条目路径 | ZIP entry 名 = 域内**逻辑路径**去掉 leading `/`（例：逻辑 `/notes.md` → `notes.md`；`/dir/b.md` → `dir/b.md`）。导入时 `normalizePath('/' + entryName)` 还原 |
-| 目录条目 | ZIP 中纯目录 entry **忽略**；导入后由 **`ensureParentDirectories`** 为文件路径补齐 `directory` 行（不写空目录进 ZIP，与 PRD「仅文本文件」一致） |
+| 目录条目 | 显式空目录 → ZIP 条目 `dirname/`（0 字节）；导入时写入 `entry_kind=directory` 行；仅有文件的父链仍由 **`ensureParentDirectories`** 补齐 |
 | 文本编码 | 条目 body 必须为 **UTF-8**；非法 UTF-8 → **整包拒绝** |
 | 二进制 | 任一 entry 解码非 UTF-8 文本 → **整包拒绝**（不做部分导入） |
 | 非法路径 | `..`、空名、`\`、Windows 绝对盘符路径、`/projects/…` 等跨域前缀 → **整包拒绝** |
@@ -112,7 +112,7 @@ flowchart TB
 2. `rows = repo.scanContents(physicalPrefix)`
 3. 若任一 row 对应 entry 的 `storage_kind === 'external'`（需在 scan 时 JOIN 或二次查询）→ 抛 `VfsZipError('EXTERNAL_NOT_SUPPORTED')`
 4. 将每条 `physical path` → `toLogicalPath(scope, physical)`，写入 ZIP（entry 名去 leading `/`）
-5. 返回 `Uint8Array`（CLI 写文件；移动端写 cache + Share）
+5. 返回 `Uint8Array`（CLI `--out` 写文件；移动端先写 app cache 临时 ZIP，再 `saveDocuments` 弹出系统「另存为」由用户选择本地目标路径）
 
 ### VFS ZIP — 导入流程（两阶段）
 
@@ -269,7 +269,7 @@ apps/mobile/__tests__/
 | 包 | 新增依赖 |
 |----|----------|
 | `@novel-master/core` | `fflate` |
-| `@novel-master/mobile` | `@react-native-documents/picker`（或等价 document picker）；导出用 `react-native` `Share` + 写 cache 文件（无额外依赖） |
+| `@novel-master/mobile` | `@react-native-documents/picker`（`pick` 导入、`saveDocuments` 导出另存为）；`react-native-blob-util`（将 ZIP 字节写入 cache 供 `saveDocuments` 复制） |
 
 ---
 
@@ -315,11 +315,11 @@ apps/mobile/__tests__/
 
 | 位置 | 改动 |
 |------|------|
-| `vfs-zip.service.ts` | `exportVfsZip(scope, vfsRuntime)` / `importVfsZip(...)` |
+| `vfs-zip.service.ts` | `exportVfsZip` → cache + `saveDocuments`（本地另存为）；`importVfsZip` → `pick` + Core import |
 | `VfsFileManager.tsx` | moreMenu：`导出 ZIP` / `导入 ZIP`；导入前 `Alert` 确认 |
 | `AgentEditorForm.tsx` | 模式切换：默认 / 白名单 / 黑名单；多选或逗号分隔工具名 |
 | `agent-run.service.ts` | filtered registry |
-| `package.json` | document picker 依赖 |
+| `package.json` | `@react-native-documents/picker`、`react-native-blob-util` |
 
 ---
 
@@ -357,7 +357,7 @@ apps/mobile/__tests__/
 
 ### M4 — 移动端 VFS ZIP + 联调
 
-1. 添加 document picker 依赖；实现 `vfs-zip.service.ts`。
+1. 添加 document picker + blob-util 依赖；实现 `vfs-zip.service.ts`（导出 `saveDocuments`，导入 `pick`）。
 2. `VfsFileManager` 三入口（global template / project template / session worktree）共用导出/导入菜单项。
 3. 导入确认文案明确「将完全替换当前工作区文件」。
 4. 手工验收：移动端 export → CLI import 同 session，路径集合一致（PRD 三端用例）。

@@ -58,7 +58,7 @@
 
 - **Core**：域级 export/import 能力（供 CLI、Mobile 调用）。
 - **CLI**：`nm` 子命令（或等价）支持三域 export/import。
-- **RN 移动端**：在对应工作区/模板入口提供导出、导入（系统文件选择器选择 ZIP）。
+- **RN 移动端**：在对应工作区/模板入口提供导出、导入；**导出**为系统「另存为」保存 ZIP 到用户选择的本地路径，**导入**为系统文件选择器选择 ZIP。
 
 **4. Agent 工具白名单 / 黑名单**
 
@@ -122,7 +122,7 @@
 ## 约束与依赖（扩展）
 
 - 依赖现有 **三域 VFS 绑定**（见 [chat-project-vfs PRD](../chat-project-vfs/prd.md)）与 **Tool 系统**（见 [tool-system PRD](../tool-system/prd.md)）、**Agent 定义**（见 [agent-system PRD](../agent-system/prd.md)）。
-- 移动端依赖系统文件选择与分享能力；CLI 依赖本地文件路径。
+- 移动端依赖系统文件选择与本地另存为能力；CLI 依赖本地文件路径（`--out` / `--file`）。
 - Agent 名单仅 YAML：移动端 Agent 编辑页需支持编辑并写回 YAML 字段（或等价序列化），不得引入第二套持久化真相源。
 
 ## 风险与待确认项（扩展）

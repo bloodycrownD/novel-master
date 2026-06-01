@@ -72,6 +72,7 @@ export {
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
+export { parseVfsZip } from "./domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "./errors/vfs-zip-errors.js";
 export type { VfsZipErrorCode } from "./errors/vfs-zip-errors.js";
 export type {

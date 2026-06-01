@@ -28,3 +28,17 @@ export function logicalFromZipEntryName(entryName: string): string {
   }
   return normalizePath(`/${trimmed}`);
 }
+
+/** ZIP directory marker entry name (`dir/` suffix) from a logical directory path. */
+export function zipDirectoryEntryNameFromLogical(logical: string): string {
+  return `${zipEntryNameFromLogical(logical)}/`;
+}
+
+/** Logical directory path from a ZIP entry ending with `/`. */
+export function logicalFromZipDirectoryEntryName(entryName: string): string {
+  const withoutSlash = entryName.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (withoutSlash.length === 0) {
+    throw vfsZipError("INVALID_PATH", "empty ZIP directory entry name");
+  }
+  return logicalFromZipEntryName(withoutSlash);
+}

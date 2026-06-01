@@ -7,16 +7,26 @@
 import { vfsZipError } from "@/errors/vfs-zip-errors.js";
 import type { VfsScope } from "./vfs-path-mapper.js";
 import { assertLogicalPathAllowed } from "./vfs-path-mapper.js";
-import { logicalFromZipEntryName } from "./vfs-zip-path.js";
+import {
+  logicalFromZipDirectoryEntryName,
+  logicalFromZipEntryName,
+} from "./vfs-zip-path.js";
 
 export const VFS_ZIP_MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024;
 export const VFS_ZIP_MAX_ENTRY_COUNT = 5_000;
 export const VFS_ZIP_MAX_ENTRY_PATH_LEN = 512;
 
+/** Validated ZIP payload ready for DB import. */
+export interface VfsZipValidatedPayload {
+  readonly files: ReadonlyMap<string, string>;
+  /** Logical directory paths (e.g. `/empty-dir`), shallow paths first. */
+  readonly directories: readonly string[];
+}
+
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
 function assertZipEntryNameAllowed(entryName: string): void {
-  if (entryName.length === 0 || entryName.endsWith("/")) {
+  if (entryName.length === 0) {
     return;
   }
   if (entryName.length > VFS_ZIP_MAX_ENTRY_PATH_LEN) {
@@ -43,28 +53,94 @@ function assertZipEntryNameAllowed(entryName: string): void {
   }
 }
 
-/** Decodes bytes as UTF-8 text; rejects invalid sequences. */
-export function decodeUtf8Entry(bytes: Uint8Array): string {
+function stripUtf8Bom(bytes: Uint8Array): Uint8Array {
+  if (
+    bytes.length >= 3 &&
+    bytes[0] === 0xef &&
+    bytes[1] === 0xbb &&
+    bytes[2] === 0xbf
+  ) {
+    return bytes.subarray(3);
+  }
+  return bytes;
+}
+
+function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Decodes bytes as UTF-8 text; rejects invalid sequences.
+ * Uses round-trip encoding (not `fatal: true`) so Hermes matches Node behavior.
+ */
+export function decodeUtf8Entry(bytes: Uint8Array, entryName: string): string {
+  const payload = stripUtf8Bom(bytes);
+  const decoded = new TextDecoder("utf-8").decode(payload);
+  const roundTrip = new TextEncoder().encode(decoded);
+  if (!bytesEqual(payload, roundTrip)) {
+    throw vfsZipError(
+      "INVALID_UTF8",
+      `ZIP entry "${entryName}" is not valid UTF-8 text (${bytes.byteLength} bytes)`,
+    );
+  }
+  return decoded;
+}
+
+function assertLogicalAllowed(
+  scope: VfsScope,
+  logical: string,
+  entryName: string,
+): void {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    throw vfsZipError("INVALID_UTF8", "ZIP entry is not valid UTF-8 text");
+    assertLogicalPathAllowed(scope, logical);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "path not allowed for scope";
+    throw vfsZipError(
+      "INVALID_PATH",
+      `ZIP entry "${entryName}" → logical "${logical}": ${message}`,
+    );
   }
 }
 
 /**
- * Validates raw ZIP entries and returns logical path → content for import.
+ * Validates raw ZIP entries and returns files + explicit empty directories.
  * Does not touch the database.
  */
 export function validateVfsZipEntries(
   scope: VfsScope,
   entries: ReadonlyMap<string, Uint8Array>,
-): Map<string, string> {
+): VfsZipValidatedPayload {
   const fileEntries: Array<{ entryName: string; bytes: Uint8Array }> = [];
+  const directoryLogicals: string[] = [];
   let totalBytes = 0;
 
   for (const [entryName, bytes] of entries) {
-    if (entryName.endsWith("/") || entryName.length === 0) {
+    if (entryName.endsWith("/")) {
+      const dirKey = entryName.replace(/\/+$/, "");
+      assertZipEntryNameAllowed(dirKey);
+      if (bytes.byteLength > 0) {
+        throw vfsZipError(
+          "INVALID_ZIP",
+          `ZIP directory entry "${entryName}" must be empty (${bytes.byteLength} bytes)`,
+        );
+      }
+      const logical = logicalFromZipDirectoryEntryName(entryName);
+      assertLogicalAllowed(scope, logical, entryName);
+      if (!directoryLogicals.includes(logical)) {
+        directoryLogicals.push(logical);
+      }
+      continue;
+    }
+    if (entryName.length === 0) {
       continue;
     }
     assertZipEntryNameAllowed(entryName);
@@ -72,10 +148,11 @@ export function validateVfsZipEntries(
     fileEntries.push({ entryName, bytes });
   }
 
-  if (fileEntries.length > VFS_ZIP_MAX_ENTRY_COUNT) {
+  const entryCount = fileEntries.length + directoryLogicals.length;
+  if (entryCount > VFS_ZIP_MAX_ENTRY_COUNT) {
     throw vfsZipError(
       "PAYLOAD_TOO_LARGE",
-      `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} file entries`,
+      `ZIP exceeds ${VFS_ZIP_MAX_ENTRY_COUNT} entries`,
     );
   }
   if (totalBytes > VFS_ZIP_MAX_UNCOMPRESSED_BYTES) {
@@ -85,22 +162,18 @@ export function validateVfsZipEntries(
     );
   }
 
-  const result = new Map<string, string>();
+  const files = new Map<string, string>();
   for (const { entryName, bytes } of fileEntries) {
     const logical = logicalFromZipEntryName(entryName);
-    if (result.has(logical)) {
+    if (files.has(logical) || directoryLogicals.includes(logical)) {
       throw vfsZipError("DUPLICATE_PATH", `duplicate logical path: ${logical}`);
     }
-    try {
-      assertLogicalPathAllowed(scope, logical);
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "path not allowed for scope";
-      throw vfsZipError("INVALID_PATH", message);
-    }
-    const content = decodeUtf8Entry(bytes);
-    result.set(logical, content);
+    assertLogicalAllowed(scope, logical, entryName);
+    const content = decodeUtf8Entry(bytes, entryName);
+    files.set(logical, content);
   }
 
-  return result;
+  directoryLogicals.sort((a, b) => a.length - b.length);
+
+  return { files, directories: directoryLogicals };
 }

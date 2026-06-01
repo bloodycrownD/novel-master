@@ -15,8 +15,12 @@ import {
   toPhysicalPath,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import { zipEntryNameFromLogical } from "@/domain/vfs/logic/vfs-zip-path.js";
+import {
+  zipDirectoryEntryNameFromLogical,
+  zipEntryNameFromLogical,
+} from "@/domain/vfs/logic/vfs-zip-path.js";
 import { validateVfsZipEntries } from "@/domain/vfs/logic/vfs-zip-validate.js";
+import { vfsNotADirectory } from "@/errors/vfs-errors.js";
 import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
@@ -31,6 +35,36 @@ export type VfsZipImportTestHook = {
   /** @internal called immediately before deleteVfsPrefix in phase B */
   readonly onBeforeDeletePrefix?: () => void;
 };
+
+function relativeUnderPhysicalPrefix(fullPath: string, prefix: string): string {
+  const base =
+    prefix === "/" ? prefix : prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+  if (fullPath === base) {
+    return "";
+  }
+  const withSlash = `${base}/`;
+  if (!fullPath.startsWith(withSlash)) {
+    throw new Error(`Path ${fullPath} is not under prefix ${prefix}`);
+  }
+  return fullPath.slice(withSlash.length);
+}
+
+async function ensureEmptyDirectoryRow(
+  repo: VfsEntryRepository,
+  scope: VfsScope,
+  logical: string,
+): Promise<void> {
+  const physical = toPhysicalPath(scope, logical);
+  await ensureParentDirectories(repo, `${physical}/__vfs_zip_placeholder`);
+  const existing = await repo.findByPath(physical);
+  if (existing == null) {
+    await repo.insertDirectory(physical);
+    return;
+  }
+  if (existing.entryKind !== "directory") {
+    throw vfsNotADirectory(physical);
+  }
+}
 
 export class DefaultVfsZipIoService implements VfsZipIoService {
   constructor(
@@ -55,7 +89,21 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       zipFiles.set(zipEntryNameFromLogical(logical), row.content);
     }
 
-    return buildVfsZip(zipFiles);
+    const directoryZipNames: string[] = [];
+    const entriesUnderScope =
+      await this.repo.listEntriesUnderPrefix(physicalPrefix);
+    for (const entry of entriesUnderScope) {
+      if (entry.kind !== "directory") {
+        continue;
+      }
+      if (relativeUnderPhysicalPrefix(entry.path, physicalPrefix).length === 0) {
+        continue;
+      }
+      const logical = toLogicalPath(scope, entry.path);
+      directoryZipNames.push(zipDirectoryEntryNameFromLogical(logical));
+    }
+
+    return buildVfsZip(zipFiles, directoryZipNames);
   }
 
   async import(
@@ -71,7 +119,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     }
 
     const rawEntries = parseVfsZip(zipBytes);
-    const files = validateVfsZipEntries(scope, rawEntries);
+    const { files, directories } = validateVfsZipEntries(scope, rawEntries);
     const physicalPrefix = scopePhysicalPrefix(scope);
 
     try {
@@ -79,6 +127,9 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
         const repoTx = new SqliteVfsEntryRepository(tx);
         this.testHook?.onBeforeDeletePrefix?.();
         await deleteVfsPrefix(repoTx, physicalPrefix);
+        for (const logical of directories) {
+          await ensureEmptyDirectoryRow(repoTx, scope, logical);
+        }
         for (const [logical, content] of files) {
           if (this.testHook?.throwOnInsertLogical === logical) {
             throw new Error("test import failure");

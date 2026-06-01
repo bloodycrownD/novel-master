@@ -8,6 +8,7 @@ import {
 import type { VfsService } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -68,6 +69,12 @@ describe("VfsZipIoService", () => {
     const read = await vfs.read("/new.md");
     assert.equal(read.content, "new");
     await ctx.conn.close();
+  });
+
+  it("markdown front matter passes UTF-8 zip validation", () => {
+    const content = "---\ntitle: x\n---\n# Hi\n";
+    const bytes = new TextEncoder().encode(content);
+    assert.equal(decodeUtf8Entry(bytes, "xxx.md"), content);
   });
 
   it("Z4: invalid UTF-8 rejects import without changing domain", async () => {
@@ -150,6 +157,67 @@ describe("VfsZipIoService", () => {
     );
     const read = await vfs.read("/stay.md");
     assert.equal(read.content, "stay");
+    await ctx.conn.close();
+  });
+
+  it("export/import preserves explicit empty directory", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-empty-dir");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.mkdir("/test");
+    await vfs.write("/note.md", "x");
+    assert.ok(
+      (await vfs.list("/")).some(
+        (e) => e.kind === "directory" && e.path === "/test",
+      ),
+      "mkdir should create /test directory row",
+    );
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const exported = await zipSvc.export(scope);
+    const names = Object.keys(unzipSync(exported));
+    assert.ok(names.includes("test/"), `expected test/ dir marker, got ${names.join(",")}`);
+
+    await vfs.write("/note.md", "mutated", { versionCheck: false });
+    await vfs.delete("/test", { recursive: true });
+
+    await zipSvc.import(scope, exported, { confirmed: true });
+
+    const entries = await vfs.list("/", { recursive: false });
+    assert.ok(
+      entries.some((e) => e.kind === "directory" && e.path === "/test"),
+      "empty directory /test should exist after import",
+    );
+    assert.equal((await vfs.read("/note.md")).content, "x");
+    await ctx.conn.close();
+  });
+
+  it("session export bytes round-trip import with UTF-8 text", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-rt");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/ddd/love_message.txt", "你好\nline2");
+    await vfs.write("/note.md", "ascii");
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const exported = await zipSvc.export(scope);
+    await zipSvc.import(scope, exported, { confirmed: true });
+
+    assert.deepEqual(await listFilePaths(vfs), ["/ddd/love_message.txt", "/note.md"]);
+    assert.equal((await vfs.read("/ddd/love_message.txt")).content, "你好\nline2");
+    assert.equal((await vfs.read("/note.md")).content, "ascii");
     await ctx.conn.close();
   });
 

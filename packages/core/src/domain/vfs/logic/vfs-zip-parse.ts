@@ -1,5 +1,5 @@
 /**
- * Parses ZIP bytes into entry name → raw bytes (skips directory-only entries).
+ * Parses ZIP bytes into entry name → raw bytes (includes `dir/` directory markers).
  *
  * @module domain/vfs/logic/vfs-zip-parse
  */
@@ -15,9 +15,6 @@ export function parseVfsZip(zipBytes: Uint8Array): Map<string, Uint8Array> {
     const raw = unzipSync(zipBytes);
     const entries = new Map<string, Uint8Array>();
     for (const [name, content] of Object.entries(raw)) {
-      if (name.endsWith("/")) {
-        continue;
-      }
       entries.set(name, content);
     }
     return entries;

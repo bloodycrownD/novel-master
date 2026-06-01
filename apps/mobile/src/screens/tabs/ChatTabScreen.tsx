@@ -29,7 +29,6 @@ import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
-import {TemplatePullButton} from '../../components/template/TemplatePullButton';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
@@ -552,12 +551,6 @@ export function ChatTabScreen() {
           )
         ) : sessionVfs && sessionWorktree && sessionId != null ? (
           <View style={styles.flexFill}>
-            <View style={[styles.pullToolbar, {borderBottomColor: tokens.border}]}>
-              <TemplatePullButton
-                scope={{kind: 'session', sessionId}}
-                onPulled={bumpVfsRefresh}
-              />
-            </View>
             <VfsFileManager
               key={`session-vfs-${vfsRefreshKey}`}
               scope={{
@@ -568,6 +561,10 @@ export function ChatTabScreen() {
               vfs={sessionVfs}
               worktree={sessionWorktree}
               rootPath="/"
+              pullFromParent={{
+                scope: {kind: 'session', sessionId},
+                onPulled: bumpVfsRefresh,
+              }}
               onOpenFile={path => openFileEditor(path, 'session')}
             />
           </View>
@@ -698,18 +695,16 @@ export function ChatTabScreen() {
       {sessionListPanel === 'template' ? (
         projectVfs && projectWorktree && projectId != null ? (
           <View style={styles.flexFill}>
-            <View style={[styles.pullToolbar, {borderBottomColor: tokens.border}]}>
-              <TemplatePullButton
-                scope={{kind: 'project', projectId}}
-                onPulled={bumpVfsRefresh}
-              />
-            </View>
             <VfsFileManager
               key={`project-template-${vfsRefreshKey}`}
               scope={{kind: 'project', projectId}}
               vfs={projectVfs}
               worktree={projectWorktree}
               rootPath="/template"
+              pullFromParent={{
+                scope: {kind: 'project', projectId},
+                onPulled: bumpVfsRefresh,
+              }}
               onOpenFile={path => openFileEditor(path, 'project')}
             />
           </View>
@@ -881,13 +876,6 @@ const styles = StyleSheet.create({
   bannerName: {fontSize: 15, fontWeight: '600'},
   sessionList: {flex: 1},
   sessionListContent: {paddingBottom: 16},
-  pullToolbar: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   flexFill: {flex: 1},
   sessionCard: {
     flexDirection: 'row',

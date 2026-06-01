@@ -13,6 +13,8 @@ type Props = {
     | {kind: 'project'; projectId: string}
     | {kind: 'session'; sessionId: string};
   onPulled?: () => void;
+  /** Inline toolbar: smaller padding, no border box. */
+  compact?: boolean;
 };
 
 function confirmMessage(scope: Props['scope']): string {
@@ -22,7 +24,7 @@ function confirmMessage(scope: Props['scope']): string {
   return '将从项目模板覆盖当前会话工作区，本地修改将丢失。确定继续？';
 }
 
-export function TemplatePullButton({scope, onPulled}: Props) {
+export function TemplatePullButton({scope, onPulled, compact = false}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
@@ -58,13 +60,18 @@ export function TemplatePullButton({scope, onPulled}: Props) {
 
   return (
     <Pressable
-      style={[styles.btn, {borderColor: tokens.border}]}
+      style={compact ? styles.btnCompact : [styles.btn, {borderColor: tokens.border}]}
       disabled={pulling}
       onPress={confirmPull}>
       {pulling ? (
-        <ActivityIndicator size="small" />
+        <ActivityIndicator size="small" color={tokens.primary} />
       ) : (
-        <Text style={{color: tokens.primary, fontWeight: '600'}}>
+        <Text
+          style={
+            compact
+              ? {color: tokens.primary, fontSize: 13, fontWeight: '600'}
+              : {color: tokens.primary, fontWeight: '600'}
+          }>
           从上级同步
         </Text>
       )}
@@ -79,6 +86,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: 8,
     minWidth: 96,
+    alignItems: 'center',
+  },
+  btnCompact: {
+    paddingHorizontal: 6,
+    paddingVertical: 8,
     alignItems: 'center',
   },
 });

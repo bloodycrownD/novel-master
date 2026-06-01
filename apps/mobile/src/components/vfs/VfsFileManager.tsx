@@ -19,6 +19,7 @@ import type {
   WorktreeListRow,
   WorktreeService,
 } from '@novel-master/core';
+import {ParentDirIcon} from '../icons/TabIcons';
 import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
 import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
@@ -49,7 +50,12 @@ import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {useTheme} from '../../theme/ThemeProvider';
+import {TemplatePullButton} from '../template/TemplatePullButton';
 import {useToast} from '../chrome/ToastHost';
+
+export type VfsFileManagerPullScope =
+  | {kind: 'project'; projectId: string}
+  | {kind: 'session'; sessionId: string};
 
 export type VfsFileManagerProps = {
   scope: VfsScope;
@@ -57,6 +63,10 @@ export type VfsFileManagerProps = {
   worktree: WorktreeService;
   onOpenFile: (path: string) => void;
   rootPath?: string;
+  pullFromParent?: {
+    scope: VfsFileManagerPullScope;
+    onPulled?: () => void;
+  };
 };
 
 type PromptState = {
@@ -72,6 +82,7 @@ export function VfsFileManager({
   worktree,
   onOpenFile,
   rootPath,
+  pullFromParent,
 }: VfsFileManagerProps) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -297,7 +308,11 @@ export function VfsFileManager({
     }
     if (action === 'export-zip') {
       exportVfsZip(runtime, scope)
-        .then(() => showToast('已发起 ZIP 导出'))
+        .then(result => {
+          if (result === 'saved') {
+            showToast('ZIP 已保存到所选位置');
+          }
+        })
         .catch(err => showToast(toastMessage('导出失败', err)));
       return;
     }
@@ -375,6 +390,7 @@ export function VfsFileManager({
         <View style={styles.navGroup}>
           <Pressable
             disabled={!canGoUp}
+            accessibilityLabel="上级目录"
             onPress={() => {
               const parent = parentLogicalPath(currentPath);
               if (parent != null) {
@@ -382,9 +398,9 @@ export function VfsFileManager({
               }
             }}
             style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}>
-            <Text style={{color: canGoUp ? tokens.text : tokens.textSecondary}}>
-              ↑
-            </Text>
+            <ParentDirIcon
+              color={canGoUp ? tokens.primary : tokens.textSecondary}
+            />
           </Pressable>
           <Text
             style={[styles.path, {color: tokens.text}]}
@@ -393,6 +409,13 @@ export function VfsFileManager({
             {currentPath}
           </Text>
         </View>
+        {pullFromParent ? (
+          <TemplatePullButton
+            compact
+            scope={pullFromParent.scope}
+            onPulled={pullFromParent.onPulled}
+          />
+        ) : null}
         <Pressable onPress={() => setMoreOpen(true)} style={styles.moreBtn}>
           <Text style={{color: tokens.text, fontSize: 20}}>⋯</Text>
         </Pressable>
@@ -473,7 +496,6 @@ export function VfsFileManager({
       />
       <BottomSheetMenu
         visible={moreOpen}
-        title={currentPath}
         items={moreMenuItems}
         onSelect={handleMoreAction}
         onClose={() => setMoreOpen(false)}
@@ -549,7 +571,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   navGroup: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8},
-  iconBtn: {padding: 8, minWidth: 36, alignItems: 'center'},
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
+  },
   iconBtnDisabled: {opacity: 0.4},
   path: {flex: 1, fontFamily: 'monospace', fontSize: 13},
   moreBtn: {padding: 8},

@@ -27,6 +27,7 @@
     "markdown-it": "^14.1.0",
     "react": "19.2.3",
     "react-native": "0.85.3",
+    "react-native-blob-util": "^0.22.2",
     "react-native-gesture-handler": "^2.24.0",
     "react-native-quick-sqlite": "^8.2.7",
     "react-native-render-html": "^6.3.4",
