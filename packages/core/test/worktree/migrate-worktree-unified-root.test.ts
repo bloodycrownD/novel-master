@@ -141,6 +141,25 @@ describe("migrateWorktreeUnifiedRoot", () => {
     await ctx.conn.close();
   });
 
+  it("repairs paths corrupted by bad substr (e/xxx → /xxx)", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    await ctx.conn.execute(
+      `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
+       VALUES ('global', 'e/xxx.md', 'auto')`,
+    );
+    await migrateWorktreeUnifiedRoot(ctx.conn);
+
+    const rows = await ctx.conn.query<{ logical_path: string }>(
+      `SELECT logical_path FROM worktree_file_rule WHERE scope_key = 'global'`,
+    );
+    assert.equal(rows[0]!.logical_path, "/xxx.md");
+
+    const wt = createWorktreeService(ctx.conn, { kind: "global" });
+    await wt.buildListRows();
+
+    await ctx.conn.close();
+  });
+
   it("is idempotent when run twice", async () => {
     const ctx = await openNovelMasterTestConnection();
     await seedLegacyGlobalDirRule(ctx.conn);
