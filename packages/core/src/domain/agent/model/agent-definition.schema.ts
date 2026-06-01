@@ -24,24 +24,27 @@ const chatPromptBlockValueSchema = z
   })
   .strict();
 
-const abstractPromptBlockValueSchema = z
-  .object({
-    type: z.literal("abstract"),
-    content: z.string(),
-  })
-  .strict();
-
 const promptBlockValueSchema = z.union([
   textPromptBlockValueSchema,
   chatPromptBlockValueSchema,
-  abstractPromptBlockValueSchema,
 ]);
 
 const promptsDocumentSchema = z
   .object({
     blocks: z.record(z.string().min(1), promptBlockValueSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((doc, ctx) => {
+    for (const [name, block] of Object.entries(doc.blocks)) {
+      const raw = block as { type?: string };
+      if (raw.type === "abstract") {
+        ctx.addIssue({
+          code: "custom",
+          message: `prompt block "${name}" uses removed type "abstract"; remove it from agent config`,
+        });
+      }
+    }
+  });
 
 const agentToolPolicyDocumentSchema = z
   .object({
@@ -50,7 +53,7 @@ const agentToolPolicyDocumentSchema = z
   })
   .strict();
 
-/** Root agent definition wire document schema (strict ù?rejects legacy keys). */
+/** Root agent definition wire document schema (strict ??rejects legacy keys). */
 export const agentDefinitionDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -95,7 +98,10 @@ function blockToMapValue(
     };
   }
   if (block.type === "abstract") {
-    return { type: "abstract", content: block.content };
+    throw new AgentConfigError(
+      "INVALID_SCHEMA",
+      "abstract prompt blocks are no longer supported",
+    );
   }
   return { type: "chat" };
 }
@@ -153,7 +159,7 @@ const agentDefinitionWireSchema = z.preprocess((raw) => {
   return raw;
 }, agentDefinitionDocumentSchema);
 
-/** Domain parser: wire document ù?{@link AgentDefinition}. */
+/** Domain parser: wire document ??{@link AgentDefinition}. */
 export const agentDefinitionSchema = Object.assign(
   agentDefinitionWireSchema.transform(documentToDefinition),
   { encode: definitionToDocument },

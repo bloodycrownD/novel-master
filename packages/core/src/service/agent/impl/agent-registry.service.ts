@@ -11,14 +11,10 @@ import {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
 } from "@/domain/agent/logic/validate-agent-definition.js";
-import type { CompactionPolicyStore } from "@/service/compaction/compaction-policy-store.port.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
 
 export class DefaultAgentRegistryService implements AgentRegistryService {
-  constructor(
-    private readonly repository: AgentDefinitionRepository,
-    private readonly compactionPolicy?: CompactionPolicyStore,
-  ) {}
+  constructor(private readonly repository: AgentDefinitionRepository) {}
 
   async listAgentIds(): Promise<readonly string[]> {
     return this.repository.listIds();
@@ -50,20 +46,6 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   }
 
   async delete(agentId: string): Promise<void> {
-    if (this.compactionPolicy != null) {
-      const policy = await this.compactionPolicy.getPolicy();
-      const abstract = policy?.action.abstract;
-      if (
-        policy != null &&
-        abstract?.type === "agent" &&
-        abstract.agentId === agentId
-      ) {
-        throw new AgentConfigError(
-          "AGENT_IN_USE",
-          `agent is referenced by compaction policy: ${agentId}`,
-        );
-      }
-    }
     const existing = await this.repository.get(agentId);
     if (existing == null) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);

@@ -1,5 +1,5 @@
 /**
- * Prompt �?LLM input and CLI formatting.
+ * Prompt → LLM input and CLI formatting.
  *
  * @module service/prompt/render-prompt
  */
@@ -15,14 +15,10 @@ import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
 export interface PromptRenderDot {
   readonly worktree: string;
   readonly filetree: string;
-  readonly abstract: string;
 }
 
-/** Worktree strings for prompt/compaction macros (excludes chat messages). */
-export type PromptMacroContext = Omit<
-  PromptRenderContext,
-  "messages" | "abstract"
->;
+/** Worktree strings for prompt macros (excludes chat messages). */
+export type PromptMacroContext = Omit<PromptRenderContext, "messages">;
 
 /** Inputs required to build LLM input from prompt blocks. */
 export interface PromptRenderContext {
@@ -30,8 +26,6 @@ export interface PromptRenderContext {
   /** ASCII tree from {@link WorktreeService.renderFileTree}; macro `{{.filetree}}`. */
   readonly filetreeDisplay: string;
   readonly messages: readonly ChatMessage[];
-  /** Compaction abstract for abstract blocks and `{{.abstract}}`; default "". */
-  readonly abstract?: string;
   /** Defaults to `new Date()` when omitted (tests inject a fixed time). */
   readonly now?: Date;
 }
@@ -58,12 +52,7 @@ function buildDot(ctx: PromptRenderContext): PromptRenderDot {
   return {
     worktree: ctx.worktreeDisplay,
     filetree: ctx.filetreeDisplay,
-    abstract: ctx.abstract ?? "",
   };
-}
-
-function hasAbstractContent(abstract: string): boolean {
-  return abstract.trim().length > 0;
 }
 
 function renderSystemMacroContent(
@@ -74,12 +63,11 @@ function renderSystemMacroContent(
   return renderMacro(content, {
     dot: dotRecord,
     root,
-    optionalDotFields: ["abstract"],
   });
 }
 
 /**
- * Builds LLM input: merge system text + abstract blocks �?render macros.
+ * Builds LLM input: merge system text blocks and render macros.
  */
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],
@@ -101,10 +89,9 @@ export function buildPromptLlmInput(
       continue;
     }
     if (block.type === "abstract") {
-      if (!hasAbstractContent(dot.abstract)) {
-        continue;
-      }
-      systemParts.push(renderSystemMacroContent(block.content, dotRecord, root));
+      throw new Error(
+        "abstract prompt blocks are removed; delete abstract blocks from agent config",
+      );
     }
   }
 
@@ -142,12 +129,9 @@ export function formatPromptLlmInputForCli(
       continue;
     }
     if (block.type === "abstract") {
-      if (!hasAbstractContent(dot.abstract)) {
-        continue;
-      }
-      const content = renderSystemMacroContent(block.content, dotRecord, root);
-      segments.push(formatSegment("system", content));
-      continue;
+      throw new Error(
+        "abstract prompt blocks are removed; delete abstract blocks from agent config",
+      );
     }
 
     for (const message of input.messages) {

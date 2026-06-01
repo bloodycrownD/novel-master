@@ -1,25 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
-  compactionPolicySchema,
-  decode,
-  type CompactionPolicy,
   createAgentRunner,
-  createCompactionPipeline,
-  createDefaultTokenCounterRegistry,
-  createNoOpCompactionPipeline,
+  createSessionMacroCache,
+  EVENT_SESSION_MESSAGE_RECEIVED,
   InMemoryAgentSession,
   registerVfsTools,
+  SimpleEventBus,
   textBlocks,
   ToolRegistry,
   type AgentDefinition,
-  type CompactionAgentResolver,
-  type CompactionPolicyStore,
+  type CreateAgentRunnerDeps,
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core";
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
-import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 import type { VfsService, VfsToolContext } from "@novel-master/core";
 import type { SessionFsService } from "../../src/service/session-fs/session-fs.port.js";
 
@@ -31,51 +26,25 @@ function minimalDefinition(): AgentDefinition {
 }
 
 const RUN_MODEL_ID = "anthropic/claude";
+const MOCK_PROJECT_ID = "test-project";
+const MOCK_SESSION_ID = "test-session";
 
-/** Dialogue agent for runner compaction integration (no compact on definition). */
-function compactRunnerDefinition(): AgentDefinition {
+function runnerDeps(
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "macroCache">,
+): CreateAgentRunnerDeps {
   return {
-    name: "runner-compact",
-    prompts: [
-      { name: "base", type: "text", role: "system", content: "base" },
-      {
-        name: "abs",
-        type: "abstract",
-        content: "CTX={{.abstract}}",
-      },
-      { name: "c", type: "chat" },
-    ],
+    ...deps,
+    eventBus: new SimpleEventBus(),
+    macroCache: createSessionMacroCache(),
   };
 }
 
-class InMemoryCompactionPolicyStore implements CompactionPolicyStore {
-  constructor(private readonly policy: CompactionPolicy) {}
-
-  async getPolicy() {
-    return this.policy;
-  }
-
-  async setPolicy(): Promise<void> {
-    throw new Error("not implemented");
-  }
-
-  async clearPolicy(): Promise<void> {
-    throw new Error("not implemented");
-  }
-}
-
-const noopResolver: CompactionAgentResolver = {
-  async resolve(agentId: string) {
-    throw new Error(`unexpected resolve: ${agentId}`);
-  },
+const defaultRunScope = {
+  sessionId: MOCK_SESSION_ID,
+  projectId: MOCK_PROJECT_ID,
+  applicationModelId: RUN_MODEL_ID,
+  workspaceModelId: RUN_MODEL_ID,
 };
-
-/** Legacy guard: agent runner must not read agent.compaction.* from any config bucket. */
-function assertLegacyCompactionKeyForbidden(key: string): void {
-  if (key.startsWith("agent.compaction.")) {
-    throw new Error(`T11: must not read ${key}`);
-  }
-}
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -107,9 +76,6 @@ function mockVfs(): VfsService {
     },
   } as unknown as VfsService;
 }
-
-const MOCK_PROJECT_ID = "test-project";
-const MOCK_SESSION_ID = "test-session";
 
 function mockSessionFs(vfs: VfsService): SessionFsService {
   return {
@@ -188,20 +154,19 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerVfsTools(registry);
-    const runner = createAgentRunner({
-      session,
-      modelRequests: model,
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      compaction: createNoOpCompactionPipeline(),
-    });
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
 
     const result = await runner.run({
       maxSteps: 1,
       definition: minimalDefinition(),
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
+      ...defaultRunScope,
     });
 
     assert.equal(model.callCount(), 1);
@@ -253,20 +218,19 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerVfsTools(registry);
-    const runner = createAgentRunner({
-      session,
-      modelRequests: model,
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      compaction: createNoOpCompactionPipeline(),
-    });
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
 
     const result = await runner.run({
       maxSteps: 3,
       definition: minimalDefinition(),
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
+      ...defaultRunScope,
     });
 
     assert.equal(model.callCount(), 3);
@@ -274,69 +238,36 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "completed");
   });
 
-  it("T11: compacts from global policy without legacy agent.compaction.* config", async () => {
-    assert.throws(
-      () => assertLegacyCompactionKeyForbidden("agent.compaction.thresholdTokens"),
-      /must not read/,
-    );
-
+  it("emits session.message.received after successful assistant append", async () => {
     const session = new InMemoryAgentSession();
-    for (let i = 0; i < 10; i++) {
-      await session.append("user", textBlocks(`message ${i} `.repeat(50)));
-    }
-
-    let mainSystem: string | undefined;
-    const model: ModelRequestService = {
-      request: mock.fn(async (_id, _content, opts) => {
-        mainSystem = opts?.system;
-        return {
-          assistantText: "done",
-          blocks: [{ type: "text", text: "done" }],
-          raw: {},
-        };
-      }),
-    };
-
-    const policyStore = new InMemoryCompactionPolicyStore(
-      decode(
-        {
-          schemaVersion: 1,
-          enabled: true,
-          trigger: { tokenThreshold: 10 },
-          action: {
-            keepLastN: 2,
-            abstract: { type: "text", content: "compact-abstract" },
-          },
-        },
-        compactionPolicySchema,
-      ),
-    );
-
+    await session.append("user", textBlocks("hi"));
+    const bus = new SimpleEventBus();
+    let received = false;
+    bus.subscribe(EVENT_SESSION_MESSAGE_RECEIVED, () => {
+      received = true;
+    });
+    const model = createMockModel([
+      {
+        assistantText: "ok",
+        blocks: [{ type: "text", text: "ok" }],
+        raw: {},
+      },
+    ]);
     const registry = new ToolRegistry();
     const runner = createAgentRunner({
       session,
       modelRequests: model,
       registry,
       toolCtx: mockToolCtx(mockVfs()),
-      compaction: createCompactionPipeline({
-        modelRequests: model,
-        policyStore,
-        resolveAgent: noopResolver,
-        tokenCounters: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
-      }),
+      eventBus: bus,
+      macroCache: createSessionMacroCache(),
     });
-
     await runner.run({
       maxSteps: 1,
-      definition: compactRunnerDefinition(),
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-      promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
+      definition: minimalDefinition(),
+      ...defaultRunScope,
     });
-
-    const hidden = session.allMessages().filter((m) => m.hidden);
-    assert.ok(hidden.length >= 8);
-    assert.match(mainSystem ?? "", /CTX=compact-abstract/);
+    assert.equal(received, true);
   });
 
   it("propagates doom_loop from identical tool_use blocks", async () => {
@@ -358,22 +289,21 @@ describe("AgentRunner", () => {
 
     const registry = new ToolRegistry();
     registerVfsTools(registry);
-    const runner = createAgentRunner({
-      session,
-      modelRequests: model,
-      registry,
-      toolCtx: mockToolCtx(mockVfs()),
-      compaction: createNoOpCompactionPipeline(),
-    });
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
 
     await assert.rejects(
       () =>
         runner.run({
           maxSteps: 3,
           definition: { ...minimalDefinition(), prompts: [] },
-          applicationModelId: RUN_MODEL_ID,
-          workspaceModelId: RUN_MODEL_ID,
-          promptContext: { worktreeDisplay: "", filetreeDisplay: "" },
+          ...defaultRunScope,
         }),
       (e: unknown) =>
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",

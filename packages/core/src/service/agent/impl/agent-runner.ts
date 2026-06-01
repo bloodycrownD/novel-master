@@ -1,5 +1,5 @@
 /**
- * Agent runner: model round-trips, tools, doom loop, compaction pipeline.
+ * Agent runner: model round-trips, tools, doom loop, event bus integration.
  *
  * @module service/agent/impl/agent-runner
  */
@@ -7,7 +7,8 @@
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import { visibleFloorByMessageId } from "@/domain/chat/logic/message-visible-floor.js";
+import { depthByMessageId } from "@/domain/depth/logic/depth-from-tail.js";
+import { listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
 import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
 import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
 import { assertNoDoomLoopInBlocks } from "@/domain/agent/logic/doom-loop.js";
@@ -18,27 +19,39 @@ import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
-import type { CompactionPipeline } from "../../compaction/compaction-pipeline.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
+import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
+import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
+import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
+import {
+  EVENT_AGENT_RUN_FAILED,
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_SESSION_COMPACTION_REQUESTED,
+  EVENT_SESSION_MESSAGE_RECEIVED,
+} from "@/domain/events/model/event-types.js";
+import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
   readonly registry: ToolRegistry<VfsToolContext>;
   readonly toolCtx: VfsToolContext;
-  readonly compaction: CompactionPipeline;
-  /** When set with {@link AgentRunOptions.activeRegexGroupId}, applies llm regex before prompt build. */
+  readonly eventBus: SimpleEventBus;
+  readonly macroCache: SessionMacroCache;
+  readonly compactionConditions?: CompactionConditionEvaluator;
   readonly regexConfig?: RegexConfigService;
-  /** Full session messages (including hidden) for visible-floor indexing. */
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
 
 const DEFAULT_MAX_STEPS = 20;
 
 /**
- * Executes agent loops: compaction ??LLM ??tools ??repeat up to maxSteps.
+ * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<VfsToolContext>;
@@ -48,10 +61,16 @@ export class DefaultAgentRunner implements AgentRunner {
   }
 
   async run(options: AgentRunOptions): Promise<AgentRunResult> {
+    const { sessionId, projectId } = options;
+    const bus = this.deps.eventBus;
+    bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId });
+
     const rounds: ModelRoundSummary[] = [];
     let stepsExecuted = 0;
     let finished = false;
     let stopReason: AgentRunResult["stopReason"] = "max_steps";
+    let assistantAppendCount = 0;
+    let runError: string | undefined;
 
     const maxSteps =
       options.maxSteps ??
@@ -59,112 +78,153 @@ export class DefaultAgentRunner implements AgentRunner {
       DEFAULT_MAX_STEPS;
 
     const tools = toolsFromRegistry(this.deps.registry);
-    let compactionAbstract = "";
 
-    for (let step = 0; step < maxSteps; step++) {
-      const modelContext = {
-        workspaceModelId: options.workspaceModelId,
-        cliModelId: options.cliModelId,
-      };
-      const nextAbstract = await this.deps.compaction.maybeCompact(
-        this.deps.session,
-        options.promptContext,
-        modelContext,
-      );
-      if (nextAbstract !== undefined) {
-        compactionAbstract = nextAbstract;
-      }
-
-      let visible = await this.deps.session.list();
-      if (options.activeRegexGroupId && this.deps.regexConfig) {
-        const rules = await resolveActiveCompiledRules(
-          this.deps.regexConfig,
-          options.activeRegexGroupId,
-        );
-        if (rules.length > 0 && this.deps.listAllSessionMessages) {
-          const all = await this.deps.listAllSessionMessages();
-          const floorMap = visibleFloorByMessageId(all);
-          visible = applyRegexChannelToMessages(
-            visible,
-            rules,
-            "llm",
-            floorMap,
-          );
+    try {
+      for (let step = 0; step < maxSteps; step++) {
+        let stepCompactionEmitted = false;
+        if (this.deps.compactionConditions != null) {
+          const shouldCompact =
+            await this.deps.compactionConditions.shouldRequestCompaction(
+              this.deps.session,
+              {
+                workspaceModelId: options.workspaceModelId,
+                applicationModelId: options.applicationModelId,
+              },
+            );
+          if (shouldCompact && !stepCompactionEmitted) {
+            bus.publish(EVENT_SESSION_COMPACTION_REQUESTED, {
+              sessionId,
+              projectId,
+              trigger: "condition",
+            });
+            stepCompactionEmitted = true;
+          }
         }
-      }
-      const llmInput = buildPromptLlmInput(options.definition.prompts, {
-        ...options.promptContext,
-        messages: visible,
-        abstract: compactionAbstract,
-      });
 
-      const result = await this.deps.modelRequests.request(
-        options.applicationModelId,
-        "",
-        {
-          history: llmInput.messages,
-          system: llmInput.system,
-          tools: tools.length > 0 ? tools : undefined,
-          stream: options.stream,
-          onStream: options.onStream,
-        },
-      );
+        const macro = this.deps.macroCache.get(projectId, sessionId);
+        const promptContext = {
+          worktreeDisplay: macro?.worktreeDisplay ?? "",
+          filetreeDisplay: macro?.filetreeDisplay ?? "",
+        };
 
-      stepsExecuted += 1;
+        let visible = await this.deps.session.list();
+        if (options.activeRegexGroupId && this.deps.regexConfig) {
+          const rules = await resolveActiveCompiledRules(
+            this.deps.regexConfig,
+            options.activeRegexGroupId,
+          );
+          if (rules.length > 0 && this.deps.listAllSessionMessages) {
+            const all = await this.deps.listAllSessionMessages();
+            const visibleSorted = listVisibleForDepth(all);
+            const depthMap = depthByMessageId(visibleSorted);
+            visible = applyRegexChannelToMessages(
+              visible,
+              rules,
+              "llm",
+              depthMap,
+            );
+          }
+        }
+        const llmInput = buildPromptLlmInput(options.definition.prompts, {
+          ...promptContext,
+          messages: visible,
+        });
 
-      await this.deps.session.append("assistant", { blocks: result.blocks }, {
-        raw: result.raw as Record<string, unknown>,
-      });
+        const onStream = options.stream
+          ? wrapStreamForBus(bus, sessionId, options.onStream)
+          : undefined;
 
-      const toolUses = result.blocks.filter(
-        (b): b is ToolUseBlock => b.type === "tool_use",
-      );
+        const result = await this.deps.modelRequests.request(
+          options.applicationModelId,
+          "",
+          {
+            history: llmInput.messages,
+            system: llmInput.system,
+            tools: tools.length > 0 ? tools : undefined,
+            stream: options.stream,
+            onStream,
+          },
+        );
 
-      if (toolUses.length === 0) {
-        finished = true;
-        stopReason = "completed";
+        stepsExecuted += 1;
+
+        await this.deps.session.append("assistant", { blocks: result.blocks }, {
+          raw: result.raw as Record<string, unknown>,
+        });
+        assistantAppendCount += 1;
+
+        const toolUses = result.blocks.filter(
+          (b): b is ToolUseBlock => b.type === "tool_use",
+        );
+
+        if (toolUses.length === 0) {
+          finished = true;
+          stopReason = "completed";
+          rounds.push({
+            step,
+            hadToolUse: false,
+            finished: true,
+            usage: result.usage,
+          });
+          break;
+        }
+
         rounds.push({
           step,
-          hadToolUse: false,
-          finished: true,
+          hadToolUse: true,
+          finished: false,
           usage: result.usage,
         });
-        break;
-      }
 
-      rounds.push({
-        step,
-        hadToolUse: true,
-        finished: false,
-        usage: result.usage,
-      });
+        assertNoDoomLoopInBlocks(result.blocks);
 
-      assertNoDoomLoopInBlocks(result.blocks);
-
-      const toolResults: ToolResultBlock[] = [];
-      for (const tu of toolUses) {
-        let content: string;
-        try {
-          const out = await this.toolRunner.call(tu.name, tu.input, this.deps.toolCtx);
-          content = formatToolOutputForLlm(out);
-        } catch (e: unknown) {
-          const msg = e instanceof Error ? e.message : String(e);
-          content = `Error: ${msg}`;
+        const toolResults: ToolResultBlock[] = [];
+        for (const tu of toolUses) {
+          let content: string;
+          try {
+            const out = await this.toolRunner.call(
+              tu.name,
+              tu.input,
+              this.deps.toolCtx,
+            );
+            content = formatToolOutputForLlm(out);
+          } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            content = `Error: ${msg}`;
+          }
+          toolResults.push({
+            type: "tool_result",
+            toolUseId: tu.id,
+            content,
+          });
         }
-        toolResults.push({
-          type: "tool_result",
-          toolUseId: tu.id,
-          content,
-        });
-      }
 
-      await this.deps.session.append("user", { blocks: toolResults });
+        await this.deps.session.append("user", { blocks: toolResults });
 
-      if (step + 1 >= maxSteps) {
-        stopReason = "max_steps";
-        break;
+        if (step + 1 >= maxSteps) {
+          stopReason = "max_steps";
+          break;
+        }
       }
+    } catch (e: unknown) {
+      runError = e instanceof Error ? e.message : String(e);
+      bus.publish(EVENT_AGENT_RUN_FAILED, {
+        sessionId,
+        projectId,
+        error: runError,
+      });
+      throw e;
     }
+
+    if (assistantAppendCount > 0) {
+      bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, { sessionId, projectId });
+    }
+
+    bus.publish(EVENT_AGENT_RUN_FINISHED, {
+      sessionId,
+      projectId,
+      stopReason,
+    });
 
     return {
       stepsExecuted,
@@ -173,4 +233,37 @@ export class DefaultAgentRunner implements AgentRunner {
       rounds,
     };
   }
+}
+
+function wrapStreamForBus(
+  bus: SimpleEventBus,
+  sessionId: string,
+  userOnStream?: (event: LlmStreamEvent) => void,
+): ((event: LlmStreamEvent) => void) | undefined {
+  if (userOnStream == null) {
+    return (ev: LlmStreamEvent) => {
+      if (ev.type === "text-delta") {
+        bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+          sessionId,
+          text: ev.text,
+        });
+      } else if (ev.type === "thinking-delta") {
+        bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
+          sessionId,
+          text: ev.text,
+        });
+      }
+    };
+  }
+  return (ev: LlmStreamEvent) => {
+    if (ev.type === "text-delta") {
+      bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, { sessionId, text: ev.text });
+    } else if (ev.type === "thinking-delta") {
+      bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
+        sessionId,
+        text: ev.text,
+      });
+    }
+    userOnStream(ev);
+  };
 }
