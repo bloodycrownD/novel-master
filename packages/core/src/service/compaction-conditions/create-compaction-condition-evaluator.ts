@@ -19,7 +19,13 @@ import {
 } from "@/domain/provider/model/protocol-sampling-defaults.js";
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
+/**
+ * Evaluates persisted compaction conditions (OR triggers) against a session.
+ * Does not hide messages or refresh macros — on true, the caller should
+ * {@link EventOrchestrator.emit} `session.compaction.requested` (awaited in AgentRunner).
+ */
 export interface CompactionConditionEvaluator {
+  /** True when enabled conditions match (token threshold and/or visible floor). */
   shouldRequestCompaction(
     session: AgentSession,
     modelContext: {

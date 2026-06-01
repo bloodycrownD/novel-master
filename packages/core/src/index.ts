@@ -266,6 +266,7 @@ export {
   type ResolveApplicationModelIdInput,
   type ResolveSummaryApplicationModelIdInput,
 } from "./domain/agent/logic/resolve-application-model-id.js";
+/** In-process typed pub/sub; UI and orchestrator subscribe to lifecycle/stream events. */
 export { SimpleEventBus } from "./infra/events/simple-event-bus.js";
 export type { EventBus, EventSubscription } from "./infra/events/simple-event-bus.js";
 export {
@@ -279,6 +280,8 @@ export {
 } from "./domain/events/model/event-types.js";
 export type {
   NovelMasterEventType,
+  AgentStreamTextDeltaPayload,
+  AgentStreamThinkingDeltaPayload,
   SessionCompactionRequestedPayload,
   CompactionTriggerKind,
 } from "./domain/events/model/event-types.js";
@@ -290,6 +293,7 @@ export { eventsConfigSchema } from "./domain/events-config/model/events-config.s
 export { DEFAULT_EVENTS_CONFIG } from "./domain/events-config/logic/default-events.js";
 export type { EventsConfigStore } from "./service/events-config/events-config-store.port.js";
 export { createEventsConfigStore } from "./service/events-config/create-events-config-store.js";
+/** Trigger-only policy (`nm-compaction-conditions`); actions live in events config. */
 export type { CompactionConditions } from "./domain/compaction-conditions/model/compaction-conditions.js";
 export { compactionConditionsSchema } from "./domain/compaction-conditions/model/compaction-conditions.schema.js";
 export { CompactionConditionsError } from "./errors/compaction-conditions-errors.js";
@@ -299,9 +303,10 @@ export {
   createCompactionConditionEvaluator,
   type CompactionConditionEvaluator,
 } from "./service/compaction-conditions/create-compaction-condition-evaluator.js";
+/** Runs actions from `nm-events` config; use {@link createEventOrchestrator} in runtime. */
 export type { EventOrchestrator, EventEmitContext } from "./service/events/event-orchestrator.port.js";
 export { createEventOrchestrator } from "./service/events/create-event-orchestrator.js";
-export type { EventRunResult } from "./service/events/event-run-result.js";
+export type { EventRunResult, EventActionFailure } from "./service/events/event-run-result.js";
 export { EventsError } from "./errors/events-errors.js";
 export type { SessionMacroCache, SessionMacroSnapshot } from "./service/prompt/session-macro-cache.port.js";
 export { createSessionMacroCache } from "./service/prompt/create-session-macro-cache.js";
