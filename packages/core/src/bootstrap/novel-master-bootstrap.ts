@@ -15,7 +15,6 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
-import { migrateVfsEntryKind } from "./vfs/migrate-vfs-entry-kind.js";
 
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -40,7 +39,6 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
-    await migrateVfsEntryKind(tx);
     await seedBuiltinProviders(tx);
   });
 }

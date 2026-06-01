@@ -29,7 +29,7 @@
 | `session-fs` rollback | `vfs.write` / `vfs.delete` 仅文件 logicalPath | `write` 经 ensure 父链；**不** delete 无关空目录 |
 | `copyVfsTree` / `replaceVfsSubtree` | 仅 `scanContents` 文件行 | 复制/删除 **directory 行**（与文件一并镜像） |
 | CLI `nm vfs` / `project vfs` / `session vfs` | 无 `mkdir`；`list` 只打 path | 增加 `mkdir`；`list` 输出 `DIR\t` / `FILE\t` 前缀 |
-| Bootstrap | 仅 `CREATE IF NOT EXISTS` | **幂等** `migrateVfsEntryKind`（`PRAGMA` + `ALTER`） |
+| Bootstrap | 仅 `CREATE IF NOT EXISTS` | `CREATE` 含 `entry_kind`；**无** `ALTER`（旧库删文件重建） |
 | 迁移 | — | **不** 从 `.keep` 反推空目录；**不** 为旧文件路径批量 materialize 父目录（仅 **新 write / mkdir / rollback write** 产生目录行） |
 
 **关键代码锚点**
@@ -194,8 +194,7 @@ for (const p of dirPaths) {
 ```
 packages/core/src/
   bootstrap/vfs/
-    vfs-schema.ts              # DDL + entry_kind 迁移语句
-    migrate-vfs-entry-kind.ts  # PRAGMA + ALTER（新建）
+    vfs-schema.ts              # DDL 含 entry_kind
   domain/vfs/
     model/vfs-entry.ts         # + entryKind
     model/vfs-list-entry.ts    # VfsListEntry（新建）
@@ -208,7 +207,7 @@ packages/core/src/
   domain/tool/builtin/vfs-tools.ts
   service/worktree/impl/worktree.service.ts
   domain/vfs/logic/vfs-tree-copy.ts
-  bootstrap/novel-master-bootstrap.ts  # 调用 migrate
+  bootstrap/novel-master-bootstrap.ts
 
 packages/core/test/vfs/
   directory-nodes.test.ts      # PRD 验收集中测试（新建）
@@ -235,27 +234,25 @@ apps/mobile/__tests__/
 
 | # | 文件 | 变更 |
 |---|------|------|
-| 1 | `vfs-schema.ts` | `CREATE TABLE` 增加 `entry_kind`；导出 `VFS_ENTRY_KIND_MIGRATION` |
-| 2 | `migrate-vfs-entry-kind.ts` | `PRAGMA table_info` 无列则 `ALTER TABLE … ADD COLUMN entry_kind TEXT NOT NULL DEFAULT 'file'` |
-| 3 | `novel-master-bootstrap.ts` | DDL 循环后调用 `migrateVfsEntryKind(tx)` |
-| 4 | `vfs-entry.ts` | `entryKind: 'file' \| 'directory'` |
-| 5 | `vfs-entry.port.ts` | `insertDirectory`, `listDirectoriesUnderPrefix?`, `list` → `VfsListEntry[]` |
-| 6 | `sqlite-vfs-entry.repository.ts` | 全面适配 kind；实现 `mkdir` 持久化 |
-| 7 | `ensure-parent-dirs.ts` | 父链补齐 |
-| 8 | `vfs.service.ts` | `mkdir`、kind 守卫、write 前 ensure |
-| 9 | `vfs-service.port.ts` + `scoped-vfs.service.ts` | 透传 `mkdir`；`list` 映射逻辑路径 |
-| 10 | `vfs-errors.ts` | 新 code + 工厂函数 |
-| 11 | `vfs-tools.ts` | `vfs.mkdir` tool |
-| 12 | `worktree.service.ts` | `loadContext` 合并 directory 行 |
-| 13 | `vfs-tree-copy.ts` | 拷贝 directory 行 |
-| 14 | `index.ts` | 导出 `VfsListEntry`, `VfsEntryKind`（若对外） |
-| 15 | `apps/cli/.../mkdir.ts` + 三处 `*_VFS_COMMANDS` | 注册 `mkdir`；更新 usage 字符串 |
-| 16 | `list.ts` | 打印 `DIR\tpath` / `FILE\tpath` |
-| 17 | `vfs-operations.service.ts` | `createVfsDirectory` → `vfs.mkdir`；删除 `DIR_PLACEHOLDER` |
-| 18 | `vfs-row-mapper.ts` | `mapVfsListEntry(entry: VfsListEntry)` |
-| 19 | `VfsFileManager.tsx` | `reload` 使用 `VfsListEntry` |
-| 20 | `renameVfsDirectory` | 递归 list 含目录行；重命名 directory 行（或 delete+mkdir 空目录） |
-| 21 | 测试文件 | 见下节 |
+| 1 | `vfs-schema.ts` | `CREATE TABLE` 增加 `entry_kind` |
+| 2 | `vfs-entry.ts` | `entryKind: 'file' \| 'directory'` |
+| 3 | `vfs-entry.port.ts` | `insertDirectory`, `listDirectoriesUnderPrefix?`, `list` → `VfsListEntry[]` |
+| 4 | `sqlite-vfs-entry.repository.ts` | 全面适配 kind；实现 `mkdir` 持久化 |
+| 5 | `ensure-parent-dirs.ts` | 父链补齐 |
+| 6 | `vfs.service.ts` | `mkdir`、kind 守卫、write 前 ensure |
+| 7 | `vfs-service.port.ts` + `scoped-vfs.service.ts` | 透传 `mkdir`；`list` 映射逻辑路径 |
+| 8 | `vfs-errors.ts` | 新 code + 工厂函数 |
+| 9 | `vfs-tools.ts` | `vfs.mkdir` tool |
+| 10 | `worktree.service.ts` | `loadContext` 合并 directory 行 |
+| 11 | `vfs-tree-copy.ts` | 拷贝 directory 行 |
+| 12 | `index.ts` | 导出 `VfsListEntry`, `VfsEntryKind`（若对外） |
+| 13 | `apps/cli/.../mkdir.ts` + 三处 `*_VFS_COMMANDS` | 注册 `mkdir`；更新 usage 字符串 |
+| 14 | `list.ts` | 打印 `DIR\tpath` / `FILE\tpath` |
+| 15 | `vfs-operations.service.ts` | `createVfsDirectory` → `vfs.mkdir`；删除 `DIR_PLACEHOLDER` |
+| 16 | `vfs-row-mapper.ts` | `mapVfsListEntry(entry: VfsListEntry)` |
+| 17 | `VfsFileManager.tsx` | `reload` 使用 `VfsListEntry` |
+| 18 | `renameVfsDirectory` | 递归 list 含目录行；重命名 directory 行（或 delete+mkdir 空目录） |
+| 19 | 测试文件 | 见下节 |
 
 ---
 
@@ -263,13 +260,12 @@ apps/mobile/__tests__/
 
 ### M1 — Schema + Repository + Service（Core）
 
-1. **DDL + 迁移**  
+1. **DDL**  
    - 新库：`vfs_entry` 含 `entry_kind TEXT NOT NULL DEFAULT 'file'`。  
-   - 旧库：`migrateVfsEntryKind` 幂等 ADD COLUMN。  
-   - 文档注释：已有库无列时需迁移或重建（与 chat `hidden` feature 策略一致）。
+   - 旧库（无 `entry_kind` 列）：**删除 DB 文件**后重新 bootstrap（无 `ALTER`）。
 
 2. **Repository**  
-   - `rowToEntry` 读 `entry_kind`（缺列迁移前仅测试新库）。  
+   - `rowToEntry` 读 `entry_kind`。  
    - `insert` → 仅 `file`；新增 `insertDirectory(path)`。  
    - `list` → `VfsListEntry[]`（SQL 选 `path, entry_kind`）。  
    - `findByPath` 返回完整 `VfsEntry`。  
@@ -368,7 +364,7 @@ apps/mobile/__tests__/
 | 风险 | 缓解 |
 |------|------|
 | `list` 返回类型由 `string[]` → `VfsListEntry[]` 破坏内部调用方 | 单仓内 grep `vfs.list` 全量改完；Agent tool outputSchema 同步 |
-| 旧 DB 无 `entry_kind` | `migrateVfsEntryKind`；测试 `:memory:` 走完整 bootstrap |
+| 旧 DB 无 `entry_kind` | 删库重建；测试 `:memory:` 走完整 bootstrap |
 | 旧数据无父 directory 行，list 不见中间目录 | PRD 接受；用户 `mkdir` 或 rewrite 文件触发 ensure |
 | worktree 双源目录（推导 + 显式）重复 | `allDirs` 用 `Set`；同 path 不重复插入 |
 | `renameVfsDirectory` 漏移 directory 行 | 单测：空目录 rename 后 list 新路径 |
@@ -394,7 +390,7 @@ apps/mobile/__tests__/
 | # | 口径 | SPEC 落点 |
 |---|------|-----------|
 | 1 | `list` 返回 `VfsListEntry[]`（含 `kind`），单仓内同步 CLI / Mobile / Agent | §API 变更、`list` 语义、变更点 #9/#16/#18 |
-| 2 | 旧库仅 `migrateVfsEntryKind` 加列；**不**批量 materialize 父目录、**不**从 `.keep` 反推空目录 | §现状迁移行、M1 DDL、§风险 |
+| 2 | 旧库无 `entry_kind` 时删库重建（无 ALTER）；**不**批量 materialize 父目录、**不**从 `.keep` 反推空目录 | §现状迁移行、M1 DDL、§风险 |
 | 3 | `mkdir` **不** `parents: true`；父须已存在（根 `/` 虚拟存在） | §`mkdir` 语义 |
 
 **Session 文件回滚（产品，非发布回滚）**：`records rollback` 不撤销显式 `mkdir` 的空目录；rollback `write` 缺父时 `ensureParentDirectories`；不连带删除无关空目录（与 PRD「文件回滚与目录节点」一致）。
