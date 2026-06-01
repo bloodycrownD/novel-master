@@ -24,7 +24,7 @@ import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
-  mapVfsFilePath,
+  mapVfsListEntry,
   mapWorktreeRow,
   parentLogicalPath,
   type MappedVfsRow,
@@ -95,7 +95,7 @@ export function VfsFileManager({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [listPaths, allRows] = await Promise.all([
+      const [listEntries, allRows] = await Promise.all([
         vfs.list(currentPath),
         worktree.buildListRows(),
       ]);
@@ -111,8 +111,8 @@ export function VfsFileManager({
           childPaths.add(row.path);
         }
       }
-      for (const path of listPaths) {
-        childPaths.add(path);
+      for (const entry of listEntries) {
+        childPaths.add(entry.path);
       }
 
       const mapped = [...childPaths]
@@ -126,7 +126,11 @@ export function VfsFileManager({
                 : undefined;
             return mapWorktreeRow(meta, count);
           }
-          return mapVfsFilePath(path);
+          const vfsEntry = listEntries.find(e => e.path === path);
+          if (vfsEntry) {
+            return mapVfsListEntry(vfsEntry);
+          }
+          return mapVfsListEntry({path, kind: 'file'});
         });
       setRows(mapped);
     } catch (error) {

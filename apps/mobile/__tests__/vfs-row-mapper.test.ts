@@ -2,6 +2,7 @@ import {
   countFilesInDir,
   isDirectChild,
   mapVfsFilePath,
+  mapVfsListEntry,
   mapWorktreeRow,
   type MappedVfsRow,
 } from '../src/components/vfs/vfs-row-mapper';
@@ -96,5 +97,12 @@ describe('vfs-row-mapper', () => {
     const mapped: MappedVfsRow = mapVfsFilePath('/template/new.md');
     expect(mapped.name).toBe('new.md');
     expect(mapped.subtitle).toBe('继承·全内容');
+  });
+
+  it('maps vfs list directory entry', () => {
+    const mapped = mapVfsListEntry({path: '/drafts', kind: 'directory'});
+    expect(mapped.kind).toBe('dir');
+    expect(mapped.name).toBe('drafts');
+    expect(mapped.subtitle).toBe('');
   });
 });

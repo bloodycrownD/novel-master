@@ -1,10 +1,8 @@
 /**
  * VFS mutations for the file manager (create / delete / rename).
  */
-import type {VfsService} from '@novel-master/core';
-
-/** Hidden placeholder so empty directories appear in listings. */
-const DIR_PLACEHOLDER = '.keep';
+import type {VfsListEntry, VfsService} from '@novel-master/core';
+import {VfsError} from '@novel-master/core';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -15,16 +13,13 @@ export async function createVfsFile(
   await vfs.write(path, content, {versionCheck: false});
 }
 
-/**
- * Create a directory by writing a placeholder file inside it.
- * VFS stores files only; parent dirs are inferred from paths.
- */
+/** Create an empty directory node. */
 export async function createVfsDirectory(
   vfs: VfsService,
   dirPath: string,
 ): Promise<void> {
   const normalized = dirPath.endsWith('/') ? dirPath.slice(0, -1) : dirPath;
-  await createVfsFile(vfs, `${normalized}/${DIR_PLACEHOLDER}`, '');
+  await vfs.mkdir(normalized);
 }
 
 /** Delete a file or directory tree. */
@@ -72,9 +67,19 @@ export function remapPathUnderDir(
   return `${normalizedNew}${path.slice(normalizedOld.length)}`;
 }
 
+async function mkdirIgnoreExists(vfs: VfsService, path: string): Promise<void> {
+  try {
+    await vfs.mkdir(path);
+  } catch (error) {
+    if (error instanceof VfsError && error.code === 'ALREADY_EXISTS') {
+      return;
+    }
+    throw error;
+  }
+}
+
 /**
- * Rename a directory by moving every file under its prefix (deepest paths first).
- * VFS stores files only; directory nodes are inferred from paths.
+ * Rename a directory by moving directory rows and files under its prefix.
  */
 export async function renameVfsDirectory(
   vfs: VfsService,
@@ -83,12 +88,28 @@ export async function renameVfsDirectory(
 ): Promise<void> {
   const oldDir = normalizeDirPath(oldPath);
   const newDir = normalizeDirPath(newPath);
-  const files = await vfs.list(oldDir, {recursive: true});
-  const sorted = [...files].sort(
-    (a, b) => b.split('/').length - a.split('/').length,
-  );
-  for (const filePath of sorted) {
-    const target = remapPathUnderDir(filePath, oldDir, newDir);
-    await renameVfsFile(vfs, filePath, target);
+  const entries = await vfs.list(oldDir, {recursive: true});
+  const dirs = entries
+    .filter(e => e.kind === 'directory')
+    .sort((a, b) => a.path.length - b.path.length);
+  const files = entries.filter(e => e.kind === 'file');
+
+  for (const dir of dirs) {
+    await mkdirIgnoreExists(vfs, remapPathUnderDir(dir.path, oldDir, newDir));
+  }
+
+  for (const file of files) {
+    await renameVfsFile(
+      vfs,
+      file.path,
+      remapPathUnderDir(file.path, oldDir, newDir),
+    );
+  }
+
+  const hadOldDirRow = dirs.some(d => d.path === oldDir);
+  if (hadOldDirRow) {
+    await vfs.delete(oldDir, {recursive: false});
   }
 }
+
+export type {VfsListEntry};

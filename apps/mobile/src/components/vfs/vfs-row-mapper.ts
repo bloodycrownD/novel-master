@@ -1,7 +1,7 @@
 /**
  * Maps {@link WorktreeListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import type {WorktreeListRow} from '@novel-master/core';
+import type {VfsListEntry, WorktreeListRow} from '@novel-master/core';
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
@@ -101,13 +101,28 @@ export function mapWorktreeRow(
 }
 
 /** Fallback row when VFS has a path not yet in worktree listing. */
-export function mapVfsFilePath(path: string): MappedVfsRow {
+export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
+  if (entry.kind === 'directory') {
+    return {
+      path: entry.path,
+      name: entryName(entry.path),
+      kind: 'dir',
+      subtitle: '',
+      badge: {label: '继承', tone: 'follow'},
+      ruleEnabled: false,
+    };
+  }
   return {
-    path,
-    name: entryName(path),
+    path: entry.path,
+    name: entryName(entry.path),
     kind: 'file',
     subtitle: '继承·全内容',
     badge: {label: '继承', tone: 'follow'},
     ruleEnabled: false,
   };
+}
+
+/** @deprecated Use {@link mapVfsListEntry}. */
+export function mapVfsFilePath(path: string): MappedVfsRow {
+  return mapVfsListEntry({path, kind: 'file'});
 }
