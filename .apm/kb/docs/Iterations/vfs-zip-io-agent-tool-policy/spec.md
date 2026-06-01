@@ -94,8 +94,8 @@ flowchart TB
 | 非法路径 | `..`、空名、`\`、Windows 绝对盘符路径、`/projects/…` 等跨域前缀 → **整包拒绝** |
 | 域路径合法性 | 还原逻辑路径后调用 `assertLogicalPathAllowed(scope, logical)` |
 | 重复路径 | 同一逻辑路径在 ZIP 中出现多次 → **整包拒绝** |
-| 导出排除 | `storage_kind !== 'inline'` 的行；worktree / snapshot / execute 元数据（不在 `vfs_entry` 中，自然排除） |
-| 存量 `.keep` | 若 DB 中仍有 `.keep` **file** 行，随其它文本文件一并导出/导入；**不**为显式空目录单独写 ZIP 目录 entry（[vfs-directory-nodes](../vfs-directory-nodes/spec.md) 后新建目录不再产生 `.keep`） |
+| 导出范围 | 仅 `entry_kind = 'file'` 且 `storage_kind = 'inline'` 的 `vfs_entry` 行；无按路径/文件名的特殊分支 |
+| 导出排除 | worktree / snapshot / execute 元数据（不在 `vfs_entry` 中，自然排除） |
 | 压缩 | DEFLATE；无密码；无分卷 |
 
 **默认资源上限（可常量配置，SPEC 定稿）**
