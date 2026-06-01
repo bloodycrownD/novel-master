@@ -28,6 +28,8 @@ import type {
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
   readonly throwOnInsertLogical?: string;
+  /** @internal called immediately before deleteVfsPrefix in phase B */
+  readonly onBeforeDeletePrefix?: () => void;
 };
 
 export class DefaultVfsZipIoService implements VfsZipIoService {
@@ -75,6 +77,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     try {
       await this.conn.transaction(async (tx) => {
         const repoTx = new SqliteVfsEntryRepository(tx);
+        this.testHook?.onBeforeDeletePrefix?.();
         await deleteVfsPrefix(repoTx, physicalPrefix);
         for (const [logical, content] of files) {
           if (this.testHook?.throwOnInsertLogical === logical) {

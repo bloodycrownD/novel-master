@@ -5,8 +5,17 @@ import {
   createVfsZipIoService,
   VfsZipError,
 } from "@novel-master/core";
+import type { VfsService } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
+
+async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
+  const entries = await vfs.list(dir, { recursive: true });
+  return entries
+    .filter((entry) => entry.kind === "file")
+    .map((entry) => entry.path)
+    .sort();
+}
 
 describe("VfsZipIoService", () => {
   it("Z1: session export includes logical paths in ZIP", async () => {
@@ -141,6 +150,96 @@ describe("VfsZipIoService", () => {
     );
     const read = await vfs.read("/stay.md");
     assert.equal(read.content, "stay");
+    await ctx.conn.close();
+  });
+
+  it("Z7: same ZIP bytes yield identical file paths in two session scopes", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-z7");
+    const sessionA = await ctx.sessions.create(project.id);
+    const sessionB = await ctx.sessions.create(project.id);
+    const zipBytes = buildVfsZip(
+      new Map([
+        ["alpha.md", "alpha"],
+        ["dir/beta.md", "beta"],
+      ]),
+    );
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const scopeA = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: sessionA.id,
+    };
+    const scopeB = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: sessionB.id,
+    };
+    await zipSvc.import(scopeA, zipBytes, { confirmed: true });
+    await zipSvc.import(scopeB, zipBytes, { confirmed: true });
+
+    const pathsA = await listFilePaths(ctx.sessionVfs(project.id, sessionA.id));
+    const pathsB = await listFilePaths(ctx.sessionVfs(project.id, sessionB.id));
+    assert.deepEqual(pathsA, pathsB);
+    assert.deepEqual(pathsA, ["/alpha.md", "/dir/beta.md"]);
+    await ctx.conn.close();
+  });
+
+  it("phase A invalid UTF-8 does not reach deleteVfsPrefix", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-val");
+    const session = await ctx.sessions.create(project.id);
+    let deleteReached = false;
+    const zipSvc = createVfsZipIoService(ctx.conn, {
+      testHook: {
+        onBeforeDeletePrefix: () => {
+          deleteReached = true;
+        },
+      },
+    });
+    const invalidUtf8Zip = zipSync({
+      "bad.md": new Uint8Array([0xff, 0xfe, 0x80]),
+    });
+    await assert.rejects(
+      () =>
+        zipSvc.import(
+          { kind: "session", projectId: project.id, sessionId: session.id },
+          invalidUtf8Zip,
+          { confirmed: true },
+        ),
+      (e: unknown) =>
+        e instanceof VfsZipError && e.code === "INVALID_UTF8",
+    );
+    assert.equal(deleteReached, false);
+    await ctx.conn.close();
+  });
+
+  it("phase A parent-segment path does not reach deleteVfsPrefix", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-path");
+    const session = await ctx.sessions.create(project.id);
+    let deleteReached = false;
+    const zipSvc = createVfsZipIoService(ctx.conn, {
+      testHook: {
+        onBeforeDeletePrefix: () => {
+          deleteReached = true;
+        },
+      },
+    });
+    const zipWithParent = zipSync({
+      "../escape.md": new TextEncoder().encode("x"),
+    });
+    await assert.rejects(
+      () =>
+        zipSvc.import(
+          { kind: "session", projectId: project.id, sessionId: session.id },
+          zipWithParent,
+          { confirmed: true },
+        ),
+      (e: unknown) =>
+        e instanceof VfsZipError && e.code === "INVALID_PATH",
+    );
+    assert.equal(deleteReached, false);
     await ctx.conn.close();
   });
 
