@@ -20,9 +20,10 @@ export async function migrateWorktreeUnifiedRoot(
          SET logical_path = '/'
          WHERE scope_key = 'global' AND logical_path = '/template'`,
       );
+      // SQLite substr is 1-based; skip the "/template" prefix (9 chars) via start index 10.
       await tx.execute(
         `UPDATE ${table}
-         SET logical_path = substr(logical_path, length('/template'))
+         SET logical_path = substr(logical_path, length('/template') + 1)
          WHERE scope_key = 'global' AND logical_path LIKE '/template/%'`,
       );
       await tx.execute(
@@ -32,7 +33,7 @@ export async function migrateWorktreeUnifiedRoot(
       );
       await tx.execute(
         `UPDATE ${table}
-         SET logical_path = substr(logical_path, length('/template'))
+         SET logical_path = substr(logical_path, length('/template') + 1)
          WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%'`,
       );
     }

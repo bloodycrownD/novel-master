@@ -23,6 +23,17 @@ describe("ScopedVfsService", () => {
     await ctx.conn.close();
   });
 
+  it("T3: project write and read round-trip unified paths", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/prompts/system.md", "system prompt");
+    const read = await pvfs.read("/prompts/system.md");
+    assert.equal(read.content, "system prompt");
+    assert.equal(read.path, "/prompts/system.md");
+    await ctx.conn.close();
+  });
+
   it("rejects legacy /template logical paths", async () => {
     const ctx = await openNovelMasterTestConnection();
     await assert.rejects(

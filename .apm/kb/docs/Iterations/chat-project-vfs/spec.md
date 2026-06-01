@@ -1,5 +1,7 @@
 # Chat / Project / 域 VFS 技术规格（SPEC）
 
+> **逻辑路径（superseded）**：global/project 对外逻辑路径以 `/` 为根、不再要求 `/template/` 前缀，见 [vfs-unified-root/spec.md](../vfs-unified-root/spec.md)。下文表中「逻辑路径 `/template/…`」仅作历史记录；实现以 vfs-unified-root 为准。
+
 ## 设计目标
 
 - 在 `@novel-master/core` 扩展 **KKV**、**Project / Session / Message** 领域模型与 service，复用现有 **`vfs_entry` + `VfsService` + `SqliteVfsEntryRepository`**，不改动 `infra/tdbc`、`infra/sql-template`。

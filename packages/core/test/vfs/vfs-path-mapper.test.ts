@@ -39,6 +39,14 @@ describe("vfs-path-mapper", () => {
         return true;
       },
     );
+    assert.throws(
+      () => assertLogicalPathAllowed({ kind: "global" }, "/template"),
+      (e: unknown) => {
+        assert.ok(e instanceof VfsError);
+        assert.equal(e.code, "INVALID_PATH");
+        return true;
+      },
+    );
   });
 
   it("allows /my-template as user subdirectory", () => {

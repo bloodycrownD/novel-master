@@ -179,7 +179,7 @@ SET logical_path = '/'
 WHERE scope_key = 'global' AND logical_path = '/template';
 
 UPDATE worktree_dir_rule
-SET logical_path = substr(logical_path, length('/template'))
+SET logical_path = substr(logical_path, length('/template') + 1)
 WHERE scope_key = 'global' AND logical_path LIKE '/template/%';
 
 -- project scope：scope_key = 'project:' || id
@@ -188,7 +188,7 @@ SET logical_path = '/'
 WHERE scope_key LIKE 'project:%' AND logical_path = '/template';
 
 UPDATE worktree_dir_rule
-SET logical_path = substr(logical_path, length('/template'))
+SET logical_path = substr(logical_path, length('/template') + 1)
 WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
 
 -- worktree_file_rule：同上两套（global / project）

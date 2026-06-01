@@ -333,6 +333,22 @@ describe("VfsZipIoService", () => {
     await ctx.conn.close();
   });
 
+  it("skips __MACOSX and .DS_Store junk entries on import", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const zip = buildVfsZip(
+      new Map([
+        ["readme.md", "ok"],
+        ["__MACOSX/._readme.md", ""],
+        [".DS_Store", ""],
+      ]),
+    );
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import({ kind: "global" }, zip, { confirmed: true });
+    const paths = await listFilePaths(ctx.globalVfs());
+    assert.deepEqual(paths, ["/readme.md"]);
+    await ctx.conn.close();
+  });
+
   it("session ZIP imports into project template scope", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P-zip-cross");
