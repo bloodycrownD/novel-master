@@ -94,8 +94,8 @@ export class DefaultVfsService implements VfsService {
     if (existing?.entryKind === "directory") {
       throw vfsIsDirectory(normalized);
     }
-    await ensureParentDirectories(this.repo, normalized);
     if (existing == null) {
+      await ensureParentDirectories(this.repo, normalized);
       return this.repo.insert(normalized, content);
     }
 

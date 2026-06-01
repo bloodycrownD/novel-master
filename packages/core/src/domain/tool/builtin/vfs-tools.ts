@@ -17,7 +17,10 @@ import type {
 import type { SessionFsService } from "@/service/session-fs/session-fs.port.js";
 import type { ToolRegistry } from "../logic/tool-registry.js";
 
-/** Context for builtin VFS tools: read-only ops use `vfs`; mutations use `sessionFs`. */
+/**
+ * Context for builtin VFS tools: reads/list/glob/grep/mkdir use `vfs` directly;
+ * write/replace mutations use `sessionFs` for rollback batches.
+ */
 export type VfsToolContext = {
   readonly vfs: VfsService;
   readonly sessionFs: SessionFsService;
@@ -30,8 +33,8 @@ export type VfsToolContext = {
  *
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
- * (e.g. session-scoped VFS). Mutating tools route through `sessionFs.execute`
- * so each tool call produces a rollback-able batch (actor `assistant`).
+ * (e.g. session-scoped VFS). `vfs.write` and `vfs.replace` route through
+ * `sessionFs.execute` for rollback batches; `vfs.mkdir` calls `vfs.mkdir` directly.
  */
 export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
   const read: Tool<{ path: string }, VfsReadResult, VfsToolContext> = {

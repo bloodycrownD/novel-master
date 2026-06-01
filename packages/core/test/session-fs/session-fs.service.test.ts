@@ -89,6 +89,7 @@ describe("SessionFsService", () => {
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.mkdir("/drafts");
     await svfs.write("/drafts/a.md", "only", { versionCheck: false });
     const physicalDrafts = toPhysicalPath(
       { kind: "session", projectId: project.id, sessionId: session.id },
@@ -102,7 +103,7 @@ describe("SessionFsService", () => {
     const result = await ctx.sessionFs.execute(
       session.id,
       project.id,
-      [{ function: "write", path: "/drafts/a.md", content: "changed" }],
+      [{ function: "delete", path: "/drafts/a.md" }],
       "assistant",
     );
     await ctx.sessionFs.rollbackBatch(session.id, project.id, result.batchId);

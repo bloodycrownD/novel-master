@@ -61,6 +61,34 @@ describe("VFS directory nodes", () => {
     await conn.close();
   });
 
+  it("update write does not recreate deleted parent directory rows", async () => {
+    const { conn, vfs } = await openVfsTestConnection();
+    await vfs.write("/drafts/a.md", "hi", { versionCheck: false });
+    await conn.execute(
+      `DELETE FROM vfs_entry WHERE path = '/drafts' AND entry_kind = 'directory'`,
+      [],
+    );
+    await vfs.write("/drafts/a.md", "updated", { versionCheck: false });
+    const root = await vfs.list("/");
+    assert.ok(!root.some((e) => e.path === "/drafts" && e.kind === "directory"));
+    assert.equal((await vfs.read("/drafts/a.md")).content, "updated");
+    await conn.close();
+  });
+
+  it("mkdir fails when parent path is a file row", async () => {
+    const { conn, vfs } = await openVfsTestConnection();
+    await vfs.write("/parent-file", "content", { versionCheck: false });
+    await assert.rejects(
+      () => vfs.mkdir("/parent-file/child"),
+      (e: unknown) => {
+        assert.ok(e instanceof VfsError);
+        assert.equal(e.code, "NOT_A_DIRECTORY");
+        return true;
+      },
+    );
+    await conn.close();
+  });
+
   it("mkdir requires existing parent", async () => {
     const { conn, vfs } = await openVfsTestConnection();
     await assert.rejects(
