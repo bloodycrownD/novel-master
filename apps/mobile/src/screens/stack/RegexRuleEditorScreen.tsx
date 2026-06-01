@@ -13,6 +13,7 @@ import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {
+  parseOptionalDepthInput,
   previewRegexRule,
   regexPreviewRoleFromScope,
   validateRegexRuleDraft,
@@ -45,8 +46,8 @@ const DEFAULT_DRAFT: RegexRuleDraftFields = {
   enabled: true,
   llmReplace: null,
   displayReplace: null,
-  minDepth: 1,
-  maxDepth: 99,
+  startDepth: 0,
+  endDepth: null,
   scopeUser: true,
   scopeAssistant: true,
 };
@@ -70,6 +71,7 @@ export function RegexRuleEditorScreen() {
   const [displayEnabled, setDisplayEnabled] = useState(false);
   const [testText, setTestText] = useState('mysecret@email.com');
   const [testChannel, setTestChannel] = useState<RegexChannel>('display');
+  const [testDepthFromTail, setTestDepthFromTail] = useState('0');
   const [previewOutput, setPreviewOutput] = useState('');
   const [previewError, setPreviewError] = useState(false);
   const [loading, setLoading] = useState(Boolean(ruleId));
@@ -114,8 +116,8 @@ export function RegexRuleEditorScreen() {
         enabled: rule.enabled,
         llmReplace: rule.llmReplace,
         displayReplace: rule.displayReplace,
-        minDepth: rule.minDepth,
-        maxDepth: rule.maxDepth,
+        startDepth: rule.startDepth,
+        endDepth: rule.endDepth,
         scopeUser: rule.scopeUser,
         scopeAssistant: rule.scopeAssistant,
       };
@@ -165,8 +167,8 @@ export function RegexRuleEditorScreen() {
       flags: draft.flags.trim(),
       llmReplace: llmEnabled ? draft.llmReplace : null,
       displayReplace: displayEnabled ? draft.displayReplace : null,
-      minDepth: Math.max(1, draft.minDepth),
-      maxDepth: Math.max(1, draft.maxDepth),
+      startDepth: draft.startDepth,
+      endDepth: draft.endDepth,
     };
   };
 
@@ -187,9 +189,13 @@ export function RegexRuleEditorScreen() {
       setPreviewError(true);
       return;
     }
+    const depthFromTail = Math.max(
+      0,
+      Number.parseInt(testDepthFromTail, 10) || 0,
+    );
     const result = previewRegexRule(testText, fields, {
       channel: testChannel,
-      floor: fields.minDepth,
+      depthFromTail,
       role: regexPreviewRoleFromScope(fields),
       text: testText,
     });
@@ -200,7 +206,7 @@ export function RegexRuleEditorScreen() {
     }
     setPreviewOutput(result.text);
     setPreviewError(false);
-  }, [draft, llmEnabled, displayEnabled, testText, testChannel]);
+  }, [draft, llmEnabled, displayEnabled, testText, testChannel, testDepthFromTail]);
 
   useEffect(() => {
     updatePreview();
@@ -304,30 +310,34 @@ export function RegexRuleEditorScreen() {
       </FormSectionCard>
 
       <FormSectionCard
-        title="深度范围"
+        title="深度范围（自最新消息起）"
         tokens={tokens}
-        hint="匹配消息在会话中的层级区间（含端点）。">
+        hint="0 = 最新一条；留空表示该侧无界。至少填一侧。">
         <View style={styles.row2}>
           <View style={styles.cell}>
-            <FormField label="最小层数" tokens={tokens}>
+            <FormField label="start-depth" tokens={tokens}>
               <FormTextInput
                 tokens={tokens}
-                value={String(draft.minDepth)}
-                onChangeText={v =>
-                  patchDraft({minDepth: Math.max(1, Number(v) || 1)})
+                value={
+                  draft.startDepth != null ? String(draft.startDepth) : ''
                 }
+                onChangeText={v =>
+                  patchDraft({startDepth: parseOptionalDepthInput(v)})
+                }
+                placeholder="0"
                 keyboardType="number-pad"
               />
             </FormField>
           </View>
           <View style={styles.cell}>
-            <FormField label="最大层数" tokens={tokens}>
+            <FormField label="end-depth" tokens={tokens}>
               <FormTextInput
                 tokens={tokens}
-                value={String(draft.maxDepth)}
+                value={draft.endDepth != null ? String(draft.endDepth) : ''}
                 onChangeText={v =>
-                  patchDraft({maxDepth: Math.max(1, Number(v) || 1)})
+                  patchDraft({endDepth: parseOptionalDepthInput(v)})
                 }
+                placeholder="∞"
                 keyboardType="number-pad"
               />
             </FormField>
@@ -405,6 +415,17 @@ export function RegexRuleEditorScreen() {
             options={CHANNEL_OPTIONS}
             value={testChannel}
             onChange={setTestChannel}
+          />
+        </FormField>
+        <FormField
+          label="预览深度 depthFromTail"
+          tokens={tokens}
+          hint="模拟该条消息距最新可见消息的尾深度（0=最新）。">
+          <FormTextInput
+            tokens={tokens}
+            value={testDepthFromTail}
+            onChangeText={setTestDepthFromTail}
+            keyboardType="number-pad"
           />
         </FormField>
         <FormField label="预览结果" tokens={tokens}>

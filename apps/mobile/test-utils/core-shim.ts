@@ -19,4 +19,8 @@ export { ChatError } from "../../../packages/core/dist/errors/chat-errors.js";
 export { ToolError } from "../../../packages/core/dist/errors/tool-errors.js";
 export { AgentError } from "../../../packages/core/dist/errors/agent-runtime-errors.js";
 export type { KkvService } from "../../../packages/core/dist/service/kkv/kkv.port.js";
+export {
+  matchDepth,
+  validateDepthSlice,
+} from "../../../packages/core/dist/domain/depth/logic/depth-slice.js";
 

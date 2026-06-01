@@ -1,6 +1,8 @@
 /**
- * Regex rule draft validation and single-rule preview (aligned with examples/mobile).
+ * Regex rule draft validation and single-rule preview (aligned with Core applyRegexRules).
  */
+
+import {matchDepth, validateDepthSlice} from '@novel-master/core';
 
 export type RegexChannel = 'llm' | 'display';
 
@@ -11,8 +13,9 @@ export interface RegexRuleDraftFields {
   readonly enabled: boolean;
   readonly llmReplace: string | null;
   readonly displayReplace: string | null;
-  readonly minDepth: number;
-  readonly maxDepth: number;
+  /** Tail depth (0 = newest visible message); null = unbounded on that side. */
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
   readonly scopeUser: boolean;
   readonly scopeAssistant: boolean;
 }
@@ -20,7 +23,8 @@ export interface RegexRuleDraftFields {
 export interface RegexPreviewContext {
   readonly text: string;
   readonly channel: RegexChannel;
-  readonly floor: number;
+  /** 0-based depth from newest visible message (matches Core regex apply). */
+  readonly depthFromTail: number;
   readonly role: string;
 }
 
@@ -28,8 +32,8 @@ interface CompiledRule {
   readonly pattern: RegExp;
   readonly llmReplace: string | null;
   readonly displayReplace: string | null;
-  readonly minDepth: number;
-  readonly maxDepth: number;
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
   readonly scopeUser: boolean;
   readonly scopeAssistant: boolean;
 }
@@ -46,8 +50,11 @@ function roleMatchesScope(role: string, rule: CompiledRule): boolean {
   return false;
 }
 
-function depthInRange(floor: number, rule: CompiledRule): boolean {
-  return floor >= rule.minDepth && floor <= rule.maxDepth;
+function depthInRange(depthFromTail: number, rule: CompiledRule): boolean {
+  return matchDepth(depthFromTail, {
+    startDepth: rule.startDepth ?? undefined,
+    endDepth: rule.endDepth ?? undefined,
+  });
 }
 
 function replaceForChannel(
@@ -74,7 +81,7 @@ function applyRegexRules(
     if (!roleMatchesScope(ctx.role, rule)) {
       continue;
     }
-    if (!depthInRange(ctx.floor, rule)) {
+    if (!depthInRange(ctx.depthFromTail, rule)) {
       continue;
     }
     out = replaceForChannel(out, rule, ctx.channel);
@@ -95,11 +102,14 @@ export function validateRegexRuleDraft(
   if (!fields.scopeUser && !fields.scopeAssistant) {
     return {ok: false, message: '至少选择 user 或 assistant 作用范围之一'};
   }
-  if (fields.minDepth > fields.maxDepth) {
-    return {
-      ok: false,
-      message: `minDepth (${fields.minDepth}) 必须 <= maxDepth (${fields.maxDepth})`,
-    };
+  try {
+    validateDepthSlice({
+      startDepth: fields.startDepth ?? undefined,
+      endDepth: fields.endDepth ?? undefined,
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return {ok: false, message: msg};
   }
   try {
     // eslint-disable-next-line no-new
@@ -129,8 +139,8 @@ export function compileRegexRuleDraft(fields: RegexRuleDraftFields): CompileResu
         pattern,
         llmReplace: fields.llmReplace,
         displayReplace: fields.displayReplace,
-        minDepth: fields.minDepth,
-        maxDepth: fields.maxDepth,
+        startDepth: fields.startDepth,
+        endDepth: fields.endDepth,
         scopeUser: fields.scopeUser,
         scopeAssistant: fields.scopeAssistant,
       },
@@ -172,4 +182,17 @@ export function regexPreviewRoleFromScope(
     return 'assistant';
   }
   return 'user';
+}
+
+/** Parses optional non-negative depth bound from form text (empty = null). */
+export function parseOptionalDepthInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (trimmed === '') {
+    return null;
+  }
+  const n = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(n) || n < 0) {
+    return null;
+  }
+  return n;
 }

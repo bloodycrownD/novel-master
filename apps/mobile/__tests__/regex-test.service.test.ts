@@ -13,8 +13,8 @@ describe('regex-test.service', () => {
     enabled: true,
     llmReplace: '[redacted]',
     displayReplace: null,
-    minDepth: 1,
-    maxDepth: 99,
+    startDepth: 0,
+    endDepth: null,
     scopeUser: true,
     scopeAssistant: false,
   };
@@ -32,7 +32,7 @@ describe('regex-test.service', () => {
     const result = previewRegexRule('my secret text', baseFields, {
       text: 'my secret text',
       channel: 'llm',
-      floor: 1,
+      depthFromTail: 0,
       role: regexPreviewRoleFromScope(baseFields),
     });
     expect(result.ok).toBe(true);
@@ -45,7 +45,7 @@ describe('regex-test.service', () => {
     const result = previewRegexRule('secret', {...baseFields, enabled: false}, {
       text: 'secret',
       channel: 'llm',
-      floor: 1,
+      depthFromTail: 0,
       role: 'user',
     });
     expect(result).toEqual({ok: true, text: 'secret'});

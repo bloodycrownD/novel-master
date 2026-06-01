@@ -1,0 +1,4 @@
+schemaVersion: 2
+enabled: true
+tokenThreshold: 12000
+visible-floor: 20

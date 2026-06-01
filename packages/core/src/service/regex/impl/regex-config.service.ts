@@ -112,8 +112,8 @@ export class DefaultRegexConfigService implements RegexConfigService {
       flags: parsed.flags ?? "",
       llmReplace: parsed.llmReplace ?? null,
       displayReplace: parsed.displayReplace ?? null,
-      minDepth: parsed.minDepth,
-      maxDepth: parsed.maxDepth,
+      startDepth: parsed.startDepth,
+      endDepth: parsed.endDepth,
       scopeUser: parsed.scopeUser ?? false,
       scopeAssistant: parsed.scopeAssistant ?? false,
     };
@@ -133,8 +133,8 @@ export class DefaultRegexConfigService implements RegexConfigService {
       enabled: parsed.enabled ?? true,
       llmReplace: fields.llmReplace,
       displayReplace: fields.displayReplace,
-      minDepth: fields.minDepth,
-      maxDepth: fields.maxDepth,
+      startDepth: fields.startDepth,
+      endDepth: fields.endDepth,
       scopeUser: fields.scopeUser,
       scopeAssistant: fields.scopeAssistant,
       createdAtMs: now,
@@ -177,8 +177,10 @@ export class DefaultRegexConfigService implements RegexConfigService {
         parsed.displayReplace !== undefined
           ? parsed.displayReplace
           : existing.displayReplace,
-      minDepth: parsed.minDepth ?? existing.minDepth,
-      maxDepth: parsed.maxDepth ?? existing.maxDepth,
+      startDepth:
+        parsed.startDepth !== undefined ? parsed.startDepth : existing.startDepth,
+      endDepth:
+        parsed.endDepth !== undefined ? parsed.endDepth : existing.endDepth,
       scopeUser: parsed.scopeUser ?? existing.scopeUser,
       scopeAssistant: parsed.scopeAssistant ?? existing.scopeAssistant,
     };
@@ -191,8 +193,8 @@ export class DefaultRegexConfigService implements RegexConfigService {
       enabled: parsed.enabled ?? existing.enabled,
       llmReplace: merged.llmReplace,
       displayReplace: merged.displayReplace,
-      minDepth: merged.minDepth,
-      maxDepth: merged.maxDepth,
+      startDepth: merged.startDepth,
+      endDepth: merged.endDepth,
       scopeUser: merged.scopeUser,
       scopeAssistant: merged.scopeAssistant,
       updatedAtMs: Date.now(),

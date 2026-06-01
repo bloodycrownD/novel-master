@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { HeuristicTokenCounter } from "../../../src/infra/tokenizer/impl/heuristic-token-counter.js";
-import { estimateTokens } from "../../../src/domain/compaction/logic/token-estimate.js";
+import { estimateTokens } from "../../../src/domain/compaction-conditions/logic/token-estimate.js";
 import type { ChatMessage } from "../../../src/domain/chat/model/message.js";
 
 function msg(role: ChatMessage["role"], text: string): ChatMessage {

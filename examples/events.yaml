@@ -1,0 +1,9 @@
+schemaVersion: 1
+events:
+  session.compaction.requested:
+    mode: parallel
+    actions:
+      - type: hide-message
+        params:
+          start-depth: 6
+      - refresh-macros
