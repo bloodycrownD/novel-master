@@ -700,7 +700,7 @@ export function ChatTabScreen() {
               scope={{kind: 'project', projectId}}
               vfs={projectVfs}
               worktree={projectWorktree}
-              rootPath="/template"
+              rootPath="/"
               pullFromParent={{
                 scope: {kind: 'project', projectId},
                 onPulled: bumpVfsRefresh,

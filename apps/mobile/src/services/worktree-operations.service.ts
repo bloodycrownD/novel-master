@@ -9,8 +9,8 @@ import type {
   WorktreeService,
 } from '@novel-master/core';
 
-function worktreeRootLogicalPath(scope: VfsScope): string {
-  return scope.kind === 'session' ? '/' : '/template';
+function worktreeRootLogicalPath(_scope: VfsScope): string {
+  return '/';
 }
 
 function isWorktreeRootPath(scope: VfsScope, logicalPath: string): boolean {
@@ -87,7 +87,7 @@ export function defaultDirRuleForm(logicalPath: string) {
   };
 }
 
-/** Scope root path for navigation (session `/`, template scopes `/template`). */
+/** Scope root path for navigation (unified logical `/` for all domains). */
 export function vfsScopeRootPath(
   scope: WorktreeService['scope'],
 ): string {

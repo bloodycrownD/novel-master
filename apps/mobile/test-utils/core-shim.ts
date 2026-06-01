@@ -11,6 +11,7 @@
  */
 
 export { VfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
+export { VfsZipError } from "../../../packages/core/dist/errors/vfs-zip-errors.js";
 export { TdbcError } from "../../../packages/core/dist/infra/tdbc/errors.js";
 export { KkvError } from "../../../packages/core/dist/errors/kkv-errors.js";
 export { ProviderError } from "../../../packages/core/dist/errors/provider-errors.js";

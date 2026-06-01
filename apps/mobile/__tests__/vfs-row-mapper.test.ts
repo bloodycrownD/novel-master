@@ -11,7 +11,7 @@ import type {WorktreeListRow} from '@novel-master/core';
 describe('vfs-row-mapper', () => {
   const dirRow: WorktreeListRow = {
     kind: 'dir',
-    path: '/template/shared',
+    path: '/shared',
     ruleState: '规则·开',
     inclusionMode: '',
     displayState: '',
@@ -19,7 +19,7 @@ describe('vfs-row-mapper', () => {
 
   const fileRowAuto: WorktreeListRow = {
     kind: 'file',
-    path: '/template/readme.md',
+    path: '/readme.md',
     ruleState: '',
     inclusionMode: '继承',
     displayState: '全内容',
@@ -27,7 +27,7 @@ describe('vfs-row-mapper', () => {
 
   const fileRowShow: WorktreeListRow = {
     kind: 'file',
-    path: '/template/visible.md',
+    path: '/visible.md',
     ruleState: '',
     inclusionMode: '展示',
     displayState: '全内容',
@@ -35,7 +35,7 @@ describe('vfs-row-mapper', () => {
 
   const fileRowHide: WorktreeListRow = {
     kind: 'file',
-    path: '/template/hidden.md',
+    path: '/hidden.md',
     ruleState: '',
     inclusionMode: '隐藏',
     displayState: '不展示',
@@ -78,23 +78,23 @@ describe('vfs-row-mapper', () => {
       fileRowAuto,
       {
         kind: 'file',
-        path: '/template/shared/nested.md',
+        path: '/shared/nested.md',
         ruleState: '',
         inclusionMode: '继承',
         displayState: '文件名',
       },
     ];
-    expect(countFilesInDir(rows, '/template')).toBe(1);
-    expect(countFilesInDir(rows, '/template/shared')).toBe(1);
+    expect(countFilesInDir(rows, '/')).toBe(1);
+    expect(countFilesInDir(rows, '/shared')).toBe(1);
   });
 
   it('detects direct children', () => {
-    expect(isDirectChild('/template', '/template/a.md')).toBe(true);
-    expect(isDirectChild('/template', '/template/sub/a.md')).toBe(false);
+    expect(isDirectChild('/', '/a.md')).toBe(true);
+    expect(isDirectChild('/', '/sub/a.md')).toBe(false);
   });
 
   it('fallback vfs file path mapping', () => {
-    const mapped: MappedVfsRow = mapVfsFilePath('/template/new.md');
+    const mapped: MappedVfsRow = mapVfsFilePath('/new.md');
     expect(mapped.name).toBe('new.md');
     expect(mapped.subtitle).toBe('继承·全内容');
   });

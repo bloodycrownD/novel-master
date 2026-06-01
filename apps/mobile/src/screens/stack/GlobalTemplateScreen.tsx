@@ -40,7 +40,7 @@ export function GlobalTemplateScreen() {
         scope={{kind: 'global'}}
         vfs={runtime.globalVfs()}
         worktree={runtime.worktree({kind: 'global'})}
-        rootPath="/template"
+        rootPath="/"
         onOpenFile={openFile}
       />
     </View>
