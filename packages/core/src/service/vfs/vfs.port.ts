@@ -11,3 +11,7 @@ export type {
   VfsService,
   WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
+export type {
+  VfsZipIoService,
+  VfsZipImportOptions,
+} from "@/domain/vfs/ports/vfs-zip-io.port.js";

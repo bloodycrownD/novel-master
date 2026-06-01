@@ -4,7 +4,7 @@
  * @module domain/vfs/repositories/vfs-entry.port
  */
 
-import type { VfsEntry } from "../model/vfs-entry.js";
+import type { VfsEntry, VfsStorageKind } from "../model/vfs-entry.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
@@ -39,6 +39,10 @@ export interface VfsEntryRepository {
   listEntriesUnderPrefix(prefix: string): Promise<VfsListEntry[]>;
 
   scanContents(pathPrefix?: string): Promise<
-    ReadonlyArray<{ path: string; content: string }>
+    ReadonlyArray<{
+      path: string;
+      content: string;
+      storageKind: VfsStorageKind;
+    }>
   >;
 }

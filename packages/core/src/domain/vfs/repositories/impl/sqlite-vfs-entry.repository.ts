@@ -295,26 +295,41 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async scanContents(
     pathPrefix?: string,
-  ): Promise<ReadonlyArray<{ path: string; content: string }>> {
+  ): Promise<
+    ReadonlyArray<{
+      path: string;
+      content: string;
+      storageKind: VfsStorageKind;
+    }>
+  > {
     if (pathPrefix == null) {
-      const rows = await queryTemplate<{ path: string; content: string }>(
+      const rows = await queryTemplate<{
+        path: string;
+        content: string;
+        storage_kind: string;
+      }>(
         this.conn,
         this.parser,
-        `SELECT path, content FROM vfs_entry WHERE entry_kind = 'file'`,
+        `SELECT path, content, storage_kind FROM vfs_entry WHERE entry_kind = 'file'`,
         {},
       );
       return rows.map((row) => ({
         path: String(row.path),
         content: String(row.content),
+        storageKind: String(row.storage_kind) as VfsStorageKind,
       }));
     }
 
     const normalized = normalizePath(pathPrefix);
     const escaped = escapeLike(normalized);
-    const rows = await queryTemplate<{ path: string; content: string }>(
+    const rows = await queryTemplate<{
+      path: string;
+      content: string;
+      storage_kind: string;
+    }>(
       this.conn,
       this.parser,
-      `SELECT path, content FROM vfs_entry
+      `SELECT path, content, storage_kind FROM vfs_entry
        WHERE entry_kind = 'file'
          AND (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')`,
       { path: normalized, childPattern: `${escaped}/%` },
@@ -322,6 +337,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     return rows.map((row) => ({
       path: String(row.path),
       content: String(row.content),
+      storageKind: String(row.storage_kind) as VfsStorageKind,
     }));
   }
 }
