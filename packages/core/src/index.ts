@@ -59,7 +59,12 @@ export type {
  */
 export { VfsError } from "./errors/vfs-errors.js";
 export type { VfsErrorCode } from "./errors/vfs-errors.js";
-export type { VfsEntry, VfsStorageKind } from "./domain/vfs/model/vfs-entry.js";
+export type {
+  VfsEntry,
+  VfsEntryKind,
+  VfsStorageKind,
+} from "./domain/vfs/model/vfs-entry.js";
+export type { VfsListEntry } from "./domain/vfs/model/vfs-list-entry.js";
 export {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,

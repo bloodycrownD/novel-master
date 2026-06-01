@@ -167,6 +167,13 @@ export class DefaultWorktreeService implements WorktreeService {
       filePaths: [...fileSet],
       configuredPaths,
     });
+    const dirPaths = await this.deps.vfs.listDirectoryPathsUnderPrefix(
+      physicalPrefix,
+    );
+    for (const physicalDir of dirPaths) {
+      const logical = toLogicalPathFromPhysical(this.scope, physicalDir);
+      allDirs.add(logical);
+    }
     return {
       dirRuleMap,
       fileRuleMap,

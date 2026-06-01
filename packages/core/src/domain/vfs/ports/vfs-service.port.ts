@@ -8,6 +8,11 @@
  * Builtin tools and external consumers depend on this port only — not on `service/vfs`.
  */
 
+import type { VfsEntryKind } from "../model/vfs-entry.js";
+import type { VfsListEntry } from "../model/vfs-list-entry.js";
+
+export type { VfsEntryKind, VfsListEntry };
+
 /** Result of reading a single path. */
 export interface VfsReadResult {
   readonly path: string;
@@ -31,7 +36,7 @@ export interface VfsGrepMatch {
 }
 
 /**
- * Virtual file system capability (read/write/list/glob/grep/delete).
+ * Virtual file system capability (read/write/list/glob/grep/delete/mkdir).
  *
  * @remarks
  * Scoping (global / project / session paths) is applied by scoped service wrappers;
@@ -41,7 +46,9 @@ export interface VfsService {
   list(
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
-  ): Promise<string[]>;
+  ): Promise<VfsListEntry[]>;
+
+  mkdir(path: string): Promise<void>;
 
   read(path: string): Promise<VfsReadResult>;
 

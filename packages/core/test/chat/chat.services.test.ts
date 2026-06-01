@@ -32,7 +32,9 @@ describe("Chat services", () => {
 
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const paths = await svfs.list("/", { recursive: true });
+    const paths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md", "/sub/b.md"]);
     assert.equal((await svfs.read("/a.md")).content, "A");
     await ctx.conn.close();
@@ -50,7 +52,9 @@ describe("Chat services", () => {
     await pvfs.write("/template/new.md", "NEW");
 
     assert.equal((await svfs.read("/a.md")).content, "A");
-    const paths = await svfs.list("/", { recursive: true });
+    const paths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md"]);
     await ctx.conn.close();
   });

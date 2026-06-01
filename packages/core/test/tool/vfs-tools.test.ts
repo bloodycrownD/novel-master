@@ -132,8 +132,13 @@ describe("Builtin vfs.* tools (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
 
-    const listed = await runner.call<string[]>("vfs.list", { dir: "/docs" }, baseCtx);
-    assert.deepEqual(listed.sort(), ["/docs/a.md", "/docs/b.txt"].sort());
+    const listed = await runner.call<Array<{ path: string; kind: string }>>(
+      "vfs.list",
+      { dir: "/docs" },
+      baseCtx,
+    );
+    const paths = listed.map((e) => e.path).sort();
+    assert.deepEqual(paths, ["/docs/a.md", "/docs/b.txt"].sort());
 
     const md = await runner.call<string[]>("vfs.glob", { pattern: "**/*.md" }, baseCtx);
     assert.deepEqual(md, ["/docs/a.md"]);
@@ -142,6 +147,29 @@ describe("Builtin vfs.* tools (integration)", () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.path, "/docs/a.md");
     assert.equal(hits[0]!.line, 1);
+    await ctx.conn.close();
+  });
+
+  it("vfs.mkdir creates directory visible in list", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
+
+    await runner.call("vfs.mkdir", { path: "/agent-dir" }, baseCtx);
+    const listed = await runner.call<Array<{ path: string; kind: string }>>(
+      "vfs.list",
+      { dir: "/" },
+      baseCtx,
+    );
+    assert.ok(
+      listed.some((e) => e.path === "/agent-dir" && e.kind === "directory"),
+    );
     await ctx.conn.close();
   });
 

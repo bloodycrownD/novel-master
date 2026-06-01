@@ -9,6 +9,7 @@ import { vfsReplaceNotFound } from "@/errors/vfs-errors.js";
 import type { Tool } from "../model/tool.js";
 import type {
   VfsGrepMatch,
+  VfsListEntry,
   VfsReadResult,
   VfsService,
   WriteOptions,
@@ -151,7 +152,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
 
   const list: Tool<
     { dir: string; options?: { recursive?: boolean; maxDepth?: number } },
-    string[],
+    VfsListEntry[],
     VfsToolContext
   > = {
     name: "vfs.list",
@@ -165,9 +166,25 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
         })
         .optional(),
     }),
-    outputSchema: z.array(z.string()),
+    outputSchema: z.array(
+      z.object({
+        path: z.string(),
+        kind: z.enum(["file", "directory"]),
+      }),
+    ),
     async run(input, ctx) {
       return await ctx.vfs.list(input.dir, input.options);
+    },
+  };
+
+  const mkdir: Tool<{ path: string }, { ok: true }, VfsToolContext> = {
+    name: "vfs.mkdir",
+    description: "Create an empty directory at path (parent must exist)",
+    inputSchema: z.object({ path: z.string().min(1) }),
+    outputSchema: z.object({ ok: z.literal(true) }),
+    async run(input, ctx) {
+      await ctx.vfs.mkdir(input.path);
+      return { ok: true as const };
     },
   };
 
@@ -212,7 +229,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     },
   };
 
-  return [read, write, replace, list, glob, grep];
+  return [read, write, replace, list, mkdir, glob, grep];
 }
 
 /**

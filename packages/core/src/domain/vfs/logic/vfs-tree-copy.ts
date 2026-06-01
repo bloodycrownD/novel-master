@@ -47,9 +47,26 @@ export async function copyVfsTree(
   toPrefix: string,
   options?: { mapPath?: (relative: string) => string },
 ): Promise<void> {
+  const dirPaths = await repo.listDirectoryPathsUnderPrefix(fromPrefix);
+  for (const dirPath of dirPaths) {
+    const relative = relativeUnderPrefix(dirPath, fromPrefix);
+    if (relative.length === 0) {
+      continue;
+    }
+    const mapped = options?.mapPath ? options.mapPath(relative) : relative;
+    const targetPath = joinPhysical(toPrefix, mapped);
+    const existing = await repo.findByPath(targetPath);
+    if (existing == null) {
+      await repo.insertDirectory(targetPath);
+    }
+  }
+
   const rows = await repo.scanContents(fromPrefix);
   for (const row of rows) {
     const relative = relativeUnderPrefix(row.path, fromPrefix);
+    if (relative.length === 0) {
+      continue;
+    }
     const mapped = options?.mapPath ? options.mapPath(relative) : relative;
     const targetPath = joinPhysical(toPrefix, mapped);
     const existing = await repo.findByPath(targetPath);
@@ -82,15 +99,9 @@ export async function deleteVfsPrefix(
   prefix: string,
 ): Promise<void> {
   const base = normalizePrefix(prefix);
-  try {
-    await repo.delete(base, { recursive: true });
-  } catch {
-    // prefix may be a directory without its own row
-  }
-  const rows = await repo.scanContents(base);
-  for (const row of rows) {
-    if (row.path !== base) {
-      await repo.delete(row.path, { recursive: false });
-    }
+  const entries = await repo.listEntriesUnderPrefix(base);
+  const sorted = [...entries].sort((a, b) => b.path.length - a.path.length);
+  for (const entry of sorted) {
+    await repo.delete(entry.path, { recursive: false });
   }
 }

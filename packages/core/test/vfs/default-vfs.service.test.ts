@@ -96,20 +96,25 @@ describe("DefaultVfsService (integration)", () => {
 
   it("lists with recursive depth", async () => {
     const { conn, vfs } = await openVfsTestConnection();
-    await vfs.write("/a", "a");
-    await vfs.write("/a/b", "b");
+    await vfs.mkdir("/a");
+    await vfs.mkdir("/a/b");
     await vfs.write("/a/b/c", "c");
-    assert.deepEqual(await vfs.list("/a"), ["/a/b"]);
-    assert.deepEqual(await vfs.list("/a", { recursive: true, maxDepth: 2 }), [
-      "/a/b",
-      "/a/b/c",
+    assert.deepEqual(await vfs.list("/a"), [
+      { path: "/a/b", kind: "directory" },
     ]);
+    assert.deepEqual(
+      await vfs.list("/a", { recursive: true, maxDepth: 2 }),
+      [
+        { path: "/a/b", kind: "directory" },
+        { path: "/a/b/c", kind: "file" },
+      ],
+    );
     await conn.close();
   });
 
   it("deletes recursively", async () => {
     const { conn, vfs } = await openVfsTestConnection();
-    await vfs.write("/del", "root");
+    await vfs.mkdir("/del");
     await vfs.write("/del/child", "child");
     await vfs.delete("/del", { recursive: true });
     await assert.rejects(() => vfs.read("/del/child"), (e: unknown) => {

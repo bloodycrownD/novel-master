@@ -6,6 +6,7 @@
 
 export type {
   VfsGrepMatch,
+  VfsListEntry,
   VfsReadResult,
   VfsService,
   WriteOptions,

@@ -16,7 +16,12 @@ import {
   vfsDirectoryNotEmpty,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
-import type { VfsEntry, VfsStorageKind } from "../../model/vfs-entry.js";
+import type {
+  VfsEntry,
+  VfsEntryKind,
+  VfsStorageKind,
+} from "../../model/vfs-entry.js";
+import type { VfsListEntry } from "../../model/vfs-list-entry.js";
 import type {
   VfsDeleteOptions,
   VfsListOptions,
@@ -26,6 +31,9 @@ import type { VfsEntryRepository } from "../vfs-entry.port.js";
 import { normalizePath } from "./normalize-path.js";
 
 function rowToEntry(row: Row): VfsEntry {
+  const kindRaw = row.entry_kind;
+  const entryKind: VfsEntryKind =
+    kindRaw === "directory" ? "directory" : "file";
   return {
     path: String(row.path),
     content: String(row.content),
@@ -33,6 +41,7 @@ function rowToEntry(row: Row): VfsEntry {
     mtimeMs: Number(row.mtime_ms),
     storageKind: String(row.storage_kind) as VfsStorageKind,
     externalUri: row.external_uri == null ? null : String(row.external_uri),
+    entryKind,
   };
 }
 
@@ -51,6 +60,13 @@ function escapeLike(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
 }
 
+function normalizePrefix(prefix: string): string {
+  if (prefix === "/") {
+    return prefix;
+  }
+  return prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+}
+
 /**
  * TDBC-backed vfs_entry repository.
  */
@@ -59,26 +75,28 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   constructor(private readonly conn: TdbcConnection) {}
 
-  async list(dir: string, options?: VfsListOptions): Promise<string[]> {
+  async list(dir: string, options?: VfsListOptions): Promise<VfsListEntry[]> {
     const normalizedDir = normalizePath(dir);
     const likePattern = listPrefix(normalizedDir);
-    const rows = await queryTemplate<{ path: string }>(
+    const rows = await queryTemplate<{ path: string; entry_kind: string }>(
       this.conn,
       this.parser,
-      `SELECT path FROM vfs_entry WHERE path LIKE #{likePattern} ESCAPE '\\'`,
+      `SELECT path, entry_kind FROM vfs_entry WHERE path LIKE #{likePattern} ESCAPE '\\'`,
       { likePattern },
     );
 
     const recursive = options?.recursive === true;
     const maxDepth = options?.maxDepth;
 
-    const paths: string[] = [];
+    const entries: VfsListEntry[] = [];
     for (const row of rows) {
       const entryPath = String(row.path);
+      const kind: VfsEntryKind =
+        row.entry_kind === "directory" ? "directory" : "file";
       const relative = relativeUnderDir(normalizedDir, entryPath);
       if (!recursive) {
         if (!relative.includes("/")) {
-          paths.push(entryPath);
+          entries.push({ path: entryPath, kind });
         }
         continue;
       }
@@ -89,11 +107,11 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
           continue;
         }
       }
-      paths.push(entryPath);
+      entries.push({ path: entryPath, kind });
     }
 
-    paths.sort();
-    return paths;
+    entries.sort((a, b) => a.path.localeCompare(b.path));
+    return entries;
   }
 
   async findByPath(path: string): Promise<VfsEntry | null> {
@@ -101,7 +119,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT path, content, version, mtime_ms, storage_kind, external_uri
+      `SELECT path, content, version, mtime_ms, storage_kind, external_uri, entry_kind
        FROM vfs_entry WHERE path = #{path}`,
       { path: normalized },
     );
@@ -117,11 +135,23 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind)
-       VALUES (#{path}, #{content}, 1, #{mtimeMs}, 'inline')`,
+      `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind, entry_kind)
+       VALUES (#{path}, #{content}, 1, #{mtimeMs}, 'inline', 'file')`,
       { path: normalized, content, mtimeMs },
     );
     return { version: 1 };
+  }
+
+  async insertDirectory(path: string): Promise<void> {
+    const normalized = normalizePath(path);
+    const mtimeMs = Date.now();
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind, entry_kind)
+       VALUES (#{path}, '', 1, #{mtimeMs}, 'inline', 'directory')`,
+      { path: normalized, mtimeMs },
+    );
   }
 
   async update(
@@ -139,7 +169,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.parser,
         `UPDATE vfs_entry
          SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
-         WHERE path = #{path} AND version = #{expectedVersion}`,
+         WHERE path = #{path} AND version = #{expectedVersion} AND entry_kind = 'file'`,
         { content, mtimeMs, path: normalized, expectedVersion },
       );
       if (result.changes === 0) {
@@ -164,7 +194,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.parser,
         `UPDATE vfs_entry
          SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
-         WHERE path = #{path}`,
+         WHERE path = #{path} AND entry_kind = 'file'`,
         { content, mtimeMs, path: normalized },
       );
       if (result.changes === 0) {
@@ -223,10 +253,44 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const rows = await queryTemplate<{ path: string }>(
       this.conn,
       this.parser,
-      `SELECT path FROM vfs_entry ORDER BY path`,
+      `SELECT path FROM vfs_entry WHERE entry_kind = 'file' ORDER BY path`,
       {},
     );
     return rows.map((row) => String(row.path));
+  }
+
+  async listDirectoryPathsUnderPrefix(
+    physicalPrefix: string,
+  ): Promise<string[]> {
+    const base = normalizePrefix(physicalPrefix);
+    const escaped = escapeLike(base);
+    const rows = await queryTemplate<{ path: string }>(
+      this.conn,
+      this.parser,
+      `SELECT path FROM vfs_entry
+       WHERE entry_kind = 'directory'
+         AND (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')
+       ORDER BY path`,
+      { path: base, childPattern: `${escaped}/%` },
+    );
+    return rows.map((row) => String(row.path));
+  }
+
+  async listEntriesUnderPrefix(prefix: string): Promise<VfsListEntry[]> {
+    const base = normalizePrefix(prefix);
+    const escaped = escapeLike(base);
+    const rows = await queryTemplate<{ path: string; entry_kind: string }>(
+      this.conn,
+      this.parser,
+      `SELECT path, entry_kind FROM vfs_entry
+       WHERE path = #{path} OR path LIKE #{childPattern} ESCAPE '\\'
+       ORDER BY path`,
+      { path: base, childPattern: `${escaped}/%` },
+    );
+    return rows.map((row) => ({
+      path: String(row.path),
+      kind: row.entry_kind === "directory" ? "directory" : "file",
+    }));
   }
 
   async scanContents(
@@ -236,7 +300,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       const rows = await queryTemplate<{ path: string; content: string }>(
         this.conn,
         this.parser,
-        `SELECT path, content FROM vfs_entry`,
+        `SELECT path, content FROM vfs_entry WHERE entry_kind = 'file'`,
         {},
       );
       return rows.map((row) => ({
@@ -251,7 +315,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       this.conn,
       this.parser,
       `SELECT path, content FROM vfs_entry
-       WHERE path = #{path} OR path LIKE #{childPattern} ESCAPE '\\'`,
+       WHERE entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')`,
       { path: normalized, childPattern: `${escaped}/%` },
     );
     return rows.map((row) => ({

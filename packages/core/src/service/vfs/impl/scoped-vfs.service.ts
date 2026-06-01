@@ -13,6 +13,7 @@ import {
 import type { VfsService } from "../vfs.port.js";
 import type {
   VfsGrepMatch,
+  VfsListEntry,
   VfsReadResult,
   WriteOptions,
 } from "../vfs.port.js";
@@ -31,11 +32,20 @@ export class ScopedVfsService implements VfsService {
   async list(
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
-  ): Promise<string[]> {
+  ): Promise<VfsListEntry[]> {
     assertLogicalPathAllowed(this.scope, dir);
     const physicalDir = toPhysicalPath(this.scope, dir);
-    const paths = await this.inner.list(physicalDir, options);
-    return paths.map((p) => toLogicalPath(this.scope, p));
+    const entries = await this.inner.list(physicalDir, options);
+    return entries.map((e) => ({
+      path: toLogicalPath(this.scope, e.path),
+      kind: e.kind,
+    }));
+  }
+
+  async mkdir(path: string): Promise<void> {
+    assertLogicalPathAllowed(this.scope, path);
+    const physical = toPhysicalPath(this.scope, path);
+    return this.inner.mkdir(physical);
   }
 
   async read(path: string): Promise<VfsReadResult> {

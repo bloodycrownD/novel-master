@@ -10,7 +10,11 @@ export type VfsErrorCode =
   | "CONFLICT"
   | "REPLACE_NOT_FOUND"
   | "DIRECTORY_NOT_EMPTY"
-  | "INVALID_PATH";
+  | "INVALID_PATH"
+  | "IS_DIRECTORY"
+  | "ALREADY_EXISTS"
+  | "NOT_A_DIRECTORY"
+  | "PARENT_NOT_FOUND";
 
 /**
  * Unified error for VFS service and repository operations.
@@ -80,4 +84,24 @@ export function vfsInvalidPath(path: string, reason: string): VfsError {
   return new VfsError("INVALID_PATH", `Invalid path ${path}: ${reason}`, {
     path,
   });
+}
+
+/** Path is a directory row; read/write/replace are not allowed. */
+export function vfsIsDirectory(path: string): VfsError {
+  return new VfsError("IS_DIRECTORY", `Path is a directory: ${path}`, { path });
+}
+
+/** mkdir target already exists. */
+export function vfsAlreadyExists(path: string): VfsError {
+  return new VfsError("ALREADY_EXISTS", `Path already exists: ${path}`, { path });
+}
+
+/** Parent path exists as a file row. */
+export function vfsNotADirectory(path: string): VfsError {
+  return new VfsError("NOT_A_DIRECTORY", `Not a directory: ${path}`, { path });
+}
+
+/** mkdir parent path does not exist. */
+export function vfsParentNotFound(path: string): VfsError {
+  return new VfsError("PARENT_NOT_FOUND", `Parent not found: ${path}`, { path });
 }

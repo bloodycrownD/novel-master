@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS vfs_entry (
   version INTEGER NOT NULL DEFAULT 1,
   mtime_ms INTEGER NOT NULL,
   storage_kind TEXT NOT NULL DEFAULT 'inline',
-  external_uri TEXT
+  external_uri TEXT,
+  entry_kind TEXT NOT NULL DEFAULT 'file'
 )`.trim();
 
 /** Prefix index for LIKE-based list queries. */

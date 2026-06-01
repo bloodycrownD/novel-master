@@ -30,23 +30,30 @@ describe("SqliteVfsEntryRepository", () => {
     assert.ok(entry);
     assert.equal(entry.content, "hi");
     assert.equal(entry.version, 1);
+    assert.equal(entry.entryKind, "file");
     await conn.close();
   });
 
   it("lists direct children only by default", async () => {
     const { conn } = await openVfsTestConnection();
     const repo = new SqliteVfsEntryRepository(conn);
-    await repo.insert("/a", "a");
-    await repo.insert("/a/b", "b");
+    await repo.insertDirectory("/a");
+    await repo.insertDirectory("/a/b");
     await repo.insert("/a/b/c", "c");
     const shallow = await repo.list("/a");
-    assert.deepEqual(shallow, ["/a/b"]);
+    assert.deepEqual(shallow, [{ path: "/a/b", kind: "directory" }]);
     const recursive = await repo.list("/a", { recursive: true });
-    assert.deepEqual(recursive, ["/a/b", "/a/b/c"]);
+    assert.deepEqual(recursive, [
+      { path: "/a/b", kind: "directory" },
+      { path: "/a/b/c", kind: "file" },
+    ]);
     const depth2 = await repo.list("/a", { recursive: true, maxDepth: 2 });
-    assert.deepEqual(depth2, ["/a/b", "/a/b/c"]);
+    assert.deepEqual(depth2, [
+      { path: "/a/b", kind: "directory" },
+      { path: "/a/b/c", kind: "file" },
+    ]);
     const depth1 = await repo.list("/a", { recursive: true, maxDepth: 1 });
-    assert.deepEqual(depth1, ["/a/b"]);
+    assert.deepEqual(depth1, [{ path: "/a/b", kind: "directory" }]);
     await conn.close();
   });
 
@@ -83,7 +90,7 @@ describe("SqliteVfsEntryRepository", () => {
   it("blocks non-recursive delete when children exist", async () => {
     const { conn } = await openVfsTestConnection();
     const repo = new SqliteVfsEntryRepository(conn);
-    await repo.insert("/tree", "root");
+    await repo.insertDirectory("/tree");
     await repo.insert("/tree/leaf", "leaf");
     await assert.rejects(
       () => repo.delete("/tree", { recursive: false }),
@@ -99,7 +106,7 @@ describe("SqliteVfsEntryRepository", () => {
   it("deletes recursively", async () => {
     const { conn } = await openVfsTestConnection();
     const repo = new SqliteVfsEntryRepository(conn);
-    await repo.insert("/tree", "root");
+    await repo.insertDirectory("/tree");
     await repo.insert("/tree/leaf", "leaf");
     await repo.delete("/tree", { recursive: true });
     assert.equal(await repo.findByPath("/tree"), null);

@@ -4,15 +4,27 @@
  * @module service/vfs/impl/vfs.service
  */
 
+import { ensureParentDirectories } from "@/domain/vfs/logic/ensure-parent-dirs.js";
+import {
+  isStorageRootParent,
+  parentDir,
+} from "@/domain/vfs/logic/parent-dir.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import {
   VfsError,
+  vfsAlreadyExists,
+  vfsInvalidPath,
+  vfsIsDirectory,
+  vfsNotADirectory,
   vfsNotFound,
+  vfsParentNotFound,
   vfsReplaceNotFound,
 } from "@/errors/vfs-errors.js";
+import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { matchGlob } from "../glob-match.js";
 import type {
   VfsGrepMatch,
+  VfsListEntry,
   VfsReadResult,
   VfsService,
   WriteOptions,
@@ -27,14 +39,42 @@ export class DefaultVfsService implements VfsService {
   list(
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
-  ): Promise<string[]> {
+  ): Promise<VfsListEntry[]> {
     return this.repo.list(dir, options);
+  }
+
+  async mkdir(path: string): Promise<void> {
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      throw vfsInvalidPath(path, "cannot mkdir root");
+    }
+
+    const existing = await this.repo.findByPath(normalized);
+    if (existing != null) {
+      throw vfsAlreadyExists(normalized);
+    }
+
+    const parent = parentDir(normalized);
+    if (parent !== "/" && !isStorageRootParent(parent)) {
+      const parentEntry = await this.repo.findByPath(parent);
+      if (parentEntry == null) {
+        throw vfsParentNotFound(parent);
+      }
+      if (parentEntry.entryKind !== "directory") {
+        throw vfsNotADirectory(parent);
+      }
+    }
+
+    await this.repo.insertDirectory(normalized);
   }
 
   async read(path: string): Promise<VfsReadResult> {
     const entry = await this.repo.findByPath(path);
     if (entry == null) {
       throw vfsNotFound(path);
+    }
+    if (entry.entryKind === "directory") {
+      throw vfsIsDirectory(path);
     }
     return {
       path: entry.path,
@@ -49,20 +89,25 @@ export class DefaultVfsService implements VfsService {
     content: string,
     options?: WriteOptions,
   ): Promise<{ version: number }> {
-    const existing = await this.repo.findByPath(path);
+    const normalized = normalizePath(path);
+    const existing = await this.repo.findByPath(normalized);
+    if (existing?.entryKind === "directory") {
+      throw vfsIsDirectory(normalized);
+    }
+    await ensureParentDirectories(this.repo, normalized);
     if (existing == null) {
-      return this.repo.insert(path, content);
+      return this.repo.insert(normalized, content);
     }
 
     const versionCheck = options?.versionCheck !== false;
     if (versionCheck && options?.expectedVersion == null) {
       throw new VfsError(
         "CONFLICT",
-        `expectedVersion required when updating ${path}`,
-        { path },
+        `expectedVersion required when updating ${normalized}`,
+        { path: normalized },
       );
     }
-    return this.repo.update(path, content, {
+    return this.repo.update(normalized, content, {
       expectedVersion: options?.expectedVersion,
       versionCheck,
     });
@@ -154,7 +199,11 @@ export class DefaultVfsService implements VfsService {
   }
 
   delete(path: string, options?: { recursive?: boolean }): Promise<void> {
-    return this.repo.delete(path, { recursive: options?.recursive === true });
+    const normalized = normalizePath(path);
+    if (normalized === "/") {
+      throw vfsInvalidPath(path, "cannot delete root");
+    }
+    return this.repo.delete(normalized, { recursive: options?.recursive === true });
   }
 }
 

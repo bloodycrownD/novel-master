@@ -55,7 +55,9 @@ describe("template pull", () => {
     await ctx.globalVfs().write("/template/g.md", "G");
     await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
 
-    const sessionPaths = await svfs.list("/", { recursive: true });
+    const sessionPaths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
     assert.deepEqual(sessionPaths.sort(), ["/base.md", "/only-in-session.md"]);
     assert.equal((await svfs.read("/only-in-session.md")).content, "session-only");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
@@ -78,7 +80,9 @@ describe("template pull", () => {
     const pull = createTemplatePullService(ctx.conn);
     await pull.projectTemplatePull(project.id);
 
-    const paths = await pvfs.list("/template", { recursive: true });
+    const paths = (await pvfs.list("/template", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
     assert.deepEqual(paths, ["/template/g.md"]);
     const pwt = createWorktreeService(ctx.conn, {
       kind: "project",
@@ -110,7 +114,9 @@ describe("template pull", () => {
     });
     await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
 
-    const paths = await svfs.list("/", { recursive: true });
+    const paths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path);
     assert.deepEqual(paths, ["/x.md"]);
     assert.equal((await svfs.read("/x.md")).content, "NEW");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
