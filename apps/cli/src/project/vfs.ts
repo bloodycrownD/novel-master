@@ -9,6 +9,7 @@ import { runDelete } from "../vfs/commands/delete.js";
 import { runGlob } from "../vfs/commands/glob.js";
 import { runGrep } from "../vfs/commands/grep.js";
 import { runList } from "../vfs/commands/list.js";
+import { runMkdir } from "../vfs/commands/mkdir.js";
 import { runRead } from "../vfs/commands/read.js";
 import { runReplace } from "../vfs/commands/replace.js";
 import { runWrite } from "../vfs/commands/write.js";
@@ -19,6 +20,7 @@ const PROJECT_VFS_COMMANDS: Record<
   (vfs: VfsService, args: readonly string[]) => Promise<void>
 > = {
   list: runList,
+  mkdir: runMkdir,
   read: runRead,
   write: runWrite,
   replace: runReplace,
@@ -37,7 +39,7 @@ export async function runProjectVfs(
   const sub = positional[0];
   if (sub == null || !(sub in PROJECT_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete> ...",
+      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete|mkdir> ...",
     );
   }
   const vfs = projectVfs(projectId);

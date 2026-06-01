@@ -10,6 +10,7 @@ import { runDelete } from "../vfs/commands/delete.js";
 import { runGlob } from "../vfs/commands/glob.js";
 import { runGrep } from "../vfs/commands/grep.js";
 import { runList } from "../vfs/commands/list.js";
+import { runMkdir } from "../vfs/commands/mkdir.js";
 import { runRead } from "../vfs/commands/read.js";
 import { runReplace } from "../vfs/commands/replace.js";
 import { runWrite } from "../vfs/commands/write.js";
@@ -20,6 +21,7 @@ import { parseCliArgs } from "../vfs/parse-args.js";
 /** Session VFS subcommands except `write` (version check comes from preferences). */
 const SESSION_VFS_COMMANDS = {
   list: runList,
+  mkdir: runMkdir,
   read: runRead,
   replace: runReplace,
   glob: runGlob,

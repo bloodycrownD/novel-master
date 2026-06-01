@@ -25,6 +25,7 @@ import {
   formatCliError,
 } from "./cli-errors.js";
 import { runDelete } from "./vfs/commands/delete.js";
+import { runMkdir } from "./vfs/commands/mkdir.js";
 import { runGlob } from "./vfs/commands/glob.js";
 import { runGrep } from "./vfs/commands/grep.js";
 import { runList } from "./vfs/commands/list.js";
@@ -38,6 +39,7 @@ const GLOBAL_VFS_COMMANDS: Record<
   (vfs: VfsService, args: readonly string[]) => Promise<void>
 > = {
   list: runList,
+  mkdir: runMkdir,
   read: runRead,
   write: runWrite,
   replace: runReplace,
@@ -63,7 +65,7 @@ async function runVfs(argv: string[]): Promise<number> {
 
   if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
     console.error(
-      "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|worktree> ...",
+      "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|worktree> ...",
     );
     return EXIT_USAGE;
   }

@@ -9,11 +9,12 @@ export async function runList(vfs: VfsService, args: readonly string[]): Promise
   const maxDepth =
     typeof depthRaw === "string" ? Number.parseInt(depthRaw, 10) : undefined;
 
-  const paths = await vfs.list(dir, {
+  const entries = await vfs.list(dir, {
     recursive,
     maxDepth: recursive ? maxDepth : undefined,
   });
-  for (const path of paths) {
-    console.log(path);
+  for (const entry of entries) {
+    const kindLabel = entry.kind === "directory" ? "DIR" : "FILE";
+    console.log(`${kindLabel}\t${entry.path}`);
   }
 }
