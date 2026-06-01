@@ -31,19 +31,21 @@ export async function applyActiveRegexChannel(
   );
 }
 
-/** Visible session messages with display-channel regex (chat UI; DB unchanged). */
+/**
+ * Session messages for chat timeline (display-channel regex; DB unchanged).
+ * Includes hidden rows — chat UI greys them out; prompt paths filter hidden separately.
+ */
 export async function loadSessionMessagesForDisplay(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
 ): Promise<ChatMessage[]> {
   const all = await runtime.messages.listBySession(sessionId);
-  const visible = all.filter(m => !m.hidden);
   const activeGroupId = await runtime.state.getCurrentRegexGroupId();
   return applyActiveRegexChannel(
     runtime.regexConfig,
     activeGroupId,
     all,
-    visible,
+    all,
     'display',
   );
 }

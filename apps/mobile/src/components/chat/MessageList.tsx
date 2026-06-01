@@ -35,6 +35,18 @@ interface ChatMessageBodyProps {
   tokens: ThemeTokens;
   isUser: boolean;
   richTextEnabled: boolean;
+  bodyColor: string;
+}
+
+/** Hidden rows use the same palette as normal bubbles, only dimmed (no badge). */
+function chatBubbleColors(
+  tokens: ThemeTokens,
+  isUser: boolean,
+): {backgroundColor: string; bodyColor: string} {
+  return {
+    backgroundColor: isUser ? tokens.primary : tokens.surface,
+    bodyColor: isUser ? '#fff' : tokens.text,
+  };
 }
 
 /** Chat bubble body: plain Text when pref off, else shared rich renderer. */
@@ -43,8 +55,9 @@ const ChatMessageBody = React.memo(function ChatMessageBody({
   tokens,
   isUser,
   richTextEnabled,
+  bodyColor,
 }: ChatMessageBodyProps) {
-  const plainColor = isUser ? '#fff' : tokens.text;
+  const plainColor = bodyColor;
   if (!richTextEnabled || isRichContentOverLimit(body)) {
     return <Text style={{color: plainColor}}>{body}</Text>;
   }
@@ -90,36 +103,35 @@ export function MessageList({
     hidden: boolean,
     /** Streaming tail always plain Text even when assistant rich text is on. */
     forcePlainText = false,
-  ) => (
-    <View
-      style={[
-        styles.bubble,
-        {
-          backgroundColor: isUser ? tokens.primary : tokens.surface,
-          opacity: hidden ? 0.55 : 1,
-        },
-        batchMode && selected && {
-          borderColor: tokens.primary,
-          borderWidth: 2,
-        },
-      ]}>
-      {hidden ? (
-        <Text style={[styles.hiddenBadge, {color: tokens.textSecondary}]}>
-          已隐藏
-        </Text>
-      ) : null}
-      {forcePlainText ? (
-        <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
-      ) : (
-        <ChatMessageBody
-          body={body}
-          tokens={tokens}
-          isUser={isUser}
-          richTextEnabled={chatRichTextEnabled}
-        />
-      )}
-    </View>
-  );
+  ) => {
+    const colors = chatBubbleColors(tokens, isUser);
+    return (
+      <View
+        style={[
+          styles.bubble,
+          {
+            backgroundColor: colors.backgroundColor,
+            opacity: hidden ? 0.55 : 1,
+          },
+          batchMode && selected && {
+            borderColor: tokens.primary,
+            borderWidth: 2,
+          },
+        ]}>
+        {forcePlainText ? (
+          <Text style={{color: colors.bodyColor}}>{body}</Text>
+        ) : (
+          <ChatMessageBody
+            body={body}
+            tokens={tokens}
+            isUser={isUser}
+            richTextEnabled={chatRichTextEnabled}
+            bodyColor={colors.bodyColor}
+          />
+        )}
+      </View>
+    );
+  };
 
   return (
     <FlatList
@@ -293,5 +305,4 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     flexShrink: 1,
   },
-  hiddenBadge: {fontSize: 11, marginBottom: 4},
 });
