@@ -8,7 +8,7 @@ import { z } from "zod";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import { validatePromptBlocksFromMap } from "@/domain/prompt/logic/validate-prompt-blocks.js";
 import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
-import type { AgentDefinition } from "./agent-definition.js";
+import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
 const textPromptBlockValueSchema = z
   .object({
@@ -43,7 +43,14 @@ const promptsDocumentSchema = z
   })
   .strict();
 
-/** Root agent definition wire document schema (strict ‚Ä?rejects legacy keys). */
+const agentToolPolicyDocumentSchema = z
+  .object({
+    allow: z.array(z.string().min(1)).optional(),
+    deny: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+
+/** Root agent definition wire document schema (strict ù?rejects legacy keys). */
 export const agentDefinitionDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -51,6 +58,7 @@ export const agentDefinitionDocumentSchema = z
     prompts: promptsDocumentSchema,
     model: z.string().min(1).optional(),
     runtime: z.object({ maxSteps: z.number().int().positive().optional() }).strict().optional(),
+    tools: agentToolPolicyDocumentSchema.optional(),
   })
   .strict();
 
@@ -92,13 +100,27 @@ function blockToMapValue(
   return { type: "chat" };
 }
 
+function wireToolsToDomain(
+  tools: AgentDefinitionDocument["tools"],
+): AgentToolPolicy | undefined {
+  if (tools == null) {
+    return undefined;
+  }
+  return {
+    ...(tools.allow != null ? { allow: tools.allow } : {}),
+    ...(tools.deny != null ? { deny: tools.deny } : {}),
+  };
+}
+
 function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
   const blocks = validatePromptBlocksFromMap(doc.prompts.blocks);
+  const tools = wireToolsToDomain(doc.tools);
   return {
     name: doc.name,
     prompts: blocks,
     model: doc.model,
     runtime: doc.runtime,
+    ...(tools != null ? { tools } : {}),
   };
 }
 
@@ -113,6 +135,16 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
     prompts: { blocks },
     ...(def.model != null ? { model: def.model } : {}),
     ...(def.runtime != null ? { runtime: def.runtime } : {}),
+    ...(def.tools != null
+      ? {
+          tools: {
+            ...(def.tools.allow != null
+              ? { allow: [...def.tools.allow] }
+              : {}),
+            ...(def.tools.deny != null ? { deny: [...def.tools.deny] } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -121,7 +153,7 @@ const agentDefinitionWireSchema = z.preprocess((raw) => {
   return raw;
 }, agentDefinitionDocumentSchema);
 
-/** Domain parser: wire document ‚Ü?{@link AgentDefinition}. */
+/** Domain parser: wire document ù?{@link AgentDefinition}. */
 export const agentDefinitionSchema = Object.assign(
   agentDefinitionWireSchema.transform(documentToDefinition),
   { encode: definitionToDocument },

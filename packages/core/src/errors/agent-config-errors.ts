@@ -9,6 +9,7 @@ export type AgentConfigErrorCode =
   | "INVALID_SCHEMA"
   | "INVALID_COMPACT"
   | "INVALID_MODEL"
+  | "INVALID_TOOL_POLICY"
   | "PROTOCOL_MISMATCH"
   | "AGENT_NOT_FOUND"
   | "AGENT_IN_USE";

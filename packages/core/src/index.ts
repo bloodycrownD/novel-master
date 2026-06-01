@@ -71,6 +71,18 @@ export {
 } from "./bootstrap/novel-master-bootstrap.js";
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
+export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
+export { VfsZipError } from "./errors/vfs-zip-errors.js";
+export type { VfsZipErrorCode } from "./errors/vfs-zip-errors.js";
+export type {
+  VfsZipIoService,
+  VfsZipImportOptions,
+} from "./domain/vfs/ports/vfs-zip-io.port.js";
+export { resolveAgentToolRegistry } from "./domain/agent/logic/resolve-agent-tool-registry.js";
+export { validateAgentToolPolicy } from "./domain/agent/logic/validate-agent-tool-policy.js";
+export type {
+  AgentToolPolicy,
+} from "./domain/agent/model/agent-definition.js";
 export type {
   VfsService,
   VfsReadResult,

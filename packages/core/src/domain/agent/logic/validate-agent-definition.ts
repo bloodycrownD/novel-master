@@ -4,6 +4,7 @@
  * @module domain/agent/validate-agent-definition
  */
 
+import { validateAgentToolPolicy } from "./validate-agent-tool-policy.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 
 export interface ValidateAgentDefinitionOptions {
@@ -11,6 +12,8 @@ export interface ValidateAgentDefinitionOptions {
   readonly assertSavedModel?: (
     applicationModelId: string,
   ) => void | Promise<void>;
+  /** Registered tool names for tools policy validation (host injects after registerVfsTools). */
+  readonly registeredToolNames?: readonly string[];
 }
 
 /**
@@ -20,6 +23,13 @@ export async function validateAgentDefinition(
   def: AgentDefinition,
   options: ValidateAgentDefinitionOptions = {},
 ): Promise<void> {
+  if (options.registeredToolNames != null) {
+    validateAgentToolPolicy(
+      def.tools,
+      new Set(options.registeredToolNames),
+    );
+  }
+
   const pin = def.model;
   if (pin == null || options.assertSavedModel == null) {
     return;
