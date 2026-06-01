@@ -6,6 +6,7 @@
  * @module infra/llm-protocol/logic/openai-content-mapper
  */
 
+import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
@@ -54,8 +55,10 @@ export function blocksToOpenAiMessageContent(
         });
         break;
       case "thinking":
-        // Reasoning from providers (e.g. GLM `reasoning_content`) is stored for audit/UI only.
-        break;
+        throw new ProviderError(
+          "UNSUPPORTED_CONTENT",
+          "OpenAI outbound messages must not include thinking blocks; strip them before mapping",
+        );
       default:
         break;
     }

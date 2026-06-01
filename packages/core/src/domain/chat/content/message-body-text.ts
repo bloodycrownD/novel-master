@@ -20,8 +20,11 @@ function blockBodyText(block: ContentBlock): string | null {
       const inputJson = JSON.stringify(block.input, null, 2);
       return inputJson === "{}" ? head : `${head}\n${inputJson}`;
     }
-    case "tool_result":
-      return formatToolResultContentForDisplay(block.content);
+    case "tool_result": {
+      const head = `[tool_result id=${block.toolUseId}]`;
+      const body = formatToolResultContentForDisplay(block.content);
+      return body === "" ? head : `${head}\n\n${body}`;
+    }
     case "thinking":
       // Omitted from LLM prompt body by design.
       return null;
