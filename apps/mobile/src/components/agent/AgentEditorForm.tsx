@@ -3,10 +3,17 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
-import type {AgentDefinition, PromptBlock, PromptBlockRole} from '@novel-master/core';
+import type {
+  AgentDefinition,
+  AgentToolPolicy,
+  PromptBlock,
+  PromptBlockRole,
+} from '@novel-master/core';
 import {
   formatApplicationModelId,
   parseApplicationModelId,
+  registerVfsTools,
+  ToolRegistry,
 } from '@novel-master/core';
 import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
@@ -26,7 +33,48 @@ type Props = {
   onSaved?: () => void;
 };
 
+type ToolsMode = 'default' | 'allow' | 'deny';
+
 const ROLES = ['system', 'user', 'assistant'] as const;
+const TOOL_MODE_OPTIONS: Array<{value: ToolsMode; label: string}> = [
+  {value: 'default', label: '默认（全部工具）'},
+  {value: 'allow', label: '白名单'},
+  {value: 'deny', label: '黑名单'},
+];
+
+function parseToolsList(text: string): string[] {
+  return text
+    .split(/[,\n]+/)
+    .map(part => part.trim())
+    .filter(part => part.length > 0);
+}
+
+function buildToolsPolicy(
+  mode: ToolsMode,
+  listText: string,
+): AgentToolPolicy | undefined {
+  if (mode === 'default') {
+    return undefined;
+  }
+  const names = parseToolsList(listText);
+  if (mode === 'allow') {
+    return {allow: names};
+  }
+  return {deny: names};
+}
+
+function toolsFromDefinition(def: AgentDefinition): {
+  mode: ToolsMode;
+  listText: string;
+} {
+  if (def.tools?.allow != null) {
+    return {mode: 'allow', listText: def.tools.allow.join(', ')};
+  }
+  if (def.tools?.deny != null) {
+    return {mode: 'deny', listText: def.tools.deny.join(', ')};
+  }
+  return {mode: 'default', listText: ''};
+}
 const ROLE_OPTIONS = ROLES.map(role => ({value: role, label: role}));
 
 function blockTypeLabel(type: PromptBlock['type']): string {
@@ -46,12 +94,16 @@ function formSnapshotJson(input: {
   modelEnabled: boolean;
   providerId: string;
   vendorModelId: string;
+  toolsMode: ToolsMode;
+  toolsList: string;
   prompts: readonly PromptBlock[];
 }): string {
   return JSON.stringify({
     name: input.name,
     maxSteps: input.maxSteps,
     modelEnabled: input.modelEnabled,
+    toolsMode: input.toolsMode,
+    toolsList: input.toolsList,
     ...(input.modelEnabled
       ? {
           providerId: input.providerId,
@@ -81,6 +133,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [addBlockVisible, setAddBlockVisible] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
+  const [toolsList, setToolsList] = useState('');
 
   const snapshot = useMemo(
     () =>
@@ -90,9 +144,20 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         modelEnabled,
         providerId,
         vendorModelId,
+        toolsMode,
+        toolsList,
         prompts,
       }),
-    [name, maxSteps, modelEnabled, providerId, vendorModelId, prompts],
+    [
+      name,
+      maxSteps,
+      modelEnabled,
+      providerId,
+      vendorModelId,
+      toolsMode,
+      toolsList,
+      prompts,
+    ],
   );
 
   useEffect(() => {
@@ -129,6 +194,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setName(def.name);
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
     setPrompts([...def.prompts]);
+    const toolsWire = toolsFromDefinition(def);
+    setToolsMode(toolsWire.mode);
+    setToolsList(toolsWire.listText);
     const providerList = await loadProviders();
     if (def.model) {
       setModelEnabled(true);
@@ -179,6 +247,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         modelEnabled,
         providerId: baselineProviderId,
         vendorModelId: baselineVendorModelId,
+        toolsMode: toolsWire.mode,
+        toolsList: toolsWire.listText,
         prompts: def.prompts,
       }),
     );
@@ -202,6 +272,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       return null;
     }
     const steps = Number(maxSteps);
+    const tools = buildToolsPolicy(toolsMode, toolsList);
     const def: AgentDefinition = {
       name: name.trim(),
       prompts,
@@ -213,6 +284,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             model: formatApplicationModelId(providerId, vendorModelId),
           }
         : {}),
+      ...(tools != null ? {tools} : {}),
     };
     return def;
   };
@@ -224,7 +296,11 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     }
     setSaving(true);
     try {
-      await runtime.agentRegistry.upsert(agentId, def);
+      const probe = new ToolRegistry();
+      registerVfsTools(probe);
+      await runtime.agentRegistry.upsert(agentId, def, {
+        registeredToolNames: probe.list(),
+      });
       setSavedBaseline(snapshot);
       onSaved?.();
       showToast('已保存 Agent 配置');
@@ -393,6 +469,36 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
               keyboardType="number-pad"
             />
           </FormField>
+        </FormSectionCard>
+
+        <FormSectionCard title="工具策略" tokens={tokens}>
+          <FormField label="模式" tokens={tokens}>
+            <FormSelectField
+              tokens={tokens}
+              value={toolsMode}
+              onChange={value => setToolsMode(value as ToolsMode)}
+              options={TOOL_MODE_OPTIONS}
+              sheetTitle="工具名单模式"
+            />
+          </FormField>
+          {toolsMode !== 'default' ? (
+            <FormField
+              label={toolsMode === 'allow' ? '白名单工具名' : '黑名单工具名'}
+              tokens={tokens}
+              hint="逗号分隔，如 vfs.read, vfs.grep">
+              <FormTextInput
+                tokens={tokens}
+                value={toolsList}
+                onChangeText={setToolsList}
+                placeholder="vfs.read, vfs.grep"
+                multiline
+              />
+            </FormField>
+          ) : (
+            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+              未配置时使用全部已注册工具（vfs.read、vfs.write 等）。
+            </Text>
+          )}
         </FormSectionCard>
 
         <FormSectionCard

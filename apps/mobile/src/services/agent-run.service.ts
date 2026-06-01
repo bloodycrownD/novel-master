@@ -7,6 +7,7 @@ import {
   createAgentRunner,
   createCompactionPipeline,
   registerVfsTools,
+  resolveAgentToolRegistry,
   resolveApplicationModelId,
   textBlocks,
   ToolRegistry,
@@ -107,8 +108,9 @@ export async function runAgentTurn(
   await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
 
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  const registry = new ToolRegistry();
-  registerVfsTools(registry);
+  const baseRegistry = new ToolRegistry();
+  registerVfsTools(baseRegistry);
+  const registry = resolveAgentToolRegistry(baseRegistry, definition);
 
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();

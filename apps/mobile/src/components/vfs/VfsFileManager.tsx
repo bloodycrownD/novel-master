@@ -46,6 +46,8 @@ import {
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
 import {toastMessage} from '../../errors/toast-message';
+import {useRuntime} from '../../hooks/useRuntime';
+import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 
@@ -73,6 +75,7 @@ export function VfsFileManager({
 }: VfsFileManagerProps) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
+  const runtime = useRuntime();
   const root = rootPath ?? vfsScopeRootPath(scope);
   const [currentPath, setCurrentPath] = useState(root);
   const [rows, setRows] = useState<MappedVfsRow[]>([]);
@@ -178,6 +181,8 @@ export function VfsFileManager({
     {label: '新建目录', action: 'create-directory'},
     {label: '新建文件', action: 'create-file'},
     {label: '目录规则', action: 'directory-rule'},
+    {label: '导出 ZIP', action: 'export-zip'},
+    {label: '导入 ZIP', action: 'import-zip'},
   ];
 
   const openPrompt = (state: PromptState) => {
@@ -288,6 +293,32 @@ export function VfsFileManager({
           await reload();
         },
       });
+      return;
+    }
+    if (action === 'export-zip') {
+      exportVfsZip(runtime, scope)
+        .then(() => showToast('已发起 ZIP 导出'))
+        .catch(err => showToast(toastMessage('导出失败', err)));
+      return;
+    }
+    if (action === 'import-zip') {
+      Alert.alert(
+        '导入 ZIP',
+        '将完全替换当前工作区文件，是否继续？',
+        [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '导入',
+            style: 'destructive',
+            onPress: () => {
+              importVfsZip(runtime, scope, {confirmed: true})
+                .then(() => reload())
+                .then(() => showToast('ZIP 导入完成'))
+                .catch(err => showToast(toastMessage('导入失败', err)));
+            },
+          },
+        ],
+      );
       return;
     }
     if (action === 'create-directory') {
