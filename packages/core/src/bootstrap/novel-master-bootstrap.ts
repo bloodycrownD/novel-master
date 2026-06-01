@@ -15,7 +15,6 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
-import { cleanupBrokenWorktreeLogicalPathsOnce } from "./worktree/cleanup-worktree-unified-root-once.js";
 import { migrateWorktreeUnifiedRoot } from "./worktree/migrate-worktree-unified-root.js";
 
 /** All module DDL statements in dependency-safe execution order. */
@@ -43,7 +42,5 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     }
     await seedBuiltinProviders(tx);
   });
-  // TEMPORARY: remove this call (and cleanup-worktree-unified-root-once.ts) after one app restart.
-  await cleanupBrokenWorktreeLogicalPathsOnce(conn);
   await migrateWorktreeUnifiedRoot(conn);
 }
