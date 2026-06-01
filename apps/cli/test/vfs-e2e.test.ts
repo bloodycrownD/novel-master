@@ -36,12 +36,12 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      const write = runCli(["vfs", "--db", dbPath, "write", "/template/hello.txt"], {
+      const write = runCli(["vfs", "--db", dbPath, "write", "/hello.txt"], {
         input: "hello cli",
       });
       assert.equal(write.status, 0, write.stderr);
 
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/hello.txt"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/hello.txt"]);
       assert.equal(read.status, 0, read.stderr);
       assert.equal(read.stdout, "hello cli");
     } finally {
@@ -54,15 +54,15 @@ describe("vfs CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       assert.equal(
-        runCli(["vfs", "--db", dbPath, "mkdir", "/template/a"]).status,
+        runCli(["vfs", "--db", dbPath, "mkdir", "/a"]).status,
         0,
       );
       assert.equal(
-        runCli(["vfs", "--db", dbPath, "mkdir", "/template/a/b"]).status,
+        runCli(["vfs", "--db", dbPath, "mkdir", "/a/b"]).status,
         0,
       );
       const writeLeaf = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/a/b/c"],
+        ["vfs", "--db", dbPath, "write", "/a/b/c"],
         { input: "c" },
       );
       assert.equal(writeLeaf.status, 0, writeLeaf.stderr);
@@ -72,15 +72,15 @@ describe("vfs CLI e2e", () => {
         "--db",
         dbPath,
         "list",
-        "/template/a",
+        "/a",
         "-r",
         "--depth",
         "2",
       ]);
       assert.equal(list.status, 0, list.stderr);
       assert.deepEqual(vfsListPaths(list.stdout).sort(), [
-        "/template/a/b",
-        "/template/a/b/c",
+        "/a/b",
+        "/a/b/c",
       ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -91,20 +91,20 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/r.txt"], { input: "a X b X" });
+      runCli(["vfs", "--db", dbPath, "write", "/r.txt"], { input: "a X b X" });
       const replaced = runCli([
         "vfs",
         "--db",
         dbPath,
         "replace",
-        "/template/r.txt",
+        "/r.txt",
         "X",
         "Y",
         "--all",
       ]);
       assert.equal(replaced.status, 0, replaced.stderr);
 
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/r.txt"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/r.txt"]);
       assert.equal(read.stdout, "a Y b Y");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -115,20 +115,20 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/docs/a.md"], {
+      runCli(["vfs", "--db", dbPath, "write", "/docs/a.md"], {
         input: "# Title",
       });
-      runCli(["vfs", "--db", dbPath, "write", "/template/docs/b.txt"], {
+      runCli(["vfs", "--db", dbPath, "write", "/docs/b.txt"], {
         input: "plain",
       });
 
       const glob = runCli(["vfs", "--db", dbPath, "glob", "**/*.md"]);
       assert.equal(glob.status, 0, glob.stderr);
-      assert.match(glob.stdout, /\/template\/docs\/a\.md/);
+      assert.match(glob.stdout, /\/docs\/a\.md/);
 
       const grep = runCli(["vfs", "--db", dbPath, "grep", "Title"]);
       assert.equal(grep.status, 0, grep.stderr);
-      assert.match(grep.stdout, /\/template\/docs\/a\.md:1:/);
+      assert.match(grep.stdout, /\/docs\/a\.md:1:/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -138,8 +138,8 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/tree"], { input: "root" });
-      runCli(["vfs", "--db", dbPath, "write", "/template/tree/leaf"], {
+      runCli(["vfs", "--db", dbPath, "write", "/tree"], { input: "root" });
+      runCli(["vfs", "--db", dbPath, "write", "/tree/leaf"], {
         input: "leaf",
       });
       const del = runCli([
@@ -147,12 +147,12 @@ describe("vfs CLI e2e", () => {
         "--db",
         dbPath,
         "delete",
-        "/template/tree",
+        "/tree",
         "-r",
       ]);
       assert.equal(del.status, 0, del.stderr);
 
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/tree/leaf"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/tree/leaf"]);
       assert.notEqual(read.status, 0);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -163,12 +163,12 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/v.txt"], { input: "one" });
-      runCli(["vfs", "--db", dbPath, "write", "/template/v.txt", "--version", "1"], {
+      runCli(["vfs", "--db", dbPath, "write", "/v.txt"], { input: "one" });
+      runCli(["vfs", "--db", dbPath, "write", "/v.txt", "--version", "1"], {
         input: "two",
       });
       const bad = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/v.txt", "--version", "1"],
+        ["vfs", "--db", dbPath, "write", "/v.txt", "--version", "1"],
         { input: "three" },
       );
       assert.equal(bad.status, 2);
@@ -189,12 +189,12 @@ describe("vfs CLI e2e", () => {
         "--db",
         dbPath,
         "write",
-        "/template/file.txt",
+        "/file.txt",
         "--file",
         payload,
       ]);
       assert.equal(write.status, 0, write.stderr);
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/file.txt"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/file.txt"]);
       assert.equal(read.stdout, "from file");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -206,11 +206,11 @@ describe("vfs CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       const write = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/text.txt"],
+        ["vfs", "--db", dbPath, "write", "/text.txt"],
         { input: "inline body" },
       );
       assert.equal(write.status, 0, write.stderr);
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/text.txt"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/text.txt"]);
       assert.equal(read.stdout, "inline body");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -221,7 +221,7 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/r2.txt"], {
+      runCli(["vfs", "--db", dbPath, "write", "/r2.txt"], {
         input: "hello world",
       });
       const replaced = runCli([
@@ -229,7 +229,7 @@ describe("vfs CLI e2e", () => {
         "--db",
         dbPath,
         "replace",
-        "/template/r2.txt",
+        "/r2.txt",
         "--old",
         "world",
         "--new",
@@ -237,7 +237,7 @@ describe("vfs CLI e2e", () => {
       ]);
       assert.equal(replaced.status, 0, replaced.stderr);
 
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/r2.txt"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/r2.txt"]);
       assert.equal(read.stdout, "hello there");
     } finally {
       await rm(dir, { recursive: true, force: true });

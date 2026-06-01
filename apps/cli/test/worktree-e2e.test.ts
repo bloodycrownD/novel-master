@@ -11,14 +11,14 @@ describe("worktree CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       runNm(
-        ["vfs", "write", "/template/t.md", "--db", dbPath],
+        ["vfs", "write", "/t.md", "--db", dbPath],
         { input: "t" },
       );
       runNm([
         "vfs",
         "worktree",
         "file",
-        "/template/t.md",
+        "/t.md",
         "--mode",
         "hide",
         "--db",
@@ -46,7 +46,7 @@ describe("worktree CLI e2e", () => {
       ]);
       assert.equal(list.status, 0, list.stderr);
       assert.match(list.stdout, /隐藏/);
-      assert.match(list.stdout, /\/template\/t\.md/);
+      assert.match(list.stdout, /\/t\.md/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -63,7 +63,7 @@ describe("worktree CLI e2e", () => {
           "project",
           "vfs",
           "write",
-          "/template/s.md",
+          "/s.md",
           "--project",
           projectId,
           "--db",
@@ -75,7 +75,7 @@ describe("worktree CLI e2e", () => {
         "project",
         "worktree",
         "file",
-        "/template/s.md",
+        "/s.md",
         "--mode",
         "show",
         "--project",
@@ -116,14 +116,14 @@ describe("worktree CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       runNm(
-        ["vfs", "write", "/template/h.md", "--db", dbPath],
+        ["vfs", "write", "/h.md", "--db", dbPath],
         { input: "h" },
       );
       runNm([
         "vfs",
         "worktree",
         "file",
-        "/template/h.md",
+        "/h.md",
         "--mode",
         "hide",
         "--db",
@@ -142,14 +142,14 @@ describe("worktree CLI e2e", () => {
     const dbPath = join(dir, "novel.db");
     try {
       runNm(
-        ["vfs", "write", "/template/d.md", "--db", dbPath],
+        ["vfs", "write", "/d.md", "--db", dbPath],
         { input: "line1\nline2" },
       );
       runNm([
         "vfs",
         "worktree",
         "file",
-        "/template/d.md",
+        "/d.md",
         "--mode",
         "show",
         "--db",

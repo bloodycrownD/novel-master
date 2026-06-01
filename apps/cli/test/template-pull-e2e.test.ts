@@ -17,7 +17,7 @@ describe("template pull CLI e2e", () => {
           "project",
           "vfs",
           "write",
-          "/template/base.md",
+          "/base.md",
           "--project",
           projectId,
           "--db",

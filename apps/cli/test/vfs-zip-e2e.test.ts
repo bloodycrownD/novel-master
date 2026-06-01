@@ -38,7 +38,7 @@ describe("vfs zip CLI e2e", () => {
     const zipPath = join(dir, "global.zip");
     try {
       const w = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/seed.md"],
+        ["vfs", "--db", dbPath, "write", "/seed.md"],
         { input: "seed" },
       );
       assert.equal(w.status, 0, w.stderr);
@@ -46,8 +46,13 @@ describe("vfs zip CLI e2e", () => {
       const exp = runCli(["vfs", "--db", dbPath, "export-zip", "--out", zipPath]);
       assert.equal(exp.status, 0, exp.stderr);
 
+      const raw = await readFile(zipPath);
+      const zipNames = Object.keys(unzipSync(new Uint8Array(raw)));
+      assert.ok(zipNames.includes("seed.md"));
+      assert.ok(!zipNames.some((n) => n.startsWith("template/")));
+
       const w2 = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/extra.md"],
+        ["vfs", "--db", dbPath, "write", "/extra.md"],
         { input: "gone" },
       );
       assert.equal(w2.status, 0, w2.stderr);
@@ -63,12 +68,12 @@ describe("vfs zip CLI e2e", () => {
       ]);
       assert.equal(imp.status, 0, imp.stderr);
 
-      const list = runCli(["vfs", "--db", dbPath, "list", "/template", "-r"]);
+      const list = runCli(["vfs", "--db", dbPath, "list", "/", "-r"]);
       assert.equal(list.status, 0, list.stderr);
       const paths = vfsListFilePaths(list.stdout);
-      assert.deepEqual(paths, ["/template/seed.md"]);
+      assert.deepEqual(paths, ["/seed.md"]);
 
-      const read = runCli(["vfs", "--db", dbPath, "read", "/template/seed.md"]);
+      const read = runCli(["vfs", "--db", dbPath, "read", "/seed.md"]);
       assert.equal(read.stdout, "seed");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -81,7 +86,7 @@ describe("vfs zip CLI e2e", () => {
     const zipPath = join(dir, "t.zip");
     try {
       const w = runCli(
-        ["vfs", "--db", dbPath, "write", "/template/a.md"],
+        ["vfs", "--db", dbPath, "write", "/a.md"],
         { input: "a" },
       );
       assert.equal(w.status, 0, w.stderr);
@@ -169,7 +174,7 @@ describe("vfs zip CLI e2e", () => {
           "project",
           "vfs",
           "write",
-          "/template/seed.md",
+          "/seed.md",
           "--project",
           projectId,
           "--db",
@@ -197,7 +202,7 @@ describe("vfs zip CLI e2e", () => {
           "project",
           "vfs",
           "write",
-          "/template/stale.md",
+          "/stale.md",
           "--project",
           projectId,
           "--db",
@@ -225,7 +230,7 @@ describe("vfs zip CLI e2e", () => {
         "project",
         "vfs",
         "list",
-        "/template",
+        "/",
         "-r",
         "--project",
         projectId,
@@ -233,13 +238,13 @@ describe("vfs zip CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(list.status, 0, list.stderr);
-      assert.deepEqual(vfsListFilePaths(list.stdout), ["/template/seed.md"]);
+      assert.deepEqual(vfsListFilePaths(list.stdout), ["/seed.md"]);
 
       const read = runCli([
         "project",
         "vfs",
         "read",
-        "/template/seed.md",
+        "/seed.md",
         "--project",
         projectId,
         "--db",
@@ -351,6 +356,89 @@ describe("vfs zip CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(readTwo.stdout, "two");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("session ZIP imports into project template vfs", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-vfs-zip-"));
+    const dbPath = join(dir, "novel.db");
+    const zipPath = join(dir, "cross.zip");
+    try {
+      const project = runCli([
+        "project",
+        "create",
+        "--name",
+        "P",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(project.status, 0, project.stderr);
+      const projectId = project.stdout.trim();
+
+      const session = runCli([
+        "session",
+        "create",
+        "--title",
+        "main",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(session.status, 0, session.stderr);
+
+      const write = runCli(
+        [
+          "session",
+          "vfs",
+          "write",
+          "/ddd/love_message.txt",
+          "--db",
+          dbPath,
+        ],
+        { input: "你好" },
+      );
+      assert.equal(write.status, 0, write.stderr);
+
+      const exp = runCli([
+        "session",
+        "vfs",
+        "export-zip",
+        "--out",
+        zipPath,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(exp.status, 0, exp.stderr);
+
+      const imp = runCli([
+        "project",
+        "vfs",
+        "import-zip",
+        "--file",
+        zipPath,
+        "--yes",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(imp.status, 0, imp.stderr);
+
+      const read = runCli([
+        "project",
+        "vfs",
+        "read",
+        "/ddd/love_message.txt",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(read.status, 0, read.stderr);
+      assert.equal(read.stdout, "你好");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
