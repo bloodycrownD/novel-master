@@ -40,7 +40,8 @@ const WORKSPACE_REGEX_GROUP_MENU = {
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
     {icon: '🔌', label: '服务商管理', route: 'Providers'},
-    {icon: '🗜️', label: '压缩策略', route: 'CompactionPolicy'},
+    {icon: '🗜️', label: '压缩条件', route: 'CompactionConditions'},
+    {icon: '⚡', label: '事件配置', route: 'EventsConfig'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
     {icon: '🌐', label: '全局模板', route: 'GlobalTemplate'},
   ];

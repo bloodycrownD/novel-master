@@ -15,8 +15,8 @@ export interface RegexRule {
   readonly enabled: boolean;
   readonly llmReplace: string | null;
   readonly displayReplace: string | null;
-  readonly minDepth: number;
-  readonly maxDepth: number;
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
   readonly scopeUser: boolean;
   readonly scopeAssistant: boolean;
   readonly createdAtMs: number;

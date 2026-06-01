@@ -26,8 +26,8 @@ function rowToRule(row: Row): RegexRule {
     llmReplace: row.llm_replace != null ? String(row.llm_replace) : null,
     displayReplace:
       row.display_replace != null ? String(row.display_replace) : null,
-    minDepth: Number(row.min_depth),
-    maxDepth: Number(row.max_depth),
+    startDepth: row.start_depth != null ? Number(row.start_depth) : null,
+    endDepth: row.end_depth != null ? Number(row.end_depth) : null,
     scopeUser: Number(row.scope_user) !== 0,
     scopeAssistant: Number(row.scope_assistant) !== 0,
     createdAtMs: Number(row.created_at_ms),
@@ -46,7 +46,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
       this.conn,
       this.parser,
       `SELECT group_id, rule_id, sort_order, name, pattern, flags, enabled,
-              llm_replace, display_replace, min_depth, max_depth,
+              llm_replace, display_replace, start_depth, end_depth,
               scope_user, scope_assistant, created_at_ms, updated_at_ms
        FROM regex_rule WHERE group_id = #{groupId}
        ORDER BY sort_order ASC, rule_id ASC`,
@@ -60,7 +60,7 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
       this.conn,
       this.parser,
       `SELECT group_id, rule_id, sort_order, name, pattern, flags, enabled,
-              llm_replace, display_replace, min_depth, max_depth,
+              llm_replace, display_replace, start_depth, end_depth,
               scope_user, scope_assistant, created_at_ms, updated_at_ms
        FROM regex_rule
        WHERE group_id = #{groupId} AND rule_id = #{ruleId}`,
@@ -78,11 +78,11 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
       this.parser,
       `INSERT INTO regex_rule (
         group_id, rule_id, sort_order, name, pattern, flags, enabled,
-        llm_replace, display_replace, min_depth, max_depth,
+        llm_replace, display_replace, start_depth, end_depth,
         scope_user, scope_assistant, created_at_ms, updated_at_ms
       ) VALUES (
         #{groupId}, #{ruleId}, #{sortOrder}, #{name}, #{pattern}, #{flags},
-        #{enabled}, #{llmReplace}, #{displayReplace}, #{minDepth}, #{maxDepth},
+        #{enabled}, #{llmReplace}, #{displayReplace}, #{startDepth}, #{endDepth},
         #{scopeUser}, #{scopeAssistant}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
@@ -95,8 +95,8 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
         enabled: rule.enabled ? 1 : 0,
         llmReplace: rule.llmReplace,
         displayReplace: rule.displayReplace,
-        minDepth: rule.minDepth,
-        maxDepth: rule.maxDepth,
+        startDepth: rule.startDepth,
+        endDepth: rule.endDepth,
         scopeUser: rule.scopeUser ? 1 : 0,
         scopeAssistant: rule.scopeAssistant ? 1 : 0,
         createdAtMs: rule.createdAtMs,
@@ -117,8 +117,8 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
         enabled = #{enabled},
         llm_replace = #{llmReplace},
         display_replace = #{displayReplace},
-        min_depth = #{minDepth},
-        max_depth = #{maxDepth},
+        start_depth = #{startDepth},
+        end_depth = #{endDepth},
         scope_user = #{scopeUser},
         scope_assistant = #{scopeAssistant},
         updated_at_ms = #{updatedAtMs}
@@ -133,8 +133,8 @@ export class SqliteRegexRuleRepository implements RegexRuleRepository {
         enabled: rule.enabled ? 1 : 0,
         llmReplace: rule.llmReplace,
         displayReplace: rule.displayReplace,
-        minDepth: rule.minDepth,
-        maxDepth: rule.maxDepth,
+        startDepth: rule.startDepth,
+        endDepth: rule.endDepth,
         scopeUser: rule.scopeUser ? 1 : 0,
         scopeAssistant: rule.scopeAssistant ? 1 : 0,
         updatedAtMs: rule.updatedAtMs,

@@ -8,7 +8,6 @@ import { readFile } from "node:fs/promises";
 import {
   ChatAgentSession,
   createAgentRunner,
-  createCompactionPipeline,
   loadPromptBlocksFromYaml,
   parseApplicationModelId,
   registerVfsTools,
@@ -185,10 +184,13 @@ export async function runAgent(
       }
 
       const wt = rt.worktree({ kind: "session", projectId, sessionId });
-      const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-        wt.renderDisplay(),
-        wt.renderFileTree(),
-      ]);
+      await rt.macroCache.refresh(projectId, sessionId, async () => {
+        const [worktreeDisplay, filetreeDisplay] = await Promise.all([
+          wt.renderDisplay(),
+          wt.renderFileTree(),
+        ]);
+        return { worktreeDisplay, filetreeDisplay };
+      });
 
       const baseRegistry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
@@ -209,12 +211,9 @@ export async function runAgent(
         },
         regexConfig: rt.regexConfig,
         listAllSessionMessages: () => rt.messages.listBySession(sessionId),
-        compaction: createCompactionPipeline({
-          modelRequests: rt.modelRequests,
-          policyStore: rt.compactionPolicy,
-          resolveAgent: rt.resolveCompactionAgent,
-          tokenCounters: rt.tokenCounters,
-        }),
+        eventBus: rt.eventBus,
+        macroCache: rt.macroCache,
+        compactionConditions: rt.compactionConditionEvaluator,
       });
 
       const onStream =
@@ -228,12 +227,13 @@ export async function runAgent(
 
       const result = await runner.run({
         definition,
+        sessionId,
+        projectId,
         applicationModelId,
         workspaceModelId,
         cliModelId,
         maxSteps,
         activeRegexGroupId,
-        promptContext: { worktreeDisplay, filetreeDisplay },
         stream: !noStream,
         onStream,
       });

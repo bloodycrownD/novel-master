@@ -6,8 +6,11 @@
 
 import {
   createAgentRegistryService,
-  createCompactionPolicyStore,
+  createCompactionConditionEvaluator,
+  createCompactionConditionsStore,
   createDefaultTokenCounterRegistry,
+  createEventOrchestrator,
+  createEventsConfigStore,
   createKkvService,
   createMessageService,
   createPersistentPreferences,
@@ -18,8 +21,9 @@ import {
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
-  createSqliteCompactionAgentResolver,
+  createSessionMacroCache,
   createWorktreeService,
+  SimpleEventBus,
   type VfsScope,
 } from '@novel-master/core';
 import {createCompositeSecretStore} from '@novel-master/core/sksp';
@@ -45,26 +49,49 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   });
 
   const providerBundle = createProviderServices(conn, secretStore);
-  const compactionPolicy = createCompactionPolicyStore(conn);
-  const agentRegistry = createAgentRegistryService(conn, {compactionPolicy});
-  const resolveCompactionAgent = createSqliteCompactionAgentResolver(agentRegistry);
   const tokenCounters = createDefaultTokenCounterRegistry({
     providers: providerBundle.providerRepo,
     savedModels: providerBundle.savedModelRepo,
   });
+
+  const eventBus = new SimpleEventBus();
+  const eventsConfig = createEventsConfigStore(conn);
+  const compactionConditions = createCompactionConditionsStore(conn);
+  const macroCache = createSessionMacroCache();
+  const messages = createMessageService(conn);
+
+  const compactionConditionEvaluator = createCompactionConditionEvaluator({
+    conditionsStore: compactionConditions,
+    tokenCounters,
+    providers: providerBundle.providerRepo,
+  });
+
+  const eventOrchestrator = createEventOrchestrator({
+    eventsConfig,
+    eventBus,
+    messages,
+    macroCache,
+    worktree: s => createWorktreeService(conn, s),
+  });
+
+  const agentRegistry = createAgentRegistryService(conn);
 
   return {
     conn,
     state,
     preferences,
     kkv,
-    compactionPolicy,
+    eventBus,
+    eventsConfig,
+    compactionConditions,
+    compactionConditionEvaluator,
+    macroCache,
+    eventOrchestrator,
     agentRegistry,
-    resolveCompactionAgent,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
-    messages: createMessageService(conn),
+    messages,
     sessionFs: createSessionFsService(conn),
     globalVfs: () => createScopedVfsService(conn, {kind: 'global'}),
     projectVfs: projectId =>

@@ -13,8 +13,8 @@ function rule(
   return {
     llmReplace: null,
     displayReplace: null,
-    minDepth: 1,
-    maxDepth: 99,
+    startDepth: 0,
+    endDepth: 99,
     scopeUser: true,
     scopeAssistant: true,
     ...partial,
@@ -36,26 +36,38 @@ describe("applyRegexRules", () => {
       }),
     ];
     assert.equal(
-      applyRegexRules("foo", rules, { channel: "llm", floor: 1, role: "user" }),
+      applyRegexRules("foo", rules, {
+        channel: "llm",
+        depthFromTail: 1,
+        role: "user",
+      }),
       "qux",
     );
   });
 
-  it("respects depth range", () => {
+  it("respects tail depth range", () => {
     const rules: CompiledRegexRule[] = [
       rule({
         pattern: /x/,
         llmReplace: "Y",
-        minDepth: 2,
-        maxDepth: 3,
+        startDepth: 2,
+        endDepth: 3,
       }),
     ];
     assert.equal(
-      applyRegexRules("x", rules, { channel: "llm", floor: 1, role: "user" }),
+      applyRegexRules("x", rules, {
+        channel: "llm",
+        depthFromTail: 1,
+        role: "user",
+      }),
       "x",
     );
     assert.equal(
-      applyRegexRules("x", rules, { channel: "llm", floor: 2, role: "user" }),
+      applyRegexRules("x", rules, {
+        channel: "llm",
+        depthFromTail: 2,
+        role: "user",
+      }),
       "Y",
     );
   });
@@ -70,7 +82,11 @@ describe("applyRegexRules", () => {
       }),
     ];
     assert.equal(
-      applyRegexRules("hi", rules, { channel: "llm", floor: 1, role: "assistant" }),
+      applyRegexRules("hi", rules, {
+        channel: "llm",
+        depthFromTail: 0,
+        role: "assistant",
+      }),
       "hi",
     );
   });
@@ -84,11 +100,19 @@ describe("applyRegexRules", () => {
       }),
     ];
     assert.equal(
-      applyRegexRules("secret", rules, { channel: "llm", floor: 1, role: "user" }),
+      applyRegexRules("secret", rules, {
+        channel: "llm",
+        depthFromTail: 0,
+        role: "user",
+      }),
       "[redacted]",
     );
     assert.equal(
-      applyRegexRules("secret", rules, { channel: "display", floor: 1, role: "user" }),
+      applyRegexRules("secret", rules, {
+        channel: "display",
+        depthFromTail: 0,
+        role: "user",
+      }),
       "***",
     );
   });
@@ -101,7 +125,11 @@ describe("applyRegexRules", () => {
       }),
     ];
     assert.equal(
-      applyRegexRules("a@b", rules, { channel: "llm", floor: 1, role: "user" }),
+      applyRegexRules("a@b", rules, {
+        channel: "llm",
+        depthFromTail: 0,
+        role: "user",
+      }),
       "a at b",
     );
   });
@@ -112,7 +140,7 @@ describe("applyRegexRules", () => {
     ];
     const out = applyRegexToMessageContent(textBlocks("bad word"), rules, {
       channel: "display",
-      floor: 1,
+      depthFromTail: 0,
       role: "user",
     });
     assert.equal(out.blocks[0]!.type === "text" && out.blocks[0]!.text, "ok word");

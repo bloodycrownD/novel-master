@@ -266,26 +266,45 @@ export {
   type ResolveApplicationModelIdInput,
   type ResolveSummaryApplicationModelIdInput,
 } from "./domain/agent/logic/resolve-application-model-id.js";
-export type { CompactionModelContext } from "./domain/compaction/model/compaction-model-context.js";
-export type {
-  CompactionPolicy,
-  CompactionPolicyTemplate,
-  CompactionTriggerConfig,
-  CompactionActionConfig,
-  CompactionAbstractConfig,
-} from "./domain/compaction/model/compaction-policy.js";
+export { SimpleEventBus } from "./infra/events/simple-event-bus.js";
+export type { EventBus, EventSubscription } from "./infra/events/simple-event-bus.js";
 export {
-  compactionPolicySchema,
-  compactionPolicyDocumentSchema,
-  compactionPolicyTemplateSchema,
-  compactionPolicyTemplateDocumentSchema,
-} from "./domain/compaction/model/compaction-policy.schema.js";
-export { CompactionPolicyError } from "./errors/compaction-policy-errors.js";
-export type { CompactionPolicyErrorCode } from "./errors/compaction-policy-errors.js";
-export type { CompactionPolicyStore } from "./service/compaction/compaction-policy-store.port.js";
-export { createCompactionPolicyStore } from "./service/compaction/create-compaction-policy-store.js";
-export type { CompactionAgentResolver } from "./domain/compaction/ports/compaction-agent-resolver.port.js";
-export { createSqliteCompactionAgentResolver } from "./service/compaction/impl/sqlite-compaction-agent-resolver.js";
+  EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_FAILED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_SESSION_MESSAGE_RECEIVED,
+  EVENT_SESSION_COMPACTION_REQUESTED,
+} from "./domain/events/model/event-types.js";
+export type {
+  NovelMasterEventType,
+  SessionCompactionRequestedPayload,
+  CompactionTriggerKind,
+} from "./domain/events/model/event-types.js";
+export type { DepthSlice } from "./domain/depth/logic/depth-slice.js";
+export { matchDepth, validateDepthSlice, messageIdsInSlice } from "./domain/depth/logic/depth-slice.js";
+export { depthByMessageId, listVisibleForDepth } from "./domain/depth/logic/depth-from-tail.js";
+export type { EventsConfig, EventAction } from "./domain/events-config/model/events-config.js";
+export { eventsConfigSchema } from "./domain/events-config/model/events-config.schema.js";
+export { DEFAULT_EVENTS_CONFIG } from "./domain/events-config/logic/default-events.js";
+export type { EventsConfigStore } from "./service/events-config/events-config-store.port.js";
+export { createEventsConfigStore } from "./service/events-config/create-events-config-store.js";
+export type { CompactionConditions } from "./domain/compaction-conditions/model/compaction-conditions.js";
+export { compactionConditionsSchema } from "./domain/compaction-conditions/model/compaction-conditions.schema.js";
+export { CompactionConditionsError } from "./errors/compaction-conditions-errors.js";
+export type { CompactionConditionsStore } from "./service/compaction-conditions/compaction-conditions-store.port.js";
+export { createCompactionConditionsStore } from "./service/compaction-conditions/create-compaction-conditions-store.js";
+export {
+  createCompactionConditionEvaluator,
+  type CompactionConditionEvaluator,
+} from "./service/compaction-conditions/create-compaction-condition-evaluator.js";
+export type { EventOrchestrator, EventEmitContext } from "./service/events/event-orchestrator.port.js";
+export { createEventOrchestrator } from "./service/events/create-event-orchestrator.js";
+export type { EventRunResult } from "./service/events/event-run-result.js";
+export { EventsError } from "./errors/events-errors.js";
+export type { SessionMacroCache, SessionMacroSnapshot } from "./service/prompt/session-macro-cache.port.js";
+export { createSessionMacroCache } from "./service/prompt/create-session-macro-cache.js";
 export type { AgentRegistryService } from "./service/agent/agent-registry.port.js";
 export { createAgentRegistryService } from "./service/agent/create-agent-registry-service.js";
 export { AgentConfigError } from "./errors/agent-config-errors.js";
@@ -355,17 +374,9 @@ export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/lo
 export { InMemoryAgentSession } from "./domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "./service/agent/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
-export {
-  createAgentRunner,
-  createNoOpCompactionPipeline,
-} from "./service/agent/create-agent-runner.js";
+export { createAgentRunner } from "./service/agent/create-agent-runner.js";
 export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
-export type { CompactionPipeline } from "./service/compaction/compaction-pipeline.port.js";
-export {
-  createCompactionPipeline,
-  type CreateCompactionPipelineDeps,
-} from "./service/compaction/create-compaction-pipeline.js";
-export { estimateTokens } from "./domain/compaction/logic/token-estimate.js";
+export { estimateTokens } from "./domain/compaction-conditions/logic/token-estimate.js";
 export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,
@@ -401,10 +412,7 @@ export {
   applyRegexChannelToMessages,
 } from "./domain/regex/logic/apply-regex-rules.js";
 export type { RegexChannel } from "./domain/regex/logic/apply-regex-rules.js";
-export {
-  listVisibleSorted,
-  visibleFloorByMessageId,
-} from "./domain/chat/logic/message-visible-floor.js";
+export { listVisibleSorted } from "./domain/chat/logic/message-visible-floor.js";
 export { validateRegexRule, validateRegexRuleEntity } from "./domain/regex/logic/validate-regex-rule.js";
 export {
   createRegexRuleSchema,

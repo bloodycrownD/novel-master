@@ -5,7 +5,6 @@ import {
   AgentConfigError,
   ChatAgentSession,
   createAgentRunner,
-  createCompactionPipeline,
   registerVfsTools,
   resolveAgentToolRegistry,
   resolveApplicationModelId,
@@ -14,18 +13,12 @@ import {
   validateAgentDefinition,
   type AgentDefinition,
   type AgentRunResult,
-  type LlmStreamEvent,
 } from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export interface AgentRunScope {
   readonly projectId: string;
   readonly sessionId: string;
-}
-
-export interface AgentRunCallbacks {
-  readonly onStreamText?: (delta: string) => void;
-  readonly onStreamThinking?: (delta: string) => void;
 }
 
 export class AgentRunError extends Error {
@@ -87,13 +80,12 @@ export async function resolveMobileApplicationModelId(
 }
 
 /**
- * Appends a user message and runs the agent loop with streaming callbacks.
+ * Appends a user message and runs the agent loop (streaming via event bus).
  */
 export async function runAgentTurn(
   runtime: MobileNovelMasterRuntime,
   scope: AgentRunScope,
   userContent: string,
-  callbacks?: AgentRunCallbacks,
   options?: {readonly stream?: boolean},
 ): Promise<AgentRunResult> {
   const stream = options?.stream !== false;
@@ -124,10 +116,13 @@ export async function runAgentTurn(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   });
-  const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-    wt.renderDisplay(),
-    wt.renderFileTree(),
-  ]);
+  await runtime.macroCache.refresh(scope.projectId, scope.sessionId, async () => {
+    const [worktreeDisplay, filetreeDisplay] = await Promise.all([
+      wt.renderDisplay(),
+      wt.renderFileTree(),
+    ]);
+    return {worktreeDisplay, filetreeDisplay};
+  });
 
   const runner = createAgentRunner({
     session,
@@ -142,32 +137,19 @@ export async function runAgentTurn(
     regexConfig: runtime.regexConfig,
     listAllSessionMessages: () =>
       runtime.messages.listBySession(scope.sessionId),
-    compaction: createCompactionPipeline({
-      modelRequests: runtime.modelRequests,
-      policyStore: runtime.compactionPolicy,
-      resolveAgent: runtime.resolveCompactionAgent,
-      tokenCounters: runtime.tokenCounters,
-    }),
+    eventBus: runtime.eventBus,
+    macroCache: runtime.macroCache,
+    compactionConditions: runtime.compactionConditionEvaluator,
   });
-
-  const onStream = stream
-    ? (ev: LlmStreamEvent) => {
-        if (ev.type === 'text-delta') {
-          callbacks?.onStreamText?.(ev.text);
-        } else if (ev.type === 'thinking-delta') {
-          callbacks?.onStreamThinking?.(ev.text);
-        }
-      }
-    : undefined;
 
   return runner.run({
     definition,
+    sessionId: scope.sessionId,
+    projectId: scope.projectId,
     applicationModelId,
     workspaceModelId,
     maxSteps: definition.runtime?.maxSteps ?? 20,
     activeRegexGroupId,
-    promptContext: {worktreeDisplay, filetreeDisplay},
     stream,
-    onStream,
   });
 }

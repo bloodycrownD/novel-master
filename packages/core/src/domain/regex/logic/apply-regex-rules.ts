@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ContentBlock, MessageContent } from "@/domain/chat/model/content-block.js";
+import { matchDepth } from "@/domain/depth/logic/depth-slice.js";
 import type { CompiledRegexRule } from "./compile-regex-rule.js";
 
 /** Replacement target channel (LLM prompt vs CLI display). */
@@ -24,8 +25,11 @@ function roleMatchesScope(
   return false;
 }
 
-function depthInRange(floor: number, rule: CompiledRegexRule): boolean {
-  return floor >= rule.minDepth && floor <= rule.maxDepth;
+function depthInRange(depthFromTail: number, rule: CompiledRegexRule): boolean {
+  return matchDepth(depthFromTail, {
+    startDepth: rule.startDepth ?? undefined,
+    endDepth: rule.endDepth ?? undefined,
+  });
 }
 
 function replaceForChannel(
@@ -43,22 +47,22 @@ function replaceForChannel(
 
 /**
  * Applies enabled rules in order; each rule may transform the prior output.
- *
- * @param text - Source plain text
- * @param rules - Compiled rules in `sort_order` sequence
- * @param ctx - Channel, visible floor, and message role
  */
 export function applyRegexRules(
   text: string,
   rules: readonly CompiledRegexRule[],
-  ctx: { readonly channel: RegexChannel; readonly floor: number; readonly role: string },
+  ctx: {
+    readonly channel: RegexChannel;
+    readonly depthFromTail: number;
+    readonly role: string;
+  },
 ): string {
   let out = text;
   for (const rule of rules) {
     if (!roleMatchesScope(ctx.role, rule)) {
       continue;
     }
-    if (!depthInRange(ctx.floor, rule)) {
+    if (!depthInRange(ctx.depthFromTail, rule)) {
       continue;
     }
     out = replaceForChannel(out, rule, ctx.channel);
@@ -79,13 +83,14 @@ function mapTextBlocks(
   return { blocks };
 }
 
-/**
- * Applies regex rules to text blocks in message content.
- */
 export function applyRegexToMessageContent(
   content: MessageContent,
   rules: readonly CompiledRegexRule[],
-  ctx: { readonly channel: RegexChannel; readonly floor: number; readonly role: string },
+  ctx: {
+    readonly channel: RegexChannel;
+    readonly depthFromTail: number;
+    readonly role: string;
+  },
 ): MessageContent {
   return mapTextBlocks(content, (text) => applyRegexRules(text, rules, ctx));
 }
@@ -93,22 +98,22 @@ export function applyRegexToMessageContent(
 /**
  * Returns messages with regex applied for a channel (DB rows unchanged).
  *
- * @param floorByMessageId - From {@link visibleFloorByMessageId}; hidden ids omitted
+ * @param depthByMessageId - Tail depth per visible message id (newest = 0)
  */
 export function applyRegexChannelToMessages(
   messages: readonly ChatMessage[],
   rules: readonly CompiledRegexRule[],
   channel: RegexChannel,
-  floorByMessageId: ReadonlyMap<string, number>,
+  depthByMessageId: ReadonlyMap<string, number>,
 ): ChatMessage[] {
   return messages.map((m) => {
-    const floor = floorByMessageId.get(m.id);
-    if (floor == null) {
+    const depth = depthByMessageId.get(m.id);
+    if (depth == null) {
       return m;
     }
     const content = applyRegexToMessageContent(m.content, rules, {
       channel,
-      floor,
+      depthFromTail: depth,
       role: m.role,
     });
     if (content === m.content) {

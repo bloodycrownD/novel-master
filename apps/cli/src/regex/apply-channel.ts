@@ -6,7 +6,8 @@
 
 import {
   applyRegexChannelToMessages,
-  visibleFloorByMessageId,
+  depthByMessageId,
+  listVisibleForDepth,
   resolveActiveCompiledRules,
   type ChatMessage,
   type RegexChannel,
@@ -27,11 +28,12 @@ export async function applyActiveRegexChannel(
   if (rules.length === 0) {
     return [...visibleMessages];
   }
-  const floorMap = visibleFloorByMessageId(allSessionMessages);
+  const visibleSorted = listVisibleForDepth(allSessionMessages);
+  const depthMap = depthByMessageId(visibleSorted);
   return applyRegexChannelToMessages(
     visibleMessages,
     rules,
     channel,
-    floorMap,
+    depthMap,
   );
 }

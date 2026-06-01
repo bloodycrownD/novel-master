@@ -38,6 +38,7 @@ export function buildMessageActionItems(
   } else {
     items.push({label: '隐藏', action: 'hide'});
   }
+  items.push({label: '压缩', action: 'compact'});
   items.push({label: '删除', action: 'delete', danger: true});
   return items;
 }

@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AgentConfigError,
-  compactionPolicySchema,
   createAgentRegistryService,
-  createCompactionPolicyStore,
   decode,
   agentDefinitionSchema,
 } from "@novel-master/core";
@@ -28,10 +26,9 @@ describe("AgentRegistryService", () => {
     await ctx.conn.close();
   });
 
-  it("AG4: delete fails when compaction references agent", async () => {
+  it("AG4: delete removes existing agent", async () => {
     const ctx = await openNovelMasterTestConnection();
-    const compaction = createCompactionPolicyStore(ctx.conn);
-    const registry = createAgentRegistryService(ctx.conn, { compactionPolicy: compaction });
+    const registry = createAgentRegistryService(ctx.conn);
     await registry.upsert(
       "summarizer",
       decode(
@@ -43,24 +40,11 @@ describe("AgentRegistryService", () => {
         agentDefinitionSchema,
       ),
     );
-    await compaction.setPolicy(
-      decode(
-        {
-          schemaVersion: 1,
-          enabled: true,
-          trigger: { tokenThreshold: 10 },
-          action: {
-            keepLastN: 2,
-            abstract: { type: "agent", agentId: "summarizer" },
-          },
-        },
-        compactionPolicySchema,
-      ),
-    );
+    await registry.delete("summarizer");
     await assert.rejects(
-      () => registry.delete("summarizer"),
+      () => registry.get("summarizer"),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.code === "AGENT_IN_USE",
+        e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
     );
     await ctx.conn.close();
   });

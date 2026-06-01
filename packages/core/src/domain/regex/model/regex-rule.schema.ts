@@ -1,10 +1,11 @@
 /**
  * Zod schemas for regex rule write payloads (Service/CLI inputs).
  *
- * @module domain/regex/regex-rule.schema
+ * @module domain/regex/model/regex-rule.schema
  */
 
 import { z } from "zod";
+import { depthSliceFromWire, validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
 const replaceFields = z.object({
   llmReplace: z.string().nullable().optional(),
@@ -16,13 +17,31 @@ const scopeFields = z.object({
   scopeAssistant: z.boolean().optional(),
 });
 
-const depthFields = z.object({
-  minDepth: z.number().int().positive(),
-  maxDepth: z.number().int().positive(),
-});
+const depthInputSchema = z
+  .object({
+    startDepth: z.number().int().nonnegative().optional(),
+    endDepth: z.number().int().nonnegative().optional(),
+    "start-depth": z.number().int().nonnegative().optional(),
+    "end-depth": z.number().int().nonnegative().optional(),
+  })
+  .strict();
 
-/** Fields required when creating a regex rule. */
-export const createRegexRuleSchema = z
+function parseDepthFromInput(raw: Record<string, unknown>): {
+  startDepth: number | null;
+  endDepth: number | null;
+} {
+  if ("minDepth" in raw || "maxDepth" in raw) {
+    throw new Error("minDepth/maxDepth are removed; use startDepth/endDepth");
+  }
+  const slice = depthSliceFromWire(raw);
+  validateDepthSlice(slice);
+  return {
+    startDepth: slice.startDepth ?? null,
+    endDepth: slice.endDepth ?? null,
+  };
+}
+
+const createRuleBaseSchema = z
   .object({
     groupId: z.string().min(1),
     ruleId: z.string().min(1),
@@ -31,10 +50,29 @@ export const createRegexRuleSchema = z
     flags: z.string().optional(),
     enabled: z.boolean().optional(),
     ...replaceFields.shape,
-    ...depthFields.shape,
+    ...depthInputSchema.shape,
     ...scopeFields.shape,
   })
   .strict();
+
+/** Fields required when creating a regex rule. */
+export const createRegexRuleSchema = createRuleBaseSchema.transform((raw) => {
+  const depth = parseDepthFromInput(raw as Record<string, unknown>);
+  return {
+    groupId: raw.groupId,
+    ruleId: raw.ruleId,
+    name: raw.name,
+    pattern: raw.pattern,
+    flags: raw.flags,
+    enabled: raw.enabled,
+    llmReplace: raw.llmReplace,
+    displayReplace: raw.displayReplace,
+    scopeUser: raw.scopeUser,
+    scopeAssistant: raw.scopeAssistant,
+    startDepth: depth.startDepth,
+    endDepth: depth.endDepth,
+  };
+});
 
 export type CreateRegexRuleInput = z.infer<typeof createRegexRuleSchema>;
 
@@ -46,11 +84,18 @@ export const updateRegexRuleSchema = z
     flags: z.string().optional(),
     enabled: z.boolean().optional(),
     ...replaceFields.shape,
-    minDepth: z.number().int().positive().optional(),
-    maxDepth: z.number().int().positive().optional(),
+    ...depthInputSchema.shape,
     ...scopeFields.shape,
   })
-  .strict();
+  .strict()
+  .superRefine((raw, ctx) => {
+    if ("minDepth" in raw || "maxDepth" in raw) {
+      ctx.addIssue({
+        code: "custom",
+        message: "minDepth/maxDepth are removed; use startDepth/endDepth",
+      });
+    }
+  });
 
 export type UpdateRegexRuleInput = z.infer<typeof updateRegexRuleSchema>;
 

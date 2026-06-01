@@ -1,7 +1,7 @@
 /**
  * Chat input: disabled without workspace model; send → user append + agent run.
  */
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  type AgentStreamTextDeltaPayload,
+  type AgentStreamThinkingDeltaPayload,
+} from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
 import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';
@@ -46,6 +53,45 @@ export function ChatComposer({
   const [text, setText] = useState('');
   const [error, setError] = useState<string | undefined>();
 
+  useEffect(() => {
+    const bus = runtime.eventBus;
+    const sid = scope.sessionId;
+    const subText = bus.subscribe(
+      EVENT_AGENT_STREAM_TEXT_DELTA,
+      (payload: AgentStreamTextDeltaPayload) => {
+        if (payload.sessionId === sid) {
+          onStreamText(payload.text);
+        }
+      },
+    );
+    const subThinking = bus.subscribe(
+      EVENT_AGENT_STREAM_THINKING_DELTA,
+      (payload: AgentStreamThinkingDeltaPayload) => {
+        if (payload.sessionId === sid) {
+          onStreamThinking(payload.text);
+        }
+      },
+    );
+    const subFinished = bus.subscribe(EVENT_AGENT_RUN_FINISHED, payload => {
+      if (payload.sessionId === sid) {
+        onMessagesChanged();
+        onStreamReset();
+      }
+    });
+    return () => {
+      subText.unsubscribe();
+      subThinking.unsubscribe();
+      subFinished.unsubscribe();
+    };
+  }, [
+    runtime.eventBus,
+    scope.sessionId,
+    onStreamText,
+    onStreamThinking,
+    onMessagesChanged,
+    onStreamReset,
+  ]);
+
   const send = useCallback(async () => {
     if (!hasModel) {
       onNeedModel();
@@ -65,18 +111,7 @@ export function ChatComposer({
     try {
       const stream =
         appUi != null ? await readLlmStreamEnabled(appUi) : true;
-      await runAgentTurn(
-        runtime,
-        scope,
-        content,
-        stream
-          ? {
-              onStreamText,
-              onStreamThinking,
-            }
-          : undefined,
-        {stream},
-      );
+      await runAgentTurn(runtime, scope, content, {stream});
       onMessagesChanged();
     } catch (err) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -96,8 +131,6 @@ export function ChatComposer({
     scope,
     onNeedModel,
     onRunningChange,
-    onStreamText,
-    onStreamThinking,
     onStreamReset,
     onMessagesChanged,
     appUi,

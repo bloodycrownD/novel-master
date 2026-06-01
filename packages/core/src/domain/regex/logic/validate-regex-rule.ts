@@ -6,14 +6,15 @@
 
 import { RegexError } from "@/errors/regex-errors.js";
 import type { RegexRule } from "../model/regex-rule.js";
+import { validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
 export interface RegexRuleValidationFields {
   readonly pattern: string;
   readonly flags: string;
   readonly llmReplace: string | null;
   readonly displayReplace: string | null;
-  readonly minDepth: number;
-  readonly maxDepth: number;
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
   readonly scopeUser: boolean;
   readonly scopeAssistant: boolean;
 }
@@ -46,12 +47,14 @@ export function validateRegexRule(
       opts,
     );
   }
-  if (fields.minDepth > fields.maxDepth) {
-    throw new RegexError(
-      "INVALID_ARGUMENT",
-      `minDepth (${fields.minDepth}) must be <= maxDepth (${fields.maxDepth})`,
-      opts,
-    );
+  try {
+    validateDepthSlice({
+      startDepth: fields.startDepth ?? undefined,
+      endDepth: fields.endDepth ?? undefined,
+    });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new RegexError("INVALID_ARGUMENT", msg, opts);
   }
   try {
     // eslint-disable-next-line no-new -- syntax check only

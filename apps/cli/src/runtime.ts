@@ -9,9 +9,11 @@ import { dirname, resolve } from "node:path";
 import {
   bootstrapNovelMaster,
   createAgentRegistryService,
-  createCompactionPolicyStore,
+  createCompactionConditionEvaluator,
+  createCompactionConditionsStore,
   createDefaultTokenCounterRegistry,
-  createSqliteCompactionAgentResolver,
+  createEventOrchestrator,
+  createEventsConfigStore,
   createMessageService,
   createPersistentPreferences,
   createPersistentState,
@@ -21,11 +23,15 @@ import {
   createSessionService,
   createProviderServices,
   createRegexConfigService,
+  createSessionMacroCache,
   createWorktreeService,
   open,
+  SimpleEventBus,
   type AgentRegistryService,
-  type CompactionAgentResolver,
-  type CompactionPolicyStore,
+  type CompactionConditionEvaluator,
+  type CompactionConditionsStore,
+  type EventOrchestrator,
+  type EventsConfigStore,
   type ModelRequestService,
   type ModelSamplingProfileService,
   type PersistentPreferences,
@@ -38,6 +44,7 @@ import {
   type ProjectService,
   type SessionFsService,
   type SessionService,
+  type SessionMacroCache,
   type TdbcConnection,
   type VfsScope,
   type VfsService,
@@ -82,6 +89,12 @@ export interface NovelMasterRuntime {
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
   readonly scope: CliScopeResolver;
+  readonly eventBus: SimpleEventBus;
+  readonly eventsConfig: EventsConfigStore;
+  readonly compactionConditions: CompactionConditionsStore;
+  readonly compactionConditionEvaluator: CompactionConditionEvaluator;
+  readonly macroCache: SessionMacroCache;
+  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
@@ -92,9 +105,7 @@ export interface NovelMasterRuntime {
   readonly modelRequests: ModelRequestService;
   readonly modelSamplingProfiles: ModelSamplingProfileService;
   readonly regexConfig: RegexConfigService;
-  readonly compactionPolicy: CompactionPolicyStore;
   readonly agentRegistry: AgentRegistryService;
-  readonly resolveCompactionAgent: CompactionAgentResolver;
   readonly tokenCounters: TokenCounterRegistry;
   readonly dbPath: string;
 }
@@ -134,26 +145,49 @@ export async function createNovelMasterRuntime(
       ? createAgentMockModelRequests()
       : providerBundle.modelRequests;
 
-  const compactionPolicy = createCompactionPolicyStore(conn);
-  const agentRegistry = createAgentRegistryService(conn, { compactionPolicy });
-  const resolveCompactionAgent = createSqliteCompactionAgentResolver(agentRegistry);
   const tokenCounters = createDefaultTokenCounterRegistry({
     providers: providerBundle.providerRepo,
     savedModels: providerBundle.savedModelRepo,
   });
+
+  const eventBus = new SimpleEventBus();
+  const eventsConfig = createEventsConfigStore(conn);
+  const compactionConditions = createCompactionConditionsStore(conn);
+  const macroCache = createSessionMacroCache();
+  const messages = createMessageService(conn);
+
+  const compactionConditionEvaluator = createCompactionConditionEvaluator({
+    conditionsStore: compactionConditions,
+    tokenCounters,
+    providers: providerBundle.providerRepo,
+  });
+
+  const eventOrchestrator = createEventOrchestrator({
+    eventsConfig,
+    eventBus,
+    messages,
+    macroCache,
+    worktree: (s) => createWorktreeService(conn, s),
+  });
+
+  const agentRegistry = createAgentRegistryService(conn);
 
   return {
     conn,
     state,
     preferences,
     dbPath,
-    compactionPolicy,
+    eventBus,
+    eventsConfig,
+    compactionConditions,
+    compactionConditionEvaluator,
+    macroCache,
+    eventOrchestrator,
     agentRegistry,
-    resolveCompactionAgent,
     tokenCounters,
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
-    messages: createMessageService(conn),
+    messages,
     sessionFs: createSessionFsService(conn),
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),

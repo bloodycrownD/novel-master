@@ -13,8 +13,8 @@ export interface CompiledRegexRule {
   readonly pattern: RegExp;
   readonly llmReplace: string | null;
   readonly displayReplace: string | null;
-  readonly minDepth: number;
-  readonly maxDepth: number;
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
   readonly scopeUser: boolean;
   readonly scopeAssistant: boolean;
 }
@@ -32,8 +32,8 @@ export function compileRegexRule(rule: RegexRule): CompiledRegexRule {
       pattern,
       llmReplace: rule.llmReplace,
       displayReplace: rule.displayReplace,
-      minDepth: rule.minDepth,
-      maxDepth: rule.maxDepth,
+      startDepth: rule.startDepth,
+      endDepth: rule.endDepth,
       scopeUser: rule.scopeUser,
       scopeAssistant: rule.scopeAssistant,
     };

@@ -6,8 +6,10 @@
 
 import type {
   AgentRegistryService,
-  CompactionAgentResolver,
-  CompactionPolicyStore,
+  CompactionConditionEvaluator,
+  CompactionConditionsStore,
+  EventOrchestrator,
+  EventsConfigStore,
   KkvService,
   MessageService,
   ModelRequestService,
@@ -20,7 +22,9 @@ import type {
   RegexConfigService,
   SecretStore,
   SessionFsService,
+  SessionMacroCache,
   SessionService,
+  SimpleEventBus,
   TdbcConnection,
   TokenCounterRegistry,
   VfsScope,
@@ -38,6 +42,12 @@ export interface MobileNovelMasterRuntime {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
+  readonly eventBus: SimpleEventBus;
+  readonly eventsConfig: EventsConfigStore;
+  readonly compactionConditions: CompactionConditionsStore;
+  readonly compactionConditionEvaluator: CompactionConditionEvaluator;
+  readonly macroCache: SessionMacroCache;
+  readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
@@ -48,8 +58,6 @@ export interface MobileNovelMasterRuntime {
   readonly modelRequests: ModelRequestService;
   readonly modelSamplingProfiles: ModelSamplingProfileService;
   readonly regexConfig: RegexConfigService;
-  readonly compactionPolicy: CompactionPolicyStore;
   readonly agentRegistry: AgentRegistryService;
-  readonly resolveCompactionAgent: CompactionAgentResolver;
   readonly tokenCounters: TokenCounterRegistry;
 }

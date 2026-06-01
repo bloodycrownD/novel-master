@@ -33,11 +33,27 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
  *
  * @param conn - Open TDBC connection
  */
+async function migrateRegexRuleDepthColumns(tx: TdbcConnection): Promise<void> {
+  const rows = await tx.query(
+    "SELECT name FROM pragma_table_info('regex_rule')",
+  );
+  const names = rows.map((r) => String(r.name));
+  if (names.includes("min_depth") && !names.includes("start_depth")) {
+    await tx.execute(
+      "ALTER TABLE regex_rule RENAME COLUMN min_depth TO start_depth",
+    );
+    await tx.execute(
+      "ALTER TABLE regex_rule RENAME COLUMN max_depth TO end_depth",
+    );
+  }
+}
+
 export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> {
   await conn.transaction(async (tx) => {
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
+    await migrateRegexRuleDepthColumns(tx);
     await seedBuiltinProviders(tx);
   });
 }

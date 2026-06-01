@@ -27,7 +27,8 @@ import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
 import {ProviderEditScreen} from '../screens/stack/ProviderEditScreen';
 import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
-import {CompactionPolicyScreen} from '../screens/stack/CompactionPolicyScreen';
+import {CompactionConditionsScreen} from '../screens/stack/CompactionConditionsScreen';
+import {EventsConfigScreen} from '../screens/stack/EventsConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
@@ -165,8 +166,15 @@ export function RootNavigator() {
             component={withStackLayout('ModelSampling', ModelSamplingScreen)}
           />
           <Stack.Screen
-            name="CompactionPolicy"
-            component={withStackLayout('CompactionPolicy', CompactionPolicyScreen)}
+            name="CompactionConditions"
+            component={withStackLayout(
+              'CompactionConditions',
+              CompactionConditionsScreen,
+            )}
+          />
+          <Stack.Screen
+            name="EventsConfig"
+            component={withStackLayout('EventsConfig', EventsConfigScreen)}
           />
           <Stack.Screen
             name="GlobalTemplate"

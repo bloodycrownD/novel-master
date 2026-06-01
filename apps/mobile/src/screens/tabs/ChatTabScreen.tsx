@@ -13,6 +13,7 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
+  EVENT_SESSION_COMPACTION_REQUESTED,
   textBlocks,
   type ChatMessage,
   type ChatProject,
@@ -460,6 +461,51 @@ export function ChatTabScreen() {
     [runtime, reloadMessages, showToast],
   );
 
+  const handleCompactSession = useCallback(() => {
+    if (agentRunning) {
+      showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
+      return;
+    }
+    if (projectId == null || sessionId == null) {
+      return;
+    }
+    Alert.alert(
+      '压缩会话',
+      '将按默认配置隐藏自尾深度 6 及以上的可见消息，并刷新宏。是否继续？',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '压缩',
+          onPress: () => {
+            void (async () => {
+              try {
+                const result = await runtime.eventOrchestrator.emit(
+                  EVENT_SESSION_COMPACTION_REQUESTED,
+                  {sessionId, projectId, trigger: 'manual'},
+                );
+                await reloadMessages();
+                if (!result.ok) {
+                  showToast(toastMessage('压缩部分失败', result.failures[0]?.error));
+                } else {
+                  showToast('已压缩');
+                }
+              } catch (error) {
+                showToast(toastMessage('压缩失败', error));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [
+    agentRunning,
+    projectId,
+    sessionId,
+    runtime.eventOrchestrator,
+    reloadMessages,
+    showToast,
+  ]);
+
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
       try {
@@ -767,6 +813,8 @@ export function ChatTabScreen() {
               handleHideMessage(target.id).catch(() => undefined);
             } else if (action === 'unhide') {
               handleShowMessage(target.id).catch(() => undefined);
+            } else if (action === 'compact') {
+              handleCompactSession();
             } else if (action === 'delete') {
               Alert.alert('删除消息', '确定删除这条消息？', [
                 {text: '取消', style: 'cancel'},

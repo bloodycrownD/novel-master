@@ -11,7 +11,8 @@ import {
 } from "@novel-master/core";
 import {
   applyRegexChannelToMessages,
-  visibleFloorByMessageId,
+  depthByMessageId,
+  listVisibleForDepth,
   resolveActiveCompiledRules,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
@@ -81,12 +82,12 @@ export async function runModel(
           activeGroupId,
         );
         if (rules.length > 0) {
-          const floorMap = visibleFloorByMessageId(all);
+          const depthMap = depthByMessageId(listVisibleForDepth(all));
           history = applyRegexChannelToMessages(
             history,
             rules,
             "llm",
-            floorMap,
+            depthMap,
           );
         }
         const result = await rt.modelRequests.request(modelId, content, {

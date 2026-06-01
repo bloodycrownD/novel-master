@@ -8,7 +8,8 @@ import {
   AgentConfigError,
   AgentError,
   ChatError,
-  CompactionPolicyError,
+  CompactionConditionsError,
+  EventsError,
   PreferencesError,
   PromptError,
   ProviderError,
@@ -30,7 +31,8 @@ export function formatCliError(error: unknown): string {
     error instanceof VfsZipError ||
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
-    error instanceof CompactionPolicyError ||
+    error instanceof CompactionConditionsError ||
+    error instanceof EventsError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||
@@ -54,7 +56,8 @@ export function exitCodeForError(error: unknown): number {
     error instanceof VfsZipError ||
     error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
-    error instanceof CompactionPolicyError ||
+    error instanceof CompactionConditionsError ||
+    error instanceof EventsError ||
     error instanceof ChatError ||
     error instanceof PromptError ||
     error instanceof TdbcError ||

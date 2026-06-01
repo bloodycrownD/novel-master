@@ -19,7 +19,8 @@ export type RootStackParamList = {
   ProviderEdit: {providerId?: string} | undefined;
   ProviderDetail: {providerId?: string} | undefined;
   ModelSampling: {applicationModelId?: string} | undefined;
-  CompactionPolicy: undefined;
+  CompactionConditions: undefined;
+  EventsConfig: undefined;
   GlobalTemplate: undefined;
   RegexGroups: undefined;
   RegexRules: {groupId?: string} | undefined;

@@ -15,8 +15,8 @@ describe("RegexConfigService", () => {
       name: "mask",
       pattern: "secret",
       llmReplace: "[x]",
-      minDepth: 1,
-      maxDepth: 10,
+      startDepth: 0,
+      endDepth: 10,
       scopeUser: true,
     });
     assert.equal(rule.sortOrder, 1);
@@ -34,8 +34,8 @@ describe("RegexConfigService", () => {
           ruleId: "bad",
           name: "bad",
           pattern: "x",
-          minDepth: 1,
-          maxDepth: 2,
+          startDepth: 0,
+          endDepth: 2,
         }),
       (e: unknown) => e instanceof RegexError && e.code === "INVALID_ARGUMENT",
     );
@@ -62,8 +62,8 @@ describe("RegexConfigService", () => {
       name: "on",
       pattern: "a",
       llmReplace: "A",
-      minDepth: 1,
-      maxDepth: 9,
+      startDepth: 0,
+      endDepth: 9,
       scopeUser: true,
     });
     await svc.createRule({
@@ -73,8 +73,8 @@ describe("RegexConfigService", () => {
       pattern: "b",
       llmReplace: "B",
       enabled: false,
-      minDepth: 1,
-      maxDepth: 9,
+      startDepth: 0,
+      endDepth: 9,
       scopeUser: true,
     });
     const compiled = await svc.listCompiledRulesForGroup("g3");

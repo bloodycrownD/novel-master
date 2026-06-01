@@ -91,7 +91,7 @@ describe("agentDefinitionSchema", () => {
           blocks: {
             alpha: { type: "text", role: "system", content: "a" },
             beta: { type: "chat" },
-            gamma: { type: "abstract", content: "{{.abstract}}" },
+            gamma: { type: "text", role: "system", content: "c" },
           },
         },
       },
@@ -140,23 +140,23 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("parses abstract prompt block in map", () => {
-    const def = decode(
-      {
-        schemaVersion: 1,
-        name: "writer",
-        prompts: {
-          blocks: {
-            summary: { type: "abstract", content: "{{.abstract}}" },
+  it("rejects abstract prompt block in map", () => {
+    assert.throws(
+      () =>
+        decode(
+          {
+            schemaVersion: 1,
+            name: "writer",
+            prompts: {
+              blocks: {
+                summary: { type: "abstract", content: "{{.abstract}}" },
+              },
+            },
           },
-        },
-      },
-      agentDefinitionSchema,
+          agentDefinitionSchema,
+        ),
+      (e: unknown) => e instanceof ConfigDecodeError,
     );
-    assert.equal(def.prompts[0]?.type, "abstract");
-    if (def.prompts[0]?.type === "abstract") {
-      assert.equal(def.prompts[0].content, "{{.abstract}}");
-    }
   });
 
   it("rejects text block with when in full document", () => {

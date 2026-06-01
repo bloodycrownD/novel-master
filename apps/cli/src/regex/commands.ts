@@ -66,11 +66,11 @@ export async function runRegex(
       const ruleId = flagString(flags, "regexId");
       const name = flagString(flags, "name");
       const pattern = flagString(flags, "pattern");
-      const minDepth = flagString(flags, "minDepth");
-      const maxDepth = flagString(flags, "maxDepth");
-      if (!ruleId || !name || !pattern || !minDepth || !maxDepth) {
+      const startDepth = flagString(flags, "startDepth");
+      const endDepth = flagString(flags, "endDepth");
+      if (!ruleId || !name || !pattern || (!startDepth && !endDepth)) {
         throw new Error(
-          "Usage: nm regex create --regexGroup <id> --regexId <id> --name <n> --pattern <p> --minDepth <a> --maxDepth <b> [--llmReplace] [--displayReplace] [--user] [--assistant]",
+          "Usage: nm regex create --regexGroup <id> --regexId <id> --name <n> --pattern <p> [--startDepth <a>] [--endDepth <b>] [--llmReplace] [--displayReplace] [--user] [--assistant]",
         );
       }
       const rule = await rt.regexConfig.createRule({
@@ -81,8 +81,9 @@ export async function runRegex(
         flags: flagString(flags, "flags"),
         llmReplace: flagString(flags, "llmReplace") ?? null,
         displayReplace: flagString(flags, "displayReplace") ?? null,
-        minDepth: Number.parseInt(minDepth, 10),
-        maxDepth: Number.parseInt(maxDepth, 10),
+        startDepth:
+          startDepth != null ? Number.parseInt(startDepth, 10) : null,
+        endDepth: endDepth != null ? Number.parseInt(endDepth, 10) : null,
         scopeUser: flagBool(flags, "user"),
         scopeAssistant: flagBool(flags, "assistant"),
         enabled: flags.has("enabled")
@@ -108,11 +109,11 @@ export async function runRegex(
       if (flags.has("displayReplace")) {
         patch.displayReplace = flagString(flags, "displayReplace") ?? null;
       }
-      if (flags.has("minDepth")) {
-        patch.minDepth = Number.parseInt(flagString(flags, "minDepth")!, 10);
+      if (flags.has("startDepth")) {
+        patch.startDepth = Number.parseInt(flagString(flags, "startDepth")!, 10);
       }
-      if (flags.has("maxDepth")) {
-        patch.maxDepth = Number.parseInt(flagString(flags, "maxDepth")!, 10);
+      if (flags.has("endDepth")) {
+        patch.endDepth = Number.parseInt(flagString(flags, "endDepth")!, 10);
       }
       if (flagBool(flags, "user")) patch.scopeUser = true;
       if (flagBool(flags, "assistant")) patch.scopeAssistant = true;
@@ -152,11 +153,11 @@ export async function runRegex(
       const ruleId = flagString(flags, "regexId");
       const channel = flagString(flags, "channel");
       const text = flagString(flags, "text") ?? "";
-      const floorRaw = flagString(flags, "floor") ?? "1";
+      const depthRaw = flagString(flags, "depth") ?? "0";
       const role = flagString(flags, "role") ?? "user";
       if (!ruleId) {
         throw new Error(
-          "Usage: nm regex test --regexGroup <id> --regexId <id> --channel llm|display [--text <s>] [--floor <n>] [--role user|assistant]",
+          "Usage: nm regex test --regexGroup <id> --regexId <id> --channel llm|display [--text <s>] [--depth <n>] [--role user|assistant]",
         );
       }
       if (channel !== "llm" && channel !== "display") {
@@ -164,10 +165,10 @@ export async function runRegex(
       }
       const rule = await rt.regexConfig.getRule(groupId, ruleId);
       const compiled = compileRegexRule(rule);
-      const floor = Number.parseInt(floorRaw, 10);
+      const depthFromTail = Number.parseInt(depthRaw, 10);
       const out = applyRegexRules(text, [compiled], {
         channel,
-        floor,
+        depthFromTail,
         role,
       });
       console.log(out);
