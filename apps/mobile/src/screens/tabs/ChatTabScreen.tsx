@@ -23,7 +23,14 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {ChatComposer} from '../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
-import {editableTextFromMessage} from '../../components/chat/message-edit';
+import {
+  buildMessageActionItems,
+  editableTextFromMessage,
+} from '../../components/chat/message-edit';
+import {
+  MessageActionMenu,
+  type MessageMenuAnchor,
+} from '../../components/chat/MessageActionMenu';
 import {MessageList} from '../../components/chat/MessageList';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
@@ -57,6 +64,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
 type ChatSubview = 'sessions' | 'conversation';
 type ConversationPanel = 'chat' | 'workspace';
+type MessageBatchPurpose = 'delete' | 'hide' | 'unhide';
 
 export function ChatTabScreen() {
   const {tokens} = useTheme();
@@ -103,6 +111,12 @@ export function ChatTabScreen() {
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
   >();
+  const [messageMenuAnchor, setMessageMenuAnchor] = useState<
+    MessageMenuAnchor | undefined
+  >();
+  const [messageBatchPurpose, setMessageBatchPurpose] = useState<
+    MessageBatchPurpose | null
+  >(null);
   const [messageEditPrompt, setMessageEditPrompt] = useState<
     {messageId: string; initialText: string} | undefined
   >();
@@ -320,16 +334,52 @@ export function ChatTabScreen() {
     setVfsRefreshKey(key => key + 1);
   }, []);
 
+  const exitMessageBatch = useCallback(() => {
+    messageBatch.exit();
+    setMessageBatchPurpose(null);
+  }, [messageBatch]);
+
+  const enterMessageBatch = useCallback(
+    (purpose: MessageBatchPurpose) => {
+      if (agentRunning) {
+        showToast(toastMessage('请稍候', 'Agent 运行中无法批量操作消息'));
+        return;
+      }
+      messageBatch.exit();
+      setMessageBatchPurpose(purpose);
+      messageBatch.enter();
+    },
+    [agentRunning, messageBatch, showToast],
+  );
+
   const deleteSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
     for (const id of ids) {
       await runtime.messages.delete(id);
     }
-    messageBatch.exit();
+    exitMessageBatch();
     setStreamingText('');
     setStreamingThinking('');
     await reloadMessages();
-  }, [runtime, messageBatch, reloadMessages]);
+  }, [runtime, exitMessageBatch, reloadMessages]);
+
+  const hideSelectedMessages = useCallback(async () => {
+    const ids = [...messageBatch.selectedIds];
+    for (const id of ids) {
+      await runtime.messages.hide(id);
+    }
+    exitMessageBatch();
+    await reloadMessages();
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
+
+  const unhideSelectedMessages = useCallback(async () => {
+    const ids = [...messageBatch.selectedIds];
+    for (const id of ids) {
+      await runtime.messages.show(id);
+    }
+    exitMessageBatch();
+    await reloadMessages();
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
 
   const confirmMessageBatchDelete = useCallback(() => {
     const count = messageBatch.selectedCount;
@@ -349,6 +399,66 @@ export function ChatTabScreen() {
       ],
     );
   }, [messageBatch.selectedCount, deleteSelectedMessages]);
+
+  const confirmBatchHideMessages = useCallback(() => {
+    const count = messageBatch.selectedCount;
+    if (count === 0) {
+      return;
+    }
+    Alert.alert(
+      '确认隐藏',
+      `确定隐藏选中的 ${count} 条消息？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '隐藏',
+          onPress: () => hideSelectedMessages().catch(() => undefined),
+        },
+      ],
+    );
+  }, [messageBatch.selectedCount, hideSelectedMessages]);
+
+  const confirmBatchUnhideMessages = useCallback(() => {
+    const count = messageBatch.selectedCount;
+    if (count === 0) {
+      return;
+    }
+    Alert.alert(
+      '确认取消隐藏',
+      `确定取消隐藏选中的 ${count} 条消息？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '取消隐藏',
+          onPress: () => unhideSelectedMessages().catch(() => undefined),
+        },
+      ],
+    );
+  }, [messageBatch.selectedCount, unhideSelectedMessages]);
+
+  const handleHideMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await runtime.messages.hide(messageId);
+        await reloadMessages();
+      } catch (error) {
+        showToast(toastMessage('隐藏失败', error));
+      }
+    },
+    [runtime, reloadMessages, showToast],
+  );
+
+  const handleShowMessage = useCallback(
+    async (messageId: string) => {
+      try {
+        await runtime.messages.show(messageId);
+        await reloadMessages();
+      } catch (error) {
+        showToast(toastMessage('取消隐藏失败', error));
+      }
+    },
+    [runtime, reloadMessages, showToast],
+  );
 
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
@@ -501,9 +611,31 @@ export function ChatTabScreen() {
                   batchMode
                   selectedCount={messageBatch.selectedCount}
                   onEnterBatch={() => undefined}
-                  onCancelBatch={messageBatch.exit}
-                  onDelete={confirmMessageBatchDelete}
-                  hint="选择要删除的消息"
+                  onCancelBatch={exitMessageBatch}
+                  primaryActionLabel={
+                    messageBatchPurpose === 'hide'
+                      ? '隐藏'
+                      : messageBatchPurpose === 'unhide'
+                        ? '取消隐藏'
+                        : '删除'
+                  }
+                  onPrimaryAction={
+                    messageBatchPurpose === 'hide'
+                      ? confirmBatchHideMessages
+                      : messageBatchPurpose === 'unhide'
+                        ? confirmBatchUnhideMessages
+                        : confirmMessageBatchDelete
+                  }
+                  primaryActionTone={
+                    messageBatchPurpose === 'delete' ? 'danger' : 'primary'
+                  }
+                  hint={
+                    messageBatchPurpose === 'hide'
+                      ? '选择要隐藏的消息'
+                      : messageBatchPurpose === 'unhide'
+                        ? '选择要取消隐藏的消息'
+                        : '选择要删除的消息'
+                  }
                 />
               ) : null}
               <MessageList
@@ -515,11 +647,12 @@ export function ChatTabScreen() {
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
                 onToggleMessageSelect={messageBatch.toggle}
-                onMessageLongPress={msg => {
+                onMessageLongPress={(msg, anchor) => {
                   if (agentRunning) {
                     return;
                   }
                   setMessageMenuTarget(msg);
+                  setMessageMenuAnchor(anchor);
                 }}
               />
               <ChatComposer
@@ -590,26 +723,33 @@ export function ChatTabScreen() {
           onSessionLog={() => navigation.navigate('SessionLog')}
           onBatchDeleteMessages={() => {
             setSessionDrawerOpen(false);
-            if (agentRunning) {
-              showToast(toastMessage('请稍候', 'Agent 运行中无法批量删除消息'));
-              return;
-            }
-            messageBatch.enter();
+            enterMessageBatch('delete');
+          }}
+          onBatchHideMessages={() => {
+            setSessionDrawerOpen(false);
+            enterMessageBatch('hide');
+          }}
+          onBatchUnhideMessages={() => {
+            setSessionDrawerOpen(false);
+            enterMessageBatch('unhide');
           }}
         />
-        <BottomSheetMenu
+        <MessageActionMenu
           visible={messageMenuTarget != null}
-          items={[
-            ...(messageMenuTarget &&
-            editableTextFromMessage(messageMenuTarget) != null
-              ? [{label: '编辑', action: 'edit'}]
-              : []),
-            {label: '删除', action: 'delete', danger: true},
-          ]}
-          onClose={() => setMessageMenuTarget(undefined)}
+          anchor={messageMenuAnchor}
+          items={
+            messageMenuTarget != null
+              ? buildMessageActionItems(messageMenuTarget)
+              : []
+          }
+          onClose={() => {
+            setMessageMenuTarget(undefined);
+            setMessageMenuAnchor(undefined);
+          }}
           onSelect={action => {
             const target = messageMenuTarget;
             setMessageMenuTarget(undefined);
+            setMessageMenuAnchor(undefined);
             if (target == null) {
               return;
             }
@@ -623,6 +763,10 @@ export function ChatTabScreen() {
                 messageId: target.id,
                 initialText: initial,
               });
+            } else if (action === 'hide') {
+              handleHideMessage(target.id).catch(() => undefined);
+            } else if (action === 'unhide') {
+              handleShowMessage(target.id).catch(() => undefined);
             } else if (action === 'delete') {
               Alert.alert('删除消息', '确定删除这条消息？', [
                 {text: '取消', style: 'cancel'},

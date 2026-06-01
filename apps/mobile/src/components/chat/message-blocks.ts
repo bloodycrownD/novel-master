@@ -43,10 +43,8 @@ export function buildToolResultByUseId(
   messages: readonly ChatMessage[],
 ): Map<string, ToolResultBlock> {
   const map = new Map<string, ToolResultBlock>();
+  // Pair against all messages so hidden tool_result rows still resolve assistant tool cards.
   for (const message of messages) {
-    if (message.hidden) {
-      continue;
-    }
     for (const block of blocksForMessage(message)) {
       if (block.type === 'tool_result') {
         map.set(block.toolUseId, block);
@@ -118,15 +116,14 @@ export function toolCallSummary(tool: ToolCallView): string {
   return '';
 }
 
-/** Flattens visible messages into bubbles and standalone tool cards. */
+/** Flattens session messages into bubbles and standalone tool cards (hidden rows stay visible). */
 export function buildChatListItems(
   messages: readonly ChatMessage[],
 ): ChatListItem[] {
-  const visible = messages.filter(m => !m.hidden);
-  const results = buildToolResultByUseId(visible);
+  const results = buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
 
-  for (const message of visible) {
+  for (const message of messages) {
     const blocks = blocksForMessage(message);
     const textParts: string[] = [];
     const thinkingParts: string[] = [];
@@ -164,11 +161,13 @@ export function buildChatListItems(
       });
     }
 
-    for (const use of toolUses) {
-      items.push({
-        kind: 'tool',
-        tool: toolCallViewFromUse(use, results),
-      });
+    if (!message.hidden) {
+      for (const use of toolUses) {
+        items.push({
+          kind: 'tool',
+          tool: toolCallViewFromUse(use, results),
+        });
+      }
     }
   }
 

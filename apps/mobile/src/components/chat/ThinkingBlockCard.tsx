@@ -9,9 +9,15 @@ type Props = {
   text: string;
   /** When true, card starts expanded (e.g. live streaming). */
   defaultExpanded?: boolean;
+  /** Grey out when parent message is hidden from prompt. */
+  dimmed?: boolean;
 };
 
-export function ThinkingBlockCard({text, defaultExpanded = false}: Props) {
+export function ThinkingBlockCard({
+  text,
+  defaultExpanded = false,
+  dimmed = false,
+}: Props) {
   const {tokens} = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const trimmed = text.trim();
@@ -26,6 +32,7 @@ export function ThinkingBlockCard({text, defaultExpanded = false}: Props) {
         {
           backgroundColor: tokens.bgSecondary,
           borderColor: tokens.borderLight,
+          opacity: dimmed ? 0.55 : 1,
         },
       ]}>
       <Pressable

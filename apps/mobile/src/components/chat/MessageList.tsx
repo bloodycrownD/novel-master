@@ -1,8 +1,9 @@
 /**
  * Session message list with tool cards, streaming tail, and optional batch select.
  */
-import React, {useMemo} from 'react';
+import React, {useMemo, useRef} from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import type {MessageMenuAnchor} from './MessageActionMenu';
 import type {ChatMessage} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {RichContentBody} from '../rich-content/RichContentBody';
@@ -23,7 +24,10 @@ type Props = {
   batchMode?: boolean;
   selectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
-  onMessageLongPress?: (message: ChatMessage) => void;
+  onMessageLongPress?: (
+    message: ChatMessage,
+    anchor: MessageMenuAnchor,
+  ) => void;
 };
 
 interface ChatMessageBodyProps {
@@ -83,6 +87,7 @@ export function MessageList({
     isUser: boolean,
     body: string,
     selected: boolean,
+    hidden: boolean,
     /** Streaming tail always plain Text even when assistant rich text is on. */
     forcePlainText = false,
   ) => (
@@ -91,12 +96,18 @@ export function MessageList({
         styles.bubble,
         {
           backgroundColor: isUser ? tokens.primary : tokens.surface,
+          opacity: hidden ? 0.55 : 1,
         },
         batchMode && selected && {
           borderColor: tokens.primary,
           borderWidth: 2,
         },
       ]}>
+      {hidden ? (
+        <Text style={[styles.hiddenBadge, {color: tokens.textSecondary}]}>
+          已隐藏
+        </Text>
+      ) : null}
       {forcePlainText ? (
         <Text style={{color: isUser ? '#fff' : tokens.text}}>{body}</Text>
       ) : (
@@ -142,7 +153,7 @@ export function MessageList({
                 />
               ) : null}
               {streamingText && streamingText.length > 0
-                ? renderBubble(false, streamingText, false, true)
+                ? renderBubble(false, streamingText, false, false, true)
                 : null}
             </View>
           );
@@ -157,6 +168,7 @@ export function MessageList({
           );
         }
         const isUser = row.message.role === 'user';
+        const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
         if (!body && !thinking) {
@@ -166,9 +178,9 @@ export function MessageList({
         const content = (
           <>
             {!isUser && thinking ? (
-              <ThinkingBlockCard text={thinking} />
+              <ThinkingBlockCard text={thinking} dimmed={hidden} />
             ) : null}
-            {body ? renderBubble(isUser, body, selected) : null}
+            {body ? renderBubble(isUser, body, selected, hidden) : null}
           </>
         );
 
@@ -197,17 +209,44 @@ export function MessageList({
         }
 
         return (
-          <Pressable
-            style={[
-              styles.rowAlign,
-              isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
-            ]}
-            onLongPress={() => onMessageLongPress?.(row.message)}>
+          <MessageLongPressRow
+            isUser={isUser}
+            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}>
             {content}
-          </Pressable>
+          </MessageLongPressRow>
         );
       }}
     />
+  );
+}
+
+type MessageLongPressRowProps = {
+  isUser: boolean;
+  onLongPress: (anchor: MessageMenuAnchor) => void;
+  children: React.ReactNode;
+};
+
+/** Measures bubble window rect at long-press time for anchored action menu. */
+function MessageLongPressRow({
+  isUser,
+  onLongPress,
+  children,
+}: MessageLongPressRowProps) {
+  const rowRef = useRef<View>(null);
+  return (
+    <Pressable
+      ref={rowRef}
+      style={[
+        styles.rowAlign,
+        isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
+      ]}
+      onLongPress={() => {
+        rowRef.current?.measureInWindow((x, y, width, height) => {
+          onLongPress({x, y, width, height});
+        });
+      }}>
+      {children}
+    </Pressable>
   );
 }
 
@@ -254,4 +293,5 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     flexShrink: 1,
   },
+  hiddenBadge: {fontSize: 11, marginBottom: 4},
 });
