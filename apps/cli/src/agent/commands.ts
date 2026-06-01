@@ -214,6 +214,7 @@ export async function runAgent(
         eventBus: rt.eventBus,
         macroCache: rt.macroCache,
         compactionConditions: rt.compactionConditionEvaluator,
+        eventOrchestrator: rt.eventOrchestrator,
       });
 
       const onStream =

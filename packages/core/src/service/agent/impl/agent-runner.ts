@@ -25,6 +25,7 @@ import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
+import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -44,6 +45,8 @@ export interface DefaultAgentRunnerDeps {
   readonly eventBus: SimpleEventBus;
   readonly macroCache: SessionMacroCache;
   readonly compactionConditions?: CompactionConditionEvaluator;
+  /** Runs hide-message / refresh-macros before prompt build on condition trigger (not bus.publish). */
+  readonly eventOrchestrator?: EventOrchestrator;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
@@ -92,7 +95,15 @@ export class DefaultAgentRunner implements AgentRunner {
               },
             );
           if (shouldCompact && !stepCompactionEmitted) {
-            bus.publish(EVENT_SESSION_COMPACTION_REQUESTED, {
+            const orchestrator = this.deps.eventOrchestrator;
+            if (orchestrator == null) {
+              throw new Error(
+                "eventOrchestrator is required when compactionConditions are configured",
+              );
+            }
+            // Direct emit (awaited): hide + macro refresh complete before prompt build.
+            // Do not bus.publish here — attachToBus would run the same actions again.
+            await orchestrator.emit(EVENT_SESSION_COMPACTION_REQUESTED, {
               sessionId,
               projectId,
               trigger: "condition",

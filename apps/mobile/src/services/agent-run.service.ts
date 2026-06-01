@@ -140,6 +140,7 @@ export async function runAgentTurn(
     eventBus: runtime.eventBus,
     macroCache: runtime.macroCache,
     compactionConditions: runtime.compactionConditionEvaluator,
+    eventOrchestrator: runtime.eventOrchestrator,
   });
 
   return runner.run({

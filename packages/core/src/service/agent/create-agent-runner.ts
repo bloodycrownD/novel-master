@@ -13,6 +13,7 @@ import type { RegexConfigService } from "../regex/regex-config.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionMacroCache } from "../prompt/session-macro-cache.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/create-compaction-condition-evaluator.js";
+import type { EventOrchestrator } from "../events/event-orchestrator.port.js";
 import type { AgentRunner } from "./agent.port.js";
 import { DefaultAgentRunner } from "./impl/agent-runner.js";
 
@@ -24,6 +25,7 @@ export interface CreateAgentRunnerDeps {
   readonly eventBus: SimpleEventBus;
   readonly macroCache: SessionMacroCache;
   readonly compactionConditions?: CompactionConditionEvaluator;
+  readonly eventOrchestrator?: EventOrchestrator;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
