@@ -15,7 +15,7 @@
 | 模块 | 现状 | 本迭代影响 |
 |------|------|------------|
 | 三域 VFS | `createScopedVfsService` + `ScopedVfsService` + `vfs-path-mapper.ts`（`VfsScope`、`scopePhysicalPrefix`、`toLogicalPath`） | ZIP IO 在 scope 边界操作，ZIP 内路径 = **逻辑路径** |
-| 域路径规则 | global/project 仅 `/template/…`；session 任意 `/…`（`normalizePath` 拒绝 `..`） | 导入校验复用 `assertLogicalPathAllowed` |
+| 域路径规则 | 三域逻辑路径均以 `/` 为根（[vfs-unified-root](../vfs-unified-root/spec.md)）；`resolveLogicalPath` + `assertLogicalPathAllowed` | 导入校验复用；**拒绝**旧式逻辑 `/template/…` |
 | 批量树操作 | `copyVfsTree` / `deleteVfsPrefix` / `replaceVfsSubtree`（`vfs-tree-copy.ts`，repository 级） | 导入写入可复用 `deleteVfsPrefix` + 批量 insert |
 | `VfsEntryRepository` | `scanContents` / `listAllPaths` **仅 file 行**（`entry_kind = 'file'`）；含 `storage_kind` | 导出 scan file；导入 `insert` + **`ensureParentDirectories`**（见 [vfs-directory-nodes](../vfs-directory-nodes/spec.md)） |
 | `vfs_entry` | `entry_kind: file \| directory`；`storage_kind: inline \| external` | 导出 **inline 文件** + **显式 directory 行**（ZIP `dir/`）；`external` 不参与 ZIP |
@@ -35,6 +35,12 @@
 - `tools` 为 Agent 定义**可选新字段**，`schemaVersion: 1` 不变；未配置 tools 的 Agent 行为与现网一致。
 - ZIP IO 为**新增 API**，不改动现有 `VfsService` 端口签名。
 - 导入**不**触及 worktree 规则、session execute 记录、snapshot、KKV、消息等（PRD 明确排除）；导入后 worktree 展示可能与 VFS 不一致，属预期——用户可在移动端/CLI 另行维护规则，或后续迭代做联动（**本迭代不做**）。
+
+**与 vfs-unified-root 对齐（M4）**
+
+- ZIP 条目名 = 逻辑路径去掉 leading `/`（如 `/ddd/a.md` → `ddd/a.md`）；global/project/session **形状一致**，ZIP 内**无** `template/` 域前缀。
+- 导出 global 写入 `/x.md` 时 ZIP 含 `x.md`，不含 `template/x.md`。
+- 同一会话导出的 ZIP 可在 **project 模板域** 入口导入（逻辑路径合法即可），不因「仅允许 `/template/`」拒绝。
 
 ---
 
@@ -387,7 +393,7 @@ apps/mobile/__tests__/
 | ID | Given | When | Then |
 |----|-------|------|------|
 | Z1 | session 有 `/a.md`、`/dir/b.md` | export | ZIP 含 `a.md`、`dir/b.md`，内容与 read 一致 |
-| Z2 | global `/template/x.md` | export | ZIP 不含 `projects/` 前缀 |
+| Z2 | global `/x.md` | export | ZIP 含 `x.md`；不含 `projects/` 或 `template/` 前缀 |
 | Z3 | session 有 `/old.md` | import 仅含 `new.md` 且 confirmed | 仅 `/new.md` 存在 |
 | Z4 | ZIP 含非法 UTF-8 | import | 报错；域内与导入前一致 |
 | Z5 | 校验通过但 transaction 失败 | import | 域内与导入前一致 |

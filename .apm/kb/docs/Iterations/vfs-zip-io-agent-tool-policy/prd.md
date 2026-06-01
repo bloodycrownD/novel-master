@@ -28,7 +28,7 @@
 | 用户 | 场景 |
 |------|------|
 | 写作用户（移动端） | 备份当前会话工作区；从同事处导入 session ZIP 覆盖恢复 |
-| 模板维护者 | 导出/导入 **全局** 或 **项目** template ZIP，批量维护 `/template/` |
+| 模板维护者 | 导出/导入 **全局** 或 **项目** 模板域 ZIP，批量维护 `/` 下文件（如 `/seed/prompt.md`） |
 | 开发者 / 运维 | CLI 脚本化导出种子数据、导入到指定 project/session |
 | Agent 配置者 | 为「只读分析」Agent 配白名单仅 `vfs.read`/`vfs.grep`；为通用写作 Agent 保持默认全启用 |
 
@@ -38,8 +38,8 @@
 
 **1. VFS ZIP 导出（按域单独操作）**
 
-- **global 域**：导出逻辑根下 `template/` 内**当前有效**文本文件。
-- **project 域**：导出指定 project 的 `template/` 文本文件。
+- **global 域**：导出该域**当前有效**文本文件（逻辑路径以 `/` 为根）。
+- **project 域**：导出指定 project 模板域**当前有效**文本文件（逻辑路径以 `/` 为根）。
 - **session 域**：导出指定 session 工作区**当前有效**文本文件（逻辑路径以 `/` 为根）。
 - 每次导出产生 **一个 ZIP**，**仅包含一个域**的文件树（不混域）。
 - ZIP 内路径与域内逻辑路径一致（如 session 导出含 `/notes.md`，不含 `projects/…` 等跨域前缀）。
@@ -93,8 +93,8 @@
 ### VFS — 导出
 
 - **Given** session 域存在 `/a.md`、`/dir/b.md`（均为 UTF-8 文本），**When** 执行 session 域导出，**Then** 得到 ZIP，解压后仅含对应逻辑路径的文本内容，且与域内读取一致。
-- **Given** global 域 `template/` 下有文件，**When** 执行 global 域导出，**Then** ZIP 内路径与 global 可见路径一致，且不包含 `projects/` 等其它域路径。
-- **Given** project 域有 template 文件，**When** 执行 project 域导出，**Then** ZIP 仅含该 project 的 template 树。
+- **Given** global 域有 `/x.md`，**When** 执行 global 域导出，**Then** ZIP 条目为 `x.md`（无 `template/` 前缀），且不包含 `projects/` 等其它域路径。
+- **Given** project 域有 `/prompt.md`，**When** 执行 project 域导出，**Then** ZIP 仅含该 project 文件树（逻辑路径形状与 session 一致）。
 
 ### VFS — 导入（完全覆盖）
 

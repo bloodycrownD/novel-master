@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "@novel-master/core";
+import { toPhysicalPath, VfsError } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("ScopedVfsService", () => {
@@ -28,6 +28,10 @@ describe("ScopedVfsService", () => {
     const project = await ctx.projects.create("P");
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/prompts/system.md", "system prompt");
+    assert.equal(
+      toPhysicalPath({ kind: "project", projectId: project.id }, "/prompts/system.md"),
+      `/projects/${project.id}/template/prompts/system.md`,
+    );
     const read = await pvfs.read("/prompts/system.md");
     assert.equal(read.content, "system prompt");
     assert.equal(read.path, "/prompts/system.md");

@@ -1,6 +1,6 @@
 # Chat / Project / 域 VFS 技术规格（SPEC）
 
-> **逻辑路径（superseded）**：global/project 对外逻辑路径以 `/` 为根、不再要求 `/template/` 前缀，见 [vfs-unified-root/spec.md](../vfs-unified-root/spec.md)。下文表中「逻辑路径 `/template/…`」仅作历史记录；实现以 vfs-unified-root 为准。
+> **逻辑路径**：global / project / session 对外逻辑路径均以 `/` 为根（见 [vfs-unified-root/spec.md](../vfs-unified-root/spec.md)）。物理 `vfs_entry` 仍用内部 `…/template/…` 挂载段，由 `vfs-path-mapper` 映射，对用户不可见。
 
 ## 设计目标
 
@@ -26,7 +26,7 @@
 
 **兼容性原则（2025-05 实现决策：无历史数据，不保留旧路径兼容）**
 
-- `nm vfs`（全局）与全部新 repository：**强制** GlobalScoped，逻辑路径仅 `/template/…`；cli e2e、`vfs-test-sync` 等一律改为 `/template/...` 或 scoped 工厂。
+- `nm vfs`（全局）与全部新 repository：**强制** GlobalScoped，逻辑路径以 `/` 为根（如 `/seed.md`）；cli e2e 使用 scoped 工厂与统一路径；`vfs-test-sync` 等无范围工具仍可用物理全路径。
 - 新 repository（kkv、chat、session-fs）及 **VfsEntryRepository 改造**：SQL 经 **`SqlTemplateParser` + `queryTemplate` / `executeTemplate`** 拼接，禁止裸字符串拼接用户输入。
 - 新表 DDL 均为 **`IF NOT EXISTS`**。
 
@@ -81,8 +81,8 @@ flowchart TB
 
 | 域 | 逻辑路径示例 | 物理路径（`vfs_entry.path`） |
 |----|--------------|------------------------------|
-| 全局 | `/template/test.md` | `/template/test.md` |
-| project `P` | `/template/test.md` | `/projects/P/template/test.md` |
+| 全局 | `/test.md` | `/template/test.md` |
+| project `P` | `/test.md` | `/projects/P/template/test.md` |
 | session `S`（属 `P`） | `/test.md` | `/projects/P/sessions/S/test.md` |
 
 `meta/` 目录（PRD 树状图）首期**仅作为 VFS 路径约定**，不单独建表；若需存 project/session 元数据，使用 **chat 表字段** + 可选 `/projects/P/meta/…` VFS 文件。
@@ -91,9 +91,9 @@ flowchart TB
 
 | Scope | 允许的逻辑路径 |
 |-------|----------------|
-| `global` | 必须以 `/template/` 开头（含 `/template` 作为 list 目录） |
-| `project` | 必须以 `/template/` 开头 |
-| `session` | 任意规范化绝对路径（`/foo.md`、`/sub/x.md`）；**禁止** `..` 逃逸（已有 `normalizePath`） |
+| `global` | 任意规范化绝对路径（`/foo.md`）；**拒绝**旧式 `/template/…` 逻辑前缀 |
+| `project` | 同上（模板域文件树，逻辑与会话一致为 `/…`） |
+| `session` | 任意规范化绝对路径；**禁止** `..` 逃逸（`normalizePath`） |
 
 映射实现：`domain/vfs/vfs-path-mapper.ts`（纯函数，无 IO）：
 
@@ -103,6 +103,7 @@ export type VfsScope =
   | { kind: "project"; projectId: string }
   | { kind: "session"; projectId: string; sessionId: string };
 
+export function resolveLogicalPath(input: string): string;
 export function toPhysicalPath(scope: VfsScope, logical: string): string;
 export function toLogicalPath(scope: VfsScope, physical: string): string;
 export function assertLogicalPathAllowed(scope: VfsScope, logical: string): void;
@@ -209,7 +210,7 @@ export function assertLogicalPathAllowed(scope: VfsScope, logical: string): void
 
 | 操作 | 行为 |
 |------|------|
-| **session.create(projectId)** | 插入 `chat_session`；`copyVfsTree`：`/projects/P/template/` → `/projects/P/sessions/S/`（逻辑 `/template/x` → session 逻辑 `/x`） |
+| **session.create(projectId)** | 插入 `chat_session`；`copyVfsTree`：物理 `/projects/P/template/` → `/projects/P/sessions/S/`（逻辑路径同为 `/x.md` 等形式） |
 | **message.fork(sessionId, upToMessageId)** | 新建 session `S'`（**不**走 template 复制）；**深拷贝**源 session 的 session 域 VFS 树；复制 `seq <= upTo` 的消息为新 id、新 seq 1..n |
 | **project.copy(projectId)** | 新 project 行；复制 `/projects/P/template/**` → `/projects/P'/template/**`；**不**复制 sessions/messages/session 数据 |
 | **session.copy(sessionId)** | 新 session 行（同 project）；复制 VFS 树 + 全部 messages（新 message id，保留 seq 顺序） |
@@ -311,7 +312,7 @@ export async function copyVfsTree(
 ```
 
 - `list` + `scanContents` 或 `WHERE path LIKE fromPrefix/%`（可在 repository 增加 `listUnderPrefix(prefix)` 以减少往返）。
-- session 创建：`fromPrefix=/projects/P/template/`，`toPrefix=/projects/P/sessions/S/`，`mapPath`: 去掉 `template/` 段（`/template/a.md` → `/a.md` 相对 session 根）。
+- session 创建：`fromPrefix=/projects/P/template/`，`toPrefix=/projects/P/sessions/S/`（相对路径 1:1 复制；逻辑路径在 global/project/session 均为 `/a.md` 等，由 mapper 映射物理前缀）。
 
 ---
 
@@ -386,7 +387,7 @@ apps/cli/src/
 | `apps/cli/src/runtime.ts` | `bootstrapNovelMaster`；导出 `createRuntime(conn?)` |
 | `apps/cli/src/vfs/*` | 全局 scoped；路径示例调整 |
 | `apps/cli/test/*` | e2e：chat、kkv、scoped vfs、session-fs |
-| `apps/cli/test/vfs-e2e.test.ts` | 路径改为 `/template/...` |
+| `apps/cli/test/vfs-e2e.test.ts` | scoped 路径以 `/` 为逻辑根 |
 | `.apm/kb/docs/monorepo.md` | 补充 `nm project` 等（实现后） |
 
 **不修改**：`infra/tdbc`、`infra/sql-template`、`packages/tdbc-driver-*`、`apps/mobile`。
@@ -415,7 +416,7 @@ apps/cli/src/
 1. `vfs-path-mapper.ts` + `ScopedVfsService`。
 2. `createScopedVfsService`；单测：三域 list/read/write 隔离、非法路径 `INVALID_PATH`。
 3. CLI：`nm vfs` → global scoped；`nm project vfs --project <id>`；`nm session vfs --project <id> --session <id>`（flag 名在实现时与 `parse-args` 统一）。
-4. 更新 `vfs-e2e.test.ts` 路径前缀。
+4. 更新 `vfs-e2e.test.ts` 为统一逻辑路径 `/…`。
 
 ### 阶段 4：Project copy + Session copy + Message fork
 
@@ -458,13 +459,13 @@ apps/cli/src/
 
 **Session 创建 + template**
 
-- project 写入 `/template/a.md`、`/template/sub/b.md` → create session → session list 含 `/a.md`、`/sub/b.md`，内容一致。
+- project 写入 `/a.md`、`/sub/b.md` → create session → session list 含 `/a.md`、`/sub/b.md`，内容一致。
 - 创建后改 project template → session 内容不变。
 - 空 template → session list 为空。
 
 **Scoped VFS**
 
-- global write `/template/g.md`；project list 不可见 `g`（除非在同 project 下写入）。
+- global write `/g.md`；project list 不可见 `g`（除非在同 project 下写入）。
 - session write `/note.md`；project/global read 同逻辑路径失败。
 
 **Message fork**
@@ -491,7 +492,7 @@ apps/cli/src/
 
 | 风险 | 缓解 |
 |------|------|
-| 全局 `nm vfs` 仅允许 `/template/*` 破坏旧脚本 | `createVfsService` 保持全路径；文档标明 `nm vfs` 为 scoped；e2e/sync 按需选用工厂 |
+| 统一逻辑 `/` 与旧 `/template/…` 脚本不兼容 | breaking 见 vfs-unified-root；`createVfsService` 保持全物理路径；`nm vfs` 为 scoped |
 | 单表 `vfs_entry` 膨胀 | 首期可接受；后期可按 prefix 归档或分库 |
 | fork VFS 语义与产品预期不符 | SPEC 已锁定「复制源 session VFS」；PRD 变更时可切换为仅 template |
 | session rollback 与 snapshot 一致性复杂 | 单测覆盖多步 execute + rollback；实现优先 checkpoint 存执行前 vfs 状态 |
