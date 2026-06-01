@@ -32,6 +32,8 @@ import { runList } from "./vfs/commands/list.js";
 import { runRead } from "./vfs/commands/read.js";
 import { runReplace } from "./vfs/commands/replace.js";
 import { runWrite } from "./vfs/commands/write.js";
+import { runExportZip } from "./vfs/commands/export-zip.js";
+import { runImportZip } from "./vfs/commands/import-zip.js";
 import { extractDbPath, parseCliArgs } from "./vfs/parse-args.js";
 
 const GLOBAL_VFS_COMMANDS: Record<
@@ -63,15 +65,22 @@ async function runVfs(argv: string[]): Promise<number> {
     }
   }
 
-  if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
-    console.error(
-      "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|worktree> ...",
-    );
-    return EXIT_USAGE;
-  }
-
   const rt = await createNovelMasterRuntime(argv);
   try {
+    if (subcommand === "export-zip") {
+      await runExportZip(rt.conn, { kind: "global" }, subArgs);
+      return 0;
+    }
+    if (subcommand === "import-zip") {
+      await runImportZip(rt.conn, { kind: "global" }, subArgs);
+      return 0;
+    }
+    if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
+      console.error(
+        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|worktree> ...",
+      );
+      return EXIT_USAGE;
+    }
     await GLOBAL_VFS_COMMANDS[subcommand]!(rt.globalVfs(), subArgs);
     return 0;
   } finally {
@@ -128,6 +137,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
             const { flags } = parseCliArgs(rest);
             const projectId = await rt.scope.resolveProjectId(flags);
             await runProjectVfs(
+              rt.conn,
               (id) => rt.projectVfs(id),
               projectId,
               rest,

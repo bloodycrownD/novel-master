@@ -14,6 +14,8 @@ import { runMkdir } from "../vfs/commands/mkdir.js";
 import { runRead } from "../vfs/commands/read.js";
 import { runReplace } from "../vfs/commands/replace.js";
 import { runWrite } from "../vfs/commands/write.js";
+import { runExportZip } from "../vfs/commands/export-zip.js";
+import { runImportZip } from "../vfs/commands/import-zip.js";
 import { runSessionTemplate } from "./template.js";
 import { runSessionWorktree } from "./worktree.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -31,6 +33,7 @@ const SESSION_VFS_COMMANDS = {
 
 type SessionDeps = Pick<
   NovelMasterRuntime,
+  | "conn"
   | "state"
   | "preferences"
   | "sessions"
@@ -189,6 +192,25 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
     throw new Error("Usage: nm session vfs snapshot <list|rollback> ...");
   }
 
+  if (group === "export-zip") {
+    const idx = args.indexOf(group);
+    await runExportZip(
+      deps.conn,
+      { kind: "session", projectId, sessionId },
+      args.slice(idx + 1),
+    );
+    return;
+  }
+  if (group === "import-zip") {
+    const idx = args.indexOf(group);
+    await runImportZip(
+      deps.conn,
+      { kind: "session", projectId, sessionId },
+      args.slice(idx + 1),
+    );
+    return;
+  }
+
   const vfs = deps.sessionVfs(projectId, sessionId);
   const idx = args.indexOf(group);
   const subArgs = args.slice(idx + 1);
@@ -201,7 +223,7 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
 
   if (group == null || !(group in SESSION_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm session vfs <list|read|write|...> | records ... | snapshot ...",
+      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...> | records ... | snapshot ...",
     );
   }
 

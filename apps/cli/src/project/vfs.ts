@@ -4,8 +4,10 @@
  * @module project/vfs
  */
 
-import type { VfsService } from "@novel-master/core";
+import type { TdbcConnection, VfsService } from "@novel-master/core";
 import { runDelete } from "../vfs/commands/delete.js";
+import { runExportZip } from "../vfs/commands/export-zip.js";
+import { runImportZip } from "../vfs/commands/import-zip.js";
 import { runGlob } from "../vfs/commands/glob.js";
 import { runGrep } from "../vfs/commands/grep.js";
 import { runList } from "../vfs/commands/list.js";
@@ -30,6 +32,7 @@ const PROJECT_VFS_COMMANDS: Record<
 };
 
 export async function runProjectVfs(
+  conn: TdbcConnection,
   projectVfs: (projectId: string) => VfsService,
   projectId: string,
   args: readonly string[],
@@ -37,9 +40,27 @@ export async function runProjectVfs(
   const vfsRest = args[0] === "vfs" ? args.slice(1) : args;
   const { positional } = parseCliArgs(vfsRest);
   const sub = positional[0];
+  if (sub === "export-zip") {
+    const idx = vfsRest.indexOf(sub);
+    await runExportZip(
+      conn,
+      { kind: "project", projectId },
+      vfsRest.slice(idx + 1),
+    );
+    return;
+  }
+  if (sub === "import-zip") {
+    const idx = vfsRest.indexOf(sub);
+    await runImportZip(
+      conn,
+      { kind: "project", projectId },
+      vfsRest.slice(idx + 1),
+    );
+    return;
+  }
   if (sub == null || !(sub in PROJECT_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete|mkdir> ...",
+      "Usage: nm project vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip> ...",
     );
   }
   const vfs = projectVfs(projectId);

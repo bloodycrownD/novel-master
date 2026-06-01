@@ -5,6 +5,7 @@
  */
 
 import {
+  AgentConfigError,
   AgentError,
   ChatError,
   CompactionPolicyError,
@@ -13,6 +14,7 @@ import {
   ProviderError,
   TdbcError,
   VfsError,
+  VfsZipError,
 } from "@novel-master/core";
 import { SkspError } from "@novel-master/core/sksp";
 
@@ -25,6 +27,8 @@ export function formatCliError(error: unknown): string {
   }
   if (
     error instanceof VfsError ||
+    error instanceof VfsZipError ||
+    error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionPolicyError ||
     error instanceof ChatError ||
@@ -47,6 +51,8 @@ export function exitCodeForError(error: unknown): number {
   }
   if (
     error instanceof VfsError ||
+    error instanceof VfsZipError ||
+    error instanceof AgentConfigError ||
     error instanceof PreferencesError ||
     error instanceof CompactionPolicyError ||
     error instanceof ChatError ||

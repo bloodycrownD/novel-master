@@ -12,6 +12,7 @@ import {
   loadPromptBlocksFromYaml,
   parseApplicationModelId,
   registerVfsTools,
+  resolveAgentToolRegistry,
   textBlocks,
   ToolRegistry,
   validateAgentDefinition,
@@ -81,6 +82,8 @@ async function resolveDefinition(
     }
   }
 
+  const toolProbe = new ToolRegistry();
+  registerVfsTools(toolProbe);
   await validateAgentDefinition(definition, {
     assertSavedModel: async (applicationModelId) => {
       const { providerId, vendorModelId } =
@@ -90,6 +93,7 @@ async function resolveDefinition(
         throw new Error(`unknown model: ${applicationModelId}`);
       }
     },
+    registeredToolNames: toolProbe.list(),
   });
 
   return definition;
@@ -186,9 +190,10 @@ export async function runAgent(
         wt.renderFileTree(),
       ]);
 
-      const registry = new ToolRegistry();
+      const baseRegistry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
-      registerVfsTools(registry);
+      registerVfsTools(baseRegistry);
+      const registry = resolveAgentToolRegistry(baseRegistry, definition);
 
       const session = new ChatAgentSession(rt.messages, sessionId);
       const activeRegexGroupId = await rt.state.getCurrentRegexGroupId();

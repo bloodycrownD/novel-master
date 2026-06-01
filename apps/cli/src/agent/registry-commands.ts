@@ -10,6 +10,8 @@ import {
   encode,
   agentDefinitionSchema,
   parseApplicationModelId,
+  registerVfsTools,
+  ToolRegistry,
   type AgentRegistryService,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
@@ -129,7 +131,10 @@ export async function runAgentRegistryCommand(
 export function createRegistryValidateOptions(
   rt: NovelMasterRuntime,
 ): Parameters<AgentRegistryService["upsert"]>[2] {
+  const probe = new ToolRegistry();
+  registerVfsTools(probe);
   return {
     assertSavedModel: (id) => assertSavedModel(rt, id),
+    registeredToolNames: probe.list(),
   };
 }
