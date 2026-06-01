@@ -8,6 +8,11 @@ import { runNm } from "./helpers.js";
 
 const REPO_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const EXAMPLES_AGENTS = join(REPO_ROOT, "examples", "agents.yaml");
+const EXAMPLES_CONDITIONS = join(
+  REPO_ROOT,
+  "examples",
+  "compaction-conditions.yaml",
+);
 
 describe("agent registry e2e", () => {
   it("E1 / AG3: import examples/agents.yaml then list contains writer and summarizer", async () => {
@@ -56,68 +61,53 @@ describe("agent registry e2e", () => {
     }
   });
 
-  it("E3: compaction set and show after agent import", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "nm-agent-compact-"));
+  it("E3: compaction-conditions set and show from examples file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-conditions-"));
     const dbPath = join(dir, "novel.db");
-    const policyPath = join(dir, "policy.yaml");
     try {
-      assert.equal(
-        runNm(["agent", "import", EXAMPLES_AGENTS, "--db", dbPath]).status,
-        0,
-      );
-
-      await writeFile(
-        policyPath,
-        [
-          "schemaVersion: 1",
-          "trigger:",
-          "  tokenThreshold: 1000",
-          "action:",
-          "  keepLastN: 4",
-          "  abstract:",
-          "    type: agent",
-          "    agentId: summarizer",
-        ].join("\n"),
-        "utf8",
-      );
-
-      const set = runNm(["compaction", "set", "--file", policyPath, "--db", dbPath]);
+      const set = runNm([
+        "compaction-conditions",
+        "set",
+        "--file",
+        EXAMPLES_CONDITIONS,
+        "--db",
+        dbPath,
+      ]);
       assert.equal(set.status, 0, set.stderr);
 
-      const show = runNm(["compaction", "show", "--db", dbPath]);
+      const show = runNm(["compaction-conditions", "show", "--db", dbPath]);
       assert.equal(show.status, 0, show.stderr);
       assert.match(show.stdout, /"enabled":\s*true/);
-      assert.match(show.stdout, /summarizer/);
+      assert.match(show.stdout, /"tokenThreshold":\s*12000/);
+      assert.match(show.stdout, /"visibleFloor":\s*20/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("AG2: compaction set rejects unknown agentId", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "nm-agent-compact-bad-"));
+  it("rejects enabled conditions with no triggers", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-conditions-bad-"));
     const dbPath = join(dir, "novel.db");
-    const policyPath = join(dir, "policy.yaml");
+    const conditionsPath = join(dir, "conditions.yaml");
     try {
       await writeFile(
-        policyPath,
-        [
-          "schemaVersion: 1",
-          "trigger:",
-          "  tokenThreshold: 10",
-          "action:",
-          "  keepLastN: 2",
-          "  abstract:",
-          "    type: agent",
-          "    agentId: does-not-exist",
-        ].join("\n"),
+        conditionsPath,
+        ["schemaVersion: 2", "enabled: true"].join("\n"),
         "utf8",
       );
 
-      const set = runNm(["compaction", "set", "--file", policyPath, "--db", dbPath]);
+      const set = runNm([
+        "compaction-conditions",
+        "set",
+        "--file",
+        conditionsPath,
+        "--db",
+        dbPath,
+      ]);
       assert.notEqual(set.status, 0);
       assert.match(
         set.stderr + set.stdout,
-        /AGENT_NOT_FOUND|agent not found|CompactionPolicyError/i,
+        /at least one of tokenThreshold|visible-floor/i,
       );
     } finally {
       await rm(dir, { recursive: true, force: true });

@@ -9,7 +9,6 @@ import { extname } from "node:path";
 import {
   compactionConditionsSchema,
   decode,
-  encode,
   parseText,
   CompactionConditionsError,
   type CompactionConditionsStore,
@@ -47,9 +46,8 @@ export async function runCompactionConditions(
         console.log("No compaction conditions configured.");
         return;
       }
-      console.log(
-        JSON.stringify(encode(conditions, compactionConditionsSchema), null, 2),
-      );
+      // Domain object from store; schema uses Zod transform (not encodable).
+      console.log(JSON.stringify(conditions, null, 2));
       return;
     }
     case "set": {

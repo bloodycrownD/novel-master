@@ -5,7 +5,6 @@
  */
 
 import { decode } from "@/infra/serialization/decode.js";
-import { encode } from "@/infra/serialization/encode.js";
 import { compactionConditionsSchema } from "@/domain/compaction-conditions/model/compaction-conditions.schema.js";
 import type { CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import { KkvError } from "@/errors/kkv-errors.js";
@@ -31,8 +30,8 @@ export class DefaultCompactionConditionsStore implements CompactionConditionsSto
   }
 
   async setConditions(conditions: CompactionConditions): Promise<void> {
-    const wire = encode(conditions, compactionConditionsSchema);
-    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(wire));
+    // Domain object is already validated; wire schema uses Zod transform (not encodable).
+    await this.kkv.set(MODULE, KEY_POLICY, JSON.stringify(conditions));
   }
 
   async clearConditions(): Promise<void> {
