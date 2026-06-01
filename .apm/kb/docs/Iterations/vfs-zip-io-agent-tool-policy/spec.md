@@ -17,8 +17,9 @@
 | 三域 VFS | `createScopedVfsService` + `ScopedVfsService` + `vfs-path-mapper.ts`（`VfsScope`、`scopePhysicalPrefix`、`toLogicalPath`） | ZIP IO 在 scope 边界操作，ZIP 内路径 = **逻辑路径** |
 | 域路径规则 | global/project 仅 `/template/…`；session 任意 `/…`（`normalizePath` 拒绝 `..`） | 导入校验复用 `assertLogicalPathAllowed` |
 | 批量树操作 | `copyVfsTree` / `deleteVfsPrefix` / `replaceVfsSubtree`（`vfs-tree-copy.ts`，repository 级） | 导入写入可复用 `deleteVfsPrefix` + 批量 insert |
-| `VfsEntryRepository` | `scanContents(pathPrefix?)` 返回 `{ path, content }[]`；`listAllPaths()` | 导出 scan + 映射 logical；回滚快照同源 |
-| `vfs_entry` | `storage_kind: inline \| external`（v1 实际均为 inline） | 导出/import 仅接受 **inline UTF-8**；scope 内若存在 `external` 行 → 导出报错 |
+| `VfsEntryRepository` | `scanContents` / `listAllPaths` **仅 file 行**（`entry_kind = 'file'`）；含 `storage_kind` | 导出 scan file；导入 `insert` + **`ensureParentDirectories`**（见 [vfs-directory-nodes](../vfs-directory-nodes/spec.md)） |
+| `vfs_entry` | `entry_kind: file \| directory`；`storage_kind: inline \| external` | 导出/import 仅 **file + inline UTF-8**；`directory` / `external` 行不参与 ZIP |
+| Core 分层 | `ARCHITECTURE.md` / [core-package-structure](../core-package-structure/spec.md)：`errors/` 包级；`domain/*/ports` 放契约 | 本 SPEC 结构与之对齐（见下） |
 | 事务 | `TdbcConnection.transaction(fn)` | 导入写入阶段包在单事务内 |
 | ZIP 库 | **无**（全仓库未引用 jszip/fflate 等） | Core 新增 **`fflate`**（纯 JS，Node + RN 可用） |
 | CLI VFS | `nm vfs …`（global）、`nm project vfs …`、`nm session vfs …`（list/read/write/…） | 各域 vfs 子命名空间增加 `export-zip` / `import-zip` |
@@ -51,8 +52,10 @@ flowchart TB
   end
 
   subgraph core_vfs [Core — VFS ZIP]
+    ZIP_ERR["errors/vfs-zip-errors"]
     ZIP_LOGIC["domain/vfs/logic/vfs-zip-*"]
-    ZIP_SVC["VfsZipIoService"]
+    ZIP_PORT["domain/vfs/ports/vfs-zip-io"]
+    ZIP_SVC["service/vfs/impl/vfs-zip-io"]
     MAPPER["vfs-path-mapper"]
     REPO["VfsEntryRepository"]
     FF["fflate zip/unzip"]
@@ -85,14 +88,14 @@ flowchart TB
 |----|------|
 | ZIP 范围 | **单域**；一条 ZIP 只对应一个 `VfsScope` |
 | 条目路径 | ZIP entry 名 = 域内**逻辑路径**去掉 leading `/`（例：逻辑 `/notes.md` → `notes.md`；`/dir/b.md` → `dir/b.md`）。导入时 `normalizePath('/' + entryName)` 还原 |
-| 目录条目 | ZIP 中的纯目录 entry（无文件内容）**忽略**；以文件 entry 隐式表达目录结构 |
+| 目录条目 | ZIP 中纯目录 entry **忽略**；导入后由 **`ensureParentDirectories`** 为文件路径补齐 `directory` 行（不写空目录进 ZIP，与 PRD「仅文本文件」一致） |
 | 文本编码 | 条目 body 必须为 **UTF-8**；非法 UTF-8 → **整包拒绝** |
 | 二进制 | 任一 entry 解码非 UTF-8 文本 → **整包拒绝**（不做部分导入） |
 | 非法路径 | `..`、空名、`\`、Windows 绝对盘符路径、`/projects/…` 等跨域前缀 → **整包拒绝** |
 | 域路径合法性 | 还原逻辑路径后调用 `assertLogicalPathAllowed(scope, logical)` |
 | 重复路径 | 同一逻辑路径在 ZIP 中出现多次 → **整包拒绝** |
 | 导出排除 | `storage_kind !== 'inline'` 的行；worktree / snapshot / execute 元数据（不在 `vfs_entry` 中，自然排除） |
-| `.keep` | 作为普通 UTF-8 文本文件**包含**在导出/导入中（移动端空目录占位） |
+| 存量 `.keep` | 若 DB 中仍有 `.keep` **file** 行，随其它文本文件一并导出/导入；**不**为显式空目录单独写 ZIP 目录 entry（[vfs-directory-nodes](../vfs-directory-nodes/spec.md) 后新建目录不再产生 `.keep`） |
 | 压缩 | DEFLATE；无密码；无分卷 |
 
 **默认资源上限（可常量配置，SPEC 定稿）**
@@ -126,7 +129,7 @@ flowchart TB
 2. `conn.transaction(async (tx) => { … })`：
    - `repoTx = new SqliteVfsEntryRepository(tx)`
    - `await deleteVfsPrefix(repoTx, physicalPrefix)`
-   - 对每个 `(logical, content)`：`insert(toPhysicalPath(scope, logical), content)`（`versionCheck: false`）
+   - 对每个 `(logical, content)`：`ensureParentDirectories` + `insert` file 行（`versionCheck: false`）；**不** `mkdir` 空目录占位
 3. 事务失败 → SQLite 回滚，域内与导入前一致
 
 > **说明**：阶段 B 依赖 TDBC 事务覆盖 `delete` + 批量 `insert`；实现时在 core 单测用故意 mid-batch 失败 hook 验证回滚。
@@ -179,7 +182,7 @@ export interface AgentDefinition {
 - 新增 `resolveAgentToolRegistry(baseRegistry, definition): ToolRegistry`（`domain/agent/logic/resolve-agent-tool-registry.ts`）：
   - 解析 policy → 计算 `allowedNames: Set<string>`
   - 从 `baseRegistry` 克隆允许的工具到新 `ToolRegistry`（复用现有 `register`）
-- `validateAgentToolPolicy(def, registryNames)` 在 `validateAgentDefinition` 或 upsert 前调用：
+- `validateAgentToolPolicy(def, registryNames)` 在 `validateAgentDefinition` / upsert 前调用；失败抛 **`AgentConfigError`**（`errors/agent-config-errors.ts`，可扩 code 如 `INVALID_TOOL_POLICY`）：
   - 互斥校验
   - allow/deny 中每个 name 必须 ∈ `registryNames`（由 host 注入 `registerVfsTools` 后的 list）
 - `DefaultAgentRunner` **不修改**；`agent/commands.ts` / `agent-run.service.ts` 改为：
@@ -198,28 +201,38 @@ createAgentRunner({ …, registry });
 
 ## 最终项目结构
 
+遵循 `packages/core/ARCHITECTURE.md`（[core-package-structure](../core-package-structure/spec.md)）：
+
+- **错误**：`packages/core/src/errors/`（禁止 `domain/**/errors/`）
+- **契约**：`domain/<ctx>/ports/`（与 `VfsService` 在 `domain/vfs/ports/vfs-service.port.ts` 一致）
+- **编排**：`service/<ctx>/impl/` + `create-*.ts`；`service/vfs/vfs.port.ts` 可 re-export 域端口
+
 ```
 packages/core/src/
+  errors/
+    vfs-zip-errors.ts            # VfsZipError + VfsZipErrorCode
+
   domain/vfs/
+    ports/
+      vfs-zip-io.port.ts         # VfsZipIoService 契约 + import options DTO
     logic/
-      vfs-zip-path.ts          # ZIP entry ↔ logical path 转换
-      vfs-zip-validate.ts      # UTF-8 / 大小 / 重复 / 域规则
-      vfs-zip-build.ts         # 内存 Map → ZIP bytes
-      vfs-zip-parse.ts         # ZIP bytes → 内存 Map
-    errors/
-      vfs-zip-errors.ts        # VfsZipError + codes
+      vfs-zip-path.ts            # ZIP entry ↔ logical path
+      vfs-zip-validate.ts        # UTF-8 / 大小 / 重复 / 域规则（纯函数）
+      vfs-zip-build.ts           # Map → ZIP bytes（fflate）
+      vfs-zip-parse.ts           # ZIP bytes → Map
+
   service/vfs/
-    vfs-zip-io.port.ts         # VfsZipIoService 端口
+    vfs.port.ts                  # 可选：re-export VfsZipIoService（与 VfsService 同模式）
     create-vfs-zip-io-service.ts
     impl/
-      vfs-zip-io.service.ts    # export/import 编排 + transaction
+      vfs-zip-io.service.ts      # DefaultVfsZipIoService：export/import + transaction
 
   domain/agent/
     logic/
-      validate-agent-tool-policy.ts
+      validate-agent-tool-policy.ts   # 纯校验；失败由调用方抛 AgentConfigError
       resolve-agent-tool-registry.ts
     model/
-      agent-definition.ts      # + tools?
+      agent-definition.ts        # + tools?: AgentToolPolicy
       agent-definition.schema.ts
 
 apps/cli/src/
@@ -266,23 +279,27 @@ apps/mobile/__tests__/
 
 | 文件 | 职责 |
 |------|------|
-| `vfs-zip-errors.ts` | `VfsZipErrorCode`: `INVALID_ZIP`, `INVALID_PATH`, `INVALID_UTF8`, `DUPLICATE_PATH`, `PAYLOAD_TOO_LARGE`, `NOT_CONFIRMED`, `EXTERNAL_NOT_SUPPORTED`, `IMPORT_FAILED` |
-| `vfs-zip-path.ts` | `zipEntryNameFromLogical` / `logicalFromZipEntryName` |
-| `vfs-zip-validate.ts` | 纯函数校验 + 聚合错误信息 |
-| `vfs-zip-build.ts` / `vfs-zip-parse.ts` | fflate 封装 |
-| `vfs-zip-io.service.ts` | `export(scope) → Uint8Array`；`import(scope, bytes, { confirmed })` |
-| `validate-agent-tool-policy.ts` | 互斥、空 allow、未知工具名 |
-| `resolve-agent-tool-registry.ts` | 过滤 registry |
+| `errors/vfs-zip-errors.ts` | `VfsZipError` / `VfsZipErrorCode`：`INVALID_ZIP`, `INVALID_PATH`, `INVALID_UTF8`, `DUPLICATE_PATH`, `PAYLOAD_TOO_LARGE`, `NOT_CONFIRMED`, `EXTERNAL_NOT_SUPPORTED`, `IMPORT_FAILED` |
+| `domain/vfs/logic/vfs-zip-path.ts` | `zipEntryNameFromLogical` / `logicalFromZipEntryName` |
+| `domain/vfs/logic/vfs-zip-validate.ts` | 纯函数校验 + 聚合错误信息 |
+| `domain/vfs/logic/vfs-zip-build.ts` / `vfs-zip-parse.ts` | fflate 封装 |
+| `domain/vfs/ports/vfs-zip-io.port.ts` | `VfsZipIoService`：`export` / `import` 签名 |
+| `service/vfs/impl/vfs-zip-io.service.ts` | `DefaultVfsZipIoService` 编排 + transaction |
+| `service/vfs/create-vfs-zip-io-service.ts` | factory |
+| `domain/agent/logic/validate-agent-tool-policy.ts` | 互斥、空 allow、未知工具名（返回错误或供 `AgentConfigError` 包装） |
+| `domain/agent/logic/resolve-agent-tool-registry.ts` | 过滤 registry |
 
 ### Core — 修改
 
 | 文件 | 改动 |
 |------|------|
-| `agent-definition.ts` | `tools?: AgentToolPolicy` |
-| `agent-definition.schema.ts` | Zod `tools: { allow?, deny? }.strict().optional()`；encode/decode |
-| `validate-agent-definition.ts` | 可选 `registeredToolNames?: readonly string[]` → 调用 tool policy 校验 |
-| `sqlite-vfs-entry.repository.ts` | `scanContents` 可选返回 `storage_kind`（或新增 `scanEntries`）供导出过滤 external |
-| `index.ts` | 导出 `createVfsZipIoService`、`VfsZipError`、`resolveAgentToolRegistry`、`validateAgentToolPolicy` |
+| `domain/agent/model/agent-definition.ts` | `tools?: AgentToolPolicy` |
+| `domain/agent/model/agent-definition.schema.ts` | Zod `tools: { allow?, deny? }.strict().optional()`；encode/decode |
+| `domain/agent/logic/validate-agent-definition.ts` | 可选 `registeredToolNames` → 调用 tool policy；失败 **`AgentConfigError`** |
+| `errors/agent-config-errors.ts` | 如需新增 `INVALID_TOOL_POLICY` 等 code |
+| `domain/vfs/repositories/impl/sqlite-vfs-entry.repository.ts` | `scanContents` 返回 `storage_kind`（仅 file 行，与现网 directory 迭代一致） |
+| `service/vfs/vfs.port.ts` | 可选 re-export `VfsZipIoService` |
+| `index.ts` | 导出 `createVfsZipIoService`、`VfsZipIoService`、`VfsZipError`、`resolveAgentToolRegistry` 等 |
 
 ### CLI — 修改
 
@@ -312,9 +329,9 @@ apps/mobile/__tests__/
 
 1. 添加 `fflate` 依赖；实现 `vfs-zip-path` / `parse` / `build` / `validate` 纯函数及单元测试（不碰 DB）。
 2. 扩展 repository scan 以识别 `storage_kind`（最小改动：`scanContents` SELECT 增加列，返回类型向后兼容扩展 optional 字段）。
-3. 实现 `DefaultVfsZipIoService`：
-   - `export`：scan → logical map → zip bytes
-   - `import`：parse/validate → `confirmed` 检查 → transaction 替换
+3. 实现 `DefaultVfsZipIoService`（`service/vfs/impl/`）：
+   - `export`：`scanContents`（仅 file）→ logical map → zip bytes
+   - `import`：parse/validate → `confirmed` → transaction：`deleteVfsPrefix` + 逐文件 `ensureParentDirectories` + `insert`
 4. `packages/core/test/vfs/vfs-zip-io.test.ts`：
    - 三域 export 后 unzip 路径与内容一致
    - import 全量替换（旧文件删除）
