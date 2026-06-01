@@ -7,7 +7,7 @@ describe("worktree getDirRule", () => {
   it("returns undefined when no rule exists and persisted fields when set", async () => {
     const ctx = await openNovelMasterTestConnection();
     const wt = createWorktreeService(ctx.conn, { kind: "global" });
-    const path = "/template/my-dir";
+    const path = "/my-dir";
 
     assert.equal(await wt.getDirRule(path), undefined);
 

@@ -122,7 +122,7 @@ describe("VFS directory nodes", () => {
     const wt = createWorktreeService(conn, { kind: "global" });
     const rows = await wt.buildListRows();
     assert.ok(
-      rows.some((r) => r.kind === "dir" && r.path === "/template/empty"),
+      rows.some((r) => r.kind === "dir" && r.path === "/empty"),
     );
     await conn.close();
   });

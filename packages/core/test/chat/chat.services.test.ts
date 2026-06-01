@@ -27,8 +27,8 @@ describe("Chat services", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/template/a.md", "A");
-    await pvfs.write("/template/sub/b.md", "B");
+    await pvfs.write("/a.md", "A");
+    await pvfs.write("/sub/b.md", "B");
 
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
@@ -44,12 +44,12 @@ describe("Chat services", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/template/a.md", "A");
+    await pvfs.write("/a.md", "A");
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    await pvfs.write("/template/a.md", "CHANGED", { versionCheck: false });
-    await pvfs.write("/template/new.md", "NEW");
+    await pvfs.write("/a.md", "CHANGED", { versionCheck: false });
+    await pvfs.write("/new.md", "NEW");
 
     assert.equal((await svfs.read("/a.md")).content, "A");
     const paths = (await svfs.list("/", { recursive: true }))
@@ -264,12 +264,12 @@ describe("Chat services", () => {
   it("project copy copies template only", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
-    await ctx.projectVfs(project.id).write("/template/foo.md", "FOO");
+    await ctx.projectVfs(project.id).write("/foo.md", "FOO");
     await ctx.sessions.create(project.id);
 
     const copy = await ctx.projects.copy(project.id);
     assert.equal(
-      (await ctx.projectVfs(copy.id).read("/template/foo.md")).content,
+      (await ctx.projectVfs(copy.id).read("/foo.md")).content,
       "FOO",
     );
     assert.equal((await ctx.sessions.listByProject(copy.id)).length, 0);

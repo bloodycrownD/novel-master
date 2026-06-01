@@ -7,23 +7,23 @@ describe("worktree list order", () => {
   it("emits child directories before sibling files at each level", async () => {
     const ctx = await openNovelMasterTestConnection();
     const gvfs = ctx.globalVfs();
-    await gvfs.write("/template/parent/a.md", "A");
-    await gvfs.write("/template/parent/sub/b.md", "B");
+    await gvfs.write("/parent/a.md", "A");
+    await gvfs.write("/parent/sub/b.md", "B");
 
     const wt = createWorktreeService(ctx.conn, { kind: "global" });
     await wt.setFileRule({
-      logicalPath: "/template/parent/a.md",
+      logicalPath: "/parent/a.md",
       inclusionMode: "show",
     });
     await wt.setFileRule({
-      logicalPath: "/template/parent/sub/b.md",
+      logicalPath: "/parent/sub/b.md",
       inclusionMode: "show",
     });
     const rows = await wt.buildListRows();
 
-    const parentDir = "/template/parent";
-    const subDir = "/template/parent/sub";
-    const aFile = "/template/parent/a.md";
+    const parentDir = "/parent";
+    const subDir = "/parent/sub";
+    const aFile = "/parent/a.md";
 
     const parentIdx = rows.findIndex((r) => r.path === parentDir);
     const subIdx = rows.findIndex((r) => r.path === subDir);
@@ -37,8 +37,8 @@ describe("worktree list order", () => {
     assert.ok(subIdx < aIdx, "sub dir before sibling a.md");
 
     const display = await wt.renderDisplay();
-    const subPos = display.indexOf('path="/template/parent/sub/b.md"');
-    const aPos = display.indexOf('path="/template/parent/a.md"');
+    const subPos = display.indexOf('path="/parent/sub/b.md"');
+    const aPos = display.indexOf('path="/parent/a.md"');
     assert.ok(subPos >= 0, "sub file in display");
     assert.ok(aPos >= 0, "a.md in display");
     assert.ok(subPos < aPos, "display DFS: sub tree before sibling file");

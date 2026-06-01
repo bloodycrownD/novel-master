@@ -7,6 +7,7 @@
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import {
   assertLogicalPathAllowed,
+  resolveLogicalPath,
   toLogicalPath,
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -33,8 +34,9 @@ export class ScopedVfsService implements VfsService {
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
   ): Promise<VfsListEntry[]> {
-    assertLogicalPathAllowed(this.scope, dir);
-    const physicalDir = toPhysicalPath(this.scope, dir);
+    const logicalDir = resolveLogicalPath(dir);
+    assertLogicalPathAllowed(this.scope, logicalDir);
+    const physicalDir = toPhysicalPath(this.scope, logicalDir);
     const entries = await this.inner.list(physicalDir, options);
     return entries.map((e) => ({
       path: toLogicalPath(this.scope, e.path),
@@ -43,14 +45,16 @@ export class ScopedVfsService implements VfsService {
   }
 
   async mkdir(path: string): Promise<void> {
-    assertLogicalPathAllowed(this.scope, path);
-    const physical = toPhysicalPath(this.scope, path);
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
     return this.inner.mkdir(physical);
   }
 
   async read(path: string): Promise<VfsReadResult> {
-    assertLogicalPathAllowed(this.scope, path);
-    const physical = toPhysicalPath(this.scope, path);
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
     const result = await this.inner.read(physical);
     return { ...result, path: toLogicalPath(this.scope, result.path) };
   }
@@ -60,8 +64,9 @@ export class ScopedVfsService implements VfsService {
     content: string,
     options?: WriteOptions,
   ): Promise<{ version: number }> {
-    assertLogicalPathAllowed(this.scope, path);
-    const physical = toPhysicalPath(this.scope, path);
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
     return this.inner.write(physical, content, options);
   }
 
@@ -71,8 +76,9 @@ export class ScopedVfsService implements VfsService {
     newString: string,
     options?: { replaceAll?: boolean },
   ): Promise<{ version: number; replacements: number }> {
-    assertLogicalPathAllowed(this.scope, path);
-    const physical = toPhysicalPath(this.scope, path);
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
     return this.inner.replace(physical, oldString, newString, options);
   }
 
@@ -81,11 +87,12 @@ export class ScopedVfsService implements VfsService {
     options?: { cwd?: string },
   ): Promise<string[]> {
     const cwd = options?.cwd;
+    let physicalCwd: string | undefined;
     if (cwd != null) {
-      assertLogicalPathAllowed(this.scope, cwd);
+      const logicalCwd = resolveLogicalPath(cwd);
+      assertLogicalPathAllowed(this.scope, logicalCwd);
+      physicalCwd = toPhysicalPath(this.scope, logicalCwd);
     }
-    const physicalCwd =
-      cwd != null ? toPhysicalPath(this.scope, cwd) : undefined;
     const paths = await this.inner.glob(pattern, { cwd: physicalCwd });
     return paths
       .map((p) => {
@@ -103,11 +110,12 @@ export class ScopedVfsService implements VfsService {
     options?: { pathPrefix?: string },
   ): Promise<VfsGrepMatch[]> {
     const prefix = options?.pathPrefix;
+    let physicalPrefix: string | undefined;
     if (prefix != null) {
-      assertLogicalPathAllowed(this.scope, prefix);
+      const logicalPrefix = resolveLogicalPath(prefix);
+      assertLogicalPathAllowed(this.scope, logicalPrefix);
+      physicalPrefix = toPhysicalPath(this.scope, logicalPrefix);
     }
-    const physicalPrefix =
-      prefix != null ? toPhysicalPath(this.scope, prefix) : undefined;
     const matches = await this.inner.grep(pattern, {
       pathPrefix: physicalPrefix,
     });
@@ -126,8 +134,9 @@ export class ScopedVfsService implements VfsService {
     path: string,
     options?: { recursive?: boolean },
   ): Promise<void> {
-    assertLogicalPathAllowed(this.scope, path);
-    const physical = toPhysicalPath(this.scope, path);
+    const logical = resolveLogicalPath(path);
+    assertLogicalPathAllowed(this.scope, logical);
+    const physical = toPhysicalPath(this.scope, logical);
     return this.inner.delete(physical, options);
   }
 }

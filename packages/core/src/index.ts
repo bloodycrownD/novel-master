@@ -91,6 +91,14 @@ export type {
   VfsGrepMatch,
 } from "./domain/vfs/ports/vfs-service.port.js";
 export type { VfsScope } from "./domain/vfs/logic/vfs-path-mapper.js";
+export {
+  resolveLogicalPath,
+  assertLogicalPathAllowed,
+  toPhysicalPath,
+  toLogicalPath,
+  scopePhysicalPrefix,
+  projectVfsPrefix,
+} from "./domain/vfs/logic/vfs-path-mapper.js";
 
 /**
  * Tool system: schema-validated registry + runner, plus builtin `vfs.*` tools.

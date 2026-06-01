@@ -22,7 +22,7 @@ export function parentDir(path: string): string {
 /**
  * Scope storage roots are virtual parents (no directory row required).
  *
- * @remarks Matches global `/template`, project template, and session vfs roots.
+ * @remarks Physical roots only: global `/template`, project `…/template`, session mount.
  */
 export function isStorageRootParent(parentPath: string): boolean {
   const normalized = normalizePath(parentPath);

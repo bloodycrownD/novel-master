@@ -21,10 +21,10 @@ export function worktreeScopeKey(scope: WorktreeScope): string {
 }
 
 /**
- * Root logical path for worktree rules in this scope.
+ * Root logical path for worktree rules in this scope (unified `/` for all domains).
  */
-export function worktreeRootLogicalPath(scope: WorktreeScope): string {
-  return scope.kind === "session" ? "/" : "/template";
+export function worktreeRootLogicalPath(_scope: WorktreeScope): string {
+  return "/";
 }
 
 /**

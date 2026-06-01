@@ -42,11 +42,12 @@ describe("VfsZipIoService", () => {
 
   it("Z2: global export has no projects/ prefix", async () => {
     const ctx = await openNovelMasterTestConnection();
-    await ctx.globalVfs().write("/template/x.md", "X");
+    await ctx.globalVfs().write("/x.md", "X");
     const zipSvc = createVfsZipIoService(ctx.conn);
     const bytes = await zipSvc.export({ kind: "global" });
     const names = Object.keys(unzipSync(bytes));
-    assert.ok(names.includes("template/x.md"));
+    assert.ok(names.includes("x.md"));
+    assert.ok(!names.some((n) => n.startsWith("template/")));
     assert.ok(!names.some((n) => n.startsWith("projects/")));
     await ctx.conn.close();
   });
@@ -315,20 +316,47 @@ describe("VfsZipIoService", () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P2");
     const pvfs = ctx.projectVfs(project.id);
-    await pvfs.write("/template/t.md", "T");
+    await pvfs.write("/t.md", "T");
 
     const zipSvc = createVfsZipIoService(ctx.conn);
     const bytes = await zipSvc.export({ kind: "project", projectId: project.id });
     const names = Object.keys(unzipSync(bytes));
-    assert.ok(names.includes("template/t.md"));
+    assert.ok(names.includes("t.md"));
 
     await zipSvc.import(
       { kind: "project", projectId: project.id },
-      buildVfsZip(new Map([["template/t.md", "T2"]])),
+      buildVfsZip(new Map([["t.md", "T2"]])),
       { confirmed: true },
     );
-    const read = await pvfs.read("/template/t.md");
+    const read = await pvfs.read("/t.md");
     assert.equal(read.content, "T2");
+    await ctx.conn.close();
+  });
+
+  it("session ZIP imports into project template scope", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P-zip-cross");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const content = "你好";
+    await svfs.write("/ddd/love_message.txt", content);
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    const zipBytes = await zipSvc.export({
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+
+    await zipSvc.import(
+      { kind: "project", projectId: project.id },
+      zipBytes,
+      { confirmed: true },
+    );
+
+    const pvfs = ctx.projectVfs(project.id);
+    const read = await pvfs.read("/ddd/love_message.txt");
+    assert.equal(read.content, content);
     await ctx.conn.close();
   });
 });

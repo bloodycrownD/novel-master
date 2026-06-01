@@ -25,6 +25,18 @@ export interface VfsZipValidatedPayload {
 
 const WINDOWS_DRIVE_PATH = /^[a-zA-Z]:[\\/]/;
 
+/** macOS / archiver noise — skipped on import, not mapped to logical paths. */
+function isZipJunkEntry(entryName: string): boolean {
+  const lower = entryName.toLowerCase();
+  if (lower === "__macosx" || lower.startsWith("__macosx/")) {
+    return true;
+  }
+  if (lower === ".ds_store" || lower.endsWith("/.ds_store")) {
+    return true;
+  }
+  return false;
+}
+
 function assertZipEntryNameAllowed(entryName: string): void {
   if (entryName.length === 0) {
     return;
@@ -124,6 +136,9 @@ export function validateVfsZipEntries(
   let totalBytes = 0;
 
   for (const [entryName, bytes] of entries) {
+    if (isZipJunkEntry(entryName)) {
+      continue;
+    }
     if (entryName.endsWith("/")) {
       const dirKey = entryName.replace(/\/+$/, "");
       assertZipEntryNameAllowed(dirKey);

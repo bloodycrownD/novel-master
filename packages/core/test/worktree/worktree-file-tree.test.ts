@@ -37,10 +37,10 @@ describe("worktree file tree", () => {
     );
   });
 
-  it("uses template root label for project scope", () => {
+  it("uses workspace root label for project scope", () => {
     assert.equal(
       worktreeFileTreeRootLabel({ kind: "project", projectId: "p1" }),
-      "template",
+      "workspace",
     );
   });
 

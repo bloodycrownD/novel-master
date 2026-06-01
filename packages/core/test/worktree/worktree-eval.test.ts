@@ -14,7 +14,7 @@ describe("worktree eval", () => {
         dirRule: null,
         indexInSortedAutoFiles: 0,
         autoFileCount: 1,
-        logicalPath: "/template/a.md",
+        logicalPath: "/a.md",
       }),
       "hidden",
     );
@@ -25,7 +25,7 @@ describe("worktree eval", () => {
         dirRule: null,
         indexInSortedAutoFiles: 0,
         autoFileCount: 1,
-        logicalPath: "/template/a.md",
+        logicalPath: "/a.md",
       }),
       "full",
     );
@@ -39,7 +39,7 @@ describe("worktree eval", () => {
         dirRule: null,
         indexInSortedAutoFiles: 0,
         autoFileCount: 1,
-        logicalPath: "/template/a.md",
+        logicalPath: "/a.md",
       }),
       "hidden",
     );
@@ -58,7 +58,7 @@ describe("worktree eval", () => {
         parentRuleOn: true,
         dirRule: {
           scopeKey: "global",
-          logicalPath: "/template",
+          logicalPath: "/",
           ruleEnabled: true,
           sortField: "name",
           sortOrder: "asc",
@@ -68,7 +68,7 @@ describe("worktree eval", () => {
         },
         indexInSortedAutoFiles: 1,
         autoFileCount: 2,
-        logicalPath: "/template/readme.txt",
+        logicalPath: "/readme.txt",
       }),
       "hidden",
     );
@@ -81,7 +81,7 @@ describe("worktree eval", () => {
         parentRuleOn: true,
         dirRule: {
           scopeKey: "global",
-          logicalPath: "/template",
+          logicalPath: "/",
           ruleEnabled: true,
           sortField: "name",
           sortOrder: "asc",
@@ -91,7 +91,7 @@ describe("worktree eval", () => {
         },
         indexInSortedAutoFiles: 1,
         autoFileCount: 2,
-        logicalPath: "/template/b.txt",
+        logicalPath: "/b.txt",
       }),
       "full",
     );
@@ -104,7 +104,7 @@ describe("worktree eval", () => {
         parentRuleOn: true,
         dirRule: {
           scopeKey: "global",
-          logicalPath: "/template",
+          logicalPath: "/",
           ruleEnabled: true,
           sortField: "name",
           sortOrder: "asc",
@@ -114,7 +114,7 @@ describe("worktree eval", () => {
         },
         indexInSortedAutoFiles: 1,
         autoFileCount: 2,
-        logicalPath: "/template/b.md",
+        logicalPath: "/b.md",
       }),
       "filename",
     );

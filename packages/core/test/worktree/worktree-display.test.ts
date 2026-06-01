@@ -10,12 +10,12 @@ import {
 describe("worktree display", () => {
   it("escapes XML in path attribute", () => {
     const block = renderFileBlock({
-      logicalPath: '/template/a&b"c.md',
+      logicalPath: '/a&b"c.md',
       mtimeMs: 1_700_000_000_000,
       display: "filename",
       content: "",
     });
-    assert.match(block, /path="\/template\/a&amp;b&quot;c\.md"/);
+    assert.match(block, /path="\/a&amp;b&quot;c\.md"/);
     assert.match(block, /createdAt="[^"]+"/);
     assert.match(block, /updatedAt="[^"]+"/);
   });
