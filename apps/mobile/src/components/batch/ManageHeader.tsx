@@ -12,7 +12,10 @@ type Props = {
   selectedCount: number;
   onEnterBatch: () => void;
   onCancelBatch: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
+  primaryActionLabel?: string;
+  onPrimaryAction?: () => void;
+  primaryActionTone?: 'danger' | 'primary';
   normalActions?: ReactNode;
   hint?: string;
 };
@@ -24,10 +27,16 @@ export function ManageHeader({
   onEnterBatch,
   onCancelBatch,
   onDelete,
+  primaryActionLabel = '删除',
+  onPrimaryAction,
+  primaryActionTone = 'danger',
   normalActions,
   hint,
 }: Props) {
   const {tokens} = useTheme();
+  const runPrimary = onPrimaryAction ?? onDelete;
+  const primaryEnabledColor =
+    primaryActionTone === 'danger' ? tokens.danger : tokens.primary;
 
   return (
     <View style={[styles.wrap, {borderBottomColor: tokens.border}]}>
@@ -39,13 +48,15 @@ export function ManageHeader({
           <Text style={{color: tokens.textSecondary}}>
             已选 {selectedCount} 项
           </Text>
-          <Pressable onPress={onDelete} disabled={selectedCount === 0}>
+          <Pressable onPress={runPrimary} disabled={selectedCount === 0}>
             <Text
               style={{
                 color:
-                  selectedCount > 0 ? tokens.danger : tokens.textTertiary,
+                  selectedCount > 0
+                    ? primaryEnabledColor
+                    : tokens.textTertiary,
               }}>
-              删除
+              {primaryActionLabel}
             </Text>
           </Pressable>
         </View>

@@ -15,6 +15,8 @@ type Props = {
   onRealPrompt?: () => void;
   onSessionLog?: () => void;
   onBatchDeleteMessages?: () => void;
+  onBatchHideMessages?: () => void;
+  onBatchUnhideMessages?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -25,6 +27,8 @@ export function SessionActionsDrawer({
   onRealPrompt,
   onSessionLog,
   onBatchDeleteMessages,
+  onBatchHideMessages,
+  onBatchUnhideMessages,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
@@ -65,6 +69,8 @@ export function SessionActionsDrawer({
     {label: '真实提示词', action: onRealPrompt},
     {label: '会话日志', action: onSessionLog},
     {label: '批量删除消息', action: onBatchDeleteMessages},
+    {label: '批量隐藏消息', action: onBatchHideMessages},
+    {label: '批量取消隐藏', action: onBatchUnhideMessages},
   ];
 
   return (
