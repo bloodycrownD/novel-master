@@ -11,6 +11,7 @@ import {
   resolveApplicationModelId,
   textBlocks,
   ToolRegistry,
+  validateAgentDefinition,
   type AgentDefinition,
   type AgentRunResult,
   type LlmStreamEvent,
@@ -107,10 +108,14 @@ export async function runAgentTurn(
 
   await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
 
+  const toolProbe = new ToolRegistry();
+  registerVfsTools(toolProbe);
+  await validateAgentDefinition(definition, {
+    registeredToolNames: toolProbe.list(),
+  });
+
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  const baseRegistry = new ToolRegistry();
-  registerVfsTools(baseRegistry);
-  const registry = resolveAgentToolRegistry(baseRegistry, definition);
+  const registry = resolveAgentToolRegistry(toolProbe, definition);
 
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();

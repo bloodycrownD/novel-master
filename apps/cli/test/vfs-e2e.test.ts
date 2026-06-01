@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
+import { vfsListPaths } from "./helpers.js";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
@@ -52,9 +53,19 @@ describe("vfs CLI e2e", () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-vfs-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runCli(["vfs", "--db", dbPath, "write", "/template/a"], { input: "a" });
-      runCli(["vfs", "--db", dbPath, "write", "/template/a/b"], { input: "b" });
-      runCli(["vfs", "--db", dbPath, "write", "/template/a/b/c"], { input: "c" });
+      assert.equal(
+        runCli(["vfs", "--db", dbPath, "mkdir", "/template/a"]).status,
+        0,
+      );
+      assert.equal(
+        runCli(["vfs", "--db", dbPath, "mkdir", "/template/a/b"]).status,
+        0,
+      );
+      const writeLeaf = runCli(
+        ["vfs", "--db", dbPath, "write", "/template/a/b/c"],
+        { input: "c" },
+      );
+      assert.equal(writeLeaf.status, 0, writeLeaf.stderr);
 
       const list = runCli([
         "vfs",
@@ -67,8 +78,10 @@ describe("vfs CLI e2e", () => {
         "2",
       ]);
       assert.equal(list.status, 0, list.stderr);
-      const lines = list.stdout.trim().split("\n").filter(Boolean);
-      assert.deepEqual(lines.sort(), ["/template/a/b", "/template/a/b/c"]);
+      assert.deepEqual(vfsListPaths(list.stdout).sort(), [
+        "/template/a/b",
+        "/template/a/b/c",
+      ]);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

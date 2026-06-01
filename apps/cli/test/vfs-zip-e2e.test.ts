@@ -6,20 +6,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { unzipSync } from "fflate";
+import { vfsListFilePaths } from "./helpers.js";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
-
-function vfsListPaths(stdout: string): string[] {
-  return stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map(line => {
-      const tab = line.indexOf("\t");
-      return tab >= 0 ? line.slice(tab + 1) : line;
-    });
-}
 
 function runCli(
   args: string[],
@@ -75,7 +65,7 @@ describe("vfs zip CLI e2e", () => {
 
       const list = runCli(["vfs", "--db", dbPath, "list", "/template", "-r"]);
       assert.equal(list.status, 0, list.stderr);
-      const paths = vfsListPaths(list.stdout);
+      const paths = vfsListFilePaths(list.stdout);
       assert.deepEqual(paths, ["/template/seed.md"]);
 
       const read = runCli(["vfs", "--db", dbPath, "read", "/template/seed.md"]);
@@ -153,6 +143,214 @@ describe("vfs zip CLI e2e", () => {
       const raw = await readFile(zipPath);
       const entries = unzipSync(new Uint8Array(raw));
       assert.equal(new TextDecoder().decode(entries["note.md"]!), "note-body");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("project vfs export-zip and import-zip round trip", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-vfs-zip-"));
+    const dbPath = join(dir, "novel.db");
+    const zipPath = join(dir, "project.zip");
+    try {
+      const project = runCli([
+        "project",
+        "create",
+        "--name",
+        "P",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(project.status, 0, project.stderr);
+      const projectId = project.stdout.trim();
+
+      const seed = runCli(
+        [
+          "project",
+          "vfs",
+          "write",
+          "/template/seed.md",
+          "--project",
+          projectId,
+          "--db",
+          dbPath,
+        ],
+        { input: "project-seed" },
+      );
+      assert.equal(seed.status, 0, seed.stderr);
+
+      const exp = runCli([
+        "project",
+        "vfs",
+        "export-zip",
+        "--out",
+        zipPath,
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(exp.status, 0, exp.stderr);
+
+      const extra = runCli(
+        [
+          "project",
+          "vfs",
+          "write",
+          "/template/stale.md",
+          "--project",
+          projectId,
+          "--db",
+          dbPath,
+        ],
+        { input: "stale" },
+      );
+      assert.equal(extra.status, 0, extra.stderr);
+
+      const imp = runCli([
+        "project",
+        "vfs",
+        "import-zip",
+        "--file",
+        zipPath,
+        "--yes",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(imp.status, 0, imp.stderr);
+
+      const list = runCli([
+        "project",
+        "vfs",
+        "list",
+        "/template",
+        "-r",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(list.status, 0, list.stderr);
+      assert.deepEqual(vfsListFilePaths(list.stdout), ["/template/seed.md"]);
+
+      const read = runCli([
+        "project",
+        "vfs",
+        "read",
+        "/template/seed.md",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(read.status, 0, read.stderr);
+      assert.equal(read.stdout, "project-seed");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("session vfs import-zip --yes matches export list and read", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-vfs-zip-"));
+    const dbPath = join(dir, "novel.db");
+    const zipPath = join(dir, "session-import.zip");
+    try {
+      const project = runCli([
+        "project",
+        "create",
+        "--name",
+        "P",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(project.status, 0, project.stderr);
+      const projectId = project.stdout.trim();
+
+      const session = runCli([
+        "session",
+        "create",
+        "--title",
+        "main",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(session.status, 0, session.stderr);
+
+      const writeOne = runCli(
+        ["session", "vfs", "write", "/one.md", "--db", dbPath],
+        { input: "one" },
+      );
+      assert.equal(writeOne.status, 0, writeOne.stderr);
+      const writeTwo = runCli(
+        ["session", "vfs", "write", "/nested/two.md", "--db", dbPath],
+        { input: "two" },
+      );
+      assert.equal(writeTwo.status, 0, writeTwo.stderr);
+
+      const exp = runCli([
+        "session",
+        "vfs",
+        "export-zip",
+        "--out",
+        zipPath,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(exp.status, 0, exp.stderr);
+
+      const sessionB = runCli([
+        "session",
+        "create",
+        "--title",
+        "other",
+        "--project",
+        projectId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(sessionB.status, 0, sessionB.stderr);
+
+      runCli(["session", "use", "--session", sessionB.stdout.trim(), "--db", dbPath]);
+
+      const imp = runCli([
+        "session",
+        "vfs",
+        "import-zip",
+        "--file",
+        zipPath,
+        "--yes",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(imp.status, 0, imp.stderr);
+
+      const list = runCli(["session", "vfs", "list", "/", "-r", "--db", dbPath]);
+      assert.equal(list.status, 0, list.stderr);
+      const paths = vfsListFilePaths(list.stdout).sort();
+      assert.deepEqual(paths, ["/nested/two.md", "/one.md"]);
+
+      const readOne = runCli([
+        "session",
+        "vfs",
+        "read",
+        "/one.md",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(readOne.stdout, "one");
+      const readTwo = runCli([
+        "session",
+        "vfs",
+        "read",
+        "/nested/two.md",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(readTwo.stdout, "two");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

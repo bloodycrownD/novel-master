@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { runNm } from "./helpers.js";
+import { runNm, vfsListFilePaths } from "./helpers.js";
 
 describe("template pull CLI e2e", () => {
   it("T3 session pull restores template vfs and clears snapshots", async () => {
@@ -103,7 +103,7 @@ describe("template pull CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(list.status, 0, list.stderr);
-      const paths = list.stdout.trim().split("\n").filter(Boolean).sort();
+      const paths = vfsListFilePaths(list.stdout).sort();
       assert.deepEqual(paths, ["/base.md"]);
       const read = runNm([
         "session",

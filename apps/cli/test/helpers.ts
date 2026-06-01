@@ -12,6 +12,27 @@ import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sq
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const CLI_ENTRY = join(CLI_ROOT, "src", "index.ts");
 
+/** Parses `nm vfs list` stdout (`DIR|FILE\\t<path>` per line) into logical paths. */
+export function vfsListPaths(stdout: string): string[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map(line => {
+      const tab = line.indexOf("\t");
+      return tab >= 0 ? line.slice(tab + 1) : line;
+    });
+}
+
+/** File rows only (excludes `DIR` directory entries). */
+export function vfsListFilePaths(stdout: string): string[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter(line => line.startsWith("FILE\t"))
+    .map(line => line.slice(line.indexOf("\t") + 1));
+}
+
 export interface SpawnResult {
   readonly status: number | null;
   readonly stdout: string;
