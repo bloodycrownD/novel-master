@@ -15,8 +15,6 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
-import { migrateWorktreeUnifiedRoot } from "./worktree/migrate-worktree-unified-root.js";
-
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
@@ -42,5 +40,4 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     }
     await seedBuiltinProviders(tx);
   });
-  await migrateWorktreeUnifiedRoot(conn);
 }

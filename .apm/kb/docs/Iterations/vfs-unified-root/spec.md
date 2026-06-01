@@ -5,7 +5,7 @@
 - **对外逻辑路径**：global / project / session 三域均使用以 `/` 为唯一根的绝对路径（如 `/readme.md`、`/ddd/love_message.txt`），不再要求 global/project 以 `/template/` 为逻辑前缀。
 - **物理存储**：保留现有 `vfs_entry.path` 布局（global 挂载于 `/template/…`，project 挂载于 `/projects/{id}/template/…`，session 仍为 `/projects/{id}/sessions/{sid}/…`），通过 `vfs-path-mapper` 隐藏，用户与 Agent 不可见。
 - **ZIP**：条目名为 `foo.md`、`dir/bar.md`（无域前缀、无 `template/` 形状差异）；三域 ZIP **路径形状一致**；导入仍为该域全量替换。
-- **Worktree**：`worktree_*` 表内 `logical_path` 与统一逻辑路径对齐（**需数据迁移**）。
+- **Worktree**：`worktree_*` 表内 `logical_path` 与统一逻辑路径对齐（新数据直接 `/…`，无 bootstrap 迁移）。
 - **Breaking**：不双读旧逻辑路径 `/template/…`；旧路径输入显式报错并提示新规则。
 - **边界**：不合并 `vfs-zip-io-agent-tool-policy` 发布；本迭代完成后 zip-io 文档/测试跟进即可。
 
@@ -114,7 +114,7 @@ packages/core/src/domain/vfs/logic/
 packages/core/src/domain/worktree/logic/
   worktree-scope.ts
   worktree-path-map.ts        # 简化为恒等映射
-packages/core/src/bootstrap/  # 可选：worktree 路径迁移 SQL
+packages/core/src/bootstrap/
 packages/core/test/vfs/
   vfs-path-mapper.test.ts     # 新建
   scoped-vfs.service.test.ts  # 更新
@@ -143,7 +143,7 @@ apps/mobile/src/
 | 4 | `worktree-scope.ts` | `worktreeRootLogicalPath` 恒为 `/` |
 | 5 | `worktree-path-map.ts` | `mapProjectWorktreePathToSession` / `mapSessionWorktreePathToProject` → `normalizePath`（恒等） |
 | 6 | `vfs-zip-validate.ts` | 跳过 `__MACOSX/`、`.DS_Store` 等；可选拒绝 ZIP 顶层 `template/` 单段前缀（旧导出兼容策略见风险） |
-| 7 | Worktree DB | 迁移 `logical_path`：`/template`→`/`，`/template/x`→`/x`（global + project scope） |
+| 7 | Worktree | `worktree-scope` / `worktree-path-map` 统一根 `/`（无 DB 迁移） |
 | 8 | `packages/core/src/index.ts` | 导出 `resolveLogicalPath`（若 CLI 需要） |
 | 9 | Core / CLI / Mobile 测试与帮助文案 | `/template/…` → `/…` |
 | 10 | Mobile UI | `rootPath="/"`；删除仅用于 `/template` 的导航假设 |
@@ -165,38 +165,10 @@ apps/mobile/src/
 | 数据 | 策略 |
 |------|------|
 | `vfs_entry.path` | **不迁移**；继续 `/template/…` 与 `…/projects/{id}/template/…` |
-| `worktree_dir_rule.logical_path` | **必须迁移**（global、project scope） |
-| `worktree_file_rule.logical_path` | **同上** |
-| Session scope worktree | 已是 `/…`，一般无需改 |
+| `worktree_* .logical_path` | **不迁移**；未发布/开发库清库重建；新规则直接写 `/…` |
 | 用户脚本/文档 | 一次性说明；`/template/foo` 将 `INVALID_PATH` |
 
-### Worktree 迁移 SQL（在 `bootstrapNovelMaster` 或专用 `migrate-worktree-unified-root.ts` 单次执行）
-
-```sql
--- 示例：global scope
-UPDATE worktree_dir_rule
-SET logical_path = '/'
-WHERE scope_key = 'global' AND logical_path = '/template';
-
-UPDATE worktree_dir_rule
-SET logical_path = substr(logical_path, length('/template') + 1)
-WHERE scope_key = 'global' AND logical_path LIKE '/template/%';
-
--- project scope：scope_key = 'project:' || id
-UPDATE worktree_dir_rule
-SET logical_path = '/'
-WHERE scope_key LIKE 'project:%' AND logical_path = '/template';
-
-UPDATE worktree_dir_rule
-SET logical_path = substr(logical_path, length('/template') + 1)
-WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
-
--- worktree_file_rule：同上两套（global / project）
-```
-
-**开发环境**：允许「删库 + `bootstrapNovelMaster`」替代迁移（PRD 已确认不保留旧逻辑兼容）。
-
-**生产/有数据环境**：执行上述 SQL + 校验脚本（list worktree 根规则为 `/`）。
+**开发 / 未发布**：无 bootstrap 内 worktree 迁移；脏库 **删库重建**。日后若有已发布库再单独加迁移脚本（不在本迭代）。
 
 ### 旧 ZIP 导入
 
@@ -212,9 +184,8 @@ WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
 1. 实现 `resolveLogicalPath` + 更新 `vfs-path-mapper.ts`（含单元测试 `vfs-path-mapper.test.ts`）。
 2. 更新 `scoped-vfs.service.ts` 使用 `resolveLogicalPath`。
 3. 更新 `parent-dir.ts`、`worktree-scope.ts`、`worktree-path-map.ts`。
-4. 添加 worktree 迁移（bootstrap 或 migration 脚本）；`npm run build -w @novel-master/core`。
-5. 更新 `scoped-vfs.service.test.ts`、`worktree-path-map.test.ts`、`template-pull.test.ts`、`vfs-zip-io.test.ts` 路径断言。
-6. 全量 `npm test -w @novel-master/core`。
+4. 更新 `scoped-vfs.service.test.ts`、`worktree-path-map.test.ts`、`template-pull.test.ts`、`vfs-zip-io.test.ts` 路径断言。
+5. 全量 `npm run build` / `npm test -w @novel-master/core`。
 
 ### M2 — CLI 与 E2E
 
@@ -250,7 +221,7 @@ WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
 | T6 | session ZIP → **project** 域 `import` confirmed | 成功；project `read` `/ddd/love_message.txt`；无 template 前缀错误 |
 | T7 | global 导出 ZIP 解压条目名 | 无 `template/` 前缀（仅 `foo.md` 等） |
 | T8 | `resolveLogicalPath('notes/a.md')` | `/notes/a.md` |
-| T9 | worktree 迁移后 project 根规则 | `getDirRule('/')` 存在且 enabled |
+| T9 | project worktree 根规则 | `setDirRule` 后 `getDirRule('/')` 存在且 enabled（`worktree-get-dir-rule.test.ts`） |
 
 ### CLI E2E
 
@@ -268,7 +239,7 @@ WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
 
 | 风险 | 缓解 | 回滚 |
 |------|------|------|
-| Worktree 迁移漏改 scope | 迁移前后 SQL 计数；测试 T9 | 从备份恢复 DB；或反向 SQL（不推荐） |
+| 旧库残留 `/template` worktree 行 | 开发环境删库重建 | 日后单独迁移脚本（非 bootstrap） |
 | 用户仍输入 `/template/...` | 明确错误文案 + 发布说明 | 回滚 mapper 提交（不推荐，违背 PRD） |
 | 旧 ZIP 含 `template/` 顶层 | 文档说明重新导出；可选校验拒绝 | 关闭可选校验 |
 | `isStorageRootParent` 与 mkdir 回归 | `directory-nodes` / mkdir 单测 | 回滚 `parent-dir.ts` |
@@ -283,8 +254,8 @@ WHERE scope_key LIKE 'project:%' AND logical_path LIKE '/template/%';
 
 | PRD 风险项 | 本 SPEC 决策 |
 |------------|--------------|
-| 物理路径迁移方式 | **不迁** `vfs_entry`；仅 mapper + worktree 逻辑路径迁移 |
-| Worktree / snapshot | Worktree **迁移**；session-fs snapshot 存物理路径，**无** `/template` 逻辑路径依赖 |
+| 物理路径迁移方式 | **不迁** `vfs_entry`；仅 mapper |
+| Worktree / snapshot | 无 worktree 迁移；session-fs snapshot 存物理路径，**无** `/template` 逻辑路径依赖 |
 | zip-io 跟进 | M4 文档/测试对齐，不合并发布 |
 
 ---
