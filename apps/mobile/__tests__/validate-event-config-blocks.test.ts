@@ -46,4 +46,50 @@ describe('validateEventConfigBlocks', () => {
       ]),
     ).toBeNull();
   });
+
+  it('rejects unknown dependency references', () => {
+    const err = validateEventConfigBlocks([
+      draft(COMPACTION, [
+        {
+          type: 'hide-message',
+          params: {startDepth: 6},
+          dependency: ['run-agent'],
+        },
+        {type: 'refresh-macros', params: {}},
+      ]),
+    ]);
+    expect(err).toMatch(/依赖不存在/);
+    expect(err).toMatch(/run-agent/);
+  });
+
+  it('rejects self dependency', () => {
+    const err = validateEventConfigBlocks([
+      draft(COMPACTION, [
+        {
+          type: 'hide-message',
+          params: {startDepth: 6},
+          dependency: ['hide-message'],
+        },
+      ]),
+    ]);
+    expect(err).toMatch(/不能依赖自身/);
+  });
+
+  it('rejects cycle dependencies', () => {
+    const err = validateEventConfigBlocks([
+      draft(COMPACTION, [
+        {
+          type: 'hide-message',
+          params: {startDepth: 6},
+          dependency: ['refresh-macros'],
+        },
+        {
+          type: 'refresh-macros',
+          params: {},
+          dependency: ['hide-message'],
+        },
+      ]),
+    ]);
+    expect(err).toMatch(/循环/);
+  });
 });
