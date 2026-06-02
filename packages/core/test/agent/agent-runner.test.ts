@@ -309,4 +309,51 @@ describe("AgentRunner", () => {
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
     );
   });
+
+  it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("loop"));
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [{ type: "tool_use", id: "a1", name: "vfs.read", input: { path: "/x" } }],
+        raw: {},
+      },
+      {
+        assistantText: "",
+        blocks: [{ type: "tool_use", id: "b1", name: "vfs.list", input: { dir: "/" } }],
+        raw: {},
+      },
+      {
+        assistantText: "",
+        blocks: [{ type: "tool_use", id: "a2", name: "vfs.read", input: { path: "/x" } }],
+        raw: {},
+      },
+      {
+        assistantText: "",
+        blocks: [{ type: "tool_use", id: "b2", name: "vfs.list", input: { dir: "/" } }],
+        raw: {},
+      },
+    ]);
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+    await assert.rejects(
+      () =>
+        runner.run({
+          maxSteps: 6,
+          definition: minimalDefinition(),
+          ...defaultRunScope,
+        }),
+      (e: unknown) =>
+        e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
+    );
+  });
 });

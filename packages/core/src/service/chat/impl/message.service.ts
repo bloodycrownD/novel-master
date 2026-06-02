@@ -46,6 +46,24 @@ export class DefaultMessageService implements MessageService {
     return this.deps.messages.listBySession(sessionId);
   }
 
+  listBySessionTail(
+    sessionId: string,
+    options: { limit: number },
+  ): Promise<ChatMessage[]> {
+    return this.deps.messages.listBySessionTail(sessionId, options.limit);
+  }
+
+  listBySessionPage(
+    sessionId: string,
+    options: { limit: number; beforeSeq?: number },
+  ): Promise<ChatMessage[]> {
+    return this.deps.messages.listBySessionPage(
+      sessionId,
+      options.limit,
+      options.beforeSeq,
+    );
+  }
+
   async get(id: string): Promise<ChatMessage> {
     const message = await this.deps.messages.findById(id);
     if (message == null) {

@@ -11,7 +11,10 @@ import { depthByMessageId } from "@/domain/depth/logic/depth-from-tail.js";
 import { listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
 import { applyRegexChannelToMessages } from "@/domain/regex/logic/apply-regex-rules.js";
 import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-regex-rules.js";
-import { assertNoDoomLoopInBlocks } from "@/domain/agent/logic/doom-loop.js";
+import {
+  assertNoCrossRoundDoomLoop,
+  assertNoDoomLoopInBlocks,
+} from "@/domain/agent/logic/doom-loop.js";
 import { formatToolOutputForLlm } from "@/domain/tool/logic/format-tool-output.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
@@ -85,6 +88,7 @@ export class DefaultAgentRunner implements AgentRunner {
     let assistantAppendCount = 0;
     let runError: string | undefined;
     const signal = options.signal;
+    const toolUseWindow: ToolUseBlock[] = [];
 
     const maxSteps =
       options.maxSteps ??
@@ -223,6 +227,14 @@ export class DefaultAgentRunner implements AgentRunner {
         });
 
         assertNoDoomLoopInBlocks(result.blocks);
+        for (const toolUse of toolUses) {
+          toolUseWindow.push(toolUse);
+          if (toolUseWindow.length > 16) {
+            toolUseWindow.shift();
+          }
+        }
+        // WHY: single-message checks miss cross-round A-B-A-B cycles.
+        assertNoCrossRoundDoomLoop(toolUseWindow);
 
         const toolResults: ToolResultBlock[] = [];
         for (const tu of toolUses) {

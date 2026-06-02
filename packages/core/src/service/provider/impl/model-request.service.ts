@@ -33,6 +33,12 @@ export interface DefaultModelRequestServiceDeps {
     readonly maxDelayMs: number;
     readonly jitterRatio: number;
   };
+  readonly resolveRetryPolicy?: () => Promise<{
+    readonly maxRetries: number;
+    readonly baseDelayMs: number;
+    readonly maxDelayMs: number;
+    readonly jitterRatio: number;
+  } | undefined>;
   readonly resolveAdapter?: (kind: LlmProtocolKind) => LlmProtocolAdapter;
 }
 
@@ -154,7 +160,10 @@ export class DefaultModelRequestService implements ModelRequestService {
 
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
     const adapter = resolveAdapter(provider.protocol);
-    const policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    const policy =
+      (await this.deps.resolveRetryPolicy?.()) ??
+      this.deps.retryPolicy ??
+      DEFAULT_RETRY_POLICY;
     let attempt = 0;
     while (true) {
       attempt += 1;

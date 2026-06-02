@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  AgentError,
+  assertNoCrossRoundDoomLoop,
   assertNoDoomLoopInBlocks,
+  CROSS_ROUND_WINDOW,
   DOOM_LOOP_THRESHOLD,
-} from "@novel-master/core";
+} from "../../src/domain/agent/logic/doom-loop.js";
+import { AgentError } from "../../src/errors/agent-runtime-errors.js";
 
 describe("doom-loop", () => {
   it(`throws DOOM_LOOP after ${DOOM_LOOP_THRESHOLD} identical tool_use blocks`, () => {
@@ -37,6 +39,30 @@ describe("doom-loop", () => {
         { type: "tool_use", id: "1", name: "vfs.read", input: { path: "/a" } },
         { type: "tool_use", id: "2", name: "vfs.read", input: { path: "/b" } },
         { type: "tool_use", id: "3", name: "vfs.read", input: { path: "/c" } },
+      ]),
+    );
+  });
+
+  it(`throws DOOM_LOOP on cross-round A-B-A-B in last ${CROSS_ROUND_WINDOW}`, () => {
+    const calls = [
+      { type: "tool_use" as const, id: "1", name: "vfs.read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "2", name: "vfs.list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "3", name: "vfs.read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "4", name: "vfs.list", input: { dir: "/" } },
+    ];
+    assert.throws(
+      () => assertNoCrossRoundDoomLoop(calls),
+      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+    );
+  });
+
+  it("allows non-alternating cross-round history", () => {
+    assert.doesNotThrow(() =>
+      assertNoCrossRoundDoomLoop([
+        { type: "tool_use", id: "1", name: "vfs.read", input: { path: "/a" } },
+        { type: "tool_use", id: "2", name: "vfs.list", input: { dir: "/" } },
+        { type: "tool_use", id: "3", name: "vfs.write", input: { path: "/a", content: "x" } },
+        { type: "tool_use", id: "4", name: "vfs.list", input: { dir: "/" } },
       ]),
     );
   });

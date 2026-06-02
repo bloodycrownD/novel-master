@@ -9,6 +9,12 @@ import type { ChatMessage } from "../model/message.js";
 /** Persistence for `chat_message` rows. */
 export interface MessageRepository {
   listBySession(sessionId: string): Promise<ChatMessage[]>;
+  listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]>;
+  listBySessionPage(
+    sessionId: string,
+    limit: number,
+    beforeSeq?: number,
+  ): Promise<ChatMessage[]>;
 
   findById(id: string): Promise<ChatMessage | null>;
 

@@ -385,7 +385,12 @@ export type {
   AgentRunResult,
   ModelRoundSummary,
 } from "./domain/agent/model/agent-run-result.js";
-export { DOOM_LOOP_THRESHOLD, assertNoDoomLoopInBlocks } from "./domain/agent/logic/doom-loop.js";
+export {
+  DOOM_LOOP_THRESHOLD,
+  CROSS_ROUND_WINDOW,
+  assertNoDoomLoopInBlocks,
+  assertNoCrossRoundDoomLoop,
+} from "./domain/agent/logic/doom-loop.js";
 export { InMemoryAgentSession } from "./domain/agent/session/impl/in-memory-agent-session.js";
 export { ChatAgentSession } from "./service/agent/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";

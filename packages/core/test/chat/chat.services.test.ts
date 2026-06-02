@@ -139,6 +139,36 @@ describe("Chat services", () => {
     await ctx.conn.close();
   });
 
+  it("message tail/page ordering stays consistent with full list", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    for (let i = 1; i <= 8; i += 1) {
+      await ctx.messages.append(session.id, "user", textBlocks(`m${i}`));
+    }
+    const all = await ctx.messages.listBySession(session.id);
+    const tail = await ctx.messages.listBySessionTail(session.id, { limit: 3 });
+    assert.deepEqual(
+      tail.map(m => firstTextBlock(m.content)),
+      ["m6", "m7", "m8"],
+    );
+    const older = await ctx.messages.listBySessionPage(session.id, {
+      limit: 3,
+      beforeSeq: tail[0]!.seq,
+    });
+    assert.deepEqual(
+      older.map(m => firstTextBlock(m.content)),
+      ["m3", "m4", "m5"],
+    );
+    const oldest = await ctx.messages.listBySessionPage(session.id, {
+      limit: 3,
+      beforeSeq: older[0]!.seq,
+    });
+    const rebuilt = [...oldest, ...older, ...tail].map(m => m.id);
+    assert.deepEqual(rebuilt, all.map(m => m.id));
+    await ctx.conn.close();
+  });
+
   it("message fork copies vfs and messages up to id", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");

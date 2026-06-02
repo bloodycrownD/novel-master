@@ -54,6 +54,49 @@ export class SqliteMessageRepository implements MessageRepository {
     return rows.map(rowToMessage);
   }
 
+  async listBySessionTail(sessionId: string, limit: number): Promise<ChatMessage[]> {
+    const clampedLimit = Math.max(1, Math.floor(limit));
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+       FROM (
+         SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+         FROM chat_message
+         WHERE session_id = #{sessionId}
+         ORDER BY seq DESC
+         LIMIT #{limit}
+       )
+       ORDER BY seq ASC`,
+      { sessionId, limit: clampedLimit },
+    );
+    return rows.map(rowToMessage);
+  }
+
+  async listBySessionPage(
+    sessionId: string,
+    limit: number,
+    beforeSeq?: number,
+  ): Promise<ChatMessage[]> {
+    const clampedLimit = Math.max(1, Math.floor(limit));
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+       FROM (
+         SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+         FROM chat_message
+         WHERE session_id = #{sessionId}
+           AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
+         ORDER BY seq DESC
+         LIMIT #{limit}
+       )
+       ORDER BY seq ASC`,
+      { sessionId, beforeSeq: beforeSeq ?? null, limit: clampedLimit },
+    );
+    return rows.map(rowToMessage);
+  }
+
   async findById(id: string): Promise<ChatMessage | null> {
     const rows = await queryTemplate(
       this.conn,

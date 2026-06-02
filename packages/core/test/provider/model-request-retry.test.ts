@@ -101,4 +101,108 @@ describe("DefaultModelRequestService retry", () => {
     await assert.rejects(() => svc.request("openai/gpt-4o-mini", "hello"));
     assert.equal(calls, 1);
   });
+
+  it("retries on 429 then succeeds", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        if (calls === 1) {
+          throw new ProviderError("HTTP_ERROR", "HTTP 429: rate limited");
+        }
+        return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      samplingProfiles,
+      retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    const out = await svc.request("openai/gpt-4o-mini", "hello");
+    assert.equal(out.assistantText, "ok");
+    assert.equal(calls, 2);
+  });
+
+  it("retries on network failures then succeeds", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        if (calls < 3) {
+          throw new Error("ECONNRESET");
+        }
+        return { assistantText: "ok", blocks: [{ type: "text", text: "ok" }], raw: {} };
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      samplingProfiles,
+      retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    const out = await svc.request("openai/gpt-4o-mini", "hello");
+    assert.equal(out.assistantText, "ok");
+    assert.equal(calls, 3);
+  });
+
+  it("fails explicitly after exceeding maxRetries", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      samplingProfiles,
+      retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    await assert.rejects(
+      () => svc.request("openai/gpt-4o-mini", "hello"),
+      (error: unknown) =>
+        error instanceof ProviderError && error.code === "HTTP_ERROR",
+    );
+    assert.equal(calls, 3);
+  });
+
+  it("does not retry when signal aborts before retry", async () => {
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        throw new ProviderError("HTTP_ERROR", "HTTP 500: upstream");
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      samplingProfiles,
+      retryPolicy: { maxRetries: 3, baseDelayMs: 50, maxDelayMs: 50, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    const controller = new AbortController();
+    controller.abort();
+    await assert.rejects(() =>
+      svc.request("openai/gpt-4o-mini", "hello", { signal: controller.signal }),
+    );
+    assert.equal(calls, 1);
+  });
 });

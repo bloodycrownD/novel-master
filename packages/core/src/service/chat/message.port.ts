@@ -10,6 +10,14 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 /** Message CRUD and fork (branch) operations. */
 export interface MessageService {
   listBySession(sessionId: string): Promise<ChatMessage[]>;
+  listBySessionTail(
+    sessionId: string,
+    options: { limit: number },
+  ): Promise<ChatMessage[]>;
+  listBySessionPage(
+    sessionId: string,
+    options: { limit: number; beforeSeq?: number },
+  ): Promise<ChatMessage[]>;
 
   get(id: string): Promise<ChatMessage>;
 

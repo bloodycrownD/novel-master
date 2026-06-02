@@ -9,6 +9,8 @@ import { agentDoomLoop, AgentError } from "@/errors/agent-runtime-errors.js";
 
 /** Consecutive identical tool_use invocations before abort. */
 export const DOOM_LOOP_THRESHOLD = 3;
+/** Sliding window size for cross-round pattern checks. */
+export const CROSS_ROUND_WINDOW = 4;
 
 function toolUseBlocks(blocks: readonly ContentBlock[]): ToolUseBlock[] {
   return blocks.filter((b): b is ToolUseBlock => b.type === "tool_use");
@@ -41,4 +43,30 @@ export function assertNoDoomLoop(toolUses: readonly ToolUseBlock[]): void {
  */
 export function assertNoDoomLoopInBlocks(blocks: readonly ContentBlock[]): void {
   assertNoDoomLoop(toolUseBlocks(blocks));
+}
+
+function sameToolUse(a: ToolUseBlock, b: ToolUseBlock): boolean {
+  return a.name === b.name && sameInput(a.input, b.input);
+}
+
+/**
+ * Throws on A-B-A-B cross-round alternation in the recent tool-use trajectory.
+ */
+export function assertNoCrossRoundDoomLoop(toolUses: readonly ToolUseBlock[]): void {
+  if (toolUses.length < CROSS_ROUND_WINDOW) {
+    return;
+  }
+  const tail = toolUses.slice(-CROSS_ROUND_WINDOW);
+  const [a1, b1, a2, b2] = tail;
+  if (
+    a1 != null &&
+    b1 != null &&
+    a2 != null &&
+    b2 != null &&
+    !sameToolUse(a1, b1) &&
+    sameToolUse(a1, a2) &&
+    sameToolUse(b1, b2)
+  ) {
+    throw agentDoomLoop(`${a1.name}<->${b1.name}`);
+  }
 }
