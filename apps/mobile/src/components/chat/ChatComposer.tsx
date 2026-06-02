@@ -3,6 +3,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import Svg, {Path, Rect} from 'react-native-svg';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
@@ -184,10 +185,39 @@ export function ChatComposer({
             {backgroundColor: disabled ? tokens.border : tokens.primary},
           ]}
           accessibilityLabel={running ? '终止' : '发送'}>
-          <Text style={styles.sendLabel}>{running ? '终止' : '发送'}</Text>
+          {running ? <TerminateIcon /> : <SendIcon />}
         </Pressable>
       </View>
     </View>
+  );
+}
+
+function SendIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M22 2L11 13"
+        stroke="#fff"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M22 2L15 22L11 13L2 9L22 2Z"
+        stroke="#fff"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function TerminateIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Rect x={6} y={6} width={12} height={12} rx={2} fill="#fff" />
+    </Svg>
   );
 }
 
@@ -218,5 +248,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sendLabel: {color: '#fff', fontWeight: '600'},
 });

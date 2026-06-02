@@ -105,5 +105,33 @@ describe('ChatComposer integration', () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });
   });
+
+  it('empty input + resumable session keeps send enabled', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    expect(sendBtn.props.disabled).toBe(false);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('empty input + non-resumable session disables send', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    expect(sendBtn.props.disabled).toBe(true);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
 });
 
