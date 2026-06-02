@@ -345,6 +345,11 @@ export {
 } from "./domain/provider/model/model-sampling-profile-from-json.js";
 export type { ModelSamplingProfileService } from "./service/provider/model-sampling-profile.port.js";
 export { createModelSamplingProfileService } from "./service/provider/create-model-sampling-profile-service.js";
+export type {
+  ModelRetryPolicy,
+  ModelRetryPolicyService,
+} from "./service/provider/model-retry-policy.port.js";
+export { createModelRetryPolicyService } from "./service/provider/create-model-retry-policy-service.js";
 export { formatLocalDateTime } from "./infra/date-format.js";
 
 /**

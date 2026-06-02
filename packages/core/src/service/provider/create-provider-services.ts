@@ -13,8 +13,7 @@ import { DefaultProviderService } from "./impl/provider.service.js";
 import { DefaultProviderModelService } from "./impl/provider-model.service.js";
 import { DefaultModelRequestService } from "./impl/model-request.service.js";
 import { createModelSamplingProfileService } from "./create-model-sampling-profile-service.js";
-import { createKkvService } from "@/service/kkv/create-kkv-service.js";
-import { KkvError } from "@/errors/kkv-errors.js";
+import { createModelRetryPolicyService } from "./create-model-retry-policy-service.js";
 import type { ProviderService } from "./provider.port.js";
 import type { ProviderModelService } from "./provider-model.port.js";
 import type { ModelRequestService } from "./model-request.port.js";
@@ -51,7 +50,7 @@ export function createProviderServices(
   });
 
   const modelSamplingProfiles = createModelSamplingProfileService(conn);
-  const kkv = createKkvService(conn);
+  const retryPolicies = createModelRetryPolicyService(conn);
 
   const providerModels = new DefaultProviderModelService({
     providers,
@@ -67,36 +66,7 @@ export function createProviderServices(
     savedModels: savedRepo,
     secretStore,
     samplingProfiles: modelSamplingProfiles,
-    resolveRetryPolicy: async () => {
-      try {
-        const raw = await kkv.get("nm-model-retry", "policy");
-        const parsed = JSON.parse(raw) as Partial<{
-          maxRetries: number;
-          baseDelayMs: number;
-          maxDelayMs: number;
-          jitterRatio: number;
-        }>;
-        if (
-          typeof parsed.maxRetries !== "number" ||
-          typeof parsed.baseDelayMs !== "number" ||
-          typeof parsed.maxDelayMs !== "number" ||
-          typeof parsed.jitterRatio !== "number"
-        ) {
-          return undefined;
-        }
-        return {
-          maxRetries: parsed.maxRetries,
-          baseDelayMs: parsed.baseDelayMs,
-          maxDelayMs: parsed.maxDelayMs,
-          jitterRatio: parsed.jitterRatio,
-        };
-      } catch (error) {
-        if (error instanceof KkvError && error.code === "NOT_FOUND") {
-          return undefined;
-        }
-        return undefined;
-      }
-    },
+    retryPolicies,
   });
 
   return {

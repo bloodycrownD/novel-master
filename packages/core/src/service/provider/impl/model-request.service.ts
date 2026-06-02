@@ -18,6 +18,10 @@ import type {
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type {
+  ModelRetryPolicy,
+  ModelRetryPolicyService,
+} from "../model-retry-policy.port.js";
+import type {
   ModelRequestOptions,
   ModelRequestService,
 } from "../model-request.port.js";
@@ -27,18 +31,14 @@ export interface DefaultModelRequestServiceDeps {
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
   readonly samplingProfiles: ModelSamplingProfileService;
-  readonly retryPolicy?: {
-    readonly maxRetries: number;
-    readonly baseDelayMs: number;
-    readonly maxDelayMs: number;
-    readonly jitterRatio: number;
-  };
-  readonly resolveRetryPolicy?: () => Promise<{
-    readonly maxRetries: number;
-    readonly baseDelayMs: number;
-    readonly maxDelayMs: number;
-    readonly jitterRatio: number;
-  } | undefined>;
+  /**
+   * Optional persisted retry policy (KKV-backed via {@link ModelRetryPolicyService}).
+   *
+   * WHY: provider services wire storage concerns; request service only consumes a port.
+   */
+  readonly retryPolicies?: ModelRetryPolicyService;
+  /** Optional explicit retry policy override (tests / callers without storage). */
+  readonly retryPolicy?: ModelRetryPolicy;
   readonly resolveAdapter?: (kind: LlmProtocolKind) => LlmProtocolAdapter;
 }
 
@@ -84,7 +84,7 @@ function isRetryableError(error: unknown): boolean {
 
 function computeBackoffMs(
   attempt: number,
-  policy: DefaultModelRequestServiceDeps["retryPolicy"],
+  policy: ModelRetryPolicy | undefined,
 ): number {
   const p = policy ?? DEFAULT_RETRY_POLICY;
   const base = Math.min(p.baseDelayMs * 2 ** Math.max(0, attempt - 1), p.maxDelayMs);
@@ -161,7 +161,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
     const adapter = resolveAdapter(provider.protocol);
     const policy =
-      (await this.deps.resolveRetryPolicy?.()) ??
+      (await this.deps.retryPolicies?.getPolicy()) ??
       this.deps.retryPolicy ??
       DEFAULT_RETRY_POLICY;
     let attempt = 0;

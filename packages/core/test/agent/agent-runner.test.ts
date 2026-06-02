@@ -133,6 +133,92 @@ function createMockModel(
 }
 
 describe("AgentRunner", () => {
+  it("returns stopReason=cancelled when aborted before run", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "should-not-run",
+        blocks: [{ type: "text", text: "should-not-run" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const controller = new AbortController();
+    controller.abort();
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      signal: controller.signal,
+    });
+
+    assert.equal(result.stopReason, "cancelled");
+    assert.equal(model.callCount(), 0);
+    assert.equal(result.stepsExecuted, 0);
+  });
+
+  it("aborting prevents further modelRequests.request calls (no subsequent rounds)", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const controller = new AbortController();
+    let calls = 0;
+    const model: ModelRequestService & { callCount: () => number } = {
+      callCount: () => calls,
+      request: mock.fn(async () => {
+        calls += 1;
+        controller.abort();
+        return {
+          assistantText: "",
+          blocks: [
+            {
+              type: "tool_use",
+              id: "tu1",
+              name: "vfs.list",
+              input: { dir: "/" },
+            },
+          ],
+          raw: {},
+        };
+      }),
+    };
+
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 6,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      signal: controller.signal,
+    });
+
+    assert.equal(result.stopReason, "cancelled");
+    assert.equal(model.callCount(), 1);
+    assert.equal(result.stepsExecuted, 0);
+  });
+
   it("maxSteps=1: runs tool once, no second model call", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));

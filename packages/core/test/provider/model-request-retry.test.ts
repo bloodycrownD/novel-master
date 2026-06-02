@@ -7,6 +7,7 @@ import type { ProviderRepository } from "../../src/domain/provider/repositories/
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
 import type { ModelSamplingProfileService } from "../../src/service/provider/model-sampling-profile.port.js";
+import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
 
 const providerRepo: ProviderRepository = {
   list: async () => [],
@@ -53,6 +54,12 @@ const samplingProfiles: ModelSamplingProfileService = {
   clearProfile: async () => undefined,
 };
 
+const noRetryPolicies: ModelRetryPolicyService = {
+  getPolicy: async () => null,
+  setPolicy: async () => undefined,
+  clearPolicy: async () => undefined,
+};
+
 describe("DefaultModelRequestService retry", () => {
   it("retries transient HTTP failures then succeeds", async () => {
     let calls = 0;
@@ -72,6 +79,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
@@ -95,6 +103,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
@@ -120,6 +129,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
@@ -146,6 +156,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
@@ -169,6 +180,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
@@ -195,6 +207,7 @@ describe("DefaultModelRequestService retry", () => {
       savedModels,
       secretStore,
       samplingProfiles,
+      retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 50, maxDelayMs: 50, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
