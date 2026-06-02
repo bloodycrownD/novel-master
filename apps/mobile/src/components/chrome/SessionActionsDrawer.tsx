@@ -11,6 +11,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onRename?: () => void;
+  onCompact?: () => void;
   onSwitchModel?: () => void;
   onRealPrompt?: () => void;
   onSessionLog?: () => void;
@@ -23,6 +24,7 @@ export function SessionActionsDrawer({
   visible,
   onClose,
   onRename,
+  onCompact,
   onSwitchModel,
   onRealPrompt,
   onSessionLog,
@@ -68,6 +70,7 @@ export function SessionActionsDrawer({
     {label: '切换模型', action: onSwitchModel},
     {label: '真实提示词', action: onRealPrompt},
     {label: '会话日志', action: onSessionLog},
+    {label: '压缩会话', action: onCompact},
     {label: '批量删除消息', action: onBatchDeleteMessages},
     {label: '批量隐藏消息', action: onBatchHideMessages},
     {label: '批量取消隐藏', action: onBatchUnhideMessages},

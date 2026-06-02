@@ -761,6 +761,10 @@ export function ChatTabScreen() {
               openSessionRenamePrompt(sessionId);
             }
           }}
+          onCompact={() => {
+            setSessionDrawerOpen(false);
+            handleCompactSession();
+          }}
           onSwitchModel={() => {
             setSessionDrawerOpen(false);
             setModelPickerOpen(true);
