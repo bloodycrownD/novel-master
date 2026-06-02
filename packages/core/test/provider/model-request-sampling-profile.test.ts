@@ -7,6 +7,7 @@ import {
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
 import { modelSamplingProfileFromJson } from "@novel-master/core";
+import { createModelRetryPolicyService } from "../../src/service/provider/create-model-retry-policy-service.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function memorySecretStore(): SecretStore {
@@ -91,6 +92,51 @@ describe("ModelRequestService sampling profile merge", () => {
         system: "test",
       });
       assert.equal(capturedBody?.temperature, undefined);
+    } finally {
+      await ctx.conn.close();
+      clearProtocolAdapters();
+    }
+  });
+
+  it("P5: consumes persisted retry policy in wired modelRequests path", async () => {
+    clearProtocolAdapters();
+    let callCount = 0;
+    const fetchFn = mock.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Response(
+          JSON.stringify({ error: { message: "upstream failed" } }),
+          { status: 500, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "ok" } }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+    const ctx = await openNovelMasterTestConnection();
+    try {
+      const secrets = memorySecretStore();
+      const bundle = createProviderServices(ctx.conn, secrets);
+      const retryPolicies = createModelRetryPolicyService(ctx.conn);
+      await retryPolicies.setPolicy({
+        maxRetries: 1,
+        baseDelayMs: 0,
+        maxDelayMs: 0,
+        jitterRatio: 0,
+      });
+      await secrets.set("provider/openai/apiKey", "sk-test");
+      await bundle.providerModels.create("openai", "retry-policy");
+
+      const out = await bundle.modelRequests.request("openai/retry-policy", "hi", {
+        system: "test",
+      });
+      assert.equal(out.assistantText, "ok");
+      assert.equal(callCount, 2);
     } finally {
       await ctx.conn.close();
       clearProtocolAdapters();
