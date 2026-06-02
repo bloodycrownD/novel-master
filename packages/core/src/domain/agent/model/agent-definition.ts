@@ -18,7 +18,11 @@ export interface AgentDefinition {
   readonly prompts: readonly PromptBlock[];
   /** Optional default model pin (applicationModelId); host resolves with flag/state. */
   readonly model?: string;
-  readonly runtime?: { readonly maxSteps?: number };
+  readonly runtime?: {
+    readonly maxSteps?: number;
+    readonly doomLoopThreshold?: number;
+    readonly doomLoopCrossRoundWindow?: number;
+  };
   /** Optional tool allow/deny policy (default: all registered tools). */
   readonly tools?: AgentToolPolicy;
 }

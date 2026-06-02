@@ -66,4 +66,31 @@ describe("doom-loop", () => {
       ]),
     );
   });
+
+  it("uses configured threshold for identical tool_use checks", () => {
+    const input = { path: "/x" };
+    const blocks = [
+      { type: "tool_use" as const, id: "1", name: "vfs.read", input },
+      { type: "tool_use" as const, id: "2", name: "vfs.read", input },
+    ];
+    assert.throws(
+      () => assertNoDoomLoopInBlocks(blocks, { threshold: 2 }),
+      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+    );
+  });
+
+  it("uses configured cross-round window", () => {
+    const calls = [
+      { type: "tool_use" as const, id: "1", name: "vfs.read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "2", name: "vfs.list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "3", name: "vfs.read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "4", name: "vfs.list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "5", name: "vfs.read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "6", name: "vfs.list", input: { dir: "/" } },
+    ];
+    assert.throws(
+      () => assertNoCrossRoundDoomLoop(calls, { crossRoundWindow: 6 }),
+      (e: unknown) => e instanceof AgentError && e.code === "DOOM_LOOP",
+    );
+  });
 });

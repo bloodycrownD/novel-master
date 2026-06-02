@@ -442,4 +442,5 @@ describe("AgentRunner", () => {
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
     );
   });
+
 });

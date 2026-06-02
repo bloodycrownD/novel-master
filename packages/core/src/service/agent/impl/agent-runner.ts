@@ -14,6 +14,8 @@ import { resolveActiveCompiledRules } from "@/domain/regex/logic/resolve-active-
 import {
   assertNoCrossRoundDoomLoop,
   assertNoDoomLoopInBlocks,
+  CROSS_ROUND_WINDOW,
+  DOOM_LOOP_THRESHOLD,
 } from "@/domain/agent/logic/doom-loop.js";
 import { formatToolOutputForLlm } from "@/domain/tool/logic/format-tool-output.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
@@ -94,6 +96,10 @@ export class DefaultAgentRunner implements AgentRunner {
       options.maxSteps ??
       options.definition.runtime?.maxSteps ??
       DEFAULT_MAX_STEPS;
+    const doomLoopThreshold =
+      options.definition.runtime?.doomLoopThreshold ?? DOOM_LOOP_THRESHOLD;
+    const doomLoopCrossRoundWindow =
+      options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry);
 
@@ -226,15 +232,17 @@ export class DefaultAgentRunner implements AgentRunner {
           usage: result.usage,
         });
 
-        assertNoDoomLoopInBlocks(result.blocks);
+        assertNoDoomLoopInBlocks(result.blocks, { threshold: doomLoopThreshold });
         for (const toolUse of toolUses) {
           toolUseWindow.push(toolUse);
-          if (toolUseWindow.length > 16) {
+          if (toolUseWindow.length > doomLoopCrossRoundWindow * 4) {
             toolUseWindow.shift();
           }
         }
         // WHY: single-message checks miss cross-round A-B-A-B cycles.
-        assertNoCrossRoundDoomLoop(toolUseWindow);
+        assertNoCrossRoundDoomLoop(toolUseWindow, {
+          crossRoundWindow: doomLoopCrossRoundWindow,
+        });
 
         const toolResults: ToolResultBlock[] = [];
         for (const tu of toolUses) {

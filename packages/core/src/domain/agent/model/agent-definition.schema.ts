@@ -60,7 +60,14 @@ export const agentDefinitionDocumentSchema = z
     name: z.string().min(1),
     prompts: promptsDocumentSchema,
     model: z.string().min(1).optional(),
-    runtime: z.object({ maxSteps: z.number().int().positive().optional() }).strict().optional(),
+    runtime: z
+      .object({
+        maxSteps: z.number().int().positive().optional(),
+        doomLoopThreshold: z.number().int().positive().optional(),
+        doomLoopCrossRoundWindow: z.number().int().positive().optional(),
+      })
+      .strict()
+      .optional(),
     tools: agentToolPolicyDocumentSchema.optional(),
   })
   .strict();
