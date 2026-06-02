@@ -10,7 +10,11 @@ import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
-import type { LlmChatResult } from "@/infra/llm-protocol/ports/adapter.port.js";
+import type {
+  LlmChatResult,
+  LlmProtocolAdapter,
+  LlmProtocolKind,
+} from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type {
@@ -23,6 +27,87 @@ export interface DefaultModelRequestServiceDeps {
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
   readonly samplingProfiles: ModelSamplingProfileService;
+  readonly retryPolicy?: {
+    readonly maxRetries: number;
+    readonly baseDelayMs: number;
+    readonly maxDelayMs: number;
+    readonly jitterRatio: number;
+  };
+  readonly resolveAdapter?: (kind: LlmProtocolKind) => LlmProtocolAdapter;
+}
+
+const DEFAULT_RETRY_POLICY = {
+  maxRetries: 2,
+  baseDelayMs: 200,
+  maxDelayMs: 2_000,
+  jitterRatio: 0.2,
+} as const;
+
+function isAbortLikeError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === "AbortError") ||
+    (error instanceof Error && error.name === "AbortError")
+  );
+}
+
+function parseHttpStatusFromProviderError(error: ProviderError): number | undefined {
+  const m = /HTTP\s+(\d{3})/.exec(error.message);
+  if (m == null) {
+    return undefined;
+  }
+  return Number(m[1]);
+}
+
+function isRetryableError(error: unknown): boolean {
+  if (isAbortLikeError(error)) {
+    return false;
+  }
+  if (!(error instanceof ProviderError)) {
+    // Unknown transport/runtime failures are treated as transient once.
+    return true;
+  }
+  if (error.code !== "HTTP_ERROR") {
+    return false;
+  }
+  const status = parseHttpStatusFromProviderError(error);
+  if (status == null) {
+    return true;
+  }
+  return status === 429 || status >= 500;
+}
+
+function computeBackoffMs(
+  attempt: number,
+  policy: DefaultModelRequestServiceDeps["retryPolicy"],
+): number {
+  const p = policy ?? DEFAULT_RETRY_POLICY;
+  const base = Math.min(p.baseDelayMs * 2 ** Math.max(0, attempt - 1), p.maxDelayMs);
+  const jitterRange = base * p.jitterRatio;
+  return Math.max(0, Math.round(base + (Math.random() * 2 - 1) * jitterRange));
+}
+
+async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Request aborted", "AbortError"));
+    };
+    if (signal == null) {
+      return;
+    }
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 /** Sends chat requests via protocol adapters. */
@@ -67,19 +152,36 @@ export class DefaultModelRequestService implements ModelRequestService {
       }
     }
 
-    const adapter = getProtocolAdapter(provider.protocol);
-    return adapter.chat({
-      baseUrl: provider.baseUrl,
-      apiKey,
-      vendorModelId,
-      userContent,
-      extraHeaders: provider.headers,
-      history: options?.history,
-      system: options?.system,
-      tools: options?.tools,
-      stream: options?.stream,
-      onStream: options?.onStream,
-      sampling,
-    });
+    const resolveAdapter = this.deps.resolveAdapter ?? getProtocolAdapter;
+    const adapter = resolveAdapter(provider.protocol);
+    const policy = this.deps.retryPolicy ?? DEFAULT_RETRY_POLICY;
+    let attempt = 0;
+    while (true) {
+      attempt += 1;
+      try {
+        return await adapter.chat({
+          baseUrl: provider.baseUrl,
+          apiKey,
+          vendorModelId,
+          userContent,
+          extraHeaders: provider.headers,
+          history: options?.history,
+          system: options?.system,
+          tools: options?.tools,
+          stream: options?.stream,
+          onStream: options?.onStream,
+          sampling,
+          signal: options?.signal,
+        });
+      } catch (error) {
+        const canRetry =
+          attempt <= policy.maxRetries && isRetryableError(error);
+        // WHY: cancel must short-circuit retries so terminate actions feel immediate.
+        if (!canRetry || isAbortLikeError(error)) {
+          throw error;
+        }
+        await delayWithSignal(computeBackoffMs(attempt, policy), options?.signal);
+      }
+    }
   }
 }

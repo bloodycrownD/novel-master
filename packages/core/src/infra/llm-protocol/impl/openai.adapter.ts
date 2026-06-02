@@ -146,6 +146,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         messages: [{ role: "user", content: userText }],
         ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
       }),
+      signal: req.signal,
     });
     const record = raw as {
       choices?: Array<{ message?: unknown }>;
@@ -166,6 +167,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         ...req.extraHeaders,
       },
       body: JSON.stringify(this.buildBody(req, false)),
+      signal: req.signal,
     });
     const record = raw as { choices?: Array<{ message?: unknown }> };
     const blocks = openAiChoiceToBlocks(record.choices?.[0]?.message ?? {});
@@ -188,10 +190,11 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
           ...req.extraHeaders,
         },
         body: JSON.stringify(this.buildBody(req, true)),
+        signal: req.signal,
       },
       (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream),
       undefined,
-      { fetchFn: this.fetchFn },
+      { fetchFn: this.fetchFn, signal: req.signal },
     );
 
     const { blocks, streamRaw } = finishOpenAiSse(state, req.onStream);

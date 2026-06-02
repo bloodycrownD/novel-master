@@ -83,6 +83,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
           ? { generationConfig: { ...req.sampling.gemini } }
           : {}),
       }),
+      signal: req.signal,
     });
     const record = raw as {
       candidates?: Array<{

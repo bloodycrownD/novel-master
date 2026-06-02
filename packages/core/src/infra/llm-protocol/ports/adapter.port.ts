@@ -47,6 +47,8 @@ export interface LlmChatRequest {
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
   readonly sampling?: ModelSamplingParams;
+  /** Cancels network IO and stream reads when run is terminated. */
+  readonly signal?: AbortSignal;
 }
 
 /** Normalized token usage from provider responses. */

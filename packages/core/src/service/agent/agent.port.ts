@@ -33,6 +33,8 @@ export interface AgentRunOptions {
   readonly persistMessages?: boolean;
   /** When false, skip `agent.run.*` / stream bus events; default true. */
   readonly publishRunLifecycle?: boolean;
+  /** Aborts an in-flight run from caller UI/runtime controls. */
+  readonly signal?: AbortSignal;
 }
 
 /** Drives multi-step model round-trips with tool execution. */

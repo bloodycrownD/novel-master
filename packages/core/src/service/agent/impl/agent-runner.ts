@@ -84,6 +84,7 @@ export class DefaultAgentRunner implements AgentRunner {
     let stopReason: AgentRunResult["stopReason"] = "max_steps";
     let assistantAppendCount = 0;
     let runError: string | undefined;
+    const signal = options.signal;
 
     const maxSteps =
       options.maxSteps ??
@@ -94,6 +95,10 @@ export class DefaultAgentRunner implements AgentRunner {
 
     try {
       for (let step = 0; step < maxSteps; step++) {
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
         let stepCompactionEmitted = false;
         if (persistMessages && this.deps.compactionConditions != null) {
           const shouldCompact =
@@ -104,6 +109,10 @@ export class DefaultAgentRunner implements AgentRunner {
                 applicationModelId: options.applicationModelId,
               },
             );
+          if (signal?.aborted) {
+            stopReason = "cancelled";
+            break;
+          }
           if (shouldCompact && !stepCompactionEmitted) {
             const orchestrator = this.deps.eventOrchestrator;
             if (orchestrator == null) {
@@ -129,6 +138,10 @@ export class DefaultAgentRunner implements AgentRunner {
         };
 
         let visible = await session.list();
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
         if (options.activeRegexGroupId && this.deps.regexConfig) {
           const rules = await resolveActiveCompiledRules(
             this.deps.regexConfig,
@@ -144,6 +157,10 @@ export class DefaultAgentRunner implements AgentRunner {
               "llm",
               depthMap,
             );
+            if (signal?.aborted) {
+              stopReason = "cancelled";
+              break;
+            }
           }
         }
         const llmInput = buildPromptLlmInput(options.definition.prompts, {
@@ -167,9 +184,14 @@ export class DefaultAgentRunner implements AgentRunner {
             tools: tools.length > 0 ? tools : undefined,
             stream: options.stream,
             onStream,
+            signal,
           },
         );
 
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
         stepsExecuted += 1;
 
         await session.append("assistant", { blocks: result.blocks }, {
@@ -204,6 +226,10 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const toolResults: ToolResultBlock[] = [];
         for (const tu of toolUses) {
+          if (signal?.aborted) {
+            stopReason = "cancelled";
+            break;
+          }
           let content: string;
           try {
             const out = await this.toolRunner.call(
@@ -223,6 +249,10 @@ export class DefaultAgentRunner implements AgentRunner {
           });
         }
 
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
         await session.append("user", { blocks: toolResults });
 
         if (step + 1 >= maxSteps) {
@@ -231,6 +261,9 @@ export class DefaultAgentRunner implements AgentRunner {
         }
       }
     } catch (e: unknown) {
+      if (signal?.aborted || (e instanceof Error && e.name === "AbortError")) {
+        stopReason = "cancelled";
+      } else {
       runError = e instanceof Error ? e.message : String(e);
       if (publishRunLifecycle) {
         bus.publish(EVENT_AGENT_RUN_FAILED, {
@@ -240,6 +273,7 @@ export class DefaultAgentRunner implements AgentRunner {
         });
       }
       throw e;
+      }
     }
 
     if (persistMessages && assistantAppendCount > 0) {

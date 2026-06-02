@@ -19,6 +19,6 @@ export interface AgentRunResult {
   readonly stepsExecuted: number;
   readonly finished: boolean;
   /** `DOOM_LOOP` terminates via thrown {@link AgentError}, not this field. */
-  readonly stopReason: "completed" | "max_steps" | "error";
+  readonly stopReason: "completed" | "max_steps" | "error" | "cancelled";
   readonly rounds: readonly ModelRoundSummary[];
 }

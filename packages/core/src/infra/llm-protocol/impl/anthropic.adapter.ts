@@ -115,6 +115,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
         ...req.extraHeaders,
       },
       body: JSON.stringify(this.buildBody(req, false)),
+      signal: req.signal,
     });
     const record = raw as { content?: unknown[] };
     const blocks = anthropicContentToBlocks(record.content ?? []);
@@ -134,6 +135,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
         ...req.extraHeaders,
       },
       body: JSON.stringify(this.buildBody(req, true)),
+      signal: req.signal,
     });
     await assertOk(response);
     if (response.body == null) {

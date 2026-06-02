@@ -13,6 +13,8 @@ export interface ModelRequestOptions {
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
   readonly sampling?: ModelSamplingParams;
+  /** Forwarded to provider adapter transport for explicit cancellation. */
+  readonly signal?: AbortSignal;
 }
 
 /** Sends chat requests via protocol adapters. */
