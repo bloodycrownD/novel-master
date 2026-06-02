@@ -33,6 +33,8 @@ export function EventsConfigScreen() {
   const runtime = useRuntime();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
   const [addEventVisible, setAddEventVisible] = useState(false);
@@ -44,10 +46,18 @@ export function EventsConfigScreen() {
       const loaded = await runtime.eventsConfig.getConfig();
       setSchemaVersion(loaded.schemaVersion);
       setBlocks(configToEventBlocks(loaded));
+      setLoadError(null);
+    } catch (error) {
+      const message = toastMessage('加载事件配置失败', error);
+      // Keep the editor usable while making the decode failure explicit.
+      setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
+      setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+      setLoadError(message);
+      showToast(message);
     } finally {
       setLoading(false);
     }
-  }, [runtime]);
+  }, [runtime, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -137,6 +147,37 @@ export function EventsConfigScreen() {
     showToast('已恢复默认（需点保存）');
   };
 
+  const handleRecoverRestoreAndSave = async () => {
+    setRecovering(true);
+    try {
+      await runtime.eventsConfig.setConfig(DEFAULT_EVENTS_CONFIG);
+      setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
+      setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+      setLoadError(null);
+      showToast('已恢复默认并保存');
+    } catch (error) {
+      showToast(toastMessage('恢复默认并保存失败', error));
+    } finally {
+      setRecovering(false);
+    }
+  };
+
+  const handleRecoverClearAndSave = async () => {
+    setRecovering(true);
+    try {
+      await runtime.eventsConfig.clearConfig();
+      await runtime.eventsConfig.setConfig(DEFAULT_EVENTS_CONFIG);
+      setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
+      setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+      setLoadError(null);
+      showToast('已清空旧配置并保存默认配置');
+    } catch (error) {
+      showToast(toastMessage('清空并保存失败', error));
+    } finally {
+      setRecovering(false);
+    }
+  };
+
   const usingDefault =
     JSON.stringify(eventBlocksToConfig(blocks, schemaVersion).events) ===
     JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
@@ -171,6 +212,32 @@ export function EventsConfigScreen() {
               </Text>
             </Pressable>
           }>
+          {loadError != null ? (
+            <View
+              style={[
+                styles.recoveryCard,
+                {borderColor: tokens.border, backgroundColor: tokens.surface},
+              ]}>
+              <Text style={[styles.recoveryTitle, {color: tokens.text}]}>
+                检测到旧版/无效事件配置，已无法按 DAG 规则解析
+              </Text>
+              <Text style={[styles.recoveryText, {color: tokens.textSecondary}]}>
+                {loadError}
+              </Text>
+              <View style={styles.recoveryActions}>
+                <Pressable disabled={recovering || saving} onPress={() => handleRecoverRestoreAndSave()}>
+                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
+                    恢复默认并保存
+                  </Text>
+                </Pressable>
+                <Pressable disabled={recovering || saving} onPress={() => handleRecoverClearAndSave()}>
+                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
+                    清空旧配置并保存
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
           <View style={styles.toolbar}>
             <Text style={[styles.status, {color: tokens.textSecondary}]}>
               {usingDefault ? '当前为默认配置。' : '已修改，保存后生效。'}
@@ -245,4 +312,14 @@ const styles = StyleSheet.create({
   status: {flex: 1, fontSize: 13, lineHeight: 18},
   blockList: {gap: 12},
   empty: {textAlign: 'center', padding: 24, fontSize: 14},
+  recoveryCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    marginBottom: 12,
+  },
+  recoveryTitle: {fontSize: 13, fontWeight: '600', lineHeight: 18},
+  recoveryText: {fontSize: 12, lineHeight: 17},
+  recoveryActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
 });
