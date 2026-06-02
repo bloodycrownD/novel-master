@@ -24,11 +24,7 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     if (raw === undefined) {
       return DEFAULT_EVENTS_CONFIG;
     }
-    try {
-      return decode(JSON.parse(raw) as unknown, eventsConfigSchema);
-    } catch {
-      return DEFAULT_EVENTS_CONFIG;
-    }
+    return decode(JSON.parse(raw) as unknown, eventsConfigSchema);
   }
 
   async setConfig(config: EventsConfig): Promise<void> {
