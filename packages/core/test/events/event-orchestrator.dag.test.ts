@@ -145,5 +145,171 @@ describe("event orchestrator (DAG)", () => {
     assert.equal(result.partialFailure, false);
     assert.deepEqual(calls, ["refresh-macros"]);
   });
+
+  it("returns explicit failure for unknown dependency during runtime prevalidation", async () => {
+    const config: EventsConfig = {
+      schemaVersion: 2,
+      events: {
+        "session.compaction.requested": [
+          {
+            type: "hide-message",
+            params: { startDepth: 0 },
+            dependency: ["run-agent"],
+          },
+        ],
+      },
+    };
+
+    const orch = new DefaultEventOrchestrator({
+      eventsConfig: {
+        async getConfig() {
+          return config;
+        },
+        async setConfig() {},
+        async clearConfig() {},
+      },
+      eventBus: {
+        subscribe() {},
+        unsubscribe() {},
+        publish() {},
+      } as any,
+      messages: {
+        async listBySession() {
+          return [];
+        },
+      } as any,
+      macroCache: {
+        async refresh() {},
+      } as any,
+      worktree: () => ({}) as any,
+      createSession: () =>
+        ({
+          async hideRange() {},
+        }) as any,
+    });
+
+    const result = await orch.emit("session.compaction.requested", {
+      sessionId: "s1",
+      projectId: "p1",
+      trigger: "manual",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.partialFailure, false);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0]?.actionType, "hide-message");
+    assert.match(result.failures[0]?.error ?? "", /unknown dependency/i);
+  });
+
+  it("returns explicit failure for cycle during runtime prevalidation", async () => {
+    const config = {
+      schemaVersion: 2,
+      events: {
+        "session.compaction.requested": [
+          {
+            type: "hide-message",
+            params: { startDepth: 0 },
+            dependency: ["refresh-macros"],
+          },
+          {
+            type: "refresh-macros",
+            params: {},
+            dependency: ["hide-message"],
+          },
+        ],
+      },
+    } as EventsConfig;
+
+    const orch = new DefaultEventOrchestrator({
+      eventsConfig: {
+        async getConfig() {
+          return config;
+        },
+        async setConfig() {},
+        async clearConfig() {},
+      },
+      eventBus: {
+        subscribe() {},
+        unsubscribe() {},
+        publish() {},
+      } as any,
+      messages: {
+        async listBySession() {
+          return [];
+        },
+      } as any,
+      macroCache: {
+        async refresh() {},
+      } as any,
+      worktree: () => ({}) as any,
+      createSession: () =>
+        ({
+          async hideRange() {},
+        }) as any,
+    });
+
+    const result = await orch.emit("session.compaction.requested", {
+      sessionId: "s1",
+      projectId: "p1",
+      trigger: "manual",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.partialFailure, false);
+    assert.equal(result.failures.length, 1);
+    assert.match(result.failures[0]?.error ?? "", /cycle detected/i);
+  });
+
+  it("returns explicit failure for duplicate action types during runtime prevalidation", async () => {
+    const config = {
+      schemaVersion: 2,
+      events: {
+        "session.compaction.requested": [
+          { type: "refresh-macros", params: {} },
+          { type: "refresh-macros", params: {} },
+        ],
+      },
+    } as EventsConfig;
+
+    const orch = new DefaultEventOrchestrator({
+      eventsConfig: {
+        async getConfig() {
+          return config;
+        },
+        async setConfig() {},
+        async clearConfig() {},
+      },
+      eventBus: {
+        subscribe() {},
+        unsubscribe() {},
+        publish() {},
+      } as any,
+      messages: {
+        async listBySession() {
+          return [];
+        },
+      } as any,
+      macroCache: {
+        async refresh() {},
+      } as any,
+      worktree: () => ({}) as any,
+      createSession: () =>
+        ({
+          async hideRange() {},
+        }) as any,
+    });
+
+    const result = await orch.emit("session.compaction.requested", {
+      sessionId: "s1",
+      projectId: "p1",
+      trigger: "manual",
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.partialFailure, false);
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.failures[0]?.actionType, "refresh-macros");
+    assert.match(result.failures[0]?.error ?? "", /duplicate action type/i);
+  });
 });
 

@@ -85,6 +85,11 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       return { ok: true, partialFailure: false, failures: [] };
     }
 
+    const prevalidationFailure = this.prevalidateDag(nodes);
+    if (prevalidationFailure != null) {
+      return { ok: false, partialFailure: false, failures: [prevalidationFailure] };
+    }
+
     const byType = new Map<EventAction["type"], EventActionNode>(
       nodes.map((n) => [n.type, n] as const),
     );
@@ -147,7 +152,66 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       }
     }
 
-    return { ok: success.size === nodes.length, partialFailure: false, failures: [] };
+    return { ok: true, partialFailure: false, failures: [] };
+  }
+
+  private prevalidateDag(nodes: readonly EventActionNode[]): EventActionFailure | null {
+    const seen = new Set<EventAction["type"]>();
+    const adjacency = new Map<EventAction["type"], readonly EventAction["type"][]>();
+
+    for (const node of nodes) {
+      if (seen.has(node.type)) {
+        return {
+          actionType: node.type,
+          error: `duplicate action type in event DAG: ${node.type}`,
+        };
+      }
+      seen.add(node.type);
+      adjacency.set(node.type, node.dependency ?? []);
+    }
+
+    for (const node of nodes) {
+      for (const dep of node.dependency ?? []) {
+        if (!seen.has(dep)) {
+          return {
+            actionType: node.type,
+            error: `unknown dependency "${dep}" referenced by "${node.type}"`,
+          };
+        }
+      }
+    }
+
+    const visiting = new Set<EventAction["type"]>();
+    const visited = new Set<EventAction["type"]>();
+
+    const hasCycle = (type: EventAction["type"]): boolean => {
+      if (visiting.has(type)) {
+        return true;
+      }
+      if (visited.has(type)) {
+        return false;
+      }
+      visiting.add(type);
+      for (const dep of adjacency.get(type) ?? []) {
+        if (hasCycle(dep)) {
+          return true;
+        }
+      }
+      visiting.delete(type);
+      visited.add(type);
+      return false;
+    };
+
+    for (const node of nodes) {
+      if (hasCycle(node.type)) {
+        return {
+          actionType: node.type,
+          error: `cycle detected in event DAG at "${node.type}"`,
+        };
+      }
+    }
+
+    return null;
   }
 
   private async runAction(action: EventAction, ctx: EventEmitContext): Promise<void> {
