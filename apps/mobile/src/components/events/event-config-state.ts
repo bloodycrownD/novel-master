@@ -1,12 +1,12 @@
 /**
  * Draft state for events config UI (array of blocks ↔ KKV document).
  */
-import type {EventExecutionMode, EventsConfig} from '@novel-master/core';
+import type {EventActionNode, EventsConfig} from '@novel-master/core';
 
 export type EventBlockDraft = {
   readonly id: string;
   eventType: string;
-  chain: EventExecutionMode;
+  actions: EventActionNode[];
 };
 
 let nextBlockId = 0;
@@ -17,30 +17,24 @@ export function newEventBlockId(): string {
 }
 
 export function configToEventBlocks(config: EventsConfig): EventBlockDraft[] {
-  return Object.entries(config.events).map(([eventType, chain]) => ({
+  return Object.entries(config.events).map(([eventType, actions]) => ({
     id: newEventBlockId(),
     eventType,
-    chain: {
-      mode: chain.mode,
-      actions: [...chain.actions],
-    },
+    actions: [...actions],
   }));
 }
 
 export function eventBlocksToConfig(
   blocks: readonly EventBlockDraft[],
-  schemaVersion: number,
+  schemaVersion: 2,
 ): EventsConfig {
-  const events: Record<string, EventExecutionMode> = {};
+  const events: Record<string, EventActionNode[]> = {};
   for (const block of blocks) {
     const key = block.eventType.trim();
     if (key === '') {
       continue;
     }
-    events[key] = {
-      mode: block.chain.mode,
-      actions: block.chain.actions,
-    };
+    events[key] = block.actions;
   }
   return {schemaVersion, events};
 }

@@ -9,7 +9,7 @@ import {
   ACTION_ADD_OPTIONS,
   EVENT_ADD_OPTIONS,
   createDefaultAction,
-  defaultChainForEvent,
+  defaultDagForEvent,
 } from '../../components/events/event-config-labels';
 import {
   configToEventBlocks,
@@ -33,7 +33,7 @@ export function EventsConfigScreen() {
   const runtime = useRuntime();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [schemaVersion, setSchemaVersion] = useState(1);
+  const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
   const [addEventVisible, setAddEventVisible] = useState(false);
   const [addActionEventId, setAddActionEventId] = useState<string | null>(null);
@@ -93,7 +93,7 @@ export function EventsConfigScreen() {
       {
         id: newEventBlockId(),
         eventType: trimmed,
-        chain: defaultChainForEvent(trimmed),
+        actions: [...defaultDagForEvent(trimmed)],
       },
     ]);
   };
@@ -106,10 +106,7 @@ export function EventsConfigScreen() {
         }
         return {
           ...b,
-          chain: {
-            ...b.chain,
-            actions: [...b.chain.actions, createDefaultAction(type)],
-          },
+          actions: [...b.actions, createDefaultAction(type)],
         };
       }),
     );

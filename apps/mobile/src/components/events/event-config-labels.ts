@@ -1,6 +1,6 @@
-import type {EventActionType, EventExecutionMode} from '@novel-master/core';
+import type {EventActionNode, EventActionType} from '@novel-master/core';
 
-export function createDefaultAction(type: EventActionType) {
+export function createDefaultAction(type: EventActionType): EventActionNode {
   switch (type) {
     case 'hide-message':
       return {
@@ -19,7 +19,7 @@ export type SupportedEventDefinition = {
   readonly eventType: string;
   readonly label: string;
   readonly hint: string;
-  readonly defaultChain: EventExecutionMode;
+  readonly defaultDag: readonly EventActionNode[];
 };
 
 export const SUPPORTED_EVENTS: readonly SupportedEventDefinition[] = [
@@ -27,22 +27,16 @@ export const SUPPORTED_EVENTS: readonly SupportedEventDefinition[] = [
     eventType: 'session.compaction.requested',
     label: '会话压缩',
     hint: '在手动压缩或自动压缩条件满足时执行下方动作。',
-    defaultChain: {
-      mode: 'parallel',
-      actions: [
-        createDefaultAction('hide-message'),
-        createDefaultAction('refresh-macros'),
-      ],
-    },
+    defaultDag: [
+      createDefaultAction('hide-message'),
+      createDefaultAction('refresh-macros'),
+    ],
   },
   {
     eventType: 'session.message.received',
     label: '收到助手消息后',
     hint: '在助手回复成功写入会话后执行下方动作。',
-    defaultChain: {
-      mode: 'sequential',
-      actions: [createDefaultAction('refresh-macros')],
-    },
+    defaultDag: [createDefaultAction('refresh-macros')],
   },
 ];
 
@@ -57,21 +51,15 @@ export function supportedEventDefinition(
   return SUPPORTED_EVENTS.find(e => e.eventType === eventType.trim());
 }
 
-export function defaultChainForEvent(eventType: string): EventExecutionMode {
+export function defaultDagForEvent(eventType: string): readonly EventActionNode[] {
   const def = supportedEventDefinition(eventType);
   if (def == null) {
-    return {
-      mode: 'parallel',
-      actions: [
-        createDefaultAction('hide-message'),
-        createDefaultAction('refresh-macros'),
-      ],
-    };
+    return [
+      createDefaultAction('hide-message'),
+      createDefaultAction('refresh-macros'),
+    ];
   }
-  return {
-    mode: def.defaultChain.mode,
-    actions: [...def.defaultChain.actions],
-  };
+  return [...def.defaultDag];
 }
 
 export const EVENT_ADD_OPTIONS: readonly {

@@ -6,12 +6,12 @@ const COMPACTION = 'session.compaction.requested';
 
 function draft(
   eventType: string,
-  actions: EventBlockDraft['chain']['actions'],
+  actions: EventBlockDraft['actions'],
 ): EventBlockDraft {
   return {
     id: 'b1',
     eventType,
-    chain: {mode: 'parallel', actions},
+    actions,
   };
 }
 

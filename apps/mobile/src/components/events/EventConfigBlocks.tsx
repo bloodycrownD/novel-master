@@ -3,10 +3,9 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {EventAction, EventExecutionMode} from '@novel-master/core';
+import type {EventActionNode, EventActionType} from '@novel-master/core';
 import {FormField} from '../form/FormField';
 import {FormTextInput} from '../form/FormTextInput';
-import {SegmentedControl} from '../ui/SegmentedControl';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
 import type {EventBlockDraft} from './event-config-state';
@@ -17,10 +16,17 @@ import {
   eventTypeLabel,
 } from './event-config-labels';
 
-const MODE_OPTIONS = [
-  {value: 'parallel' as const, label: '并行'},
-  {value: 'sequential' as const, label: '顺序'},
-];
+function parseDeps(input: string): readonly EventActionType[] | undefined {
+  const parts = input
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+  return parts.length > 0 ? (parts as readonly EventActionType[]) : undefined;
+}
+
+function depsToString(deps: readonly string[] | undefined): string {
+  return deps?.join(', ') ?? '';
+}
 
 function BlockIconButton({
   label,
@@ -57,11 +63,11 @@ function ActionBlockCard({
   onDelete,
   onMove,
 }: {
-  action: EventAction;
+  action: EventActionNode;
   index: number;
   total: number;
   tokens: ThemeTokens;
-  onChange: (action: EventAction) => void;
+  onChange: (action: EventActionNode) => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
 }) {
@@ -101,6 +107,26 @@ function ActionBlockCard({
       <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
         {actionTypeHint(action.type)}
       </Text>
+      <View style={styles.actionFields}>
+        <FormField
+          label="依赖（DAG）"
+          tokens={tokens}
+          hint="填写依赖动作 type，逗号分隔；留空表示无依赖（可并发执行）">
+          <FormTextInput
+            tokens={tokens}
+            value={depsToString(action.dependency)}
+            onChangeText={v =>
+              onChange({
+                ...action,
+                dependency: parseDeps(v),
+              })
+            }
+            placeholder="例如 run-agent, refresh-macros"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </FormField>
+      </View>
       {action.type === 'hide-message' ? (
         <View style={styles.actionFields}>
           <FormField label="起始深度" tokens={tokens} hint="0 = 最新一条；留空表示不限制">
@@ -113,10 +139,10 @@ function ActionBlockCard({
               }
               onChangeText={v =>
                 onChange({
-                  type: 'hide-message',
+                  ...action,
                   params: {
                     ...action.params,
-                    startDepth: parseOptionalDepthInput(v),
+                    startDepth: parseOptionalDepthInput(v) ?? undefined,
                   },
                 })
               }
@@ -132,11 +158,8 @@ function ActionBlockCard({
               }
               onChangeText={v =>
                 onChange({
-                  type: 'hide-message',
-                  params: {
-                    ...action.params,
-                    endDepth: parseOptionalDepthInput(v),
-                  },
+                  ...action,
+                  params: {...action.params, endDepth: parseOptionalDepthInput(v) ?? undefined},
                 })
               }
               placeholder="留空"
@@ -155,7 +178,7 @@ function ActionBlockCard({
               }
               onChangeText={v =>
                 onChange({
-                  type: 'run-agent',
+                  ...action,
                   params: {agentId: v.trim()},
                 })
               }
@@ -194,39 +217,31 @@ export function EventBlockEditor({
   onAddAction,
   onMinActions,
 }: EventBlockEditorProps) {
-  const chain = block.chain;
   const displayType = block.eventType.trim();
 
-  const setChain = (next: EventExecutionMode) => {
-    onChange({chain: next});
-  };
-
-  const updateAction = (actionIndex: number, action: EventAction) => {
-    const actions = chain.actions.map((a, i) => (i === actionIndex ? action : a));
-    setChain({...chain, actions});
+  const updateAction = (actionIndex: number, action: EventActionNode) => {
+    const actions = block.actions.map((a, i) => (i === actionIndex ? action : a));
+    onChange({actions});
   };
 
   const deleteAction = (actionIndex: number) => {
-    if (chain.actions.length <= 1) {
+    if (block.actions.length <= 1) {
       return false;
     }
-    setChain({
-      ...chain,
-      actions: chain.actions.filter((_, i) => i !== actionIndex),
-    });
+    onChange({actions: block.actions.filter((_, i) => i !== actionIndex)});
     return true;
   };
 
   const moveAction = (actionIndex: number, dir: -1 | 1) => {
     const target = actionIndex + dir;
-    if (target < 0 || target >= chain.actions.length) {
+    if (target < 0 || target >= block.actions.length) {
       return;
     }
-    const actions = [...chain.actions];
+    const actions = [...block.actions];
     const tmp = actions[target]!;
     actions[target] = actions[actionIndex]!;
     actions[actionIndex] = tmp;
-    setChain({...chain, actions});
+    onChange({actions});
   };
 
   return (
@@ -264,19 +279,8 @@ export function EventBlockEditor({
       <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
         {eventTypeHint(displayType)}
       </Text>
-
-      <FormField label="执行方式" tokens={tokens}>
-        <SegmentedControl
-          tokens={tokens}
-          options={MODE_OPTIONS}
-          value={chain.mode}
-          onChange={mode => setChain({...chain, mode})}
-        />
-      </FormField>
       <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-        {chain.mode === 'parallel'
-          ? '多个动作同时执行；某个失败不会撤销已成功的步骤。'
-          : '按顺序执行；某步失败则停止后续动作。'}
+        DAG：无依赖动作会并发执行；下游需等待所有依赖成功。任一失败将终止后续调度。
       </Text>
 
       <View style={styles.actionsHeader}>
@@ -287,12 +291,12 @@ export function EventBlockEditor({
       </View>
 
       <View style={styles.blockList}>
-        {chain.actions.map((action, actionIndex) => (
+        {block.actions.map((action, actionIndex) => (
           <ActionBlockCard
             key={`${block.id}-action-${actionIndex}`}
             action={action}
             index={actionIndex}
-            total={chain.actions.length}
+            total={block.actions.length}
             tokens={tokens}
             onChange={a => updateAction(actionIndex, a)}
             onDelete={() => {
