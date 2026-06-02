@@ -86,19 +86,34 @@ export async function runAgentTurn(
   runtime: MobileNovelMasterRuntime,
   scope: AgentRunScope,
   userContent: string,
-  options?: {readonly stream?: boolean},
+  options?: {
+    readonly stream?: boolean;
+    readonly allowResumeWithoutInput?: boolean;
+    readonly signal?: AbortSignal;
+  },
 ): Promise<AgentRunResult> {
   const stream = options?.stream !== false;
   const trimmed = userContent.trim();
-  if (trimmed === '') {
+  const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
+  if (trimmed === '' && !allowResumeWithoutInput) {
     throw new AgentRunError('消息不能为空');
+  }
+  if (trimmed === '' && allowResumeWithoutInput) {
+    const list = await runtime.messages.listBySession(scope.sessionId);
+    const last = list[list.length - 1];
+    // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
+    if (last?.role !== 'user') {
+      throw new AgentRunError('消息不能为空');
+    }
   }
 
   const {definition} = await resolveCurrentAgentDefinition(runtime);
   const {applicationModelId, workspaceModelId} =
     await resolveMobileApplicationModelId(runtime, definition);
 
-  await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
+  if (trimmed !== '') {
+    await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
+  }
 
   const toolProbe = new ToolRegistry();
   registerVfsTools(toolProbe);
@@ -152,5 +167,6 @@ export async function runAgentTurn(
     maxSteps: definition.runtime?.maxSteps ?? 20,
     activeRegexGroupId,
     stream,
+    signal: options?.signal,
   });
 }

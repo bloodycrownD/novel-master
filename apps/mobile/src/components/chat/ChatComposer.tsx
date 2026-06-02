@@ -2,14 +2,7 @@
  * Chat input: disabled without workspace model; send → user append + agent run.
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
@@ -34,6 +27,7 @@ type Props = {
   onStreamReset: () => void;
   onMessagesChanged: () => void;
   onNeedModel: () => void;
+  canResumeWithoutInput: boolean;
 };
 
 export function ChatComposer({
@@ -46,12 +40,16 @@ export function ChatComposer({
   onStreamReset,
   onMessagesChanged,
   onNeedModel,
+  canResumeWithoutInput,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | undefined>();
+  const [runAbortController, setRunAbortController] = useState<AbortController | null>(
+    null,
+  );
 
   useEffect(() => {
     const bus = runtime.eventBus;
@@ -98,20 +96,30 @@ export function ChatComposer({
       return;
     }
     if (running) {
+      runAbortController?.abort();
       return;
     }
     const content = text.trim();
-    if (!content) {
+    const allowResumeWithoutInput = !content && canResumeWithoutInput;
+    if (!content && !allowResumeWithoutInput) {
       return;
     }
+    const controller = new AbortController();
     setError(undefined);
     onStreamReset();
     onRunningChange(true);
-    setText('');
+    if (content) {
+      setText('');
+    }
+    setRunAbortController(controller);
     try {
       const stream =
         appUi != null ? await readLlmStreamEnabled(appUi) : true;
-      await runAgentTurn(runtime, scope, content, {stream});
+      await runAgentTurn(runtime, scope, content, {
+        stream,
+        allowResumeWithoutInput,
+        signal: controller.signal,
+      });
       onMessagesChanged();
     } catch (err) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -120,6 +128,7 @@ export function ChatComposer({
       setError(formatError(err));
       onMessagesChanged();
     } finally {
+      setRunAbortController(null);
       onRunningChange(false);
       onStreamReset();
     }
@@ -127,6 +136,8 @@ export function ChatComposer({
     hasModel,
     running,
     text,
+    canResumeWithoutInput,
+    runAbortController,
     runtime,
     scope,
     onNeedModel,
@@ -136,7 +147,7 @@ export function ChatComposer({
     appUi,
   ]);
 
-  const disabled = !hasModel || running;
+  const disabled = !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
 
   return (
     <View style={[styles.dock, {borderTopColor: tokens.border}]}>
@@ -172,12 +183,8 @@ export function ChatComposer({
             styles.sendBtn,
             {backgroundColor: disabled ? tokens.border : tokens.primary},
           ]}
-          accessibilityLabel="发送">
-          {running ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.sendLabel}>发送</Text>
-          )}
+          accessibilityLabel={running ? '终止' : '发送'}>
+          <Text style={styles.sendLabel}>{running ? '终止' : '发送'}</Text>
         </Pressable>
       </View>
     </View>

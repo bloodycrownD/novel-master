@@ -144,6 +144,8 @@ export function ChatTabScreen() {
   }, [reloadLists]);
 
   const currentSession = sessions.find(s => s.id === sessionId);
+  const canResumeWithoutInput =
+    chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.role === 'user';
 
   const refreshChatMeta = useCallback(async () => {
     const modelId = await runtime.state.getCurrentModelId();
@@ -362,7 +364,7 @@ export function ChatTabScreen() {
     setStreamingText('');
     setStreamingThinking('');
     await reloadMessages();
-  }, [runtime, exitMessageBatch, reloadMessages]);
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
 
   const hideSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
@@ -721,6 +723,7 @@ export function ChatTabScreen() {
                   refreshChatMeta().catch(() => undefined);
                 }}
                 onNeedModel={() => setModelPickerOpen(true)}
+                canResumeWithoutInput={canResumeWithoutInput}
               />
             </View>
           ) : (
