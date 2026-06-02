@@ -2,7 +2,7 @@
  * Events configuration: editable event blocks with nested actions (prompt-block UX).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
 import {DEFAULT_EVENTS_CONFIG, type EventsConfig} from '@novel-master/core';
 import {EventBlockEditor} from '../../components/events/EventConfigBlocks';
 import {
@@ -26,6 +26,7 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {exportEventsYaml, importEventsYaml} from '../../services/events-yaml.service';
 
 export function EventsConfigScreen() {
   const {tokens} = useTheme();
@@ -178,6 +179,37 @@ export function EventsConfigScreen() {
     }
   };
 
+  const handleExportYaml = useCallback(async () => {
+    try {
+      const result = await exportEventsYaml(runtime);
+      if (result === 'saved') {
+        showToast('已导出 Events YAML');
+      }
+    } catch (error) {
+      showToast(toastMessage('导出 YAML 失败', error));
+    }
+  }, [runtime, showToast]);
+
+  const handleImportYaml = useCallback(() => {
+    Alert.alert('导入 YAML', '将覆盖当前事件配置，是否继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '导入',
+        onPress: () => {
+          void (async () => {
+            try {
+              await importEventsYaml(runtime);
+              await load();
+              showToast('已导入 Events YAML');
+            } catch (error) {
+              showToast(toastMessage('导入 YAML 失败', error));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [runtime, load, showToast]);
+
   const usingDefault =
     JSON.stringify(eventBlocksToConfig(blocks, schemaVersion).events) ===
     JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
@@ -206,11 +238,23 @@ export function EventsConfigScreen() {
           tokens={tokens}
           hint="定义「发生什么事后执行哪些动作」。自动压缩的触发条件请在「压缩条件」里设置。重复的事件或动作在保存时会提示；有 2 个及以上事件时，点卡片右上角 × 可移除。"
           rightAction={
-            <Pressable onPress={() => setAddEventVisible(true)}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                添加
-              </Text>
-            </Pressable>
+            <View style={styles.rightActions}>
+              <Pressable onPress={() => handleImportYaml()}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  导入 YAML
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  导出 YAML
+                </Text>
+              </Pressable>
+              <Pressable onPress={() => setAddEventVisible(true)}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                  添加
+                </Text>
+              </Pressable>
+            </View>
           }>
           {loadError != null ? (
             <View
@@ -309,6 +353,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  rightActions: {flexDirection: 'row', alignItems: 'center', gap: 12},
   status: {flex: 1, fontSize: 13, lineHeight: 18},
   blockList: {gap: 12},
   empty: {textAlign: 'center', padding: 24, fontSize: 14},

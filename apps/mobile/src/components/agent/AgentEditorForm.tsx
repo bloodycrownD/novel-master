@@ -2,7 +2,7 @@
  * Agent definition editor: name, model pin, maxSteps, prompt blocks.
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
 import type {
   AgentDefinition,
   AgentToolPolicy,
@@ -27,6 +27,7 @@ import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {exportAgentYaml, importAgentYaml} from '../../services/agent-yaml.service';
 
 type Props = {
   agentId: string;
@@ -330,6 +331,37 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     }
   };
 
+  const handleExportYaml = useCallback(async () => {
+    try {
+      const result = await exportAgentYaml(runtime, agentId);
+      if (result === 'saved') {
+        showToast('已导出 Agent YAML');
+      }
+    } catch (error) {
+      showToast(toastMessage('导出 YAML 失败', error));
+    }
+  }, [runtime, agentId, showToast]);
+
+  const handleImportYaml = useCallback(() => {
+    Alert.alert('导入 YAML', '将覆盖当前 Agent 配置，是否继续？', [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '导入',
+        onPress: () => {
+          void (async () => {
+            try {
+              await importAgentYaml(runtime, agentId);
+              await loadAgent();
+              showToast('已导入 Agent YAML');
+            } catch (error) {
+              showToast(toastMessage('导入 YAML 失败', error));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [runtime, agentId, loadAgent, showToast]);
+
   const updateBlock = (index: number, patch: Partial<PromptBlock>) => {
     setPrompts(prev =>
       prev.map((block, i) =>
@@ -405,6 +437,14 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           />
         }>
         <FormSectionCard title="基本信息" tokens={tokens}>
+          <View style={styles.yamlActions}>
+            <Pressable onPress={() => handleImportYaml()}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>导入 YAML</Text>
+            </Pressable>
+            <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>导出 YAML</Text>
+            </Pressable>
+          </View>
           <FormField label="名称" tokens={tokens}>
             <FormTextInput
               tokens={tokens}
@@ -658,6 +698,7 @@ const styles = StyleSheet.create({
   hint: {fontSize: 13, lineHeight: 18},
   fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
+  yamlActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
   blockList: {gap: 12},
   blockCard: {
     borderWidth: 1,
