@@ -9,24 +9,13 @@ import {FormTextInput} from '../form/FormTextInput';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
 import type {EventBlockDraft} from './event-config-state';
+import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {
   actionTypeHint,
   actionTypeLabel,
   eventTypeHint,
   eventTypeLabel,
 } from './event-config-labels';
-
-function parseDeps(input: string): readonly EventActionType[] | undefined {
-  const parts = input
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
-  return parts.length > 0 ? (parts as readonly EventActionType[]) : undefined;
-}
-
-function depsToString(deps: readonly string[] | undefined): string {
-  return deps?.join(', ') ?? '';
-}
 
 function BlockIconButton({
   label,
@@ -62,6 +51,7 @@ function ActionBlockCard({
   onChange,
   onDelete,
   onMove,
+  availableDependencies,
 }: {
   action: EventActionNode;
   index: number;
@@ -70,9 +60,22 @@ function ActionBlockCard({
   onChange: (action: EventActionNode) => void;
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
+  availableDependencies: readonly EventActionType[];
 }) {
   const badgeColor =
     action.type === 'hide-message' ? tokens.primary : tokens.success;
+  const currentDeps = action.dependency ?? [];
+  const selectableDeps = availableDependencies.filter(
+    type => !currentDeps.includes(type),
+  );
+  const [depPickerOpen, setDepPickerOpen] = React.useState(false);
+
+  const setDeps = (deps: readonly EventActionType[]) => {
+    onChange({
+      ...action,
+      dependency: deps.length > 0 ? deps : undefined,
+    });
+  };
 
   return (
     <View
@@ -111,19 +114,59 @@ function ActionBlockCard({
         <FormField
           label="依赖（DAG）"
           tokens={tokens}
-          hint="填写依赖动作 type，逗号分隔；留空表示无依赖（可并发执行）">
-          <FormTextInput
-            tokens={tokens}
-            value={depsToString(action.dependency)}
-            onChangeText={v =>
-              onChange({
-                ...action,
-                dependency: parseDeps(v),
-              })
-            }
-            placeholder="例如 run-agent, refresh-macros"
-            autoCapitalize="none"
-            autoCorrect={false}
+          hint="从下拉列表选择依赖动作；留空表示无依赖（可并发执行）">
+          <Pressable
+            style={[
+              styles.depInputBox,
+              {backgroundColor: tokens.bgSecondary, borderColor: tokens.borderLight},
+            ]}
+            onPress={() => setDepPickerOpen(true)}>
+            {currentDeps.length === 0 ? (
+              <Text style={{color: tokens.textSecondary}}>选择依赖动作</Text>
+            ) : (
+              <View style={styles.depChips}>
+                {currentDeps.map(dep => (
+                  <Pressable
+                    key={dep}
+                    style={[
+                      styles.depChip,
+                      {
+                        borderColor: tokens.borderLight,
+                        backgroundColor: tokens.surface,
+                      },
+                    ]}
+                    onPress={e => {
+                      e.stopPropagation();
+                      setDeps(currentDeps.filter(item => item !== dep));
+                    }}>
+                    <Text style={{color: tokens.text}}>{actionTypeLabel(dep)}</Text>
+                    <Text style={{color: tokens.textSecondary}}>×</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <Text style={{color: tokens.textSecondary}}>▼</Text>
+          </Pressable>
+          <BottomSheetMenu
+            visible={depPickerOpen}
+            title="依赖动作"
+            items={[
+              ...selectableDeps.map(type => ({
+                label: actionTypeLabel(type),
+                action: type,
+              })),
+              ...(currentDeps.length > 0
+                ? [{label: '清空依赖', action: '__clear__', danger: true}]
+                : []),
+            ]}
+            onClose={() => setDepPickerOpen(false)}
+            onSelect={selected => {
+              if (selected === '__clear__') {
+                setDeps([]);
+                return;
+              }
+              setDeps([...currentDeps, selected as EventActionType]);
+            }}
           />
         </FormField>
       </View>
@@ -291,22 +334,32 @@ export function EventBlockEditor({
       </View>
 
       <View style={styles.blockList}>
-        {block.actions.map((action, actionIndex) => (
-          <ActionBlockCard
-            key={`${block.id}-action-${actionIndex}`}
-            action={action}
-            index={actionIndex}
-            total={block.actions.length}
-            tokens={tokens}
-            onChange={a => updateAction(actionIndex, a)}
-            onDelete={() => {
-              if (!deleteAction(actionIndex)) {
-                onMinActions();
-              }
-            }}
-            onMove={dir => moveAction(actionIndex, dir)}
-          />
-        ))}
+        {block.actions.map((action, actionIndex) => {
+          const availableDependencies = [
+            ...new Set(
+              block.actions
+                .map(a => a.type)
+                .filter(type => type !== action.type),
+            ),
+          ] as EventActionType[];
+          return (
+            <ActionBlockCard
+              key={`${block.id}-action-${actionIndex}`}
+              action={action}
+              index={actionIndex}
+              total={block.actions.length}
+              tokens={tokens}
+              availableDependencies={availableDependencies}
+              onChange={a => updateAction(actionIndex, a)}
+              onDelete={() => {
+                if (!deleteAction(actionIndex)) {
+                  onMinActions();
+                }
+              }}
+              onMove={dir => moveAction(actionIndex, dir)}
+            />
+          );
+        })}
       </View>
     </View>
   );
@@ -358,5 +411,26 @@ const styles = StyleSheet.create({
   },
   fieldHint: {fontSize: 12, lineHeight: 17},
   actionFields: {gap: 4},
+  depChips: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  depInputBox: {
+    minHeight: 48,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  depChip: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   warn: {fontSize: 12, lineHeight: 17},
 });
