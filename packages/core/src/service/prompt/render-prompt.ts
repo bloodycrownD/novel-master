@@ -86,12 +86,6 @@ export function buildPromptLlmInput(
   for (const block of blocks) {
     if (block.type === "text" && block.role === "system") {
       systemParts.push(renderSystemMacroContent(block.content, dotRecord, root));
-      continue;
-    }
-    if (block.type === "abstract") {
-      throw new Error(
-        "abstract prompt blocks are removed; delete abstract blocks from agent config",
-      );
     }
   }
 
@@ -127,11 +121,6 @@ export function formatPromptLlmInputForCli(
       const content = renderSystemMacroContent(block.content, dotRecord, root);
       segments.push(formatSegment(block.role, content));
       continue;
-    }
-    if (block.type === "abstract") {
-      throw new Error(
-        "abstract prompt blocks are removed; delete abstract blocks from agent config",
-      );
     }
 
     for (const message of input.messages) {

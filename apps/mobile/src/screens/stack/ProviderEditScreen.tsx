@@ -61,7 +61,6 @@ export function ProviderEditScreen() {
         protocol: provider.protocol,
         baseUrl: provider.baseUrl,
         displayName: provider.displayName ?? '',
-        defaultModelId: provider.defaultModelId ?? '',
         headersJson:
           Object.keys(provider.headers).length > 0
             ? JSON.stringify(provider.headers)

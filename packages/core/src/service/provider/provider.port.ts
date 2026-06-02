@@ -7,7 +7,6 @@ export interface CreateProviderInput {
   readonly baseUrl: string;
   readonly displayName?: string;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly defaultModelId?: string;
   readonly apiKey?: string;
 }
 
@@ -16,7 +15,6 @@ export interface EditProviderPatch {
   readonly baseUrl?: string;
   readonly displayName?: string | null;
   readonly headers?: Readonly<Record<string, string>>;
-  readonly defaultModelId?: string | null;
   readonly apiKey?: string;
 }
 

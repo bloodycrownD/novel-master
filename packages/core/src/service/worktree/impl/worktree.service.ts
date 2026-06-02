@@ -17,6 +17,7 @@ import {
   inclusionModeLabel,
   ruleStateLabel,
 } from "@/domain/worktree/logic/worktree-labels.js";
+import { DEFAULT_WORKTREE_DIR_RULE } from "@/domain/worktree/logic/default-dir-rule.js";
 import {
   buildWorktreeDirSet,
   directChildDirs,
@@ -82,11 +83,16 @@ export class DefaultWorktreeService implements WorktreeService {
       scopeKey: worktreeScopeKey(this.scope),
       logicalPath,
       ruleEnabled: input.ruleEnabled === false ? false : true,
-      sortField: input.sortField ?? existing?.sortField ?? "name",
-      sortOrder: input.sortOrder ?? existing?.sortOrder ?? "asc",
-      headCount: input.headCount ?? existing?.headCount ?? 0,
-      tailCount: input.tailCount ?? existing?.tailCount ?? 0,
-      fillPolicy: input.fillPolicy ?? existing?.fillPolicy ?? "hidden",
+      sortField:
+        input.sortField ?? existing?.sortField ?? DEFAULT_WORKTREE_DIR_RULE.sortField,
+      sortOrder:
+        input.sortOrder ?? existing?.sortOrder ?? DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+      headCount:
+        input.headCount ?? existing?.headCount ?? DEFAULT_WORKTREE_DIR_RULE.headCount,
+      tailCount:
+        input.tailCount ?? existing?.tailCount ?? DEFAULT_WORKTREE_DIR_RULE.tailCount,
+      fillPolicy:
+        input.fillPolicy ?? existing?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
     };
     await this.deps.worktree.upsertDirRule(rule);
   }

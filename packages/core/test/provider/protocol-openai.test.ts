@@ -356,6 +356,35 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     assert.equal(result.assistantText, "pong");
   });
 
+  it("O5c: stream maps reasoning-only deltas to assistant text (GLM)", async () => {
+    const sse = [
+      'data: {"choices":[{"delta":{"reasoning_content":"你好"}}]}',
+      "",
+      "data: [DONE]",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const adapter = new OpenAiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      apiKey: "sk-test",
+      vendorModelId: "glm-4.7",
+      userContent: "hello",
+      stream: true,
+    });
+
+    assert.equal(result.assistantText, "你好");
+    assert.equal(result.blocks.length, 1);
+    assert.equal(result.blocks[0]!.type, "text");
+  });
+
   it("omits thinking blocks from outbound history", async () => {
     const calls: Array<{ body: string }> = [];
     const fetchFn = async (_url: string, init?: RequestInit) => {

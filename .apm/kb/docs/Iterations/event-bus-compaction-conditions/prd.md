@@ -96,7 +96,7 @@
    - **内置 action（首期）**（命名：**动词-实体**）：
      - **`hide-message`**：按深度切片对**可见消息**执行 hide（`MessageService` / `hideRange` 等由 SPEC 映射）；**替代原 `keepLastN`**，不再使用 `keepLastN` 作为 action 名。
      - **`refresh-macros`**：无参，可简写。
-     - **`agent-run`**：可选，有参，非默认。
+     - **`run-agent`**：可选，参数 `agent-id`（Agent 注册表 id）；产出消息不写入会话，工具调用可用；非默认。
    - **parallel 执行（已定稿）**：各 action 独立；失败 **不回滚** 已成功项；向调用方报告 **部分失败**。
 
 7. **全局默认 events**
@@ -111,7 +111,7 @@
    ```
 
    - 语义：压缩时并行 **隐藏深度 6～∞** + **刷新宏**；保留最近 **6** 条可见消息。
-   - 不含 `session.message.received`；不含 `agent-run`。
+   - 不含 `session.message.received`；不含 `run-agent`。
 
 8. **压缩语义变更** — 移除 abstract / 摘要 message；压缩产物仅 worktree（工具），同前。
 

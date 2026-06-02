@@ -26,6 +26,11 @@ import type {
 import type { EventActionFailure, EventRunResult } from "../event-run-result.js";
 import { runHideMessageAction } from "./actions/hide-message.handler.js";
 import { runRefreshMacrosAction } from "./actions/refresh-macros.handler.js";
+import {
+  runRunAgentAction,
+  type RunAgentHandlerDeps,
+} from "./actions/run-agent.handler.js";
+import type { RunAgentActionParams } from "@/domain/events-config/model/events-config.js";
 
 export interface DefaultEventOrchestratorDeps {
   readonly eventsConfig: EventsConfigStore;
@@ -34,6 +39,7 @@ export interface DefaultEventOrchestratorDeps {
   readonly macroCache: SessionMacroCache;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly createSession: (sessionId: string) => AgentSession;
+  readonly runAgent?: RunAgentHandlerDeps;
 }
 
 export class DefaultEventOrchestrator implements EventOrchestrator {
@@ -138,8 +144,17 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
           worktree: this.deps.worktree,
         });
         return;
-      case "agent-run":
-        throw new Error("agent-run action is not implemented in this release");
+      case "run-agent": {
+        if (this.deps.runAgent == null) {
+          throw new Error("run-agent is not configured for this runtime");
+        }
+        await runRunAgentAction(
+          ctx,
+          action.params as RunAgentActionParams,
+          this.deps.runAgent,
+        );
+        return;
+      }
       default:
         throw new Error(`unknown action: ${(action as EventAction).type}`);
     }

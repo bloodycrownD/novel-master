@@ -131,7 +131,7 @@ describe("openai-content-mapper", () => {
     );
   });
 
-  it("maps reasoning_content inbound to thinking", () => {
+  it("maps reasoning_content inbound to thinking when content is present", () => {
     const blocks = openAiChoiceToBlocks({
       content: "answer",
       reasoning_content: "internal chain",
@@ -139,5 +139,17 @@ describe("openai-content-mapper", () => {
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]!.type, "thinking");
     assert.equal(blocks[1]!.type, "text");
+  });
+
+  it("maps reasoning-only inbound to text (GLM-style empty content)", () => {
+    const blocks = openAiChoiceToBlocks({
+      content: "",
+      reasoning_content: "visible reply",
+    });
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]!.type, "text");
+    if (blocks[0]!.type === "text") {
+      assert.equal(blocks[0].text, "visible reply");
+    }
   });
 });

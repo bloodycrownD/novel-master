@@ -19,6 +19,7 @@ import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormSelectField} from '../form/FormSelectField';
 import {FormTextInput} from '../form/FormTextInput';
+import {PromptMacroTextInput} from './PromptMacroTextInput';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
@@ -78,13 +79,23 @@ function toolsFromDefinition(def: AgentDefinition): {
 const ROLE_OPTIONS = ROLES.map(role => ({value: role, label: role}));
 
 function blockTypeLabel(type: PromptBlock['type']): string {
-  if (type === 'text') {
-    return '文本';
+  return type === 'text' ? '文本' : '会话';
+}
+
+/** Drop removed `abstract` blocks from legacy agent configs. */
+function stripRemovedPromptBlocks(
+  blocks: readonly PromptBlock[],
+): {readonly prompts: PromptBlock[]; readonly removed: number} {
+  const kept: PromptBlock[] = [];
+  let removed = 0;
+  for (const block of blocks) {
+    if ((block as {type: string}).type === 'abstract') {
+      removed += 1;
+      continue;
+    }
+    kept.push(block);
   }
-  if (type === 'abstract') {
-    return '摘要';
-  }
-  return '会话';
+  return {prompts: kept, removed};
 }
 
 /** Stable JSON for dirty check; omits model ids when专属模型 is off. */
@@ -193,7 +204,15 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     const def = await runtime.agentRegistry.get(agentId);
     setName(def.name);
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-    setPrompts([...def.prompts]);
+    const {prompts: loadedPrompts, removed: removedAbstract} =
+      stripRemovedPromptBlocks(def.prompts);
+    if (loadedPrompts.length === 0) {
+      throw new Error('Agent 至少需要一个 Prompt 块');
+    }
+    setPrompts(loadedPrompts);
+    if (removedAbstract > 0) {
+      showToast('已移除已废弃的摘要块（abstract）');
+    }
     const toolsWire = toolsFromDefinition(def);
     setToolsMode(toolsWire.mode);
     setToolsList(toolsWire.listText);
@@ -249,10 +268,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         vendorModelId: baselineVendorModelId,
         toolsMode: toolsWire.mode,
         toolsList: toolsWire.listText,
-        prompts: def.prompts,
+        prompts: loadedPrompts,
       }),
     );
-  }, [agentId, runtime, loadProviders, loadSavedModels]);
+  }, [agentId, runtime, loadProviders, loadSavedModels, showToast]);
 
   useEffect(() => {
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
@@ -341,7 +360,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setPrompts(prev => prev.filter((_, i) => i !== index));
   };
 
-  const addBlock = (kind: 'text' | 'abstract' | 'chat') => {
+  const addBlock = (kind: 'text' | 'chat') => {
     if (kind === 'text') {
       setPrompts(prev => [
         ...prev,
@@ -350,15 +369,6 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           type: 'text',
           role: 'system',
           content: '',
-        },
-      ]);
-    } else if (kind === 'abstract') {
-      setPrompts(prev => [
-        ...prev,
-        {
-          name: 'abstract',
-          type: 'abstract',
-          content: '压缩后的内容如下：\n{{.abstract}}',
         },
       ]);
     } else {
@@ -606,38 +616,15 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                       仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
                     </Text>
                     <FormField label="内容" tokens={tokens}>
-                      <FormTextInput
+                      <PromptMacroTextInput
                         tokens={tokens}
                         value={block.content}
                         onChangeText={v =>
                           updateBlock(index, {type: 'text', content: v})
                         }
-                        multiline
+                        placeholder="输入 system 提示词…"
                       />
                     </FormField>
-                    <Text
-                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      宏：{'{{.worktree}}'} {'{{.filetree}}'} {'{{$time}}'} {'{{$week_cn}}'}
-                    </Text>
-                  </>
-                ) : null}
-                {block.type === 'abstract' ? (
-                  <>
-                    <FormField label="内容" tokens={tokens}>
-                      <FormTextInput
-                        tokens={tokens}
-                        value={block.content}
-                        onChangeText={v =>
-                          updateBlock(index, {type: 'abstract', content: v})
-                        }
-                        multiline
-                      />
-                    </FormField>
-                    <Text
-                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      无压缩摘要时不拼接；可用 {'{{.abstract}}'}、{'{{.worktree}}'}、{'{{.filetree}}'}
-                      、{'{{$time}}'}、{'{{$week_cn}}'}
-                    </Text>
                   </>
                 ) : null}
                 {block.type === 'chat' ? (
@@ -649,24 +636,16 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             ))}
           </View>
         </FormSectionCard>
-
-        <FormSectionCard title="工具" tokens={tokens}>
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            VFS 工具（read / write / list 等）由运行时全局注册，当前 Agent
-            配置不可 per-agent 开关。
-          </Text>
-        </FormSectionCard>
       </ScreenFormLayout>
       <BottomSheetMenu
         visible={addBlockVisible}
         items={[
           {label: '文本块', action: 'text'},
-          {label: '摘要块', action: 'abstract'},
           {label: '会话块', action: 'chat'},
         ]}
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {
-          if (action === 'text' || action === 'abstract' || action === 'chat') {
+          if (action === 'text' || action === 'chat') {
             addBlock(action);
           }
         }}

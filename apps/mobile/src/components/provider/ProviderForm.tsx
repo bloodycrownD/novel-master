@@ -21,7 +21,6 @@ export type ProviderFormValues = {
   protocol: LlmProtocolKind;
   baseUrl: string;
   displayName: string;
-  defaultModelId: string;
   apiKey: string;
   headersJson: string;
 };
@@ -31,7 +30,6 @@ export const EMPTY_PROVIDER_FORM: ProviderFormValues = {
   protocol: 'openai',
   baseUrl: '',
   displayName: '',
-  defaultModelId: '',
   apiKey: '',
   headersJson: '',
 };
@@ -67,16 +65,19 @@ function parseHeadersJson(raw: string): Record<string, string> | undefined {
 export function providerFormToCreateInput(values: ProviderFormValues) {
   const id = values.id.trim();
   const baseUrl = values.baseUrl.trim();
+  const apiKey = values.apiKey.trim();
   if (!id || !baseUrl) {
     throw new Error('请填写 providerId 与 baseUrl');
+  }
+  if (!apiKey) {
+    throw new Error('请填写 API Key');
   }
   return {
     id,
     protocol: values.protocol,
     baseUrl,
     displayName: values.displayName.trim() || undefined,
-    defaultModelId: values.defaultModelId.trim() || undefined,
-    apiKey: values.apiKey.trim() || undefined,
+    apiKey,
     headers: parseHeadersJson(values.headersJson),
   };
 }
@@ -86,7 +87,6 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
     protocol?: LlmProtocolKind;
     baseUrl?: string;
     displayName?: string | null;
-    defaultModelId?: string | null;
     apiKey?: string;
     headers?: Record<string, string>;
   } = {};
@@ -95,7 +95,6 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
     patch.baseUrl = baseUrl;
   }
   patch.displayName = values.displayName.trim() || null;
-  patch.defaultModelId = values.defaultModelId.trim() || null;
   const apiKey = values.apiKey.trim();
   if (apiKey) {
     patch.apiKey = apiKey;
@@ -138,10 +137,14 @@ export function ProviderForm({
 
   const canSave = useMemo(() => {
     if (mode === 'create') {
-      return values.id.trim().length > 0 && values.baseUrl.trim().length > 0;
+      return (
+        values.id.trim().length > 0 &&
+        values.baseUrl.trim().length > 0 &&
+        values.apiKey.trim().length > 0
+      );
     }
     return true;
-  }, [mode, values.baseUrl, values.id]);
+  }, [mode, values.apiKey, values.baseUrl, values.id]);
 
   const handleSave = async () => {
     try {
@@ -217,16 +220,6 @@ export function ProviderForm({
             placeholder="可选"
           />
         </FormField>
-        <FormField label="默认模型 ID" tokens={tokens} hint="可选">
-          <FormTextInput
-            tokens={tokens}
-            value={values.defaultModelId}
-            onChangeText={text => patch({defaultModelId: text})}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="provider/vendorModelId"
-          />
-        </FormField>
       </FormSectionCard>
 
       <FormSectionCard title="认证" tokens={tokens}>
@@ -236,7 +229,7 @@ export function ProviderForm({
           hint={
             mode === 'edit' && apiKeyStatus
               ? `当前：${apiKeyStatus}；留空则不修改`
-              : '可选，写入 SKSP 安全存储'
+              : '必填，写入 SKSP 安全存储'
           }>
           <FormTextInput
             tokens={tokens}

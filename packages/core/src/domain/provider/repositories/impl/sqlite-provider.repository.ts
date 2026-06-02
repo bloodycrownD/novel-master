@@ -40,8 +40,6 @@ function rowToProvider(row: Row): LlmProvider {
     baseUrl: String(row.base_url),
     displayName: row.display_name != null ? String(row.display_name) : null,
     secretRef: row.secret_ref != null ? String(row.secret_ref) : null,
-    defaultModelId:
-      row.default_model_id != null ? String(row.default_model_id) : null,
     headers: parseHeaders(String(row.headers_json ?? "{}")),
     isBuiltin: Number(row.is_builtin) === 1,
     createdAtMs: Number(row.created_at_ms),
@@ -59,7 +57,7 @@ export class SqliteProviderRepository implements ProviderRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, protocol, base_url, display_name, secret_ref, default_model_id,
+      `SELECT id, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider ORDER BY id`,
       {},
@@ -71,7 +69,7 @@ export class SqliteProviderRepository implements ProviderRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, protocol, base_url, display_name, secret_ref, default_model_id,
+      `SELECT id, protocol, base_url, display_name, secret_ref,
               headers_json, is_builtin, created_at_ms, updated_at_ms
        FROM llm_provider WHERE id = #{id}`,
       { id },
@@ -87,10 +85,10 @@ export class SqliteProviderRepository implements ProviderRepository {
       this.conn,
       this.parser,
       `INSERT INTO llm_provider (
-        id, protocol, base_url, display_name, secret_ref, default_model_id,
+        id, protocol, base_url, display_name, secret_ref,
         headers_json, is_builtin, created_at_ms, updated_at_ms
       ) VALUES (
-        #{id}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef}, #{defaultModelId},
+        #{id}, #{protocol}, #{baseUrl}, #{displayName}, #{secretRef},
         #{headersJson}, #{isBuiltin}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
@@ -99,7 +97,6 @@ export class SqliteProviderRepository implements ProviderRepository {
         baseUrl: provider.baseUrl,
         displayName: provider.displayName,
         secretRef: provider.secretRef,
-        defaultModelId: provider.defaultModelId,
         headersJson: JSON.stringify(provider.headers),
         isBuiltin: provider.isBuiltin ? 1 : 0,
         createdAtMs: provider.createdAtMs,
@@ -117,7 +114,6 @@ export class SqliteProviderRepository implements ProviderRepository {
         base_url = #{baseUrl},
         display_name = #{displayName},
         secret_ref = #{secretRef},
-        default_model_id = #{defaultModelId},
         headers_json = #{headersJson},
         updated_at_ms = #{updatedAtMs}
        WHERE id = #{id}`,
@@ -127,7 +123,6 @@ export class SqliteProviderRepository implements ProviderRepository {
         baseUrl: provider.baseUrl,
         displayName: provider.displayName,
         secretRef: provider.secretRef,
-        defaultModelId: provider.defaultModelId,
         headersJson: JSON.stringify(provider.headers),
         updatedAtMs: provider.updatedAtMs,
       },

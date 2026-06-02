@@ -8,6 +8,7 @@ import type {
   WorktreeDirRule,
   WorktreeService,
 } from '@novel-master/core';
+import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core';
 
 function worktreeRootLogicalPath(_scope: VfsScope): string {
   return '/';
@@ -78,11 +79,11 @@ export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
 export function defaultDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
-    sortField: 'name' as const,
-    sortOrder: 'asc' as const,
-    headCount: 0,
-    tailCount: 0,
-    fillPolicy: 'hidden' as const,
+    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
     ruleEnabled: true,
   };
 }

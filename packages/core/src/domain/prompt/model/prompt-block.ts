@@ -1,5 +1,5 @@
 /**
- * Prompt block model (text, chat, and abstract segments).
+ * Prompt block model (text and chat segments).
  *
  * @module domain/prompt/model/prompt-block
  */
@@ -18,10 +18,4 @@ export type PromptBlock =
   | {
       readonly name: string;
       readonly type: "chat";
-    }
-  | {
-      readonly name: string;
-      /** Renders into system when {@link PromptRenderContext.abstract} is non-empty. */
-      readonly type: "abstract";
-      readonly content: string;
     };

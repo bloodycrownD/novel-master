@@ -199,6 +199,7 @@ export {
   computeHeadTailIndices,
   sortFilesForDir,
 } from "./domain/worktree/logic/worktree-eval.js";
+export { DEFAULT_WORKTREE_DIR_RULE } from "./domain/worktree/logic/default-dir-rule.js";
 export {
   renderFileBlock,
   joinFileBlocks,
@@ -288,7 +289,12 @@ export type {
 export type { DepthSlice } from "./domain/depth/logic/depth-slice.js";
 export { matchDepth, validateDepthSlice, messageIdsInSlice } from "./domain/depth/logic/depth-slice.js";
 export { depthByMessageId, listVisibleForDepth } from "./domain/depth/logic/depth-from-tail.js";
-export type { EventsConfig, EventAction } from "./domain/events-config/model/events-config.js";
+export type {
+  EventsConfig,
+  EventAction,
+  EventActionType,
+  RunAgentActionParams,
+} from "./domain/events-config/model/events-config.js";
 export { eventsConfigSchema } from "./domain/events-config/model/events-config.schema.js";
 export { DEFAULT_EVENTS_CONFIG } from "./domain/events-config/logic/default-events.js";
 export type { EventsConfigStore } from "./service/events-config/events-config-store.port.js";
@@ -305,7 +311,10 @@ export {
 } from "./service/compaction-conditions/create-compaction-condition-evaluator.js";
 /** Runs actions from `nm-events` config; use {@link createEventOrchestrator} in runtime. */
 export type { EventOrchestrator, EventEmitContext } from "./service/events/event-orchestrator.port.js";
-export { createEventOrchestrator } from "./service/events/create-event-orchestrator.js";
+export {
+  createEventOrchestrator,
+  createRunAgentHandlerDeps,
+} from "./service/events/create-event-orchestrator.js";
 export type { EventRunResult, EventActionFailure } from "./service/events/event-run-result.js";
 export { EventsError } from "./errors/events-errors.js";
 export type { SessionMacroCache, SessionMacroSnapshot } from "./service/prompt/session-macro-cache.port.js";

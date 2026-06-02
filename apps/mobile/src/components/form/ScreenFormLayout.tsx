@@ -10,13 +10,21 @@ type Props = {
   tokens: ThemeTokens;
   children: ReactNode;
   footer?: ReactNode;
+  /** Disable scroll while a modal/sheet is open to avoid background bleed. */
+  scrollEnabled?: boolean;
 };
 
-export function ScreenFormLayout({tokens, children, footer}: Props) {
+export function ScreenFormLayout({
+  tokens,
+  children,
+  footer,
+  scrollEnabled = true,
+}: Props) {
   return (
     <FormOverlayProvider>
       <View style={[styles.root, {backgroundColor: tokens.background}]}>
         <ScrollView
+          scrollEnabled={scrollEnabled}
           contentContainerStyle={styles.scroll}
           keyboardShouldPersistTaps="handled">
           {children}

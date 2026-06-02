@@ -12,7 +12,6 @@ export interface LlmProvider {
   readonly baseUrl: string;
   readonly displayName: string | null;
   readonly secretRef: string | null;
-  readonly defaultModelId: string | null;
   readonly headers: Readonly<Record<string, string>>;
   readonly isBuiltin: boolean;
   readonly createdAtMs: number;

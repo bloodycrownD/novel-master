@@ -12,11 +12,12 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import type {
-  FillPolicy,
-  SetDirRuleInput,
-  SortField,
-  SortOrder,
+import {
+  DEFAULT_WORKTREE_DIR_RULE,
+  type FillPolicy,
+  type SetDirRuleInput,
+  type SortField,
+  type SortOrder,
 } from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -55,22 +56,38 @@ export function DirectoryRuleSheet({
 }: Props) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
-  const [sortField, setSortField] = useState<SortField>('name');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [headCount, setHeadCount] = useState('0');
-  const [tailCount, setTailCount] = useState('0');
-  const [fillPolicy, setFillPolicy] = useState<FillPolicy>('hidden');
+  const [sortField, setSortField] = useState<SortField>(
+    DEFAULT_WORKTREE_DIR_RULE.sortField,
+  );
+  const [sortOrder, setSortOrder] = useState<SortOrder>(
+    DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+  );
+  const [headCount, setHeadCount] = useState(
+    String(DEFAULT_WORKTREE_DIR_RULE.headCount),
+  );
+  const [tailCount, setTailCount] = useState(
+    String(DEFAULT_WORKTREE_DIR_RULE.tailCount),
+  );
+  const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
+    DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+  );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
-    setSortField(initial?.sortField ?? 'name');
-    setSortOrder(initial?.sortOrder ?? 'asc');
-    setHeadCount(String(initial?.headCount ?? 0));
-    setTailCount(String(initial?.tailCount ?? 0));
-    setFillPolicy(initial?.fillPolicy ?? 'hidden');
+    setSortField(initial?.sortField ?? DEFAULT_WORKTREE_DIR_RULE.sortField);
+    setSortOrder(initial?.sortOrder ?? DEFAULT_WORKTREE_DIR_RULE.sortOrder);
+    setHeadCount(
+      String(initial?.headCount ?? DEFAULT_WORKTREE_DIR_RULE.headCount),
+    );
+    setTailCount(
+      String(initial?.tailCount ?? DEFAULT_WORKTREE_DIR_RULE.tailCount),
+    );
+    setFillPolicy(
+      initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    );
   }, [visible, initial, logicalPath]);
 
   const handleSave = async () => {

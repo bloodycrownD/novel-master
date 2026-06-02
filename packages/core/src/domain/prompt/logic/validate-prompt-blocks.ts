@@ -21,7 +21,7 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
   if ("when" in record) {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: when is no longer supported; use type abstract for conditional summary blocks`,
+      `${label}: when is no longer supported; remove the when field`,
     );
   }
 }
@@ -88,19 +88,10 @@ function validateBlockEntry(
   }
 
   if (type === "abstract") {
-    if ("role" in record) {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}: abstract block must not include role`,
-      );
-    }
-    if (typeof record.content !== "string") {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}: abstract block requires string content`,
-      );
-    }
-    return { name, type: "abstract", content: record.content };
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}: type "abstract" is removed; delete the block and any {{.abstract}} macros`,
+    );
   }
 
   throw new PromptError("INVALID_BLOCK", `${label}: unknown type "${type}"`);
@@ -132,4 +123,4 @@ export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[
 
 /** @alias validatePromptBlocksFromMap */
 export const validatePromptBlocks = validatePromptBlocksFromMap;
-
+

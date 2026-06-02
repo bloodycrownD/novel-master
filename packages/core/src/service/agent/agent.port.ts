@@ -26,6 +26,13 @@ export interface AgentRunOptions {
   readonly onStream?: (event: LlmStreamEvent) => void;
   /** When set with runner regex deps, LLM prompt messages get llm-channel replacement. */
   readonly activeRegexGroupId?: string;
+  /**
+   * When false, assistant/tool turns are kept in an ephemeral overlay only
+   * ({@link EphemeralOverlayAgentSession}); default true.
+   */
+  readonly persistMessages?: boolean;
+  /** When false, skip `agent.run.*` / stream bus events; default true. */
+  readonly publishRunLifecycle?: boolean;
 }
 
 /** Drives multi-step model round-trips with tool execution. */

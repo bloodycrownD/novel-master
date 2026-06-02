@@ -13,6 +13,7 @@ import {
   createCompactionConditionsStore,
   createDefaultTokenCounterRegistry,
   createEventOrchestrator,
+  createRunAgentHandlerDeps,
   createEventsConfigStore,
   createMessageService,
   createPersistentPreferences,
@@ -162,15 +163,28 @@ export async function createNovelMasterRuntime(
     providers: providerBundle.providerRepo,
   });
 
+  const agentRegistry = createAgentRegistryService(conn);
+
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,
     eventBus,
     messages,
     macroCache,
     worktree: (s) => createWorktreeService(conn, s),
+    runAgent: createRunAgentHandlerDeps({
+      messages,
+      agentRegistry,
+      modelRequests,
+      macroCache,
+      worktree: (s) => createWorktreeService(conn, s),
+      sessionFs: createSessionFsService(conn),
+      sessionVfs: (projectId, sessionId) =>
+        createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
+      eventBus,
+      state,
+      regexConfig,
+    }),
   });
-
-  const agentRegistry = createAgentRegistryService(conn);
 
   return {
     conn,

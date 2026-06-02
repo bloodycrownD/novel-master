@@ -81,16 +81,22 @@ describe("validatePromptBlocks", () => {
     );
   });
 
-  it("accepts abstract block", () => {
-    const blocks = validatePromptBlocks({
-      summary: {
-        type: "abstract",
-        content: "{{.abstract}}",
+  it("rejects abstract block", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks({
+          summary: {
+            type: "abstract",
+            content: "{{.abstract}}",
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        assert.match(error.message, /abstract.*removed/i);
+        return true;
       },
-    });
-    assert.equal(blocks.length, 1);
-    assert.equal(blocks[0]?.type, "abstract");
-    assert.equal(blocks[0]?.name, "summary");
+    );
   });
 
   it("rejects when on text block", () => {

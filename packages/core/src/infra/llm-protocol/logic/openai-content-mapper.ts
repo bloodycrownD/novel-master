@@ -19,6 +19,52 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Build NM blocks from accumulated reply strings.
+ * When `content` is empty but `reasoning_content` is set (some GLM endpoints), treat
+ * reasoning as visible text so chat UI is not thinking-only.
+ */
+function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
+  let text = textRaw;
+  let thinking = thinkingRaw;
+  if (text.trim() === "" && thinking.trim() !== "") {
+    text = thinking;
+    thinking = "";
+  }
+  const blocks: ContentBlock[] = [];
+  if (thinking.trim() !== "") {
+    blocks.push({ type: "thinking", text: thinking });
+  }
+  if (text.trim() !== "") {
+    blocks.push({ type: "text", text });
+  }
+  return blocks;
+}
+
+function appendOpenAiStreamTextDelta(
+  state: { textParts: string[] },
+  content: unknown,
+  onStream?: (event: LlmStreamEvent) => void,
+): void {
+  if (typeof content === "string" && content !== "") {
+    state.textParts.push(content);
+    onStream?.({ type: "text-delta", text: content });
+    return;
+  }
+  if (!Array.isArray(content)) {
+    return;
+  }
+  for (const part of content) {
+    if (!isRecord(part)) {
+      continue;
+    }
+    if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
+      state.textParts.push(part.text);
+      onStream?.({ type: "text-delta", text: part.text });
+    }
+  }
+}
+
 function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): string {
   if (block.source.kind === "url") {
     return block.source.url;
@@ -145,23 +191,25 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
     return [];
   }
 
+  const textParts: string[] = [];
+  const thinkingParts: string[] = [];
   const blocks: ContentBlock[] = [];
 
   const reasoning = message.reasoning_content;
   if (typeof reasoning === "string" && reasoning !== "") {
-    blocks.push({ type: "thinking", text: reasoning });
+    thinkingParts.push(reasoning);
   }
 
   const content = message.content;
   if (typeof content === "string" && content !== "") {
-    blocks.push({ type: "text", text: content });
+    textParts.push(content);
   } else if (Array.isArray(content)) {
     for (const part of content) {
       if (!isRecord(part)) {
         continue;
       }
       if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
-        blocks.push({ type: "text", text: part.text });
+        textParts.push(part.text);
       } else if (part.type === "image_url" && isRecord(part.image_url)) {
         const url = part.image_url.url;
         if (typeof url === "string" && url !== "") {
@@ -187,6 +235,10 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
       }
     }
   }
+
+  blocks.unshift(
+    ...blocksFromReplyStrings(textParts.join(""), thinkingParts.join("")),
+  );
 
   const toolCalls = message.tool_calls;
   if (Array.isArray(toolCalls)) {
@@ -243,10 +295,7 @@ export function openAiStreamDeltaToEvents(
     return;
   }
 
-  if (typeof delta.content === "string" && delta.content !== "") {
-    state.textParts.push(delta.content);
-    onStream?.({ type: "text-delta", text: delta.content });
-  }
+  appendOpenAiStreamTextDelta(state, delta.content, onStream);
 
   const reasoning = delta.reasoning_content;
   if (typeof reasoning === "string" && reasoning !== "") {
@@ -294,15 +343,10 @@ export function openAiStreamAccumulatorsToBlocks(
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
-  const blocks: ContentBlock[] = [];
-  const text = state.textParts.join("");
-  if (text !== "") {
-    blocks.push({ type: "text", text });
-  }
-  const thinking = state.thinkingParts.join("");
-  if (thinking !== "") {
-    blocks.push({ type: "thinking", text: thinking });
-  }
+  const blocks = blocksFromReplyStrings(
+    state.textParts.join(""),
+    state.thinkingParts.join(""),
+  );
 
   const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);
   for (const index of indices) {

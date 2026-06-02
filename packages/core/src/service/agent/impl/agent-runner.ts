@@ -22,6 +22,7 @@ import type { ModelRequestService } from "../../provider/model-request.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
+import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -65,8 +66,17 @@ export class DefaultAgentRunner implements AgentRunner {
 
   async run(options: AgentRunOptions): Promise<AgentRunResult> {
     const { sessionId, projectId } = options;
+    const persistMessages = options.persistMessages !== false;
+    const publishRunLifecycle = options.publishRunLifecycle !== false;
     const bus = this.deps.eventBus;
-    bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId });
+    const session =
+      persistMessages
+        ? this.deps.session
+        : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
+
+    if (publishRunLifecycle) {
+      bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId });
+    }
 
     const rounds: ModelRoundSummary[] = [];
     let stepsExecuted = 0;
@@ -85,7 +95,7 @@ export class DefaultAgentRunner implements AgentRunner {
     try {
       for (let step = 0; step < maxSteps; step++) {
         let stepCompactionEmitted = false;
-        if (this.deps.compactionConditions != null) {
+        if (persistMessages && this.deps.compactionConditions != null) {
           const shouldCompact =
             await this.deps.compactionConditions.shouldRequestCompaction(
               this.deps.session,
@@ -118,7 +128,7 @@ export class DefaultAgentRunner implements AgentRunner {
           filetreeDisplay: macro?.filetreeDisplay ?? "",
         };
 
-        let visible = await this.deps.session.list();
+        let visible = await session.list();
         if (options.activeRegexGroupId && this.deps.regexConfig) {
           const rules = await resolveActiveCompiledRules(
             this.deps.regexConfig,
@@ -141,9 +151,12 @@ export class DefaultAgentRunner implements AgentRunner {
           messages: visible,
         });
 
-        const onStream = options.stream
-          ? wrapStreamForBus(bus, sessionId, options.onStream)
-          : undefined;
+        const onStream =
+          options.stream && publishRunLifecycle
+            ? wrapStreamForBus(bus, sessionId, options.onStream)
+            : options.stream
+              ? options.onStream
+              : undefined;
 
         const result = await this.deps.modelRequests.request(
           options.applicationModelId,
@@ -159,7 +172,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         stepsExecuted += 1;
 
-        await this.deps.session.append("assistant", { blocks: result.blocks }, {
+        await session.append("assistant", { blocks: result.blocks }, {
           raw: result.raw as Record<string, unknown>,
         });
         assistantAppendCount += 1;
@@ -210,7 +223,7 @@ export class DefaultAgentRunner implements AgentRunner {
           });
         }
 
-        await this.deps.session.append("user", { blocks: toolResults });
+        await session.append("user", { blocks: toolResults });
 
         if (step + 1 >= maxSteps) {
           stopReason = "max_steps";
@@ -219,23 +232,27 @@ export class DefaultAgentRunner implements AgentRunner {
       }
     } catch (e: unknown) {
       runError = e instanceof Error ? e.message : String(e);
-      bus.publish(EVENT_AGENT_RUN_FAILED, {
-        sessionId,
-        projectId,
-        error: runError,
-      });
+      if (publishRunLifecycle) {
+        bus.publish(EVENT_AGENT_RUN_FAILED, {
+          sessionId,
+          projectId,
+          error: runError,
+        });
+      }
       throw e;
     }
 
-    if (assistantAppendCount > 0) {
+    if (persistMessages && assistantAppendCount > 0) {
       bus.publish(EVENT_SESSION_MESSAGE_RECEIVED, { sessionId, projectId });
     }
 
-    bus.publish(EVENT_AGENT_RUN_FINISHED, {
-      sessionId,
-      projectId,
-      stopReason,
-    });
+    if (publishRunLifecycle) {
+      bus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId,
+        projectId,
+        stopReason,
+      });
+    }
 
     return {
       stepsExecuted,

@@ -12,6 +12,7 @@ import type {
   SortOrder,
   WorktreeDirRule,
 } from "../model/worktree-types.js";
+import { DEFAULT_WORKTREE_DIR_RULE } from "./default-dir-rule.js";
 
 /** File metadata used for sorting within a directory. */
 export interface WorktreeFileSortMeta {
@@ -65,8 +66,10 @@ export function sortFilesForDir(
   files: readonly WorktreeFileSortMeta[],
   dirRule: WorktreeDirRule | null,
 ): WorktreeFileSortMeta[] {
-  const sortField: SortField = dirRule?.sortField ?? "name";
-  const sortOrder: SortOrder = dirRule?.sortOrder ?? "asc";
+  const sortField: SortField =
+    dirRule?.sortField ?? DEFAULT_WORKTREE_DIR_RULE.sortField;
+  const sortOrder: SortOrder =
+    dirRule?.sortOrder ?? DEFAULT_WORKTREE_DIR_RULE.sortOrder;
   const sorted = [...files];
   sorted.sort((a, b) => {
     switch (sortField) {
@@ -100,9 +103,10 @@ export function evaluateFileDisplay(params: {
   if (!params.parentRuleOn) {
     return "hidden";
   }
-  const head = params.dirRule?.headCount ?? 0;
-  const tail = params.dirRule?.tailCount ?? 0;
-  const fill: FillPolicy = params.dirRule?.fillPolicy ?? "hidden";
+  const head = params.dirRule?.headCount ?? DEFAULT_WORKTREE_DIR_RULE.headCount;
+  const tail = params.dirRule?.tailCount ?? DEFAULT_WORKTREE_DIR_RULE.tailCount;
+  const fill: FillPolicy =
+    params.dirRule?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy;
   const priority = computeHeadTailIndices(
     params.autoFileCount,
     head,

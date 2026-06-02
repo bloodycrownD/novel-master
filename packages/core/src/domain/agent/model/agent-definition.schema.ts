@@ -97,12 +97,6 @@ function blockToMapValue(
       content: block.content,
     };
   }
-  if (block.type === "abstract") {
-    throw new AgentConfigError(
-      "INVALID_SCHEMA",
-      "abstract prompt blocks are no longer supported",
-    );
-  }
   return { type: "chat" };
 }
 

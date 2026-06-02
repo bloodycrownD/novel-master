@@ -29,6 +29,7 @@ flowchart TB
   subgraph actions [内置 actions]
     HM[hide-message]
     RM[refresh-macros]
+    RA[run-agent]
   end
   subgraph runner [AgentRunner]
     ARUN[run loop]
@@ -39,6 +40,7 @@ flowchart TB
   EO --> AR
   AR --> HM
   AR --> RM
+  AR --> RA
   HM --> MS[MessageService.hideRange]
   RM --> MC[SessionMacroCache]
   ARUN --> MC
@@ -119,6 +121,7 @@ events:
 | `- refresh-macros` | `{ type: 'refresh-macros', params: {} }` |
 | `- refresh-macros: {}` | 同上 |
 | `- hide-message:` + `start-depth` / `end-depth` | `{ type: 'hide-message', params: DepthSlice }` |
+| `- run-agent:` + `agent-id` | `{ type: 'run-agent', params: { agentId } }`；**不**写入会话消息，工具调用经 VFS 等工具与宿主交互 |
 
 **执行语义**：
 
@@ -300,7 +303,7 @@ packages/core/src/
 │   │       └── actions/
 │   │           ├── hide-message.handler.ts
 │   │           ├── refresh-macros.handler.ts
-│   │           └── register-default-action-handlers.ts
+│   │           └── run-agent.handler.ts
 │   ├── prompt/
 │   │   ├── render-prompt.ts                               # 删 abstract；读宏缓存
 │   │   ├── session-macro-cache.port.ts

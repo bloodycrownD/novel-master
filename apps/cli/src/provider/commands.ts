@@ -80,7 +80,7 @@ export async function runProvider(
       const baseUrl = flagString(flags, "baseUrl");
       if (!id || !protocol || !baseUrl) {
         throw new Error(
-          "Usage: nm provider create --providerId <id> --protocol <openai|anthropic|gemini> --baseUrl <url> [--displayName] [--headers] [--defaultModelId] [--apiKey]",
+          "Usage: nm provider create --providerId <id> --protocol <openai|anthropic|gemini> --baseUrl <url> [--displayName] [--headers] [--apiKey]",
         );
       }
       await rt.providers.create({
@@ -89,7 +89,6 @@ export async function runProvider(
         baseUrl,
         displayName: flagString(flags, "displayName"),
         headers: parseHeaders(flags),
-        defaultModelId: flagString(flags, "defaultModelId"),
         apiKey: flagString(flags, "apiKey"),
       });
       return;
@@ -116,7 +115,6 @@ export async function runProvider(
         baseUrl?: string;
         displayName?: string | null;
         headers?: Record<string, string>;
-        defaultModelId?: string | null;
         apiKey?: string;
       } = {};
       const protocol = flagString(flags, "protocol");
@@ -134,16 +132,13 @@ export async function runProvider(
       if (headers) {
         patch.headers = headers;
       }
-      if (flags.has("defaultModelId")) {
-        patch.defaultModelId = flagString(flags, "defaultModelId") ?? null;
-      }
       const apiKey = flagString(flags, "apiKey");
       if (apiKey) {
         patch.apiKey = apiKey;
       }
       if (Object.keys(patch).length === 0) {
         throw new Error(
-          "Usage: nm provider edit --providerId <id> [--baseUrl] [--displayName] [--headers] [--defaultModelId] [--apiKey] [--protocol]",
+          "Usage: nm provider edit --providerId <id> [--baseUrl] [--displayName] [--headers] [--apiKey] [--protocol]",
         );
       }
       await rt.providers.edit(id, patch);

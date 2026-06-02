@@ -20,7 +20,6 @@ function stubProvider(
     baseUrl: "https://example.com/v1",
     displayName: id,
     secretRef: null,
-    defaultModelId: null,
     headers: {},
     isBuiltin: true,
     createdAtMs: 0,

@@ -8,10 +8,6 @@ import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
-import {
-  formatApplicationModelId,
-  parseApplicationModelId,
-} from "@/domain/provider/logic/application-model-id.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -83,15 +79,11 @@ export class DefaultProviderService implements ProviderService {
       baseUrl: normalizeBaseUrl(input.baseUrl),
       displayName: input.displayName ?? null,
       secretRef,
-      defaultModelId: input.defaultModelId ?? null,
       headers: input.headers ?? {},
       isBuiltin: false,
       createdAtMs: now,
       updatedAtMs: now,
     };
-    if (provider.defaultModelId) {
-      await this.assertSavedModel(provider.defaultModelId);
-    }
     await this.deps.providers.insert(provider);
     return provider;
   }
@@ -110,13 +102,6 @@ export class DefaultProviderService implements ProviderService {
       secretRef = providerApiKeyRef(id);
       await this.deps.secretStore.set(secretRef, patch.apiKey);
     }
-    let defaultModelId = provider.defaultModelId;
-    if (patch.defaultModelId !== undefined) {
-      defaultModelId = patch.defaultModelId;
-      if (defaultModelId) {
-        await this.assertSavedModel(defaultModelId);
-      }
-    }
     const updated: LlmProvider = {
       ...provider,
       protocol: patch.protocol ?? provider.protocol,
@@ -127,7 +112,6 @@ export class DefaultProviderService implements ProviderService {
         patch.displayName !== undefined ? patch.displayName : provider.displayName,
       headers: patch.headers ?? provider.headers,
       secretRef,
-      defaultModelId,
       updatedAtMs: Date.now(),
     };
     await this.deps.providers.update(updated);
@@ -159,18 +143,5 @@ export class DefaultProviderService implements ProviderService {
       return "set";
     }
     return "not set";
-  }
-
-  private async assertSavedModel(applicationModelId: string): Promise<void> {
-    const { providerId, vendorModelId } =
-      parseApplicationModelId(applicationModelId);
-    const saved = await this.deps.savedModels.find(providerId, vendorModelId);
-    if (!saved) {
-      throw new ProviderError(
-        "MODEL_NOT_SAVED",
-        `Model not saved: ${formatApplicationModelId(providerId, vendorModelId)}`,
-        { modelId: applicationModelId, providerId },
-      );
-    }
   }
 }

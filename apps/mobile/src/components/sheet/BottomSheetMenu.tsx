@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export interface SheetMenuItem {
@@ -33,17 +34,25 @@ export function BottomSheetMenu({
   onClose,
 }: Props) {
   const {tokens} = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
+      statusBarTranslucent
       onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <Pressable
-          style={[styles.sheet, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+      <View style={styles.backdrop}>
+        <Pressable style={styles.backdropTap} onPress={onClose} />
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: tokens.surface,
+              paddingBottom: Math.max(insets.bottom, 16),
+            },
+          ]}>
           {title ? (
             <Text style={[styles.title, {color: tokens.textSecondary}]}>
               {title}
@@ -73,8 +82,8 @@ export function BottomSheetMenu({
               取消
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -83,12 +92,15 @@ const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  backdropTap: {
+    ...StyleSheet.absoluteFillObject,
   },
   sheet: {
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
-    paddingBottom: 24,
+    overflow: 'hidden',
   },
   title: {
     textAlign: 'center',

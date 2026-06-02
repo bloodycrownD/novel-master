@@ -33,6 +33,20 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
  *
  * @param conn - Open TDBC connection
  */
+async function migrateDropProviderDefaultModelId(
+  tx: TdbcConnection,
+): Promise<void> {
+  const rows = await tx.query(
+    "SELECT name FROM pragma_table_info('llm_provider')",
+  );
+  const names = rows.map((r) => String(r.name));
+  if (names.includes("default_model_id")) {
+    await tx.execute(
+      "ALTER TABLE llm_provider DROP COLUMN default_model_id",
+    );
+  }
+}
+
 async function migrateRegexRuleDepthColumns(tx: TdbcConnection): Promise<void> {
   const rows = await tx.query(
     "SELECT name FROM pragma_table_info('regex_rule')",
@@ -54,6 +68,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
       await tx.execute(sql);
     }
     await migrateRegexRuleDepthColumns(tx);
+    await migrateDropProviderDefaultModelId(tx);
     await seedBuiltinProviders(tx);
   });
 }

@@ -6,6 +6,24 @@ const path = require('path');
 const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
 const monorepoRoot = path.resolve(__dirname, '../..');
+const coreDistRoot = path.resolve(monorepoRoot, 'packages/core/dist');
+/** Metro resolves `@novel-master/core` to dist; stale dist misses new domain modules. */
+const coreDistSmokeFiles = [
+  'index.js',
+  'domain/events-config/model/events-config.schema.js',
+  'domain/compaction-conditions/model/compaction-conditions.schema.js',
+  'domain/worktree/logic/default-dir-rule.js',
+  'service/events/create-event-orchestrator.js',
+];
+for (const rel of coreDistSmokeFiles) {
+  const abs = path.join(coreDistRoot, rel);
+  if (!fs.existsSync(abs)) {
+    throw new Error(
+      `[metro] Incomplete @novel-master/core build (missing ${rel}). ` +
+        'Run: npm run build -w @novel-master/core',
+    );
+  }
+}
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
 const zodCjs = path.resolve(zodRoot, 'index.cjs');

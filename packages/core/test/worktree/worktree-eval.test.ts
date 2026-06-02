@@ -97,6 +97,20 @@ describe("worktree eval", () => {
     );
   });
 
+  it("uses default tail 1000 and fill full when dirRule is null", () => {
+    assert.equal(
+      evaluateFileDisplay({
+        inclusion: "auto",
+        parentRuleOn: true,
+        dirRule: null,
+        indexInSortedAutoFiles: 500,
+        autoFileCount: 1001,
+        logicalPath: "/middle.md",
+      }),
+      "full",
+    );
+  });
+
   it("fill filename for non-priority auto file", () => {
     assert.equal(
       evaluateFileDisplay({

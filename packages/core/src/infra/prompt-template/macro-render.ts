@@ -10,7 +10,7 @@ import { scanMacroActions } from "./macro-scan.js";
 export interface MacroRenderContext {
   readonly dot: Readonly<Record<string, unknown>>;
   readonly root: Readonly<Record<string, string>>;
-  /** Dot fields that resolve to "" when missing (e.g. abstract). */
+  /** Dot fields that resolve to "" when missing. */
   readonly optionalDotFields?: readonly string[];
 }
 

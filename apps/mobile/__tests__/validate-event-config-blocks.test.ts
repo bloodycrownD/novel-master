@@ -1,0 +1,49 @@
+import type {EventBlockDraft} from '../src/components/events/event-config-state';
+import {validateEventConfigBlocks} from '../src/components/events/validate-event-config-blocks';
+
+const MSG_RECEIVED = 'session.message.received';
+const COMPACTION = 'session.compaction.requested';
+
+function draft(
+  eventType: string,
+  actions: EventBlockDraft['chain']['actions'],
+): EventBlockDraft {
+  return {
+    id: 'b1',
+    eventType,
+    chain: {mode: 'parallel', actions},
+  };
+}
+
+describe('validateEventConfigBlocks', () => {
+  it('rejects duplicate event types', () => {
+    const err = validateEventConfigBlocks([
+      draft(MSG_RECEIVED, [{type: 'refresh-macros', params: {}}]),
+      draft(MSG_RECEIVED, [{type: 'refresh-macros', params: {}}]),
+    ]);
+    expect(err).toMatch(/重复/);
+    expect(err).toMatch(/收到助手消息后/);
+  });
+
+  it('rejects duplicate action types in one event', () => {
+    const err = validateEventConfigBlocks([
+      draft(COMPACTION, [
+        {type: 'hide-message', params: {startDepth: 6}},
+        {type: 'hide-message', params: {startDepth: 3}},
+      ]),
+    ]);
+    expect(err).toMatch(/隐藏消息/);
+    expect(err).toMatch(/重复/);
+  });
+
+  it('accepts distinct actions', () => {
+    expect(
+      validateEventConfigBlocks([
+        draft(COMPACTION, [
+          {type: 'hide-message', params: {startDepth: 6}},
+          {type: 'refresh-macros', params: {}},
+        ]),
+      ]),
+    ).toBeNull();
+  });
+});

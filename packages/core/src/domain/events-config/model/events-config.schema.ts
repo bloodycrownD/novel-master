@@ -48,7 +48,19 @@ function parseActionItem(raw: unknown): EventAction {
     return { type: "hide-message", params: slice };
   }
   if (type === "agent-run") {
-    return { type: "agent-run", params: {} };
+    throw new Error("action 'agent-run' was renamed to 'run-agent'");
+  }
+  if (type === "run-agent") {
+    const paramsRaw = obj[type];
+    const wire =
+      paramsRaw != null && typeof paramsRaw === "object"
+        ? (paramsRaw as Record<string, unknown>)
+        : {};
+    const agentId = String(wire.agentId ?? wire["agent-id"] ?? "").trim();
+    if (agentId === "") {
+      throw new Error("run-agent requires agentId");
+    }
+    return { type: "run-agent", params: { agentId } };
   }
   throw new Error(`unknown action type: ${type}`);
 }
