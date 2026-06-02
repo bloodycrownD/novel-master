@@ -292,6 +292,7 @@ export { depthByMessageId, listVisibleForDepth } from "./domain/depth/logic/dept
 export type {
   EventsConfig,
   EventAction,
+  EventActionNode,
   EventActionType,
   RunAgentActionParams,
 } from "./domain/events-config/model/events-config.js";

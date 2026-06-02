@@ -9,17 +9,14 @@ import { EVENT_SESSION_COMPACTION_REQUESTED } from "@/domain/events/model/event-
 
 /** Factory default: parallel hide depth 6+ and refresh macros on compaction. */
 export const DEFAULT_EVENTS_CONFIG: EventsConfig = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   events: {
-    [EVENT_SESSION_COMPACTION_REQUESTED]: {
-      mode: "parallel",
-      actions: [
-        {
-          type: "hide-message",
-          params: { startDepth: 6 },
-        },
-        { type: "refresh-macros", params: {} },
-      ],
-    },
+    [EVENT_SESSION_COMPACTION_REQUESTED]: [
+      {
+        type: "hide-message",
+        params: { startDepth: 6 },
+      },
+      { type: "refresh-macros", params: {} },
+    ],
   },
 };

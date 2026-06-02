@@ -4,7 +4,7 @@
  * @module service/events/impl/event-orchestrator.service
  */
 
-import type { EventAction } from "@/domain/events-config/model/events-config.js";
+import type { EventAction, EventActionNode } from "@/domain/events-config/model/events-config.js";
 import type { EventsConfigStore } from "@/service/events-config/events-config-store.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { MessageService } from "@/service/chat/message.port.js";
@@ -70,61 +70,84 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
 
   async emit(eventType: string, ctx: EventEmitContext): Promise<EventRunResult> {
     const config = await this.deps.eventsConfig.getConfig();
-    const chain = config.events[eventType];
-    if (chain == null) {
+    const nodes = config.events[eventType];
+    if (nodes == null) {
+      return { ok: true, partialFailure: false, failures: [] };
+    }
+    return this.runDag(nodes, ctx);
+  }
+
+  private async runDag(
+    nodes: readonly EventActionNode[],
+    ctx: EventEmitContext,
+  ): Promise<EventRunResult> {
+    if (nodes.length === 0) {
       return { ok: true, partialFailure: false, failures: [] };
     }
 
-    if (chain.mode === "sequential") {
-      return this.runSequential(chain.actions, ctx);
-    }
-    return this.runParallel(chain.actions, ctx);
-  }
-
-  private async runSequential(
-    actions: readonly EventAction[],
-    ctx: EventEmitContext,
-  ): Promise<EventRunResult> {
-    const failures: EventActionFailure[] = [];
-    for (const action of actions) {
-      try {
-        await this.runAction(action, ctx);
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e);
-        failures.push({ actionType: action.type, error: msg });
-        return {
-          ok: false,
-          partialFailure: failures.length > 0 && failures.length < actions.length,
-          failures,
-        };
-      }
-    }
-    return { ok: failures.length === 0, partialFailure: false, failures };
-  }
-
-  private async runParallel(
-    actions: readonly EventAction[],
-    ctx: EventEmitContext,
-  ): Promise<EventRunResult> {
-    const results = await Promise.allSettled(
-      actions.map((action) => this.runAction(action, ctx)),
+    const byType = new Map<EventAction["type"], EventActionNode>(
+      nodes.map((n) => [n.type, n] as const),
     );
-    const failures: EventActionFailure[] = [];
-    for (let i = 0; i < results.length; i++) {
-      const r = results[i]!;
-      if (r.status === "rejected") {
-        failures.push({
-          actionType: actions[i]!.type,
-          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
-        });
+    const remainingDeps = new Map<EventAction["type"], number>();
+    const dependents = new Map<EventAction["type"], EventAction["type"][]>();
+    for (const n of nodes) {
+      remainingDeps.set(n.type, n.dependency?.length ?? 0);
+      dependents.set(n.type, []);
+    }
+    for (const n of nodes) {
+      for (const dep of n.dependency ?? []) {
+        dependents.get(dep)?.push(n.type);
       }
     }
-    const partialFailure = failures.length > 0 && failures.length < actions.length;
-    return {
-      ok: failures.length === 0,
-      partialFailure,
-      failures,
-    };
+
+    const ready = new Set<EventAction["type"]>();
+    for (const [t, count] of remainingDeps.entries()) {
+      if (count === 0) ready.add(t);
+    }
+
+    const success = new Set<EventAction["type"]>();
+    while (ready.size > 0) {
+      const batch = Array.from(ready);
+      ready.clear();
+
+      const results = await Promise.allSettled(
+        batch.map((t) => {
+          const node = byType.get(t);
+          if (node == null) {
+            throw new Error(`missing action node: ${t}`);
+          }
+          return this.runAction(node, ctx);
+        }),
+      );
+
+      const failures: EventActionFailure[] = [];
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i]!;
+        if (r.status === "rejected") {
+          failures.push({
+            actionType: batch[i]!,
+            error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+          });
+        }
+      }
+      if (failures.length > 0) {
+        // Fail-fast: do not schedule any further actions.
+        return { ok: false, partialFailure: false, failures };
+      }
+
+      for (const t of batch) {
+        success.add(t);
+        for (const dep of dependents.get(t) ?? []) {
+          const next = (remainingDeps.get(dep) ?? 0) - 1;
+          remainingDeps.set(dep, next);
+          if (next === 0 && !success.has(dep)) {
+            ready.add(dep);
+          }
+        }
+      }
+    }
+
+    return { ok: success.size === nodes.length, partialFailure: false, failures: [] };
   }
 
   private async runAction(action: EventAction, ctx: EventEmitContext): Promise<void> {

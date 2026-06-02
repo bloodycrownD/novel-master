@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import type { EventAction, EventsConfig, EventExecutionMode } from "./events-config.js";
+import type { EventActionNode, EventActionType, EventsConfig } from "./events-config.js";
 import { depthSliceFromWire } from "@/domain/depth/logic/depth-slice.js";
 import { validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
@@ -18,7 +18,22 @@ const depthWireSchema = z
   })
   .strict();
 
-function parseActionItem(raw: unknown): EventAction {
+function parseDependency(wire: Record<string, unknown>): readonly EventActionType[] | undefined {
+  const depRaw = wire.dependency;
+  if (depRaw == null) {
+    return undefined;
+  }
+  if (!Array.isArray(depRaw)) {
+    throw new Error("dependency must be an array");
+  }
+  const deps = depRaw.map((v) => String(v).trim()).filter((v) => v !== "");
+  if (deps.length === 0) {
+    return undefined;
+  }
+  return deps as readonly EventActionType[];
+}
+
+function parseActionNode(raw: unknown): EventActionNode {
   if (typeof raw === "string") {
     if (raw === "refresh-macros") {
       return { type: "refresh-macros", params: {} };
@@ -35,7 +50,13 @@ function parseActionItem(raw: unknown): EventAction {
   }
   const type = keys[0]!;
   if (type === "refresh-macros") {
-    return { type: "refresh-macros", params: {} };
+    const paramsRaw = obj[type];
+    const wire =
+      paramsRaw != null && typeof paramsRaw === "object"
+        ? (paramsRaw as Record<string, unknown>)
+        : {};
+    const dependency = parseDependency(wire);
+    return { type: "refresh-macros", params: {}, dependency };
   }
   if (type === "hide-message") {
     const paramsRaw = obj[type];
@@ -43,9 +64,10 @@ function parseActionItem(raw: unknown): EventAction {
       paramsRaw != null && typeof paramsRaw === "object"
         ? (paramsRaw as Record<string, unknown>)
         : {};
+    const dependency = parseDependency(wire);
     const slice = depthSliceFromWire(wire);
     validateDepthSlice(slice);
-    return { type: "hide-message", params: slice };
+    return { type: "hide-message", params: slice, dependency };
   }
   if (type === "agent-run") {
     throw new Error("action 'agent-run' was renamed to 'run-agent'");
@@ -56,40 +78,83 @@ function parseActionItem(raw: unknown): EventAction {
       paramsRaw != null && typeof paramsRaw === "object"
         ? (paramsRaw as Record<string, unknown>)
         : {};
+    const dependency = parseDependency(wire);
     const agentId = String(wire.agentId ?? wire["agent-id"] ?? "").trim();
     if (agentId === "") {
       throw new Error("run-agent requires agentId");
     }
-    return { type: "run-agent", params: { agentId } };
+    return { type: "run-agent", params: { agentId }, dependency };
   }
   throw new Error(`unknown action type: ${type}`);
 }
 
-const executionModeSchema = z.union([
-  z
-    .object({
-      sequential: z.array(z.unknown()).min(1),
-    })
-    .strict()
-    .transform((v): EventExecutionMode => ({
-      mode: "sequential",
-      actions: v.sequential.map(parseActionItem),
-    })),
-  z
-    .object({
-      parallel: z.array(z.unknown()).min(1),
-    })
-    .strict()
-    .transform((v): EventExecutionMode => ({
-      mode: "parallel",
-      actions: v.parallel.map(parseActionItem),
-    })),
-]);
+function validateDag(nodes: readonly EventActionNode[]): void {
+  const seen = new Set<string>();
+  for (const n of nodes) {
+    if (seen.has(n.type)) {
+      throw new Error(`duplicate action type in one event: ${n.type}`);
+    }
+    seen.add(n.type);
+  }
+  for (const n of nodes) {
+    for (const dep of n.dependency ?? []) {
+      if (!seen.has(dep)) {
+        throw new Error(`unknown dependency reference: ${n.type} depends on ${dep}`);
+      }
+    }
+  }
+
+  // Kahn's algorithm for cycle detection
+  const indegree = new Map<string, number>();
+  const out = new Map<string, string[]>();
+  for (const n of nodes) {
+    indegree.set(n.type, 0);
+    out.set(n.type, []);
+  }
+  for (const n of nodes) {
+    for (const dep of n.dependency ?? []) {
+      out.get(dep)!.push(n.type);
+      indegree.set(n.type, (indegree.get(n.type) ?? 0) + 1);
+    }
+  }
+  const queue: string[] = [];
+  for (const [t, deg] of indegree.entries()) {
+    if (deg === 0) queue.push(t);
+  }
+  let visited = 0;
+  while (queue.length > 0) {
+    const t = queue.shift()!;
+    visited++;
+    for (const nxt of out.get(t) ?? []) {
+      const v = (indegree.get(nxt) ?? 0) - 1;
+      indegree.set(nxt, v);
+      if (v === 0) queue.push(nxt);
+    }
+  }
+  if (visited !== nodes.length) {
+    throw new Error("dependency graph has a cycle");
+  }
+}
+
+const eventNodesSchema = z
+  .array(z.unknown())
+  .min(1)
+  .transform((items): readonly EventActionNode[] => items.map(parseActionNode))
+  .superRefine((nodes, ctx) => {
+    try {
+      validateDag(nodes);
+    } catch (e: unknown) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  });
 
 const eventsConfigDocumentSchema = z
   .object({
-    schemaVersion: z.number().int().positive(),
-    events: z.record(z.string(), executionModeSchema),
+    schemaVersion: z.literal(2),
+    events: z.record(z.string(), eventNodesSchema),
   })
   .strict();
 
