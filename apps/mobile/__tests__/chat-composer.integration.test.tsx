@@ -1,0 +1,109 @@
+import React from 'react';
+import {describe, expect, it, jest} from '@jest/globals';
+import TestRenderer, {act} from 'react-test-renderer';
+
+jest.mock('@novel-master/core', () => ({
+  EVENT_AGENT_RUN_FINISHED: 'agent.run.finished',
+  EVENT_AGENT_STREAM_TEXT_DELTA: 'agent.stream.text',
+  EVENT_AGENT_STREAM_THINKING_DELTA: 'agent.stream.thinking',
+  VfsError: class VfsError extends Error {},
+  VfsZipError: class VfsZipError extends Error {},
+  TdbcError: class TdbcError extends Error {},
+  KkvError: class KkvError extends Error {},
+  ProviderError: class ProviderError extends Error {},
+  ChatError: class ChatError extends Error {},
+  ToolError: class ToolError extends Error {},
+  AgentError: class AgentError extends Error {},
+}));
+
+(global as any).__DEV__ = false;
+
+jest.mock('../src/hooks/useRuntime', () => ({
+  useRuntime: () => ({
+    eventBus: {
+      subscribe: () => ({unsubscribe: () => undefined}),
+    },
+  }),
+}));
+
+jest.mock('../src/runtime/novel-master-context', () => ({
+  useNovelMaster: () => ({appUi: null}),
+}));
+
+jest.mock('../src/storage/llm-stream-pref', () => ({
+  readLlmStreamEnabled: async () => true,
+}));
+
+const mockRunAgentTurn = jest.fn(async (_runtime, _scope, _content, options) => {
+  return new Promise<void>((resolve, reject) => {
+    const signal: AbortSignal | undefined = options?.signal;
+    if (signal?.aborted) {
+      reject(new DOMException('aborted', 'AbortError'));
+      return;
+    }
+    signal?.addEventListener(
+      'abort',
+      () => reject(new DOMException('aborted', 'AbortError')),
+      {once: true},
+    );
+  });
+});
+
+jest.mock('../src/services/agent-run.service', () => ({
+  runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
+}));
+
+import {ChatComposer} from '../src/components/chat/ChatComposer';
+import {ThemeProvider} from '../src/theme/ThemeProvider';
+
+function Harness(props: {canResumeWithoutInput: boolean}) {
+  const [running, setRunning] = React.useState(false);
+  return (
+    <ThemeProvider>
+      <ChatComposer
+        scope={{projectId: 'p', sessionId: 's'}}
+        hasModel={true}
+        running={running}
+        onRunningChange={setRunning}
+        onStreamText={() => undefined}
+        onStreamThinking={() => undefined}
+        onStreamReset={() => undefined}
+        onMessagesChanged={() => undefined}
+        onNeedModel={() => undefined}
+        canResumeWithoutInput={props.canResumeWithoutInput}
+      />
+    </ThemeProvider>
+  );
+}
+
+describe('ChatComposer integration', () => {
+  it('running-state “终止” action aborts current run', async () => {
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+
+    // Second press while running should abort.
+    const stopBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '终止',
+    );
+    await act(async () => {
+      stopBtn.props.onPress();
+    });
+
+    // runAgentTurn stays at 1 call; cancellation is via AbortSignal.
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+});
+

@@ -59,6 +59,7 @@ import {
   loadSessionMessagesPageForDisplay,
   loadSessionMessagesTailForDisplay,
 } from '../../services/regex-apply-channel';
+import {prependOlderMessages} from '../../services/message-paging';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -230,7 +231,7 @@ export function ChatTabScreen() {
         setHasMoreMessages(false);
         return;
       }
-      setChatMessages(prev => [...older, ...prev]);
+      setChatMessages(prev => prependOlderMessages(prev, older));
       setHasMoreMessages(older.length === CHAT_PAGE_SIZE);
     } finally {
       setLoadingMoreMessages(false);

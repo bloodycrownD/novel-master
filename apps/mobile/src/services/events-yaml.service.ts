@@ -15,6 +15,19 @@ import {
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
+function blobFs(): typeof ReactNativeBlobUtil.fs {
+  const anyMod = ReactNativeBlobUtil as unknown as {
+    fs?: typeof ReactNativeBlobUtil.fs;
+    default?: {fs?: typeof ReactNativeBlobUtil.fs};
+  };
+  // WHY: RN native modules may be CJS or ESM-wrapped; support both shapes in tests/bundlers.
+  const fs = anyMod.fs ?? anyMod.default?.fs;
+  if (fs == null) {
+    throw new Error('react-native-blob-util.fs unavailable');
+  }
+  return fs;
+}
+
 function normalizeYamlError(error: unknown, fallback: string): Error {
   if (error instanceof Error) {
     return new Error(`${fallback}：${error.message}`);
@@ -27,14 +40,19 @@ export function decodeEventsYamlText(yaml: string) {
   return decode(raw, eventsConfigSchema);
 }
 
+export function encodeEventsYamlText(config: unknown): string {
+  return stringifyText(config, 'yaml');
+}
+
 export async function exportEventsYaml(
   runtime: MobileNovelMasterRuntime,
 ): Promise<'saved' | 'cancelled'> {
   const config = await runtime.eventsConfig.getConfig();
-  const yaml = stringifyText(config, 'yaml');
+  const yaml = encodeEventsYamlText(config);
   const fileName = 'events.config.yaml';
-  const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
-  await ReactNativeBlobUtil.fs.writeFile(tmpPath, yaml, 'utf8');
+  const fs = blobFs();
+  const tmpPath = `${fs.dirs.CacheDir}/${fileName}`;
+  await fs.writeFile(tmpPath, yaml, 'utf8');
   try {
     await saveDocuments({
       sourceUris: [`file://${tmpPath}`],
@@ -49,7 +67,7 @@ export async function exportEventsYaml(
     }
     throw error;
   } finally {
-    await ReactNativeBlobUtil.fs.unlink(tmpPath).catch(() => undefined);
+    await fs.unlink(tmpPath).catch(() => undefined);
   }
 }
 
@@ -71,7 +89,8 @@ export async function importEventsYaml(runtime: MobileNovelMasterRuntime): Promi
   const fsPath = local.localUri.startsWith('file://')
     ? local.localUri.slice('file://'.length)
     : local.localUri;
-  const yaml = await ReactNativeBlobUtil.fs.readFile(decodeURIComponent(fsPath), 'utf8');
+  const fs = blobFs();
+  const yaml = await fs.readFile(decodeURIComponent(fsPath), 'utf8');
   try {
     const config = decodeEventsYamlText(yaml);
     await runtime.eventsConfig.setConfig(config);
