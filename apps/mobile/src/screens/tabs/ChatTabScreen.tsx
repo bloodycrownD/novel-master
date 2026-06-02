@@ -1,7 +1,7 @@
 /**
  * Chat tab: session list / template sub-tabs, conversation workspace (M1 skeleton).
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   Alert,
   FlatList,
@@ -55,17 +55,22 @@ import {
   type ChatAgentMeta,
 } from '../../services/chat-agent-meta';
 import {loadChatPromptTokenLabelResilient} from '../../services/chat-prompt-tokens.service';
-import {loadSessionMessagesForDisplay} from '../../services/regex-apply-channel';
+import {
+  loadSessionMessagesPageForDisplay,
+  loadSessionMessagesTailForDisplay,
+} from '../../services/regex-apply-channel';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
+import {createStreamBuffer} from '../../services/stream-buffer.service';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
 type ChatSubview = 'sessions' | 'conversation';
 type ConversationPanel = 'chat' | 'workspace';
 type MessageBatchPurpose = 'delete' | 'hide' | 'unhide';
+const CHAT_PAGE_SIZE = 40;
 
 export function ChatTabScreen() {
   const {tokens} = useTheme();
@@ -90,6 +95,8 @@ export function ChatTabScreen() {
   const messageBatch = useBatchSelection();
   const {appUi} = useNovelMaster();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
   const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
     agentId: undefined,
     agentName: '—',
@@ -102,6 +109,14 @@ export function ChatTabScreen() {
   const [agentRunning, setAgentRunning] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
+  const streamBuffer = useMemo(
+    () =>
+      createStreamBuffer({
+        onTextFlush: delta => setStreamingText(prev => prev + delta),
+        onThinkingFlush: delta => setStreamingThinking(prev => prev + delta),
+      }),
+    [],
+  );
   const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
@@ -176,11 +191,57 @@ export function ChatTabScreen() {
   const reloadMessages = useCallback(async () => {
     if (sessionId == null) {
       setChatMessages([]);
+      setHasMoreMessages(false);
       return;
     }
-    const list = await loadSessionMessagesForDisplay(runtime, sessionId);
+    const list = await loadSessionMessagesTailForDisplay(
+      runtime,
+      sessionId,
+      CHAT_PAGE_SIZE,
+    );
     setChatMessages(list);
+    const oldestSeq = list[0]?.seq;
+    if (oldestSeq == null) {
+      setHasMoreMessages(false);
+    } else {
+      const older = await runtime.messages.listBySessionPage(sessionId, {
+        limit: 1,
+        beforeSeq: oldestSeq,
+      });
+      setHasMoreMessages(older.length > 0);
+    }
   }, [runtime, sessionId]);
+
+  const loadOlderMessages = useCallback(async () => {
+    if (sessionId == null || loadingMoreMessages || chatMessages.length === 0) {
+      return;
+    }
+    setLoadingMoreMessages(true);
+    try {
+      const beforeSeq = chatMessages[0]?.seq;
+      if (beforeSeq == null) {
+        return;
+      }
+      const older = await loadSessionMessagesPageForDisplay(runtime, sessionId, {
+        limit: CHAT_PAGE_SIZE,
+        beforeSeq,
+      });
+      if (older.length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+      setChatMessages(prev => [...older, ...prev]);
+      setHasMoreMessages(older.length === CHAT_PAGE_SIZE);
+    } finally {
+      setLoadingMoreMessages(false);
+    }
+  }, [runtime, sessionId, loadingMoreMessages, chatMessages]);
+
+  useEffect(() => {
+    return () => {
+      streamBuffer.dispose();
+    };
+  }, [streamBuffer]);
 
   useEffect(() => {
     if (chatSubview === 'conversation' && sessionId != null) {
@@ -703,18 +764,24 @@ export function ChatTabScreen() {
                   setMessageMenuAnchor(anchor);
                 }}
               />
+              {hasMoreMessages ? (
+                <Pressable
+                  style={styles.loadMoreBtn}
+                  onPress={() => loadOlderMessages().catch(() => undefined)}>
+                  <Text style={{color: tokens.primary}}>
+                    {loadingMoreMessages ? '加载中…' : '加载更早消息'}
+                  </Text>
+                </Pressable>
+              ) : null}
               <ChatComposer
                 scope={{projectId, sessionId}}
                 hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
                 running={agentRunning}
                 onRunningChange={setAgentRunning}
-                onStreamText={delta =>
-                  setStreamingText(prev => prev + delta)
-                }
-                onStreamThinking={delta =>
-                  setStreamingThinking(prev => prev + delta)
-                }
+                onStreamText={delta => streamBuffer.push('text', delta)}
+                onStreamThinking={delta => streamBuffer.push('thinking', delta)}
                 onStreamReset={() => {
+                  streamBuffer.reset();
                   setStreamingText('');
                   setStreamingThinking('');
                 }}
@@ -1106,4 +1173,9 @@ const styles = StyleSheet.create({
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   chatPanel: {flex: 1},
+  loadMoreBtn: {
+    alignSelf: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
 });

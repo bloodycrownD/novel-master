@@ -49,3 +49,35 @@ export async function loadSessionMessagesForDisplay(
     'display',
   );
 }
+
+export async function loadSessionMessagesTailForDisplay(
+  runtime: MobileNovelMasterRuntime,
+  sessionId: string,
+  limit: number,
+): Promise<ChatMessage[]> {
+  const tail = await runtime.messages.listBySessionTail(sessionId, {limit});
+  const activeGroupId = await runtime.state.getCurrentRegexGroupId();
+  return applyActiveRegexChannel(
+    runtime.regexConfig,
+    activeGroupId,
+    tail,
+    tail,
+    'display',
+  );
+}
+
+export async function loadSessionMessagesPageForDisplay(
+  runtime: MobileNovelMasterRuntime,
+  sessionId: string,
+  options: {limit: number; beforeSeq?: number},
+): Promise<ChatMessage[]> {
+  const page = await runtime.messages.listBySessionPage(sessionId, options);
+  const activeGroupId = await runtime.state.getCurrentRegexGroupId();
+  return applyActiveRegexChannel(
+    runtime.regexConfig,
+    activeGroupId,
+    page,
+    page,
+    'display',
+  );
+}
