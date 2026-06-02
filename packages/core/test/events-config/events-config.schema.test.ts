@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { encode } from "../../src/infra/serialization/encode.js";
+import { DEFAULT_EVENTS_CONFIG } from "../../src/domain/events-config/logic/default-events.js";
 import { eventsConfigSchema } from "../../src/domain/events-config/model/events-config.schema.js";
 
 describe("events config schema", () => {
@@ -61,6 +63,40 @@ describe("events config schema", () => {
           },
         }),
       /unknown dependency reference/,
+    );
+  });
+
+  it("round-trips domain config to wire and back", () => {
+    const wire = encode(DEFAULT_EVENTS_CONFIG, eventsConfigSchema);
+    const doc = eventsConfigSchema.parse(wire);
+    assert.deepEqual(doc, DEFAULT_EVENTS_CONFIG);
+    const nodes = wire.events[Object.keys(wire.events)[0]!]!;
+    assert.ok(
+      nodes.some(
+        (n) =>
+          n === "refresh-macros" ||
+          (typeof n === "object" && n != null && "refresh-macros" in n),
+      ),
+    );
+    assert.ok(
+      nodes.some(
+        (n) => typeof n === "object" && n != null && "hide-message" in n,
+      ),
+    );
+  });
+
+  it("rejects domain-shaped action items", () => {
+    assert.throws(
+      () =>
+        eventsConfigSchema.parse({
+          schemaVersion: 2,
+          events: {
+            "session.compaction.requested": [
+              { type: "hide-message", params: { startDepth: 6 } },
+            ],
+          },
+        }),
+      /exactly one key/,
     );
   });
 

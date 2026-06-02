@@ -14,7 +14,9 @@ const mockUnlink = jest.fn(async () => undefined);
 const mockReadFile = jest.fn(async () => '');
 
 jest.mock('@novel-master/core', () => ({
-  agentDefinitionSchema: {encode: (x: any) => x},
+  agentDefinitionSchema: {toWire: (x: any) => x},
+  encode: (value: unknown, schema: {toWire: (v: unknown) => unknown}) =>
+    schema.toWire(value),
   decode: (...args: any[]) => mockDecode(...args),
   parseText: (...args: any[]) => mockParseText(...args),
   registerVfsTools: () => undefined,
@@ -39,6 +41,7 @@ jest.mock('react-native-blob-util', () => ({
 jest.mock('@react-native-documents/picker', () => ({
   errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
   isErrorWithCode: (error: any) => Boolean(error?.code),
+  isKnownType: () => ({mimeType: null, uti: null}),
   keepLocalCopy: (...args: any[]) => mockKeepLocalCopy(...args),
   pick: (...args: any[]) => mockPick(...args),
   saveDocuments: (...args: any[]) => mockSaveDocuments(...args),
@@ -62,6 +65,13 @@ describe('agent-yaml.service', () => {
     expect(mockWriteFile).toHaveBeenCalledWith('/tmp/a1.agent.yaml', 'yaml', 'utf8');
     expect(mockSaveDocuments).toHaveBeenCalled();
     expect(mockUnlink).toHaveBeenCalledWith('/tmp/a1.agent.yaml');
+  });
+
+  it('rejects non-yaml file names from picker', async () => {
+    mockPick.mockResolvedValueOnce([{uri: 'file:///sdcard/readme.txt', name: 'readme.txt'}]);
+    const runtime = {agentRegistry: {upsert: jest.fn()}} as any;
+    await expect(importAgentYaml(runtime, 'a1')).rejects.toThrow(/\.yaml/);
+    expect(mockKeepLocalCopy).not.toHaveBeenCalled();
   });
 
   it('imports yaml via picker/copy/read and persists agent', async () => {

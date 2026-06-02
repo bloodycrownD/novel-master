@@ -13,6 +13,7 @@ import type { ChatSession } from "@/domain/chat/model/session.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -132,6 +133,13 @@ export class DefaultMessageService implements MessageService {
       throw chatNotFound("message", upToMessageId, { sessionId });
     }
     const all = await this.deps.messages.listBySession(sessionId);
+    const projectSessions = await this.deps.sessions.listByProject(
+      source.projectId,
+    );
+    const forkTitle = nextForkSessionTitle(
+      source.title,
+      projectSessions.map((s) => s.title),
+    );
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const toCopy = all.filter((m) => m.seq <= upTo.seq);
@@ -142,7 +150,7 @@ export class DefaultMessageService implements MessageService {
       const forked: ChatSession = {
         id: randomUUID(),
         projectId: source.projectId,
-        title: source.title == null ? null : `${source.title} (fork)`,
+        title: forkTitle,
         createdAtMs: now,
         updatedAtMs: now,
       };

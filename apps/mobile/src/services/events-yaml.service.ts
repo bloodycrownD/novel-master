@@ -1,9 +1,11 @@
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
   decode,
+  encode,
   eventsConfigSchema,
   parseText,
   stringifyText,
+  type EventsConfig,
 } from '@novel-master/core';
 import {
   errorCodes,
@@ -11,9 +13,9 @@ import {
   keepLocalCopy,
   pick,
   saveDocuments,
-  types,
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
 
 function blobFs(): typeof ReactNativeBlobUtil.fs {
   const anyMod = ReactNativeBlobUtil as unknown as {
@@ -40,8 +42,9 @@ export function decodeEventsYamlText(yaml: string) {
   return decode(raw, eventsConfigSchema);
 }
 
-export function encodeEventsYamlText(config: unknown): string {
-  return stringifyText(config, 'yaml');
+export function encodeEventsYamlText(config: EventsConfig): string {
+  const wire = encode(config, eventsConfigSchema);
+  return stringifyText(wire, 'yaml');
 }
 
 export async function exportEventsYaml(
@@ -56,7 +59,7 @@ export async function exportEventsYaml(
   try {
     await saveDocuments({
       sourceUris: [`file://${tmpPath}`],
-      mimeType: 'application/x-yaml',
+      mimeType: 'application/yaml',
       fileName,
       copy: true,
     });
@@ -73,12 +76,13 @@ export async function exportEventsYaml(
 
 export async function importEventsYaml(runtime: MobileNovelMasterRuntime): Promise<void> {
   const [file] = await pick({
-    type: [types.plainText, 'text/yaml', 'application/x-yaml'],
+    type: yamlImportPickTypes(),
     allowMultiSelection: false,
   });
   if (file == null) {
     return;
   }
+  assertYamlFileName(file.name);
   const [local] = await keepLocalCopy({
     files: [{uri: file.uri, fileName: file.name ?? 'events.config.yaml'}],
     destination: 'cachesDirectory',

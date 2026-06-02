@@ -42,6 +42,11 @@ const mockRuntime: any = {
   projectVfs: jest.fn(() => ({})),
 };
 
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: {setString: jest.fn()},
+}));
+
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
   useNavigation: () => ({navigate: jest.fn()}),

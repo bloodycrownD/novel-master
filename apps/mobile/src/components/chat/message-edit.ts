@@ -25,7 +25,7 @@ export function editableTextFromMessage(message: ChatMessage): string | null {
   return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
-/** Builds long-press actions: edit when allowed, hide/unhide toggle, delete. */
+/** Builds long-press actions: edit, hide/unhide, copy, fork, delete. */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {
@@ -38,7 +38,8 @@ export function buildMessageActionItems(
   } else {
     items.push({label: '隐藏', action: 'hide'});
   }
-  items.push({label: '压缩', action: 'compact'});
+  items.push({label: '复制', action: 'copy'});
+  items.push({label: 'Fork', action: 'fork'});
   items.push({label: '删除', action: 'delete', danger: true});
   return items;
 }

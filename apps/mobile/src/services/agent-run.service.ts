@@ -90,8 +90,10 @@ export async function runAgentTurn(
     readonly stream?: boolean;
     readonly allowResumeWithoutInput?: boolean;
     readonly signal?: AbortSignal;
+    readonly onUserMessageAppended?: () => void | Promise<void>;
   },
 ): Promise<AgentRunResult> {
+  let stage = 'start';
   const stream = options?.stream !== false;
   const trimmed = userContent.trim();
   const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
@@ -99,6 +101,7 @@ export async function runAgentTurn(
     throw new AgentRunError('消息不能为空');
   }
   if (trimmed === '' && allowResumeWithoutInput) {
+    stage = 'resume-check-last-message';
     const list = await runtime.messages.listBySession(scope.sessionId);
     const last = list[list.length - 1];
     // WHY: only resume on trailing user turn to avoid consecutive assistant runs.
@@ -108,13 +111,17 @@ export async function runAgentTurn(
   }
 
   const {definition} = await resolveCurrentAgentDefinition(runtime);
+  stage = 'resolve-model';
   const {applicationModelId, workspaceModelId} =
     await resolveMobileApplicationModelId(runtime, definition);
 
   if (trimmed !== '') {
+    stage = 'append-user-message';
     await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
+    await options?.onUserMessageAppended?.();
   }
 
+  stage = 'validate-agent-definition';
   const toolProbe = new ToolRegistry();
   registerVfsTools(toolProbe);
   await validateAgentDefinition(definition, {
@@ -158,15 +165,37 @@ export async function runAgentTurn(
     eventOrchestrator: runtime.eventOrchestrator,
   });
 
-  return runner.run({
-    definition,
-    sessionId: scope.sessionId,
-    projectId: scope.projectId,
-    applicationModelId,
-    workspaceModelId,
-    maxSteps: definition.runtime?.maxSteps ?? 20,
-    activeRegexGroupId,
-    stream,
-    signal: options?.signal,
-  });
+  try {
+    stage = 'runner.run';
+    return await runner.run({
+      definition,
+      sessionId: scope.sessionId,
+      projectId: scope.projectId,
+      applicationModelId,
+      workspaceModelId,
+      maxSteps: definition.runtime?.maxSteps ?? 20,
+      activeRegexGroupId,
+      stream,
+      signal: options?.signal,
+    });
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      const err =
+        error instanceof Error
+          ? {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+              cause: String((error as Error & {cause?: unknown}).cause ?? ''),
+            }
+          : {name: typeof error, message: String(error)};
+      console.error('[novel-master/agent-run] failed', {
+        stage,
+        sessionId: scope.sessionId,
+        projectId: scope.projectId,
+        err,
+      });
+    }
+    throw error;
+  }
 }

@@ -15,7 +15,7 @@ describe("serialization", () => {
     .transform((doc) => ({ name: doc.name }));
 
   const encodable = Object.assign(schema, {
-    encode: (value: { name: string }) => ({
+    toWire: (value: { name: string }) => ({
       schemaVersion: 1 as const,
       name: value.name,
     }),

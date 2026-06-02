@@ -25,7 +25,7 @@ describe("worktree file tree", () => {
     assert.equal(
       tree,
       [
-        "workspace/",
+        "/",
         "├── src/",
         "│   ├── index.ts",
         "│   └── utils.ts",
@@ -37,10 +37,10 @@ describe("worktree file tree", () => {
     );
   });
 
-  it("uses workspace root label for project scope", () => {
+  it("uses / root label for project scope", () => {
     assert.equal(
       worktreeFileTreeRootLabel({ kind: "project", projectId: "p1" }),
-      "workspace",
+      "/",
     );
   });
 
@@ -52,6 +52,6 @@ describe("worktree file tree", () => {
       dirRuleMap: new Map(),
       mtimeByPath: new Map(),
     });
-    assert.equal(tree, "workspace/");
+    assert.equal(tree, "/");
   });
 });

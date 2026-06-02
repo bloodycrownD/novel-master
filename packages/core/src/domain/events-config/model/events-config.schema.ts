@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import type { EventActionNode, EventActionType, EventsConfig } from "./events-config.js";
+import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { depthSliceFromWire } from "@/domain/depth/logic/depth-slice.js";
 import { validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
@@ -17,6 +18,28 @@ const depthWireSchema = z
     "end-depth": z.number().int().nonnegative().optional(),
   })
   .strict();
+
+type EventsConfigWireDocument = {
+  readonly schemaVersion: 2;
+  readonly events: Record<string, readonly unknown[]>;
+};
+
+function cleanDepthSlice(slice: DepthSlice): DepthSlice {
+  return {
+    ...(slice.startDepth != null ? { startDepth: slice.startDepth } : {}),
+    ...(slice.endDepth != null ? { endDepth: slice.endDepth } : {}),
+  };
+}
+
+function withDependency<T extends EventActionNode>(
+  node: Omit<T, "dependency">,
+  dependency: readonly EventActionType[] | undefined,
+): T {
+  if (dependency == null) {
+    return node as T;
+  }
+  return { ...node, dependency } as T;
+}
 
 function parseDependency(wire: Record<string, unknown>): readonly EventActionType[] | undefined {
   const depRaw = wire.dependency;
@@ -31,6 +54,52 @@ function parseDependency(wire: Record<string, unknown>): readonly EventActionTyp
     return undefined;
   }
   return deps as readonly EventActionType[];
+}
+
+function actionNodeToWire(node: EventActionNode): unknown {
+  const wire: Record<string, unknown> = {};
+  if (node.dependency != null && node.dependency.length > 0) {
+    wire.dependency = [...node.dependency];
+  }
+
+  if (node.type === "refresh-macros") {
+    if (Object.keys(wire).length === 0) {
+      return "refresh-macros";
+    }
+    return { "refresh-macros": wire };
+  }
+
+  if (node.type === "hide-message") {
+    if (node.params.startDepth != null) {
+      wire["start-depth"] = node.params.startDepth;
+    }
+    if (node.params.endDepth != null) {
+      wire["end-depth"] = node.params.endDepth;
+    }
+    return { "hide-message": wire };
+  }
+
+  if (node.type === "run-agent") {
+    return {
+      "run-agent": {
+        "agent-id": node.params.agentId,
+        ...wire,
+      },
+    };
+  }
+
+  throw new Error(`unknown action type: ${(node as EventActionNode).type}`);
+}
+
+function eventsConfigToWire(config: EventsConfig): EventsConfigWireDocument {
+  const events: Record<string, readonly unknown[]> = {};
+  for (const [eventName, nodes] of Object.entries(config.events)) {
+    events[eventName] = nodes.map(actionNodeToWire);
+  }
+  return {
+    schemaVersion: config.schemaVersion,
+    events,
+  };
 }
 
 function parseActionNode(raw: unknown): EventActionNode {
@@ -56,7 +125,7 @@ function parseActionNode(raw: unknown): EventActionNode {
         ? (paramsRaw as Record<string, unknown>)
         : {};
     const dependency = parseDependency(wire);
-    return { type: "refresh-macros", params: {}, dependency };
+    return withDependency({ type: "refresh-macros", params: {} }, dependency);
   }
   if (type === "hide-message") {
     const paramsRaw = obj[type];
@@ -67,7 +136,10 @@ function parseActionNode(raw: unknown): EventActionNode {
     const dependency = parseDependency(wire);
     const slice = depthSliceFromWire(wire);
     validateDepthSlice(slice);
-    return { type: "hide-message", params: slice, dependency };
+    return withDependency(
+      { type: "hide-message", params: cleanDepthSlice(slice) },
+      dependency,
+    );
   }
   if (type === "agent-run") {
     throw new Error("action 'agent-run' was renamed to 'run-agent'");
@@ -83,7 +155,7 @@ function parseActionNode(raw: unknown): EventActionNode {
     if (agentId === "") {
       throw new Error("run-agent requires agentId");
     }
-    return { type: "run-agent", params: { agentId }, dependency };
+    return withDependency({ type: "run-agent", params: { agentId } }, dependency);
   }
   throw new Error(`unknown action type: ${type}`);
 }
@@ -158,12 +230,15 @@ const eventsConfigDocumentSchema = z
   })
   .strict();
 
-/** Wire document → {@link EventsConfig}. */
-export const eventsConfigSchema = eventsConfigDocumentSchema.transform(
-  (doc): EventsConfig => ({
-    schemaVersion: doc.schemaVersion,
-    events: doc.events,
-  }),
+/** Wire document ↔ {@link EventsConfig}. */
+export const eventsConfigSchema = Object.assign(
+  eventsConfigDocumentSchema.transform(
+    (doc): EventsConfig => ({
+      schemaVersion: doc.schemaVersion,
+      events: doc.events,
+    }),
+  ),
+  { toWire: eventsConfigToWire },
 );
 
 export { depthWireSchema };

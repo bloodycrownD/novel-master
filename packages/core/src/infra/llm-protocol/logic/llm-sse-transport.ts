@@ -33,6 +33,7 @@ type SseXmlHttpRequest = {
   onprogress: (() => void) | null;
   onload: (() => void) | null;
   onerror: (() => void) | null;
+  onabort: (() => void) | null;
   getResponseHeader(name: string): string | null;
 };
 
@@ -148,6 +149,18 @@ function postSseViaXhr(
     const xhr = new XhrCtor();
     let processedLength = 0;
     let firstChunkLogged = false;
+    let settled = false;
+
+    const resolveOnce = (value: { status: number; contentType: string | null }) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const rejectOnce = (error: ProviderError) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
 
     const deliverNewText = (): void => {
       const text = xhr.responseText;
@@ -167,9 +180,7 @@ function postSseViaXhr(
 
     if (signal != null) {
       if (signal.aborted) {
-        reject(
-          new ProviderError("HTTP_ERROR", "Request aborted", { providerId }),
-        );
+        rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
         return;
       }
       signal.addEventListener(
@@ -194,7 +205,7 @@ function postSseViaXhr(
       if (status < 200 || status >= 300) {
         const body = xhr.responseText;
         const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
-        reject(
+        rejectOnce(
           new ProviderError(
             "HTTP_ERROR",
             `HTTP ${status}: ${snippet}`,
@@ -204,13 +215,15 @@ function postSseViaXhr(
         return;
       }
 
-      resolve({ status, contentType });
+      resolveOnce({ status, contentType });
     };
 
     xhr.onerror = () => {
-      reject(
-        new ProviderError("HTTP_ERROR", "XHR network error", { providerId }),
-      );
+      rejectOnce(new ProviderError("HTTP_ERROR", "XHR network error", { providerId }));
+    };
+
+    xhr.onabort = () => {
+      rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
     };
 
     applyXhrHeaders(xhr, init.headers);

@@ -58,11 +58,11 @@ describe("buildPromptLlmInput", () => {
     ];
     const input = buildPromptLlmInput(blocks, {
       worktreeDisplay: "",
-      filetreeDisplay: "workspace/\n└── README.md",
+      filetreeDisplay: "/\n└── README.md",
       messages: [],
       now: fixedNow,
     });
-    assert.equal(input.system, "Files:\nworkspace/\n└── README.md");
+    assert.equal(input.system, "Files:\n/\n└── README.md");
   });
 });
 

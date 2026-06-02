@@ -180,6 +180,7 @@ describe("Chat services", () => {
     await ctx.messages.append(session.id, "user", textBlocks("3"));
 
     const forked = await ctx.messages.fork(session.id, m2.id);
+    assert.equal(forked.title, "会话_ckpt_1");
     const forkedMsgs = await ctx.messages.listBySession(forked.id);
     assert.equal(forkedMsgs.length, 2);
     assert.equal(firstTextBlock(forkedMsgs[0]!.content), "1");
@@ -189,6 +190,20 @@ describe("Chat services", () => {
       "edited",
     );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
+    await ctx.conn.close();
+  });
+
+  it("message fork titles session as sourceName_ckpt_n", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id, "新会话1");
+    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
+
+    const first = await ctx.messages.fork(session.id, m1.id);
+    assert.equal(first.title, "新会话1_ckpt_1");
+
+    const second = await ctx.messages.fork(session.id, m1.id);
+    assert.equal(second.title, "新会话1_ckpt_2");
     await ctx.conn.close();
   });
 

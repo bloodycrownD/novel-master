@@ -23,7 +23,9 @@ import type {
 import {
   chatMessagesToOpenAi,
   openAiChoiceToBlocks,
+  openAiStreamAccumulatorsToPartialBlocks,
 } from "../logic/openai-content-mapper.js";
+import { isRequestAborted } from "../logic/request-abort.js";
 import {
   blocksToTextOnly,
   chatMessagesToTextOnly,
@@ -180,24 +182,39 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     const url = joinUrl(req.baseUrl, "/chat/completions");
     const state = createOpenAiSseParserState();
 
-    await postSse(
-      url,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${req.apiKey}`,
-          "Content-Type": "application/json",
-          ...req.extraHeaders,
+    try {
+      await postSse(
+        url,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${req.apiKey}`,
+            "Content-Type": "application/json",
+            ...req.extraHeaders,
+          },
+          body: JSON.stringify(this.buildBody(req, true)),
+          signal: req.signal,
         },
-        body: JSON.stringify(this.buildBody(req, true)),
-        signal: req.signal,
-      },
-      (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream),
-      undefined,
-      { fetchFn: this.fetchFn, signal: req.signal },
-    );
+        (chunk) => feedOpenAiSseChunk(state, chunk, req.onStream),
+        undefined,
+        { fetchFn: this.fetchFn, signal: req.signal },
+      );
+    } catch (error) {
+      if (!isRequestAborted(error, req.signal)) {
+        throw error;
+      }
+    }
 
-    const { blocks, streamRaw } = finishOpenAiSse(state, req.onStream);
+    const aborted = req.signal?.aborted === true;
+    const { blocks, streamRaw } = aborted
+      ? {
+          blocks: openAiStreamAccumulatorsToPartialBlocks(state, req.onStream),
+          streamRaw:
+            state.lastUsageEvent ??
+            state.lastEvent ??
+            ({ streamed: true, aborted: true } as Record<string, unknown>),
+        }
+      : finishOpenAiSse(state, req.onStream);
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseOpenAiUsage(streamRaw);
     const result: LlmChatResult = {

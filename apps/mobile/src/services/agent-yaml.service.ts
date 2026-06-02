@@ -2,6 +2,7 @@ import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
   agentDefinitionSchema,
   decode,
+  encode,
   parseText,
   registerVfsTools,
   stringifyText,
@@ -14,9 +15,9 @@ import {
   keepLocalCopy,
   pick,
   saveDocuments,
-  types,
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {assertYamlFileName, yamlImportPickTypes} from './yaml-document-pick';
 
 function blobFs(): typeof ReactNativeBlobUtil.fs {
   const anyMod = ReactNativeBlobUtil as unknown as {
@@ -44,7 +45,7 @@ export function decodeAgentYamlText(yaml: string) {
 }
 
 export function encodeAgentYamlText(def: unknown): string {
-  const doc = agentDefinitionSchema.encode(def);
+  const doc = encode(def, agentDefinitionSchema);
   return stringifyText(doc, 'yaml');
 }
 
@@ -61,7 +62,7 @@ export async function exportAgentYaml(
   try {
     await saveDocuments({
       sourceUris: [`file://${tmpPath}`],
-      mimeType: 'application/x-yaml',
+      mimeType: 'application/yaml',
       fileName,
       copy: true,
     });
@@ -81,12 +82,13 @@ export async function importAgentYaml(
   agentId: string,
 ): Promise<void> {
   const [file] = await pick({
-    type: [types.plainText, 'text/yaml', 'application/x-yaml'],
+    type: yamlImportPickTypes(),
     allowMultiSelection: false,
   });
   if (file == null) {
     return;
   }
+  assertYamlFileName(file.name);
   const [local] = await keepLocalCopy({
     files: [{uri: file.uri, fileName: file.name ?? `${agentId}.agent.yaml`}],
     destination: 'cachesDirectory',

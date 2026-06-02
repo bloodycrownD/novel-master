@@ -378,3 +378,55 @@ export function openAiStreamAccumulatorsToBlocks(
 
   return blocks;
 }
+
+/**
+ * Partial stream snapshot on user cancel: keep thinking, always emit a text block
+ * (may be empty when only reasoning streamed).
+ */
+export function openAiStreamAccumulatorsToPartialBlocks(
+  state: {
+    textParts: string[];
+    thinkingParts: string[];
+    toolCalls: Map<number, ToolCallAccumulator>;
+    emittedToolIndices: Set<number>;
+  },
+  onStream?: (event: LlmStreamEvent) => void,
+): ContentBlock[] {
+  const text = state.textParts.join("");
+  const thinking = state.thinkingParts.join("");
+  const blocks: ContentBlock[] = [];
+  if (thinking.trim() !== "") {
+    blocks.push({ type: "thinking", text: thinking });
+  }
+  if (text.length > 0 || thinking.trim() !== "") {
+    blocks.push({ type: "text", text });
+  }
+  const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);
+  for (const index of indices) {
+    const acc = state.toolCalls.get(index)!;
+    let input: Record<string, unknown> = {};
+    if (acc.argumentsJson !== "") {
+      try {
+        input = JSON.parse(acc.argumentsJson) as Record<string, unknown>;
+      } catch {
+        input = {};
+      }
+    }
+    blocks.push({
+      type: "tool_use",
+      id: acc.id,
+      name: acc.name,
+      input,
+    });
+    if (!state.emittedToolIndices.has(index)) {
+      state.emittedToolIndices.add(index);
+      onStream?.({
+        type: "tool-use",
+        id: acc.id,
+        name: acc.name,
+        input,
+      });
+    }
+  }
+  return blocks;
+}

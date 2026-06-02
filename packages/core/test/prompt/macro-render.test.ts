@@ -17,10 +17,10 @@ describe("renderMacro", () => {
 
   it("substitutes .filetree", () => {
     const out = renderMacro("tree:\n{{ .filetree }}", {
-      dot: { worktree: "", filetree: "workspace/\n└── a.md" },
+      dot: { worktree: "", filetree: "/\n└── a.md" },
       root: { time: "t", week_cn: "w" },
     });
-    assert.equal(out, "tree:\nworkspace/\n└── a.md");
+    assert.equal(out, "tree:\n/\n└── a.md");
   });
 
   it("substitutes $.time with fixed now", () => {

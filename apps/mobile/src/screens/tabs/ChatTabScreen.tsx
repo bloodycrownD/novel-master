@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {
@@ -213,6 +214,32 @@ export function ChatTabScreen() {
     }
   }, [runtime, sessionId]);
 
+  const handleStreamText = useCallback(
+    (delta: string) => {
+      streamBuffer.push('text', delta);
+    },
+    [streamBuffer],
+  );
+
+  const handleStreamThinking = useCallback(
+    (delta: string) => {
+      streamBuffer.push('thinking', delta);
+    },
+    [streamBuffer],
+  );
+
+  const handleStreamReset = useCallback(() => {
+    streamBuffer.flush();
+    streamBuffer.reset();
+    setStreamingText('');
+    setStreamingThinking('');
+  }, [streamBuffer]);
+
+  const handleMessagesChanged = useCallback(async () => {
+    await reloadMessages();
+    await refreshChatMeta();
+  }, [reloadMessages, refreshChatMeta]);
+
   const loadOlderMessages = useCallback(async () => {
     if (sessionId == null || loadingMoreMessages || chatMessages.length === 0) {
       return;
@@ -395,9 +422,80 @@ export function ChatTabScreen() {
     [runtime, reloadLists, showToast],
   );
 
+  const handleDeleteSession = useCallback(
+    async (targetSessionId: string) => {
+      try {
+        await runtime.sessions.delete(targetSessionId);
+        if (sessionId === targetSessionId) {
+          setChatSubview('sessions');
+        }
+        await refreshScope();
+        await reloadLists();
+        showToast('已删除会话');
+      } catch (error) {
+        showToast(toastMessage('删除失败', error));
+      }
+    },
+    [runtime, sessionId, refreshScope, reloadLists, showToast],
+  );
+
+  const confirmDeleteSession = useCallback(
+    (targetSessionId: string) => {
+      const session = sessions.find(s => s.id === targetSessionId);
+      const label = session?.title?.trim() || '该会话';
+      Alert.alert(
+        '确认删除',
+        `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`,
+        [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '删除',
+            style: 'destructive',
+            onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
+          },
+        ],
+      );
+    },
+    [sessions, handleDeleteSession],
+  );
+
   const bumpVfsRefresh = useCallback(() => {
     setVfsRefreshKey(key => key + 1);
   }, []);
+
+  const handleForkFromMessage = useCallback(
+    async (messageId: string) => {
+      if (sessionId == null) {
+        return;
+      }
+      if (agentRunning) {
+        showToast(toastMessage('请稍候', 'Agent 运行中无法 Fork'));
+        return;
+      }
+      try {
+        const forked = await runtime.messages.fork(sessionId, messageId);
+        await reloadLists();
+        await setCurrentSession(forked.id);
+        setChatSubview('conversation');
+        setConversationPanel('chat');
+        setStreamingText('');
+        setStreamingThinking('');
+        bumpVfsRefresh();
+        showToast(`已 Fork：${forked.title ?? forked.id}`);
+      } catch (error) {
+        showToast(toastMessage('Fork 失败', error));
+      }
+    },
+    [
+      sessionId,
+      agentRunning,
+      runtime,
+      reloadLists,
+      setCurrentSession,
+      bumpVfsRefresh,
+      showToast,
+    ],
+  );
 
   const exitMessageBatch = useCallback(() => {
     messageBatch.exit();
@@ -779,17 +877,10 @@ export function ChatTabScreen() {
                 hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
                 running={agentRunning}
                 onRunningChange={setAgentRunning}
-                onStreamText={delta => streamBuffer.push('text', delta)}
-                onStreamThinking={delta => streamBuffer.push('thinking', delta)}
-                onStreamReset={() => {
-                  streamBuffer.reset();
-                  setStreamingText('');
-                  setStreamingThinking('');
-                }}
-                onMessagesChanged={() => {
-                  reloadMessages().catch(() => undefined);
-                  refreshChatMeta().catch(() => undefined);
-                }}
+                onStreamText={handleStreamText}
+                onStreamThinking={handleStreamThinking}
+                onStreamReset={handleStreamReset}
+                onMessagesChanged={handleMessagesChanged}
                 onNeedModel={() => setModelPickerOpen(true)}
                 canResumeWithoutInput={canResumeWithoutInput}
               />
@@ -888,8 +979,16 @@ export function ChatTabScreen() {
               handleHideMessage(target.id).catch(() => undefined);
             } else if (action === 'unhide') {
               handleShowMessage(target.id).catch(() => undefined);
-            } else if (action === 'compact') {
-              handleCompactSession();
+            } else if (action === 'copy') {
+              const text = editableTextFromMessage(target);
+              if (text == null) {
+                showToast(toastMessage('无法复制', '该消息没有可复制的文本'));
+                return;
+              }
+              Clipboard.setString(text);
+              showToast('已复制');
+            } else if (action === 'fork') {
+              handleForkFromMessage(target.id).catch(() => undefined);
             } else if (action === 'delete') {
               Alert.alert('删除消息', '确定删除这条消息？', [
                 {text: '取消', style: 'cancel'},
@@ -1093,7 +1192,8 @@ export function ChatTabScreen() {
             visible={menuSessionId != null}
             items={[
               {label: '重命名', action: 'rename'},
-              {label: '复制会话', action: 'copy'},
+              {label: '复制', action: 'copy'},
+              {label: '删除', action: 'delete', danger: true},
             ]}
             onClose={() => setMenuSessionId(undefined)}
             onSelect={action => {
@@ -1106,6 +1206,8 @@ export function ChatTabScreen() {
                 openSessionRenamePrompt(sid);
               } else if (action === 'copy') {
                 handleCopySession(sid).catch(() => undefined);
+              } else if (action === 'delete') {
+                confirmDeleteSession(sid);
               }
             }}
           />

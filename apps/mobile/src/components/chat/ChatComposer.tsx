@@ -1,7 +1,7 @@
 /**
  * Chat input: disabled without workspace model; send → user append + agent run.
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
 import {
@@ -17,6 +17,7 @@ import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readLlmStreamEnabled} from '../../storage/llm-stream-pref';
+import {flushRunUi} from './flush-run-ui';
 
 type Props = {
   scope: AgentRunScope;
@@ -26,7 +27,7 @@ type Props = {
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
-  onMessagesChanged: () => void;
+  onMessagesChanged: () => void | Promise<void>;
   onNeedModel: () => void;
   canResumeWithoutInput: boolean;
 };
@@ -52,6 +53,19 @@ export function ChatComposer({
     null,
   );
 
+  const streamHandlersRef = useRef({
+    onStreamText,
+    onStreamThinking,
+    onMessagesChanged,
+    onStreamReset,
+  });
+  streamHandlersRef.current = {
+    onStreamText,
+    onStreamThinking,
+    onMessagesChanged,
+    onStreamReset,
+  };
+
   useEffect(() => {
     const bus = runtime.eventBus;
     const sid = scope.sessionId;
@@ -59,7 +73,7 @@ export function ChatComposer({
       EVENT_AGENT_STREAM_TEXT_DELTA,
       (payload: AgentStreamTextDeltaPayload) => {
         if (payload.sessionId === sid) {
-          onStreamText(payload.text);
+          streamHandlersRef.current.onStreamText(payload.text);
         }
       },
     );
@@ -67,14 +81,15 @@ export function ChatComposer({
       EVENT_AGENT_STREAM_THINKING_DELTA,
       (payload: AgentStreamThinkingDeltaPayload) => {
         if (payload.sessionId === sid) {
-          onStreamThinking(payload.text);
+          streamHandlersRef.current.onStreamThinking(payload.text);
         }
       },
     );
     const subFinished = bus.subscribe(EVENT_AGENT_RUN_FINISHED, payload => {
       if (payload.sessionId === sid) {
-        onMessagesChanged();
-        onStreamReset();
+        const {onMessagesChanged: reload, onStreamReset: reset} =
+          streamHandlersRef.current;
+        flushRunUi(reload, reset).catch(() => undefined);
       }
     });
     return () => {
@@ -82,14 +97,7 @@ export function ChatComposer({
       subThinking.unsubscribe();
       subFinished.unsubscribe();
     };
-  }, [
-    runtime.eventBus,
-    scope.sessionId,
-    onStreamText,
-    onStreamThinking,
-    onMessagesChanged,
-    onStreamReset,
-  ]);
+  }, [runtime.eventBus, scope.sessionId]);
 
   const send = useCallback(async () => {
     if (!hasModel) {
@@ -98,6 +106,9 @@ export function ChatComposer({
     }
     if (running) {
       runAbortController?.abort();
+      // WHY: keep stream overlay until run teardown persists partial output + reload.
+      setRunAbortController(null);
+      onRunningChange(false);
       return;
     }
     const content = text.trim();
@@ -120,18 +131,30 @@ export function ChatComposer({
         stream,
         allowResumeWithoutInput,
         signal: controller.signal,
+        onUserMessageAppended: () => {
+          void Promise.resolve(streamHandlersRef.current.onMessagesChanged()).catch(
+            () => undefined,
+          );
+        },
       });
-      onMessagesChanged();
     } catch (err) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.error('[novel-master/chat]', err);
+        const detail =
+          err instanceof Error
+            ? {
+                name: err.name,
+                message: err.message,
+                stack: err.stack,
+                cause: String((err as Error & {cause?: unknown}).cause ?? ''),
+              }
+            : {name: typeof err, message: String(err)};
+        console.error('[novel-master/chat] run failed', detail);
       }
       setError(formatError(err));
-      onMessagesChanged();
+      await flushRunUi(onMessagesChanged, onStreamReset);
     } finally {
       setRunAbortController(null);
       onRunningChange(false);
-      onStreamReset();
     }
   }, [
     hasModel,
@@ -148,7 +171,11 @@ export function ChatComposer({
     appUi,
   ]);
 
-  const disabled = !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
+  // Input should remain editable whenever the user can type (model selected and not running).
+  // Send button can be disabled separately when there is nothing to send/resume.
+  const inputDisabled = !hasModel || running;
+  const sendDisabled =
+    !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
 
   return (
     <View style={[styles.dock, {borderTopColor: tokens.border}]}>
@@ -174,15 +201,21 @@ export function ChatComposer({
           placeholderTextColor={tokens.textSecondary}
           value={text}
           onChangeText={setText}
-          editable={!disabled}
+          editable={!inputDisabled}
           multiline
         />
         <Pressable
           onPress={send}
-          disabled={disabled}
+          disabled={sendDisabled}
           style={[
             styles.sendBtn,
-            {backgroundColor: disabled ? tokens.border : tokens.primary},
+            {
+              backgroundColor: sendDisabled
+                ? tokens.border
+                : running
+                  ? tokens.danger
+                  : tokens.primary,
+            },
           ]}
           accessibilityLabel={running ? '终止' : '发送'}>
           {running ? <TerminateIcon /> : <SendIcon />}

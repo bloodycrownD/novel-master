@@ -163,7 +163,7 @@ const agentDefinitionWireSchema = z.preprocess((raw) => {
 /** Domain parser: wire document ??{@link AgentDefinition}. */
 export const agentDefinitionSchema = Object.assign(
   agentDefinitionWireSchema.transform(documentToDefinition),
-  { encode: definitionToDocument },
+  { toWire: definitionToDocument },
 );
 
 export { promptsDocumentSchema, promptBlockValueSchema };

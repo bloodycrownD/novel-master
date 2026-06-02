@@ -185,29 +185,44 @@ export class DefaultAgentRunner implements AgentRunner {
               ? options.onStream
               : undefined;
 
-        const result = await this.deps.modelRequests.request(
-          options.applicationModelId,
-          "",
-          {
-            history: llmInput.messages,
-            system: llmInput.system,
-            tools: tools.length > 0 ? tools : undefined,
-            stream: options.stream,
-            onStream,
-            signal,
-          },
-        );
+        let result;
+        try {
+          result = await this.deps.modelRequests.request(
+            options.applicationModelId,
+            "",
+            {
+              history: llmInput.messages,
+              system: llmInput.system,
+              tools: tools.length > 0 ? tools : undefined,
+              stream: options.stream,
+              onStream,
+              signal,
+            },
+          );
+        } catch (e: unknown) {
+          if (
+            signal?.aborted ||
+            (e instanceof Error && e.name === "AbortError")
+          ) {
+            stopReason = "cancelled";
+            break;
+          }
+          throw e;
+        }
+
+        stepsExecuted += 1;
+
+        if (result.blocks.length > 0) {
+          await session.append("assistant", { blocks: result.blocks }, {
+            raw: result.raw as Record<string, unknown>,
+          });
+          assistantAppendCount += 1;
+        }
 
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;
         }
-        stepsExecuted += 1;
-
-        await session.append("assistant", { blocks: result.blocks }, {
-          raw: result.raw as Record<string, unknown>,
-        });
-        assistantAppendCount += 1;
 
         const toolUses = result.blocks.filter(
           (b): b is ToolUseBlock => b.type === "tool_use",

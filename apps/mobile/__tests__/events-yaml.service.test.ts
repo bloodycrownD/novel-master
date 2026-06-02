@@ -12,9 +12,12 @@ const mockWriteFile = jest.fn(async () => undefined);
 const mockUnlink = jest.fn(async () => undefined);
 const mockReadFile = jest.fn(async () => '');
 
+const mockEncode = jest.fn((config: unknown) => config);
+
 jest.mock('@novel-master/core', () => ({
-  eventsConfigSchema: {encode: (x: any) => x},
+  eventsConfigSchema: {toWire: (x: unknown) => x},
   decode: (...args: any[]) => mockDecode(...args),
+  encode: (...args: any[]) => mockEncode(...args),
   parseText: (...args: any[]) => mockParseText(...args),
   stringifyText: (...args: any[]) => mockStringifyText(...args),
 }));
@@ -30,6 +33,7 @@ jest.mock('react-native-blob-util', () => ({
 jest.mock('@react-native-documents/picker', () => ({
   errorCodes: {OPERATION_CANCELED: 'OPERATION_CANCELED'},
   isErrorWithCode: (error: any) => Boolean(error?.code),
+  isKnownType: () => ({mimeType: null, uti: null}),
   keepLocalCopy: (...args: any[]) => mockKeepLocalCopy(...args),
   pick: (...args: any[]) => mockPick(...args),
   saveDocuments: (...args: any[]) => mockSaveDocuments(...args),
@@ -50,6 +54,7 @@ describe('events-yaml.service', () => {
       },
     } as any;
     await expect(exportEventsYaml(runtime)).resolves.toBe('saved');
+    expect(mockEncode).toHaveBeenCalled();
     expect(mockWriteFile).toHaveBeenCalledWith('/tmp/events.config.yaml', 'yaml', 'utf8');
     expect(mockSaveDocuments).toHaveBeenCalled();
     expect(mockUnlink).toHaveBeenCalledWith('/tmp/events.config.yaml');

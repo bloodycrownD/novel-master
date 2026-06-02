@@ -12,9 +12,11 @@ jest.mock('react-native-blob-util', () => ({
 jest.mock('@react-native-documents/picker', () => ({}));
 
 jest.mock('@novel-master/core', () => ({
-  agentDefinitionSchema: {encode: (x: any) => x},
-  stringifyText: (_doc: any, _format: any) => 'yaml-out',
-  eventsConfigSchema: {},
+  agentDefinitionSchema: {toWire: (x: any) => x},
+  eventsConfigSchema: {toWire: (x: any) => x},
+  encode: (_value: unknown, schema: {toWire: (v: unknown) => unknown}) =>
+    schema.toWire(_value),
+  stringifyText: (_doc: unknown, _format: string) => 'yaml-out',
   parseText: () => ({}),
   decode: () => ({}),
 }));

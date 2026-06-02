@@ -42,11 +42,11 @@ function entryName(entry: TreeEntry): string {
 export function worktreeFileTreeRootLabel(scope: WorktreeScope): string {
   const root = worktreeRootLogicalPath(scope);
   if (root === "/") {
-    return "workspace";
+    return "/";
   }
   const idx = root.lastIndexOf("/");
   const base = idx >= 0 ? root.slice(idx + 1) : root;
-  return base.length > 0 ? base : "root";
+  return base.length > 0 ? base : "/";
 }
 
 function sortedChildren(
@@ -103,7 +103,8 @@ export function renderWorktreeFileTree(
 ): string {
   const rootPath = worktreeRootLogicalPath(params.scope);
   const rootLabel = worktreeFileTreeRootLabel(params.scope);
-  const lines: string[] = [`${rootLabel}/`];
+  const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
+  const lines: string[] = [headerLine];
   appendDirLines(lines, rootPath, "", params);
   return lines.join("\n");
 }

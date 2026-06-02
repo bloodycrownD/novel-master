@@ -28,6 +28,20 @@ export type VfsToolContext = {
   readonly sessionId: string;
 };
 
+function assertSessionFsExecute(
+  ctx: VfsToolContext,
+): asserts ctx is VfsToolContext & {
+  sessionFs: SessionFsService & {
+    execute: NonNullable<SessionFsService['execute']>;
+  };
+} {
+  if (typeof ctx.sessionFs.execute !== "function") {
+    // WHY: surface a deterministic tool error when runtime wiring is stale/broken
+    // (e.g. HMR stale object), instead of opaque "undefined is not a function".
+    throw new Error("sessionFs.execute is unavailable in vfs tool context");
+  }
+}
+
 /**
  * Creates the builtin VFS tools.
  *
@@ -71,6 +85,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
+      assertSessionFsExecute(ctx);
       const versionCheck = input.options?.versionCheck ?? true;
       const result = await ctx.sessionFs.execute(
         ctx.sessionId,
@@ -115,6 +130,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       replacements: z.number().int(),
     }),
     async run(input, ctx) {
+      assertSessionFsExecute(ctx);
       const current = await ctx.vfs.read(input.path);
       let replacements = 0;
       let nextContent = current.content;
