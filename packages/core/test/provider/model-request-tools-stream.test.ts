@@ -4,7 +4,6 @@ import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anth
 import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
 import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
 import { toolsFromRegistry, ToolRegistry, registerVfsTools } from "@novel-master/core";
-import { ProviderError } from "../../src/errors/provider-errors.js";
 
 describe("ModelRequest tools + stream (adapters)", () => {
   it("Anthropic chat sends tools in request body", async () => {
@@ -164,19 +163,64 @@ describe("ModelRequest tools + stream (adapters)", () => {
     assert.equal(result.assistantText, "Hi");
   });
 
-  it("Gemini throws UNSUPPORTED when tools present", async () => {
-    const adapter = new GeminiProtocolAdapter(async () => new Response("{}"));
-    await assert.rejects(
-      () =>
-        adapter.chat({
-          baseUrl: "https://generativelanguage.googleapis.com",
-          apiKey: "k",
-          vendorModelId: "gemini",
-          userContent: "hi",
-          tools: [{ name: "t", description: "d", inputSchema: {} }],
+  it("Gemini stream emits text-delta and done", async () => {
+    const sse = [
+      'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}],"role":"model"}}]}',
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const deltas: string[] = [];
+    const adapter = new GeminiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "k",
+      vendorModelId: "gemini-2.0-flash",
+      userContent: "hi",
+      stream: true,
+      onStream: (ev) => {
+        if (ev.type === "text-delta") {
+          deltas.push(ev.text);
+        }
+      },
+    });
+
+    assert.deepEqual(deltas, ["Hi"]);
+    assert.equal(result.assistantText, "Hi");
+  });
+
+  it("Gemini chat sends tools in request body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ text: "ok" }] } }],
         }),
-      (e: unknown) => e instanceof ProviderError && e.code === "UNSUPPORTED",
-    );
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new GeminiProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "k",
+      vendorModelId: "gemini",
+      userContent: "hi",
+      tools: [{ name: "vfs.read", description: "read", inputSchema: { type: "object" } }],
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      tools?: Array<{ functionDeclarations?: unknown[] }>;
+    };
+    assert.ok(Array.isArray(parsed.tools));
+    assert.equal(parsed.tools![0]!.functionDeclarations!.length, 1);
   });
 
   it("toolsFromRegistry produces serializable schemas", () => {

@@ -54,4 +54,77 @@ describe("GeminiProtocolAdapter HTTP", () => {
     assert.equal(calls[0]!.init.method, "POST");
     assert.equal(result.assistantText, "ok");
   });
+
+  it("T8: chat with tools includes functionDeclarations in body", async () => {
+    const calls: Array<{ body: string }> = [];
+    const fetchFn = mock.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: String(init?.body ?? "") });
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    functionCall: { name: "vfs.read", args: { path: "/a" } },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+
+    const adapter = new GeminiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "gem-key",
+      vendorModelId: "gemini-2.0-flash",
+      userContent: "hi",
+      tools: [
+        {
+          name: "vfs.read",
+          description: "read",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ],
+    });
+
+    const parsed = JSON.parse(calls[0]!.body) as {
+      tools?: Array<{ functionDeclarations?: unknown[] }>;
+    };
+    assert.ok(Array.isArray(parsed.tools));
+    assert.ok(parsed.tools![0]!.functionDeclarations!.length >= 1);
+    assert.equal(result.blocks[0]?.type, "tool_use");
+  });
+
+  it("stream uses streamGenerateContent with alt=sse", async () => {
+    const calls: Array<{ url: string }> = [];
+    const fetchFn = mock.fn(async (url: string) => {
+      calls.push({ url });
+      const sse = [
+        'data: {"candidates":[{"content":{"parts":[{"text":"Hi"}],"role":"model"}}]}',
+        "",
+      ].join("\n");
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const adapter = new GeminiProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "gem-key",
+      vendorModelId: "gemini-2.0-flash",
+      userContent: "hi",
+      stream: true,
+    });
+
+    assert.match(calls[0]!.url, /streamGenerateContent/);
+    assert.match(calls[0]!.url, /alt=sse/);
+    assert.equal(result.assistantText, "Hi");
+  });
 });
