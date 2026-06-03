@@ -37,6 +37,7 @@ import {MessageList} from '../../components/chat/MessageList';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
+import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
@@ -110,6 +111,7 @@ export function ChatTabScreen() {
   });
   const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
@@ -322,6 +324,7 @@ export function ChatTabScreen() {
       messageBatchActive: messageBatch.active,
       messageEditOpen: messageEditPrompt != null,
       modelPickerOpen,
+      agentPickerOpen,
       sessionRenameOpen: sessionRenamePrompt != null,
       projectDrawerOpen,
       sessionBatchActive: sessionBatch.active,
@@ -333,6 +336,7 @@ export function ChatTabScreen() {
       exitMessageBatch: messageBatch.exit,
       closeMessageEdit: () => setMessageEditPrompt(undefined),
       closeModelPicker: () => setModelPickerOpen(false),
+      closeAgentPicker: () => setAgentPickerOpen(false),
       closeSessionRename: () => setSessionRenamePrompt(undefined),
       closeProjectDrawer: () => setProjectDrawerOpen(false),
       exitSessionBatch: sessionBatch.exit,
@@ -1023,6 +1027,10 @@ export function ChatTabScreen() {
             setSessionDrawerOpen(false);
             setModelPickerOpen(true);
           }}
+          onSwitchAgent={() => {
+            setSessionDrawerOpen(false);
+            setAgentPickerOpen(true);
+          }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
           onBatchDeleteMessages={() => {
             setSessionDrawerOpen(false);
@@ -1114,6 +1122,11 @@ export function ChatTabScreen() {
         <ModelPickerModal
           visible={modelPickerOpen}
           onClose={() => setModelPickerOpen(false)}
+          onSelected={() => refreshChatMeta().catch(() => undefined)}
+        />
+        <AgentPickerModal
+          visible={agentPickerOpen}
+          onClose={() => setAgentPickerOpen(false)}
           onSelected={() => refreshChatMeta().catch(() => undefined)}
         />
         {sessionRenameModal}

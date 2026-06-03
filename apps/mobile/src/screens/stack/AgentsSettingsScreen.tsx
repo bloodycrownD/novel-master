@@ -1,37 +1,29 @@
 /**
- * Agents tab: registry list + create new agent.
+ * Stack screen: agent registry list and create (replaces Agents tab).
  */
 import React from 'react';
 import {StyleSheet, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentList} from '../../components/agent/AgentList';
-import {AppHeader} from '../../components/chrome/AppHeader';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
+import {createBlankAgent} from '../../services/agent-create';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-export function AgentsTabScreen() {
+export function AgentsSettingsScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
   const navigation = useNavigation<Nav>();
 
   const handleCreate = async () => {
-    const id = `agent-${Date.now()}`;
     try {
-      await runtime.agentRegistry.upsert(id, {
-        name: 'new-agent',
-        runtime: {maxSteps: 20},
-        prompts: [
-          {name: 'system', type: 'text', role: 'system', content: ''},
-          {name: 'history', type: 'chat'},
-        ],
-      });
+      const id = await createBlankAgent(runtime);
       navigation.navigate('AgentEditor', {agentId: id});
     } catch (error) {
       showToast(toastMessage('创建失败', error));
@@ -40,7 +32,6 @@ export function AgentsTabScreen() {
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AppHeader pageKey="agents" />
       <AgentList onCreate={() => handleCreate().catch(() => undefined)} />
     </View>
   );

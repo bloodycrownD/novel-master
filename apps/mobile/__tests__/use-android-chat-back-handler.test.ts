@@ -38,6 +38,7 @@ function defaultState(
     messageBatchActive: false,
     messageEditOpen: false,
     modelPickerOpen: false,
+    agentPickerOpen: false,
     sessionRenameOpen: false,
     projectDrawerOpen: false,
     sessionBatchActive: false,
@@ -55,6 +56,7 @@ function defaultActions(
     exitMessageBatch: jest.fn(),
     closeMessageEdit: jest.fn(),
     closeModelPicker: jest.fn(),
+    closeAgentPicker: jest.fn(),
     closeSessionRename: jest.fn(),
     closeProjectDrawer: jest.fn(),
     exitSessionBatch: jest.fn(),
@@ -129,6 +131,22 @@ describe('useAndroidChatBackHandler', () => {
 
     expect(handler()).toBe(true);
     expect(closeSessionDrawer).toHaveBeenCalledTimes(1);
+    expect(backFromConversation).not.toHaveBeenCalled();
+  });
+
+  it('T-B4: agent picker closes first without leaving conversation', () => {
+    const backFromConversation = jest.fn();
+    const closeAgentPicker = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({
+        chatSubview: 'conversation',
+        agentPickerOpen: true,
+      }),
+      defaultActions({backFromConversation, closeAgentPicker}),
+    );
+
+    expect(handler()).toBe(true);
+    expect(closeAgentPicker).toHaveBeenCalledTimes(1);
     expect(backFromConversation).not.toHaveBeenCalled();
   });
 });

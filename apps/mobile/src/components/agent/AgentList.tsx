@@ -1,5 +1,5 @@
 /**
- * Agent registry list with default marker and context menu.
+ * Agent registry list with context menu (rename, duplicate, delete).
  */
 import React, {useCallback, useState} from 'react';
 import {
@@ -20,6 +20,7 @@ import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {ElevatedCard} from '../ui/ElevatedCard';
 import {PrimaryButton} from '../ui/PrototypeButtons';
+import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
@@ -34,7 +35,6 @@ interface AgentRow {
   id: string;
   def: AgentDefinition;
   meta: string;
-  isDefault: boolean;
 }
 
 const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
@@ -57,13 +57,15 @@ export function AgentList({onCreate}: Props) {
   const [rows, setRows] = useState<AgentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [menuAgentId, setMenuAgentId] = useState<string | undefined>();
+  const [renamePrompt, setRenamePrompt] = useState<
+    {agentId: string; initialName: string} | undefined
+  >();
   const batch = useBatchSelection();
 
   const reload = useCallback(async () => {
     setLoading(true);
     try {
       const ids = await runtime.agentRegistry.listAgentIds();
-      const currentId = await runtime.state.getCurrentAgentId();
       const workspaceModelId = await runtime.state.getCurrentModelId();
       let workspaceLabel = '—';
       if (workspaceModelId) {
@@ -91,12 +93,7 @@ export function AgentList({onCreate}: Props) {
         } else {
           meta = agentMeta(def, workspaceLabel, true);
         }
-        enriched.push({
-          id,
-          def,
-          meta,
-          isDefault: currentId === id || (!currentId && ids[0] === id),
-        });
+        enriched.push({id, def, meta});
       }
       setRows(enriched);
     } finally {
@@ -110,8 +107,13 @@ export function AgentList({onCreate}: Props) {
     }, [reload]),
   );
 
-  const handleSetDefault = async (agentId: string) => {
-    await runtime.state.setCurrentAgentId(agentId);
+  const handleRename = async (agentId: string, name: string) => {
+    const trimmed = name.trim();
+    if (trimmed === '') {
+      return;
+    }
+    const def = await runtime.agentRegistry.get(agentId);
+    await runtime.agentRegistry.upsert(agentId, {...def, name: trimmed});
     await reload();
   };
 
@@ -190,15 +192,11 @@ export function AgentList({onCreate}: Props) {
     ]);
   };
 
-  const menuItems = (agentId: string, isDefault: boolean) => {
-    const items = [];
-    if (!isDefault) {
-      items.push({label: '设为默认', action: 'set-default'});
-    }
-    items.push({label: '复制', action: 'duplicate'});
-    items.push({label: '删除', action: 'delete', danger: true});
-    return items;
-  };
+  const menuItems = () => [
+    {label: '重命名', action: 'rename'},
+    {label: '复制', action: 'duplicate'},
+    {label: '删除', action: 'delete', danger: true},
+  ];
 
   return (
     <View style={styles.root}>
@@ -270,12 +268,6 @@ export function AgentList({onCreate}: Props) {
                   {item.meta}
                 </Text>
               </View>
-              {item.isDefault && !batch.active ? (
-                <View
-                  style={[styles.defaultBadge, {backgroundColor: tokens.primary}]}>
-                  <Text style={styles.defaultBadgeText}>默认</Text>
-                </View>
-              ) : null}
               {!batch.active ? (
                 <>
                   <Pressable
@@ -300,14 +292,7 @@ export function AgentList({onCreate}: Props) {
       )}
       <BottomSheetMenu
         visible={menuAgentId != null}
-        items={
-          menuAgentId
-            ? menuItems(
-                menuAgentId,
-                rows.find(r => r.id === menuAgentId)?.isDefault ?? false,
-              )
-            : []
-        }
+        items={menuAgentId ? menuItems() : []}
         onClose={() => setMenuAgentId(undefined)}
         onSelect={action => {
           const id = menuAgentId;
@@ -315,12 +300,31 @@ export function AgentList({onCreate}: Props) {
           if (!id) {
             return;
           }
-          if (action === 'set-default') {
-            handleSetDefault(id).catch(() => undefined);
+          if (action === 'rename') {
+            const row = rows.find(r => r.id === id);
+            if (row) {
+              setRenamePrompt({agentId: id, initialName: row.def.name});
+            }
           } else if (action === 'duplicate') {
             handleDuplicate(id).catch(() => undefined);
           } else if (action === 'delete') {
             handleDelete(id).catch(() => undefined);
+          }
+        }}
+      />
+      <TextPromptModal
+        visible={renamePrompt != null}
+        title="重命名 Agent"
+        label="显示名称"
+        placeholder="Agent 名称"
+        initialValue={renamePrompt?.initialName ?? ''}
+        confirmLabel="保存"
+        onClose={() => setRenamePrompt(undefined)}
+        onConfirm={async value => {
+          const prompt = renamePrompt;
+          setRenamePrompt(undefined);
+          if (prompt) {
+            await handleRename(prompt.agentId, value);
           }
         }}
       />
@@ -344,12 +348,6 @@ const styles = StyleSheet.create({
   info: {flex: 1, minWidth: 0, gap: 4},
   name: {fontSize: 16, fontWeight: '600'},
   meta: {fontSize: 13, lineHeight: 18},
-  defaultBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  defaultBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},
 });

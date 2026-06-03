@@ -1,5 +1,5 @@
 /**
- * Root navigation: bottom tabs (Chat, Agents, Profile) + native stack.
+ * Root navigation: bottom tabs (Chat, Profile) + native stack.
  */
 import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
@@ -7,18 +7,14 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {Platform, StyleSheet} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  AgentTabIcon,
-  ChatTabIcon,
-  ProfileTabIcon,
-} from '../components/icons/TabIcons';
+import {ChatTabIcon, ProfileTabIcon} from '../components/icons/TabIcons';
 import {HeaderProvider} from './HeaderContext';
 import {StackScreenLayout} from './StackScreenLayout';
 import type {MainTabParamList, RootStackParamList} from './types';
 import {useTheme} from '../theme/ThemeProvider';
 import {ChatTabScreen} from '../screens/tabs/ChatTabScreen';
-import {AgentsTabScreen} from '../screens/tabs/AgentsTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
+import {AgentsSettingsScreen} from '../screens/stack/AgentsSettingsScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
@@ -88,14 +84,6 @@ function MainTabs() {
         }}
       />
       <Tab.Screen
-        name="Agents"
-        component={AgentsTabScreen}
-        options={{
-          tabBarLabel: 'Agent',
-          tabBarIcon: tabIcon(AgentTabIcon),
-        }}
-      />
-      <Tab.Screen
         name="Profile"
         component={ProfileTabScreen}
         options={{
@@ -132,6 +120,10 @@ export function RootNavigator() {
             contentStyle: {backgroundColor: tokens.background},
           }}>
           <Stack.Screen name="MainTabs" component={MainTabs} />
+          <Stack.Screen
+            name="AgentsSettings"
+            component={withStackLayout('AgentsSettings', AgentsSettingsScreen)}
+          />
           <Stack.Screen
             name="AgentEditor"
             component={withStackLayout('AgentEditor', AgentEditorScreen)}

@@ -15,6 +15,7 @@ export type AndroidChatBackState = {
   messageBatchActive: boolean;
   messageEditOpen: boolean;
   modelPickerOpen: boolean;
+  agentPickerOpen: boolean;
   sessionRenameOpen: boolean;
   projectDrawerOpen: boolean;
   sessionBatchActive: boolean;
@@ -27,6 +28,7 @@ export type AndroidChatBackActions = {
   exitMessageBatch: () => void;
   closeMessageEdit: () => void;
   closeModelPicker: () => void;
+  closeAgentPicker: () => void;
   closeSessionRename: () => void;
   closeProjectDrawer: () => void;
   exitSessionBatch: () => void;
@@ -46,6 +48,7 @@ export function useAndroidChatBackHandler(
     messageBatchActive,
     messageEditOpen,
     modelPickerOpen,
+    agentPickerOpen,
     sessionRenameOpen,
     projectDrawerOpen,
     sessionBatchActive,
@@ -58,6 +61,7 @@ export function useAndroidChatBackHandler(
     exitMessageBatch,
     closeMessageEdit,
     closeModelPicker,
+    closeAgentPicker,
     closeSessionRename,
     closeProjectDrawer,
     exitSessionBatch,
@@ -84,6 +88,10 @@ export function useAndroidChatBackHandler(
     }
     if (modelPickerOpen) {
       closeModelPicker();
+      return true;
+    }
+    if (agentPickerOpen) {
+      closeAgentPicker();
       return true;
     }
     if (sessionRenameOpen) {
@@ -117,6 +125,7 @@ export function useAndroidChatBackHandler(
     messageBatchActive,
     messageEditOpen,
     modelPickerOpen,
+    agentPickerOpen,
     sessionRenameOpen,
     chatSubview,
     projectDrawerOpen,
@@ -128,6 +137,7 @@ export function useAndroidChatBackHandler(
     exitMessageBatch,
     closeMessageEdit,
     closeModelPicker,
+    closeAgentPicker,
     closeSessionRename,
     closeProjectDrawer,
     exitSessionBatch,

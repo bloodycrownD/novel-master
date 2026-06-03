@@ -5,6 +5,7 @@ import React, {useCallback, useState} from 'react';
 import {ScrollView, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
 import {AppHeader} from '../../components/chrome/AppHeader';
@@ -22,6 +23,7 @@ import {
   writeLlmStreamEnabled,
 } from '../../storage/llm-stream-pref';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
+import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -32,6 +34,11 @@ const WORKSPACE_MODEL_MENU = {
   label: '当前模型',
 } as const;
 
+const WORKSPACE_AGENT_MENU = {
+  icon: '🧠',
+  label: '当前 agent',
+} as const;
+
 const WORKSPACE_REGEX_GROUP_MENU = {
   icon: '🛡️',
   label: '当前正则组',
@@ -39,6 +46,7 @@ const WORKSPACE_REGEX_GROUP_MENU = {
 
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
+    {icon: '🤖', label: 'agent设置', route: 'AgentsSettings'},
     {icon: '🔌', label: '服务商管理', route: 'Providers'},
     {icon: '🗜️', label: '压缩条件', route: 'CompactionConditions'},
     {icon: '⚡', label: '事件配置', route: 'EventsConfig'},
@@ -52,12 +60,22 @@ export function ProfileTabScreen() {
   const {appUi} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
+  const [agentLabel, setAgentLabel] = useState('—');
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
+  const [agentPickerVisible, setAgentPickerVisible] = useState(false);
   const [regexGroupPickerVisible, setRegexGroupPickerVisible] =
     useState(false);
+
+  const refreshAgentLabel = useCallback(async () => {
+    try {
+      setAgentLabel(await resolveCurrentAgentDisplayLabel(runtime));
+    } catch {
+      setAgentLabel('—');
+    }
+  }, [runtime]);
 
   const refreshModelLabel = useCallback(async () => {
     const currentId = await runtime.state.getCurrentModelId();
@@ -103,11 +121,13 @@ export function ProfileTabScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
+      refreshAgentLabel().catch(() => setAgentLabel('—'));
       refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
       refreshStreamPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
     }, [
       refreshModelLabel,
+      refreshAgentLabel,
       refreshRegexGroupLabel,
       refreshStreamPref,
       refreshChatRichTextPref,
@@ -135,6 +155,13 @@ export function ProfileTabScreen() {
           value={modelLabel}
           tokens={tokens}
           onPress={() => setModelPickerVisible(true)}
+        />
+        <ProfileMenuItem
+          icon={WORKSPACE_AGENT_MENU.icon}
+          label={WORKSPACE_AGENT_MENU.label}
+          value={agentLabel}
+          tokens={tokens}
+          onPress={() => setAgentPickerVisible(true)}
         />
         <ProfileMenuItem
           icon={WORKSPACE_REGEX_GROUP_MENU.icon}
@@ -192,6 +219,11 @@ export function ProfileTabScreen() {
         visible={modelPickerVisible}
         onClose={() => setModelPickerVisible(false)}
         onSelected={() => refreshModelLabel().catch(() => undefined)}
+      />
+      <AgentPickerModal
+        visible={agentPickerVisible}
+        onClose={() => setAgentPickerVisible(false)}
+        onSelected={() => refreshAgentLabel().catch(() => undefined)}
       />
       <RegexGroupPickerModal
         visible={regexGroupPickerVisible}

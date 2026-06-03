@@ -5,12 +5,12 @@ import type {NavigatorScreenParams} from '@react-navigation/native';
 
 export type MainTabParamList = {
   Chat: undefined;
-  Agents: undefined;
   Profile: undefined;
 };
 
 export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
+  AgentsSettings: undefined;
   AgentEditor: {agentId?: string} | undefined;
   RealPrompt: undefined;
   Providers: undefined;
