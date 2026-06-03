@@ -207,6 +207,7 @@ export {
 export {
   evaluateFileDisplay,
   computeHeadTailIndices,
+  sortDirPaths,
   sortFilesForDir,
 } from "./domain/worktree/logic/worktree-eval.js";
 export { DEFAULT_WORKTREE_DIR_RULE } from "./domain/worktree/logic/default-dir-rule.js";

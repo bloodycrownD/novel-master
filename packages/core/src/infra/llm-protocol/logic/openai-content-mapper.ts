@@ -21,22 +21,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Build NM blocks from accumulated reply strings.
- * When `content` is empty but `reasoning_content` is set (some GLM endpoints), treat
- * reasoning as visible text so chat UI is not thinking-only.
+ * Build NM blocks from accumulated reply strings (normal stream finish).
+ * Aligns with {@link buildStreamPartialBlocks}: keep thinking separate; when only
+ * reasoning streamed, still emit an empty text block so UI can show ThinkingBlockCard
+ * without promoting reasoning into visible body text (GLM reasoning_content).
  */
 function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
-  let text = textRaw;
-  let thinking = thinkingRaw;
-  if (text.trim() === "" && thinking.trim() !== "") {
-    text = thinking;
-    thinking = "";
-  }
+  const text = textRaw;
+  const thinking = thinkingRaw;
   const blocks: ContentBlock[] = [];
   if (thinking.trim() !== "") {
     blocks.push({ type: "thinking", text: thinking });
   }
-  if (text.trim() !== "") {
+  if (text.trim() !== "" || thinking.trim() !== "") {
     blocks.push({ type: "text", text });
   }
   return blocks;

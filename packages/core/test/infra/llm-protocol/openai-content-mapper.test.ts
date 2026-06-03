@@ -141,15 +141,19 @@ describe("openai-content-mapper", () => {
     assert.equal(blocks[1]!.type, "text");
   });
 
-  it("maps reasoning-only inbound to text (GLM-style empty content)", () => {
+  it("maps reasoning-only inbound to thinking + empty text (no GLM promotion)", () => {
     const blocks = openAiChoiceToBlocks({
       content: "",
       reasoning_content: "visible reply",
     });
-    assert.equal(blocks.length, 1);
-    assert.equal(blocks[0]!.type, "text");
-    if (blocks[0]!.type === "text") {
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0]!.type, "thinking");
+    if (blocks[0]!.type === "thinking") {
       assert.equal(blocks[0].text, "visible reply");
+    }
+    assert.equal(blocks[1]!.type, "text");
+    if (blocks[1]!.type === "text") {
+      assert.equal(blocks[1].text, "");
     }
   });
 });
