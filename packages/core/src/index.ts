@@ -287,6 +287,7 @@ export {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STEP_COMMITTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   EVENT_SESSION_COMPACTION_REQUESTED,
 } from "./domain/events/model/event-types.js";
@@ -294,6 +295,8 @@ export type {
   NovelMasterEventType,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
+  AgentStepCommittedPayload,
+  AgentStepCommittedPhase,
   SessionCompactionRequestedPayload,
   CompactionTriggerKind,
 } from "./domain/events/model/event-types.js";

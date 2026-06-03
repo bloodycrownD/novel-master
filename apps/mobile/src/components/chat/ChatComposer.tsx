@@ -6,8 +6,10 @@ import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
 import {
   EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
 } from '@novel-master/core';
@@ -21,7 +23,7 @@ import {
   readChatComposerDraft,
   writeChatComposerDraft,
 } from '../../storage/chat-composer-draft';
-import {flushRunUi} from './flush-run-ui';
+import {flushAgentStepUi, flushRunUi} from './flush-run-ui';
 
 type Props = {
   scope: AgentRunScope;
@@ -94,6 +96,16 @@ export function ChatComposer({
         }
       },
     );
+    const subStep = bus.subscribe(
+      EVENT_AGENT_STEP_COMMITTED,
+      (payload: AgentStepCommittedPayload) => {
+        if (payload.sessionId === sid) {
+          const {onMessagesChanged: reload, onStreamReset: reset} =
+            streamHandlersRef.current;
+          flushAgentStepUi(payload.phase, reload, reset).catch(() => undefined);
+        }
+      },
+    );
     const subFinished = bus.subscribe(EVENT_AGENT_RUN_FINISHED, payload => {
       if (payload.sessionId === sid) {
         const {onMessagesChanged: reload, onStreamReset: reset} =
@@ -104,6 +116,7 @@ export function ChatComposer({
     return () => {
       subText.unsubscribe();
       subThinking.unsubscribe();
+      subStep.unsubscribe();
       subFinished.unsubscribe();
     };
   }, [runtime.eventBus, scope.sessionId]);

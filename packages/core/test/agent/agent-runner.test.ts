@@ -3,6 +3,7 @@ import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
   createSessionMacroCache,
+  EVENT_AGENT_STEP_COMMITTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   InMemoryAgentSession,
   registerVfsTools,
@@ -10,6 +11,7 @@ import {
   textBlocks,
   ToolRegistry,
   type AgentDefinition,
+  type AgentStepCommittedPayload,
   type CreateAgentRunnerDeps,
   type LlmChatResult,
   type ModelRequestService,
@@ -357,6 +359,52 @@ describe("AgentRunner", () => {
       ...defaultRunScope,
     });
     assert.equal(received, true);
+  });
+
+  it("emits agent.step.committed after each assistant and tool_results append", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const bus = new SimpleEventBus();
+    const phases: AgentStepCommittedPayload["phase"][] = [];
+    bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
+      phases.push(p.phase);
+    });
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          { type: "thinking", text: "plan" },
+          {
+            type: "tool_use",
+            id: "tu1",
+            name: "vfs.list",
+            input: { dir: "/" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner({
+      session,
+      modelRequests: model,
+      registry,
+      toolCtx: mockToolCtx(mockVfs()),
+      eventBus: bus,
+      macroCache: createSessionMacroCache(),
+    });
+    await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+    assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
   it("propagates doom_loop from identical tool_use blocks", async () => {

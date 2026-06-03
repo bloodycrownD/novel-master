@@ -36,6 +36,7 @@ import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_SESSION_COMPACTION_REQUESTED,
@@ -223,6 +224,13 @@ export class DefaultAgentRunner implements AgentRunner {
             messageId: assistantMessage.id,
             batchId: null,
           };
+          if (publishRunLifecycle) {
+            bus.publish(EVENT_AGENT_STEP_COMMITTED, {
+              sessionId,
+              projectId,
+              phase: "assistant",
+            });
+          }
         }
 
         if (signal?.aborted) {
@@ -295,6 +303,13 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         await session.append("user", { blocks: toolResults });
+        if (publishRunLifecycle) {
+          bus.publish(EVENT_AGENT_STEP_COMMITTED, {
+            sessionId,
+            projectId,
+            phase: "tool_results",
+          });
+        }
 
         if (step + 1 >= maxSteps) {
           stopReason = "max_steps";
