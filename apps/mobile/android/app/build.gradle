@@ -80,8 +80,22 @@ android {
         applicationId "com.novelmaster"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        def ciVersionCode = findProperty("versionCode")?.toString()?.toInteger()
+            ?: System.getenv("VERSION_CODE")?.toInteger()
+            ?: 1
+        def ciVersionName = findProperty("versionName")?.toString()
+            ?: System.getenv("VERSION_NAME")
+            ?: "1.0"
+        versionCode ciVersionCode
+        versionName ciVersionName
+    }
+    splits {
+        abi {
+            enable true
+            reset()
+            include "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
+            universalApk true
+        }
     }
     signingConfigs {
         debug {
@@ -90,15 +104,32 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        release {
+            def keystorePath = findProperty("android.injected.signing.store.file")?.toString()
+                ?: System.getenv("ANDROID_KEYSTORE_FILE")
+            if (keystorePath != null && !keystorePath.isEmpty()) {
+                storeFile file(keystorePath)
+                storePassword findProperty("android.injected.signing.store.password")?.toString()
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias findProperty("android.injected.signing.key.alias")?.toString()
+                    ?: System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword findProperty("android.injected.signing.key.password")?.toString()
+                    ?: System.getenv("ANDROID_KEY_PASSWORD")
+            } else {
+                // Local / CI without secrets: debug keystore (not for Play Store).
+                storeFile file('debug.keystore')
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }

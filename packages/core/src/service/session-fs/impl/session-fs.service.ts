@@ -6,7 +6,7 @@
 
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { VfsError, vfsNotFound } from "@/errors/vfs-errors.js";
+import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
 import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
@@ -205,7 +205,7 @@ export class DefaultSessionFsService implements SessionFsService {
           try {
             await vfs.delete(action.logicalPath);
           } catch (error) {
-            if (!(error instanceof VfsError) || error.code !== "NOT_FOUND") {
+            if (!isVfsError(error, "NOT_FOUND")) {
               throw error;
             }
           }
@@ -253,7 +253,7 @@ export class DefaultSessionFsService implements SessionFsService {
       try {
         await vfs.delete(logicalPath);
       } catch (error) {
-        if (!(error instanceof VfsError) || error.code !== "NOT_FOUND") {
+        if (!isVfsError(error, "NOT_FOUND")) {
           throw error;
         }
       }
@@ -282,7 +282,7 @@ export class DefaultSessionFsService implements SessionFsService {
       const read = await vfs.read(path);
       return read.version;
     } catch (error) {
-      if (error instanceof VfsError && error.code === "NOT_FOUND") {
+      if (isVfsError(error, "NOT_FOUND")) {
         return null;
       }
       throw error;
@@ -312,7 +312,7 @@ export class DefaultSessionFsService implements SessionFsService {
       });
       return rev;
     } catch (error) {
-      if (error instanceof VfsError && error.code === "NOT_FOUND") {
+      if (isVfsError(error, "NOT_FOUND")) {
         const rev = await snapshots.nextRev(sessionId, logicalPath);
         await snapshots.insert({
           sessionId,
@@ -375,7 +375,7 @@ export class DefaultSessionFsService implements SessionFsService {
       });
       return result.version;
     } catch (error) {
-      if (error instanceof VfsError && error.code === "NOT_FOUND") {
+      if (isVfsError(error, "NOT_FOUND")) {
         const result = await vfs.write(path, content);
         return result.version;
       }

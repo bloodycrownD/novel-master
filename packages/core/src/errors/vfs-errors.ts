@@ -43,6 +43,21 @@ export class VfsError extends Error {
   }
 }
 
+/** Type guard that works across duplicate module instances (e.g. src vs dist in tests). */
+export function isVfsError(
+  error: unknown,
+  code?: VfsErrorCode,
+): error is VfsError {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+  const candidate = error as { name?: unknown; code?: unknown };
+  if (candidate.name !== "VfsError" || typeof candidate.code !== "string") {
+    return false;
+  }
+  return code === undefined || candidate.code === code;
+}
+
 /** Path does not exist. */
 export function vfsNotFound(path: string): VfsError {
   return new VfsError("NOT_FOUND", `Path not found: ${path}`, { path });

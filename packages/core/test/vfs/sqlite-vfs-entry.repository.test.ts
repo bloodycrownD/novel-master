@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "@/errors/vfs-errors.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { openVfsTestConnection } from "./helpers.js";
@@ -14,8 +14,7 @@ describe("normalizePath", () => {
 
   it("rejects invalid paths", () => {
     assert.throws(() => normalizePath("relative"), (e: unknown) => {
-      assert.ok(e instanceof VfsError);
-      assert.equal(e.code, "INVALID_PATH");
+      assert.ok(isVfsError(e, "INVALID_PATH"));
       return true;
     });
   });
@@ -69,9 +68,8 @@ describe("SqliteVfsEntryRepository", () => {
           versionCheck: true,
         }),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "CONFLICT");
-        assert.equal(e.actualVersion, 2);
+        assert.ok(isVfsError(e, "CONFLICT"));
+        assert.equal((e as { actualVersion?: number }).actualVersion, 2);
         return true;
       },
     );
@@ -95,8 +93,7 @@ describe("SqliteVfsEntryRepository", () => {
     await assert.rejects(
       () => repo.delete("/tree", { recursive: false }),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "DIRECTORY_NOT_EMPTY");
+        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
         return true;
       },
     );

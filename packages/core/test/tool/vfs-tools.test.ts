@@ -8,7 +8,7 @@ import {
   type VfsToolContext,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
-import { VfsError } from "@novel-master/core";
+import { isVfsError } from "@novel-master/core";
 import type { SessionFsService } from "../../src/service/session-fs/session-fs.port.js";
 
 function toolCtx(
@@ -190,8 +190,7 @@ describe("Builtin vfs.* tools (integration)", () => {
         assert.ok(e instanceof ToolError);
         assert.equal(e.code, "FAILED");
         assert.equal(e.toolName, "vfs.read");
-        assert.ok(e.cause instanceof VfsError);
-        assert.equal((e.cause as VfsError).code, "NOT_FOUND");
+        assert.ok(isVfsError(e.cause, "NOT_FOUND"));
         return true;
       },
     );

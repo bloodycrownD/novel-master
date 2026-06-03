@@ -6,7 +6,7 @@
  * @module service/provider/impl/model-retry-policy.service
  */
 
-import { KkvError } from "@/errors/kkv-errors.js";
+import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type {
   ModelRetryPolicy,
@@ -59,7 +59,7 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     try {
       raw = await this.kkv.get(MODULE, KEY);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return null;
       }
       throw error;
@@ -82,7 +82,7 @@ export class DefaultModelRetryPolicyService implements ModelRetryPolicyService {
     try {
       await this.kkv.delete(MODULE, KEY);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return;
       }
       throw error;

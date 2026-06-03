@@ -4,7 +4,7 @@
  * @module service/persistent-state/impl/persistent-state.service
  */
 
-import { KkvError } from "@/errors/kkv-errors.js";
+import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
 
@@ -97,7 +97,7 @@ export class DefaultPersistentState implements PersistentState {
     try {
       return await this.kkv.get(MODULE, key);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return undefined;
       }
       throw error;
@@ -112,7 +112,7 @@ export class DefaultPersistentState implements PersistentState {
     try {
       await this.kkv.delete(MODULE, key);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return;
       }
       throw error;

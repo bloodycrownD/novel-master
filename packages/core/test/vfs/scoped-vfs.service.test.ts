@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { toPhysicalPath, VfsError } from "@novel-master/core";
+import { isVfsError, toPhysicalPath } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("ScopedVfsService", () => {
@@ -43,8 +43,7 @@ describe("ScopedVfsService", () => {
     await assert.rejects(
       () => ctx.globalVfs().write("/template/legacy.md", "x"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "INVALID_PATH");
+        assert.ok(isVfsError(e, "INVALID_PATH"));
         return true;
       },
     );

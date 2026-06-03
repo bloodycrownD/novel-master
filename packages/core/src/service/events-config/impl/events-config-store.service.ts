@@ -9,7 +9,7 @@ import { encode } from "@/infra/serialization/encode.js";
 import { eventsConfigSchema } from "@/domain/events-config/model/events-config.schema.js";
 import type { EventsConfig } from "@/domain/events-config/model/events-config.js";
 import { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-events.js";
-import { KkvError } from "@/errors/kkv-errors.js";
+import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { EventsConfigStore } from "../events-config-store.port.js";
 
@@ -36,7 +36,7 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     try {
       await this.kkv.delete(MODULE, KEY_CONFIG);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return;
       }
       throw error;
@@ -47,7 +47,7 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     try {
       return await this.kkv.get(MODULE, KEY_CONFIG);
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return undefined;
       }
       throw error;

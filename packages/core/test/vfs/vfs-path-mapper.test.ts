@@ -5,7 +5,7 @@ import {
   resolveLogicalPath,
   toLogicalPath,
   toPhysicalPath,
-  VfsError,
+  isVfsError,
 } from "@novel-master/core";
 
 describe("vfs-path-mapper", () => {
@@ -34,16 +34,14 @@ describe("vfs-path-mapper", () => {
     assert.throws(
       () => assertLogicalPathAllowed({ kind: "global" }, "/template/legacy.md"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "INVALID_PATH");
+        assert.ok(isVfsError(e, "INVALID_PATH"));
         return true;
       },
     );
     assert.throws(
       () => assertLogicalPathAllowed({ kind: "global" }, "/template"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "INVALID_PATH");
+        assert.ok(isVfsError(e, "INVALID_PATH"));
         return true;
       },
     );

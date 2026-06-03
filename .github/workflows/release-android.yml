@@ -1,0 +1,172 @@
+# Build Android release APKs and publish a GitHub Release when a version tag is pushed.
+#
+# Tag examples: v0.1.0, v1.2.3-beta.1
+#
+# Optional repository secrets (recommended for production installs):
+#   ANDROID_KEYSTORE_BASE64      — base64-encoded .jks / .keystore
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# Without these, the workflow signs with the checked-in debug keystore.
+
+name: Release Android
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-release:
+    name: Build & publish Android APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NAME="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;27.1.12297006
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn
+
+      - name: Prepare release keystore
+        id: keystore
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        working-directory: apps/mobile/android/app
+        shell: bash
+        run: |
+          KEYSTORE_PATH="${GITHUB_WORKSPACE}/apps/mobile/android/app/release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "path=${KEYSTORE_PATH}" >> "$GITHUB_OUTPUT"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Build release APKs (all ABIs + universal)
+        working-directory: apps/mobile/android
+        shell: bash
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease \
+            --no-daemon \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64 \
+            -PversionName="$VERSION_NAME" \
+            -PversionCode="$VERSION_CODE"
+
+      - name: Collect APK artifacts
+        id: artifacts
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.name }}"
+          TAG="${{ steps.version.outputs.tag }}"
+          OUT="${RUNNER_TEMP}/release-apks"
+          mkdir -p "$OUT"
+
+          shopt -s nullglob
+          apks=(apps/mobile/android/app/build/outputs/apk/release/*-release.apk)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "No release APKs found under app/build/outputs/apk/release/"
+            ls -laR apps/mobile/android/app/build/outputs || true
+            exit 1
+          fi
+
+          for apk in "${apks[@]}"; do
+            base="$(basename "$apk")"
+            # app-arm64-v8a-release.apk -> NovelMaster-1.0.0-arm64-v8a.apk
+            abi="${base#app-}"
+            abi="${abi%-release.apk}"
+            if [ "$abi" = "universal" ]; then
+              dest="NovelMaster-${VERSION}-universal.apk"
+            else
+              dest="NovelMaster-${VERSION}-${abi}.apk"
+            fi
+            cp "$apk" "${OUT}/${dest}"
+            echo "- ${dest}" >> "$OUT/ASSETS.txt"
+          done
+
+          {
+            echo "# Novel Master Android ${TAG}"
+            echo ""
+            echo "| APK | ABI |"
+            echo "| --- | --- |"
+            for f in "$OUT"/NovelMaster-*.apk; do
+              name="$(basename "$f")"
+              if [[ "$name" == *-universal.apk ]]; then
+                echo "| ${name} | all (fat) |"
+              else
+                abi="${name#NovelMaster-${VERSION}-}"
+                abi="${abi%.apk}"
+                echo "| ${name} | ${abi} |"
+              fi
+            done
+            echo ""
+            echo "**Install tip:** use \`universal\` on most phones; use per-ABI builds for smaller downloads."
+          } > "$OUT/RELEASE_NOTES.md"
+
+          echo "dir=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Android ${{ steps.version.outputs.tag }}
+          tag_name: ${{ github.ref_name }}
+          body_path: ${{ steps.artifacts.outputs.dir }}/RELEASE_NOTES.md
+          files: ${{ steps.artifacts.outputs.dir }}/NovelMaster-*.apk
+          fail_on_unmatched_files: true
+          generate_release_notes: true

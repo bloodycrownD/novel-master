@@ -140,6 +140,26 @@ nm vfs list / -r
 npm test -w @novel-master/mobile
 ```
 
+## GitHub Release (Android)
+
+Push a version tag to trigger [`.github/workflows/release-android.yml`](../../.github/workflows/release-android.yml):
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The workflow builds release APKs for **armeabi-v7a**, **arm64-v8a**, **x86**, **x86_64**, plus a **universal** fat APK, and attaches them to a GitHub Release.
+
+Optional repository secrets for production signing (otherwise the debug keystore is used):
+
+| Secret | Description |
+|--------|-------------|
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded `.jks` / `.keystore` |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
 ## Known issues
 
 - **New Architecture**: init enables `newArchEnabled=true` in `android/gradle.properties`. If `react-native-quick-sqlite` fails to link, set `newArchEnabled=false` and rebuild.

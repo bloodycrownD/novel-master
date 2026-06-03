@@ -1,7 +1,12 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@novel-master/core": ["./src/index.ts"]
+    }
   },
   "include": ["src/**/*", "test/**/*"]
 }

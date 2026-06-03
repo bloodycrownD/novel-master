@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError, createWorktreeService } from "@novel-master/core";
+import { createWorktreeService, isVfsError } from "@novel-master/core";
 import { openVfsTestConnection } from "./helpers.js";
 
 describe("VFS directory nodes", () => {
@@ -26,8 +26,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.delete("/drafts"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "DIRECTORY_NOT_EMPTY");
+        assert.ok(isVfsError(e, "DIRECTORY_NOT_EMPTY"));
         return true;
       },
     );
@@ -45,8 +44,7 @@ describe("VFS directory nodes", () => {
       () => vfs.replace("/drafts", "a", "b"),
     ]) {
       await assert.rejects(fn, (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "IS_DIRECTORY");
+        assert.ok(isVfsError(e, "IS_DIRECTORY"));
         return true;
       });
     }
@@ -81,8 +79,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.mkdir("/parent-file/child"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "NOT_A_DIRECTORY");
+        assert.ok(isVfsError(e, "NOT_A_DIRECTORY"));
         return true;
       },
     );
@@ -94,8 +91,7 @@ describe("VFS directory nodes", () => {
     await assert.rejects(
       () => vfs.mkdir("/nested/leaf"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "PARENT_NOT_FOUND");
+        assert.ok(isVfsError(e, "PARENT_NOT_FOUND"));
         return true;
       },
     );

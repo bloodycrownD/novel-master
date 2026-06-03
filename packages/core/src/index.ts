@@ -57,7 +57,7 @@ export type {
 /**
  * Virtual file system: path-keyed content with optimistic versioning.
  */
-export { VfsError } from "./errors/vfs-errors.js";
+export { VfsError, isVfsError } from "./errors/vfs-errors.js";
 export type { VfsErrorCode } from "./errors/vfs-errors.js";
 export type {
   VfsEntry,
@@ -114,7 +114,7 @@ export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 /**
  * Persistent workspace pointers and behavioral preferences (KKV-backed, modules internal).
  */
-export { KkvError } from "./errors/kkv-errors.js";
+export { KkvError, isKkvError } from "./errors/kkv-errors.js";
 export type { KkvErrorCode } from "./errors/kkv-errors.js";
 export { createKkvService } from "./service/kkv/create-kkv-service.js";
 export type { KkvService } from "./service/kkv/kkv.port.js";

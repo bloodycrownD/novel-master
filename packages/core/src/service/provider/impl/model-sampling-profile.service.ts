@@ -12,7 +12,7 @@ import {
 } from "@/domain/provider/model/model-sampling-profile-from-json.js";
 import type { ModelSamplingProfile } from "@/domain/provider/model/model-sampling-profile.js";
 import { ProviderError } from "@/errors/provider-errors.js";
-import { KkvError } from "@/errors/kkv-errors.js";
+import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 
@@ -57,7 +57,7 @@ export class DefaultModelSamplingProfileService implements ModelSamplingProfileS
     try {
       await this.kkv.delete(MODULE, profileKey(applicationModelId));
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return;
       }
       throw error;
@@ -68,7 +68,7 @@ export class DefaultModelSamplingProfileService implements ModelSamplingProfileS
     try {
       return await this.kkv.get(MODULE, profileKey(applicationModelId));
     } catch (error) {
-      if (error instanceof KkvError && error.code === "NOT_FOUND") {
+      if (isKkvError(error, "NOT_FOUND")) {
         return undefined;
       }
       throw error;

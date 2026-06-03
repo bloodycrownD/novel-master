@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "@novel-master/core";
+import { isVfsError } from "@novel-master/core";
 import { openVfsTestConnection } from "./helpers.js";
 
 describe("DefaultVfsService (integration)", () => {
@@ -32,8 +32,7 @@ describe("DefaultVfsService (integration)", () => {
     await assert.rejects(
       () => vfs.write("/stale.txt", "three", { expectedVersion: 1 }),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "CONFLICT");
+        assert.ok(isVfsError(e, "CONFLICT"));
         return true;
       },
     );
@@ -73,8 +72,7 @@ describe("DefaultVfsService (integration)", () => {
     await assert.rejects(
       () => vfs.replace("/missing.txt", "nope", "x"),
       (e: unknown) => {
-        assert.ok(e instanceof VfsError);
-        assert.equal(e.code, "REPLACE_NOT_FOUND");
+        assert.ok(isVfsError(e, "REPLACE_NOT_FOUND"));
         return true;
       },
     );
@@ -118,8 +116,7 @@ describe("DefaultVfsService (integration)", () => {
     await vfs.write("/del/child", "child");
     await vfs.delete("/del", { recursive: true });
     await assert.rejects(() => vfs.read("/del/child"), (e: unknown) => {
-      assert.ok(e instanceof VfsError);
-      assert.equal(e.code, "NOT_FOUND");
+      assert.ok(isVfsError(e, "NOT_FOUND"));
       return true;
     });
     await conn.close();
