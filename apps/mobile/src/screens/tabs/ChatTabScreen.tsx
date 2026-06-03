@@ -45,6 +45,7 @@ import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {nextDefaultSessionTitle} from '../../utils/session-default-title';
@@ -302,6 +303,43 @@ export function ChatTabScreen() {
     }, [refreshChatRichTextPref]),
   );
 
+  const backFromConversation = useCallback(
+    () => setChatSubview('sessions'),
+    [],
+  );
+
+  const closeMessageMenu = useCallback(() => {
+    setMessageMenuTarget(undefined);
+    setMessageMenuAnchor(undefined);
+  }, []);
+
+  useAndroidChatBackHandler(
+    {
+      chatSubview,
+      sessionListPanel,
+      sessionDrawerOpen,
+      messageMenuOpen: messageMenuTarget != null,
+      messageBatchActive: messageBatch.active,
+      messageEditOpen: messageEditPrompt != null,
+      modelPickerOpen,
+      sessionRenameOpen: sessionRenamePrompt != null,
+      projectDrawerOpen,
+      sessionBatchActive: sessionBatch.active,
+    },
+    {
+      backFromConversation,
+      closeSessionDrawer: () => setSessionDrawerOpen(false),
+      closeMessageMenu,
+      exitMessageBatch: messageBatch.exit,
+      closeMessageEdit: () => setMessageEditPrompt(undefined),
+      closeModelPicker: () => setModelPickerOpen(false),
+      closeSessionRename: () => setSessionRenamePrompt(undefined),
+      closeProjectDrawer: () => setProjectDrawerOpen(false),
+      exitSessionBatch: sessionBatch.exit,
+      showSessionsPanel: () => setSessionListPanel('sessions'),
+    },
+  );
+
   useEffect(() => {
     setChat({
       chatSubview,
@@ -310,7 +348,7 @@ export function ChatTabScreen() {
       agentName: chatSubview === 'conversation' ? agentMeta.agentName : undefined,
       modelLabel:
         chatSubview === 'conversation' ? agentMeta.modelLabel : undefined,
-      onBackFromConversation: () => setChatSubview('sessions'),
+      onBackFromConversation: backFromConversation,
       onOpenDrawer: () => {
         if (chatSubview === 'conversation') {
           setSessionDrawerOpen(true);
@@ -319,7 +357,14 @@ export function ChatTabScreen() {
         }
       },
     });
-  }, [chatSubview, sessionListPanel, currentSession, agentMeta, setChat]);
+  }, [
+    chatSubview,
+    sessionListPanel,
+    currentSession,
+    agentMeta,
+    setChat,
+    backFromConversation,
+  ]);
 
   const openConversation = useCallback(
     async (sid: string) => {
