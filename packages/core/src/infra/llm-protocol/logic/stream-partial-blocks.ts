@@ -1,8 +1,8 @@
 /**
  * Abort-time partial blocks for streaming LLM adapters.
  *
- * On user cancel we keep thinking + an empty text block when only reasoning streamed,
- * without GLM-style promotion of thinking into visible text (that applies only on normal finish).
+ * On user cancel we keep thinking without promoting it into visible text.
+ * Empty text blocks are omitted (content_json requires non-empty text strings).
  *
  * @module infra/llm-protocol/logic/stream-partial-blocks
  */
@@ -36,7 +36,7 @@ export function buildStreamPartialBlocks(
   if (thinking.trim() !== "") {
     blocks.push({ type: "thinking", text: thinking });
   }
-  if (text.length > 0 || thinking.trim() !== "") {
+  if (text.length > 0) {
     blocks.push({ type: "text", text });
   }
   for (const tu of input.toolUses ?? []) {

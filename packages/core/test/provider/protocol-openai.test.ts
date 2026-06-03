@@ -381,11 +381,9 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     });
 
     assert.equal(result.assistantText, "");
-    assert.equal(result.blocks.length, 2);
+    assert.equal(result.blocks.length, 1);
     assert.equal(result.blocks[0]!.type, "thinking");
     assert.equal(result.blocks[0]!.text, "你好");
-    assert.equal(result.blocks[1]!.type, "text");
-    assert.equal(result.blocks[1]!.text, "");
   });
 
   it("omits thinking blocks from outbound history", async () => {

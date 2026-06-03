@@ -4,15 +4,14 @@ import { openAiStreamAccumulatorsToPartialBlocks } from "../../../src/infra/llm-
 import { createOpenAiSseParserState } from "../../../src/infra/llm-protocol/logic/openai-sse-parser.js";
 
 describe("openAiStreamAccumulatorsToPartialBlocks", () => {
-  it("keeps partial thinking and empty text block", () => {
+  it("keeps partial thinking without empty text block", () => {
     const state = createOpenAiSseParserState();
     state.thinkingParts.push("half thought");
     const blocks = openAiStreamAccumulatorsToPartialBlocks(state);
-    assert.equal(blocks.length, 2);
+    assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
-    assert.equal(blocks[1]?.type, "text");
-    if (blocks[1]?.type === "text") {
-      assert.equal(blocks[1].text, "");
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].text, "half thought");
     }
   });
 

@@ -8,18 +8,17 @@ import {
 } from "../../../src/infra/llm-protocol/logic/anthropic-sse-parser.js";
 
 describe("anthropic partial stream", () => {
-  it("finishAnthropicSsePartial: only thinking → thinking + empty text", () => {
+  it("finishAnthropicSsePartial: only thinking → thinking only", () => {
     const state = createAnthropicSseParserState();
     feedAnthropicSseChunk(
       state,
       'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"partial"}}\n',
     );
     const { blocks } = finishAnthropicSsePartial(state);
-    assert.equal(blocks.length, 2);
+    assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
-    assert.equal(blocks[1]?.type, "text");
-    if (blocks[1]?.type === "text") {
-      assert.equal(blocks[1].text, "");
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].text, "partial");
     }
   });
 

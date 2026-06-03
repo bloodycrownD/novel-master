@@ -22,9 +22,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Build NM blocks from accumulated reply strings (normal stream finish).
- * Aligns with {@link buildStreamPartialBlocks}: keep thinking separate; when only
- * reasoning streamed, still emit an empty text block so UI can show ThinkingBlockCard
- * without promoting reasoning into visible body text (GLM reasoning_content).
+ * Aligns with {@link buildStreamPartialBlocks}: keep thinking separate; omit empty
+ * text blocks (content_json rejects `text: ""`). Thinking-only replies are valid.
  */
 function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
   const text = textRaw;
@@ -33,7 +32,7 @@ function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBl
   if (thinking.trim() !== "") {
     blocks.push({ type: "thinking", text: thinking });
   }
-  if (text.trim() !== "" || thinking.trim() !== "") {
+  if (text.trim() !== "") {
     blocks.push({ type: "text", text });
   }
   return blocks;

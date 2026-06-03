@@ -35,15 +35,14 @@ describe("gemini-sse-parser", () => {
     }
   });
 
-  it("T7: abort partial keeps thinking + empty text", () => {
+  it("T7: abort partial keeps thinking without empty text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(
       state,
       'data: {"candidates":[{"content":{"parts":[{"text":"thought","thought":true}]}}]}\n',
     );
     const { blocks } = finishGeminiSsePartial(state);
-    assert.equal(blocks.length, 2);
+    assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
-    assert.equal(blocks[1]?.type, "text");
   });
 });

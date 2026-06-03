@@ -43,6 +43,13 @@ describe("parseMessageContent", () => {
     assert.equal(parsed.blocks[3]!.type, "tool_use");
   });
 
+  it("accepts thinking-only blocks (no empty text)", () => {
+    const payload = { blocks: [{ type: "thinking", text: "chain only" }] };
+    const parsed = parseMessageContent(JSON.stringify(payload));
+    assert.equal(parsed.blocks.length, 1);
+    assert.equal(parsed.blocks[0]!.type, "thinking");
+  });
+
   it("rejects legacy { content } shape", () => {
     assert.throws(
       () => parseMessageContent(JSON.stringify({ content: "x" })),

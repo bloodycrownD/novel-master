@@ -3,16 +3,15 @@ import { describe, it } from "node:test";
 import { buildStreamPartialBlocks } from "../../../src/infra/llm-protocol/logic/stream-partial-blocks.js";
 
 describe("buildStreamPartialBlocks", () => {
-  it("T1: keeps partial thinking and empty text block", () => {
+  it("T1: keeps partial thinking without empty text block", () => {
     const blocks = buildStreamPartialBlocks({
       text: "",
       thinking: "half thought",
     });
-    assert.equal(blocks.length, 2);
+    assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
-    assert.equal(blocks[1]?.type, "text");
-    if (blocks[1]?.type === "text") {
-      assert.equal(blocks[1].text, "");
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].text, "half thought");
     }
   });
 
