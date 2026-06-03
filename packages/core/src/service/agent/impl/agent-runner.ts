@@ -212,11 +212,17 @@ export class DefaultAgentRunner implements AgentRunner {
 
         stepsExecuted += 1;
 
+        let assistantMessage: ChatMessage | undefined;
         if (result.blocks.length > 0) {
-          await session.append("assistant", { blocks: result.blocks }, {
+          assistantMessage = await session.append("assistant", { blocks: result.blocks }, {
             raw: result.raw as Record<string, unknown>,
           });
           assistantAppendCount += 1;
+          // Fresh bag each LLM step so mutating tools share one batch per assistant message.
+          this.deps.toolCtx.executeRound = {
+            messageId: assistantMessage.id,
+            batchId: null,
+          };
         }
 
         if (signal?.aborted) {

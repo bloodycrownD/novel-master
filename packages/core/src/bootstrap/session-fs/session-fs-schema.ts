@@ -23,7 +23,8 @@ export const SESSION_FS_SCHEMA_STATEMENTS: readonly string[] = [
     id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
     created_at_ms INTEGER NOT NULL,
-    created_by TEXT NOT NULL
+    created_by TEXT NOT NULL,
+    message_id TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS session_execute_action (
     batch_id TEXT NOT NULL,

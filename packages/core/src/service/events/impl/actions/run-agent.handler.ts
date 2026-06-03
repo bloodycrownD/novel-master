@@ -68,6 +68,7 @@ export async function runRunAgentAction(
   const vfs = deps.sessionVfs(ctx.projectId, ctx.sessionId);
   const registry = resolveAgentToolRegistry(probe, definition);
   const session = new ChatAgentSession(deps.messages, ctx.sessionId);
+  const executeRound = { messageId: "", batchId: null as string | null };
 
   const runner = createAgentRunner({
     session,
@@ -78,6 +79,7 @@ export async function runRunAgentAction(
       sessionFs: deps.sessionFs,
       projectId: ctx.projectId,
       sessionId: ctx.sessionId,
+      executeRound,
     },
     eventBus: deps.eventBus,
     macroCache: deps.macroCache,

@@ -59,6 +59,15 @@ export type {
  */
 export { VfsError, isVfsError } from "./errors/vfs-errors.js";
 export type { VfsErrorCode } from "./errors/vfs-errors.js";
+export {
+  SessionFsError,
+  isSessionFsError,
+  sessionFsRollbackLegacyBatch,
+  sessionFsRollbackSnapshotMissing,
+  sessionFsRollbackMessageNotFound,
+  sessionFsRollbackMessageSessionMismatch,
+} from "./errors/session-fs-errors.js";
+export type { SessionFsErrorCode } from "./errors/session-fs-errors.js";
 export type {
   VfsEntry,
   VfsEntryKind,
@@ -169,6 +178,7 @@ export type {
   SessionFsActor,
   SessionFsAction,
   SessionFsExecuteOptions,
+  SessionFsExecuteRound,
   SessionFsExecuteResult,
   SessionFsBatchSummary,
   SessionFsSnapshotSummary,

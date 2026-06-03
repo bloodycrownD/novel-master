@@ -10,6 +10,8 @@ export interface SessionExecuteBatch {
   readonly sessionId: string;
   readonly createdAtMs: number;
   readonly createdBy: string;
+  /** Assistant message id when batch was opened from an agent round; null for legacy/script batches. */
+  readonly messageId?: string | null;
 }
 
 /** A single action within an execute batch. */

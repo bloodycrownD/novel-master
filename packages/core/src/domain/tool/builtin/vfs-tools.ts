@@ -14,7 +14,12 @@ import type {
   VfsService,
   WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
-import type { SessionFsService } from "@/service/session-fs/session-fs.port.js";
+import type {
+  SessionFsAction,
+  SessionFsExecuteOptions,
+  SessionFsExecuteRound,
+  SessionFsService,
+} from "@/service/session-fs/session-fs.port.js";
 import type { ToolRegistry } from "../logic/tool-registry.js";
 
 /**
@@ -26,7 +31,40 @@ export type VfsToolContext = {
   readonly sessionFs: SessionFsService;
   readonly projectId: string;
   readonly sessionId: string;
+  /** When set by AgentRunner, mutating tools share one batch per assistant message. */
+  executeRound?: SessionFsExecuteRound;
 };
+
+async function executeMutating(
+  ctx: VfsToolContext,
+  actions: SessionFsAction[],
+  opts?: Pick<SessionFsExecuteOptions, "versionCheck" | "expectedVersion">,
+): Promise<{ batchId: string; results: Awaited<ReturnType<SessionFsService["execute"]>>["results"] }> {
+  assertSessionFsExecute(ctx);
+  const round = ctx.executeRound;
+  if (round == null) {
+    return await ctx.sessionFs.execute(
+      ctx.sessionId,
+      ctx.projectId,
+      actions,
+      "assistant",
+      opts,
+    );
+  }
+  const result = await ctx.sessionFs.execute(
+    ctx.sessionId,
+    ctx.projectId,
+    actions,
+    "assistant",
+    {
+      ...opts,
+      messageId: round.batchId == null ? round.messageId : undefined,
+      continueBatchId: round.batchId ?? undefined,
+    },
+  );
+  round.batchId = result.batchId;
+  return result;
+}
 
 function assertSessionFsExecute(
   ctx: VfsToolContext,
@@ -85,13 +123,10 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
-      assertSessionFsExecute(ctx);
       const versionCheck = input.options?.versionCheck ?? true;
-      const result = await ctx.sessionFs.execute(
-        ctx.sessionId,
-        ctx.projectId,
+      const result = await executeMutating(
+        ctx,
         [{ function: "write", path: input.path, content: input.content }],
-        "assistant",
         {
           versionCheck,
           ...(input.options?.expectedVersion != null
@@ -155,12 +190,9 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       }
 
       // Single write batch after in-memory replace (read stays outside the batch).
-      const result = await ctx.sessionFs.execute(
-        ctx.sessionId,
-        ctx.projectId,
-        [{ function: "write", path: input.path, content: nextContent }],
-        "assistant",
-      );
+      const result = await executeMutating(ctx, [
+        { function: "write", path: input.path, content: nextContent },
+      ]);
       const writeResult = result.results.find((r) => r.function === "write");
       if (writeResult == null || writeResult.function !== "write") {
         throw new Error("sessionFs.execute did not return a write result");

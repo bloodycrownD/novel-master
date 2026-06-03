@@ -47,6 +47,18 @@ async function migrateDropProviderDefaultModelId(
   }
 }
 
+async function migrateAddBatchMessageId(tx: TdbcConnection): Promise<void> {
+  const rows = await tx.query(
+    "SELECT name FROM pragma_table_info('session_execute_batch')",
+  );
+  const names = rows.map((r) => String(r.name));
+  if (!names.includes("message_id")) {
+    await tx.execute(
+      "ALTER TABLE session_execute_batch ADD COLUMN message_id TEXT",
+    );
+  }
+}
+
 async function migrateRegexRuleDepthColumns(tx: TdbcConnection): Promise<void> {
   const rows = await tx.query(
     "SELECT name FROM pragma_table_info('regex_rule')",
@@ -68,6 +80,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
       await tx.execute(sql);
     }
     await migrateRegexRuleDepthColumns(tx);
+    await migrateAddBatchMessageId(tx);
     await migrateDropProviderDefaultModelId(tx);
     await seedBuiltinProviders(tx);
   });

@@ -7,6 +7,14 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
+import {
+  sessionFsRollbackLegacyBatch,
+  sessionFsRollbackMessageNotFound,
+  sessionFsRollbackMessageSessionMismatch,
+  sessionFsRollbackSnapshotMissing,
+} from "@/errors/session-fs-errors.js";
+import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
 import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
@@ -28,6 +36,17 @@ export interface SessionFsServiceDeps {
   readonly conn: TdbcConnection;
   readonly snapshots: SessionSnapshotRepository;
   readonly execute: SessionExecuteRepository;
+  readonly messages: MessageRepository;
+}
+
+interface RunActionsCtx {
+  readonly sessionId: string;
+  readonly projectId: string;
+  readonly batchId: string;
+  readonly actor: SessionFsActor;
+  readonly versionCheck: boolean;
+  readonly expectedVersion?: number;
+  readonly startSeq: number;
 }
 
 /**
@@ -44,112 +63,45 @@ export class DefaultSessionFsService implements SessionFsService {
     options?: SessionFsExecuteOptions,
   ): Promise<SessionFsExecuteResult> {
     const versionCheck = options?.versionCheck !== false;
-    const batchId = randomUUID();
+    const continueBatchId = options?.continueBatchId;
     const now = Date.now();
+    let batchId: string;
+    let startSeq = 0;
+
+    if (continueBatchId != null && continueBatchId !== "") {
+      const existing = await this.deps.execute.findBatch(continueBatchId);
+      if (existing == null || existing.sessionId !== sessionId) {
+        throw vfsNotFound(continueBatchId);
+      }
+      batchId = continueBatchId;
+      startSeq = (await this.deps.execute.maxActionSeq(batchId)) + 1;
+    } else {
+      batchId = randomUUID();
+    }
+
     const results: Array<SessionFsExecuteResult["results"][number]> = [];
 
     await this.deps.conn.transaction(async (tx) => {
-      const vfs = this.scopedVfs(projectId, sessionId, tx);
-      const snapshots = new SqliteSessionSnapshotRepository(tx);
       const execute = new SqliteSessionExecuteRepository(tx);
-
-      await execute.insertBatch({
-        id: batchId,
-        sessionId,
-        createdAtMs: now,
-        createdBy: actor,
-      });
-
-      let seq = 0;
-      const checkpointedPaths = new Set<string>();
-      for (const action of actions) {
-        if (action.function !== "read" && !checkpointedPaths.has(action.path)) {
-          checkpointedPaths.add(action.path);
-          const checkpointRev = await this.captureCheckpoint(
-            sessionId,
-            action.path,
-            actor,
-            vfs,
-            now,
-            snapshots,
-          );
-          await execute.insertCheckpoint({
-            batchId,
-            logicalPath: action.path,
-            snapshotRev: checkpointRev,
-            vfsVersion: await this.currentVfsVersion(vfs, action.path),
-            createdAtMs: now,
-            createdBy: actor,
-          });
-        }
-
-        if (action.function === "read") {
-          const read = await vfs.read(action.path);
-          results.push({
-            function: "read",
-            path: action.path,
-            content: read.content,
-          });
-          await execute.insertAction({
-            batchId,
-            seq,
-            function: "read",
-            logicalPath: action.path,
-            payloadJson: null,
-          });
-        } else if (action.function === "write") {
-          const version = await this.autoWrite(
-            vfs,
-            action.path,
-            action.content,
-            versionCheck,
-            options?.expectedVersion,
-          );
-          await this.appendPostSnapshot(
-            sessionId,
-            action.path,
-            action.content,
-            "active",
-            version,
-            actor,
-            now,
-            snapshots,
-          );
-          results.push({
-            function: "write",
-            path: action.path,
-            version,
-          });
-          await execute.insertAction({
-            batchId,
-            seq,
-            function: "write",
-            logicalPath: action.path,
-            payloadJson: JSON.stringify({ content: action.content }),
-          });
-        } else {
-          await this.appendPostSnapshot(
-            sessionId,
-            action.path,
-            null,
-            "deleted",
-            null,
-            actor,
-            now,
-            snapshots,
-          );
-          await vfs.delete(action.path);
-          results.push({ function: "delete", path: action.path });
-          await execute.insertAction({
-            batchId,
-            seq,
-            function: "delete",
-            logicalPath: action.path,
-            payloadJson: null,
-          });
-        }
-        seq++;
+      if (continueBatchId == null || continueBatchId === "") {
+        await execute.insertBatch({
+          id: batchId,
+          sessionId,
+          createdAtMs: now,
+          createdBy: actor,
+          messageId: options?.messageId ?? null,
+        });
       }
+      const batchResults = await this.runActionsInTx(tx, {
+        sessionId,
+        projectId,
+        batchId,
+        actor,
+        versionCheck,
+        expectedVersion: options?.expectedVersion,
+        startSeq,
+      }, actions);
+      results.push(...batchResults);
     });
 
     return { batchId, results };
@@ -162,6 +114,7 @@ export class DefaultSessionFsService implements SessionFsService {
       sessionId: b.sessionId,
       createdAtMs: b.createdAtMs,
       createdBy: b.createdBy,
+      messageId: b.messageId ?? null,
     }));
   }
 
@@ -174,49 +127,68 @@ export class DefaultSessionFsService implements SessionFsService {
     if (batch == null || batch.sessionId !== sessionId) {
       throw vfsNotFound(batchId);
     }
-    const checkpoints = await this.deps.execute.listCheckpoints(batchId);
-    const checkpointByPath = new Map(
-      checkpoints.map((cp) => [cp.logicalPath, cp]),
-    );
-    const actions = await this.deps.execute.listActions(batchId);
 
     await this.deps.conn.transaction(async (tx) => {
-      const vfs = this.scopedVfs(projectId, sessionId, tx);
-      const snapshots = new SqliteSessionSnapshotRepository(tx);
-      const execute = new SqliteSessionExecuteRepository(tx);
-      const mutableActions = [...actions].reverse();
-      for (const action of mutableActions) {
-        if (action.function === "read") {
-          continue;
-        }
-        const cp = checkpointByPath.get(action.logicalPath);
-        if (cp == null) {
-          continue;
-        }
-        const snap = await snapshots.findByRev(
-          sessionId,
-          action.logicalPath,
-          cp.snapshotRev,
-        );
-        if (snap == null) {
-          continue;
-        }
-        if (snap.status === "deleted" || snap.content == null) {
-          try {
-            await vfs.delete(action.logicalPath);
-          } catch (error) {
-            if (!isVfsError(error, "NOT_FOUND")) {
-              throw error;
-            }
-          }
-        } else {
-          await vfs.write(action.logicalPath, snap.content, {
-            versionCheck: false,
-          });
-        }
+      await this.rollbackBatchInTx(tx, sessionId, projectId, batchId, batch.createdAtMs);
+    });
+  }
+
+  /**
+   * Rolls back batches for messages after the anchor, then truncates the chat tail.
+   * Batches are undone newest-first inside one transaction so snapshot cleanup stays consistent.
+   */
+  async rollbackToMessage(
+    sessionId: string,
+    projectId: string,
+    messageId: string,
+  ): Promise<void> {
+    const anchor = await this.deps.messages.findById(messageId);
+    if (anchor == null) {
+      throw sessionFsRollbackMessageNotFound(messageId);
+    }
+    if (anchor.sessionId !== sessionId) {
+      throw sessionFsRollbackMessageSessionMismatch(messageId, sessionId);
+    }
+
+    const allMessages = await this.deps.messages.listBySession(sessionId);
+    const tail = allMessages.filter((m) => m.seq > anchor.seq);
+    const tailMessageIds = new Set(tail.map((m) => m.id));
+
+    const batches = await this.deps.execute.listBatches(sessionId);
+    const toRollback = batches.filter(
+      (b) => b.messageId != null && tailMessageIds.has(b.messageId),
+    );
+
+    // Legacy batches (no message_id) after the anchor with mutating actions block message rollback.
+    for (const b of batches) {
+      if (b.messageId != null) {
+        continue;
       }
-      await snapshots.deleteAfterBatch(sessionId, batch.createdAtMs);
-      await execute.deleteBatch(batchId);
+      if (b.createdAtMs <= anchor.createdAtMs) {
+        continue;
+      }
+      const actions = await this.deps.execute.listActions(b.id);
+      if (actions.some((a) => a.function !== "read")) {
+        throw sessionFsRollbackLegacyBatch(sessionId);
+      }
+    }
+
+    const sorted = [...toRollback].sort(
+      (a, b) => b.createdAtMs - a.createdAtMs,
+    );
+
+    await this.deps.conn.transaction(async (tx) => {
+      for (const batch of sorted) {
+        await this.rollbackBatchInTx(
+          tx,
+          sessionId,
+          projectId,
+          batch.id,
+          batch.createdAtMs,
+        );
+      }
+      const messages = new SqliteMessageRepository(tx);
+      await messages.deleteAfterSeq(sessionId, anchor.seq);
     });
   }
 
@@ -260,6 +232,165 @@ export class DefaultSessionFsService implements SessionFsService {
     } else {
       await vfs.write(logicalPath, snap.content, { versionCheck: false });
     }
+  }
+
+  private async runActionsInTx(
+    tx: TdbcConnection,
+    ctx: RunActionsCtx,
+    actions: SessionFsAction[],
+  ): Promise<SessionFsExecuteResult["results"]> {
+    const vfs = this.scopedVfs(ctx.projectId, ctx.sessionId, tx);
+    const snapshots = new SqliteSessionSnapshotRepository(tx);
+    const execute = new SqliteSessionExecuteRepository(tx);
+    const results: SessionFsExecuteResult["results"][number][] = [];
+    const now = Date.now();
+    let seq = ctx.startSeq;
+    const existingCheckpoints = await execute.listCheckpoints(ctx.batchId);
+    const checkpointedPaths = new Set(
+      existingCheckpoints.map((cp) => cp.logicalPath),
+    );
+
+    for (const action of actions) {
+      if (action.function !== "read" && !checkpointedPaths.has(action.path)) {
+        checkpointedPaths.add(action.path);
+        const checkpointRev = await this.captureCheckpoint(
+          ctx.sessionId,
+          action.path,
+          ctx.actor,
+          vfs,
+          now,
+          snapshots,
+        );
+        await execute.insertCheckpoint({
+          batchId: ctx.batchId,
+          logicalPath: action.path,
+          snapshotRev: checkpointRev,
+          vfsVersion: await this.currentVfsVersion(vfs, action.path),
+          createdAtMs: now,
+          createdBy: ctx.actor,
+        });
+      }
+
+      if (action.function === "read") {
+        const read = await vfs.read(action.path);
+        results.push({
+          function: "read",
+          path: action.path,
+          content: read.content,
+        });
+        await execute.insertAction({
+          batchId: ctx.batchId,
+          seq,
+          function: "read",
+          logicalPath: action.path,
+          payloadJson: null,
+        });
+      } else if (action.function === "write") {
+        const version = await this.autoWrite(
+          vfs,
+          action.path,
+          action.content,
+          ctx.versionCheck,
+          ctx.expectedVersion,
+        );
+        await this.appendPostSnapshot(
+          ctx.sessionId,
+          action.path,
+          action.content,
+          "active",
+          version,
+          ctx.actor,
+          now,
+          snapshots,
+        );
+        results.push({
+          function: "write",
+          path: action.path,
+          version,
+        });
+        await execute.insertAction({
+          batchId: ctx.batchId,
+          seq,
+          function: "write",
+          logicalPath: action.path,
+          payloadJson: JSON.stringify({ content: action.content }),
+        });
+      } else {
+        await this.appendPostSnapshot(
+          ctx.sessionId,
+          action.path,
+          null,
+          "deleted",
+          null,
+          ctx.actor,
+          now,
+          snapshots,
+        );
+        await vfs.delete(action.path);
+        results.push({ function: "delete", path: action.path });
+        await execute.insertAction({
+          batchId: ctx.batchId,
+          seq,
+          function: "delete",
+          logicalPath: action.path,
+          payloadJson: null,
+        });
+      }
+      seq++;
+    }
+
+    return results;
+  }
+
+  private async rollbackBatchInTx(
+    tx: TdbcConnection,
+    sessionId: string,
+    projectId: string,
+    batchId: string,
+    batchCreatedAtMs: number,
+  ): Promise<void> {
+    const execute = new SqliteSessionExecuteRepository(tx);
+    const snapshots = new SqliteSessionSnapshotRepository(tx);
+    const checkpoints = await execute.listCheckpoints(batchId);
+    const checkpointByPath = new Map(
+      checkpoints.map((cp) => [cp.logicalPath, cp]),
+    );
+    const actions = await execute.listActions(batchId);
+    const vfs = this.scopedVfs(projectId, sessionId, tx);
+    const mutableActions = [...actions].reverse();
+
+    for (const action of mutableActions) {
+      if (action.function === "read") {
+        continue;
+      }
+      const cp = checkpointByPath.get(action.logicalPath);
+      if (cp == null) {
+        continue;
+      }
+      const snap = await snapshots.findByRev(
+        sessionId,
+        action.logicalPath,
+        cp.snapshotRev,
+      );
+      if (snap == null) {
+        throw sessionFsRollbackSnapshotMissing(batchId, action.logicalPath);
+      }
+      if (snap.status === "deleted" || snap.content == null) {
+        try {
+          await vfs.delete(action.logicalPath);
+        } catch (error) {
+          if (!isVfsError(error, "NOT_FOUND")) {
+            throw error;
+          }
+        }
+      } else {
+        await vfs.write(action.logicalPath, snap.content, {
+          versionCheck: false,
+        });
+      }
+    }
+    await snapshots.deleteAfterBatch(sessionId, batchCreatedAtMs);
+    await execute.deleteBatch(batchId);
   }
 
   private scopedVfs(

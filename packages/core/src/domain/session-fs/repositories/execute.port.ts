@@ -26,6 +26,8 @@ export interface SessionExecuteRepository {
 
   listActions(batchId: string): Promise<SessionExecuteAction[]>;
 
+  maxActionSeq(batchId: string): Promise<number>;
+
   deleteBatch(batchId: string): Promise<void>;
 
   deleteBySession(sessionId: string): Promise<void>;

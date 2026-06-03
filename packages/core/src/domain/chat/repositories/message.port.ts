@@ -29,6 +29,9 @@ export interface MessageRepository {
 
   deleteBySession(sessionId: string): Promise<void>;
 
+  /** Deletes messages with seq strictly greater than `afterSeq` in the session. */
+  deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void>;
+
   /** Update the hidden state of a single message. Returns true if message was found. */
   updateHidden(messageId: string, hidden: boolean): Promise<boolean>;
 

@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
 import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
 import { DefaultSessionFsService } from "./impl/session-fs.service.js";
@@ -20,6 +21,7 @@ export function createSessionFsService(conn: TdbcConnection): SessionFsService {
     conn,
     snapshots: new SqliteSessionSnapshotRepository(conn),
     execute: new SqliteSessionExecuteRepository(conn),
+    messages: new SqliteMessageRepository(conn),
   });
 }
 

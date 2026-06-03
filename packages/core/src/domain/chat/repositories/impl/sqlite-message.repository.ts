@@ -173,6 +173,15 @@ export class SqliteMessageRepository implements MessageRepository {
     );
   }
 
+  async deleteAfterSeq(sessionId: string, afterSeq: number): Promise<void> {
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM chat_message WHERE session_id = #{sessionId} AND seq > #{afterSeq}`,
+      { sessionId, afterSeq },
+    );
+  }
+
   async updateHidden(messageId: string, hidden: boolean): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,

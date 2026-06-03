@@ -24,6 +24,7 @@ function rowToBatch(row: Row): SessionExecuteBatch {
     sessionId: String(row.session_id),
     createdAtMs: Number(row.created_at_ms),
     createdBy: String(row.created_by),
+    messageId: row.message_id == null ? null : String(row.message_id),
   };
 }
 
@@ -58,13 +59,14 @@ export class SqliteSessionExecuteRepository implements SessionExecuteRepository 
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO session_execute_batch (id, session_id, created_at_ms, created_by)
-       VALUES (#{id}, #{sessionId}, #{createdAtMs}, #{createdBy})`,
+      `INSERT INTO session_execute_batch (id, session_id, created_at_ms, created_by, message_id)
+       VALUES (#{id}, #{sessionId}, #{createdAtMs}, #{createdBy}, #{messageId})`,
       {
         id: batch.id,
         sessionId: batch.sessionId,
         createdAtMs: batch.createdAtMs,
         createdBy: batch.createdBy,
+        messageId: batch.messageId ?? null,
       },
     );
   }
@@ -107,7 +109,7 @@ export class SqliteSessionExecuteRepository implements SessionExecuteRepository 
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, created_at_ms, created_by FROM session_execute_batch
+      `SELECT id, session_id, created_at_ms, created_by, message_id FROM session_execute_batch
        WHERE session_id = #{sessionId} ORDER BY created_at_ms DESC`,
       { sessionId },
     );
@@ -118,7 +120,7 @@ export class SqliteSessionExecuteRepository implements SessionExecuteRepository 
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, created_at_ms, created_by FROM session_execute_batch WHERE id = #{id}`,
+      `SELECT id, session_id, created_at_ms, created_by, message_id FROM session_execute_batch WHERE id = #{id}`,
       { id },
     );
     if (rows.length === 0) {
@@ -148,6 +150,17 @@ export class SqliteSessionExecuteRepository implements SessionExecuteRepository 
       { batchId },
     );
     return rows.map(rowToCheckpoint);
+  }
+
+  async maxActionSeq(batchId: string): Promise<number> {
+    const rows = await queryTemplate<{ max_seq: number | null }>(
+      this.conn,
+      this.parser,
+      `SELECT MAX(seq) AS max_seq FROM session_execute_action WHERE batch_id = #{batchId}`,
+      { batchId },
+    );
+    const maxSeq = rows[0]?.max_seq;
+    return maxSeq == null ? -1 : Number(maxSeq);
   }
 
   async deleteBatch(batchId: string): Promise<void> {

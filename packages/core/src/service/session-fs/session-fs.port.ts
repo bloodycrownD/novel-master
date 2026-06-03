@@ -13,12 +13,22 @@ export type SessionFsAction =
   | { function: "write"; path: string; content: string }
   | { function: "delete"; path: string };
 
+/** Per-assistant-turn batch state for vfs mutating tools (one batch per message). */
+export interface SessionFsExecuteRound {
+  messageId: string;
+  batchId: string | null;
+}
+
 /** Options for {@link SessionFsService.execute}. */
 export interface SessionFsExecuteOptions {
   /** Default true; when false, writes skip optimistic version checks. */
   readonly versionCheck?: boolean;
   /** CAS version for writes; forwarded to VFS when set (e.g. from `vfs.write` tool). */
   readonly expectedVersion?: number;
+  /** When set, append actions to an existing batch instead of creating a new one. */
+  readonly continueBatchId?: string;
+  /** Persisted on new batches only (ignored when continuing). */
+  readonly messageId?: string;
 }
 
 /** Result of a successful execute batch. */
@@ -37,6 +47,7 @@ export interface SessionFsBatchSummary {
   readonly sessionId: string;
   readonly createdAtMs: number;
   readonly createdBy: string;
+  readonly messageId: string | null;
 }
 
 /** Snapshot list entry. */
@@ -66,6 +77,16 @@ export interface SessionFsService {
     sessionId: string,
     projectId: string,
     batchId: string,
+  ): Promise<void>;
+
+  /**
+   * Rolls back VFS batches tied to messages after the anchor, then deletes messages with `seq > anchor.seq`.
+   * Anchor message and its batch (if any) are preserved.
+   */
+  rollbackToMessage(
+    sessionId: string,
+    projectId: string,
+    messageId: string,
   ): Promise<void>;
 
   listSnapshots(
