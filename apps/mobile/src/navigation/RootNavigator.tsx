@@ -21,7 +21,6 @@ import {AgentsTabScreen} from '../screens/tabs/AgentsTabScreen';
 import {ProfileTabScreen} from '../screens/tabs/ProfileTabScreen';
 import {AgentEditorScreen} from '../screens/stack/AgentEditorScreen';
 import {RealPromptScreen} from '../screens/stack/RealPromptScreen';
-import {SessionLogScreen} from '../screens/stack/SessionLogScreen';
 import {ProvidersScreen} from '../screens/stack/ProvidersScreen';
 import {ProviderCreateScreen} from '../screens/stack/ProviderCreateScreen';
 import {ProviderEditScreen} from '../screens/stack/ProviderEditScreen';
@@ -140,10 +139,6 @@ export function RootNavigator() {
           <Stack.Screen
             name="RealPrompt"
             component={withStackLayout('RealPrompt', RealPromptScreen)}
-          />
-          <Stack.Screen
-            name="SessionLog"
-            component={withStackLayout('SessionLog', SessionLogScreen)}
           />
           <Stack.Screen
             name="Providers"

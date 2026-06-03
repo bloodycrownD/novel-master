@@ -23,14 +23,14 @@ describe('buildMessageActionItems', () => {
     const actions = buildMessageActionItems(
       msg(false, [{type: 'text', text: 'hi'}]),
     ).map(i => i.action);
-    expect(actions).toEqual(['edit', 'hide', 'copy', 'fork', 'delete']);
+    expect(actions).toEqual(['edit', 'hide', 'copy', 'fork', 'rollback', 'delete']);
   });
 
   it('shows unhide instead of hide for hidden messages', () => {
     const actions = buildMessageActionItems(
       msg(true, [{type: 'text', text: 'hi'}]),
     ).map(i => i.action);
-    expect(actions).toEqual(['edit', 'unhide', 'copy', 'fork', 'delete']);
+    expect(actions).toEqual(['edit', 'unhide', 'copy', 'fork', 'rollback', 'delete']);
   });
 
   it('omits edit when message has tool_use blocks', () => {
@@ -39,6 +39,6 @@ describe('buildMessageActionItems', () => {
         {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
       ]),
     ).map(i => i.action);
-    expect(actions).toEqual(['hide', 'copy', 'fork', 'delete']);
+    expect(actions).toEqual(['hide', 'copy', 'fork', 'rollback', 'delete']);
   });
 });

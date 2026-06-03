@@ -40,6 +40,7 @@ export function buildMessageActionItems(
   }
   items.push({label: '复制', action: 'copy'});
   items.push({label: 'Fork', action: 'fork'});
+  items.push({label: '回滚', action: 'rollback', danger: true});
   items.push({label: '删除', action: 'delete', danger: true});
   return items;
 }

@@ -13,7 +13,6 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   AgentEditor: {agentId?: string} | undefined;
   RealPrompt: undefined;
-  SessionLog: undefined;
   Providers: undefined;
   ProviderCreate: undefined;
   ProviderEdit: {providerId?: string} | undefined;

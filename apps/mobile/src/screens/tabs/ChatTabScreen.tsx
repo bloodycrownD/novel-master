@@ -66,6 +66,7 @@ import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
 import {createStreamBuffer} from '../../services/stream-buffer.service';
+import {rollbackToMessage} from '../../services/message-rollback.service';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
@@ -492,6 +493,52 @@ export function ChatTabScreen() {
       runtime,
       reloadLists,
       setCurrentSession,
+      bumpVfsRefresh,
+      showToast,
+    ],
+  );
+
+  const handleRollbackFromMessage = useCallback(
+    (messageId: string) => {
+      if (sessionId == null || projectId == null) {
+        return;
+      }
+      if (agentRunning) {
+        showToast(toastMessage('请稍候', 'Agent 运行中无法回滚'));
+        return;
+      }
+      Alert.alert(
+        '回滚到此消息',
+        '将删除此消息之后的对话，并撤销相关文件修改。是否继续？',
+        [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '回滚',
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                try {
+                  await rollbackToMessage(runtime, {projectId, sessionId}, messageId);
+                  setStreamingText('');
+                  setStreamingThinking('');
+                  await reloadMessages();
+                  bumpVfsRefresh();
+                  showToast('回滚成功');
+                } catch (error) {
+                  showToast(toastMessage('回滚失败', error));
+                }
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [
+      sessionId,
+      projectId,
+      agentRunning,
+      runtime,
+      reloadMessages,
       bumpVfsRefresh,
       showToast,
     ],
@@ -932,7 +979,6 @@ export function ChatTabScreen() {
             setModelPickerOpen(true);
           }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
-          onSessionLog={() => navigation.navigate('SessionLog')}
           onBatchDeleteMessages={() => {
             setSessionDrawerOpen(false);
             enterMessageBatch('delete');
@@ -989,6 +1035,8 @@ export function ChatTabScreen() {
               showToast('已复制');
             } else if (action === 'fork') {
               handleForkFromMessage(target.id).catch(() => undefined);
+            } else if (action === 'rollback') {
+              handleRollbackFromMessage(target.id);
             } else if (action === 'delete') {
               Alert.alert('删除消息', '确定删除这条消息？', [
                 {text: '取消', style: 'cancel'},

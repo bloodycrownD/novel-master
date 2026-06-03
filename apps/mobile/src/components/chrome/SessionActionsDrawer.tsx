@@ -14,7 +14,6 @@ type Props = {
   onCompact?: () => void;
   onSwitchModel?: () => void;
   onRealPrompt?: () => void;
-  onSessionLog?: () => void;
   onBatchDeleteMessages?: () => void;
   onBatchHideMessages?: () => void;
   onBatchUnhideMessages?: () => void;
@@ -27,7 +26,6 @@ export function SessionActionsDrawer({
   onCompact,
   onSwitchModel,
   onRealPrompt,
-  onSessionLog,
   onBatchDeleteMessages,
   onBatchHideMessages,
   onBatchUnhideMessages,
@@ -69,7 +67,6 @@ export function SessionActionsDrawer({
     {label: '重命名', action: onRename},
     {label: '切换模型', action: onSwitchModel},
     {label: '真实提示词', action: onRealPrompt},
-    {label: '会话日志', action: onSessionLog},
     {label: '压缩会话', action: onCompact},
     {label: '批量删除消息', action: onBatchDeleteMessages},
     {label: '批量隐藏消息', action: onBatchHideMessages},
