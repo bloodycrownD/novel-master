@@ -20,8 +20,20 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {FileMarkdownPreview} from '../../components/vfs/FileMarkdownPreview';
+import {formatCharCount} from '../../hooks/useAgentStreamMetrics';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
+
+/** Last-saved timestamp for the stats row (device local time). */
+function formatFileMtime(ms: number): string {
+  return new Date(ms).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export function FileEditorScreen() {
   const {tokens} = useTheme();
@@ -33,6 +45,7 @@ export function FileEditorScreen() {
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
   const [version, setVersion] = useState<number | undefined>();
+  const [mtimeMs, setMtimeMs] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(true);
@@ -70,6 +83,7 @@ export function FileEditorScreen() {
         setContent(result.content);
         setSavedContent(result.content);
         setVersion(result.version);
+        setMtimeMs(result.mtimeMs);
       } catch (error) {
         if (!cancelled) {
           showToast(toastMessage('读取失败', error));
@@ -114,6 +128,7 @@ export function FileEditorScreen() {
       const vfs = resolveVfs();
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);
+      setMtimeMs(refreshed.mtimeMs);
       showToast('已保存');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
@@ -162,6 +177,16 @@ export function FileEditorScreen() {
           </Text>
         </Pressable>
       </View>
+      {mtimeMs != null ? (
+        <View style={[styles.statsRow, {borderBottomColor: tokens.border}]}>
+          <Text
+            style={[styles.statsText, {color: tokens.textSecondary}]}
+            numberOfLines={1}>
+            更新于 {formatFileMtime(mtimeMs)} · {formatCharCount(content.length)} 字
+            {isDirty ? ' · 编辑中未保存' : ''}
+          </Text>
+        </View>
+      ) : null}
       {previewMode ? (
         <ScrollView
           style={[styles.preview, {backgroundColor: tokens.surface}]}
@@ -198,6 +223,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  statsRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  statsText: {fontSize: 12},
   editor: {
     flex: 1,
     padding: 12,

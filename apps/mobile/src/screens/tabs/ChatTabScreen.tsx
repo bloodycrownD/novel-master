@@ -25,6 +25,7 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {ChatComposer} from '../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
+import {ChatStreamMetricsBar} from '../../components/chat/ChatStreamMetricsBar';
 import {
   buildMessageActionItems,
   editableTextFromMessage,
@@ -46,6 +47,7 @@ import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
+import {useAgentStreamMetrics} from '../../hooks/useAgentStreamMetrics';
 import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
@@ -114,6 +116,8 @@ export function ChatTabScreen() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [agentRunning, setAgentRunning] = useState(false);
+  const {metrics: streamMetrics, noteTextDelta, noteThinkingDelta} =
+    useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
   const streamBuffer = useMemo(
@@ -221,16 +225,18 @@ export function ChatTabScreen() {
 
   const handleStreamText = useCallback(
     (delta: string) => {
+      noteTextDelta(delta);
       streamBuffer.push('text', delta);
     },
-    [streamBuffer],
+    [streamBuffer, noteTextDelta],
   );
 
   const handleStreamThinking = useCallback(
     (delta: string) => {
+      noteThinkingDelta(delta);
       streamBuffer.push('thinking', delta);
     },
-    [streamBuffer],
+    [streamBuffer, noteThinkingDelta],
   );
 
   const handleStreamReset = useCallback(() => {
@@ -925,6 +931,9 @@ export function ChatTabScreen() {
           projectId != null && sessionId != null ? (
             <View style={styles.chatPanel}>
               <ChatMetaBar meta={agentMeta} />
+              {streamMetrics != null ? (
+                <ChatStreamMetricsBar metrics={streamMetrics} />
+              ) : null}
               {messageBatch.active ? (
                 <ManageHeader
                   title="消息"
