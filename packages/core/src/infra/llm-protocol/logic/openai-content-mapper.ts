@@ -10,6 +10,7 @@ import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -392,15 +393,14 @@ export function openAiStreamAccumulatorsToPartialBlocks(
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
-  const text = state.textParts.join("");
-  const thinking = state.thinkingParts.join("");
-  const blocks: ContentBlock[] = [];
-  if (thinking.trim() !== "") {
-    blocks.push({ type: "thinking", text: thinking });
-  }
-  if (text.length > 0 || thinking.trim() !== "") {
-    blocks.push({ type: "text", text });
-  }
+  const blocks = buildStreamPartialBlocks(
+    {
+      text: state.textParts.join(""),
+      thinking: state.thinkingParts.join(""),
+    },
+    onStream,
+  );
+
   const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);
   for (const index of indices) {
     const acc = state.toolCalls.get(index)!;

@@ -1,20 +1,19 @@
 /**
  * Anthropic protocol adapter (multi-block request/response, tools, streaming).
  *
+ * Streaming uses {@link postSse} so RN gets XHR SSE; abort returns partial blocks.
+ *
  * @module infra/llm-protocol/impl/anthropic.adapter
  */
 
 import { messageBodyTextFromContent } from "@/domain/chat/content/message-body-text.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
-import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import { ProviderError } from "@/errors/provider-errors.js";
 import type {
   FetchFn,
   LlmChatRequest,
   LlmChatResult,
   LlmListModelsResult,
   LlmProtocolAdapter,
-  LlmStreamEvent,
   LlmToolDefinition,
 } from "../ports/adapter.port.js";
 import {
@@ -22,12 +21,16 @@ import {
   blocksToAnthropicContent,
   chatMessagesToAnthropic,
 } from "../logic/anthropic-content-mapper.js";
-import { assertOk, fetchJson, joinUrl } from "../logic/http-util.js";
+import {
+  createAnthropicSseParserState,
+  feedAnthropicSseChunk,
+  finishAnthropicSse,
+  finishAnthropicSsePartial,
+} from "../logic/anthropic-sse-parser.js";
+import { fetchJson, joinUrl } from "../logic/http-util.js";
+import { postSse } from "../logic/llm-sse-transport.js";
+import { isRequestAborted } from "../logic/request-abort.js";
 import { parseAnthropicUsage } from "../logic/usage-parser.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function anthropicTools(tools: readonly LlmToolDefinition[]): unknown[] {
   return tools.map((t) => ({
@@ -126,23 +129,36 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
   private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
     const url = joinUrl(req.baseUrl, "/v1/messages");
-    const response = await this.fetchFn(url, {
-      method: "POST",
-      headers: {
-        "x-api-key": req.apiKey,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
-        ...req.extraHeaders,
-      },
-      body: JSON.stringify(this.buildBody(req, true)),
-      signal: req.signal,
-    });
-    await assertOk(response);
-    if (response.body == null) {
-      throw new ProviderError("HTTP_ERROR", "Empty streaming response body");
+    const state = createAnthropicSseParserState();
+
+    try {
+      await postSse(
+        url,
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": req.apiKey,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+            ...req.extraHeaders,
+          },
+          body: JSON.stringify(this.buildBody(req, true)),
+          signal: req.signal,
+        },
+        (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream),
+        undefined,
+        { fetchFn: this.fetchFn, signal: req.signal },
+      );
+    } catch (error) {
+      if (!isRequestAborted(error, req.signal)) {
+        throw error;
+      }
     }
 
-    const { blocks, streamRaw } = await this.parseSseStream(response.body, req.onStream);
+    const aborted = req.signal?.aborted === true;
+    const { blocks, streamRaw } = aborted
+      ? finishAnthropicSsePartial(state, req.onStream)
+      : finishAnthropicSse(state, req.onStream);
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseAnthropicUsage(streamRaw);
     const result: LlmChatResult = {
@@ -153,123 +169,5 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     };
     req.onStream?.({ type: "done", result });
     return result;
-  }
-
-  private async parseSseStream(
-    body: ReadableStream<Uint8Array>,
-    onStream?: (event: LlmStreamEvent) => void,
-  ): Promise<{ blocks: ContentBlock[]; streamRaw: unknown }> {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    const textParts: string[] = [];
-    const thinkingParts: string[] = [];
-    const toolUses: Array<{
-      id: string;
-      name: string;
-      inputJson: string;
-    }> = [];
-    let currentToolIndex = -1;
-    let streamRaw: unknown;
-
-    const flushBlock = () => {
-      currentToolIndex = -1;
-    };
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) {
-          continue;
-        }
-        const payload = line.slice(6).trim();
-        if (payload === "" || payload === "[DONE]") {
-          continue;
-        }
-        let event: Record<string, unknown>;
-        try {
-          event = JSON.parse(payload) as Record<string, unknown>;
-        } catch {
-          continue;
-        }
-        const type = event.type;
-        if (type === "message_start" || type === "message_delta") {
-          streamRaw = event;
-        }
-        if (type === "content_block_start") {
-          const block = event.content_block;
-          if (isRecord(block) && block.type === "tool_use") {
-            toolUses.push({
-              id: typeof block.id === "string" ? block.id : "",
-              name: typeof block.name === "string" ? block.name : "",
-              inputJson: "",
-            });
-            currentToolIndex = toolUses.length - 1;
-          }
-        } else if (type === "content_block_delta") {
-          const delta = event.delta;
-          if (!isRecord(delta)) {
-            continue;
-          }
-          if (delta.type === "text_delta" && typeof delta.text === "string") {
-            textParts.push(delta.text);
-            onStream?.({ type: "text-delta", text: delta.text });
-          } else if (
-            delta.type === "thinking_delta" &&
-            typeof delta.thinking === "string"
-          ) {
-            thinkingParts.push(delta.thinking);
-            onStream?.({ type: "thinking-delta", text: delta.thinking });
-          } else if (
-            delta.type === "input_json_delta" &&
-            typeof delta.partial_json === "string" &&
-            currentToolIndex >= 0
-          ) {
-            toolUses[currentToolIndex]!.inputJson += delta.partial_json;
-          }
-        } else if (type === "content_block_stop") {
-          flushBlock();
-        }
-      }
-    }
-
-    const blocks: ContentBlock[] = [];
-    const text = textParts.join("");
-    if (text !== "") {
-      blocks.push({ type: "text", text });
-    }
-    const thinking = thinkingParts.join("");
-    if (thinking !== "") {
-      blocks.push({ type: "thinking", text: thinking });
-    }
-    for (const tu of toolUses) {
-      let input: Record<string, unknown> = {};
-      try {
-        input = tu.inputJson ? (JSON.parse(tu.inputJson) as Record<string, unknown>) : {};
-      } catch {
-        input = {};
-      }
-      blocks.push({
-        type: "tool_use",
-        id: tu.id,
-        name: tu.name,
-        input,
-      });
-      onStream?.({
-        type: "tool-use",
-        id: tu.id,
-        name: tu.name,
-        input,
-      });
-    }
-    return { blocks, streamRaw };
   }
 }
