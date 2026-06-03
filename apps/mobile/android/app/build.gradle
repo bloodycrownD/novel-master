@@ -41,9 +41,17 @@ react {
     //   See https://github.com/react-native-community/cli/blob/main/docs/commands.md#bundle
     // extraPackagerArgs = []
 
-    /* Hermes Commands */
-    //   The hermes compiler command to run. By default it is 'hermesc'
-    // hermesCommand = "$rootDir/my-custom-hermesc/bin/hermesc"
+    /* Hermes Commands — monorepo hoists hermes-compiler to repo root (RN 0.83+) */
+    def osBin = org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? "win64-bin"
+        : (org.gradle.internal.os.OperatingSystem.current().isMacOsX() ? "osx-bin" : "linux64-bin")
+    def hermescName = org.gradle.internal.os.OperatingSystem.current().isWindows()
+        ? "hermesc.exe"
+        : "hermesc"
+    hermesCommand = new File(
+        monorepoRoot,
+        "node_modules/hermes-compiler/hermesc/${osBin}/${hermescName}",
+    ).absolutePath
     //
     //   The list of flags to pass to the Hermes compiler. By default is "-O", "-output-source-map"
     // hermesFlags = ["-O", "-output-source-map"]
