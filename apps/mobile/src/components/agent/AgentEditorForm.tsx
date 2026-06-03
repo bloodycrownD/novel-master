@@ -564,7 +564,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           <View style={styles.blockList}>
             {prompts.map((block, index) => (
               <View
-                key={`${block.name}-${index}`}
+                // WHY: stable key — block.name in key remounts TextInput on each keystroke (Android keyboard blur).
+                key={`prompt-block-${index}`}
                 style={[
                   styles.blockCard,
                   {
