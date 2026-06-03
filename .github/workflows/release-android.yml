@@ -81,10 +81,14 @@ jobs:
 
       - name: Prepare release keystore
         id: keystore
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
         working-directory: apps/mobile/android/app
         shell: bash
         run: |
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret; Gradle will use debug signing."
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           KEYSTORE_PATH="${GITHUB_WORKSPACE}/apps/mobile/android/app/release.keystore"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
           echo "path=${KEYSTORE_PATH}" >> "$GITHUB_OUTPUT"
