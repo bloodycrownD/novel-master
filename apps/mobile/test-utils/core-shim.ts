@@ -23,4 +23,13 @@ export {
   matchDepth,
   validateDepthSlice,
 } from "../../../packages/core/dist/domain/depth/logic/depth-slice.js";
+export {
+  sortDirPaths,
+  sortFilesForDir,
+} from "../../../packages/core/dist/domain/worktree/logic/worktree-eval.js";
+export { DEFAULT_WORKTREE_DIR_RULE } from "../../../packages/core/dist/domain/worktree/logic/default-dir-rule.js";
+export type {
+  WorktreeDirRule,
+  WorktreeListRow,
+} from "../../../packages/core/dist/domain/worktree/model/worktree-types.js";
 

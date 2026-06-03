@@ -31,6 +31,7 @@ import {
   parentLogicalPath,
   type MappedVfsRow,
 } from './vfs-row-mapper';
+import {orderedDirectChildPaths} from './vfs-direct-children-order';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -119,9 +120,10 @@ export function VfsFileManager({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [listEntries, allRows] = await Promise.all([
+      const [listEntries, allRows, dirRule] = await Promise.all([
         vfs.list(currentPath),
         worktree.buildListRows(),
+        worktree.getDirRule(currentPath),
       ]);
       setWorktreeRows(allRows);
       const metaByPath = new Map<string, WorktreeListRow>();
@@ -135,13 +137,21 @@ export function VfsFileManager({
           childPaths.add(row.path);
         }
       }
+      const kindByPath = new Map<string, 'dir' | 'file'>();
       for (const entry of listEntries) {
         childPaths.add(entry.path);
+        kindByPath.set(entry.path, entry.kind);
       }
 
-      const mapped = [...childPaths]
-        .sort((a, b) => a.localeCompare(b))
-        .map(path => {
+      const orderedPaths = orderedDirectChildPaths({
+        parentPath: currentPath,
+        rows: allRows,
+        extraPaths: [...childPaths],
+        dirRule: dirRule ?? null,
+        kindByPath,
+      });
+
+      const mapped = orderedPaths.map(path => {
           const meta = metaByPath.get(path);
           if (meta) {
             const count =
