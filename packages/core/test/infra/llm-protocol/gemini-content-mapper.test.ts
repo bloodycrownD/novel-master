@@ -47,6 +47,67 @@ describe("gemini-content-mapper", () => {
       c.parts.some((p) => p.functionResponse != null),
     );
     assert.ok(toolResultTurn);
+    const fr = toolResultTurn!.parts.find((p) => p.functionResponse != null)
+      ?.functionResponse as { name: string };
+    assert.equal(fr.name, "vfs.read");
+  });
+
+  it("outbound tool_result uses function name on functionResponse.name", () => {
+    const messages: ChatMessage[] = [
+      {
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "vfs.read",
+              input: { path: "/a" },
+            },
+          ],
+        },
+      },
+      {
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "call_1",
+              content: "file body",
+            },
+          ],
+        },
+      },
+    ];
+
+    const contents = chatMessagesToGeminiContents(messages);
+    const toolResultTurn = contents.find((c) =>
+      c.parts.some((p) => p.functionResponse != null),
+    );
+    assert.ok(toolResultTurn);
+    const fr = toolResultTurn!.parts.find((p) => p.functionResponse != null)
+      ?.functionResponse as { name: string };
+    assert.equal(fr.name, "vfs.read");
+  });
+
+  it("inbound functionResponse.name resolves to NM toolUseId", () => {
+    const blocks = geminiPartsToBlocks(
+      [
+        {
+          functionResponse: {
+            name: "vfs.read",
+            response: { output: "file body" },
+          },
+        },
+      ],
+      { toolUseIdByFunctionName: new Map([["vfs.read", "call_1"]]) },
+    );
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]?.type, "tool_result");
+    if (blocks[0]?.type === "tool_result") {
+      assert.equal(blocks[0].toolUseId, "call_1");
+    }
   });
 
   it("round-trips functionCall to tool_use", () => {

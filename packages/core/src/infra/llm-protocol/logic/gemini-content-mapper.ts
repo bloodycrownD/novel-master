@@ -12,12 +12,34 @@ import type { LlmToolDefinition } from "../ports/adapter.port.js";
 type GeminiPart = Record<string, unknown>;
 type GeminiContent = { role: string; parts: GeminiPart[] };
 
+export type GeminiPartsToBlocksOptions = {
+  /** Latest NM `tool_use.id` per function name (Gemini `functionResponse.name` is the function name, not the call id). */
+  readonly toolUseIdByFunctionName?: ReadonlyMap<string, string>;
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function buildToolUseIdToNameMap(
+  messages: readonly ChatMessage[],
+): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const msg of messages) {
+    for (const block of msg.content.blocks) {
+      if (block.type === "tool_use") {
+        map.set(block.id, block.name);
+      }
+    }
+  }
+  return map;
+}
+
 /** NM blocks → Gemini `parts` for one content turn. */
-export function blocksToGeminiParts(blocks: readonly ContentBlock[]): GeminiPart[] {
+export function blocksToGeminiParts(
+  blocks: readonly ContentBlock[],
+  toolUseIdToName: ReadonlyMap<string, string> = new Map(),
+): GeminiPart[] {
   const parts: GeminiPart[] = [];
   for (const block of blocks) {
     switch (block.type) {
@@ -34,14 +56,17 @@ export function blocksToGeminiParts(blocks: readonly ContentBlock[]): GeminiPart
           },
         });
         break;
-      case "tool_result":
+      case "tool_result": {
+        const functionName = toolUseIdToName.get(block.toolUseId) ?? block.toolUseId;
+        // Gemini wire: `functionResponse.name` is the declared function name (e.g. vfs.read), not NM tool_use id.
         parts.push({
           functionResponse: {
-            name: block.toolUseId,
+            name: functionName,
             response: { output: block.content },
           },
         });
         break;
+      }
       case "thinking":
         parts.push({ text: block.text, thought: true });
         break;
@@ -58,7 +83,10 @@ export function blocksToGeminiParts(blocks: readonly ContentBlock[]): GeminiPart
 }
 
 /** Gemini `parts` → NM blocks. */
-export function geminiPartsToBlocks(parts: readonly unknown[]): ContentBlock[] {
+export function geminiPartsToBlocks(
+  parts: readonly unknown[],
+  options: GeminiPartsToBlocksOptions = {},
+): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const part of parts) {
     if (!isRecord(part)) {
@@ -96,9 +124,12 @@ export function geminiPartsToBlocks(parts: readonly unknown[]): ContentBlock[] {
           : typeof response === "string"
             ? response
             : JSON.stringify(response ?? "");
+      const functionName = functionResponse.name;
+      const toolUseId =
+        options.toolUseIdByFunctionName?.get(functionName) ?? functionName;
       blocks.push({
         type: "tool_result",
-        toolUseId: functionResponse.name,
+        toolUseId,
         content,
       });
     }
@@ -111,6 +142,7 @@ export function chatMessagesToGeminiContents(
   messages: readonly ChatMessage[],
 ): GeminiContent[] {
   const out: GeminiContent[] = [];
+  const toolUseIdToName = buildToolUseIdToNameMap(messages);
 
   for (const msg of messages) {
     const toolResults = msg.content.blocks.filter((b) => b.type === "tool_result");
@@ -119,13 +151,13 @@ export function chatMessagesToGeminiContents(
     if (toolResults.length > 0) {
       out.push({
         role: "user",
-        parts: blocksToGeminiParts(toolResults),
+        parts: blocksToGeminiParts(toolResults, toolUseIdToName),
       });
     }
     if (other.length > 0) {
       out.push({
         role: msg.role === "assistant" ? "model" : "user",
-        parts: blocksToGeminiParts(other),
+        parts: blocksToGeminiParts(other, toolUseIdToName),
       });
     }
   }
