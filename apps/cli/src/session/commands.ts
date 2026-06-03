@@ -126,9 +126,20 @@ export async function runSession(
       await runSessionTemplate(deps, templateSub, args.slice(1));
       return;
     }
+    case "rollback": {
+      const messageId = flags.get("message");
+      if (typeof messageId !== "string" || messageId === "") {
+        throw new Error(
+          "Usage: nm session rollback [--project <id>] [--session <id>] --message <messageId>",
+        );
+      }
+      const { projectId, sessionId } = await deps.scope.resolveProjectSession(flags);
+      await deps.sessionFs.rollbackToMessage(sessionId, projectId, messageId);
+      return;
+    }
     default:
       throw new Error(
-        "Usage: nm session <list|create|use|current|delete|copy|vfs|worktree|template> ...",
+        "Usage: nm session <list|create|use|current|delete|copy|vfs|worktree|template|rollback> ...",
       );
   }
 }
