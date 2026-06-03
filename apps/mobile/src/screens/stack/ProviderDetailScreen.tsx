@@ -27,6 +27,7 @@ import {
   SecondaryButton,
 } from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {resolveModelShortLabel} from '../../provider/model-display-label';
@@ -60,6 +61,14 @@ export function ProviderDetailScreen() {
   const [fetchVisible, setFetchVisible] = useState(false);
   const [menuVendorId, setMenuVendorId] = useState<string | undefined>();
   const batch = useBatchSelection();
+
+  const dismissAllOverlays = useCallback(() => {
+    setAddVisible(false);
+    setFetchVisible(false);
+    setMenuVendorId(undefined);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const reload = useCallback(async () => {
     if (!providerId) {

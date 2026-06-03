@@ -22,6 +22,7 @@ import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -44,6 +45,12 @@ export function ProvidersScreen() {
   const [loading, setLoading] = useState(true);
   const [menuProviderId, setMenuProviderId] = useState<string | undefined>();
   const batch = useBatchSelection();
+
+  const dismissAllOverlays = useCallback(() => {
+    setMenuProviderId(undefined);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const reload = useCallback(async () => {
     setLoading(true);

@@ -3,7 +3,6 @@
  */
 import React, {useEffect, useState} from 'react';
 import {
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,6 +18,7 @@ import {
   type SortField,
   type SortOrder,
 } from '@novel-master/core';
+import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -109,7 +109,7 @@ export function DirectoryRuleSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       transparent
       animationType="slide"
@@ -192,7 +192,7 @@ export function DirectoryRuleSheet({
           </View>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

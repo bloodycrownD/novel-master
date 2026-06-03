@@ -5,13 +5,13 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
+import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type SuggestionRow = {
@@ -90,7 +90,7 @@ export function FetchModelsSheet({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       transparent
@@ -168,7 +168,7 @@ export function FetchModelsSheet({
           </Pressable>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 

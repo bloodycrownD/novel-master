@@ -5,12 +5,12 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
 } from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
+import {AppModal} from '../ui/AppModal';
 import {
   AGENT_PICKER_EMPTY_MESSAGE,
   isAgentPickerRowSelected,
@@ -60,7 +60,7 @@ export function AgentPickerModal({visible, onClose, onSelected}: Props) {
   );
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       transparent
@@ -111,7 +111,7 @@ export function AgentPickerModal({visible, onClose, onSelected}: Props) {
           </Pressable>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 

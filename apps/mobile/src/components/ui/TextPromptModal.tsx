@@ -2,15 +2,9 @@
  * Single-line text prompt (create/rename dialogs).
  */
 import React, {useEffect, useState} from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
+import {AppModal} from './AppModal';
 
 type Props = {
   visible: boolean;
@@ -60,7 +54,7 @@ export function TextPromptModal({
   };
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="fade"
       transparent
@@ -112,7 +106,7 @@ export function TextPromptModal({
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 

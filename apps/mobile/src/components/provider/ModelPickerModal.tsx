@@ -5,13 +5,13 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import {formatApplicationModelId} from '@novel-master/core';
+import {AppModal} from '../ui/AppModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -80,7 +80,7 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
   );
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       transparent
@@ -127,7 +127,7 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
           </Pressable>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 

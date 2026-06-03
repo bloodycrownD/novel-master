@@ -23,6 +23,7 @@ import {PromptMacroTextInput} from './PromptMacroTextInput';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
@@ -147,6 +148,12 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [saving, setSaving] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsList, setToolsList] = useState('');
+
+  const dismissAllOverlays = useCallback(() => {
+    setAddBlockVisible(false);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const snapshot = useMemo(
     () =>

@@ -2,7 +2,8 @@
  * Session actions drawer: read-only current agent/model + action rows.
  */
 import React, {useEffect, useState} from 'react';
-import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {AppModal} from '../ui/AppModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
@@ -86,7 +87,7 @@ export function SessionActionsDrawer({
   ];
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <AppModal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" />
         <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
@@ -133,7 +134,7 @@ export function SessionActionsDrawer({
           ))}
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

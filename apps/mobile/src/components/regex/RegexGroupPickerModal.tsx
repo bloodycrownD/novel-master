@@ -5,7 +5,6 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import type {RegexGroup} from '@novel-master/core';
 import {useRuntime} from '../../hooks/useRuntime';
+import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
 function groupTitle(group: RegexGroup): string {
@@ -68,7 +68,7 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
   const disabledSelected = currentId == null || currentId === '';
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       transparent
@@ -131,7 +131,7 @@ export function RegexGroupPickerModal({visible, onClose, onSelected}: Props) {
           </Pressable>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 

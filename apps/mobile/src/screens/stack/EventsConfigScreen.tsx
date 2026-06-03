@@ -22,6 +22,7 @@ import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -40,6 +41,13 @@ export function EventsConfigScreen() {
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
   const [addEventVisible, setAddEventVisible] = useState(false);
   const [addActionEventId, setAddActionEventId] = useState<string | null>(null);
+
+  const dismissAllOverlays = useCallback(() => {
+    setAddEventVisible(false);
+    setAddActionEventId(null);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const load = useCallback(async () => {
     setLoading(true);

@@ -4,12 +4,12 @@
 import React, {useMemo} from 'react';
 import {
   Dimensions,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export interface MessageMenuAnchor {
@@ -94,7 +94,7 @@ export function MessageActionMenu({
   }, [anchor, items.length, window.width, window.height]);
 
   return (
-    <Modal
+    <AppModal
       visible={visible && layout != null}
       transparent
       animationType="fade"
@@ -139,7 +139,7 @@ export function MessageActionMenu({
           </View>
         ) : null}
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

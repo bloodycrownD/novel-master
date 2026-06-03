@@ -12,6 +12,7 @@ import {AppHeader} from '../../components/chrome/AppHeader';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
 import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -68,6 +69,14 @@ export function ProfileTabScreen() {
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
   const [regexGroupPickerVisible, setRegexGroupPickerVisible] =
     useState(false);
+
+  const dismissAllOverlays = useCallback(() => {
+    setModelPickerVisible(false);
+    setAgentPickerVisible(false);
+    setRegexGroupPickerVisible(false);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const refreshAgentLabel = useCallback(async () => {
     try {

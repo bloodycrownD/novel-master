@@ -4,7 +4,6 @@
 import React, {useEffect, useState} from 'react';
 import {
   Alert,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +12,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import type {ChatProject} from '@novel-master/core';
+import {AppModal} from '../ui/AppModal';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
@@ -94,7 +94,7 @@ export function ProjectDrawer({
 
   return (
     <>
-      <Modal
+      <AppModal
         visible={visible}
         animationType="fade"
         transparent
@@ -230,7 +230,7 @@ export function ProjectDrawer({
             accessibilityLabel="关闭项目列表"
           />
         </View>
-      </Modal>
+      </AppModal>
 
       <BottomSheetMenu
         visible={menuProjectId != null}

@@ -6,6 +6,7 @@ import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {EventActionNode, EventActionType} from '@novel-master/core';
 import {FormField} from '../form/FormField';
 import {FormTextInput} from '../form/FormTextInput';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
 import type {EventBlockDraft} from './event-config-state';
@@ -69,6 +70,12 @@ function ActionBlockCard({
     type => !currentDeps.includes(type),
   );
   const [depPickerOpen, setDepPickerOpen] = React.useState(false);
+
+  const dismissAllOverlays = React.useCallback(() => {
+    setDepPickerOpen(false);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const setDeps = (deps: readonly EventActionType[]) => {
     onChange({

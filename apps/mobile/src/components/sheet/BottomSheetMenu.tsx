@@ -2,13 +2,8 @@
  * Simple action sheet (Modal) aligned with prototype bottom sheet menus.
  */
 import React from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {AppModal} from '../ui/AppModal';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -37,7 +32,7 @@ export function BottomSheetMenu({
   const insets = useSafeAreaInsets();
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       transparent
       animationType="slide"
@@ -84,7 +79,7 @@ export function BottomSheetMenu({
           </Pressable>
         </View>
       </View>
-    </Modal>
+    </AppModal>
   );
 }
 

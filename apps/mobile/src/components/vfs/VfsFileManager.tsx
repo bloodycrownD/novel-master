@@ -5,13 +5,14 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {
   Alert,
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {AppModal} from '../ui/AppModal';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {
   SetDirRuleInput,
   VfsScope,
@@ -99,6 +100,15 @@ export function VfsFileManager({
   >();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [promptValue, setPromptValue] = useState('');
+
+  const dismissAllOverlays = useCallback(() => {
+    setMenuPath(null);
+    setMoreOpen(false);
+    setDirRuleOpen(false);
+    setPrompt(null);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   useEffect(() => {
     setCurrentPath(root);
@@ -512,7 +522,7 @@ export function VfsFileManager({
         }}
       />
 
-      <Modal
+      <AppModal
         visible={prompt != null}
         transparent
         animationType="fade"
@@ -556,7 +566,7 @@ export function VfsFileManager({
             </View>
           </View>
         </View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }

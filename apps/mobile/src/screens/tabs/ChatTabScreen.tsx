@@ -47,6 +47,7 @@ import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {nextDefaultSessionTitle} from '../../utils/session-default-title';
@@ -314,6 +315,19 @@ export function ChatTabScreen() {
     setMessageMenuTarget(undefined);
     setMessageMenuAnchor(undefined);
   }, []);
+
+  const dismissAllOverlays = useCallback(() => {
+    setProjectDrawerOpen(false);
+    setSessionDrawerOpen(false);
+    setModelPickerOpen(false);
+    setAgentPickerOpen(false);
+    closeMessageMenu();
+    setMessageEditPrompt(undefined);
+    setSessionRenamePrompt(undefined);
+    setMenuSessionId(undefined);
+  }, [closeMessageMenu]);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   useAndroidChatBackHandler(
     {

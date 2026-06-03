@@ -21,6 +21,7 @@ import {ConfigListCard} from '../../components/ui/ConfigListCard';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {deriveRegexGroupId} from '../../utils/regex-group-id';
@@ -50,6 +51,14 @@ export function RegexGroupsScreen() {
   const [createVisible, setCreateVisible] = useState(false);
   const [editGroupId, setEditGroupId] = useState<string | undefined>();
   const batch = useBatchSelection();
+
+  const dismissAllOverlays = useCallback(() => {
+    setMenuGroupId(undefined);
+    setCreateVisible(false);
+    setEditGroupId(undefined);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const reload = useCallback(async () => {
     setLoading(true);

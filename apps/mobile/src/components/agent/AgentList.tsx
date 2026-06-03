@@ -22,6 +22,7 @@ import {ElevatedCard} from '../ui/ElevatedCard';
 import {PrimaryButton} from '../ui/PrototypeButtons';
 import {TextPromptModal} from '../ui/TextPromptModal';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
@@ -61,6 +62,13 @@ export function AgentList({onCreate}: Props) {
     {agentId: string; initialName: string} | undefined
   >();
   const batch = useBatchSelection();
+
+  const dismissAllOverlays = useCallback(() => {
+    setMenuAgentId(undefined);
+    setRenamePrompt(undefined);
+  }, []);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const reload = useCallback(async () => {
     setLoading(true);

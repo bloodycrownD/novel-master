@@ -2,14 +2,8 @@
  * Register a saved model under a provider (vendorModelId + optional display name).
  */
 import React, {useEffect, useState} from 'react';
-import {
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -47,7 +41,7 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
   };
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
       animationType="slide"
       transparent
@@ -100,7 +94,7 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
           </View>
         </Pressable>
       </Pressable>
-    </Modal>
+    </AppModal>
   );
 }
 
