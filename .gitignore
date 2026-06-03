@@ -1,10 +1,29 @@
 node_modules/
+
+# Build outputs (TypeScript / npm workspaces)
 dist/
 *.tsbuildinfo
+coverage/
+
+# Android / Gradle
+**/android/build/
+**/.gradle/
+**/.cxx/
+**/local.properties
+*.apk
+*.aab
+
+# iOS / Xcode
+DerivedData/
+*.ipa
+**/Pods/
+
+# React Native
+*.jsbundle
+
 .env
 .env.*
 !.env.example
-coverage/
 .DS_Store
 Thumbs.db
 
