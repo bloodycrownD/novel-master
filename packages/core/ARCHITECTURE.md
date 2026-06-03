@@ -98,7 +98,15 @@ infra/<capability>/
 
 | Module | ports | impl | logic |
 |--------|-------|------|-------|
-| `llm-protocol/` | `adapter.port.ts` | `openai`, `anthropic`, `gemini` adapters | registry, mappers, http-util, tool-definitions, usage-parser, … |
+| `llm-protocol/` | `adapter.port.ts` | `openai`, `anthropic`, `gemini` adapters | registry, mappers, `postSse` (fetch + RN XHR), `stream-partial-blocks`, protocol SSE parsers, http-util, tool-definitions, usage-parser, … |
+
+**LLM protocol capability matrix** (user abort returns partial `blocks` via `buildStreamPartialBlocks`; streaming uses `postSse` on all three protocols):
+
+| Protocol | Stream | Abort partial | RN SSE (`postSse`) | Tools / multi-turn |
+|----------|--------|---------------|--------------------|--------------------|
+| openai | yes | yes | yes | yes |
+| anthropic | yes | yes | yes | yes |
+| gemini | yes | yes | yes | yes |
 | `tokenizer/` | `token-counter.port.ts`, `token-counter-registry.port.ts` | `heuristic-token-counter`, `tiktoken-token-counter` | tiktoken-model-map, openai-message-token-count, serialize-prompt-input, create-default-registry |
 | `sksp/` | `secret-store.port.ts` | `env-secret-store`, `composite-secret-store` | registry, ref-to-env |
 | `tdbc/` | `driver.port.ts`, `connection.port.ts` | (drivers register from external packages) | open, registry, template-helper, normalize-bindings |
