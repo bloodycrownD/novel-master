@@ -35,7 +35,7 @@ export function FileEditorScreen() {
   const [version, setVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [previewMode, setPreviewMode] = useState(false);
+  const [previewMode, setPreviewMode] = useState(true);
 
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);

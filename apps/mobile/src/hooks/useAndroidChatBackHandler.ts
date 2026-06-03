@@ -1,7 +1,7 @@
 /**
  * Android hardware back for Chat Tab only (registered while the tab is focused).
- * Aligns system back / edge swipe with the header: conversation → session list;
- * session list root returns false so the activity can exit.
+ * Aligns system back / edge swipe with segmented sub-panels:
+ * conversation workspace → chat → session list; template → sessions; then exit app.
  */
 import {useCallback} from 'react';
 import {BackHandler, Platform} from 'react-native';
@@ -9,6 +9,7 @@ import {useFocusEffect} from '@react-navigation/native';
 
 export type AndroidChatBackState = {
   chatSubview: 'sessions' | 'conversation';
+  conversationPanel: 'chat' | 'workspace';
   sessionListPanel: 'sessions' | 'template';
   sessionDrawerOpen: boolean;
   messageMenuOpen: boolean;
@@ -23,6 +24,7 @@ export type AndroidChatBackState = {
 
 export type AndroidChatBackActions = {
   backFromConversation: () => void;
+  showChatPanel: () => void;
   closeSessionDrawer: () => void;
   closeMessageMenu: () => void;
   exitMessageBatch: () => void;
@@ -42,6 +44,7 @@ export function useAndroidChatBackHandler(
 ): void {
   const {
     chatSubview,
+    conversationPanel,
     sessionListPanel,
     sessionDrawerOpen,
     messageMenuOpen,
@@ -56,6 +59,7 @@ export function useAndroidChatBackHandler(
 
   const {
     backFromConversation,
+    showChatPanel,
     closeSessionDrawer,
     closeMessageMenu,
     exitMessageBatch,
@@ -100,6 +104,10 @@ export function useAndroidChatBackHandler(
     }
 
     if (chatSubview === 'conversation') {
+      if (conversationPanel === 'workspace') {
+        showChatPanel();
+        return true;
+      }
       backFromConversation();
       return true;
     }
@@ -128,10 +136,12 @@ export function useAndroidChatBackHandler(
     agentPickerOpen,
     sessionRenameOpen,
     chatSubview,
+    conversationPanel,
     projectDrawerOpen,
     sessionBatchActive,
     sessionListPanel,
     backFromConversation,
+    showChatPanel,
     closeSessionDrawer,
     closeMessageMenu,
     exitMessageBatch,

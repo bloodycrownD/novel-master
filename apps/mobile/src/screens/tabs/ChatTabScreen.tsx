@@ -332,6 +332,7 @@ export function ChatTabScreen() {
   useAndroidChatBackHandler(
     {
       chatSubview,
+      conversationPanel,
       sessionListPanel,
       sessionDrawerOpen,
       messageMenuOpen: messageMenuTarget != null,
@@ -345,6 +346,7 @@ export function ChatTabScreen() {
     },
     {
       backFromConversation,
+      showChatPanel: () => setConversationPanel('chat'),
       closeSessionDrawer: () => setSessionDrawerOpen(false),
       closeMessageMenu,
       exitMessageBatch: messageBatch.exit,

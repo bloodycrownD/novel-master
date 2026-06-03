@@ -32,6 +32,7 @@ function defaultState(
 ): AndroidChatBackState {
   return {
     chatSubview: 'sessions',
+    conversationPanel: 'chat',
     sessionListPanel: 'sessions',
     sessionDrawerOpen: false,
     messageMenuOpen: false,
@@ -51,6 +52,7 @@ function defaultActions(
 ): AndroidChatBackActions {
   return {
     backFromConversation: jest.fn(),
+    showChatPanel: jest.fn(),
     closeSessionDrawer: jest.fn(),
     closeMessageMenu: jest.fn(),
     exitMessageBatch: jest.fn(),
@@ -96,15 +98,33 @@ describe('useAndroidChatBackHandler', () => {
     return capturedHandler!;
   }
 
-  it('T-B1: conversation subview intercepts back and calls backFromConversation', () => {
+  it('T-B1: conversation chat panel intercepts back and calls backFromConversation', () => {
     const backFromConversation = jest.fn();
+    const showChatPanel = jest.fn();
     const handler = mountAndGetHandler(
-      defaultState({chatSubview: 'conversation'}),
-      defaultActions({backFromConversation}),
+      defaultState({chatSubview: 'conversation', conversationPanel: 'chat'}),
+      defaultActions({backFromConversation, showChatPanel}),
     );
 
     expect(handler()).toBe(true);
     expect(backFromConversation).toHaveBeenCalledTimes(1);
+    expect(showChatPanel).not.toHaveBeenCalled();
+  });
+
+  it('T-B1b: conversation workspace panel returns to chat before session list', () => {
+    const backFromConversation = jest.fn();
+    const showChatPanel = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({
+        chatSubview: 'conversation',
+        conversationPanel: 'workspace',
+      }),
+      defaultActions({backFromConversation, showChatPanel}),
+    );
+
+    expect(handler()).toBe(true);
+    expect(showChatPanel).toHaveBeenCalledTimes(1);
+    expect(backFromConversation).not.toHaveBeenCalled();
   });
 
   it('T-B2: session list with no overlays returns false', () => {
@@ -132,6 +152,17 @@ describe('useAndroidChatBackHandler', () => {
     expect(handler()).toBe(true);
     expect(closeSessionDrawer).toHaveBeenCalledTimes(1);
     expect(backFromConversation).not.toHaveBeenCalled();
+  });
+
+  it('T-B5: project template panel returns to session list before exiting app', () => {
+    const showSessionsPanel = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({sessionListPanel: 'template'}),
+      defaultActions({showSessionsPanel}),
+    );
+
+    expect(handler()).toBe(true);
+    expect(showSessionsPanel).toHaveBeenCalledTimes(1);
   });
 
   it('T-B4: agent picker closes first without leaving conversation', () => {

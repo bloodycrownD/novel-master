@@ -361,6 +361,7 @@ export function VfsFileManager({
               ? `/${trimmed}`
               : `${currentPath}/${trimmed}`;
           await createVfsDirectory(vfs, path);
+          await worktree.setDirRule(defaultDirRuleForm(path));
           await reload();
         },
       });

@@ -17,6 +17,10 @@ import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {readLlmStreamEnabled} from '../../storage/llm-stream-pref';
+import {
+  readChatComposerDraft,
+  writeChatComposerDraft,
+} from '../../storage/chat-composer-draft';
 import {flushRunUi} from './flush-run-ui';
 
 type Props = {
@@ -47,7 +51,8 @@ export function ChatComposer({
   const {tokens} = useTheme();
   const runtime = useRuntime();
   const {appUi} = useNovelMaster();
-  const [text, setText] = useState('');
+  const {sessionId} = scope;
+  const [text, setText] = useState(() => readChatComposerDraft(sessionId));
   const [error, setError] = useState<string | undefined>();
   const [runAbortController, setRunAbortController] = useState<AbortController | null>(
     null,
@@ -67,8 +72,12 @@ export function ChatComposer({
   };
 
   useEffect(() => {
+    setText(readChatComposerDraft(sessionId));
+  }, [sessionId]);
+
+  useEffect(() => {
     const bus = runtime.eventBus;
-    const sid = scope.sessionId;
+    const sid = sessionId;
     const subText = bus.subscribe(
       EVENT_AGENT_STREAM_TEXT_DELTA,
       (payload: AgentStreamTextDeltaPayload) => {
@@ -121,6 +130,7 @@ export function ChatComposer({
     onStreamReset();
     onRunningChange(true);
     if (content) {
+      writeChatComposerDraft(sessionId, '');
       setText('');
     }
     setRunAbortController(controller);
@@ -200,7 +210,10 @@ export function ChatComposer({
           placeholder={hasModel ? '输入消息…' : '选择模型后可发送'}
           placeholderTextColor={tokens.textSecondary}
           value={text}
-          onChangeText={setText}
+          onChangeText={next => {
+            setText(next);
+            writeChatComposerDraft(sessionId, next);
+          }}
           editable={!inputDisabled}
           multiline
         />
