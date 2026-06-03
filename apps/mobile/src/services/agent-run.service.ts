@@ -47,7 +47,7 @@ export async function resolveCurrentAgentDefinition(
   const agentId = await resolveCurrentAgentId(runtime);
   if (agentId == null || agentId === '') {
     throw new AgentRunError(
-      '未配置 Agent。请先在「agent设置」中导入或创建 Agent。',
+      '未配置 Agent。请先在「agent管理」中导入或创建 Agent。',
     );
   }
   try {

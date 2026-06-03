@@ -15,7 +15,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   MainTabs: {title: '', showBack: false, showNav: true},
   chat: {title: '会话', showBack: false, showNav: true},
   profile: {title: '我的', showBack: false, showNav: true},
-  AgentsSettings: {title: 'agent设置', showBack: true, showNav: false},
+  AgentsSettings: {title: 'agent管理', showBack: true, showNav: false},
   AgentEditor: {title: 'Agent 配置', showBack: true, showNav: false},
   RealPrompt: {title: '真实提示词', showBack: true, showNav: false},
   Providers: {title: '服务商管理', showBack: true, showNav: false},

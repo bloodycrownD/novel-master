@@ -46,7 +46,7 @@ const WORKSPACE_REGEX_GROUP_MENU = {
 
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
-    {icon: '🤖', label: 'agent设置', route: 'AgentsSettings'},
+    {icon: '🤖', label: 'agent管理', route: 'AgentsSettings'},
     {icon: '🔌', label: '服务商管理', route: 'Providers'},
     {icon: '🗜️', label: '压缩条件', route: 'CompactionConditions'},
     {icon: '⚡', label: '事件配置', route: 'EventsConfig'},

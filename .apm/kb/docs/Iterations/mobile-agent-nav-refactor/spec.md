@@ -6,7 +6,7 @@
 
 ## 设计目标
 
-- 底部 Tab 收敛为 **对话 + 我的**；Agent 管理能力迁至 **Stack「agent设置」**。
+- 底部 Tab 收敛为 **对话 + 我的**；Agent 管理能力迁至 **Stack「agent管理」**。
 - 用 **工作区「当前 agent」** + **会话抽屉「切换 agent」** 统一替代「设为默认 / 默认徽标」产品语义。
 - **Agent 选择器** 交互对齐现有 `ModelPickerModal`；重命名对齐 `TextPromptModal`（与会话重命名同模式）。
 - 最小 diff：复用 `AgentList`、`resolveCurrentAgentId`、`loadChatAgentMeta`，不新增持久化字段。
@@ -39,10 +39,10 @@ flowchart LR
 | `RootNavigator.tsx` | 3 Tab：Chat / **Agents** / Profile | 2 Tab；Agents 改为 Stack `AgentsSettings` |
 | `AgentsTabScreen.tsx` | Tab 壳 + `AppHeader pageKey=agents` + `AgentList` | **删除**；逻辑迁至 `AgentsSettingsScreen` |
 | `AgentList.tsx` | ⋮「设为默认」、卡片「默认」徽标；`isDefault` 来自 `currentAgentId` | 移除默认 UI；**+重命名** |
-| `ProfileTabScreen.tsx` | 工作区：当前模型/正则组；配置区 5 项 | **+当前 agent**；配置 **+agent设置** |
+| `ProfileTabScreen.tsx` | 工作区：当前模型/正则组；配置区 5 项 | **+当前 agent**；配置 **+agent管理** |
 | `SessionActionsDrawer.tsx` | 只读「当前模型」；「切换模型」 | **+当前 agent**；**+切换 agent** |
 | `ModelPickerModal.tsx` | `setCurrentModelId` + 列表 | 参照实现 **`AgentPickerModal`** |
-| `agent-run.service.ts` | `resolveCurrentAgentId`：state → registry 首项 | **不变**；错误文案改指向「agent设置」 |
+| `agent-run.service.ts` | `resolveCurrentAgentId`：state → registry 首项 | **不变**；错误文案改指向「agent管理」 |
 | `useAndroidChatBackHandler` | 含 `modelPickerOpen` | **+`agentPickerOpen`** 关闭优先 |
 
 ### 关键代码锚点
@@ -73,7 +73,7 @@ export async function resolveCurrentAgentId(
 }
 ```
 
-**Profile 导航模式（agent设置 应一致）**
+**Profile 导航模式（agent管理 应一致）**
 
 ```117:122:apps/mobile/src/screens/tabs/ProfileTabScreen.tsx
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -107,7 +107,7 @@ flowchart TB
     AP[AgentPickerModal]
     MP[ModelPickerModal]
   end
-  Profile -->|agent设置| Stack
+  Profile -->|agent管理| Stack
   Profile -->|当前 agent| AP
   Chat -->|切换 agent| AP
   AP -->|setCurrentAgentId| PS[(PersistentState)]
@@ -159,18 +159,18 @@ apps/mobile/src/
 |------|------|
 | `navigation/RootNavigator.tsx` | 移除 `Agents` Tab；注册 `AgentsSettings` Stack Screen |
 | `navigation/types.ts` | `MainTabParamList` 删 `Agents`；`RootStackParamList` 增 `AgentsSettings` |
-| `navigation/header-config.ts` | 删 `agents` Tab 项；增 `AgentsSettings: { title: 'agent设置', showBack: true }` |
+| `navigation/header-config.ts` | 删 `agents` Tab 项；增 `AgentsSettings: { title: 'agent管理', showBack: true }` |
 | `screens/stack/AgentsSettingsScreen.tsx` | **新增** |
 | `screens/tabs/AgentsTabScreen.tsx` | **删除** |
 | `services/agent-create.ts` | **新增** `createBlankAgent(runtime, navigation)` 或返回 `agentId` |
 | `components/agent/AgentPickerModal.tsx` | **新增** |
 | `services/agent-display-label.ts` | **新增** `resolveCurrentAgentDisplayLabel` |
 | `components/agent/AgentList.tsx` | 去默认 UI/菜单；+重命名 Modal |
-| `screens/tabs/ProfileTabScreen.tsx` | 工作区「当前 agent」；配置「agent设置」 |
+| `screens/tabs/ProfileTabScreen.tsx` | 工作区「当前 agent」；配置「agent管理」 |
 | `components/chrome/SessionActionsDrawer.tsx` | 当前 agent 只读 + `onSwitchAgent`；菜单「切换 agent」 |
 | `screens/tabs/ChatTabScreen.tsx` | `agentPickerOpen`、`AgentPickerModal`、抽屉 wiring、`refreshChatMeta` |
 | `hooks/useAndroidChatBackHandler.ts` | +`agentPickerOpen` / `closeAgentPicker` |
-| `services/agent-run.service.ts` | 错误提示：「Agent」页 →「agent设置」 |
+| `services/agent-run.service.ts` | 错误提示：「Agent」页 →「agent管理」 |
 
 **明确不改**：Core、`AgentEditorForm`、CLI、`examples/mobile`。
 
@@ -210,7 +210,7 @@ export async function createBlankAgent(runtime, id = `agent-${Date.now()}`): Pro
 - `reload`：`listAgentIds` → `get(id)` → `{ agentId, label: def.name }`
 - `currentId` from `getCurrentAgentId()`；列表项 `selected = agentId === currentId || (!currentId && index===0)` **（与旧默认徽标语义一致，仅 UI）**
 - `select`：`await setCurrentAgentId(agentId)` → `onSelected` → `onClose`
-- 标题：**「选择 Agent」**；空列表提示引导至 agent设置
+- 标题：**「选择 Agent」**；空列表提示引导至 agent管理
 
 ### 步骤 3：`resolveCurrentAgentDisplayLabel`
 
@@ -234,7 +234,7 @@ export async function resolveCurrentAgentDisplayLabel(runtime): Promise<string>
 1. `WORKSPACE_AGENT_MENU = { icon: '🤖', label: '当前 agent' }`（图标可与模型区分，如 `🧠`）。
 2. `agentLabel` state + `refreshAgentLabel`（`useFocusEffect` 内调用）。
 3. 在「当前模型」**下方**插入 `ProfileMenuItem` → 打开 `AgentPickerModal`。
-4. `CONFIG_MENU` **首位或「服务商」前** 增加：`{ icon: '🤖', label: 'agent设置', route: 'AgentsSettings' }`。
+4. `CONFIG_MENU` **首位或「服务商」前** 增加：`{ icon: '🤖', label: 'agent管理', route: 'AgentsSettings' }`。
 5. `AgentPickerModal.onSelected` → `refreshAgentLabel`。
 
 ### 步骤 6：`SessionActionsDrawer` + `ChatTabScreen`
@@ -254,7 +254,7 @@ export async function resolveCurrentAgentDisplayLabel(runtime): Promise<string>
 
 ### 步骤 7：文案与清理
 
-- `agent-run.service.ts`：`未配置 Agent。请先在「agent设置」…`
+- `agent-run.service.ts`：`未配置 Agent。请先在「agent管理」…`
 - Grep `Agent」页` / `AgentsTab` 残留并修正。
 
 ### 步骤 8：验证
@@ -293,12 +293,12 @@ npm test -w @novel-master/mobile -- use-android-chat-back-handler
 | ID | 场景 |
 |----|------|
 | T1 | 底部仅「对话」「我的」 |
-| T2 | 我的 → agent设置：列表/新建/编辑/批量/⋮ 无「设为默认」 |
+| T2 | 我的 → agent管理：列表/新建/编辑/批量/⋮ 无「设为默认」 |
 | T3 | 列表无「默认」徽标 |
 | T4 | ⋮ 重命名 → 列表与「当前 agent」同步 |
 | T5 | 我的 → 当前 agent → 选择 → 对话顶栏 agent 名更新 |
 | T6 | 对话抽屉：见当前 agent + 切换 agent |
-| T7 | 全流程：agent设置新建 → 设当前 → 发消息 → 抽屉切换 → 再发消息 |
+| T7 | 全流程：agent管理新建 → 设当前 → 发消息 → 抽屉切换 → 再发消息 |
 
 ### 负向
 
@@ -310,7 +310,7 @@ npm test -w @novel-master/mobile -- use-android-chat-back-handler
 
 | 风险 | 缓解 |
 |------|------|
-| 用户习惯 3 Tab | PRD 已确认 2 Tab；agent设置 在配置区首屏可见 |
+| 用户习惯 3 Tab | PRD 已确认 2 Tab；agent管理 在配置区首屏可见 |
 | 移除「设为默认」后未设 state 的用户 | `resolveCurrentAgentId` 仍 fallback 首项；选择器显式化后行为更清晰 |
 | `MainTabParamList` 类型变更导致编译错误 | 全仓 grep `Agents` route |
 | Drawer 增高两行 info | 保持紧凑 `modelInfo` 样式，避免遮挡操作项 |
@@ -324,7 +324,7 @@ npm test -w @novel-master/mobile -- use-android-chat-back-handler
 
 - [ ] 2 Tab；`AgentsSettings` Stack 可达
 - [ ] 无「设为默认」「默认」徽标；有「重命名」
-- [ ] 我的：当前 agent + agent设置
+- [ ] 我的：当前 agent + agent管理
 - [ ] 会话抽屉：当前 agent + 切换 agent
 - [ ] 单测 + lint（变更文件无新 error）
 - [ ] Android T1–T7
