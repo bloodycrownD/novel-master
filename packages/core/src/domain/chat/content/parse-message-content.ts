@@ -56,6 +56,25 @@ function parseImageSource(value: unknown): ImageSource {
   throw chatInvalidArgument('image block: source.kind must be "url" or "base64"');
 }
 
+/**
+ * Drop legacy empty `text` blocks (reasoning-only GLM append briefly wrote `text: ""`).
+ * Applied on read and before append validation.
+ */
+function parseBlocksArray(rawBlocks: unknown[]): ContentBlock[] {
+  const blocks: ContentBlock[] = [];
+  for (let i = 0; i < rawBlocks.length; i++) {
+    const raw = rawBlocks[i];
+    if (isRecord(raw) && raw.type === "text") {
+      const text = raw.text;
+      if (typeof text !== "string" || text === "") {
+        continue;
+      }
+    }
+    blocks.push(parseBlock(raw, i));
+  }
+  return blocks;
+}
+
 function parseBlock(value: unknown, index: number): ContentBlock {
   if (!isRecord(value)) {
     throw chatInvalidArgument(`blocks[${index}]: must be an object`);
@@ -120,11 +139,7 @@ export function assertMessageContent(value: unknown): asserts value is MessageCo
   if (!Array.isArray(value.blocks)) {
     throw chatInvalidArgument("MessageContent.blocks must be an array");
   }
-  const blocks: ContentBlock[] = [];
-  for (let i = 0; i < value.blocks.length; i++) {
-    blocks.push(parseBlock(value.blocks[i], i));
-  }
-  (value as { blocks: ContentBlock[] }).blocks = blocks;
+  (value as { blocks: ContentBlock[] }).blocks = parseBlocksArray(value.blocks);
 }
 
 /** Parse and validate JSON from `content_json`. */

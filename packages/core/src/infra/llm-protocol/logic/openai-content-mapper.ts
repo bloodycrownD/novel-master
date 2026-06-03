@@ -376,10 +376,7 @@ export function openAiStreamAccumulatorsToBlocks(
   return blocks;
 }
 
-/**
- * Partial stream snapshot on user cancel: keep thinking, always emit a text block
- * (may be empty when only reasoning streamed).
- */
+/** Partial stream snapshot on user cancel (see {@link buildStreamPartialBlocks}). */
 export function openAiStreamAccumulatorsToPartialBlocks(
   state: {
     textParts: string[];

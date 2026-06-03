@@ -50,6 +50,22 @@ describe("parseMessageContent", () => {
     assert.equal(parsed.blocks[0]!.type, "thinking");
   });
 
+  it("strips legacy empty text blocks on parse and append", () => {
+    const legacy = {
+      blocks: [
+        { type: "thinking", text: "reasoning" },
+        { type: "text", text: "" },
+      ],
+    };
+    const parsed = parseMessageContent(JSON.stringify(legacy));
+    assert.equal(parsed.blocks.length, 1);
+    assert.equal(parsed.blocks[0]!.type, "thinking");
+
+    const inMemory = structuredClone(legacy);
+    assertMessageContent(inMemory);
+    assert.equal(inMemory.blocks.length, 1);
+  });
+
   it("rejects legacy { content } shape", () => {
     assert.throws(
       () => parseMessageContent(JSON.stringify({ content: "x" })),
