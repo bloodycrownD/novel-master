@@ -251,12 +251,14 @@ export {
 export {
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
+  buildPromptPreviewSegments,
 } from "./service/prompt/render-prompt.js";
 export type {
   PromptRenderContext,
   PromptRenderDot,
   PromptMacroContext,
   PromptLlmInput,
+  PromptPreviewSegment,
 } from "./service/prompt/render-prompt.js";
 export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
 export { stringifyText } from "./infra/serialization/stringify-text.js";

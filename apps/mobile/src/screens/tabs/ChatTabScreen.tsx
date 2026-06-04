@@ -883,6 +883,14 @@ export function ChatTabScreen() {
     [navigation, projectId, sessionId, bumpVfsRefresh],
   );
 
+  const openSessionFilePreview = useCallback(
+    (path: string) => {
+      setConversationPanel('workspace');
+      openFileEditor(path, 'session');
+    },
+    [openFileEditor],
+  );
+
   const sessionVfs =
     projectId != null && sessionId != null
       ? runtime.sessionVfs(projectId, sessionId)
@@ -991,16 +999,21 @@ export function ChatTabScreen() {
                   setMessageMenuTarget(msg);
                   setMessageMenuAnchor(anchor);
                 }}
+                onOpenToolFile={openSessionFilePreview}
+                listHeaderComponent={
+                  hasMoreMessages ? (
+                    <Pressable
+                      style={styles.loadMoreBtn}
+                      onPress={() =>
+                        loadOlderMessages().catch(() => undefined)
+                      }>
+                      <Text style={{color: tokens.primary}}>
+                        {loadingMoreMessages ? '加载中…' : '加载更早消息'}
+                      </Text>
+                    </Pressable>
+                  ) : null
+                }
               />
-              {hasMoreMessages ? (
-                <Pressable
-                  style={styles.loadMoreBtn}
-                  onPress={() => loadOlderMessages().catch(() => undefined)}>
-                  <Text style={{color: tokens.primary}}>
-                    {loadingMoreMessages ? '加载中…' : '加载更早消息'}
-                  </Text>
-                </Pressable>
-              ) : null}
               <ChatComposer
                 scope={{projectId, sessionId}}
                 hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
@@ -1421,6 +1434,7 @@ const styles = StyleSheet.create({
   loadMoreBtn: {
     alignSelf: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    marginBottom: 4,
   },
 });

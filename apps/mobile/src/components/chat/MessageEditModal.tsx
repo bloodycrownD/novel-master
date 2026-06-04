@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -45,7 +46,8 @@ export function MessageEditModal({
 
   const inputMaxHeight = useMemo(() => {
     const windowHeight = Dimensions.get('window').height;
-    return Math.min(280, windowHeight * 0.35);
+    // Leave room for title, label, actions, padding, and keyboard (resize/adjust).
+    return Math.min(240, Math.max(INPUT_MIN_HEIGHT, windowHeight * 0.28));
   }, []);
 
   useEffect(() => {
@@ -70,17 +72,21 @@ export function MessageEditModal({
     }
   };
 
+  // AndroidManifest uses adjustResize; extra KAV "height" shrinks the panel and overflows children.
+  const keyboardBehavior =
+    Platform.OS === 'ios' ? ('padding' as const) : undefined;
+
   return (
     <AppModal
       visible={visible}
       animationType="fade"
       transparent
       onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
-          style={styles.avoiding}>
+      <KeyboardAvoidingView
+        behavior={keyboardBehavior}
+        style={styles.avoidingRoot}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 24 : 0}>
+        <Pressable style={styles.backdrop} onPress={onClose}>
           <Pressable
             style={[styles.panel, {backgroundColor: tokens.surface}]}
             onPress={e => e.stopPropagation()}>
@@ -90,28 +96,32 @@ export function MessageEditModal({
                 {label}
               </Text>
             ) : null}
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  color: tokens.text,
-                  borderColor: tokens.border,
-                  backgroundColor: tokens.background,
-                  minHeight: INPUT_MIN_HEIGHT,
-                  maxHeight: inputMaxHeight,
-                },
-              ]}
-              value={value}
-              onChangeText={setValue}
-              placeholder={placeholder}
-              placeholderTextColor={tokens.textSecondary}
-              autoFocus
-              autoCorrect={false}
-              multiline
-              blurOnSubmit={false}
-              scrollEnabled
-              textAlignVertical="top"
-            />
+            <ScrollView
+              style={[styles.inputScroll, {maxHeight: inputMaxHeight}]}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    color: tokens.text,
+                    borderColor: tokens.border,
+                    backgroundColor: tokens.background,
+                    minHeight: INPUT_MIN_HEIGHT,
+                  },
+                ]}
+                value={value}
+                onChangeText={setValue}
+                placeholder={placeholder}
+                placeholderTextColor={tokens.textSecondary}
+                autoFocus
+                autoCorrect={false}
+                multiline
+                blurOnSubmit={false}
+                scrollEnabled={false}
+                textAlignVertical="top"
+              />
+            </ScrollView>
             <View style={styles.actions}>
               <Pressable onPress={onClose} style={styles.btn}>
                 <Text style={{color: tokens.textSecondary}}>取消</Text>
@@ -130,13 +140,16 @@ export function MessageEditModal({
               </Pressable>
             </View>
           </Pressable>
-        </KeyboardAvoidingView>
-      </Pressable>
+        </Pressable>
+      </KeyboardAvoidingView>
     </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
+  avoidingRoot: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'center',
@@ -144,15 +157,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
     padding: 24,
   },
-  avoiding: {
-    width: '100%',
-    maxWidth: 360,
-  },
   panel: {
     width: '100%',
+    maxWidth: 360,
     borderRadius: 16,
     padding: 20,
     maxHeight: '85%',
+    overflow: 'hidden',
+  },
+  inputScroll: {
+    flexGrow: 0,
   },
   title: {
     fontSize: 18,

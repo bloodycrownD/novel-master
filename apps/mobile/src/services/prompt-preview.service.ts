@@ -1,7 +1,11 @@
 /**
- * Real prompt preview: agent prompts + llm-channel regex + formatPromptLlmInputForCli.
+ * Real prompt preview: agent prompts + llm-channel regex + structured segments.
  */
-import {formatPromptLlmInputForCli, type AgentDefinition} from '@novel-master/core';
+import {
+  buildPromptPreviewSegments,
+  type AgentDefinition,
+  type PromptPreviewSegment,
+} from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 import {resolveCurrentAgentDefinition} from './agent-run.service';
@@ -11,24 +15,16 @@ export interface PromptPreviewScope {
   readonly sessionId: string;
 }
 
-/** Builds CLI-formatted prompt text for the current agent and session scope. */
-export async function buildRealPromptPreview(
+/** Ordered segments for collapsible real-prompt UI (one card per bubble). */
+export async function buildRealPromptPreviewSegments(
   runtime: MobileNovelMasterRuntime,
   scope: PromptPreviewScope,
-): Promise<string> {
+): Promise<readonly PromptPreviewSegment[]> {
   const {definition} = await resolveCurrentAgentDefinition(runtime);
-  return buildPromptPreviewForDefinition(runtime, scope, definition);
-}
-
-async function buildPromptPreviewForDefinition(
-  runtime: MobileNovelMasterRuntime,
-  scope: PromptPreviewScope,
-  definition: AgentDefinition,
-): Promise<string> {
   const {ctx, input} = await buildSessionPromptInput(
     runtime,
     scope,
     definition,
   );
-  return formatPromptLlmInputForCli(definition.prompts, input, ctx);
+  return buildPromptPreviewSegments(definition.prompts, input, ctx);
 }

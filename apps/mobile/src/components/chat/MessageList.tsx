@@ -1,8 +1,16 @@
 /**
  * Session message list with tool cards, streaming tail, and optional batch select.
  */
-import React, {useMemo, useRef} from 'react';
-import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import type {ChatMessage} from '@novel-master/core';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
@@ -30,7 +38,14 @@ type Props = {
     message: ChatMessage,
     anchor: MessageMenuAnchor,
   ) => void;
+  /** Shown at the top of the timeline (e.g. load older history). */
+  listHeaderComponent?: React.ReactElement | null;
+  /** Open session VFS file from vfs.read / write / replace tool cards. */
+  onOpenToolFile?: (path: string) => void;
 };
+
+/** Within this distance from the bottom we treat the user as "following" the tail. */
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
 interface ChatMessageBodyProps {
   body: string;
@@ -89,9 +104,72 @@ export function MessageList({
   selectedMessageIds,
   onToggleMessageSelect,
   onMessageLongPress,
+  listHeaderComponent,
+  onOpenToolFile,
 }: Props) {
   const {tokens} = useTheme();
+  const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
+  const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
+  const prevMessageCountRef = useRef(0);
+  const nearBottomRef = useRef(true);
+  const scrollOffsetRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+
   const items = useMemo(() => buildChatListItems(messages), [messages]);
+
+  const syncNearBottomFromScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+      scrollOffsetRef.current = contentOffset.y;
+      contentHeightRef.current = contentSize.height;
+      viewportHeightRef.current = layoutMeasurement.height;
+      const distanceFromBottom =
+        contentSize.height - contentOffset.y - layoutMeasurement.height;
+      nearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+    },
+    [],
+  );
+
+  const scrollToEndIfNearBottom = useCallback(() => {
+    if (!nearBottomRef.current) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToEnd({animated: false});
+    });
+  }, []);
+
+  useEffect(() => {
+    const firstId = messages[0]?.id;
+    const prevFirstId = prevFirstMessageIdRef.current;
+    const prevCount = prevMessageCountRef.current;
+    const grew = messages.length > prevCount;
+    const prependedOlder =
+      grew &&
+      prevFirstId != null &&
+      firstId != null &&
+      firstId !== prevFirstId;
+
+    if (prependedOlder) {
+      nearBottomRef.current = false;
+    } else if (prevCount === 0 && messages.length > 0) {
+      nearBottomRef.current = true;
+      scrollToEndIfNearBottom();
+    } else if (grew && firstId === prevFirstId) {
+      scrollToEndIfNearBottom();
+    }
+
+    prevFirstMessageIdRef.current = firstId;
+    prevMessageCountRef.current = messages.length;
+  }, [messages, scrollToEndIfNearBottom]);
+
+  useEffect(() => {
+    if (!streamingText && !streamingThinking) {
+      return;
+    }
+    scrollToEndIfNearBottom();
+  }, [streamingText, streamingThinking, scrollToEndIfNearBottom]);
 
   const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
@@ -146,9 +224,21 @@ export function MessageList({
 
   return (
     <FlatList
+      ref={listRef}
       style={styles.list}
       data={data}
       extraData={{chatRichTextEnabled, richRenderEpoch}}
+      ListHeaderComponent={listHeaderComponent ?? undefined}
+      maintainVisibleContentPosition={{
+        minIndexForVisible: 0,
+        autoscrollToTopThreshold: 10,
+      }}
+      onScroll={syncNearBottomFromScroll}
+      scrollEventThrottle={16}
+      onContentSizeChange={() => {
+        // Only follow tail when onScroll already marked the user near the bottom.
+        scrollToEndIfNearBottom();
+      }}
       keyExtractor={(item, index) => {
         if ('kind' in item && item.kind === 'stream') {
           return 'stream';
@@ -188,6 +278,7 @@ export function MessageList({
             <ToolCallCard
               tool={row.tool}
               showFullParams={showFullToolParams}
+              onOpenFile={onOpenToolFile}
             />
           );
         }

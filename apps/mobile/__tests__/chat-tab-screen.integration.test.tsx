@@ -195,12 +195,15 @@ jest.mock('../src/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
 
-jest.mock('../src/components/chat/MessageList', () => ({
-  MessageList: (props: any) => {
-    mockLatestMessageListProps = props;
-    return null;
-  },
-}));
+jest.mock('../src/components/chat/MessageList', () => {
+  const ReactNative = require('react-native');
+  return {
+    MessageList: (props: any) => {
+      mockLatestMessageListProps = props;
+      return props.listHeaderComponent ?? null;
+    },
+  };
+});
 
 jest.mock('../src/components/chat/ChatComposer', () => {
   const ReactNative = require('react-native');

@@ -3,6 +3,7 @@ import {
   buildChatListItems,
   buildToolResultByUseId,
   toolCallViewFromUse,
+  vfsToolFilePath,
 } from '../src/components/chat/message-blocks';
 
 function msg(
@@ -103,5 +104,24 @@ describe('message-blocks', () => {
     if (tool?.kind === 'tool') {
       expect(tool.tool.status).toBe('success');
     }
+  });
+
+  it('vfsToolFilePath returns path for vfs read/write/replace only', () => {
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't1',
+        name: 'vfs.replace',
+        input: {path: '/续写/a.md'},
+        status: 'success',
+      }),
+    ).toBe('/续写/a.md');
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't2',
+        name: 'vfs.list',
+        input: {path: '/'},
+        status: 'success',
+      }),
+    ).toBeUndefined();
   });
 });

@@ -104,6 +104,25 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
   }
 }
 
+/** VFS tools whose `input.path` points at a file we can open in session workspace. */
+const VFS_FILE_OPEN_TOOL_NAMES = new Set([
+  'vfs.read',
+  'vfs.write',
+  'vfs.replace',
+]);
+
+/** Logical file path for workspace preview, or undefined if not openable. */
+export function vfsToolFilePath(tool: ToolCallView): string | undefined {
+  if (!VFS_FILE_OPEN_TOOL_NAMES.has(tool.name)) {
+    return undefined;
+  }
+  const path = tool.input.path;
+  if (typeof path === 'string' && path.startsWith('/')) {
+    return path;
+  }
+  return undefined;
+}
+
 export function toolCallSummary(tool: ToolCallView): string {
   const fromInput = summarizeToolInput(tool.name, tool.input);
   if (fromInput) {

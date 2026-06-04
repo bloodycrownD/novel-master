@@ -2,13 +2,19 @@
  * Tool invocation card with status from paired tool_result.
  */
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
-import {toolCallSummary, type ToolCallView} from './message-blocks';
+import {
+  toolCallSummary,
+  vfsToolFilePath,
+  type ToolCallView,
+} from './message-blocks';
 
 type Props = {
   tool: ToolCallView;
   showFullParams?: boolean;
+  /** When set and tool has a VFS file path, the card is tappable. */
+  onOpenFile?: (path: string) => void;
 };
 
 function statusLabel(status: ToolCallView['status']): string {
@@ -36,19 +42,17 @@ function statusColor(
   }
 }
 
-export function ToolCallCard({tool, showFullParams}: Props) {
+export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
   const {tokens} = useTheme();
+  const filePath = vfsToolFilePath(tool);
+  const canOpen = filePath != null && onOpenFile != null;
   const summary = toolCallSummary(tool);
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
     : summary;
 
-  return (
-    <View
-      style={[
-        styles.card,
-        {backgroundColor: tokens.surface, borderColor: tokens.border},
-      ]}>
+  const card = (
+    <>
       <View style={styles.header}>
         <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
           {tool.name}
@@ -66,6 +70,40 @@ export function ToolCallCard({tool, showFullParams}: Props) {
           {detail}
         </Text>
       ) : null}
+      {canOpen ? (
+        <Text style={[styles.openHint, {color: tokens.primary}]}>
+          点击查看 · 会话工作区
+        </Text>
+      ) : null}
+    </>
+  );
+
+  if (canOpen) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`打开文件 ${filePath}`}
+        onPress={() => onOpenFile(filePath)}
+        style={({pressed}) => [
+          styles.card,
+          {
+            backgroundColor: tokens.surface,
+            borderColor: canOpen ? tokens.primary : tokens.border,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}>
+        {card}
+      </Pressable>
+    );
+  }
+
+  return (
+    <View
+      style={[
+        styles.card,
+        {backgroundColor: tokens.surface, borderColor: tokens.border},
+      ]}>
+      {card}
     </View>
   );
 }
@@ -87,4 +125,5 @@ const styles = StyleSheet.create({
   name: {flex: 1, fontWeight: '600', fontSize: 14},
   status: {fontSize: 12, fontWeight: '500'},
   summary: {marginTop: 6, fontSize: 13},
+  openHint: {marginTop: 8, fontSize: 12, fontWeight: '500'},
 });

@@ -36,6 +36,14 @@ export interface PromptLlmInput {
   readonly messages: readonly ChatMessage[];
 }
 
+/** One collapsible preview card in CLI / mobile real-prompt UI. */
+export interface PromptPreviewSegment {
+  readonly id: string;
+  readonly role: string;
+  readonly title: string;
+  readonly body: string;
+}
+
 function formatSegment(role: string, body: string): string {
   const trimmed = body.replace(/\r\n/g, "\n");
   if (trimmed === "") {
@@ -99,13 +107,13 @@ export function buildPromptLlmInput(
 }
 
 /**
- * Formats {@link PromptLlmInput} as role-prefixed plain text for CLI preview.
+ * Builds ordered preview segments (one card per role-prefixed bubble).
  */
-export function formatPromptLlmInputForCli(
+export function buildPromptPreviewSegments(
   blocks: readonly PromptBlock[],
   input: PromptLlmInput,
   ctx: PromptRenderContext,
-): string {
+): PromptPreviewSegment[] {
   const now = ctx.now ?? new Date();
   const dot = buildDot(ctx);
   const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
@@ -114,21 +122,48 @@ export function formatPromptLlmInputForCli(
     week_cn: formatWeekCn(now),
   };
 
-  const segments: string[] = [];
+  const segments: PromptPreviewSegment[] = [];
+  let segmentIndex = 0;
 
   for (const block of blocks) {
     if (block.type === "text") {
       const content = renderSystemMacroContent(block.content, dotRecord, root);
-      segments.push(formatSegment(block.role, content));
+      segments.push({
+        id: `text-${block.name}`,
+        role: block.role,
+        title: block.name,
+        body: content,
+      });
       continue;
     }
 
     for (const message of input.messages) {
-      for (const segment of formatChatMessageForCliPreview(message)) {
-        segments.push(formatSegment(segment.role, segment.body));
+      const messageSegments = formatChatMessageForCliPreview(message);
+      for (let i = 0; i < messageSegments.length; i++) {
+        const segment = messageSegments[i]!;
+        segments.push({
+          id: `chat-${message.id}-${segmentIndex}`,
+          role: segment.role,
+          title: `#${message.seq} · ${segment.role}`,
+          body: segment.body,
+        });
+        segmentIndex += 1;
       }
     }
   }
 
-  return segments.join("\n");
+  return segments;
+}
+
+/**
+ * Formats {@link PromptLlmInput} as role-prefixed plain text for CLI preview.
+ */
+export function formatPromptLlmInputForCli(
+  blocks: readonly PromptBlock[],
+  input: PromptLlmInput,
+  ctx: PromptRenderContext,
+): string {
+  return buildPromptPreviewSegments(blocks, input, ctx)
+    .map((segment) => formatSegment(segment.role, segment.body))
+    .join("\n");
 }

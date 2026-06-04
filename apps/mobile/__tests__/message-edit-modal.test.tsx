@@ -65,6 +65,8 @@ jest.mock('react-native', () => {
     },
     Text: ({children, ...props}: {children?: React.ReactNode}) =>
       mockReact.createElement('Text', props, children),
+    ScrollView: ({children, ...props}: {children?: React.ReactNode}) =>
+      mockReact.createElement('ScrollView', props, children),
     TextInput: (props: Record<string, unknown>) =>
       mockReact.createElement('TextInput', props),
     View: ({children, ...props}: {children?: React.ReactNode}) =>

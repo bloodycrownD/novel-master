@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildPromptLlmInput,
+  buildPromptPreviewSegments,
   formatPromptLlmInputForCli,
   textBlocks,
   type ChatMessage,
@@ -63,6 +64,37 @@ describe("buildPromptLlmInput", () => {
       now: fixedNow,
     });
     assert.equal(input.system, "Files:\n/\n└── README.md");
+  });
+});
+
+describe("buildPromptPreviewSegments", () => {
+  it("segments join to the same text as formatPromptLlmInputForCli", () => {
+    const blocks: PromptBlock[] = [
+      { name: "s", type: "text", role: "system", content: "ctx" },
+      { name: "c", type: "chat" },
+      { name: "u", type: "text", role: "user", content: "ask" },
+    ];
+    const messages = [message("user", "{{literal}}", 1)];
+    const ctx = { worktreeDisplay: "WT", filetreeDisplay: "TREE", messages, now: fixedNow };
+    const input = buildPromptLlmInput(blocks, ctx);
+    const segments = buildPromptPreviewSegments(blocks, input, ctx);
+    const joined = segments
+      .map((s) => {
+        const trimmed = s.body.replace(/\r\n/g, "\n");
+        if (trimmed === "") {
+          return `${s.role}: `;
+        }
+        const lines = trimmed.split("\n");
+        if (lines.length === 1) {
+          return `${s.role}: ${lines[0]}`;
+        }
+        return `${s.role}: ${lines[0]}\n${lines.slice(1).join("\n")}`;
+      })
+      .join("\n");
+    assert.equal(joined, formatPromptLlmInputForCli(blocks, input, ctx));
+    assert.equal(segments.length, 3);
+    assert.equal(segments[0]!.id, "text-s");
+    assert.equal(segments[1]!.id, "chat-m1-0");
   });
 });
 
