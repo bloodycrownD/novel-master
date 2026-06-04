@@ -41,7 +41,8 @@ export function FileEditorScreen() {
   const {showToast} = useToast();
   const runtime = useRuntime();
   const route = useRoute<FileEditorRoute>();
-  const {path, scopeKind, projectId, sessionId} = route.params;
+  const {path, scopeKind, projectId, sessionId, onSessionVfsSaved} =
+    route.params;
 
   const [content, setContent] = useState('');
   const [savedContent, setSavedContent] = useState('');
@@ -132,6 +133,7 @@ export function FileEditorScreen() {
       setMtimeMs(refreshed.mtimeMs);
       if (scopeKind === 'session' && projectId && sessionId) {
         invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
+        onSessionVfsSaved?.();
       }
       showToast('已保存');
     } catch (error) {

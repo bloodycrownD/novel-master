@@ -29,6 +29,8 @@ export type RootStackParamList = {
     scopeKind: 'global' | 'project' | 'session';
     projectId?: string;
     sessionId?: string;
+    /** Called after a successful session-scope save (refreshes workspace list). */
+    onSessionVfsSaved?: () => void;
   };
 };
 

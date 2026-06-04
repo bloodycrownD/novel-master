@@ -870,6 +870,7 @@ export function ChatTabScreen() {
           scopeKind: 'session',
           projectId,
           sessionId,
+          onSessionVfsSaved: bumpVfsRefresh,
         });
       } else {
         navigation.navigate('FileEditor', {
@@ -879,7 +880,7 @@ export function ChatTabScreen() {
         });
       }
     },
-    [navigation, projectId, sessionId],
+    [navigation, projectId, sessionId, bumpVfsRefresh],
   );
 
   const sessionVfs =
