@@ -1,9 +1,9 @@
 /**
- * React Native prompt token counter (M0).
+ * React Native prompt token counter (M1).
  *
  * Hermes cannot run @agnai/web-tokenizers or @agnai/sentencepiece-js (Node fs/url/WASM).
- * GPT families use js-tiktoken (Metro shim); all other families use heuristic until M1
- * Android native TokenizerModule replaces WEB/SP counting.
+ * GPT families use js-tiktoken (Metro shim). WEB/SP families delegate to Android
+ * NovelMasterTokenizer when available; otherwise heuristic + estimated.
  */
 import {
   parseApplicationModelId,
@@ -14,8 +14,9 @@ import {
   NM_PROMPT_TOKEN_COUNTER_KEY,
 } from '@novel-master/core';
 import {encoding_for_model} from 'tiktoken';
+import {countPromptViaNative, isNativeTokenizerAvailable} from './native-tokenizer';
 
-/** WEB JSON families — M1 will delegate to native; M0 uses heuristic + estimated. */
+/** WEB JSON families — M1 native on Android. */
 const WEB_FAMILIES = new Set([
   'claude',
   'llama3',
@@ -26,7 +27,7 @@ const WEB_FAMILIES = new Set([
   'deepseek',
 ]);
 
-/** SentencePiece families — M1 native; M0 heuristic + estimated. */
+/** SentencePiece families — M1 native on Android. */
 const SP_FAMILIES = new Set(['llama', 'mistral', 'yi', 'gemma', 'jamba']);
 
 function heuristicCount(text) {
@@ -49,16 +50,37 @@ function countTiktoken(serialized, vendorModelId) {
   }
 }
 
+/**
+ * Map native bridge payload to mobile counter shape.
+ * @param {import('./native-tokenizer').NativeCountResponse} nativeResult
+ */
+function mapNativeResult(nativeResult) {
+  return {
+    count: nativeResult.tokenCount,
+    counterKind: nativeResult.counterKind,
+    estimated: nativeResult.estimated,
+  };
+}
+
 async function countSerialized(family, serialized, vendorModelId) {
   if (family === 'heuristic') {
     return {count: heuristicCount(serialized), counterKind: 'heuristic', estimated: true};
   }
-  // Only GPT path is exact in RN; js-tiktoken is the sole @agnai-free tokenizer lib.
+  // GPT path stays in JS — js-tiktoken is exact and Metro-safe (M0/M1).
   if (family === 'tiktoken' || family === 'gpt2') {
     return countTiktoken(serialized, vendorModelId);
   }
-  // M0: no @agnai/* in bundle — WEB/SP families are estimated until M1 native bridge.
   if (WEB_FAMILIES.has(family) || SP_FAMILIES.has(family)) {
+    if (isNativeTokenizerAvailable()) {
+      const nativeResult = await countPromptViaNative({
+        serialized,
+        family,
+        vendorModelId,
+      });
+      if (nativeResult != null) {
+        return mapNativeResult(nativeResult);
+      }
+    }
     return {
       count: heuristicCount(serialized),
       counterKind: family,
@@ -98,3 +120,11 @@ export function installMobilePromptTokenCounter() {
     countPromptLlmInput: countPromptLlmInputMobile,
   };
 }
+
+// Test hooks
+export const __test__ = {
+  WEB_FAMILIES,
+  SP_FAMILIES,
+  countSerialized,
+  heuristicCount,
+};
