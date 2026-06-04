@@ -12,6 +12,7 @@ import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
   createDefaultTokenCounterRegistry,
+  readTokenCounterModeFromPreferences,
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
@@ -147,8 +148,7 @@ export async function createNovelMasterRuntime(
       : providerBundle.modelRequests;
 
   const tokenCounters = createDefaultTokenCounterRegistry({
-    providers: providerBundle.providerRepo,
-    savedModels: providerBundle.savedModelRepo,
+    getTokenizerOverride: () => readTokenCounterModeFromPreferences(preferences),
   });
 
   const eventBus = new SimpleEventBus();
@@ -160,7 +160,6 @@ export async function createNovelMasterRuntime(
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
     tokenCounters,
-    providers: providerBundle.providerRepo,
   });
 
   const agentRegistry = createAgentRegistryService(conn);

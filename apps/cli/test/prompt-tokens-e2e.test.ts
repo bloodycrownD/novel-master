@@ -40,6 +40,8 @@ function parseTokenJsonLine(stderr: string): {
   tokenCount: number;
   counter?: string;
   model?: string | null;
+  estimated?: boolean;
+  tokenizerFamily?: string;
 } {
   const line = stderr
     .split(/\r?\n/)
@@ -93,7 +95,7 @@ describe("prompt render --tokens CLI e2e", () => {
       const tokens = parseTokenJsonLine(render.stderr);
       assert.ok(tokens.tokenCount > 0);
       assert.equal(tokens.counter, "heuristic");
-      assert.doesNotMatch(render.stderr, /"counterKind"/);
+      assert.equal(tokens.estimated, true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -193,6 +195,65 @@ describe("prompt render --tokens CLI e2e", () => {
       assert.ok(tokens.tokenCount > 0);
       assert.equal(tokens.counter, "tiktoken");
       assert.equal(tokens.model, "openai/gpt-4o");
+      assert.equal(tokens.estimated, false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("CLI4: --tokens --model openai/claude-3-5-sonnet uses claude counter", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-prompt-tokens-claude-"));
+    const dbPath = join(dir, "novel.db");
+    const promptPath = join(dir, "prompt.yaml");
+    try {
+      await writeFile(promptPath, PROMPT_YAML, "utf8");
+      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "model",
+        "create",
+        "--vendorModelId",
+        "claude-3-5-sonnet",
+        "--db",
+        dbPath,
+      ]);
+
+      const { projectId, sessionId } = await setupSession(dbPath);
+      runNm([
+        "message",
+        "append",
+        "--session",
+        sessionId,
+        "--role",
+        "user",
+        "--content",
+        "claude path",
+        "--db",
+        dbPath,
+      ]);
+
+      const render = runNm([
+        "prompt",
+        "render",
+        "--path",
+        promptPath,
+        "--tokens",
+        "--model",
+        "openai/claude-3-5-sonnet",
+        "--project",
+        projectId,
+        "--session",
+        sessionId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(render.status, 0, render.stderr);
+
+      const tokens = parseTokenJsonLine(render.stderr);
+      assert.ok(tokens.tokenCount > 0);
+      assert.equal(tokens.counter, "claude");
+      assert.notEqual(tokens.counter, "tiktoken");
+      assert.notEqual(tokens.counter, "heuristic");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -6,14 +6,15 @@
 
 import { readFile } from "node:fs/promises";
 import {
+  applyRegexChannelForLlm,
   buildPromptLlmInput,
+  countPromptLlmInput,
   formatPromptLlmInputForCli,
   loadPromptBlocksFromYaml,
   parseApplicationModelId,
   serializePromptLlmInput,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
-import { applyActiveRegexChannel } from "../regex/apply-channel.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runPrompt(
@@ -25,7 +26,6 @@ export async function runPrompt(
     | "state"
     | "regexConfig"
     | "tokenCounters"
-    | "providerModels"
   >,
   subcommand: string,
   args: readonly string[],
@@ -49,12 +49,11 @@ export async function runPrompt(
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const allMessages = await rt.messages.listBySession(sessionId);
   const activeGroupId = await rt.state.getCurrentRegexGroupId();
-  const messages = await applyActiveRegexChannel(
+  const messages = await applyRegexChannelForLlm(
     rt.regexConfig,
     activeGroupId,
     allMessages,
     allMessages.filter((m) => !m.hidden),
-    "llm",
   );
   const wt = rt.worktree({ kind: "session", projectId, sessionId });
   const [worktreeDisplay, filetreeDisplay] = await Promise.all([
@@ -70,35 +69,50 @@ export async function runPrompt(
   }
 
   if (flags.get("tokens") === true) {
-    const serialized = serializePromptLlmInput(input);
     const modelFlag = flags.get("model");
-    const modelId = typeof modelFlag === "string" ? modelFlag : null;
-
-    let counter = rt.tokenCounters.heuristic;
-    if (modelId != null) {
-      try {
-        const { providerId, vendorModelId } = parseApplicationModelId(modelId);
-        const saved = await rt.providerModels.savedList(providerId);
-        if (!saved.some((m) => m.vendorModelId === vendorModelId)) {
-          console.error(
-            `warning: model ${modelId} not saved; using heuristic counter`,
-          );
-        } else {
-          counter = await rt.tokenCounters.forApplicationModel(modelId);
-        }
-      } catch {
-        console.error(
-          `warning: invalid model id ${modelId}; using heuristic counter`,
-        );
-      }
+    let applicationModelId: string | undefined;
+    if (typeof modelFlag === "string") {
+      applicationModelId = modelFlag;
+    } else {
+      applicationModelId = (await rt.state.getCurrentModelId()) ?? undefined;
     }
 
-    const tokenCount = counter.countText(serialized);
+    if (applicationModelId == null) {
+      const serialized = serializePromptLlmInput(input);
+      const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
+      console.error(
+        JSON.stringify({
+          tokenCount,
+          model: null,
+          counter: "heuristic",
+          estimated: true,
+          tokenizerFamily: "heuristic",
+        }),
+      );
+      return;
+    }
+
+    try {
+      parseApplicationModelId(applicationModelId);
+    } catch {
+      console.error(
+        `warning: invalid model id ${applicationModelId}; using heuristic counter`,
+      );
+    }
+
+    const result = await countPromptLlmInput({
+      input,
+      applicationModelId,
+      registry: rt.tokenCounters,
+    });
+
     console.error(
       JSON.stringify({
-        tokenCount,
-        model: modelId,
-        counter: counter.kind,
+        tokenCount: result.tokenCount,
+        model: applicationModelId,
+        counter: result.counterKind,
+        estimated: result.estimated,
+        tokenizerFamily: result.tokenizerFamily,
       }),
     );
   }

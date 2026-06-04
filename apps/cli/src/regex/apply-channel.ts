@@ -5,6 +5,7 @@
  */
 
 import {
+  applyRegexChannelForLlm,
   applyRegexChannelToMessages,
   depthByMessageId,
   listVisibleForDepth,
@@ -24,6 +25,14 @@ export async function applyActiveRegexChannel(
   visibleMessages: readonly ChatMessage[],
   channel: RegexChannel,
 ): Promise<ChatMessage[]> {
+  if (channel === "llm") {
+    return applyRegexChannelForLlm(
+      config,
+      activeGroupId,
+      allSessionMessages,
+      visibleMessages,
+    );
+  }
   const rules = await resolveActiveCompiledRules(config, activeGroupId);
   if (rules.length === 0) {
     return [...visibleMessages];
