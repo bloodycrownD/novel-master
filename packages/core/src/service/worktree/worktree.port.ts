@@ -12,6 +12,13 @@ import type {
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
 
+/** Single materialized worktree snapshot: list rows plus macro display strings. */
+export interface WorktreeMaterialized {
+  readonly listRows: readonly WorktreeListRow[];
+  readonly worktreeDisplay: string;
+  readonly filetreeDisplay: string;
+}
+
 /** Worktree configuration and display operations for one VFS scope. */
 export interface WorktreeService {
   readonly scope: WorktreeScope;
@@ -21,6 +28,12 @@ export interface WorktreeService {
   getDirRule(logicalPath: string): Promise<WorktreeDirRule | undefined>;
 
   setFileRule(input: SetFileRuleInput): Promise<void>;
+
+  /**
+   * Materializes list rows and macro strings in one metadata-first DFS.
+   * Display blocks lazily read file content only for `full` / `header` files.
+   */
+  materialize(): Promise<WorktreeMaterialized>;
 
   /** Full tree listing rows (without TSV header). */
   buildListRows(): Promise<WorktreeListRow[]>;

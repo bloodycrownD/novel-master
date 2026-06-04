@@ -4,6 +4,7 @@
  * @module service/prompt/impl/session-macro-cache.service
  */
 
+import type { WorktreeListRow } from "@/domain/worktree/model/worktree-types.js";
 import type {
   SessionMacroCache,
   SessionMacroSnapshot,
@@ -26,12 +27,14 @@ export class DefaultSessionMacroCache implements SessionMacroCache {
     render: () => Promise<{
       readonly worktreeDisplay: string;
       readonly filetreeDisplay: string;
+      readonly listRows: readonly WorktreeListRow[];
     }>,
   ): Promise<SessionMacroSnapshot> {
-    const { worktreeDisplay, filetreeDisplay } = await render();
+    const { worktreeDisplay, filetreeDisplay, listRows } = await render();
     const snapshot: SessionMacroSnapshot = {
       worktreeDisplay,
       filetreeDisplay,
+      listRows,
       refreshedAtMs: Date.now(),
     };
     this.store.set(cacheKey(projectId, sessionId), snapshot);

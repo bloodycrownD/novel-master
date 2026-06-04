@@ -62,11 +62,12 @@ describe("event orchestrator (DAG)", () => {
       } as any,
       worktree: () =>
         ({
-          async renderDisplay() {
-            return "worktree";
-          },
-          async renderFileTree() {
-            return "filetree";
+          async materialize() {
+            return {
+              worktreeDisplay: "worktree",
+              filetreeDisplay: "filetree",
+              listRows: [],
+            };
           },
         }) as any,
       createSession: () =>

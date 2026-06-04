@@ -227,7 +227,10 @@ export {
 } from "./domain/worktree/logic/front-matter.js";
 export { replaceVfsSubtree } from "./domain/vfs/logic/vfs-tree-copy.js";
 export { createWorktreeService } from "./service/worktree/create-worktree-service.js";
-export type { WorktreeService } from "./service/worktree/worktree.port.js";
+export type {
+  WorktreeService,
+  WorktreeMaterialized,
+} from "./service/worktree/worktree.port.js";
 export { createTemplatePullService } from "./service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "./service/template/template-pull.port.js";
 

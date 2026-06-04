@@ -23,11 +23,5 @@ export async function runRefreshMacrosAction(
     projectId,
     sessionId,
   });
-  await deps.macroCache.refresh(projectId, sessionId, async () => {
-    const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-      wt.renderDisplay(),
-      wt.renderFileTree(),
-    ]);
-    return { worktreeDisplay, filetreeDisplay };
-  });
+  await deps.macroCache.refresh(projectId, sessionId, () => wt.materialize());
 }
