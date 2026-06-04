@@ -11,9 +11,31 @@ import type { TokenizerFamily } from "../ports/token-counter.port.js";
 
 export type TokenizerRuntime = "node" | "react-native";
 
+/** Set by Mobile `polyfills` before any tokenizer use (Hermes has no `node:fs`). */
+export const NM_TOKENIZER_LOADER_KEY = "__NM_TOKENIZER_LOADER__";
+
 export interface TokenizerLoader {
   readJson(relativePath: string): ArrayBuffer;
   readModel(relativePath: string): string;
+}
+
+function injectedLoader(): TokenizerLoader | undefined {
+  const g = globalThis as Record<string, unknown>;
+  const loader = g[NM_TOKENIZER_LOADER_KEY];
+  if (
+    loader != null &&
+    typeof loader === "object" &&
+    typeof (loader as TokenizerLoader).readJson === "function" &&
+    typeof (loader as TokenizerLoader).readModel === "function"
+  ) {
+    return loader as TokenizerLoader;
+  }
+  return undefined;
+}
+
+/** Active loader: RN injection when present, otherwise Node filesystem. */
+export function getTokenizerLoader(): TokenizerLoader {
+  return injectedLoader() ?? createNodeTokenizerLoader();
 }
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -27,11 +49,7 @@ function assetsRoot(): string {
   return join(corePackageRoot(), "assets/tokenizers");
 }
 
-/** Node loader — reads from `packages/core/assets/tokenizers`. */
-export function createTokenizerLoader(runtime: "node"): TokenizerLoader;
-/** RN loader — same paths; Metro resolves bundled assets via `readModel` overrides. */
-export function createTokenizerLoader(runtime: "react-native"): TokenizerLoader;
-export function createTokenizerLoader(_runtime: TokenizerRuntime): TokenizerLoader {
+function createNodeTokenizerLoader(): TokenizerLoader {
   const root = assetsRoot();
   return {
     readJson(relativePath: string): ArrayBuffer {
@@ -42,6 +60,23 @@ export function createTokenizerLoader(_runtime: TokenizerRuntime): TokenizerLoad
       return join(root, relativePath);
     },
   };
+}
+
+/** Node loader — reads from `packages/core/assets/tokenizers`. */
+export function createTokenizerLoader(runtime: "node"): TokenizerLoader;
+/** RN loader — requires {@link NM_TOKENIZER_LOADER_KEY} injection (see Mobile polyfills). */
+export function createTokenizerLoader(runtime: "react-native"): TokenizerLoader;
+export function createTokenizerLoader(runtime: TokenizerRuntime): TokenizerLoader {
+  if (runtime === "react-native") {
+    const injected = injectedLoader();
+    if (injected == null) {
+      throw new Error(
+        "React Native tokenizer loader not installed; set globalThis.__NM_TOKENIZER_LOADER__ in polyfills",
+      );
+    }
+    return injected;
+  }
+  return createNodeTokenizerLoader();
 }
 
 /** Relative asset paths per tokenizer family (ST parity). */

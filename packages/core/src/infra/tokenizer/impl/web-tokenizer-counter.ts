@@ -14,7 +14,7 @@ import {
   type OpenAiStyleMessage,
 } from "../logic/count-openai-style-message.js";
 import {
-  createTokenizerLoader,
+  getTokenizerLoader,
   tokenizerAssetPaths,
 } from "./create-tokenizer-loader.js";
 import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./heuristic-token-counter.js";
@@ -43,7 +43,7 @@ export class WebTokenizerCounter implements TokenCounter {
       this.loadError = true;
       return null;
     }
-    const loader = createTokenizerLoader("node");
+    const loader = getTokenizerLoader();
     try {
       const primary = loader.readJson(paths.primary);
       this.instance = await Tokenizer.fromJSON(primary);

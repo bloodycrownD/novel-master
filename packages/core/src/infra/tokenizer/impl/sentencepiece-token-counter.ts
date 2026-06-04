@@ -9,7 +9,7 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
 import type { TokenCounter, TokenizerFamily } from "../ports/token-counter.port.js";
 import {
-  createTokenizerLoader,
+  getTokenizerLoader,
   tokenizerAssetPaths,
 } from "./create-tokenizer-loader.js";
 import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./heuristic-token-counter.js";
@@ -44,7 +44,7 @@ export class SentencePieceTokenCounter implements TokenCounter {
       return null;
     }
     try {
-      const loader = createTokenizerLoader("node");
+      const loader = getTokenizerLoader();
       const proc = new SentencePieceProcessor();
       await proc.load(loader.readModel(paths.primary));
       this.processor = proc;

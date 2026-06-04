@@ -438,6 +438,9 @@ export {
   type CreateDefaultTokenCounterRegistryDeps,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
+  getTokenizerLoader,
+  NM_TOKENIZER_LOADER_KEY,
+  type TokenizerLoader,
 } from "./infra/tokenizer/index.js";
 export {
   readTokenCounterModeFromPreferences,
