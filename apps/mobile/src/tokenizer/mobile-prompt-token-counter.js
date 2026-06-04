@@ -2,7 +2,7 @@
  * React Native prompt token counter (M1).
  *
  * Hermes cannot run @agnai/web-tokenizers or @agnai/sentencepiece-js (Node fs/url/WASM).
- * GPT families use js-tiktoken (Metro shim). WEB/SP families delegate to Android
+ * GPT families lazy-load js-tiktoken on first use (Metro shim). WEB/SP delegate to Android
  * NovelMasterTokenizer when available; otherwise heuristic + estimated.
  */
 import {
@@ -13,8 +13,17 @@ import {
   CHARACTERS_PER_TOKEN_RATIO,
   NM_PROMPT_TOKEN_COUNTER_KEY,
 } from '@novel-master/core';
-import {encoding_for_model} from 'tiktoken';
 import {countPromptViaNative, isNativeTokenizerAvailable} from './native-tokenizer';
+
+/** @type {typeof import('tiktoken') | null} */
+let tiktokenModule = null;
+
+async function getTiktoken() {
+  if (tiktokenModule == null) {
+    tiktokenModule = await import('tiktoken');
+  }
+  return tiktokenModule;
+}
 
 /** WEB JSON families — M1 native on Android. */
 const WEB_FAMILIES = new Set([
@@ -34,7 +43,8 @@ function heuristicCount(text) {
   return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
 }
 
-function countTiktoken(serialized, vendorModelId) {
+async function countTiktoken(serialized, vendorModelId) {
+  const {encoding_for_model} = await getTiktoken();
   const model = mapVendorModelIdToTiktokenModel(vendorModelId);
   const enc = encoding_for_model(model);
   try {

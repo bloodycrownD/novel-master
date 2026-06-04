@@ -41,12 +41,16 @@ jest.mock('@novel-master/core', () => ({
   serializePromptLlmInput: () => '',
 }));
 
-jest.mock('tiktoken', () => ({
-  encoding_for_model: () => ({
-    encode: () => [1, 2, 3],
-    free: () => {},
+jest.mock(
+  'tiktoken',
+  () => ({
+    encoding_for_model: () => ({
+      encode: () => [1, 2, 3],
+      free: () => {},
+    }),
   }),
-}));
+  {virtual: true},
+);
 
 describe('mobile-prompt-token-counter', () => {
   beforeEach(() => {
