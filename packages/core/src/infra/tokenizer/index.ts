@@ -16,9 +16,7 @@ export type {
 export type { TokenizerOverride } from "./logic/resolve-tokenizer-family.js";
 export { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./impl/heuristic-token-counter.js";
 export { TiktokenTokenCounter, clearTiktokenEncodingCache } from "./impl/tiktoken-token-counter.js";
-export { ClaudeWebTokenCounter } from "./impl/web-tokenizer-counter.js";
-export { WebTokenizerCounter } from "./impl/web-tokenizer-counter.js";
-export { SentencePieceTokenCounter } from "./impl/sentencepiece-token-counter.js";
+/** Node-only counters — not exported here (avoid Metro pulling `@agnai/sentencepiece-js`). */
 export {
   createDefaultTokenCounterRegistry,
   resetTiktokenLoadFailedFlag,
@@ -40,8 +38,10 @@ export {
 export {
   countPromptLlmInput,
   formatPromptTokenUsageLabel,
+  NM_PROMPT_TOKEN_COUNTER_KEY,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
+  type PromptTokenCounterBridge,
 } from "./logic/count-prompt-llm-input.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export {

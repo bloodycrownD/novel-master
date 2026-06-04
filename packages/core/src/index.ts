@@ -428,6 +428,7 @@ export {
   countPromptLlmInput,
   formatPromptTokenUsageLabel,
   resolveTokenizerFamily,
+  tokenizerAssetPaths,
   resolveContextWindowTokens,
   resolveContextWindowTokensOrDefault,
   type TokenCounter,
@@ -440,7 +441,9 @@ export {
   type PromptTokenCountResult,
   getTokenizerLoader,
   NM_TOKENIZER_LOADER_KEY,
+  NM_PROMPT_TOKEN_COUNTER_KEY,
   type TokenizerLoader,
+  type PromptTokenCounterBridge,
 } from "./infra/tokenizer/index.js";
 export {
   readTokenCounterModeFromPreferences,

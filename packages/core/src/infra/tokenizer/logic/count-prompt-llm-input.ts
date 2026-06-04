@@ -1,5 +1,5 @@
 /**
- * Unified prompt token count — single product entry for CLI, Mobile, and compaction.
+ * Unified prompt token count — delegates to platform bridge (Mobile / CLI) or Node impl.
  *
  * @module infra/tokenizer/logic/count-prompt-llm-input
  */
@@ -8,148 +8,80 @@ import { parseApplicationModelId } from "@/domain/provider/logic/application-mod
 import type { PromptLlmInput } from "@/service/prompt/render-prompt.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
-import {
-  countOpenAiStyleMessages,
-  wrapSerializedPromptAsSystemMessage,
-} from "./count-openai-style-message.js";
-import {
-  resolveTokenizerFamily,
-  mapVendorModelIdToTiktokenModel,
-  type TokenizerOverride,
-} from "./resolve-tokenizer-family.js";
+import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
+import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
-import { HeuristicTokenCounter } from "../impl/heuristic-token-counter.js";
-import { countWebFamilyPrompt } from "../impl/web-tokenizer-counter.js";
-import { countSentencePieceFamilyPrompt } from "../impl/sentencepiece-token-counter.js";
-import { encoding_for_model, type Tiktoken } from "tiktoken";
+/** Installed by Mobile polyfills or CLI before counting (avoids `@agnai/sentencepiece-js` on RN). */
+export const NM_PROMPT_TOKEN_COUNTER_KEY = "__NM_PROMPT_TOKEN_COUNTER__";
 
 export interface CountPromptLlmInputParams {
   readonly input: PromptLlmInput;
   readonly applicationModelId: string;
   readonly registry: TokenCounterRegistry;
-  /** Default `auto` — only vendorModelId + registry override. */
   readonly tokenizerOverride?: TokenizerOverride;
 }
 
 export interface PromptTokenCountResult {
   readonly tokenCount: number;
   readonly counterKind: TokenCounterKind;
-  /** True when heuristic or tokenizer load failed. */
   readonly estimated: boolean;
   readonly applicationModelId: string;
   readonly vendorModelId: string;
   readonly tokenizerFamily: TokenizerFamily;
 }
 
-const WEB_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "claude",
-  "llama3",
-  "qwen2",
-  "command-r",
-  "command-a",
-  "nemo",
-  "deepseek",
-]);
+/** Platform implements full model-aware counting without Node-only deps. */
+export interface PromptTokenCounterBridge {
+  countPromptLlmInput(
+    params: CountPromptLlmInputParams,
+  ): Promise<PromptTokenCountResult>;
+}
 
-const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
-  "llama",
-  "mistral",
-  "yi",
-  "gemma",
-  "jamba",
-]);
+function injectedPromptTokenCounter(): PromptTokenCounterBridge | undefined {
+  const g = globalThis as Record<string, unknown>;
+  const bridge = g[NM_PROMPT_TOKEN_COUNTER_KEY];
+  if (
+    bridge != null &&
+    typeof bridge === "object" &&
+    typeof (bridge as PromptTokenCounterBridge).countPromptLlmInput === "function"
+  ) {
+    return bridge as PromptTokenCounterBridge;
+  }
+  return undefined;
+}
 
 /**
- * Counts tokens for a full {@link PromptLlmInput} using model-aware tokenizer routing.
+ * Counts tokens for a full {@link PromptLlmInput}.
+ * RN always uses {@link PromptTokenCounterBridge}; Node falls back to dynamic import when unset.
  */
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { input, applicationModelId, registry } = params;
-  const { vendorModelId } = parseApplicationModelId(applicationModelId);
-  const override =
-    params.tokenizerOverride ??
-    (await registry.getTokenizerOverride?.()) ??
-    "auto";
-  const family = resolveTokenizerFamily(vendorModelId, override);
-  const serialized = serializePromptLlmInput(input);
-
-  let tokenCount: number;
-  let counterKind: TokenCounterKind;
-  let estimated = false;
-
-  try {
-    if (family === "heuristic") {
-      tokenCount = registry.heuristic.countText(serialized);
-      counterKind = "heuristic";
-      estimated = true;
-    } else if (family === "tiktoken" || family === "gpt2") {
-      const counter = registry.forVendorModel(vendorModelId);
-      const tiktokenModel = mapVendorModelIdToTiktokenModel(vendorModelId);
-      let encoding: Tiktoken;
-      try {
-        encoding = encoding_for_model(
-          tiktokenModel as Parameters<typeof encoding_for_model>[0],
-        );
-      } catch {
-        tokenCount = registry.heuristic.countText(serialized);
-        counterKind = "heuristic";
-        estimated = true;
-        return result(applicationModelId, vendorModelId, family, tokenCount, counterKind, estimated);
-      }
-      tokenCount = countOpenAiStyleMessages(
-        encoding,
-        [wrapSerializedPromptAsSystemMessage(serialized)],
-        tiktokenModel,
-      );
-      encoding.free();
-      counterKind = counter.kind;
-    } else if (WEB_FAMILIES.has(family)) {
-      const web = await countWebFamilyPrompt(family, serialized);
-      tokenCount = web.count;
-      counterKind = family;
-      estimated = web.estimated;
-    } else if (SP_FAMILIES.has(family)) {
-      const sp = await countSentencePieceFamilyPrompt(family, serialized);
-      tokenCount = sp.count;
-      counterKind = family;
-      estimated = sp.estimated;
-    } else {
-      tokenCount = registry.heuristic.countText(serialized);
-      counterKind = "heuristic";
-      estimated = true;
-    }
-  } catch {
-    tokenCount = new HeuristicTokenCounter().countText(serialized);
-    counterKind = "heuristic";
-    estimated = true;
+  const bridge = injectedPromptTokenCounter();
+  if (bridge != null) {
+    return bridge.countPromptLlmInput(params);
   }
 
-  return result(
-    applicationModelId,
-    vendorModelId,
-    family,
-    tokenCount,
-    counterKind,
-    estimated,
-  );
+  const { countPromptLlmInputNode } = await import("./count-prompt-llm-input-node.js");
+  return countPromptLlmInputNode(params);
 }
 
-function result(
-  applicationModelId: string,
-  vendorModelId: string,
-  tokenizerFamily: TokenizerFamily,
-  tokenCount: number,
-  counterKind: TokenCounterKind,
-  estimated: boolean,
-): PromptTokenCountResult {
+/** Minimal fallback when bridge missing and dynamic import fails (tests). */
+export async function countPromptLlmInputHeuristicOnly(
+  params: CountPromptLlmInputParams,
+): Promise<PromptTokenCountResult> {
+  const { applicationModelId, registry, input } = params;
+  const { vendorModelId } = parseApplicationModelId(applicationModelId);
+  const family = resolveTokenizerFamily(vendorModelId, "auto");
+  const serialized = serializePromptLlmInput(input);
+  const tokenCount = registry.heuristic.countText(serialized);
   return {
     tokenCount,
-    counterKind,
-    estimated,
+    counterKind: "heuristic",
+    estimated: true,
     applicationModelId,
     vendorModelId,
-    tokenizerFamily,
+    tokenizerFamily: family,
   };
 }
 

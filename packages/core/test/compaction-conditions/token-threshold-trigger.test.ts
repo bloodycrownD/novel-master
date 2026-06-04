@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
-import { installNodeTestTokenizerLoader } from "../infra/tokenizer/install-node-test-tokenizer-loader.js";
+import {
+  installNodeTestPromptTokenCounter,
+  installNodeTestTokenizerLoader,
+} from "../infra/tokenizer/install-node-test-tokenizer-loader.js";
 import { TokenThresholdConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-threshold.trigger.js";
 import {
   InMemoryAgentSession,
@@ -17,8 +20,9 @@ const promptInput: PromptLlmInput = {
 };
 
 describe("TokenThresholdConditionTrigger", () => {
-  before(() => {
+  before(async () => {
     installNodeTestTokenizerLoader();
+    await installNodeTestPromptTokenCounter();
   });
 
   it("fires when prompt tokens exceed threshold", async () => {

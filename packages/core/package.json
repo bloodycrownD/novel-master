@@ -21,6 +21,10 @@
     "./front-matter": {
       "types": "./dist/domain/worktree/logic/front-matter.d.ts",
       "import": "./dist/domain/worktree/logic/front-matter.js"
+    },
+    "./tokenizer-node": {
+      "types": "./dist/infra/tokenizer/logic/count-prompt-llm-input-node.d.ts",
+      "import": "./dist/infra/tokenizer/logic/count-prompt-llm-input-node.js"
     }
   },
   "scripts": {

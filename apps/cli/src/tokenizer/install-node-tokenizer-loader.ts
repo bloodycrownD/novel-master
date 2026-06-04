@@ -30,8 +30,10 @@ function createNodeTokenizerLoader(): TokenizerLoader {
   };
 }
 
-/** Call once before any `countPromptLlmInput` / web-tokenizer use on Node. */
+/** Call once before any `countPromptLlmInput` on Node. */
 export function installNodeTokenizerLoader(): void {
   (globalThis as Record<string, unknown>)[NM_TOKENIZER_LOADER_KEY] =
     createNodeTokenizerLoader();
 }
+
+export { installNodePromptTokenCounter } from "./install-node-prompt-token-counter.js";

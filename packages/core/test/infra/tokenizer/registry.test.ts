@@ -6,7 +6,6 @@ import {
   resolveTokenizerFamily,
 } from "../../../src/infra/tokenizer/index.js";
 import { TiktokenTokenCounter } from "../../../src/infra/tokenizer/impl/tiktoken-token-counter.js";
-import { ClaudeWebTokenCounter } from "../../../src/infra/tokenizer/impl/web-tokenizer-counter.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
 describe("TokenCounterRegistry", () => {
@@ -28,18 +27,18 @@ describe("TokenCounterRegistry", () => {
     assert.ok(counter instanceof TiktokenTokenCounter);
   });
 
-  it("R3: openai protocol + claude model → claude counter", async () => {
+  it("R3: claude model → heuristic registry (counting via PromptTokenCounterBridge)", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel(
       "openai/claude-3-5-sonnet-20241022",
     );
-    assert.ok(counter instanceof ClaudeWebTokenCounter);
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("gemini protocol + gemini model → gemma sentencepiece counter kind", async () => {
+  it("gemini model → heuristic registry (SP counting is platform bridge)", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel("gemini/gemini-2.0-flash");
-    assert.equal(counter.kind, "gemma");
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
   it("unsaved model still routes by vendor model id", async () => {

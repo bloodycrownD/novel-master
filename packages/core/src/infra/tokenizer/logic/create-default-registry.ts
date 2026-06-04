@@ -8,9 +8,7 @@ import { parseApplicationModelId } from "@/domain/provider/logic/application-mod
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { HeuristicTokenCounter } from "../impl/heuristic-token-counter.js";
 import { TiktokenTokenCounter } from "../impl/tiktoken-token-counter.js";
-import { ClaudeWebTokenCounter } from "../impl/web-tokenizer-counter.js";
-import { WebTokenizerCounter } from "../impl/web-tokenizer-counter.js";
-import { SentencePieceTokenCounter } from "../impl/sentencepiece-token-counter.js";
+/** Web / SentencePiece counters are Node-only; RN uses {@link PromptTokenCounterBridge}. */
 import type { TokenCounter } from "../ports/token-counter.port.js";
 import type {
   ForVendorModelOptions,
@@ -94,27 +92,21 @@ class DefaultTokenCounterRegistry implements TokenCounterRegistry {
         return this.heuristic;
       }
     }
-    if (family === "claude") {
-      return new ClaudeWebTokenCounter();
-    }
     if (
+      family === "claude" ||
       family === "llama3" ||
       family === "qwen2" ||
       family === "command-r" ||
       family === "command-a" ||
       family === "nemo" ||
-      family === "deepseek"
-    ) {
-      return new WebTokenizerCounter(family);
-    }
-    if (
+      family === "deepseek" ||
       family === "llama" ||
       family === "mistral" ||
       family === "yi" ||
       family === "gemma" ||
       family === "jamba"
     ) {
-      return new SentencePieceTokenCounter(family);
+      return this.heuristic;
     }
     return this.heuristic;
   }

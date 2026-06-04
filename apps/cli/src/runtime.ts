@@ -6,7 +6,10 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { installNodeTokenizerLoader } from "./tokenizer/install-node-tokenizer-loader.js";
+import {
+  installNodeTokenizerLoader,
+  installNodePromptTokenCounter,
+} from "./tokenizer/install-node-tokenizer-loader.js";
 import {
   bootstrapNovelMaster,
   createAgentRegistryService,
@@ -129,6 +132,7 @@ export async function createNovelMasterRuntime(
   });
   await bootstrapNovelMaster(conn);
   installNodeTokenizerLoader();
+  await installNodePromptTokenCounter();
 
   const state = createPersistentState(conn);
   const regexConfig = createRegexConfigService(conn, state);

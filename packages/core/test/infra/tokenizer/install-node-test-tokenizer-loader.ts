@@ -27,3 +27,16 @@ export function installNodeTestTokenizerLoader(): void {
   };
   (globalThis as Record<string, unknown>)[NM_TOKENIZER_LOADER_KEY] = loader;
 }
+
+/** Registers Node prompt counter bridge for tests using `@agnai/*`. */
+export async function installNodeTestPromptTokenCounter(): Promise<void> {
+  const { countPromptLlmInputNode } = await import(
+    "../../../src/infra/tokenizer/logic/count-prompt-llm-input-node.js"
+  );
+  const { NM_PROMPT_TOKEN_COUNTER_KEY } = await import(
+    "../../../src/infra/tokenizer/logic/count-prompt-llm-input.js",
+  );
+  (globalThis as Record<string, unknown>)[NM_PROMPT_TOKEN_COUNTER_KEY] = {
+    countPromptLlmInput: countPromptLlmInputNode,
+  };
+}

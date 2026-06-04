@@ -82,6 +82,10 @@ function resolveZodModule(moduleName) {
 const metroBlockList = [
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]node-tokenizer-loader\.js$/,
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]create-tokenizer-loader\.js$/,
+  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]sentencepiece-token-counter\.js$/,
+  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]web-tokenizer-counter\.js$/,
+  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]logic[\\/]count-prompt-llm-input-node\.js$/,
+  /[\\/]node_modules[\\/]@agnai[\\/]sentencepiece-js[\\/]/,
 ];
 
 /** @type {import('@react-native/metro-config').MetroConfig} */
