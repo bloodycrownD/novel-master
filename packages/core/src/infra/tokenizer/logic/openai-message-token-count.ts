@@ -7,7 +7,7 @@
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
 import type { Tiktoken } from "tiktoken";
-import { isGpt0301TiktokenModel } from "./tiktoken-model-map.js";
+import { isGpt0301TiktokenModel } from "./resolve-tokenizer-family.js";
 
 /**
  * Counts tokens for visible messages using OpenAI chat billing overhead.

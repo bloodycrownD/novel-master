@@ -8,7 +8,7 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { encoding_for_model, type Tiktoken } from "tiktoken";
 import type { TokenCounter } from "../ports/token-counter.port.js";
 import { countOpenAiMessages } from "../logic/openai-message-token-count.js";
-import { mapVendorModelIdToTiktokenModel } from "../logic/tiktoken-model-map.js";
+import { mapVendorModelIdToTiktokenModel } from "../logic/resolve-tokenizer-family.js";
 
 const encodingCache = new Map<string, Tiktoken>();
 

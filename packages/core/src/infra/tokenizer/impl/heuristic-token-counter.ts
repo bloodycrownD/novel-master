@@ -1,5 +1,5 @@
 /**
- * Heuristic token counter — chars / 4 (compaction fallback).
+ * Heuristic token counter — SillyTavern CHARACTERS_PER_TOKEN_RATIO fallback.
  *
  * @module infra/tokenizer/impl/heuristic-token-counter
  */
@@ -8,12 +8,15 @@ import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
 import type { TokenCounter } from "../ports/token-counter.port.js";
 
-/** `Math.floor(charLength / 4)` for text and message bodies. */
+/** Matches SillyTavern `CHARACTERS_PER_TOKEN_RATIO`. */
+export const CHARACTERS_PER_TOKEN_RATIO = 3.35;
+
+/** `Math.ceil(charLength / 3.35)` for text and message bodies. */
 export class HeuristicTokenCounter implements TokenCounter {
   readonly kind = "heuristic" as const;
 
   countText(text: string): number {
-    return Math.floor(text.length / 4);
+    return Math.ceil(text.length / CHARACTERS_PER_TOKEN_RATIO);
   }
 
   countMessages(messages: readonly ChatMessage[]): number {
@@ -21,6 +24,6 @@ export class HeuristicTokenCounter implements TokenCounter {
     for (const m of messages) {
       chars += messageBodyText(m).length;
     }
-    return Math.floor(chars / 4);
+    return Math.ceil(chars / CHARACTERS_PER_TOKEN_RATIO);
   }
 }

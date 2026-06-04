@@ -95,9 +95,7 @@ export function mockSavedModelRepository(
   };
 }
 
-/** Registry deps with no providers (always heuristic via forApplicationModel). */
-export function emptyRegistryDeps(): {
-  providers: ProviderRepository;
-} {
-  return { providers: noopProviderRepo };
+/** Empty registry deps (model-name routing needs no DB). */
+export function emptyRegistryDeps(): Record<string, never> {
+  return {};
 }

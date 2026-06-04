@@ -425,11 +425,26 @@ export {
   createDefaultTokenCounterRegistry,
   HeuristicTokenCounter,
   serializePromptLlmInput,
+  countPromptLlmInput,
+  formatPromptTokenUsageLabel,
+  resolveTokenizerFamily,
+  resolveContextWindowTokens,
+  resolveContextWindowTokensOrDefault,
   type TokenCounter,
   type TokenCounterRegistry,
   type TokenCounterKind,
+  type TokenizerFamily,
+  type TokenizerOverride,
   type CreateDefaultTokenCounterRegistryDeps,
+  type CountPromptLlmInputParams,
+  type PromptTokenCountResult,
 } from "./infra/tokenizer/index.js";
+export {
+  readTokenCounterModeFromPreferences,
+  parseTokenCounterModePref,
+  TOKEN_COUNTER_MODE_PREF_KEY,
+} from "./infra/tokenizer/index.js";
+export { applyRegexChannelForLlm } from "./service/prompt/apply-regex-channel-for-llm.js";
 export { createProviderServices } from "./service/provider/create-provider-services.js";
 export type { ProviderServiceBundle } from "./service/provider/create-provider-services.js";
 export type {

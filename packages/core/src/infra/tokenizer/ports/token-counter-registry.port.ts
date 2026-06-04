@@ -6,16 +6,29 @@
 
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { TokenCounter } from "./token-counter.port.js";
+import type { TokenizerOverride } from "../logic/resolve-tokenizer-family.js";
 
-/** Resolves {@link TokenCounter} by application model id or vendor model + protocol. */
+export interface ForVendorModelOptions {
+  readonly override?: TokenizerOverride;
+}
+
+/** Resolves {@link TokenCounter} by vendor model id (protocol-independent). */
 export interface TokenCounterRegistry {
-  /** Default heuristic counter (always available). */
   readonly heuristic: TokenCounter;
+  /** Optional preference override (`tokenCounter.mode`). */
+  getTokenizerOverride?(): Promise<TokenizerOverride>;
   /**
    * Resolve counter for `applicationModelId` (`providerId/vendorModelId`).
-   * Reads provider protocol from the repository on each call; openai → tiktoken; else heuristic.
+   * Routes by vendor model name only.
    */
-  forApplicationModel(applicationModelId: string): Promise<TokenCounter>;
-  /** Tests: pass protocol explicitly without DB. */
-  forVendorModel(vendorModelId: string, protocol: LlmProtocolKind): TokenCounter;
+  forApplicationModel(
+    applicationModelId: string,
+    options?: ForVendorModelOptions,
+  ): Promise<TokenCounter>;
+  /** Primary path: vendor model id substring → tokenizer family. */
+  forVendorModel(
+    vendorModelId: string,
+    protocolOrOptions?: LlmProtocolKind | ForVendorModelOptions,
+    options?: ForVendorModelOptions,
+  ): TokenCounter;
 }
