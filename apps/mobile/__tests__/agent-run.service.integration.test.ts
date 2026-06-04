@@ -48,8 +48,11 @@ function baseRuntime(overrides: Partial<any> = {}) {
     eventBus: {subscribe: () => ({unsubscribe: () => undefined})},
     macroCache: {refresh: async () => undefined},
     worktree: () => ({
-      renderDisplay: async () => '',
-      renderFileTree: async () => '',
+      materialize: async () => ({
+        worktreeDisplay: '',
+        filetreeDisplay: '',
+        listRows: [],
+      }),
     }),
     modelRequests: {},
     compactionConditionEvaluator: undefined,

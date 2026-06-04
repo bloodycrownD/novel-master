@@ -51,6 +51,10 @@ import {
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
+import {
+  getOrRefreshSessionWorktreeSnapshot,
+  invalidateSessionWorktreeSnapshot,
+} from '../../services/worktree-snapshot.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../template/TemplatePullButton';
 import {useToast} from '../chrome/ToastHost';
@@ -111,6 +115,16 @@ export function VfsFileManager({
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
+  const invalidateSessionSnapshot = useCallback(() => {
+    if (scope.kind === 'session') {
+      invalidateSessionWorktreeSnapshot(
+        runtime,
+        scope.projectId,
+        scope.sessionId,
+      );
+    }
+  }, [runtime, scope]);
+
   useEffect(() => {
     setCurrentPath(root);
   }, [root]);
@@ -120,9 +134,19 @@ export function VfsFileManager({
   const reload = useCallback(async () => {
     setLoading(true);
     try {
+      const loadWorktreeRows = async (): Promise<WorktreeListRow[]> => {
+        if (scope.kind === 'session') {
+          const snap = await getOrRefreshSessionWorktreeSnapshot(runtime, {
+            projectId: scope.projectId,
+            sessionId: scope.sessionId,
+          });
+          return [...snap.listRows];
+        }
+        return worktree.buildListRows();
+      };
       const [listEntries, allRows, dirRule] = await Promise.all([
         vfs.list(currentPath),
-        worktree.buildListRows(),
+        loadWorktreeRows(),
         worktree.getDirRule(currentPath),
       ]);
       setWorktreeRows(allRows);
@@ -172,7 +196,12 @@ export function VfsFileManager({
     } finally {
       setLoading(false);
     }
-  }, [currentPath, vfs, worktree]);
+  }, [currentPath, vfs, worktree, scope, runtime]);
+
+  const reloadAfterMutation = useCallback(async () => {
+    invalidateSessionSnapshot();
+    await reload();
+  }, [invalidateSessionSnapshot, reload]);
 
   useEffect(() => {
     reload().catch(() => undefined);
@@ -242,12 +271,12 @@ export function VfsFileManager({
           menuRow.ruleEnabled,
         );
         showToast(next ? '目录规则已开启' : '目录规则已关闭');
-        await reload();
+        await reloadAfterMutation();
         return;
       }
       if (action === 'toggle-include' && menuRow.kind === 'file' && meta) {
         await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
-        await reload();
+        await reloadAfterMutation();
         return;
       }
       if (action === 'rename') {
@@ -275,7 +304,6 @@ export function VfsFileManager({
                 setCurrentPath(remapPathUnderDir(currentPath, menuPath, newPath));
               }
             }
-            await reload();
           },
         });
         return;
@@ -291,7 +319,7 @@ export function VfsFileManager({
               style: 'destructive',
               onPress: () => {
                 deleteVfsEntry(vfs, menuPath, {recursive: true})
-                  .then(() => reload())
+                  .then(() => reloadAfterMutation())
                   .catch(err =>
                     showToast(toastMessage('删除失败', err)),
                   );
@@ -321,7 +349,6 @@ export function VfsFileManager({
               ? `/${trimmed}`
               : `${currentPath}/${trimmed}`;
           await createVfsFile(vfs, path);
-          await reload();
         },
       });
       return;
@@ -347,7 +374,7 @@ export function VfsFileManager({
             style: 'destructive',
             onPress: () => {
               importVfsZip(runtime, scope, {confirmed: true})
-                .then(() => reload())
+                .then(() => reloadAfterMutation())
                 .then(() => showToast('ZIP 导入完成'))
                 .catch(err => showToast(toastMessage('导入失败', err)));
             },
@@ -372,7 +399,6 @@ export function VfsFileManager({
               : `${currentPath}/${trimmed}`;
           await createVfsDirectory(vfs, path);
           await worktree.setDirRule(defaultDirRuleForm(path));
-          await reload();
         },
       });
       return;
@@ -529,7 +555,7 @@ export function VfsFileManager({
         onSave={async input => {
           await worktree.setDirRule(input);
           setDirRuleInitial(input);
-          await reload();
+          await reloadAfterMutation();
         }}
       />
 
@@ -567,7 +593,7 @@ export function VfsFileManager({
                   setPrompt(null);
                   current
                     .onSubmit(promptValue)
-                    .then(() => reload())
+                    .then(() => reloadAfterMutation())
                     .catch(err =>
                       showToast(toastMessage('失败', err)),
                     );

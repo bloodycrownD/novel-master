@@ -74,6 +74,7 @@ import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
 import {createStreamBuffer} from '../../services/stream-buffer.service';
 import {rollbackToMessage} from '../../services/message-rollback.service';
+import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
@@ -534,8 +535,11 @@ export function ChatTabScreen() {
   );
 
   const bumpVfsRefresh = useCallback(() => {
+    if (projectId != null && sessionId != null) {
+      invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
+    }
     setVfsRefreshKey(key => key + 1);
-  }, []);
+  }, [runtime, projectId, sessionId]);
 
   const handleForkFromMessage = useCallback(
     async (messageId: string) => {

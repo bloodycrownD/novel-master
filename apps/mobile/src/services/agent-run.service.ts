@@ -139,13 +139,9 @@ export async function runAgentTurn(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   });
-  await runtime.macroCache.refresh(scope.projectId, scope.sessionId, async () => {
-    const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-      wt.renderDisplay(),
-      wt.renderFileTree(),
-    ]);
-    return {worktreeDisplay, filetreeDisplay};
-  });
+  await runtime.macroCache.refresh(scope.projectId, scope.sessionId, () =>
+    wt.materialize(),
+  );
 
   const runner = createAgentRunner({
     session,

@@ -10,6 +10,7 @@ import {
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {applyActiveRegexChannel} from './regex-apply-channel';
 import {resolveCurrentAgentDefinition} from './agent-run.service';
+import {getOrRefreshSessionWorktreeSnapshot} from './worktree-snapshot.service';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -41,15 +42,9 @@ export async function buildSessionPromptInput(
     visible,
     'llm',
   );
-  const wt = runtime.worktree({
-    kind: 'session',
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-  });
-  const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-    wt.renderDisplay(),
-    wt.renderFileTree(),
-  ]);
+  const snapshot = await getOrRefreshSessionWorktreeSnapshot(runtime, scope);
+  const worktreeDisplay = snapshot.worktreeDisplay;
+  const filetreeDisplay = snapshot.filetreeDisplay;
 
   const ctx: PromptRenderContext = {worktreeDisplay, filetreeDisplay, messages};
   const input = buildPromptLlmInput(resolved.prompts, ctx);

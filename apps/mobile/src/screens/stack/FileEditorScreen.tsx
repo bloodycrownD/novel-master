@@ -19,6 +19,7 @@ import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
+import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
 import {FileMarkdownPreview} from '../../components/vfs/FileMarkdownPreview';
 import {formatCharCount} from '../../hooks/useAgentStreamMetrics';
 
@@ -129,6 +130,9 @@ export function FileEditorScreen() {
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);
       setMtimeMs(refreshed.mtimeMs);
+      if (scopeKind === 'session' && projectId && sessionId) {
+        invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
+      }
       showToast('已保存');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
