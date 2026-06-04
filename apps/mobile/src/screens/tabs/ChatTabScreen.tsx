@@ -176,21 +176,34 @@ export function ChatTabScreen() {
   const canResumeWithoutInput =
     chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.role === 'user';
 
+  const refreshChatTokenLabel = useCallback(async () => {
+    if (projectId == null || sessionId == null) {
+      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
+      return;
+    }
+    setAgentMeta(prev => ({...prev, tokenLabel: '…'}));
+    try {
+      const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
+        projectId,
+        sessionId,
+      });
+      setAgentMeta(prev => ({...prev, tokenLabel}));
+    } catch {
+      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
+    }
+  }, [runtime, projectId, sessionId]);
+
   const refreshChatMeta = useCallback(async () => {
     const modelId = await runtime.state.getCurrentModelId();
     setHasWorkspaceModel(modelId != null && modelId !== '');
     try {
       const meta = await loadChatAgentMeta(runtime);
-      setAgentMeta({...meta, tokenLabel: '…'});
-      if (projectId != null && sessionId != null) {
-        const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
-          projectId,
-          sessionId,
-        });
-        setAgentMeta(prev => ({...prev, tokenLabel}));
-      } else {
-        setAgentMeta(prev => ({...prev, tokenLabel: ''}));
-      }
+      setAgentMeta(prev => ({
+        ...prev,
+        ...meta,
+        tokenLabel: prev?.tokenLabel ?? '…',
+      }));
+      void refreshChatTokenLabel();
     } catch {
       setAgentMeta({
         agentId: undefined,
@@ -200,7 +213,7 @@ export function ChatTabScreen() {
         hasDedicatedModel: false,
       });
     }
-  }, [runtime, projectId, sessionId]);
+  }, [runtime, refreshChatTokenLabel]);
 
   const reloadMessages = useCallback(async () => {
     if (sessionId == null) {
@@ -251,8 +264,8 @@ export function ChatTabScreen() {
 
   const handleMessagesChanged = useCallback(async () => {
     await reloadMessages();
-    await refreshChatMeta();
-  }, [reloadMessages, refreshChatMeta]);
+    void refreshChatTokenLabel();
+  }, [reloadMessages, refreshChatTokenLabel]);
 
   const loadOlderMessages = useCallback(async () => {
     if (sessionId == null || loadingMoreMessages || chatMessages.length === 0) {
