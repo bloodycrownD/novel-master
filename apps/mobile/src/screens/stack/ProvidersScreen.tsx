@@ -15,7 +15,6 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ProviderListItem} from '@novel-master/core';
-import {formatApplicationModelId} from '@novel-master/core';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
@@ -33,7 +32,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 interface ProviderRow extends ProviderListItem {
   savedCount: number;
-  samplingCount: number;
 }
 
 export function ProvidersScreen() {
@@ -59,22 +57,9 @@ export function ProvidersScreen() {
       const enriched: ProviderRow[] = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);
-        let samplingCount = 0;
-        for (const model of saved) {
-          const applicationModelId = formatApplicationModelId(
-            provider.id,
-            model.vendorModelId,
-          );
-          const profile =
-            await runtime.modelSamplingProfiles.getProfile(applicationModelId);
-          if (profile?.enabled && profile.params) {
-            samplingCount += 1;
-          }
-        }
         enriched.push({
           ...provider,
           savedCount: saved.length,
-          samplingCount,
         });
       }
       setRows(enriched);
@@ -89,13 +74,8 @@ export function ProvidersScreen() {
     }, [reload]),
   );
 
-  const metaLine = (row: ProviderRow) => {
-    let meta = `${row.savedCount} 个已保存模型 · apiKey: ${row.apiKeyStatus}`;
-    if (row.samplingCount > 0) {
-      meta += ` · ${row.samplingCount} 个已配采样`;
-    }
-    return meta;
-  };
+  const metaLine = (row: ProviderRow) =>
+    `${row.savedCount} 个已保存模型 · apiKey: ${row.apiKeyStatus}`;
 
   const deleteProviders = async (providerIds: string[]) => {
     for (const providerId of providerIds) {
