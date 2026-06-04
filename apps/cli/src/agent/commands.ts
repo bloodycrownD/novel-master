@@ -184,13 +184,7 @@ export async function runAgent(
       }
 
       const wt = rt.worktree({ kind: "session", projectId, sessionId });
-      await rt.macroCache.refresh(projectId, sessionId, async () => {
-        const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-          wt.renderDisplay(),
-          wt.renderFileTree(),
-        ]);
-        return { worktreeDisplay, filetreeDisplay };
-      });
+      await rt.macroCache.refresh(projectId, sessionId, () => wt.materialize());
 
       const baseRegistry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
