@@ -5,6 +5,7 @@ import React, {useMemo} from 'react';
 import {
   Dimensions,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -33,22 +34,30 @@ type Props = {
   onClose: () => void;
 };
 
-const MENU_HEIGHT = 48;
 const MENU_GAP = 8;
 const SCREEN_MARGIN = 12;
-const ITEM_MIN_WIDTH = 64;
+const ITEM_MIN_HEIGHT = 44;
+const MENU_MAX_HEIGHT_CAP = 360;
 
-/** Places the horizontal bar above or below the bubble, clamped inside the window. */
-function layoutAnchoredMenu(
+/** Vertical menu max height for small screens. */
+export function messageActionMenuMaxHeight(screenHeight: number): number {
+  return Math.min(MENU_MAX_HEIGHT_CAP, screenHeight * 0.45);
+}
+
+/** Places the vertical menu above or below the bubble, clamped inside the window. */
+export function layoutAnchoredMenu(
   anchor: MessageMenuAnchor,
   itemCount: number,
   screenWidth: number,
   screenHeight: number,
-): {left: number; top: number; width: number} {
-  const menuWidth = Math.min(
-    screenWidth - SCREEN_MARGIN * 2,
-    itemCount * ITEM_MIN_WIDTH + 16,
+): {left: number; top: number; width: number; maxHeight: number} {
+  const menuWidth = Math.min(screenWidth - SCREEN_MARGIN * 2, 280);
+  const maxHeight = messageActionMenuMaxHeight(screenHeight);
+  const estimatedHeight = Math.min(
+    maxHeight,
+    itemCount * ITEM_MIN_HEIGHT + 8,
   );
+
   const bubbleCenterX = anchor.x + anchor.width / 2;
   let left = bubbleCenterX - menuWidth / 2;
   left = Math.max(
@@ -59,17 +68,17 @@ function layoutAnchoredMenu(
   const spaceAbove = anchor.y;
   const spaceBelow = screenHeight - (anchor.y + anchor.height);
   const placeAbove =
-    spaceAbove >= MENU_HEIGHT + MENU_GAP ||
+    spaceAbove >= estimatedHeight + MENU_GAP ||
     spaceAbove >= spaceBelow;
   let top = placeAbove
-    ? anchor.y - MENU_HEIGHT - MENU_GAP
+    ? anchor.y - estimatedHeight - MENU_GAP
     : anchor.y + anchor.height + MENU_GAP;
   top = Math.max(
     SCREEN_MARGIN,
-    Math.min(top, screenHeight - MENU_HEIGHT - SCREEN_MARGIN),
+    Math.min(top, screenHeight - estimatedHeight - SCREEN_MARGIN),
   );
 
-  return {left, top, width: menuWidth};
+  return {left, top, width: menuWidth, maxHeight};
 }
 
 export function MessageActionMenu({
@@ -104,38 +113,41 @@ export function MessageActionMenu({
         {layout != null ? (
           <View
             style={[
-              styles.bar,
+              styles.menu,
               {
                 left: layout.left,
                 top: layout.top,
                 width: layout.width,
+                maxHeight: layout.maxHeight,
                 backgroundColor: tokens.surfaceElevated,
                 borderColor: tokens.border,
               },
             ]}>
-            {items.map((item, index) => (
-              <Pressable
-                key={item.action}
-                style={[
-                  styles.item,
-                  index > 0 && {
-                    borderLeftWidth: StyleSheet.hairlineWidth,
-                    borderLeftColor: tokens.border,
-                  },
-                ]}
-                onPress={() => {
-                  onClose();
-                  onSelect(item.action);
-                }}>
-                <Text
-                  style={{
-                    color: item.danger ? tokens.danger : tokens.text,
-                    fontSize: 15,
+            <ScrollView
+              bounces={false}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={items.length > 5}>
+              {items.map(item => (
+                <Pressable
+                  key={item.action}
+                  style={[
+                    styles.item,
+                    {borderBottomColor: tokens.border},
+                  ]}
+                  onPress={() => {
+                    onClose();
+                    onSelect(item.action);
                   }}>
-                  {item.label}
-                </Text>
-              </Pressable>
-            ))}
+                  <Text
+                    style={{
+                      color: item.danger ? tokens.danger : tokens.text,
+                      fontSize: 15,
+                    }}>
+                    {item.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         ) : null}
       </View>
@@ -148,20 +160,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
-  bar: {
+  menu: {
     position: 'absolute',
-    flexDirection: 'row',
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     overflow: 'hidden',
-    minHeight: MENU_HEIGHT,
   },
   item: {
-    flex: 1,
-    minHeight: MENU_HEIGHT,
-    minWidth: ITEM_MIN_WIDTH,
-    alignItems: 'center',
+    minHeight: ITEM_MIN_HEIGHT,
     justifyContent: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
