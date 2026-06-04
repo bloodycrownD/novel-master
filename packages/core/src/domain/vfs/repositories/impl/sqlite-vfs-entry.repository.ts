@@ -293,6 +293,27 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     }));
   }
 
+  async listFileMetaUnderPrefix(
+    physicalPrefix: string,
+  ): Promise<ReadonlyArray<{ path: string; mtimeMs: number }>> {
+    const base = normalizePrefix(physicalPrefix);
+    const escaped = escapeLike(base);
+    const childPattern = base === "/" ? "/%" : `${escaped}/%`;
+    const rows = await queryTemplate<{ path: string; mtime_ms: number }>(
+      this.conn,
+      this.parser,
+      `SELECT path, mtime_ms FROM vfs_entry
+       WHERE entry_kind = 'file'
+         AND (path = #{path} OR path LIKE #{childPattern} ESCAPE '\\')
+       ORDER BY path`,
+      { path: base, childPattern },
+    );
+    return rows.map((row) => ({
+      path: String(row.path),
+      mtimeMs: Number(row.mtime_ms),
+    }));
+  }
+
   async scanContents(
     pathPrefix?: string,
   ): Promise<

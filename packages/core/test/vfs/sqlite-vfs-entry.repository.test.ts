@@ -110,4 +110,25 @@ describe("SqliteVfsEntryRepository", () => {
     assert.equal(await repo.findByPath("/tree/leaf"), null);
     await conn.close();
   });
+
+  it("listFileMetaUnderPrefix returns path and mtime without content", async () => {
+    const { conn } = await openVfsTestConnection();
+    const repo = new SqliteVfsEntryRepository(conn);
+    await repo.insert("/a.txt", "alpha");
+    await repo.insert("/dir/b.txt", "beta");
+    await repo.insertDirectory("/dir");
+
+    const meta = await repo.listFileMetaUnderPrefix("/");
+    assert.equal(meta.length, 2);
+    assert.deepEqual(
+      meta.map((row) => row.path).sort(),
+      ["/a.txt", "/dir/b.txt"],
+    );
+    for (const row of meta) {
+      assert.equal(typeof row.mtimeMs, "number");
+      assert.ok(row.mtimeMs > 0);
+      assert.equal("content" in row, false);
+    }
+    await conn.close();
+  });
 });

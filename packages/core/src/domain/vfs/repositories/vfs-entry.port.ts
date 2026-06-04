@@ -38,6 +38,11 @@ export interface VfsEntryRepository {
 
   listEntriesUnderPrefix(prefix: string): Promise<VfsListEntry[]>;
 
+  /** Lists file paths and mtimes under a prefix without reading `content`. */
+  listFileMetaUnderPrefix(physicalPrefix: string): Promise<
+    ReadonlyArray<{ path: string; mtimeMs: number }>
+  >;
+
   scanContents(pathPrefix?: string): Promise<
     ReadonlyArray<{
       path: string;
