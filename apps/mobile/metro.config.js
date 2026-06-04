@@ -31,6 +31,11 @@ for (const rel of coreDistSmokeFiles) {
 }
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
+/** Node-only fallback in core; RN always uses PromptTokenCounterBridge from polyfills. */
+const nodeCountPromptStub = path.resolve(
+  __dirname,
+  'src/shims/count-prompt-llm-input-node.stub.js',
+);
 const zodCjs = path.resolve(zodRoot, 'index.cjs');
 /** markdown-it@10 pins entities@2; hoisted entities@4 lacks lib/maps/entities.json */
 const entitiesDecode = path.resolve(
@@ -78,7 +83,10 @@ function resolveZodModule(moduleName) {
   return null;
 }
 
-/** Stale dist files must not enter the RN graph (core has no Node tokenizer loader). */
+/**
+ * Block Node-only tokenizer paths and @agnai/* — RN uses js-tiktoken + heuristic (M0)
+ * or Android native bridge (M1), never web-tokenizers / sentencepiece-js in JS.
+ */
 const metroBlockList = [
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]node-tokenizer-loader\.js$/,
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]create-tokenizer-loader\.js$/,
@@ -86,6 +94,7 @@ const metroBlockList = [
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]web-tokenizer-counter\.js$/,
   /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]logic[\\/]count-prompt-llm-input-node\.js$/,
   /[\\/]node_modules[\\/]@agnai[\\/]sentencepiece-js[\\/]/,
+  /[\\/]node_modules[\\/]@agnai[\\/]web-tokenizers[\\/]/,
 ];
 
 /** @type {import('@react-native/metro-config').MetroConfig} */
@@ -102,6 +111,13 @@ const config = {
     resolverMainFields: ['react-native', 'browser', 'main'],
     unstable_conditionNames: ['require', 'react-native', 'browser'],
     resolveRequest(context, moduleName, platform) {
+      if (
+        moduleName === './count-prompt-llm-input-node.js' ||
+        moduleName.endsWith('count-prompt-llm-input-node.js')
+      ) {
+        return {type: 'sourceFile', filePath: nodeCountPromptStub};
+      }
+
       if (isTiktokenModule(moduleName)) {
         return {type: 'sourceFile', filePath: tiktokenShim};
       }

@@ -1,7 +1,8 @@
 /**
  * Installs Node filesystem tokenizer loader for CLI (core only exposes the port).
  *
- * Assets live under `apps/mobile/assets/tokenizers` (single monorepo copy).
+ * CLI maintains its own copy under `apps/cli/assets/tokenizers` (platform split from
+ * mobile/android assets — each loader resolves its own tree, no shared symlink).
  *
  * @module tokenizer/install-node-tokenizer-loader
  */
@@ -13,12 +14,12 @@ import { NM_TOKENIZER_LOADER_KEY, type TokenizerLoader } from "@novel-master/cor
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 
-function mobileTokenizerAssetsRoot(): string {
-  return join(moduleDir, "../../../mobile/assets/tokenizers");
+function cliTokenizerAssetsRoot(): string {
+  return join(moduleDir, "../../assets/tokenizers");
 }
 
 function createNodeTokenizerLoader(): TokenizerLoader {
-  const root = mobileTokenizerAssetsRoot();
+  const root = cliTokenizerAssetsRoot();
   return {
     readJson(relativePath: string): ArrayBuffer {
       const buf = readFileSync(join(root, relativePath));
