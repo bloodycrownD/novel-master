@@ -2,7 +2,8 @@
 
 > **PRD**：[prd.md](./prd.md)  
 > **父 SPEC**：[../../spec.md](../../spec.md) — 本文 **supersede** 其中「RN 加载 `@agnai/*`」「Mobile 与 Node 共用 `packages/core/assets`」「Metro shim `@agnai/*`」等章节；**保留** 族解析、`countPromptLlmInput` 类型、压缩/CLI 接线、context window 表。  
-> **分支**：`feature/model-aware-token-counting`（不新开长期分支名）。
+> **分支**：`feature/model-aware-token-counting`（不新开长期分支名）。  
+> **后续**：启动性能见 [../mobile-tokenizer-startup-perf/spec.md](../mobile-tokenizer-startup-perf/spec.md)。
 
 ---
 
