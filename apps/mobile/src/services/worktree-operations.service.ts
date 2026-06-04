@@ -9,6 +9,7 @@ import type {
   WorktreeService,
 } from '@novel-master/core';
 import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core';
+import { normalizeFillPolicyForMobile } from '../storage/fill-policy-mobile';
 
 function worktreeRootLogicalPath(_scope: VfsScope): string {
   return '/';
@@ -70,7 +71,7 @@ export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
     sortOrder: rule.sortOrder,
     headCount: rule.headCount,
     tailCount: rule.tailCount,
-    fillPolicy: rule.fillPolicy,
+    fillPolicy: normalizeFillPolicyForMobile(rule.fillPolicy),
     ruleEnabled: rule.ruleEnabled,
   };
 }

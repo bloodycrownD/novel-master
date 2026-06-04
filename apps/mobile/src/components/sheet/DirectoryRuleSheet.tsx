@@ -19,6 +19,7 @@ import {
   type SortOrder,
 } from '@novel-master/core';
 import {AppModal} from '../ui/AppModal';
+import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -41,7 +42,6 @@ const SORT_ORDERS: {value: SortOrder; label: string}[] = [
 ];
 
 const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
-  {value: 'full', label: '全文本'},
   {value: 'filename', label: '文件名'},
   {value: 'header', label: '头信息'},
   {value: 'hidden', label: '不展示'},
@@ -86,7 +86,9 @@ export function DirectoryRuleSheet({
       String(initial?.tailCount ?? DEFAULT_WORKTREE_DIR_RULE.tailCount),
     );
     setFillPolicy(
-      initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+      normalizeFillPolicyForMobile(
+        initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+      ),
     );
   }, [visible, initial, logicalPath]);
 
@@ -99,7 +101,7 @@ export function DirectoryRuleSheet({
         sortOrder,
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
-        fillPolicy,
+        fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
         ruleEnabled: true,
       });
       onClose();
