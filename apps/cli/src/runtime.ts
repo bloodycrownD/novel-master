@@ -6,6 +6,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { installNodeTokenizerLoader } from "./tokenizer/install-node-tokenizer-loader.js";
 import {
   bootstrapNovelMaster,
   createAgentRegistryService,
@@ -127,6 +128,7 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
+  installNodeTokenizerLoader();
 
   const state = createPersistentState(conn);
   const regexConfig = createRegexConfigService(conn, state);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { before, describe, it } from "node:test";
+import { installNodeTestTokenizerLoader } from "./install-node-test-tokenizer-loader.js";
 import {
   countPromptLlmInput,
   createDefaultTokenCounterRegistry,
@@ -30,6 +31,10 @@ function fixtureInput(overrides?: Partial<PromptLlmInput>): PromptLlmInput {
 }
 
 describe("countPromptLlmInput", () => {
+  before(() => {
+    installNodeTestTokenizerLoader();
+  });
+
   const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
 
   it("C1: stable count for same input and model", async () => {

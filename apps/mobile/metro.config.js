@@ -16,7 +16,7 @@ const coreDistSmokeFiles = [
   'service/events/create-event-orchestrator.js',
   'infra/tokenizer/logic/resolve-context-window.js',
   'infra/tokenizer/logic/count-prompt-llm-input.js',
-  'infra/tokenizer/impl/get-tokenizer-loader.native.js',
+  'infra/tokenizer/impl/get-tokenizer-loader.js',
   'infra/tokenizer/impl/tokenizer-loader-shared.js',
   'service/compaction-conditions/create-compaction-condition-evaluator.js',
 ];
@@ -78,10 +78,17 @@ function resolveZodModule(moduleName) {
   return null;
 }
 
+/** Stale dist files must not enter the RN graph (core has no Node tokenizer loader). */
+const metroBlockList = [
+  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]node-tokenizer-loader\.js$/,
+  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]create-tokenizer-loader\.js$/,
+];
+
 /** @type {import('@react-native/metro-config').MetroConfig} */
 const config = {
   watchFolders: [monorepoRoot],
   resolver: {
+    blockList: metroBlockList,
     assetExts: [...defaultConfig.resolver.assetExts, 'model'],
     nodeModulesPaths: [
       path.resolve(__dirname, 'node_modules'),

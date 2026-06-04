@@ -6,9 +6,7 @@
 
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 
-export type TokenizerRuntime = "node" | "react-native";
-
-/** Set by Mobile `polyfills` before any tokenizer use (Hermes has no `node:fs`). */
+/** Set by Mobile `polyfills` or CLI `installNodeTokenizerLoader` before tokenizer use. */
 export const NM_TOKENIZER_LOADER_KEY = "__NM_TOKENIZER_LOADER__";
 
 export interface TokenizerLoader {

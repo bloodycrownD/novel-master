@@ -44,12 +44,10 @@ export {
   type PromptTokenCountResult,
 } from "./logic/count-prompt-llm-input.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
-export { createTokenizerLoader } from "./impl/create-tokenizer-loader.js";
 export {
   tokenizerAssetPaths,
   NM_TOKENIZER_LOADER_KEY,
   type TokenizerLoader,
-  type TokenizerRuntime,
 } from "./impl/tokenizer-loader-shared.js";
 export { getTokenizerLoader } from "./impl/get-tokenizer-loader.js";
 export {

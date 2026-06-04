@@ -7,19 +7,19 @@ import {NM_TOKENIZER_LOADER_KEY} from '@novel-master/core';
 const resolveAssetSource =
   require('react-native/Libraries/Image/resolveAssetSource').default;
 
-const claudeJson = require('../../../../packages/core/assets/tokenizers/claude.json');
-const llama3Json = require('../../../../packages/core/assets/tokenizers/llama3.json');
-const qwen2Json = require('../../../../packages/core/assets/tokenizers/web/qwen2.json');
-const commandRJson = require('../../../../packages/core/assets/tokenizers/web/command-r.json');
-const commandAJson = require('../../../../packages/core/assets/tokenizers/web/command-a.json');
-const nemoJson = require('../../../../packages/core/assets/tokenizers/web/nemo.json');
-const deepseekJson = require('../../../../packages/core/assets/tokenizers/web/deepseek.json');
+const claudeJson = require('../../assets/tokenizers/claude.json');
+const llama3Json = require('../../assets/tokenizers/llama3.json');
+const qwen2Json = require('../../assets/tokenizers/web/qwen2.json');
+const commandRJson = require('../../assets/tokenizers/web/command-r.json');
+const commandAJson = require('../../assets/tokenizers/web/command-a.json');
+const nemoJson = require('../../assets/tokenizers/web/nemo.json');
+const deepseekJson = require('../../assets/tokenizers/web/deepseek.json');
 
-const llamaModel = require('../../../../packages/core/assets/tokenizers/llama.model');
-const mistralModel = require('../../../../packages/core/assets/tokenizers/mistral.model');
-const yiModel = require('../../../../packages/core/assets/tokenizers/yi.model');
-const gemmaModel = require('../../../../packages/core/assets/tokenizers/gemma.model');
-const jambaModel = require('../../../../packages/core/assets/tokenizers/jamba.model');
+const llamaModel = require('../../assets/tokenizers/llama.model');
+const mistralModel = require('../../assets/tokenizers/mistral.model');
+const yiModel = require('../../assets/tokenizers/yi.model');
+const gemmaModel = require('../../assets/tokenizers/gemma.model');
+const jambaModel = require('../../assets/tokenizers/jamba.model');
 
 /** @type {Record<string, object>} */
 const JSON_ASSETS = {
