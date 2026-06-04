@@ -53,6 +53,7 @@ import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {nextDefaultSessionTitle} from '../../utils/session-default-title';
+import {MessageEditModal} from '../../components/chat/MessageEditModal';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
@@ -1133,7 +1134,7 @@ export function ChatTabScreen() {
             }
           }}
         />
-        <TextPromptModal
+        <MessageEditModal
           visible={messageEditPrompt != null}
           title="编辑消息"
           label="内容"
