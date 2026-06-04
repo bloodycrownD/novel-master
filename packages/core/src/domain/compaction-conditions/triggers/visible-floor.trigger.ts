@@ -6,7 +6,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type {
-  CompactionConditionModelContext,
+  CompactionEvaluationContext,
   CompactionConditionTrigger,
 } from "../ports/compaction-condition-trigger.port.js";
 
@@ -16,7 +16,7 @@ export class VisibleFloorTrigger implements CompactionConditionTrigger {
 
   async shouldTrigger(
     session: AgentSession,
-    _modelContext: CompactionConditionModelContext,
+    _evaluation: CompactionEvaluationContext,
   ): Promise<boolean> {
     const visible = await session.list();
     return visible.length > this.visibleFloor;

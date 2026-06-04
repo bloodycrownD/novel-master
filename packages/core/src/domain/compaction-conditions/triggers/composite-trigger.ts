@@ -6,7 +6,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type {
-  CompactionConditionModelContext,
+  CompactionEvaluationContext,
   CompactionConditionTrigger,
 } from "../ports/compaction-condition-trigger.port.js";
 
@@ -16,10 +16,10 @@ export class CompositeConditionTrigger implements CompactionConditionTrigger {
 
   async shouldTrigger(
     session: AgentSession,
-    modelContext: CompactionConditionModelContext,
+    evaluation: CompactionEvaluationContext,
   ): Promise<boolean> {
     for (const trigger of this.triggers) {
-      if (await trigger.shouldTrigger(session, modelContext)) {
+      if (await trigger.shouldTrigger(session, evaluation)) {
         return true;
       }
     }

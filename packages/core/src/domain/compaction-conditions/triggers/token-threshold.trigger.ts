@@ -5,9 +5,10 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
+import { countPromptLlmInput } from "@/infra/tokenizer/logic/count-prompt-llm-input.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 import type {
-  CompactionConditionModelContext,
+  CompactionEvaluationContext,
   CompactionConditionTrigger,
 } from "../ports/compaction-condition-trigger.port.js";
 
@@ -15,11 +16,11 @@ export interface TokenThresholdTriggerOptions {
   readonly tokenThreshold: number;
   readonly tokenRatio?: number;
   readonly resolveMaxContextTokens: (
-    modelContext: CompactionConditionModelContext,
+    evaluation: CompactionEvaluationContext,
   ) => Promise<number>;
 }
 
-/** Fires when visible tokens exceed effective threshold. */
+/** Fires when full prompt tokens exceed effective threshold. */
 export class TokenThresholdConditionTrigger implements CompactionConditionTrigger {
   constructor(
     private readonly options: TokenThresholdTriggerOptions,
@@ -27,20 +28,21 @@ export class TokenThresholdConditionTrigger implements CompactionConditionTrigge
   ) {}
 
   async shouldTrigger(
-    session: AgentSession,
-    modelContext: CompactionConditionModelContext,
+    _session: AgentSession,
+    evaluation: CompactionEvaluationContext,
   ): Promise<boolean> {
     let threshold = this.options.tokenThreshold;
     if (threshold === -1) {
-      threshold = await this.options.resolveMaxContextTokens(modelContext);
+      threshold = await this.options.resolveMaxContextTokens(evaluation);
     }
     const ratio = this.options.tokenRatio ?? 1;
     const effective = Math.floor(threshold * ratio);
 
-    const visible = await session.list();
-    const counter = await this.tokenCounters.forApplicationModel(
-      modelContext.applicationModelId,
-    );
-    return counter.countMessages(visible) > effective;
+    const { tokenCount } = await countPromptLlmInput({
+      input: evaluation.promptInput,
+      applicationModelId: evaluation.modelContext.applicationModelId,
+      registry: this.tokenCounters,
+    });
+    return tokenCount > effective;
   }
 }

@@ -5,16 +5,22 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
+import type { PromptLlmInput } from "@/service/prompt/render-prompt.js";
 
 export interface CompactionConditionModelContext {
   readonly workspaceModelId: string;
   readonly applicationModelId: string;
 }
 
+export interface CompactionEvaluationContext {
+  readonly modelContext: CompactionConditionModelContext;
+  readonly promptInput: PromptLlmInput;
+}
+
 /** Returns true when this trigger slice is satisfied. */
 export interface CompactionConditionTrigger {
   shouldTrigger(
     session: AgentSession,
-    modelContext: CompactionConditionModelContext,
+    evaluation: CompactionEvaluationContext,
   ): Promise<boolean>;
 }

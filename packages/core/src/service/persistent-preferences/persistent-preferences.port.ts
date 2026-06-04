@@ -17,4 +17,8 @@ export interface PersistentPreferences {
 
   /** All entries in `nm-preferences`, sorted by key (for `nm preferences list`). */
   list(): Promise<ReadonlyArray<{ key: string; value: string }>>;
+
+  /** Raw preference value (undefined when unset). */
+  getPreference(key: string): Promise<string | undefined>;
+  setPreference(key: string, value: string): Promise<void>;
 }

@@ -25,6 +25,7 @@ import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
+import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
@@ -111,13 +112,42 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         let stepCompactionEmitted = false;
+        const macro = this.deps.macroCache.get(projectId, sessionId);
+        const promptContext = {
+          worktreeDisplay: macro?.worktreeDisplay ?? "",
+          filetreeDisplay: macro?.filetreeDisplay ?? "",
+        };
+
+        let visible = await session.list();
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+        visible = await applyLlmRegexChannelToVisible(
+          this.deps,
+          options,
+          visible,
+        );
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
+        const promptInput = buildPromptLlmInput(options.definition.prompts, {
+          ...promptContext,
+          messages: visible,
+        });
+
         if (persistMessages && this.deps.compactionConditions != null) {
           const shouldCompact =
             await this.deps.compactionConditions.shouldRequestCompaction(
               this.deps.session,
               {
-                workspaceModelId: options.workspaceModelId,
-                applicationModelId: options.applicationModelId,
+                modelContext: {
+                  workspaceModelId: options.workspaceModelId,
+                  applicationModelId: options.applicationModelId,
+                },
+                promptInput,
               },
             );
           if (signal?.aborted) {
@@ -131,8 +161,6 @@ export class DefaultAgentRunner implements AgentRunner {
                 "eventOrchestrator is required when compactionConditions are configured",
               );
             }
-            // Direct emit (awaited): hide + macro refresh complete before prompt build.
-            // Do not bus.publish here — attachToBus would run the same actions again.
             await orchestrator.emit(EVENT_SESSION_COMPACTION_REQUESTED, {
               sessionId,
               projectId,
@@ -142,42 +170,7 @@ export class DefaultAgentRunner implements AgentRunner {
           }
         }
 
-        const macro = this.deps.macroCache.get(projectId, sessionId);
-        const promptContext = {
-          worktreeDisplay: macro?.worktreeDisplay ?? "",
-          filetreeDisplay: macro?.filetreeDisplay ?? "",
-        };
-
-        let visible = await session.list();
-        if (signal?.aborted) {
-          stopReason = "cancelled";
-          break;
-        }
-        if (options.activeRegexGroupId && this.deps.regexConfig) {
-          const rules = await resolveActiveCompiledRules(
-            this.deps.regexConfig,
-            options.activeRegexGroupId,
-          );
-          if (rules.length > 0 && this.deps.listAllSessionMessages) {
-            const all = await this.deps.listAllSessionMessages();
-            const visibleSorted = listVisibleForDepth(all);
-            const depthMap = depthByMessageId(visibleSorted);
-            visible = applyRegexChannelToMessages(
-              visible,
-              rules,
-              "llm",
-              depthMap,
-            );
-            if (signal?.aborted) {
-              stopReason = "cancelled";
-              break;
-            }
-          }
-        }
-        const llmInput = buildPromptLlmInput(options.definition.prompts, {
-          ...promptContext,
-          messages: visible,
-        });
+        const llmInput = promptInput;
 
         const onStream =
           options.stream && publishRunLifecycle
@@ -351,6 +344,35 @@ export class DefaultAgentRunner implements AgentRunner {
       rounds,
     };
   }
+}
+
+async function applyLlmRegexChannelToVisible(
+  deps: DefaultAgentRunnerDeps,
+  options: AgentRunOptions,
+  visible: readonly ChatMessage[],
+): Promise<ChatMessage[]> {
+  if (!options.activeRegexGroupId || deps.regexConfig == null) {
+    return [...visible];
+  }
+  if (deps.listAllSessionMessages != null) {
+    const all = await deps.listAllSessionMessages();
+    return applyRegexChannelForLlm(
+      deps.regexConfig,
+      options.activeRegexGroupId,
+      all,
+      visible,
+    );
+  }
+  const rules = await resolveActiveCompiledRules(
+    deps.regexConfig,
+    options.activeRegexGroupId,
+  );
+  if (rules.length === 0) {
+    return [...visible];
+  }
+  const visibleSorted = listVisibleForDepth(visible);
+  const depthMap = depthByMessageId(visibleSorted);
+  return applyRegexChannelToMessages(visible, rules, "llm", depthMap);
 }
 
 function wrapStreamForBus(

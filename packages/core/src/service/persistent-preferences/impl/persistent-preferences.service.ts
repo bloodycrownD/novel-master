@@ -60,6 +60,14 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
     return entries;
   }
 
+  async getPreference(key: string): Promise<string | undefined> {
+    return this.getRaw(key);
+  }
+
+  async setPreference(key: string, value: string): Promise<void> {
+    await this.kkv.set(MODULE, key, value);
+  }
+
   private async getRaw(key: string): Promise<string | undefined> {
     try {
       return await this.kkv.get(MODULE, key);

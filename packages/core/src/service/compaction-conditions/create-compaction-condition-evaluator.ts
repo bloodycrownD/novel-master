@@ -8,15 +8,14 @@ import type { AgentSession } from "@/domain/agent/session/agent-session.port.js"
 import { CompositeConditionTrigger } from "@/domain/compaction-conditions/triggers/composite-trigger.js";
 import { VisibleFloorTrigger } from "@/domain/compaction-conditions/triggers/visible-floor.trigger.js";
 import { TokenThresholdConditionTrigger } from "@/domain/compaction-conditions/triggers/token-threshold.trigger.js";
-import type { CompactionConditionTrigger } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
+import type {
+  CompactionConditionTrigger,
+  CompactionEvaluationContext,
+} from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
 import type { CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
-import {
-  mergeSamplingWithDefaults,
-  maxOutputTokensFromSampling,
-} from "@/domain/provider/model/protocol-sampling-defaults.js";
+import { resolveContextWindowTokensOrDefault } from "@/infra/tokenizer/logic/resolve-context-window.js";
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
 /**
@@ -28,17 +27,13 @@ export interface CompactionConditionEvaluator {
   /** True when enabled conditions match (token threshold and/or visible floor). */
   shouldRequestCompaction(
     session: AgentSession,
-    modelContext: {
-      readonly workspaceModelId: string;
-      readonly applicationModelId: string;
-    },
+    evaluation: CompactionEvaluationContext,
   ): Promise<boolean>;
 }
 
 export interface CreateCompactionConditionEvaluatorDeps {
   readonly conditionsStore: CompactionConditionsStore;
   readonly tokenCounters: TokenCounterRegistry;
-  readonly providers?: ProviderRepository;
 }
 
 function triggersFromConditions(
@@ -52,8 +47,12 @@ function triggersFromConditions(
         {
           tokenThreshold: conditions.tokenThreshold,
           tokenRatio: conditions.tokenRatio,
-          resolveMaxContextTokens: async (ctx) =>
-            resolveMaxContextTokens(ctx.applicationModelId, deps.providers),
+          resolveMaxContextTokens: async (evaluation) => {
+            const { vendorModelId } = parseApplicationModelId(
+              evaluation.modelContext.applicationModelId,
+            );
+            return resolveContextWindowTokensOrDefault(vendorModelId);
+          },
         },
         deps.tokenCounters,
       ),
@@ -68,29 +67,11 @@ function triggersFromConditions(
   return new CompositeConditionTrigger(parts);
 }
 
-async function resolveMaxContextTokens(
-  applicationModelId: string,
-  providers?: ProviderRepository,
-): Promise<number> {
-  try {
-    const { providerId } = parseApplicationModelId(applicationModelId);
-    const protocol =
-      providers != null
-        ? (await providers.findById(providerId))?.protocol ?? "openai"
-        : "openai";
-    const defaults = mergeSamplingWithDefaults(protocol, undefined);
-    const cap = maxOutputTokensFromSampling(defaults);
-    return cap ?? 128_000;
-  } catch {
-    return 128_000;
-  }
-}
-
 export function createCompactionConditionEvaluator(
   deps: CreateCompactionConditionEvaluatorDeps,
 ): CompactionConditionEvaluator {
   return {
-    async shouldRequestCompaction(session, modelContext) {
+    async shouldRequestCompaction(session, evaluation) {
       const conditions = await deps.conditionsStore.getConditions();
       if (conditions == null || !conditions.enabled) {
         return false;
@@ -99,7 +80,7 @@ export function createCompactionConditionEvaluator(
       if (trigger == null) {
         return false;
       }
-      return trigger.shouldTrigger(session, modelContext);
+      return trigger.shouldTrigger(session, evaluation);
     },
   };
 }
