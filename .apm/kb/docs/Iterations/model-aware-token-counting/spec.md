@@ -2,6 +2,7 @@
 
 > **PRD**：[prd.md](./prd.md)  
 > **Supersedes**：[token-counting/spec.md](../token-counting/spec.md) 中的协议门控、压缩仅 `countMessages`、非 OpenAI tokenizer 排除、Mobile 排除等约定。  
+> **Mobile 实现（迭代内变更）**：[features/android-native-tokenizer-bridge/spec.md](./features/android-native-tokenizer-bridge/spec.md) — RN **不得** 静态依赖 `@agnai/*`；Android 精确计数走 Kotlin 原生桥（M1）。下文涉及「RN 加载 `@agnai/*`」的段落以 feature SPEC 为准。  
 > **参考实现**：`D:\Dev\Js\SillyTavern\src\endpoints\tokenizers.js`（`getTokenizerModel` + `/openai/count` 分支）。
 
 ---
