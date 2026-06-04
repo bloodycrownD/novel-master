@@ -31,8 +31,8 @@
 | `apps/cli/prompt/commands.ts` | 未保存模型 warning + heuristic；自拼 counter | 调 `countPromptLlmInput`；stderr 增加 `estimated` |
 | `TokenCounterKind` | `"heuristic" \| "tiktoken"` | 扩展为族 id（见下）或 `counterKind: string` + `tokenizerFamily` |
 | `SavedModel` | 无 context window 字段 | 本迭代 **不增 DB 列**；用 `context-window-map.ts` 静态子串表（与 tokenizer 表并列，可后补 KKV） |
-| Mobile `metro.config.js` | 仅 shim `tiktoken` → `js-tiktoken` | 增加 tokenizer 资源 bundle + 可选 shim `@agnai/*` |
-| `packages/core/package.json` | 仅 `tiktoken` | 增加 `@agnai/web-tokenizers`、`@agnai/sentencepiece-js`（与 ST 同族） |
+| Mobile `metro.config.js` | 仅 shim `tiktoken` → `js-tiktoken` | blockList `@agnai/*`；GPT 用 `js-tiktoken`；WEB/SP 见 [android-native-tokenizer-bridge](./features/android-native-tokenizer-bridge/spec.md) |
+| `packages/core/package.json` | 仅 `tiktoken`（RN 不打包 `@agnai/*`） | Node/CLI：`@agnai/*` 经 `tokenizer-node`；Mobile：Kotlin 原生桥 |
 
 **架构约束**（`packages/core/ARCHITECTURE.md`）：
 

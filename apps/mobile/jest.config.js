@@ -8,6 +8,7 @@ const repoRoot = path.resolve(__dirname, '../..');
 module.exports = {
   preset: '@react-native/jest-preset',
   moduleNameMapper: {
+    '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
     // Avoid importing `@novel-master/core` barrel in tests: it pulls in the
     // prompt-yaml module which depends on `yaml` ESM browser entry and breaks
     // under the default RN Jest transform settings.
