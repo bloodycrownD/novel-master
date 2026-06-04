@@ -4,6 +4,7 @@ import android.app.Application
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
 import com.novelmaster.sksp.SkspPackage
+import com.novelmaster.tokenizer.TokenizerPackage
 import com.facebook.react.ReactHost
 import com.facebook.react.ReactNativeApplicationEntryPoint.loadReactNative
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
@@ -17,6 +18,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // SKSP native module (Keystore); also autolinked via @novel-master/sksp-android.
           add(SkspPackage())
+          add(TokenizerPackage())
         },
     )
   }
