@@ -2,18 +2,18 @@ package com.novelmaster.tokenizer
 
 import ai.djl.huggingface.tokenizers.Encoding
 import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer
+import ai.djl.sentencepiece.SpTokenizer
 import android.content.Context
 import android.util.LruCache
-import com.sentencepiece.Model
-import com.sentencepiece.Scoring
-import com.sentencepiece.SentencePieceAlgorithm
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 import kotlin.math.ceil
 
 /**
  * Native WEB (HF JSON) and SP (.model) counting — parity with core tokenizers.
+ * SP uses DJL {@link SpTokenizer} (official SentencePiece JNI, matches @agnai encodeIds).
  * On load/encode failure returns heuristic + estimated (never throws to JS).
  */
 internal class TokenizerEngine(private val context: Context) {
@@ -24,12 +24,7 @@ internal class TokenizerEngine(private val context: Context) {
   )
 
   private val webCache = LruCache<String, HuggingFaceTokenizer>(8)
-  private val spCache = LruCache<String, SpHandle>(8)
-
-  private data class SpHandle(
-    val model: Model,
-    val algorithm: SentencePieceAlgorithm,
-  )
+  private val spCache = LruCache<String, SpTokenizer>(8)
 
   fun count(serialized: String, family: String): CountResult {
     val spec = TokenizerAssetPaths.forFamily(family) ?: return heuristic(serialized, family)
@@ -78,7 +73,7 @@ internal class TokenizerEngine(private val context: Context) {
 
   private fun tryLoadWebTokenizer(path: String): HuggingFaceTokenizer? {
     return try {
-      HuggingFaceTokenizer.newInstance(java.nio.file.Paths.get(path))
+      HuggingFaceTokenizer.newInstance(Paths.get(path))
     } catch (_: Throwable) {
       null
     }
@@ -89,22 +84,20 @@ internal class TokenizerEngine(private val context: Context) {
     family: String,
     spec: AssetPathSpec,
   ): CountResult {
-    val handle = loadSpHandle(family, spec) ?: return heuristic(serialized, family)
+    val tokenizer = loadSpTokenizer(family, spec) ?: return heuristic(serialized, family)
     return try {
-      val ids = handle.model.encodeNormalized(serialized, handle.algorithm)
+      val ids = tokenizer.processor.encode(serialized)
       CountResult(ids.size, family, estimated = false)
     } catch (_: Throwable) {
       heuristic(serialized, family)
     }
   }
 
-  private fun loadSpHandle(family: String, spec: AssetPathSpec): SpHandle? {
+  private fun loadSpTokenizer(family: String, spec: AssetPathSpec): SpTokenizer? {
     spCache.get(family)?.let { return it }
     val path = copyAssetToCache("tokenizers/${spec.primary}") ?: return null
     return try {
-      val model = Model.parseFrom(java.nio.file.Paths.get(path))
-      val algorithm = SentencePieceAlgorithm(true, Scoring.HIGHEST_SCORE)
-      SpHandle(model, algorithm).also { spCache.put(family, it) }
+      SpTokenizer(Paths.get(path)).also { spCache.put(family, it) }
     } catch (_: Throwable) {
       null
     }
@@ -128,7 +121,7 @@ internal class TokenizerEngine(private val context: Context) {
   }
 
   companion object {
-  /** Matches core `CHARACTERS_PER_TOKEN_RATIO` (SillyTavern fallback). */
+    /** Matches core `CHARACTERS_PER_TOKEN_RATIO` (SillyTavern fallback). */
     private const val CHARACTERS_PER_TOKEN_RATIO = 3.35
 
     fun heuristic(serialized: String, counterKind: String): CountResult {

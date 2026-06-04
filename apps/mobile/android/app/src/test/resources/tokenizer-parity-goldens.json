@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "claude-openai-sonnet",
+      "family": "claude",
+      "applicationModelId": "openai/claude-3-5-sonnet",
+      "vendorModelId": "claude-3-5-sonnet",
+      "serialized": "You are helpful.\n\nuser: Hello",
+      "cliTokenCount": 13,
+      "cliEstimated": false,
+      "cliCounterKind": "claude"
+    },
+    {
+      "id": "gemma-gemini-flash",
+      "family": "gemma",
+      "applicationModelId": "google/gemini-2.0-flash",
+      "vendorModelId": "gemini-2.0-flash",
+      "serialized": "You are helpful.\n\nuser: Hello",
+      "cliTokenCount": 8,
+      "cliEstimated": false,
+      "cliCounterKind": "gemma"
+    }
+  ]
+}
