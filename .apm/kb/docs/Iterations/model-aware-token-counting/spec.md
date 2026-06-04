@@ -218,29 +218,12 @@ Registry 构造注入 `getTokenizerOverride: () => Promise<"auto" | "heuristic" 
 
 ### Tokenizer 资源与运行时
 
-| 平台 | 策略 |
-|------|------|
-| Node (core tests, CLI) | `packages/core/assets/tokenizers/` 从 SillyTavern 仓库拷贝：`claude.json`、`llama3.json`、`*.model`（llama/mistral/yi/gemma/jamba）；Web 族 JSON 从 `SillyTavern-Tokenizers` raw URL 或 vendor 到 `assets/tokenizers/web/` |
-| RN (Mobile) | Metro `resolver` 将 `@novel-master/core` 内 `assets/tokenizers/*` 注册为 `assetExts`；`createTokenizerLoader("react-native")` 用 `require()` 读 bundled JSON；SentencePiece **若** Metro 无法加载 `.model`，则 RN 对该族 **降级 heuristic** 并 `estimated: true`（须在 Mobile 单测/手工清单注明）；优先尝试 `react-native-fs` + 预置 assets |
+> **Obsolete（Mobile）**：以下 RN / 共用 core assets / Metro `@agnai/*` 方案已由 [android-native-tokenizer-bridge/spec.md](./features/android-native-tokenizer-bridge/spec.md) 取代。Mobile JS **不得** 静态依赖 `@agnai/*`；WEB/SP 精确计数走 Android Kotlin（`android/app/src/main/assets/tokenizers/`）。GPT 系仍用 Metro `js-tiktoken` shim。
 
-**依赖**（`packages/core/package.json`）：
-
-```json
-"@agnai/web-tokenizers": "^0.3.0",
-"@agnai/sentencepiece-js": "^0.2.0"
-```
-
-（版本以 `SillyTavern/package.json` 对齐为准，实现时 pin 锁定。）
-
-**实现类**（`infra/tokenizer/impl/`）：
-
-| 族 | 类 | 底层 |
-|----|-----|------|
-| tiktoken | 现有 `TiktokenTokenCounter` | `tiktoken` / Mobile shim |
-| claude | `ClaudeWebTokenCounter` | `@agnai/web-tokenizers` + `claude.json` |
-| llama3, qwen2, command-r/a, nemo, deepseek | `WebTokenizerCounter` | 各 JSON + fallback 链 |
-| llama, mistral, yi, gemma, jamba | `SentencePieceTokenCounter` | `@agnai/sentencepiece-js` + `.model` |
-| heuristic | `HeuristicTokenCounter` | 纯 JS |
+| 平台 | 策略（当前） |
+|------|----------------|
+| Node (core tests, CLI) | `apps/cli/assets/tokenizers/`（CLI loader）；core tests 可用 `apps/mobile/assets/tokenizers` 副本。`@agnai/*` **仅 Node**（`count-prompt-llm-input-node.ts`）。 |
+| RN (Mobile) | 见 feature SPEC：M0/M1 `mobile-prompt-token-counter.js` + `NovelMasterTokenizer`；失败 → `Math.ceil(len/3.35)` + `estimated: true`。 |
 
 ### Compaction 接线
 
