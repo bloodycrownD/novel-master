@@ -77,6 +77,7 @@ function resolveZodModule(moduleName) {
 const config = {
   watchFolders: [monorepoRoot],
   resolver: {
+    assetExts: [...defaultConfig.resolver.assetExts, 'model'],
     nodeModulesPaths: [
       path.resolve(__dirname, 'node_modules'),
       path.resolve(monorepoRoot, 'node_modules'),
@@ -116,6 +117,10 @@ const config = {
       }
       return context.resolveRequest(context, moduleName, platform);
     },
+  },
+  transformer: {
+    ...defaultConfig.transformer,
+    assetRegistryPath: defaultConfig.transformer?.assetRegistryPath,
   },
 };
 

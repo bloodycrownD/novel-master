@@ -5,10 +5,11 @@
  */
 
 import {
+  createDefaultTokenCounterRegistry,
+  readTokenCounterModeFromPreferences,
   createAgentRegistryService,
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
-  createDefaultTokenCounterRegistry,
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
@@ -31,6 +32,7 @@ import {createCompositeSecretStore} from '@novel-master/core/sksp';
 import {createAndroidSecretStore} from '@novel-master/sksp-android';
 import {getMobileConnection} from '../db/connection';
 import {ensureLlmFetchConfigured} from './setup-llm-fetch';
+import {readTokenCounterModeFromAppUi} from '../storage/token-counter-pref';
 import type {MobileNovelMasterRuntime} from './types';
 
 /**
@@ -51,8 +53,14 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
 
   const providerBundle = createProviderServices(conn, secretStore);
   const tokenCounters = createDefaultTokenCounterRegistry({
-    providers: providerBundle.providerRepo,
-    savedModels: providerBundle.savedModelRepo,
+    getTokenizerOverride: async () => {
+      const fromCore = await readTokenCounterModeFromPreferences(preferences);
+      if (fromCore !== 'auto') {
+        return fromCore;
+      }
+      const fromAppUi = await readTokenCounterModeFromAppUi(kkv);
+      return fromAppUi;
+    },
   });
 
   const eventBus = new SimpleEventBus();
@@ -64,7 +72,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
     tokenCounters,
-    providers: providerBundle.providerRepo,
   });
 
   const agentRegistry = createAgentRegistryService(conn);

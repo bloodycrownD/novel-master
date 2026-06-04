@@ -14,6 +14,8 @@ export const APP_UI_KEY_SHOW_FULL_TOOL_PARAMS = 'showFullToolParams';
 export const APP_UI_KEY_LLM_STREAM = 'llmStream';
 /** `true` | `false` — assistant chat bubbles use MD/HTML when true (default off). */
 export const APP_UI_KEY_CHAT_RICH_TEXT = 'chatRichText';
+/** Token counter mode: `auto` | `heuristic` | tokenizer family id. */
+export const APP_UI_KEY_TOKEN_COUNTER_MODE = 'tokenCounter.mode';
 /** Last app version seen at bootstrap (package version). */
 export const APP_UI_KEY_LAST_RUN_VERSION = 'app.lastRunVersion';
 /** Integer string; bumped when app version changes to remount rich text. */
@@ -26,4 +28,5 @@ export const APP_UI_DEFAULTS = {
   [APP_UI_KEY_SHOW_FULL_TOOL_PARAMS]: 'false',
   [APP_UI_KEY_LLM_STREAM]: 'true',
   [APP_UI_KEY_CHAT_RICH_TEXT]: 'false',
+  [APP_UI_KEY_TOKEN_COUNTER_MODE]: 'auto',
 } as const;

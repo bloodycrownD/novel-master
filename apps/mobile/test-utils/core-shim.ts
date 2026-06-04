@@ -32,4 +32,10 @@ export type {
   WorktreeDirRule,
   WorktreeListRow,
 } from "../../../packages/core/dist/domain/worktree/model/worktree-types.js";
+export {
+  parseTokenCounterModePref,
+  TOKEN_COUNTER_MODE_PREF_KEY,
+} from "../../../packages/core/dist/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+export type { TokenizerOverride } from "../../../packages/core/dist/infra/tokenizer/logic/resolve-tokenizer-family.js";
+export { messageBodyText } from "../../../packages/core/dist/domain/prompt/logic/message-body.js";
 

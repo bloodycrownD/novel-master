@@ -26,6 +26,10 @@ import {
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
 import {
+  readTokenCounterModeFromAppUi,
+  writeTokenCounterModeToAppUi,
+} from '../../storage/token-counter-pref';
+import {
   readLlmStreamEnabled,
   writeLlmStreamEnabled,
 } from '../../storage/llm-stream-pref';
@@ -73,6 +77,7 @@ export function ProfileTabScreen() {
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [tokenCounterMode, setTokenCounterMode] = useState('auto');
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
   const [regexGroupPickerVisible, setRegexGroupPickerVisible] =
@@ -135,6 +140,13 @@ export function ProfileTabScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  const refreshTokenCounterPref = useCallback(async () => {
+    if (appUi == null) {
+      return;
+    }
+    setTokenCounterMode(await readTokenCounterModeFromAppUi(appUi));
+  }, [appUi]);
+
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
@@ -142,12 +154,14 @@ export function ProfileTabScreen() {
       refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
       refreshStreamPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
+      refreshTokenCounterPref().catch(() => undefined);
     }, [
       refreshModelLabel,
       refreshAgentLabel,
       refreshRegexGroupLabel,
       refreshStreamPref,
       refreshChatRichTextPref,
+      refreshTokenCounterPref,
     ]),
   );
 
@@ -219,6 +233,41 @@ export function ProfileTabScreen() {
             if (appUi) {
               writeChatRichTextEnabled(appUi, enabled).catch(() => undefined);
             }
+          }}
+        />
+        <ProfileMenuItem
+          icon="🔢"
+          label="Token 计数器"
+          value={tokenCounterMode}
+          tokens={tokens}
+          onPress={() => {
+            const modes = [
+              'auto',
+              'heuristic',
+              'tiktoken',
+              'claude',
+              'gemma',
+              'llama3',
+              'mistral',
+            ];
+            Alert.alert(
+              'Token 计数器',
+              '选择计数方式（自动按模型名匹配）',
+              [
+                ...modes.map(mode => ({
+                  text: mode,
+                  onPress: () => {
+                    setTokenCounterMode(mode);
+                    if (appUi) {
+                      writeTokenCounterModeToAppUi(appUi, mode as typeof mode).catch(
+                        () => undefined,
+                      );
+                    }
+                  },
+                })),
+                {text: '取消', style: 'cancel'},
+              ],
+            );
           }}
         />
         <ListSectionTitle title="数据管理" tokens={tokens} />
