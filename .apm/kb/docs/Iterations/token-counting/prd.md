@@ -1,5 +1,7 @@
 # Token 统计基础能力 PRD
 
+> **状态**：已由 [model-aware-token-counting](../model-aware-token-counting/prd.md) supersede（模型名路由、完整 prompt 统一口径、多 tokenizer 一次交付）。实现以新 PRD/SPEC 为准。
+
 ## 背景
 
 Novel Master 当前仅在 **上下文压缩（compaction）** 触发时使用 token 估算：`estimateTokens()` 对可见消息的 `messageBodyText` 做 **字符数 ÷ 4** 的粗算（`domain/compaction/logic/token-estimate.ts`）。该逻辑：
