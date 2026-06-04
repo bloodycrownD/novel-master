@@ -8,10 +8,8 @@ import { SentencePieceProcessor } from "@agnai/sentencepiece-js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { messageBodyText } from "@/domain/prompt/logic/message-body.js";
 import type { TokenCounter, TokenizerFamily } from "../ports/token-counter.port.js";
-import {
-  getTokenizerLoader,
-  tokenizerAssetPaths,
-} from "./create-tokenizer-loader.js";
+import { getTokenizerLoader } from "./get-tokenizer-loader.js";
+import { tokenizerAssetPaths } from "./tokenizer-loader-shared.js";
 import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./heuristic-token-counter.js";
 
 const heuristic = new HeuristicTokenCounter();

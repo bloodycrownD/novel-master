@@ -14,6 +14,11 @@ const coreDistSmokeFiles = [
   'domain/compaction-conditions/model/compaction-conditions.schema.js',
   'domain/worktree/logic/default-dir-rule.js',
   'service/events/create-event-orchestrator.js',
+  'infra/tokenizer/logic/resolve-context-window.js',
+  'infra/tokenizer/logic/count-prompt-llm-input.js',
+  'infra/tokenizer/impl/get-tokenizer-loader.native.js',
+  'infra/tokenizer/impl/tokenizer-loader-shared.js',
+  'service/compaction-conditions/create-compaction-condition-evaluator.js',
 ];
 for (const rel of coreDistSmokeFiles) {
   const abs = path.join(coreDistRoot, rel);

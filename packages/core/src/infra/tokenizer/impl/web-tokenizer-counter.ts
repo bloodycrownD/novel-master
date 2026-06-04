@@ -13,10 +13,8 @@ import {
   wrapSerializedPromptAsSystemMessage,
   type OpenAiStyleMessage,
 } from "../logic/count-openai-style-message.js";
-import {
-  getTokenizerLoader,
-  tokenizerAssetPaths,
-} from "./create-tokenizer-loader.js";
+import { getTokenizerLoader } from "./get-tokenizer-loader.js";
+import { tokenizerAssetPaths } from "./tokenizer-loader-shared.js";
 import { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./heuristic-token-counter.js";
 
 const heuristic = new HeuristicTokenCounter();
