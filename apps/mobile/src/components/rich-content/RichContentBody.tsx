@@ -24,6 +24,8 @@ export interface RichContentBodyProps {
   variant: RichContentVariant;
   /** Plain-text fallback when over limit or prepare fails (default tokens.text). */
   fallbackTextColor?: string;
+  /** Forces RenderHTML remount when app version epoch changes. */
+  renderKey?: string;
 }
 
 function RichContentBodyInner({
@@ -31,6 +33,7 @@ function RichContentBodyInner({
   tokens,
   variant,
   fallbackTextColor,
+  renderKey,
 }: RichContentBodyProps) {
   const {width: windowWidth} = useWindowDimensions();
   const overLimit = isRichContentOverLimit(content);
@@ -92,6 +95,7 @@ function RichContentBodyInner({
   return (
     <View style={{width: contentWidth, maxWidth: '100%'}}>
       <RenderHTML
+        key={renderKey}
         contentWidth={contentWidth}
         source={{html: prepared.html}}
         baseStyle={baseStyle}

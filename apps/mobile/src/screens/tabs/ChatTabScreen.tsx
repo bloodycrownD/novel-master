@@ -68,6 +68,7 @@ import {
 import {prependOlderMessages} from '../../services/message-paging';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
+import {setMobileAgentActive} from '../../runtime/agent-activity';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
 import {createStreamBuffer} from '../../services/stream-buffer.service';
@@ -101,7 +102,7 @@ export function ChatTabScreen() {
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const sessionBatch = useBatchSelection();
   const messageBatch = useBatchSelection();
-  const {appUi} = useNovelMaster();
+  const {appUi, richRenderEpoch} = useNovelMaster();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
@@ -973,6 +974,7 @@ export function ChatTabScreen() {
                 streamingThinking={streamingThinking}
                 showFullToolParams={showFullToolParams}
                 chatRichTextEnabled={chatRichTextEnabled}
+                richRenderEpoch={richRenderEpoch}
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
                 onToggleMessageSelect={messageBatch.toggle}
@@ -997,7 +999,10 @@ export function ChatTabScreen() {
                 scope={{projectId, sessionId}}
                 hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
                 running={agentRunning}
-                onRunningChange={setAgentRunning}
+                onRunningChange={running => {
+                  setAgentRunning(running);
+                  setMobileAgentActive(running);
+                }}
                 onStreamText={handleStreamText}
                 onStreamThinking={handleStreamThinking}
                 onStreamReset={handleStreamReset}

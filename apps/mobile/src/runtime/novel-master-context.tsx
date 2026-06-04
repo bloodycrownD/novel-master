@@ -20,11 +20,14 @@ import {
   Text,
   View,
 } from 'react-native';
+import {closeMobileConnection} from '../db/connection';
 import {
   createAppUiPreferences,
   type AppUiPreferences,
 } from '../storage/app-ui-prefs';
+import {syncAppVersionForRichRender} from '../storage/app-version-guard';
 import {createMobileNovelMasterRuntime} from './create-mobile-runtime';
+import mobilePackage from '../../package.json';
 import {
   loadMobileScope,
   setMobileProject,
@@ -39,6 +42,8 @@ export interface NovelMasterContextValue {
   status: RuntimeStatus;
   runtime: MobileNovelMasterRuntime | undefined;
   appUi: AppUiPreferences | undefined;
+  /** Rich-text remount generation; bumps when app package version changes. */
+  richRenderEpoch: number;
   error: string | undefined;
   retry: () => void;
   scope: MobileScopeSnapshot;
@@ -67,6 +72,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     projectId: undefined,
     sessionId: undefined,
   });
+  const [richRenderEpoch, setRichRenderEpoch] = useState(0);
   const [bootToken, setBootToken] = useState(0);
 
   const retry = useCallback(() => {
@@ -78,17 +84,26 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
     setStatus('loading');
     setError(undefined);
 
-    createMobileNovelMasterRuntime()
-      .then(async rt => {
-        const loaded = await loadMobileScope(rt);
-        if (cancelled) {
-          return;
-        }
-        setRuntime(rt);
-        setAppUi(createAppUiPreferences(rt.kkv));
-        setScope(loaded);
-        setStatus('ready');
-      })
+    (async () => {
+      if (bootToken > 0) {
+        await closeMobileConnection();
+      }
+      const rt = await createMobileNovelMasterRuntime();
+      const loaded = await loadMobileScope(rt);
+      const ui = createAppUiPreferences(rt.kkv);
+      const epoch = await syncAppVersionForRichRender(
+        ui,
+        mobilePackage.version,
+      );
+      if (cancelled) {
+        return;
+      }
+      setRuntime(rt);
+      setAppUi(ui);
+      setRichRenderEpoch(epoch);
+      setScope(loaded);
+      setStatus('ready');
+    })()
       .catch(err => {
         if (!cancelled) {
           setRuntime(undefined);
@@ -138,6 +153,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       status,
       runtime,
       appUi,
+      richRenderEpoch,
       error,
       retry,
       scope,
@@ -149,6 +165,7 @@ export function NovelMasterProvider({children}: {children: ReactNode}) {
       status,
       runtime,
       appUi,
+      richRenderEpoch,
       error,
       retry,
       scope,

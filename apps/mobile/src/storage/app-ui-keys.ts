@@ -14,6 +14,10 @@ export const APP_UI_KEY_SHOW_FULL_TOOL_PARAMS = 'showFullToolParams';
 export const APP_UI_KEY_LLM_STREAM = 'llmStream';
 /** `true` | `false` — assistant chat bubbles use MD/HTML when true (default off). */
 export const APP_UI_KEY_CHAT_RICH_TEXT = 'chatRichText';
+/** Last app version seen at bootstrap (package version). */
+export const APP_UI_KEY_LAST_RUN_VERSION = 'app.lastRunVersion';
+/** Integer string; bumped when app version changes to remount rich text. */
+export const APP_UI_KEY_RICH_RENDER_EPOCH = 'app.richRenderEpoch';
 
 /** Default string values when a key is missing. */
 export const APP_UI_DEFAULTS = {

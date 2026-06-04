@@ -50,6 +50,7 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
   useNavigation: () => ({navigate: jest.fn()}),
+  useIsFocused: () => true,
 }));
 
 jest.mock('@novel-master/core', () => ({
@@ -80,7 +81,10 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
 }));
 
 jest.mock('../src/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: {get: jest.fn(async () => 'false')}}),
+  useNovelMaster: () => ({
+    appUi: {get: jest.fn(async () => 'false')},
+    richRenderEpoch: 0,
+  }),
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({

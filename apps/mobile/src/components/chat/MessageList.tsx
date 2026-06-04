@@ -21,6 +21,8 @@ type Props = {
   showFullToolParams?: boolean;
   /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
   chatRichTextEnabled?: boolean;
+  /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
+  richRenderEpoch?: number;
   batchMode?: boolean;
   selectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
@@ -35,6 +37,8 @@ interface ChatMessageBodyProps {
   tokens: ThemeTokens;
   isUser: boolean;
   richTextEnabled: boolean;
+  richRenderEpoch: number;
+  messageId: string;
   bodyColor: string;
 }
 
@@ -55,6 +59,8 @@ const ChatMessageBody = React.memo(function ChatMessageBody({
   tokens,
   isUser,
   richTextEnabled,
+  richRenderEpoch,
+  messageId,
   bodyColor,
 }: ChatMessageBodyProps) {
   const plainColor = bodyColor;
@@ -67,6 +73,7 @@ const ChatMessageBody = React.memo(function ChatMessageBody({
       tokens={tokens}
       variant={isUser ? 'chat-user' : 'chat-assistant'}
       fallbackTextColor={plainColor}
+      renderKey={`${messageId}:${richRenderEpoch}`}
     />
   );
 });
@@ -77,6 +84,7 @@ export function MessageList({
   streamingThinking,
   showFullToolParams,
   chatRichTextEnabled = false,
+  richRenderEpoch = 0,
   batchMode = false,
   selectedMessageIds,
   onToggleMessageSelect,
@@ -101,6 +109,7 @@ export function MessageList({
     body: string,
     selected: boolean,
     hidden: boolean,
+    messageId: string,
     /** Streaming tail always plain Text even when assistant rich text is on. */
     forcePlainText = false,
   ) => {
@@ -126,6 +135,8 @@ export function MessageList({
             tokens={tokens}
             isUser={isUser}
             richTextEnabled={chatRichTextEnabled}
+            richRenderEpoch={richRenderEpoch}
+            messageId={messageId}
             bodyColor={colors.bodyColor}
           />
         )}
@@ -137,6 +148,7 @@ export function MessageList({
     <FlatList
       style={styles.list}
       data={data}
+      extraData={{chatRichTextEnabled, richRenderEpoch}}
       keyExtractor={(item, index) => {
         if ('kind' in item && item.kind === 'stream') {
           return 'stream';
@@ -165,7 +177,7 @@ export function MessageList({
                 />
               ) : null}
               {streamingText && streamingText.length > 0
-                ? renderBubble(false, streamingText, false, false, true)
+                ? renderBubble(false, streamingText, false, false, 'stream', true)
                 : null}
             </View>
           );
@@ -192,7 +204,15 @@ export function MessageList({
             {!isUser && thinking ? (
               <ThinkingBlockCard text={thinking} dimmed={hidden} />
             ) : null}
-            {body ? renderBubble(isUser, body, selected, hidden) : null}
+            {body
+              ? renderBubble(
+                  isUser,
+                  body,
+                  selected,
+                  hidden,
+                  row.message.id,
+                )
+              : null}
           </>
         );
 
