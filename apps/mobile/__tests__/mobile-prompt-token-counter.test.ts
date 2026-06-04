@@ -41,20 +41,19 @@ jest.mock('@novel-master/core', () => ({
   serializePromptLlmInput: () => '',
 }));
 
-jest.mock(
-  'tiktoken',
-  () => ({
-    encoding_for_model: () => ({
-      encode: () => [1, 2, 3],
-      free: () => {},
-    }),
-  }),
-  {virtual: true},
-);
+const mockEncodingForModel = jest.fn(() => ({
+  encode: () => [1, 2, 3],
+  free: () => {},
+}));
+
+jest.mock('tiktoken', () => ({
+  encoding_for_model: (...args: unknown[]) => mockEncodingForModel(...args),
+}));
 
 describe('mobile-prompt-token-counter', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
+    mockEncodingForModel.mockClear();
     nativeBridgeState.available = true;
     mockResolveFamily = 'claude';
   });
@@ -107,6 +106,26 @@ describe('mobile-prompt-token-counter', () => {
     );
     expect(result.estimated).toBe(false);
     expect(result.count).toBeGreaterThan(0);
+  });
+
+  it('uses js-tiktoken encoding_for_model for tiktoken family', async () => {
+    mockResolveFamily = 'tiktoken';
+    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    __test__.setTiktokenModuleForTests(require('tiktoken'));
+
+    const result = await __test__.countSerialized(
+      'tiktoken',
+      'system prompt for gpt',
+      'openai/gpt-4o',
+    );
+
+    expect(mockEncodingForModel).toHaveBeenCalledWith('gpt-4o');
+    expect(mockCountPrompt).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      count: 9,
+      counterKind: 'tiktoken',
+      estimated: false,
+    });
   });
 
   it('falls back to heuristic when native bridge is unavailable', async () => {

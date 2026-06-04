@@ -137,4 +137,11 @@ export const __test__ = {
   SP_FAMILIES,
   countSerialized,
   heuristicCount,
+  /** Jest cannot run `import('tiktoken')`; prime the lazy cache from require(). */
+  setTiktokenModuleForTests(mod) {
+    tiktokenModule = mod;
+  },
+  resetTiktokenModuleForTests() {
+    tiktokenModule = null;
+  },
 };

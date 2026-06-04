@@ -17,7 +17,7 @@ React Native app scaffold for monorepo VFS validation on device (Android Debug).
 - Node **22.22.0** (`nvm use` at repo root)
 - JDK 17+ and Android SDK (API 34+ recommended)
 - Android emulator or USB device with debugging enabled
-- **Android 8.0+ (API 26+)** on device/emulator for native tokenizer (M1): DJL HuggingFace + SentencePiece bindings require `minSdkVersion` 26 (`apps/mobile/android/build.gradle`). Older API levels are not supported for exact WEB/SP token counts.
+- **Android 8.0+ (API 26+)** on device/emulator for native tokenizer (M1): DJL HuggingFace + SentencePiece bindings require `minSdkVersion` 26 (`apps/mobile/android/build.gradle`). Older API levels are not supported for exact WEB/SP token counts. Tokenizer asset layout: [assets/tokenizers/README.md](./assets/tokenizers/README.md).
 
 ### Android SDK path (required once per machine)
 
