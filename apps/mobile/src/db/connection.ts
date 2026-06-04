@@ -4,9 +4,16 @@
 import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
 import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
-import {open as openQuickSqlite} from 'react-native-quick-sqlite';
-import ReactNativeBlobUtil from 'react-native-blob-util';
-import {MOBILE_TDBC_URL, MOBILE_VFS_DB_NAME} from '../vfs/constants';
+import {MOBILE_TDBC_URL} from '../vfs/constants';
+import {
+  clearMobileDatabaseFilePathCache,
+  probeAndCacheMobileDatabaseFilePath,
+} from './db-file-path';
+
+export {
+  getMobileDatabaseFilePath,
+  probeAndCacheMobileDatabaseFilePath,
+} from './db-file-path';
 
 let conn: TdbcConnection | undefined;
 let initPromise: Promise<TdbcConnection> | undefined;
@@ -22,6 +29,7 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
       registerSkspAndroidDriver();
       const c = await open(MOBILE_TDBC_URL, {driver: 'rn'});
       await bootstrapNovelMaster(c);
+      await probeAndCacheMobileDatabaseFilePath();
       conn = c;
       return c;
     })();
@@ -34,23 +42,7 @@ export async function closeMobileConnection(): Promise<void> {
   await conn?.close();
   conn = undefined;
   initPromise = undefined;
-}
-
-/**
- * Resolves the on-disk path for the mobile VFS SQLite file.
- * Prefers quick-sqlite `dbPath` when exposed; otherwise Android DatabasesDir.
- */
-export function getMobileDatabaseFilePath(): string {
-  const handle = openQuickSqlite({
-    name: MOBILE_VFS_DB_NAME,
-    location: 'default',
-  });
-  const maybePath = (handle as {dbPath?: string}).dbPath;
-  handle.close();
-  if (typeof maybePath === 'string' && maybePath.length > 0) {
-    return maybePath;
-  }
-  return `${ReactNativeBlobUtil.fs.dirs.DatabasesDir}/${MOBILE_VFS_DB_NAME}`;
+  clearMobileDatabaseFilePathCache();
 }
 
 /** WAL checkpoint before file-level copy (export backup). */

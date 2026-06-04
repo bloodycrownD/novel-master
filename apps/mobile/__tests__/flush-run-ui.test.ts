@@ -1,23 +1,19 @@
 import {flushAgentStepUi, flushRunUi} from '../src/components/chat/flush-run-ui';
 
 describe('flush-run-ui', () => {
-  it('flushAgentStepUi clears stream only after assistant phase', async () => {
-    const resets: string[] = [];
-    const reloads: string[] = [];
-    const reset = () => resets.push('reset');
+  it('flushAgentStepUi reloads then clears stream only after assistant phase', async () => {
+    const order: string[] = [];
+    const reset = () => order.push('reset');
     const reload = async () => {
-      reloads.push('reload');
+      order.push('reload');
     };
 
     await flushAgentStepUi('tool_results', reload, reset);
-    expect(resets).toEqual([]);
-    expect(reloads).toEqual(['reload']);
+    expect(order).toEqual(['reload']);
 
-    resets.length = 0;
-    reloads.length = 0;
+    order.length = 0;
     await flushAgentStepUi('assistant', reload, reset);
-    expect(resets).toEqual(['reset']);
-    expect(reloads).toEqual(['reload']);
+    expect(order).toEqual(['reload', 'reset']);
   });
 
   it('flushRunUi always resets after reload', async () => {

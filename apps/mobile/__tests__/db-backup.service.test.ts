@@ -18,7 +18,10 @@ const mockAgentActive = jest.fn();
 jest.mock('../src/db/connection', () => ({
   checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
   closeMobileConnection: (...args: unknown[]) => mockClose(...args),
-  getMobileDatabaseFilePath: (...args: unknown[]) => mockGetPath(...args),
+}));
+
+jest.mock('../src/db/db-file-path', () => ({
+  resolveMobileDatabaseFilePath: (...args: unknown[]) => mockGetPath(...args),
 }));
 
 jest.mock('../src/runtime/agent-activity', () => ({
@@ -60,7 +63,7 @@ describe('db-backup.service', () => {
   beforeEach(() => {
     mockCheckpoint.mockReset().mockResolvedValue(undefined);
     mockClose.mockReset().mockResolvedValue(undefined);
-    mockGetPath.mockReset().mockReturnValue('/db/novel_master_vfs');
+    mockGetPath.mockReset().mockResolvedValue('/db/novel_master_vfs');
     mockCp.mockReset().mockResolvedValue(undefined);
     mockExists.mockReset().mockResolvedValue(true);
     mockUnlink.mockReset().mockResolvedValue(undefined);

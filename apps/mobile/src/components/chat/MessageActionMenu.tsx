@@ -38,20 +38,39 @@ const MENU_GAP = 8;
 const SCREEN_MARGIN = 12;
 const ITEM_MIN_HEIGHT = 44;
 const MENU_MAX_HEIGHT_CAP = 360;
+const MENU_MIN_WIDTH = 132;
+const MENU_MAX_WIDTH = 200;
+const MENU_H_PADDING = 32;
+/** Rough width per glyph for CJK/Latin labels without native measure. */
+const MENU_CHAR_WIDTH_EST = 14;
 
 /** Vertical menu max height for small screens. */
 export function messageActionMenuMaxHeight(screenHeight: number): number {
   return Math.min(MENU_MAX_HEIGHT_CAP, screenHeight * 0.45);
 }
 
+/** Content-aware width so short labels do not stretch to full screen. */
+export function computeMessageActionMenuWidth(
+  items: readonly {label: string}[],
+  screenWidth: number,
+): number {
+  const longest = items.reduce(
+    (max, item) => Math.max(max, item.label.length),
+    0,
+  );
+  const byLabel = longest * MENU_CHAR_WIDTH_EST + MENU_H_PADDING;
+  const cap = screenWidth - SCREEN_MARGIN * 2;
+  return Math.min(cap, MENU_MAX_WIDTH, Math.max(MENU_MIN_WIDTH, byLabel));
+}
+
 /** Places the vertical menu above or below the bubble, clamped inside the window. */
 export function layoutAnchoredMenu(
   anchor: MessageMenuAnchor,
   itemCount: number,
+  menuWidth: number,
   screenWidth: number,
   screenHeight: number,
 ): {left: number; top: number; width: number; maxHeight: number} {
-  const menuWidth = Math.min(screenWidth - SCREEN_MARGIN * 2, 280);
   const maxHeight = messageActionMenuMaxHeight(screenHeight);
   const estimatedHeight = Math.min(
     maxHeight,
@@ -94,13 +113,15 @@ export function MessageActionMenu({
     if (anchor == null || items.length === 0) {
       return undefined;
     }
+    const menuWidth = computeMessageActionMenuWidth(items, window.width);
     return layoutAnchoredMenu(
       anchor,
       items.length,
+      menuWidth,
       window.width,
       window.height,
     );
-  }, [anchor, items.length, window.width, window.height]);
+  }, [anchor, items, window.width, window.height]);
 
   return (
     <AppModal
@@ -142,6 +163,7 @@ export function MessageActionMenu({
                     style={{
                       color: item.danger ? tokens.danger : tokens.text,
                       fontSize: 15,
+                      textAlign: 'center',
                     }}>
                     {item.label}
                   </Text>
@@ -169,7 +191,8 @@ const styles = StyleSheet.create({
   item: {
     minHeight: ITEM_MIN_HEIGHT,
     justifyContent: 'center',
-    paddingHorizontal: 16,
+    alignItems: 'center',
+    paddingHorizontal: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });

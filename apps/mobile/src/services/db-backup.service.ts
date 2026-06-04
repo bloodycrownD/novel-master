@@ -16,8 +16,8 @@ import {
 import {
   checkpointMobileDatabase,
   closeMobileConnection,
-  getMobileDatabaseFilePath,
 } from '../db/connection';
+import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
@@ -75,7 +75,7 @@ export async function exportDatabaseBackup(
   }
 
   await checkpointMobileDatabase(runtime.conn);
-  const dbPath = getMobileDatabaseFilePath();
+  const dbPath = await resolveMobileDatabaseFilePath();
   const fileName = backupFileName();
   const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
 
@@ -134,7 +134,7 @@ export async function importDatabaseBackup(
   const bytes = await readFileAsBytes(pickedPath);
   assertSqliteFile(bytes);
 
-  const dbPath = getMobileDatabaseFilePath();
+  const dbPath = await resolveMobileDatabaseFilePath();
   const bakPath = `${dbPath}.nmbackup.bak`;
 
   const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);

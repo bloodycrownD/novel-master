@@ -241,7 +241,7 @@ export function ChatTabScreen() {
   );
 
   const handleStreamReset = useCallback(() => {
-    streamBuffer.flush();
+    // Discard buffered deltas only — flushing would re-apply text that is already persisted.
     streamBuffer.reset();
     setStreamingText('');
     setStreamingThinking('');

@@ -3,6 +3,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
   MessageActionMenu,
+  computeMessageActionMenuWidth,
   layoutAnchoredMenu,
 } from '../src/components/chat/MessageActionMenu';
 import {buildMessageActionItems} from '../src/components/chat/message-edit';
@@ -95,13 +96,24 @@ describe('MessageActionMenu', () => {
     expect(scrollViews.length).toBeGreaterThanOrEqual(1);
   });
 
+  it('computeMessageActionMenuWidth stays compact for six items', () => {
+    const items = buildMessageActionItems(sampleMessage());
+    const width = computeMessageActionMenuWidth(items, 360);
+    expect(width).toBeLessThanOrEqual(200);
+    expect(width).toBeGreaterThanOrEqual(132);
+  });
+
   it('layoutAnchoredMenu returns bounded maxHeight for six items', () => {
+    const items = buildMessageActionItems(sampleMessage());
+    const menuWidth = computeMessageActionMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
       {x: 40, y: 200, width: 200, height: 48},
       6,
+      menuWidth,
       360,
       640,
     );
+    expect(layout.width).toBe(menuWidth);
     expect(layout.maxHeight).toBeLessThanOrEqual(360);
     expect(layout.maxHeight).toBe(288);
   });
