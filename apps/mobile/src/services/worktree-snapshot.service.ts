@@ -11,6 +11,12 @@ export interface SessionWorktreeSnapshotScope {
   readonly sessionId: string;
 }
 
+function hasMaterializedListRows(
+  snapshot: SessionMacroSnapshot | undefined,
+): snapshot is SessionMacroSnapshot {
+  return snapshot != null && Array.isArray(snapshot.listRows);
+}
+
 /**
  * Returns cached session worktree snapshot or materializes and stores one.
  * Treats snapshots missing `listRows` as a cache miss.
@@ -20,7 +26,7 @@ export async function getOrRefreshSessionWorktreeSnapshot(
   scope: SessionWorktreeSnapshotScope,
 ): Promise<SessionMacroSnapshot> {
   const cached = runtime.macroCache.get(scope.projectId, scope.sessionId);
-  if (cached != null) {
+  if (hasMaterializedListRows(cached)) {
     return cached;
   }
   const wt = runtime.worktree({

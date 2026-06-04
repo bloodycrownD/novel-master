@@ -5,7 +5,7 @@ import {
 } from '../src/services/worktree-snapshot.service';
 
 describe('worktree-snapshot.service', () => {
-  it('getOrRefresh returns cached snapshot without rematerializing', async () => {
+  it('getOrRefresh returns cached snapshot with listRows without rematerializing', async () => {
     const materialize = jest.fn(async () => ({
       worktreeDisplay: 'wt',
       filetreeDisplay: 'ft',
@@ -17,7 +17,15 @@ describe('worktree-snapshot.service', () => {
         get: () => ({
           worktreeDisplay: 'cached-wt',
           filetreeDisplay: 'cached-ft',
-          listRows: [],
+          listRows: [
+            {
+              kind: 'file' as const,
+              path: '/a.md',
+              ruleState: '',
+              inclusionMode: '',
+              displayState: '',
+            },
+          ],
           refreshedAtMs: 1,
         }),
         refresh,
@@ -34,6 +42,36 @@ describe('worktree-snapshot.service', () => {
     expect(snap.worktreeDisplay).toBe('cached-wt');
     expect(materialize).not.toHaveBeenCalled();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it('getOrRefresh treats legacy snapshot without listRows as cache miss', async () => {
+    const materialize = jest.fn(async () => ({
+      worktreeDisplay: 'wt',
+      filetreeDisplay: 'ft',
+      listRows: [],
+    }));
+    const refresh = jest.fn(async (_p, _s, loader) => loader());
+    const runtime = {
+      macroCache: {
+        get: () =>
+          ({
+            worktreeDisplay: 'legacy-wt',
+            filetreeDisplay: 'legacy-ft',
+            refreshedAtMs: 1,
+          }) as any,
+        refresh,
+        clear: jest.fn(),
+      },
+      worktree: () => ({materialize}),
+    };
+
+    await getOrRefreshSessionWorktreeSnapshot(runtime as any, {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
+
+    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(refresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
   });
 
   it('getOrRefresh materializes on cache miss', async () => {

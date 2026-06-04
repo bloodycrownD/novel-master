@@ -81,6 +81,31 @@ describe("worktree materialize", () => {
     await ctx.conn.close();
   });
 
+  it("filename fill display never calls findByPath", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const gvfs = ctx.globalVfs();
+    await gvfs.write("/fn/a.md", "BODY-A");
+    await gvfs.write("/fn/b.md", "BODY-B");
+
+    const { wt, calls } = createSpyingWorktreeService(ctx.conn);
+    await wt.setDirRule({
+      logicalPath: "/fn",
+      ruleEnabled: true,
+      headCount: 0,
+      tailCount: 0,
+      fillPolicy: "filename",
+    });
+
+    calls.findByPath = 0;
+    const materialized = await wt.materialize();
+    assert.equal(calls.findByPath, 0);
+    assert.match(materialized.worktreeDisplay, /a\.md/);
+    assert.match(materialized.worktreeDisplay, /b\.md/);
+    assert.doesNotMatch(materialized.worktreeDisplay, /BODY-A/);
+
+    await ctx.conn.close();
+  });
+
   it("lazy findByPath only for visible full/header files", async () => {
     const ctx = await openNovelMasterTestConnection();
     const gvfs = ctx.globalVfs();
