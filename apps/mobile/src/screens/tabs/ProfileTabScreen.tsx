@@ -2,7 +2,7 @@
  * Profile tab: menu items navigate to stack screens.
  */
 import React, {useCallback, useState} from 'react';
-import {ScrollView, StyleSheet, View} from 'react-native';
+import {Alert, ScrollView, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
@@ -13,8 +13,14 @@ import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
 import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
+import {useToast} from '../../components/chrome/ToastHost';
+import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useNovelMaster} from '../../runtime/novel-master-context';
+import {
+  exportDatabaseBackup,
+  importDatabaseBackup,
+} from '../../services/db-backup.service';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
@@ -57,9 +63,11 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
 
 export function ProfileTabScreen() {
   const {tokens} = useTheme();
+  const {showToast} = useToast();
   const runtime = useRuntime();
-  const {appUi} = useNovelMaster();
+  const {appUi, retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
+  const [dbBusy, setDbBusy] = useState(false);
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
@@ -211,6 +219,57 @@ export function ProfileTabScreen() {
             if (appUi) {
               writeChatRichTextEnabled(appUi, enabled).catch(() => undefined);
             }
+          }}
+        />
+        <ListSectionTitle title="数据管理" tokens={tokens} />
+        <ProfileMenuItem
+          icon="💾"
+          label="导出数据库"
+          value={dbBusy ? '处理中…' : '分享备份文件'}
+          tokens={tokens}
+          onPress={() => {
+            if (dbBusy) {
+              return;
+            }
+            setDbBusy(true);
+            exportDatabaseBackup(runtime)
+              .then(result => {
+                if (result === 'saved') {
+                  showToast('数据库已导出');
+                }
+              })
+              .catch(err => showToast(toastMessage('导出失败', err)))
+              .finally(() => setDbBusy(false));
+          }}
+        />
+        <ProfileMenuItem
+          icon="📥"
+          label="导入数据库"
+          value={dbBusy ? '处理中…' : '完全替换'}
+          tokens={tokens}
+          onPress={() => {
+            if (dbBusy) {
+              return;
+            }
+            Alert.alert(
+              '导入数据库',
+              '将用所选备份完全替换当前应用数据（项目、会话、消息、服务商等）。此操作不可撤销，是否继续？',
+              [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '继续选择文件',
+                  onPress: () => {
+                    setDbBusy(true);
+                    importDatabaseBackup(retry)
+                      .then(() => showToast('正在重新加载，请稍候…'))
+                      .catch(err =>
+                        showToast(toastMessage('导入失败', err)),
+                      )
+                      .finally(() => setDbBusy(false));
+                  },
+                },
+              ],
+            );
           }}
         />
         <ListSectionTitle title="配置" tokens={tokens} />
