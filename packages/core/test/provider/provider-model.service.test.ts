@@ -1,6 +1,7 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { ProviderError } from "../../src/errors/provider-errors.js";
 import { formatApplicationModelId } from "../../src/domain/provider/logic/application-model-id.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
@@ -112,6 +113,20 @@ describe("ProviderModelService settings", () => {
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "unknown-model");
     assert.equal(saved.settings.contextWindowTokens, 128_000);
+    await ctx.conn.close();
+  });
+
+  it("updateSettings rejects non-positive contextWindowTokens", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    await bundle.providerModels.create("openai", "manual-model");
+    await assert.rejects(
+      () =>
+        bundle.providerModels.updateSettings("openai", "manual-model", {
+          contextWindowTokens: 0,
+        }),
+      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+    );
     await ctx.conn.close();
   });
 });

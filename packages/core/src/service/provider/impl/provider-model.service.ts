@@ -327,6 +327,18 @@ export class DefaultProviderModelService implements ProviderModelService {
 
     }
 
+    if (
+      patch.contextWindowTokens != null &&
+      (!Number.isInteger(patch.contextWindowTokens) ||
+        patch.contextWindowTokens <= 0)
+    ) {
+      throw new ProviderError(
+        "INVALID_ARGUMENT",
+        "contextWindowTokens must be a positive integer",
+        { providerId, modelId: `${providerId}/${vendorModelId}` },
+      );
+    }
+
     const updated: SavedModel = {
 
       ...existing,

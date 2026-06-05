@@ -77,4 +77,36 @@ describe("TokenRatioConditionTrigger", () => {
     );
     assert.equal(await trigger.shouldTrigger(session, evaluation), true);
   });
+
+  it("85000 tokens at effective threshold does not trigger (strict >)", async () => {
+    const session = new InMemoryAgentSession();
+    const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
+    const promptInput: PromptLlmInput = {
+      system: "x".repeat(340_000),
+      messages: [],
+    };
+    const evaluation = {
+      modelContext: {
+        workspaceModelId: "openai/test",
+        applicationModelId: "openai/test",
+      },
+      promptInput,
+    };
+    const { tokenCount } = await countPromptLlmInput({
+      input: promptInput,
+      applicationModelId: "openai/test",
+      registry,
+    });
+    const contextWindow = tokenCount / 0.8;
+    assert.equal(Math.floor(contextWindow * 0.8), tokenCount);
+
+    const trigger = new TokenRatioConditionTrigger(
+      {
+        tokenRatio: 0.8,
+        resolveContextWindow: async () => contextWindow,
+      },
+      registry,
+    );
+    assert.equal(await trigger.shouldTrigger(session, evaluation), false);
+  });
 });

@@ -1,8 +1,13 @@
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
+import {
+  clearProtocolAdapters,
+  getProtocolAdapter,
+} from "../../src/infra/llm-protocol/logic/registry.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function memorySecretStore(): SecretStore {
@@ -73,5 +78,41 @@ describe("ProviderService", () => {
     await bundle.providers.delete("tmpgw");
     assert.equal(await secrets.has("provider/tmpgw/apiKey"), false);
     await ctx.conn.close();
+  });
+
+  it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
+    clearProtocolAdapters();
+    const fetchFn = mock.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: [{ id: "gpt-4o" }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+    const ctx = await openNovelMasterTestConnection();
+    const secrets = memorySecretStore();
+    const kkv = createKkvService(ctx.conn);
+    const bundle = createProviderServices(ctx.conn, secrets);
+    await secrets.set("provider/custom/apiKey", "sk-test");
+    await bundle.providers.create({
+      id: "custom",
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      apiKey: "sk-test",
+    });
+
+    await bundle.providerModels.fetch("custom");
+    const keysBefore = await kkv.listKeys("nm-model-suggestions");
+    assert.ok(keysBefore.includes("custom"));
+
+    await bundle.providers.delete("custom");
+    const keysAfter = await kkv.listKeys("nm-model-suggestions");
+    assert.ok(!keysAfter.includes("custom"));
+
+    await ctx.conn.close();
+    clearProtocolAdapters();
   });
 });
