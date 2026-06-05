@@ -859,7 +859,7 @@ export function ChatTabScreen() {
     }
     Alert.alert(
       '压缩会话',
-      '将按默认配置隐藏自尾深度 6 及以上的可见消息，并刷新宏。是否继续？',
+      '将按照事件配置执行相应动作。是否继续？',
       [
         {text: '取消', style: 'cancel'},
         {
