@@ -35,6 +35,12 @@ import {
   type MessageMenuAnchor,
 } from '../../components/chat/MessageActionMenu';
 import {MessageList} from '../../components/chat/MessageList';
+import {
+  getScrollSnapshot,
+  scrollCacheKey,
+  setScrollSnapshot,
+  type ChatListScrollSnapshot,
+} from '../../services/chat-list-scroll-cache';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
@@ -150,6 +156,25 @@ export function ChatTabScreen() {
   const [messageEditPrompt, setMessageEditPrompt] = useState<
     {messageId: string; initialText: string} | undefined
   >();
+
+  const chatScrollKey =
+    projectId != null && sessionId != null
+      ? scrollCacheKey(projectId, sessionId)
+      : null;
+  const cachedChatScroll = chatScrollKey
+    ? getScrollSnapshot(chatScrollKey)
+    : undefined;
+  const defaultChatScrollToBottom =
+    chatScrollKey != null && cachedChatScroll == null;
+
+  const handleChatScrollSnapshot = useCallback(
+    (snap: ChatListScrollSnapshot) => {
+      if (chatScrollKey) {
+        setScrollSnapshot(chatScrollKey, snap);
+      }
+    },
+    [chatScrollKey],
+  );
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();
@@ -1002,6 +1027,9 @@ export function ChatTabScreen() {
                 showFullToolParams={showFullToolParams}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
+                initialScroll={cachedChatScroll ?? null}
+                defaultScrollToBottom={defaultChatScrollToBottom}
+                onScrollSnapshot={handleChatScrollSnapshot}
                 batchMode={messageBatch.active}
                 selectedMessageIds={messageBatch.selectedIds}
                 onToggleMessageSelect={messageBatch.toggle}
