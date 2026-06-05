@@ -122,6 +122,8 @@ export function ProviderEditScreen() {
             }
             showToast('已保存');
             navigation.goBack();
+          } catch (err) {
+            showToast(toastMessage('保存失败', err));
           } finally {
             setSaving(false);
           }
