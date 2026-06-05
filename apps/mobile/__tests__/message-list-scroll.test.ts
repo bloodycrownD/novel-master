@@ -132,7 +132,7 @@ describe('MessageList scroll restore', () => {
     );
   });
 
-  it('T2: new session without cache scrolls to end', () => {
+  it('T2: new session without cache does not force initial scrollToEnd', () => {
     const messages = [sampleMessage('m1')];
     let renderer: TestRenderer.ReactTestRenderer;
     act(() => {
@@ -146,7 +146,7 @@ describe('MessageList scroll restore', () => {
     flushScrollEffects();
     mockScrollToEnd.mockClear();
     triggerContentSizeChange(renderer!);
-    expect(mockScrollToEnd).toHaveBeenCalled();
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
     expect(mockScrollToOffset).not.toHaveBeenCalled();
   });
 
@@ -176,5 +176,21 @@ describe('MessageList scroll restore', () => {
     expect(mockScrollToOffset).toHaveBeenCalledWith(
       expect.objectContaining({offset: 200, animated: false}),
     );
+  });
+
+  it('T4: cached near-bottom restore scrolls to end once', () => {
+    const messages = [sampleMessage('m1')];
+    let renderer: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        React.createElement(MessageList, {
+          messages,
+          initialScroll: {offsetY: 0, nearBottom: true},
+        }),
+      );
+    });
+    mockScrollToEnd.mockClear();
+    triggerContentSizeChange(renderer!);
+    expect(mockScrollToEnd).toHaveBeenCalled();
   });
 });

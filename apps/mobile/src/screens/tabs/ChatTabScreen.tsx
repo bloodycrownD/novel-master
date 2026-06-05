@@ -41,6 +41,12 @@ import {
   setScrollSnapshot,
   type ChatListScrollSnapshot,
 } from '../../services/chat-list-scroll-cache';
+import {
+  clearSessionViewCache,
+  getSessionViewCache,
+  sessionViewCacheKey,
+  setSessionViewCache,
+} from '../../services/chat-session-view-cache';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
@@ -240,29 +246,58 @@ export function ChatTabScreen() {
     }
   }, [runtime, refreshChatTokenLabel]);
 
-  const reloadMessages = useCallback(async () => {
-    if (sessionId == null) {
-      setChatMessages([]);
-      setHasMoreMessages(false);
-      return;
-    }
-    const list = await loadSessionMessagesTailForDisplay(
-      runtime,
-      sessionId,
-      CHAT_PAGE_SIZE,
-    );
-    setChatMessages(list);
-    const oldestSeq = list[0]?.seq;
-    if (oldestSeq == null) {
-      setHasMoreMessages(false);
-    } else {
-      const older = await runtime.messages.listBySessionPage(sessionId, {
-        limit: 1,
-        beforeSeq: oldestSeq,
+  const persistSessionViewCache = useCallback(
+    (messages: readonly ChatMessage[], hasMore: boolean) => {
+      if (projectId == null || sessionId == null) {
+        return;
+      }
+      setSessionViewCache(sessionViewCacheKey(projectId, sessionId), {
+        messages,
+        hasMoreMessages: hasMore,
       });
-      setHasMoreMessages(older.length > 0);
-    }
-  }, [runtime, sessionId]);
+    },
+    [projectId, sessionId],
+  );
+
+  const reloadMessages = useCallback(
+    async (force = false) => {
+      if (sessionId == null || projectId == null) {
+        setChatMessages([]);
+        setHasMoreMessages(false);
+        return;
+      }
+      const cacheKey = sessionViewCacheKey(projectId, sessionId);
+      if (!force) {
+        const cached = getSessionViewCache(cacheKey);
+        if (cached != null) {
+          setChatMessages([...cached.messages]);
+          setHasMoreMessages(cached.hasMoreMessages);
+          return;
+        }
+      }
+      const list = await loadSessionMessagesTailForDisplay(
+        runtime,
+        sessionId,
+        CHAT_PAGE_SIZE,
+      );
+      let hasMore = false;
+      const oldestSeq = list[0]?.seq;
+      if (oldestSeq != null) {
+        const older = await runtime.messages.listBySessionPage(sessionId, {
+          limit: 1,
+          beforeSeq: oldestSeq,
+        });
+        hasMore = older.length > 0;
+      }
+      setChatMessages(list);
+      setHasMoreMessages(hasMore);
+      setSessionViewCache(cacheKey, {
+        messages: list,
+        hasMoreMessages: hasMore,
+      });
+    },
+    [runtime, sessionId, projectId],
+  );
 
   const handleStreamText = useCallback(
     (delta: string) => {
@@ -288,7 +323,7 @@ export function ChatTabScreen() {
   }, [streamBuffer]);
 
   const handleMessagesChanged = useCallback(async () => {
-    await reloadMessages();
+    await reloadMessages(true);
     void refreshChatTokenLabel();
   }, [reloadMessages, refreshChatTokenLabel]);
 
@@ -310,12 +345,23 @@ export function ChatTabScreen() {
         setHasMoreMessages(false);
         return;
       }
-      setChatMessages(prev => prependOlderMessages(prev, older));
-      setHasMoreMessages(older.length === CHAT_PAGE_SIZE);
+      const hasMore = older.length === CHAT_PAGE_SIZE;
+      setChatMessages(prev => {
+        const next = prependOlderMessages(prev, older);
+        persistSessionViewCache(next, hasMore);
+        return next;
+      });
+      setHasMoreMessages(hasMore);
     } finally {
       setLoadingMoreMessages(false);
     }
-  }, [runtime, sessionId, loadingMoreMessages, chatMessages]);
+  }, [
+    runtime,
+    sessionId,
+    loadingMoreMessages,
+    chatMessages,
+    persistSessionViewCache,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -439,6 +485,16 @@ export function ChatTabScreen() {
         return;
       }
       await setCurrentSession(sid);
+      const cached = getSessionViewCache(
+        sessionViewCacheKey(projectId, sid),
+      );
+      if (cached != null) {
+        setChatMessages([...cached.messages]);
+        setHasMoreMessages(cached.hasMoreMessages);
+      } else {
+        setChatMessages([]);
+        setHasMoreMessages(false);
+      }
       setChatSubview('conversation');
       setConversationPanel('chat');
     },
@@ -512,6 +568,9 @@ export function ChatTabScreen() {
     const ids = [...sessionBatch.selectedIds];
     for (const id of ids) {
       await runtime.sessions.delete(id);
+      if (projectId != null) {
+        clearSessionViewCache(sessionViewCacheKey(projectId, id));
+      }
     }
     const deletedCurrent = sessionId != null && ids.includes(sessionId);
     sessionBatch.exit();
@@ -520,7 +579,7 @@ export function ChatTabScreen() {
     }
     await refreshScope();
     await reloadLists();
-  }, [runtime, sessionBatch, sessionId, refreshScope, reloadLists]);
+  }, [runtime, sessionBatch, sessionId, projectId, refreshScope, reloadLists]);
 
   const handleCopySession = useCallback(
     async (sourceSessionId: string) => {
@@ -539,6 +598,11 @@ export function ChatTabScreen() {
     async (targetSessionId: string) => {
       try {
         await runtime.sessions.delete(targetSessionId);
+        if (projectId != null) {
+          clearSessionViewCache(
+            sessionViewCacheKey(projectId, targetSessionId),
+          );
+        }
         if (sessionId === targetSessionId) {
           setChatSubview('sessions');
         }
@@ -549,7 +613,7 @@ export function ChatTabScreen() {
         showToast(toastMessage('删除失败', error));
       }
     },
-    [runtime, sessionId, refreshScope, reloadLists, showToast],
+    [runtime, projectId, sessionId, refreshScope, reloadLists, showToast],
   );
 
   const confirmDeleteSession = useCallback(
@@ -636,7 +700,7 @@ export function ChatTabScreen() {
                   await rollbackToMessage(runtime, {projectId, sessionId}, messageId);
                   setStreamingText('');
                   setStreamingThinking('');
-                  await reloadMessages();
+                  await reloadMessages(true);
                   bumpVfsRefresh();
                   showToast('回滚成功');
                 } catch (error) {
@@ -685,7 +749,7 @@ export function ChatTabScreen() {
     exitMessageBatch();
     setStreamingText('');
     setStreamingThinking('');
-    await reloadMessages();
+    await reloadMessages(true);
   }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
 
   const hideSelectedMessages = useCallback(async () => {
@@ -694,7 +758,7 @@ export function ChatTabScreen() {
       await runtime.messages.hide(id);
     }
     exitMessageBatch();
-    await reloadMessages();
+    await reloadMessages(true);
   }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
 
   const unhideSelectedMessages = useCallback(async () => {
@@ -703,7 +767,7 @@ export function ChatTabScreen() {
       await runtime.messages.show(id);
     }
     exitMessageBatch();
-    await reloadMessages();
+    await reloadMessages(true);
   }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
 
   const confirmMessageBatchDelete = useCallback(() => {
@@ -765,7 +829,7 @@ export function ChatTabScreen() {
     async (messageId: string) => {
       try {
         await runtime.messages.hide(messageId);
-        await reloadMessages();
+        await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('隐藏失败', error));
       }
@@ -777,7 +841,7 @@ export function ChatTabScreen() {
     async (messageId: string) => {
       try {
         await runtime.messages.show(messageId);
-        await reloadMessages();
+        await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('取消隐藏失败', error));
       }
@@ -807,7 +871,7 @@ export function ChatTabScreen() {
                   EVENT_SESSION_COMPACTION_REQUESTED,
                   {sessionId, projectId, trigger: 'manual'},
                 );
-                await reloadMessages();
+                await reloadMessages(true);
                 if (!result.ok) {
                   showToast(toastMessage('压缩部分失败', result.failures[0]?.error));
                 } else {
@@ -836,7 +900,7 @@ export function ChatTabScreen() {
         await runtime.messages.delete(messageId);
         setStreamingText('');
         setStreamingThinking('');
-        await reloadMessages();
+        await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('删除失败', error));
       }
@@ -853,7 +917,7 @@ export function ChatTabScreen() {
       }
       try {
         await runtime.messages.updateContent(messageId, textBlocks(trimmed));
-        await reloadMessages();
+        await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('保存失败', error));
       }
@@ -967,10 +1031,15 @@ export function ChatTabScreen() {
     />
   );
 
-  if (chatSubview === 'conversation') {
-    return (
-      <View style={[styles.root, {backgroundColor: tokens.background}]}>
-        <AppHeader pageKey="chat" />
+  return (
+    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+      <AppHeader pageKey="chat" />
+      <View
+        style={[
+          styles.subviewFill,
+          chatSubview !== 'conversation' && styles.panelHidden,
+        ]}
+        pointerEvents={chatSubview === 'conversation' ? 'auto' : 'none'}>
         <SegmentedControl
           tokens={tokens}
           value={conversationPanel}
@@ -980,9 +1049,14 @@ export function ChatTabScreen() {
             {value: 'workspace', label: '会话工作区'},
           ]}
         />
-        {conversationPanel === 'chat' ? (
-          projectId != null && sessionId != null ? (
-            <View style={styles.chatPanel}>
+        {projectId != null && sessionId != null ? (
+          <>
+            <View
+              style={[
+                styles.chatPanel,
+                conversationPanel !== 'chat' && styles.panelHidden,
+              ]}
+              pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
               <ChatMetaBar meta={agentMeta} />
               {streamMetrics != null ? (
                 <ChatStreamMetricsBar metrics={streamMetrics} />
@@ -1021,6 +1095,7 @@ export function ChatTabScreen() {
                 />
               ) : null}
               <MessageList
+                key={chatScrollKey ?? 'no-session-scroll'}
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
@@ -1071,30 +1146,40 @@ export function ChatTabScreen() {
                 canResumeWithoutInput={canResumeWithoutInput}
               />
             </View>
-          ) : (
-            <View style={styles.placeholder}>
-              <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
-            </View>
-          )
-        ) : sessionVfs && sessionWorktree && sessionId != null ? (
-          <View style={styles.flexFill}>
-            <VfsFileManager
-              key={`session-vfs-${vfsRefreshKey}`}
-              scope={{
-                kind: 'session',
-                projectId: projectId!,
-                sessionId,
-              }}
-              vfs={sessionVfs}
-              worktree={sessionWorktree}
-              rootPath="/"
-              pullFromParent={{
-                scope: {kind: 'session', sessionId},
-                onPulled: bumpVfsRefresh,
-              }}
-              onOpenFile={path => openFileEditor(path, 'session')}
-            />
-          </View>
+            {sessionVfs && sessionWorktree ? (
+              <View
+                style={[
+                  styles.flexFill,
+                  conversationPanel !== 'workspace' && styles.panelHidden,
+                ]}
+                pointerEvents={
+                  conversationPanel === 'workspace' ? 'auto' : 'none'
+                }>
+                <VfsFileManager
+                  key={`session-vfs-${vfsRefreshKey}`}
+                  scope={{
+                    kind: 'session',
+                    projectId: projectId!,
+                    sessionId,
+                  }}
+                  vfs={sessionVfs}
+                  worktree={sessionWorktree}
+                  rootPath="/"
+                  pullFromParent={{
+                    scope: {kind: 'session', sessionId},
+                    onPulled: bumpVfsRefresh,
+                  }}
+                  onOpenFile={path => openFileEditor(path, 'session')}
+                />
+              </View>
+            ) : conversationPanel === 'workspace' ? (
+              <View style={styles.placeholder}>
+                <Text style={{color: tokens.textSecondary}}>
+                  会话工作区不可用
+                </Text>
+              </View>
+            ) : null}
+          </>
         ) : (
           <View style={styles.placeholder}>
             <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
@@ -1219,14 +1304,13 @@ export function ChatTabScreen() {
           onClose={() => setAgentPickerOpen(false)}
           onSelected={() => refreshChatMeta().catch(() => undefined)}
         />
-        {sessionRenameModal}
       </View>
-    );
-  }
-
-  return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <AppHeader pageKey="chat" />
+      <View
+        style={[
+          styles.subviewFill,
+          chatSubview !== 'sessions' && styles.panelHidden,
+        ]}
+        pointerEvents={chatSubview === 'sessions' ? 'auto' : 'none'}>
       {currentProject ? (
         <Pressable
           style={[
@@ -1407,9 +1491,10 @@ export function ChatTabScreen() {
               }
             }}
           />
-          {sessionRenameModal}
         </>
       )}
+      </View>
+      {sessionRenameModal}
       <ProjectDrawer
         visible={projectDrawerOpen}
         projects={projects}
@@ -1472,6 +1557,8 @@ const styles = StyleSheet.create({
   empty: {textAlign: 'center', marginTop: 32},
   placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   chatPanel: {flex: 1},
+  subviewFill: {flex: 1, minHeight: 0},
+  panelHidden: {display: 'none'},
   loadMoreBtn: {
     alignSelf: 'center',
     paddingHorizontal: 12,

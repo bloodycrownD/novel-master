@@ -46,7 +46,9 @@ type Props = {
   /** Restored scroll position after panel remount (workspace ↔ chat). */
   initialScroll?: ChatListScrollSnapshot | null;
   onScrollSnapshot?: (snap: ChatListScrollSnapshot) => void;
-  /** New session with no cache: default to bottom. */
+  /**
+   * New session with no cache: mark near-bottom for stream follow only (no initial scrollToEnd).
+   */
   defaultScrollToBottom?: boolean;
 };
 
@@ -132,13 +134,17 @@ export function MessageList({
   const viewportHeightRef = useRef(0);
   const contentHeightRef = useRef(0);
   const hasAppliedInitialScrollRef = useRef(false);
-  const pendingScrollRestoreRef = useRef(
-    initialScroll != null || defaultScrollToBottom,
-  );
+  const pendingScrollRestoreRef = useRef(initialScroll != null);
   const lastScrollToEndMsRef = useRef(0);
   const scrollToEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const mountContentOffsetRef = useRef<{x: number; y: number} | undefined>(
+    initialScroll != null &&
+      !initialScroll.nearBottom &&
+      initialScroll.offsetY > 0
+      ? {x: 0, y: initialScroll.offsetY}
+      : undefined,
+  );
   const items = useMemo(() => buildChatListItems(messages), [messages]);
 
   const currentScrollSnapshot = useCallback(
@@ -189,14 +195,9 @@ export function MessageList({
           animated: false,
         });
         pendingScrollRestoreRef.current = false;
-        return;
-      }
-      if (defaultScrollToBottom) {
-        listRef.current?.scrollToEnd({animated: false});
-        pendingScrollRestoreRef.current = false;
       }
     },
-    [initialScroll, defaultScrollToBottom],
+    [initialScroll],
   );
 
   const scheduleScrollToEnd = useCallback(() => {
@@ -251,8 +252,6 @@ export function MessageList({
       scrollOffsetRef.current = initialScroll.offsetY;
     } else if (defaultScrollToBottom) {
       nearBottomRef.current = true;
-    } else {
-      pendingScrollRestoreRef.current = false;
     }
     requestAnimationFrame(() => {
       applyPendingScrollRestore();
@@ -277,7 +276,6 @@ export function MessageList({
         nearBottomRef.current = initialScroll.nearBottom;
       } else if (defaultScrollToBottom) {
         nearBottomRef.current = true;
-        scheduleScrollToEnd();
       }
     } else if (grew && firstId === prevFirstId) {
       scheduleScrollToEnd();
@@ -367,6 +365,7 @@ export function MessageList({
       ref={listRef}
       style={styles.list}
       data={data}
+      contentOffset={mountContentOffsetRef.current}
       extraData={{chatRichTextEnabled, richRenderEpoch}}
       ListHeaderComponent={listHeaderComponent ?? undefined}
       maintainVisibleContentPosition={{
