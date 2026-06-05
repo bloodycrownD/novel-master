@@ -16,9 +16,8 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
 const DEFAULT_CONDITIONS: CompactionConditions = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   enabled: false,
-  tokenThreshold: -1,
   tokenRatio: 0.8,
   visibleFloor: 20,
 };
@@ -30,7 +29,6 @@ export function CompactionConditionsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [enabled, setEnabled] = useState(false);
-  const [tokenThreshold, setTokenThreshold] = useState('-1');
   const [tokenRatio, setTokenRatio] = useState('0.8');
   const [visibleFloor, setVisibleFloor] = useState('20');
 
@@ -40,9 +38,6 @@ export function CompactionConditionsScreen() {
       const stored = await runtime.compactionConditions.getConditions();
       const c = stored ?? DEFAULT_CONDITIONS;
       setEnabled(c.enabled);
-      setTokenThreshold(
-        c.tokenThreshold != null ? String(c.tokenThreshold) : '',
-      );
       setTokenRatio(c.tokenRatio != null ? String(c.tokenRatio) : '');
       setVisibleFloor(
         c.visibleFloor != null ? String(c.visibleFloor) : '',
@@ -57,17 +52,15 @@ export function CompactionConditionsScreen() {
   }, [load]);
 
   const collect = (): CompactionConditions | null => {
-    const token = tokenThreshold.trim() ? Number(tokenThreshold) : undefined;
     const ratio = tokenRatio.trim() ? Number(tokenRatio) : undefined;
     const floor = visibleFloor.trim() ? Number(visibleFloor) : undefined;
-    if (enabled && token == null && floor == null) {
-      showToast('启用时至少填写 token 阈值或可见条数阈值');
+    if (enabled && ratio == null && floor == null) {
+      showToast('启用时至少填写 token 比例或可见条数阈值');
       return null;
     }
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       enabled,
-      ...(token != null ? {tokenThreshold: token} : {}),
       ...(ratio != null ? {tokenRatio: ratio} : {}),
       ...(floor != null ? {visibleFloor: floor} : {}),
     };
@@ -119,18 +112,9 @@ export function CompactionConditionsScreen() {
       {enabled ? (
         <FormSectionCard title="触发条件（OR）" tokens={tokens}>
           <FormField
-            label="Token 阈值"
+            label="Token 比例"
             tokens={tokens}
-            hint="-1 表示使用当前模型上下文上限 × 比例">
-            <FormTextInput
-              tokens={tokens}
-              value={tokenThreshold}
-              onChangeText={setTokenThreshold}
-              keyboardType="numbers-and-punctuation"
-              placeholder="-1"
-            />
-          </FormField>
-          <FormField label="Token 比例" tokens={tokens}>
+            hint="基于当前模型上下文上限 × 比例">
             <FormTextInput
               tokens={tokens}
               value={tokenRatio}

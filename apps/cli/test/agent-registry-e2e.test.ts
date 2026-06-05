@@ -78,7 +78,8 @@ describe("agent registry e2e", () => {
       const show = runNm(["compaction-conditions", "show", "--db", dbPath]);
       assert.equal(show.status, 0, show.stderr);
       assert.match(show.stdout, /"enabled":\s*true/);
-      assert.match(show.stdout, /"tokenThreshold":\s*12000/);
+      assert.match(show.stdout, /"tokenRatio":\s*0\.8/);
+      assert.match(show.stdout, /"schemaVersion":\s*3/);
       assert.match(show.stdout, /"visibleFloor":\s*20/);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -92,7 +93,7 @@ describe("agent registry e2e", () => {
     try {
       await writeFile(
         conditionsPath,
-        ["schemaVersion: 2", "enabled: true"].join("\n"),
+        ["schemaVersion: 2", "enabled: true", "tokenThreshold: 12000"].join("\n"),
         "utf8",
       );
 
@@ -107,7 +108,7 @@ describe("agent registry e2e", () => {
       assert.notEqual(set.status, 0);
       assert.match(
         set.stderr + set.stdout,
-        /at least one of tokenThreshold|visible-floor/i,
+        /schemaVersion|tokenRatio|visible-floor/i,
       );
     } finally {
       await rm(dir, { recursive: true, force: true });

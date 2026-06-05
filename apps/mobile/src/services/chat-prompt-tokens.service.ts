@@ -6,7 +6,6 @@ import {
   messageBodyText,
   parseApplicationModelId,
   resolveApplicationModelId,
-  resolveContextWindowTokens,
   serializePromptLlmInput,
 } from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -38,10 +37,10 @@ export async function loadChatPromptTokenLabel(
     registry: runtime.tokenCounters,
   });
 
-  const {vendorModelId} = parseApplicationModelId(applicationModelId);
-  const contextWindow = resolveContextWindowTokens(vendorModelId);
+  const contextWindow =
+    await runtime.providerModels.getContextWindow(applicationModelId);
 
-  return formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
+  return formatPromptTokenUsageLabel(result.tokenCount, contextWindow ?? undefined, {
     estimated: result.estimated,
   });
 }
@@ -73,8 +72,9 @@ async function loadChatPromptTokenLabelFallback(
   let contextWindow: number | undefined;
   if (applicationModelId) {
     try {
-      const {vendorModelId} = parseApplicationModelId(applicationModelId);
-      contextWindow = resolveContextWindowTokens(vendorModelId);
+      const cw =
+        await runtime.providerModels.getContextWindow(applicationModelId);
+      contextWindow = cw ?? undefined;
     } catch {
       contextWindow = undefined;
     }

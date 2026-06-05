@@ -13,7 +13,6 @@ import type {
   KkvService,
   MessageService,
   ModelRequestService,
-  ModelSamplingProfileService,
   PersistentPreferences,
   PersistentState,
   ProjectService,
@@ -56,7 +55,6 @@ export interface MobileNovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
-  readonly modelSamplingProfiles: ModelSamplingProfileService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;

@@ -72,6 +72,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
     tokenCounters,
+    providerModels: providerBundle.providerModels,
   });
 
   const agentRegistry = createAgentRegistryService(conn);
@@ -124,7 +125,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
     modelRequests: providerBundle.modelRequests,
-    modelSamplingProfiles: providerBundle.modelSamplingProfiles,
     regexConfig,
   };
 }

@@ -1,5 +1,5 @@
 /**
- * Per-model sampling profile CRUD (modelSamplingProfiles KKV).
+ * Per-model settings: context window + sampling (`settings_json`).
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator} from 'react-native';
@@ -10,7 +10,9 @@ import {
   mergeSamplingWithDefaults,
   parseApplicationModelId,
 } from '@novel-master/core';
+import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SamplingForm} from '../../components/provider/SamplingForm';
@@ -49,6 +51,7 @@ export function ModelSamplingScreen() {
 
   const [protocol, setProtocol] = useState<LlmProtocolKind>('openai');
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
+  const [contextWindowTokens, setContextWindowTokens] = useState('');
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -69,11 +72,15 @@ export function ModelSamplingScreen() {
       } catch {
         setModelSubtitle(applicationModelId);
       }
-      const profile =
-        await runtime.modelSamplingProfiles.getProfile(applicationModelId);
-      const stored =
-        profile?.enabled && profile.params != null ? profile.params : undefined;
-      setParams(mergeSamplingWithDefaults(provider.protocol, stored));
+      const saved = await runtime.providerModels.getSaved(applicationModelId);
+      if (saved) {
+        setContextWindowTokens(String(saved.settings.contextWindowTokens));
+        const stored =
+          saved.settings.sampling.enabled && saved.settings.sampling.params != null
+            ? saved.settings.sampling.params
+            : undefined;
+        setParams(mergeSamplingWithDefaults(provider.protocol, stored));
+      }
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
@@ -96,23 +103,47 @@ export function ModelSamplingScreen() {
     if (!applicationModelId) {
       return;
     }
+    const {providerId, vendorModelId} =
+      parseApplicationModelId(applicationModelId);
+    const contextWindow = Number(contextWindowTokens);
+    if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+      showToast('上下文上限须为正整数');
+      return;
+    }
     setSaving(true);
     try {
-      if (paramsEmpty(params)) {
-        await runtime.modelSamplingProfiles.clearProfile(applicationModelId);
-      } else if (params) {
-        await runtime.modelSamplingProfiles.setProfile(applicationModelId, {
-          schemaVersion: 1,
-          enabled: true,
-          params,
-        });
-      }
-      showToast('已保存采样配置');
+      const sampling =
+        paramsEmpty(params) || !params
+          ? {enabled: false as const}
+          : {enabled: true as const, params};
+      await runtime.providerModels.updateSettings(providerId, vendorModelId, {
+        contextWindowTokens: contextWindow,
+        sampling,
+      });
+      showToast('已保存模型设置');
       navigation.goBack();
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetContextWindow = async () => {
+    if (!applicationModelId) {
+      return;
+    }
+    const {providerId, vendorModelId} =
+      parseApplicationModelId(applicationModelId);
+    try {
+      const updated = await runtime.providerModels.resetContextWindowToDefault(
+        providerId,
+        vendorModelId,
+      );
+      setContextWindowTokens(String(updated.settings.contextWindowTokens));
+      showToast('已恢复默认上下文上限');
+    } catch (error) {
+      showToast(toastMessage('恢复失败', error));
     }
   };
 
@@ -135,6 +166,22 @@ export function ModelSamplingScreen() {
           onPress={() => handleSave().catch(() => undefined)}
         />
       }>
+      <FormSectionCard title="上下文上限" tokens={tokens}>
+        <FormField label="Context window (tokens)" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={contextWindowTokens}
+            onChangeText={setContextWindowTokens}
+            keyboardType="number-pad"
+          />
+        </FormField>
+        <StickyFormFooter
+          tokens={tokens}
+          label="恢复默认"
+          loading={false}
+          onPress={() => handleResetContextWindow().catch(() => undefined)}
+        />
+      </FormSectionCard>
       <FormSectionCard title="采样参数" tokens={tokens} hint={sectionHint}>
         <SamplingForm
           tokens={tokens}

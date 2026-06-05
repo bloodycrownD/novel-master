@@ -1,14 +1,14 @@
 /**
- * `nm provider model sampling` subcommands (KKV profiles per saved model).
+ * `nm provider model sampling` subcommands (reads/writes `settings_json.sampling`).
  *
  * @module provider/model/sampling-commands
  */
 
 import { readFile } from "node:fs/promises";
 import {
-  modelSamplingProfileFromJson,
-  modelSamplingProfileToJson,
   parseApplicationModelId,
+  savedModelSettingsFromJson,
+  savedModelSettingsToJson,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
@@ -40,8 +40,8 @@ export async function runProviderModelSampling(
   const modelId = requireModelId(flags);
   const { providerId, vendorModelId } = parseApplicationModelId(modelId);
 
-  const saved = await rt.providerModels.savedList(providerId);
-  if (!saved.some((m) => m.vendorModelId === vendorModelId)) {
+  const saved = await rt.providerModels.getSaved(modelId);
+  if (saved == null) {
     throw new Error(
       `Model not saved: ${modelId} (run: nm provider model save --vendorModelId ${vendorModelId})`,
     );
@@ -49,12 +49,17 @@ export async function runProviderModelSampling(
 
   switch (subcommand) {
     case "show": {
-      const profile = await rt.modelSamplingProfiles.getProfile(modelId);
-      if (profile == null) {
-        console.log(JSON.stringify({ enabled: false }, null, 2));
-        return;
-      }
-      console.log(JSON.stringify(modelSamplingProfileToJson(profile), null, 2));
+      const sampling = saved.settings.sampling;
+      console.log(
+        JSON.stringify(
+          {
+            enabled: sampling.enabled,
+            ...(sampling.params != null ? { params: sampling.params } : {}),
+          },
+          null,
+          2,
+        ),
+      );
       return;
     }
     case "set": {
@@ -65,12 +70,23 @@ export async function runProviderModelSampling(
         );
       }
       const raw = await readFile(filePath, "utf8");
-      const profile = modelSamplingProfileFromJson(JSON.parse(raw) as unknown);
-      await rt.modelSamplingProfiles.setProfile(modelId, profile);
+      const doc = JSON.parse(raw) as unknown;
+      const parsed = savedModelSettingsFromJson({
+        ...savedModelSettingsToJson(saved.settings),
+        sampling: {
+          enabled: Boolean((doc as { enabled?: boolean }).enabled),
+          params: (doc as { params?: unknown }).params,
+        },
+      });
+      await rt.providerModels.updateSettings(providerId, vendorModelId, {
+        sampling: parsed.sampling,
+      });
       return;
     }
     case "clear": {
-      await rt.modelSamplingProfiles.clearProfile(modelId);
+      await rt.providerModels.updateSettings(providerId, vendorModelId, {
+        sampling: { enabled: false },
+      });
       return;
     }
     default:

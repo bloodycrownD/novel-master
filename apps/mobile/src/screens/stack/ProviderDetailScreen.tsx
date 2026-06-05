@@ -87,9 +87,9 @@ export function ProviderDetailScreen() {
           providerId,
           model.vendorModelId,
         );
-        const profile =
-          await runtime.modelSamplingProfiles.getProfile(applicationModelId);
-        const hasSampling = Boolean(profile?.enabled && profile.params);
+        const hasSampling = Boolean(
+          model.settings.sampling.enabled && model.settings.sampling.params,
+        );
         let label = model.displayName?.trim() || model.vendorModelId;
         try {
           label = await resolveModelShortLabel(runtime, applicationModelId);
@@ -144,7 +144,6 @@ export function ProviderDetailScreen() {
         vendorModelId,
       );
       await runtime.providerModels.deleteSaved(providerId, vendorModelId);
-      await runtime.modelSamplingProfiles.clearProfile(applicationModelId);
     }
     await reload();
   };

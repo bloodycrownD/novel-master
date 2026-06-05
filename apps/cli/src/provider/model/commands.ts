@@ -96,14 +96,30 @@ export async function runProviderModel(
       const modelId = flagString(flags, "modelId");
       if (!modelId) {
         throw new Error(
-          "Usage: nm provider model edit --modelId <provider>/<vendor> [--displayName]",
+          "Usage: nm provider model edit --modelId <provider>/<vendor> [--displayName] [--contextWindowTokens N] [--resetContextWindow]",
         );
       }
       const { providerId: pid, vendorModelId } = parseApplicationModelId(modelId);
       const displayName = flags.has("displayName")
         ? (flagString(flags, "displayName") ?? null)
         : undefined;
-      await rt.providerModels.editSaved(pid, vendorModelId, displayName);
+      if (displayName !== undefined) {
+        await rt.providerModels.editSaved(pid, vendorModelId, displayName);
+      }
+      if (flags.has("resetContextWindow")) {
+        await rt.providerModels.resetContextWindowToDefault(pid, vendorModelId);
+      } else {
+        const contextWindowRaw = flagString(flags, "contextWindowTokens");
+        if (contextWindowRaw != null) {
+          const contextWindowTokens = Number(contextWindowRaw);
+          if (!Number.isInteger(contextWindowTokens) || contextWindowTokens <= 0) {
+            throw new Error("--contextWindowTokens must be a positive integer");
+          }
+          await rt.providerModels.updateSettings(pid, vendorModelId, {
+            contextWindowTokens,
+          });
+        }
+      }
       return;
     }
     case "delete": {
