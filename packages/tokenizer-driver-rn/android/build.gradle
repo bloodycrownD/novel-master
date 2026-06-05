@@ -1,0 +1,47 @@
+buildscript {
+  ext.kotlinVersion = "2.0.21"
+}
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+  namespace "com.novelmaster.tokenizer"
+  compileSdkVersion rootProject.ext.compileSdkVersion
+
+  defaultConfig {
+    minSdkVersion rootProject.ext.minSdkVersion
+    targetSdkVersion rootProject.ext.targetSdkVersion
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = "17"
+  }
+
+  testOptions {
+    unitTests.includeAndroidResources = true
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+
+  def djlVersion = "0.33.0"
+  implementation(platform("ai.djl:bom:${djlVersion}"))
+  implementation("ai.djl:api")
+  implementation("ai.djl.huggingface:tokenizers")
+  implementation("ai.djl.android:core:${djlVersion}")
+  implementation("ai.djl.android:tokenizer-native:${djlVersion}")
+  implementation("ai.djl.sentencepiece:sentencepiece")
+
+  testImplementation("junit:junit:4.13.2")
+  testImplementation("org.json:json:20240303")
+  testImplementation(platform("ai.djl:bom:${djlVersion}"))
+  testImplementation("ai.djl.huggingface:tokenizers")
+}

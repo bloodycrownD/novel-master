@@ -1,0 +1,43 @@
+{
+  "name": "@novel-master/tokenizer-driver-rn",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./native": {
+      "types": "./dist/native.d.ts",
+      "import": "./dist/native.js"
+    },
+    "./android-native-bridge": {
+      "types": "./dist/android-native-bridge.d.ts",
+      "import": "./dist/android-native-bridge.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@novel-master/core": "*",
+    "js-tiktoken": "^1.0.21"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.74.0"
+  },
+  "react-native": {
+    "android": {
+      "sourceDir": "./android"
+    }
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.8.3"
+  }
+}

@@ -4,7 +4,6 @@
  * @module infra/tokenizer/ports/token-counter-registry.port
  */
 
-import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { TokenCounter } from "./token-counter.port.js";
 import type { TokenizerOverride } from "../logic/resolve-tokenizer-family.js";
 
@@ -25,10 +24,9 @@ export interface TokenCounterRegistry {
     applicationModelId: string,
     options?: ForVendorModelOptions,
   ): Promise<TokenCounter>;
-  /** Primary path: vendor model id substring → tokenizer family. */
+  /** Primary path: vendor model id substring → tokenizer family (heuristic in core). */
   forVendorModel(
     vendorModelId: string,
-    protocolOrOptions?: LlmProtocolKind | ForVendorModelOptions,
     options?: ForVendorModelOptions,
   ): TokenCounter;
 }

@@ -16,7 +16,8 @@ class MainApplication : Application(), ReactApplication {
       context = applicationContext,
       packageList =
         PackageList(this).packages.apply {
-          // SKSP native module (Keystore); also autolinked via @novel-master/sksp-android.
+          // Local monorepo packages: explicit add() mirrors @novel-master/sksp-android.
+          // PackageList autolink may not always include workspace project packages reliably.
           add(SkspPackage())
           add(TokenizerPackage())
         },

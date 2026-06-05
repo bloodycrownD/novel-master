@@ -10,15 +10,16 @@
     "start": "react-native start",
     "test": "jest",
     "icons": "node scripts/generate-app-icons.mjs",
-    "prestart": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn",
-    "preandroid": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn",
-    "preios": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn"
+    "prestart": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
+    "preandroid": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
+    "preios": "npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.2",
     "@novel-master/core": "*",
     "@novel-master/sksp-android": "*",
     "@novel-master/tdbc-driver-rn": "*",
+    "@novel-master/tokenizer-driver-rn": "*",
     "@react-native-clipboard/clipboard": "^1.16.3",
     "@react-native-documents/picker": "^12.0.1",
     "@react-navigation/bottom-tabs": "^7.3.10",

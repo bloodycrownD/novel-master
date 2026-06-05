@@ -6,10 +6,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  installNodeTokenizerLoader,
-  installNodePromptTokenCounter,
-} from "./tokenizer/install-node-tokenizer-loader.js";
+import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
 import {
   bootstrapNovelMaster,
   createAgentRegistryService,
@@ -124,6 +121,7 @@ export async function createNovelMasterRuntime(
 ): Promise<NovelMasterRuntime> {
   registerBetterSqlite3Driver();
   registerSkspWindowsDriver();
+  registerTokenizerNodeDriver();
   const dbPath = resolve(resolveDbPath(argv));
   await mkdir(dirname(dbPath), { recursive: true });
 
@@ -131,8 +129,6 @@ export async function createNovelMasterRuntime(
     driver: "better-sqlite3",
   });
   await bootstrapNovelMaster(conn);
-  installNodeTokenizerLoader();
-  await installNodePromptTokenCounter();
 
   const state = createPersistentState(conn);
   const regexConfig = createRegexConfigService(conn, state);

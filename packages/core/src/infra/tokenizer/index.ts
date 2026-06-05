@@ -15,11 +15,8 @@ export type {
 } from "./ports/token-counter-registry.port.js";
 export type { TokenizerOverride } from "./logic/resolve-tokenizer-family.js";
 export { HeuristicTokenCounter, CHARACTERS_PER_TOKEN_RATIO } from "./impl/heuristic-token-counter.js";
-export { TiktokenTokenCounter, clearTiktokenEncodingCache } from "./impl/tiktoken-token-counter.js";
-/** Node-only counters — not exported here (avoid Metro pulling `@agnai/sentencepiece-js`). */
 export {
   createDefaultTokenCounterRegistry,
-  resetTiktokenLoadFailedFlag,
   type CreateDefaultTokenCounterRegistryDeps,
 } from "./logic/create-default-registry.js";
 export {
@@ -37,21 +34,23 @@ export {
 } from "./logic/context-window-map.js";
 export {
   countPromptLlmInput,
+  countPromptLlmInputHeuristicOnly,
   formatPromptTokenUsageLabel,
-  NM_PROMPT_TOKEN_COUNTER_KEY,
   type CountPromptLlmInputParams,
   type PromptTokenCountResult,
-  type PromptTokenCounterBridge,
 } from "./logic/count-prompt-llm-input.js";
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
-export {
-  tokenizerAssetPaths,
-  NM_TOKENIZER_LOADER_KEY,
-  type TokenizerLoader,
-} from "./impl/tokenizer-loader-shared.js";
-export { getTokenizerLoader } from "./impl/get-tokenizer-loader.js";
+export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   readTokenCounterModeFromPreferences,
   parseTokenCounterModePref,
   TOKEN_COUNTER_MODE_PREF_KEY,
 } from "./logic/read-token-counter-mode-pref.js";
+export {
+  registerTokenizerDriver,
+  getTokenizerDriver,
+  resolveTokenizerDriver,
+  clearTokenizerDrivers,
+  TokenizerError,
+} from "../nmtp/index.js";
+export type { TokenizerDriver, TokenizerErrorCode } from "../nmtp/index.js";

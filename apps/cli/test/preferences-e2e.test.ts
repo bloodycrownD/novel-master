@@ -32,7 +32,7 @@ describe("preferences CLI e2e", () => {
 
       const list = runNm(["preferences", "list", "--db", dbPath]);
       assert.equal(list.status, 0, list.stderr);
-      assert.match(list.stdout, /session-fs\.versionCheck\tfalse/);
+      assert.match(list.stdout, /session-fs\.versionCheck=false/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

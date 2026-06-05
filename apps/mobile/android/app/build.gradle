@@ -157,17 +157,5 @@ dependencies {
         implementation jscFlavor
     }
 
-    // M1: HuggingFace JSON tokenizers (WEB) + DJL SentencePiece JNI (.model, CLI parity)
-    def djlVersion = "0.33.0"
-    implementation(platform("ai.djl:bom:${djlVersion}"))
-    implementation("ai.djl:api")
-    implementation("ai.djl.huggingface:tokenizers")
-    implementation("ai.djl.android:core:${djlVersion}")
-    implementation("ai.djl.android:tokenizer-native:${djlVersion}")
-    implementation("ai.djl.sentencepiece:sentencepiece")
-
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20240303")
-    testImplementation(platform("ai.djl:bom:${djlVersion}"))
-    testImplementation("ai.djl.huggingface:tokenizers")
 }

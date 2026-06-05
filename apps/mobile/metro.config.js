@@ -16,8 +16,7 @@ const coreDistSmokeFiles = [
   'service/events/create-event-orchestrator.js',
   'infra/tokenizer/logic/resolve-context-window.js',
   'infra/tokenizer/logic/count-prompt-llm-input.js',
-  'infra/tokenizer/impl/get-tokenizer-loader.js',
-  'infra/tokenizer/impl/tokenizer-loader-shared.js',
+  'infra/nmtp/logic/registry.js',
   'service/compaction-conditions/create-compaction-condition-evaluator.js',
 ];
 for (const rel of coreDistSmokeFiles) {
@@ -31,11 +30,6 @@ for (const rel of coreDistSmokeFiles) {
 }
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
-/** Node-only fallback in core; RN always uses PromptTokenCounterBridge from polyfills. */
-const nodeCountPromptStub = path.resolve(
-  __dirname,
-  'src/shims/count-prompt-llm-input-node.stub.js',
-);
 const zodCjs = path.resolve(zodRoot, 'index.cjs');
 /** markdown-it@10 pins entities@2; hoisted entities@4 lacks lib/maps/entities.json */
 const entitiesDecode = path.resolve(
@@ -83,16 +77,9 @@ function resolveZodModule(moduleName) {
   return null;
 }
 
-/**
- * Block Node-only tokenizer paths and @agnai/* — RN uses js-tiktoken + heuristic (M0)
- * or Android native bridge (M1), never web-tokenizers / sentencepiece-js in JS.
- */
+/** Block Node-only tokenizer-driver-node from RN bundles. */
 const metroBlockList = [
-  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]node-tokenizer-loader\.js$/,
-  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]create-tokenizer-loader\.js$/,
-  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]sentencepiece-token-counter\.js$/,
-  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]impl[\\/]web-tokenizer-counter\.js$/,
-  /[\\/]packages[\\/]core[\\/]dist[\\/]infra[\\/]tokenizer[\\/]logic[\\/]count-prompt-llm-input-node\.js$/,
+  /[\\/]packages[\\/]tokenizer-driver-node[\\/]/,
   /[\\/]node_modules[\\/]@agnai[\\/]sentencepiece-js[\\/]/,
   /[\\/]node_modules[\\/]@agnai[\\/]web-tokenizers[\\/]/,
 ];
@@ -111,13 +98,6 @@ const config = {
     resolverMainFields: ['react-native', 'browser', 'main'],
     unstable_conditionNames: ['require', 'react-native', 'browser'],
     resolveRequest(context, moduleName, platform) {
-      if (
-        moduleName === './count-prompt-llm-input-node.js' ||
-        moduleName.endsWith('count-prompt-llm-input-node.js')
-      ) {
-        return {type: 'sourceFile', filePath: nodeCountPromptStub};
-      }
-
       if (isTiktokenModule(moduleName)) {
         return {type: 'sourceFile', filePath: tiktokenShim};
       }

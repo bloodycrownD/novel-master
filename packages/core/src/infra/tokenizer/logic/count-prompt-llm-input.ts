@@ -1,18 +1,17 @@
 /**
- * Unified prompt token count — delegates to platform bridge (Mobile / CLI) or Node impl.
+ * Unified prompt token count — delegates to NMTP driver registry.
  *
  * @module infra/tokenizer/logic/count-prompt-llm-input
  */
 
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import type { PromptLlmInput } from "@/service/prompt/render-prompt.js";
+import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
-/** Installed by Mobile polyfills or CLI before counting (avoids `@agnai/sentencepiece-js` on RN). */
-export const NM_PROMPT_TOKEN_COUNTER_KEY = "__NM_PROMPT_TOKEN_COUNTER__";
 
 export interface CountPromptLlmInputParams {
   readonly input: PromptLlmInput;
@@ -30,43 +29,16 @@ export interface PromptTokenCountResult {
   readonly tokenizerFamily: TokenizerFamily;
 }
 
-/** Platform implements full model-aware counting without Node-only deps. */
-export interface PromptTokenCounterBridge {
-  countPromptLlmInput(
-    params: CountPromptLlmInputParams,
-  ): Promise<PromptTokenCountResult>;
-}
-
-function injectedPromptTokenCounter(): PromptTokenCounterBridge | undefined {
-  const g = globalThis as Record<string, unknown>;
-  const bridge = g[NM_PROMPT_TOKEN_COUNTER_KEY];
-  if (
-    bridge != null &&
-    typeof bridge === "object" &&
-    typeof (bridge as PromptTokenCounterBridge).countPromptLlmInput === "function"
-  ) {
-    return bridge as PromptTokenCounterBridge;
-  }
-  return undefined;
-}
-
 /**
- * Counts tokens for a full {@link PromptLlmInput}.
- * RN always uses {@link PromptTokenCounterBridge}; Node falls back to dynamic import when unset.
+ * Counts tokens for a full {@link PromptLlmInput} via registered NMTP driver.
  */
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const bridge = injectedPromptTokenCounter();
-  if (bridge != null) {
-    return bridge.countPromptLlmInput(params);
-  }
-
-  const { countPromptLlmInputNode } = await import("./count-prompt-llm-input-node.js");
-  return countPromptLlmInputNode(params);
+  return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
-/** Minimal fallback when bridge missing and dynamic import fails (tests). */
+/** Minimal fallback without a registered driver (tests / documentation). */
 export async function countPromptLlmInputHeuristicOnly(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {

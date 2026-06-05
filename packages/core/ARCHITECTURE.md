@@ -107,9 +107,12 @@ infra/<capability>/
 | openai | yes | yes | yes | yes |
 | anthropic | yes | yes | yes | yes |
 | gemini | yes | yes | yes | yes |
-| `tokenizer/` | `token-counter.port.ts`, `token-counter-registry.port.ts` | `heuristic-token-counter`, `tiktoken-token-counter` | tiktoken-model-map, openai-message-token-count, serialize-prompt-input, create-default-registry |
+| `tokenizer/` | `token-counter.port.ts`, `token-counter-registry.port.ts` | `heuristic-token-counter` | resolve-tokenizer-family, serialize-prompt-input, create-default-registry, count-prompt-llm-input |
+| `nmtp/` | `tokenizer-driver.port.ts` | — | registry (`registerTokenizerDriver`, `resolveTokenizerDriver`) |
 | `sksp/` | `secret-store.port.ts` | `env-secret-store`, `composite-secret-store` | registry, ref-to-env |
 | `tdbc/` | `driver.port.ts`, `connection.port.ts` | (drivers register from external packages) | open, registry, template-helper, normalize-bindings |
+
+**External NMTP drivers** (zero native deps in core): `@novel-master/tokenizer-driver-node` (CLI / Electron), `@novel-master/tokenizer-driver-rn` (Android RN + Kotlin `TokenizerModule`).
 
 ### Library 型（纯函数 / 解析器，无 port）
 

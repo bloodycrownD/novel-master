@@ -15,8 +15,10 @@ jest.mock('react-native', () => ({
   },
 }));
 
-jest.mock('../src/tokenizer/native-tokenizer', () => {
-  const actual = jest.requireActual('../src/tokenizer/native-tokenizer');
+jest.mock('@novel-master/tokenizer-driver-rn/android-native-bridge', () => {
+  const actual = jest.requireActual(
+    '@novel-master/tokenizer-driver-rn/android-native-bridge',
+  );
   return {
     ...actual,
     isNativeTokenizerAvailable: () => nativeBridgeState.available,
@@ -34,7 +36,6 @@ jest.mock('../src/tokenizer/native-tokenizer', () => {
 
 jest.mock('@novel-master/core', () => ({
   CHARACTERS_PER_TOKEN_RATIO: 3.35,
-  NM_PROMPT_TOKEN_COUNTER_KEY: '__NM_PROMPT_TOKEN_COUNTER__',
   parseApplicationModelId: (id: string) => ({vendorModelId: id.split('/').pop() ?? id}),
   resolveTokenizerFamily: () => mockResolveFamily,
   mapVendorModelIdToTiktokenModel: () => 'gpt-4o',
@@ -50,7 +51,7 @@ jest.mock('tiktoken', () => ({
   encoding_for_model: (...args: unknown[]) => mockEncodingForModel(...args),
 }));
 
-describe('mobile-prompt-token-counter', () => {
+describe('tokenizer-driver-rn countPromptLlmInputRn', () => {
   beforeEach(() => {
     mockCountPrompt.mockReset();
     mockEncodingForModel.mockClear();
@@ -64,7 +65,7 @@ describe('mobile-prompt-token-counter', () => {
       counterKind: 'claude',
       estimated: false,
     });
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
     const result = await __test__.countSerialized(
       'claude',
@@ -91,7 +92,7 @@ describe('mobile-prompt-token-counter', () => {
       counterKind: 'gemma',
       estimated: false,
     });
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
     const result = await __test__.countSerialized(
       'gemma',
@@ -110,7 +111,7 @@ describe('mobile-prompt-token-counter', () => {
 
   it('uses js-tiktoken encoding_for_model for tiktoken family', async () => {
     mockResolveFamily = 'tiktoken';
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
     __test__.setTiktokenModuleForTests(require('tiktoken'));
 
     const result = await __test__.countSerialized(
@@ -130,7 +131,7 @@ describe('mobile-prompt-token-counter', () => {
 
   it('falls back to heuristic when native bridge is unavailable', async () => {
     nativeBridgeState.available = false;
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
     const result = await __test__.countSerialized(
       'claude',
@@ -153,7 +154,7 @@ describe('mobile-prompt-token-counter', () => {
       estimated: true,
     });
     mockResolveFamily = 'gemma';
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
 
     const result = await __test__.countSerialized(
       'gemma',
@@ -169,7 +170,7 @@ describe('mobile-prompt-token-counter', () => {
   });
 
   it('heuristic uses 3.35 character ratio', () => {
-    const {__test__} = require('../src/tokenizer/mobile-prompt-token-counter');
+    const {__test__} = require('@novel-master/tokenizer-driver-rn');
     expect(__test__.heuristicCount('abcdefghij')).toBe(Math.ceil(10 / 3.35));
   });
 });

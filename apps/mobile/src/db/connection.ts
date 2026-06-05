@@ -4,6 +4,7 @@
 import {bootstrapNovelMaster, open, type TdbcConnection} from '@novel-master/core';
 import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
 import {registerSkspAndroidDriver} from '@novel-master/sksp-android';
+import {registerTokenizerRnDriver} from '@novel-master/tokenizer-driver-rn/native';
 import {MOBILE_TDBC_URL} from '../vfs/constants';
 import {
   clearMobileDatabaseFilePathCache,
@@ -27,6 +28,7 @@ export async function getMobileConnection(): Promise<TdbcConnection> {
     initPromise = (async () => {
       registerRnDriver();
       registerSkspAndroidDriver();
+      registerTokenizerRnDriver();
       const c = await open(MOBILE_TDBC_URL, {driver: 'rn'});
       await bootstrapNovelMaster(c);
       await probeAndCacheMobileDatabaseFilePath();

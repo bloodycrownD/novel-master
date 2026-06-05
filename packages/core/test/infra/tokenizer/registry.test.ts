@@ -5,29 +5,28 @@ import {
   HeuristicTokenCounter,
   resolveTokenizerFamily,
 } from "../../../src/infra/tokenizer/index.js";
-import { TiktokenTokenCounter } from "../../../src/infra/tokenizer/impl/tiktoken-token-counter.js";
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
 describe("TokenCounterRegistry", () => {
   it("R1: unknown provider id still routes gpt-4o by model name", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel("missing/gpt-4o");
-    assert.ok(counter instanceof TiktokenTokenCounter);
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("R2: gpt-4o → tiktoken regardless of protocol", () => {
+  it("R2: gpt-4o → heuristic (precise counting via NMTP driver)", () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = registry.forVendorModel("gpt-4o", "gemini");
-    assert.ok(counter instanceof TiktokenTokenCounter);
+    const counter = registry.forVendorModel("gpt-4o");
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("R2b: forApplicationModel openai/gpt-4o → tiktoken", async () => {
+  it("R2b: forApplicationModel openai/gpt-4o → heuristic", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel("openai/gpt-4o");
-    assert.ok(counter instanceof TiktokenTokenCounter);
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("R3: claude model → heuristic registry (counting via PromptTokenCounterBridge)", async () => {
+  it("R3: claude model → heuristic registry", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel(
       "openai/claude-3-5-sonnet-20241022",
@@ -35,7 +34,7 @@ describe("TokenCounterRegistry", () => {
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("gemini model → heuristic registry (SP counting is platform bridge)", async () => {
+  it("gemini model → heuristic registry", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel("gemini/gemini-2.0-flash");
     assert.ok(counter instanceof HeuristicTokenCounter);
@@ -44,7 +43,7 @@ describe("TokenCounterRegistry", () => {
   it("unsaved model still routes by vendor model id", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const counter = await registry.forApplicationModel("openai/gpt-4o");
-    assert.ok(counter instanceof TiktokenTokenCounter);
+    assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
   it("heuristic override forces heuristic for gpt-4o", () => {
