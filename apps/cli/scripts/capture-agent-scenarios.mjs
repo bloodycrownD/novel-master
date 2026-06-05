@@ -507,7 +507,7 @@ try {
 
   const compactAgentDir = mkdtempSync(join(tmpdir(), "nm-compact-agent-"));
   const compactAgentPath = join(compactAgentDir, "agent.yaml");
-  const compactPolicyPath = join(compactAgentDir, "policy.yaml");
+  const compactConditionsPath = join(compactAgentDir, "conditions.yaml");
   writeFileSync(
     compactAgentPath,
     [
@@ -524,17 +524,11 @@ try {
     "utf8",
   );
   writeFileSync(
-    compactPolicyPath,
+    compactConditionsPath,
     [
-      "schemaVersion: 1",
+      "schemaVersion: 3",
       "enabled: true",
-      "trigger:",
-      "  tokenThreshold: 10",
-      "action:",
-      "  keepLastN: 2",
-      "  abstract:",
-      "    type: text",
-      "    content: capture-compaction-summary",
+      "visibleFloor: 2",
       "",
     ].join("\n"),
     "utf8",
@@ -542,16 +536,16 @@ try {
 
   createCaptureScope(dbPath, COMPACT_PROJECT);
   run([
-    "compaction",
+    "compaction-conditions",
     "clear",
     "--db",
     dbPath,
   ]);
   run([
-    "compaction",
+    "compaction-conditions",
     "set",
     "--file",
-    compactPolicyPath,
+    compactConditionsPath,
     "--db",
     dbPath,
   ]);

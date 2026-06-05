@@ -22,7 +22,6 @@
         globalCompactionPolicy: null,
         /** Workspace current model (mock nm model use); single source for chat + profile. */
         workspaceCurrentModelId: 'zhipu/glm-4.6',
-        modelSamplingProfiles: {},
         editingProviderId: null,
         editingModelApplicationModelId: null,
         regexGroups: [],
@@ -34,7 +33,6 @@
     };
 
     const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
-    const MODEL_SAMPLING_STORAGE_KEY = 'nm-mobile-model-sampling-profiles';
     const REGEX_GROUPS_STORAGE_KEY = 'nm-mobile-regex-groups';
     const REGEX_RULES_STORAGE_KEY = 'nm-mobile-regex-rules';
     const WORKSPACE_REGEX_GROUP_STORAGE_KEY = 'nm-mobile-workspace-current-regex-group';
@@ -1095,34 +1093,75 @@
     }
 
     /* ----- Agent 配置（对齐 packages/core AgentDefinition） ----- */
+    const DEFAULT_CONTEXT_WINDOW_TOKENS = 128000;
+
+    function seedContextWindowTokens(vendorModelId) {
+        if (
+            vendorModelId.indexOf('claude-3-5') >= 0 ||
+            vendorModelId.indexOf('claude-3-7') >= 0 ||
+            vendorModelId.indexOf('claude-3') >= 0
+        ) {
+            return 200000;
+        }
+        if (vendorModelId.indexOf('gpt-4o') >= 0 || vendorModelId.indexOf('gpt-4-turbo') >= 0) {
+            return 128000;
+        }
+        if (vendorModelId.indexOf('gpt-3.5') >= 0) {
+            return 16385;
+        }
+        if (vendorModelId.indexOf('gemini-2.0') >= 0 || vendorModelId.indexOf('gemini-1.5') >= 0) {
+            return 1048576;
+        }
+        if (vendorModelId.indexOf('gemini') >= 0) {
+            return 1000000;
+        }
+        return DEFAULT_CONTEXT_WINDOW_TOKENS;
+    }
+
+    function defaultModelSettings(vendorModelId) {
+        return {
+            schemaVersion: 1,
+            contextWindowTokens: seedContextWindowTokens(vendorModelId),
+            sampling: { enabled: false },
+        };
+    }
+
+    function createMockSavedModel(vendorModelId, label) {
+        return {
+            vendorModelId: vendorModelId,
+            label: label,
+            settings: defaultModelSettings(vendorModelId),
+        };
+    }
+
     const MOCK_PROVIDERS = [
         {
             id: 'zhipu',
             name: '智谱 AI',
             protocol: 'openai',
             models: [
-                { vendorModelId: 'glm-4.6', label: 'GLM-4.6' },
-                { vendorModelId: 'glm-4-flash', label: 'GLM-4 Flash' },
-                { vendorModelId: 'glm-4-air', label: 'GLM-4 Air' },
+                createMockSavedModel('glm-4.6', 'GLM-4.6'),
+                createMockSavedModel('glm-4-flash', 'GLM-4 Flash'),
+                createMockSavedModel('glm-4-air', 'GLM-4 Air'),
             ],
         },
         {
             id: 'openai',
             name: 'OpenAI',
             protocol: 'openai',
-            models: [{ vendorModelId: 'gpt-4o', label: 'GPT-4o' }],
+            models: [createMockSavedModel('gpt-4o', 'GPT-4o')],
         },
         {
             id: 'anthropic',
             name: 'Anthropic',
             protocol: 'anthropic',
-            models: [{ vendorModelId: 'claude-3-5-sonnet', label: 'Claude 3.5 Sonnet' }],
+            models: [createMockSavedModel('claude-3-5-sonnet', 'Claude 3.5 Sonnet')],
         },
         {
             id: 'google',
             name: 'Google',
             protocol: 'gemini',
-            models: [{ vendorModelId: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' }],
+            models: [createMockSavedModel('gemini-2.0-flash', 'Gemini 2.0 Flash')],
         },
     ];
 
@@ -1347,14 +1386,8 @@
         const idSet = new Set(ids);
         for (let i = MOCK_PROVIDERS.length - 1; i >= 0; i--) {
             if (!idSet.has(MOCK_PROVIDERS[i].id)) continue;
-            MOCK_PROVIDERS[i].models.forEach(function (m) {
-                delete appState.modelSamplingProfiles[
-                    buildApplicationModelId(MOCK_PROVIDERS[i].id, m.vendorModelId)
-                ];
-            });
             MOCK_PROVIDERS.splice(i, 1);
         }
-        persistModelSamplingProfiles();
         if (appState.editingProviderId && idSet.has(appState.editingProviderId)) {
             appState.editingProviderId = null;
             if (appState.currentPage === 'providerDetail' || appState.currentPage === 'modelSampling') {
@@ -1369,15 +1402,8 @@
         if (!provider) return;
         const idSet = new Set(vendorModelIds);
         provider.models = provider.models.filter(function (m) {
-            if (idSet.has(m.vendorModelId)) {
-                delete appState.modelSamplingProfiles[
-                    buildApplicationModelId(provider.id, m.vendorModelId)
-                ];
-                return false;
-            }
-            return true;
+            return !idSet.has(m.vendorModelId);
         });
-        persistModelSamplingProfiles();
         if (
             appState.editingModelApplicationModelId &&
             idSet.has(parseApplicationModelId(appState.editingModelApplicationModelId).vendorModelId)
@@ -1684,20 +1710,28 @@
         return model ? model.label : sel.vendorModelId;
     }
 
-    function profileHasSamplingParams(profile) {
-        if (!profile || !profile.params) return false;
-        const p = profile.params;
-        if (p.openai && Object.keys(p.openai).length > 0) return true;
-        if (p.anthropic && Object.keys(p.anthropic).length > 0) return true;
-        if (p.gemini && Object.keys(p.gemini).length > 0) return true;
+    function findSavedModel(providerId, vendorModelId) {
+        const provider = findProvider(providerId);
+        if (!provider) return null;
+        return provider.models.find(function (m) {
+            return m.vendorModelId === vendorModelId;
+        }) || null;
+    }
+
+    function settingsHasSampling(settings) {
+        if (!settings || !settings.sampling || !settings.sampling.enabled) return false;
+        const params = settings.sampling.params;
+        if (!params) return false;
+        if (params.openai && Object.keys(params.openai).length > 0) return true;
+        if (params.anthropic && Object.keys(params.anthropic).length > 0) return true;
+        if (params.gemini && Object.keys(params.gemini).length > 0) return true;
         return false;
     }
 
     function providerModelMetaLine(provider) {
         const n = provider.models.length;
         const samplingN = provider.models.filter(function (m) {
-            const id = buildApplicationModelId(provider.id, m.vendorModelId);
-            return profileHasSamplingParams(getModelSamplingProfile(id));
+            return settingsHasSampling(m.settings);
         }).length;
         let meta = n + ' 个已保存模型';
         if (samplingN > 0) meta += ' · ' + samplingN + ' 个已配采样';
@@ -1750,7 +1784,7 @@
         const listId = 'providerModels';
         provider.models.forEach(function (m) {
             const applicationModelId = buildApplicationModelId(provider.id, m.vendorModelId);
-            const profile = getModelSamplingProfile(applicationModelId);
+            const settings = m.settings || defaultModelSettings(m.vendorModelId);
             html +=
                 '<div class="provider-model-item' +
                 listItemSelectedClass(listId, m.vendorModelId) +
@@ -1761,7 +1795,8 @@
             html += '<div class="provider-model-info">';
             html += '<div class="provider-model-name">' + escapeHtml(m.label) + '</div>';
             html += '<div class="provider-model-meta">' + escapeHtml(applicationModelId);
-            if (profileHasSamplingParams(profile)) html += ' · 已配采样';
+            html += ' · ' + settings.contextWindowTokens + ' tokens';
+            if (settingsHasSampling(settings)) html += ' · 已配采样';
             html += '</div></div>';
             if (!isBatchMode(listId)) {
                 html += '<button type="button" class="agent-menu-btn" data-provider-model-menu="' +
@@ -1786,12 +1821,25 @@
         const root = document.getElementById('modelSamplingRoot');
         const applicationModelId = appState.editingModelApplicationModelId;
         if (!root || !applicationModelId) return;
-        const profile = getModelSamplingProfile(applicationModelId);
+        const parsed = parseApplicationModelId(applicationModelId);
+        const model = findSavedModel(parsed.providerId, parsed.vendorModelId);
+        const settings = model
+            ? model.settings
+            : defaultModelSettings(parsed.vendorModelId);
+        const samplingParams =
+            settings.sampling.enabled && settings.sampling.params
+                ? settings.sampling.params
+                : null;
         const protocol = modelProtocolForId(applicationModelId);
         let html = '<section class="agent-form-section">';
-        html += '<h3>采样参数</h3>';
+        html += '<h3>模型设置</h3>';
         html += '<p class="agent-field-hint model-sampling-id">' + escapeHtml(applicationModelId) + '</p>';
-        html += renderSamplingFields(protocol, profile.params);
+        html +=
+            '<label class="agent-field"><span>上下文上限 (tokens)</span><input type="number" data-model-settings-field="contextWindowTokens" min="1" step="1" value="' +
+            settings.contextWindowTokens +
+            '"></label>';
+        html += '<h3>采样参数</h3>';
+        html += renderSamplingFields(protocol, samplingParams);
         html += '<p class="agent-field-hint">留空表示使用协议默认参数。</p>';
         html += '</section>';
         root.innerHTML = html;
@@ -1818,17 +1866,28 @@
         const applicationModelId = appState.editingModelApplicationModelId;
         const root = document.getElementById('modelSamplingRoot');
         if (!applicationModelId || !root) return;
+        const parsed = parseApplicationModelId(applicationModelId);
+        const model = findSavedModel(parsed.providerId, parsed.vendorModelId);
+        if (!model) return;
+        const contextEl = root.querySelector('[data-model-settings-field="contextWindowTokens"]');
+        const contextWindow = contextEl ? Number(contextEl.value) : NaN;
+        if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
+            showToast('上下文上限须为正整数');
+            return;
+        }
         const protocol = modelProtocolForId(applicationModelId);
         const params = collectSamplingParamsFromRoot(root, protocol);
-        if (params == null) {
-            delete appState.modelSamplingProfiles[applicationModelId];
-        } else {
-            setModelSamplingProfile(applicationModelId, { enabled: true, params: params });
-        }
-        persistModelSamplingProfiles();
+        model.settings = {
+            schemaVersion: 1,
+            contextWindowTokens: contextWindow,
+            sampling:
+                params == null
+                    ? { enabled: false }
+                    : { enabled: true, params: params },
+        };
         renderProviderDetail();
         renderProviderList();
-        showToast('已保存采样配置');
+        showToast('已保存模型设置');
         if (appState.pageStack.length > 0) {
             const previousPage = appState.pageStack.pop();
             navigateToPage(previousPage, false);
@@ -1847,8 +1906,6 @@
                 provider.models = provider.models.filter(function (m) {
                     return m.vendorModelId !== vendorModelId;
                 });
-                delete appState.modelSamplingProfiles[applicationModelId];
-                persistModelSamplingProfiles();
                 renderProviderDetail();
                 renderProviderList();
                 showToast('已删除模型');
@@ -1891,7 +1948,7 @@
             return;
         }
         const label = labelInput && labelInput.value.trim() ? labelInput.value.trim() : vendorModelId;
-        provider.models.push({ vendorModelId: vendorModelId, label: label });
+        provider.models.push(createMockSavedModel(vendorModelId, label));
         closeAddModelModal();
         renderProviderDetail();
         renderProviderList();
@@ -1903,16 +1960,6 @@
             const stored = localStorage.getItem(WORKSPACE_MODEL_STORAGE_KEY);
             if (stored) appState.workspaceCurrentModelId = stored;
         } catch (_e) { /* file:// may block storage */ }
-        try {
-            const raw = localStorage.getItem(MODEL_SAMPLING_STORAGE_KEY);
-            if (raw) appState.modelSamplingProfiles = JSON.parse(raw);
-        } catch (_e) { /* ignore */ }
-    }
-
-    function persistModelSamplingProfiles() {
-        try {
-            localStorage.setItem(MODEL_SAMPLING_STORAGE_KEY, JSON.stringify(appState.modelSamplingProfiles));
-        } catch (_e) { /* ignore */ }
     }
 
     function setWorkspaceModel(applicationModelId) {
@@ -1930,15 +1977,6 @@
         const profileEl = document.getElementById('profileCurrentModelLabel');
         if (profileEl) profileEl.textContent = label;
         updateChatAgentMeta();
-    }
-
-    function getModelSamplingProfile(applicationModelId) {
-        return appState.modelSamplingProfiles[applicationModelId] || { enabled: false, params: null };
-    }
-
-    function setModelSamplingProfile(applicationModelId, profile) {
-        appState.modelSamplingProfiles[applicationModelId] = profile;
-        persistModelSamplingProfiles();
     }
 
     function populateModelPickerSelects(providerId, vendorModelId) {
@@ -2402,35 +2440,11 @@
 
     function defaultGlobalCompactionPolicy() {
         return {
-            schemaVersion: 1,
+            schemaVersion: 3,
             enabled: true,
-            trigger: { tokenThreshold: 12000, floorThreshold: 20 },
-            action: {
-                keepLastN: 6,
-                abstract: {
-                    type: 'agent',
-                    agentId: 'agent-writer',
-                    instruction: 'Summarize the following conversation history concisely:',
-                },
-            },
+            tokenRatio: 0.8,
+            visibleFloor: 20,
         };
-    }
-
-    function renderCompactionAgentOptions(selectedId) {
-        return Object.keys(agentCatalog)
-            .map(function (id) {
-                const def = agentCatalog[id].definition;
-                return (
-                    '<option value="' +
-                    id +
-                    '"' +
-                    (id === selectedId ? ' selected' : '') +
-                    '>' +
-                    escapeHtml(def.name + ' (' + id + ')') +
-                    '</option>'
-                );
-            })
-            .join('');
     }
 
     function renderCompactionPolicyPage() {
@@ -2440,28 +2454,16 @@
             appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
         }
         const policy = appState.globalCompactionPolicy;
-        const trigger = policy.trigger || {};
-        const action = policy.action || { keepLastN: 6, abstract: { type: 'agent', agentId: 'agent-writer' } };
-        const abstract = action.abstract || { type: 'agent', agentId: 'agent-writer' };
-        const abstractType = abstract.type || 'agent';
 
         let html = '';
-        html += '<section class="agent-form-section"><h3>全局压缩策略</h3>';
-        html += '<label class="agent-field agent-field--row"><span>启用压缩</span><input type="checkbox" class="toggle" data-policy-field="enabled"' + (policy.enabled ? ' checked' : '') + '></label>';
+        html += '<section class="agent-form-section"><h3>压缩条件</h3>';
+        html += '<label class="agent-field agent-field--row"><span>启用自动压缩</span><input type="checkbox" class="toggle" data-policy-field="enabled"' + (policy.enabled ? ' checked' : '') + '></label>';
         html += '<div class="compaction-policy-panel' + (policy.enabled ? '' : ' hidden') + '" data-policy-panel>';
-        html += '<p class="agent-field-hint">全应用单条策略；触发条件为 OR（token 估计或消息条数）。</p>';
-        html += '<label class="agent-field"><span>Token 阈值</span><input type="number" data-policy-field="tokenThreshold" min="1" step="1" value="' + (trigger.tokenThreshold || '') + '" placeholder="如 12000"></label>';
-        html += '<label class="agent-field"><span>消息条数阈值</span><input type="number" data-policy-field="floorThreshold" min="1" step="1" value="' + (trigger.floorThreshold || '') + '" placeholder="如 20"></label>';
-        html += '<label class="agent-field"><span>保留最近 N 条</span><input type="number" data-policy-field="keepLastN" min="1" step="1" value="' + (action.keepLastN || 6) + '"></label>';
-        html += '<label class="agent-field"><span>摘要方式</span><select data-policy-field="abstractType">';
-        html += '<option value="agent"' + (abstractType === 'agent' ? ' selected' : '') + '>Agent 生成</option>';
-        html += '<option value="text"' + (abstractType === 'text' ? ' selected' : '') + '>静态文本</option>';
-        html += '</select></label>';
-        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要 Agent</span><select class="compaction-agent-select" data-policy-field="agentId">';
-        html += renderCompactionAgentOptions(abstract.type === 'agent' ? abstract.agentId : 'agent-writer');
-        html += '</select></label>';
-        html += '<label class="agent-field agent-abstract-agent' + (abstractType === 'agent' ? '' : ' hidden') + '"><span>摘要指令 instruction</span><textarea data-policy-field="abstractInstruction" rows="2" placeholder="Summarize the following conversation history concisely:">' + escapeHtml(abstract.type === 'agent' && abstract.instruction ? abstract.instruction : '') + '</textarea></label>';
-        html += '<label class="agent-field agent-abstract-text' + (abstractType === 'text' ? '' : ' hidden') + '"><span>摘要模板 content</span><textarea data-policy-field="abstractContent" rows="3" placeholder="支持宏">' + escapeHtml(abstract.type === 'text' && abstract.content ? abstract.content : '') + '</textarea></label>';
+        html += '<p class="agent-field-hint">满足任一条件时自动发出压缩事件；具体 hide/刷新宏见「事件配置」。</p>';
+        html += '<label class="agent-field"><span>Token 比例</span><input type="number" data-policy-field="tokenRatio" min="0.01" max="1" step="0.01" value="' + (policy.tokenRatio != null ? policy.tokenRatio : '') + '" placeholder="如 0.8"></label>';
+        html += '<p class="agent-field-hint">基于当前模型上下文上限 × 比例</p>';
+        html += '<label class="agent-field"><span>可见条数阈值</span><input type="number" data-policy-field="visibleFloor" min="0" step="1" value="' + (policy.visibleFloor != null ? policy.visibleFloor : '') + '" placeholder="如 20"></label>';
+        html += '<p class="agent-field-hint">可见消息条数达到该值时触发</p>';
         html += '</div></section>';
         root.innerHTML = html;
     }
@@ -2471,36 +2473,19 @@
         if (!root) return null;
         const enabledEl = root.querySelector('[data-policy-field="enabled"]');
         const enabled = enabledEl ? enabledEl.checked : false;
-        const trigger = {};
-        const tokenEl = root.querySelector('[data-policy-field="tokenThreshold"]');
-        const floorEl = root.querySelector('[data-policy-field="floorThreshold"]');
-        if (tokenEl && tokenEl.value) trigger.tokenThreshold = Number(tokenEl.value);
-        if (floorEl && floorEl.value) trigger.floorThreshold = Number(floorEl.value);
-        if (enabled && !trigger.tokenThreshold && !trigger.floorThreshold) {
-            showToast('压缩触发条件至少填一项');
+        const ratioEl = root.querySelector('[data-policy-field="tokenRatio"]');
+        const floorEl = root.querySelector('[data-policy-field="visibleFloor"]');
+        const tokenRatio = ratioEl && ratioEl.value.trim() ? Number(ratioEl.value) : undefined;
+        const visibleFloor = floorEl && floorEl.value.trim() ? Number(floorEl.value) : undefined;
+        if (enabled && tokenRatio == null && visibleFloor == null) {
+            showToast('启用时至少填写 token 比例或可见条数阈值');
             return null;
         }
-        const keepEl = root.querySelector('[data-policy-field="keepLastN"]');
-        const abstractTypeEl = root.querySelector('[data-policy-field="abstractType"]');
-        const abstractType = abstractTypeEl ? abstractTypeEl.value : 'agent';
-        const abstract = { type: abstractType };
-        if (abstractType === 'text') {
-            const contentEl = root.querySelector('[data-policy-field="abstractContent"]');
-            abstract.content = contentEl ? contentEl.value : '';
-        } else {
-            const agentIdEl = root.querySelector('[data-policy-field="agentId"]');
-            abstract.agentId = agentIdEl ? agentIdEl.value : 'agent-writer';
-            const instrEl = root.querySelector('[data-policy-field="abstractInstruction"]');
-            if (instrEl && instrEl.value.trim()) abstract.instruction = instrEl.value.trim();
-        }
         return {
-            schemaVersion: 1,
+            schemaVersion: 3,
             enabled: enabled,
-            trigger: trigger,
-            action: {
-                keepLastN: keepEl ? Number(keepEl.value) || 6 : 6,
-                abstract: abstract,
-            },
+            ...(tokenRatio != null ? { tokenRatio: tokenRatio } : {}),
+            ...(visibleFloor != null ? { visibleFloor: visibleFloor } : {}),
         };
     }
 
@@ -2518,15 +2503,6 @@
             if (e.target.matches('[data-policy-field="enabled"]')) {
                 const panel = root.querySelector('[data-policy-panel]');
                 if (panel) panel.classList.toggle('hidden', !e.target.checked);
-                return;
-            }
-            if (e.target.matches('[data-policy-field="abstractType"]')) {
-                const isAgent = e.target.value === 'agent';
-                root.querySelectorAll('.agent-abstract-agent').forEach(function (el) {
-                    el.classList.toggle('hidden', !isAgent);
-                });
-                const textEl = root.querySelector('.agent-abstract-text');
-                if (textEl) textEl.classList.toggle('hidden', isAgent);
             }
         });
         const saveBtn = document.querySelector('[data-action="save-compaction-policy"]');

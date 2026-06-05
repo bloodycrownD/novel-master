@@ -125,7 +125,7 @@
 | 进入管理 | 区头「管理」→ 显示复选框 + 批量头（取消 / 已选 N 项 / 删除） |
 | 批量头位置 | 各列表均在 `manage-header`（或项目抽屉头）内切换：取消 / 已选 N 项 / 删除 |
 | 选择 | 行复选框；批量模式下点行切换选中，不触发导航 |
-| 删除 | 二次确认；项目删除会删其下会话；服务商删除会清其模型及采样配置 |
+| 删除 | 二次确认；项目删除会删其下会话；服务商删除会清其下已保存模型 |
 | 提示文案 | 各列表有 `manage-header-hint`（如删服务商同时删已保存模型） |
 
 ### 1.5 主题
@@ -390,9 +390,9 @@
 | 功能 | 原型 |
 |------|------|
 | 添加模型 | 模态框：vendorModelId + 可选 label |
-| 模型行 | applicationModelId、是否已配采样 |
+| 模型行 | applicationModelId、contextWindowTokens、是否已配采样 |
 | 行菜单 ⋮ | 删除模型（确认） |
-| 进入采样 | 点行 → `modelSampling` |
+| 进入模型设置 | 点行 → `modelSampling` |
 | 批量删除 | 管理头；批量模式下不进入采样 |
 | 空状态 | 引导添加模型 |
 
@@ -407,13 +407,14 @@
 
 **原型未实现**：在模型列表行上「设为当前」；等价能力仅通过模态框统一设置。
 
-### 8.4 采样配置页
+### 8.4 模型设置页（`settings_json` mock）
 
 | 功能 | 原型 |
 |------|------|
-| 按协议字段 | OpenAI：temperature、top_p、max_tokens；Anthropic：+top_k；Gemini：topP、topK、maxOutputTokens |
-| 留空 | 提示「留空表示协议默认」 |
-| 保存 | 写入 `modelSamplingProfiles` mock；无单独「启用」开关 |
+| 上下文上限 | `settings.contextWindowTokens`（正整数）；新建模型按 vendor id 种子默认值 |
+| 采样参数 | 按协议字段：OpenAI temperature/top_p/max_tokens；Anthropic +top_k；Gemini topP/topK/maxOutputTokens |
+| 留空采样 | 提示「留空表示协议默认」→ `sampling.enabled: false` |
+| 保存 | 写入模型行内 `settings`（对齐 Core `llm_saved_model.settings_json`） |
 | 顶栏标题 | 模型短名称 |
 
 ---
@@ -473,14 +474,15 @@
 
 ## 10. 扩展设置
 
-### 10.1 压缩策略（独立页）
+### 10.1 压缩条件（独立页，v3）
 
 | 字段 | 原型 |
 |------|------|
 | enabled | toggle；关闭时折叠面板 |
-| tokenThreshold / floorThreshold | OR 触发；至少填一项校验 |
-| keepLastN | 数字 |
-| abstract | 类型 agent / text；agent 时选 Agent + instruction 文案 |
+| tokenRatio | 0–1；基于当前模型 `contextWindowTokens` × 比例 |
+| visibleFloor | 可见消息条数阈值 |
+| 触发逻辑 | OR（至少填一项校验）；对齐 Core `CompactionConditions` schemaVersion 3 |
+| 动作 | 不在此页配置；正式 App 由「事件配置」处理 hide/refresh-macros |
 | 保存 | 内存 `globalCompactionPolicy` mock |
 
 ### 10.2 扩展设置页（`settings`）
