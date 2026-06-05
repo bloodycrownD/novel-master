@@ -25,6 +25,10 @@ import type {
   ModelRequestOptions,
   ModelRequestService,
 } from "../model-request.port.js";
+import {
+  createAbortError,
+  isAbortLikeError,
+} from "@/infra/llm-protocol/logic/request-abort.js";
 
 export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
@@ -48,13 +52,6 @@ const DEFAULT_RETRY_POLICY = {
   maxDelayMs: 2_000,
   jitterRatio: 0.2,
 } as const;
-
-function isAbortLikeError(error: unknown): boolean {
-  return (
-    (error instanceof DOMException && error.name === "AbortError") ||
-    (error instanceof Error && error.name === "AbortError")
-  );
-}
 
 function parseHttpStatusFromProviderError(error: ProviderError): number | undefined {
   const m = /HTTP\s+(\d{3})/.exec(error.message);
@@ -103,7 +100,7 @@ async function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> 
     }, ms);
     const onAbort = () => {
       clearTimeout(timer);
-      reject(new DOMException("Request aborted", "AbortError"));
+      reject(createAbortError());
     };
     if (signal == null) {
       return;
@@ -175,6 +172,7 @@ export class DefaultModelRequestService implements ModelRequestService {
           userContent,
           extraHeaders: provider.headers,
           history: options?.history,
+          toolUseLookupMessages: options?.toolUseLookupMessages,
           system: options?.system,
           tools: options?.tools,
           stream: options?.stream,

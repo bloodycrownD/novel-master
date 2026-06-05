@@ -218,4 +218,41 @@ describe("DefaultModelRequestService retry", () => {
     );
     assert.equal(calls, 1);
   });
+
+  it("surfaces HTTP 400 without DOMException global (React Native Hermes)", async () => {
+    const g = globalThis as { DOMException?: typeof DOMException };
+    const savedDom = g.DOMException;
+    // @ts-expect-error simulate Hermes missing DOMException
+    delete g.DOMException;
+    let calls = 0;
+    const adapter: LlmProtocolAdapter = {
+      kind: "openai",
+      listModels: async () => ({ models: [] }),
+      chat: async () => {
+        calls += 1;
+        throw new ProviderError("HTTP_ERROR", "HTTP 400: bad request");
+      },
+    };
+    const svc = new DefaultModelRequestService({
+      providers: providerRepo,
+      savedModels,
+      secretStore,
+      samplingProfiles,
+      retryPolicies: noRetryPolicies,
+      retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
+      resolveAdapter: () => adapter,
+    });
+    try {
+      await assert.rejects(
+        () => svc.request("openai/gpt-4o-mini", "hello"),
+        (error: unknown) =>
+          error instanceof ProviderError && error.code === "HTTP_ERROR",
+      );
+      assert.equal(calls, 1);
+    } finally {
+      if (savedDom !== undefined) {
+        g.DOMException = savedDom;
+      }
+    }
+  });
 });

@@ -8,6 +8,8 @@ import type {
 
 export interface ModelRequestOptions {
   readonly history?: readonly ChatMessage[];
+  /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
+  readonly toolUseLookupMessages?: readonly ChatMessage[];
   readonly system?: string;
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;

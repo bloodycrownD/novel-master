@@ -18,10 +18,8 @@ export function normalizeQuickSqliteBindings(
       return null;
     }
     if (value instanceof Uint8Array) {
-      return value.buffer.slice(
-        value.byteOffset,
-        value.byteOffset + value.byteLength,
-      );
+      // Own a tight copy: quick-sqlite frees the bound buffer; shared/sliced views corrupt the heap.
+      return new Uint8Array(value).buffer;
     }
     return value;
   });

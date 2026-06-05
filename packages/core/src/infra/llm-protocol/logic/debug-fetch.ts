@@ -11,6 +11,10 @@ import type { FetchFn } from "../ports/adapter.port.js";
 
 const LOG_TAG = "[novel-master/llm]";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Whether LLM fetch logging is active. */
 export function isLlmFetchDebugEnabled(): boolean {
   if (process.env.NM_DEBUG_LLM_FETCH === "1") {
@@ -65,6 +69,27 @@ function summarizeBody(body: RequestInit["body"]): string | undefined {
       };
       if (Array.isArray(parsed.messages)) {
         summary.messages = `array(${parsed.messages.length})`;
+      }
+      if (Array.isArray(parsed.contents)) {
+        summary.contents = parsed.contents.slice(0, 4).map((content, index) => {
+          if (!isRecord(content) || !Array.isArray(content.parts)) {
+            return { index, role: "?", parts: 0 };
+          }
+          const first = content.parts[0];
+          const fr = isRecord(first) ? first.functionResponse : undefined;
+          const fc = isRecord(first) ? first.functionCall : undefined;
+          return {
+            index,
+            role: content.role,
+            partKinds: content.parts.map((part) =>
+              isRecord(part) ? Object.keys(part)[0] ?? "?" : "?",
+            ),
+            functionResponseName:
+              isRecord(fr) && typeof fr.name === "string" ? fr.name : undefined,
+            functionCallName:
+              isRecord(fc) && typeof fc.name === "string" ? fc.name : undefined,
+          };
+        });
       }
       return JSON.stringify(summary);
     } catch {

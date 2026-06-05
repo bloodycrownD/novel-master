@@ -68,7 +68,10 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
 
   private buildContents(req: LlmChatRequest) {
     return req.history != null && req.history.length > 0
-      ? chatMessagesToGeminiContents(req.history)
+      ? chatMessagesToGeminiContents(req.history, {
+          toolLookupMessages: req.toolUseLookupMessages,
+          knownToolNames: req.tools?.map((t) => t.name),
+        })
       : [
           {
             role: "user",

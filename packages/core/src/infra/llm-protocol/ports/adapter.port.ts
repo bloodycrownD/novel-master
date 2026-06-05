@@ -42,6 +42,8 @@ export interface LlmChatRequest {
   readonly extraHeaders?: Readonly<Record<string, string>>;
   /** When set, used instead of a single user message built from `userContent`. */
   readonly history?: readonly ChatMessage[];
+  /** Full session messages (including hidden) for Gemini tool_use id → name resolution. */
+  readonly toolUseLookupMessages?: readonly ChatMessage[];
   readonly system?: string;
   readonly tools?: readonly LlmToolDefinition[];
   readonly stream?: boolean;

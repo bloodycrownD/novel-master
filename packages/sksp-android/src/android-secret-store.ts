@@ -29,10 +29,6 @@ function decodeBlob(value: unknown): Uint8Array {
   throw new SkspError("DB_ERROR", "Invalid blob column");
 }
 
-function encodeBlob(bytes: Uint8Array): Uint8Array {
-  return bytes;
-}
-
 function base64ToBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
@@ -114,8 +110,9 @@ export class AndroidSecretStore implements SecretStore {
         cause,
       });
     }
-    const ciphertext = encodeBlob(base64ToBytes(enc.ciphertext));
-    const iv = encodeBlob(base64ToBytes(enc.iv));
+    // Store base64 text, not Uint8Array BLOB binds (quick-sqlite heap corruption on free).
+    const ciphertext = enc.ciphertext;
+    const iv = enc.iv;
     const now = Date.now();
     await executeTemplate(
       this.conn,

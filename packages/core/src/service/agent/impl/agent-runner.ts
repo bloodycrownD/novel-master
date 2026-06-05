@@ -26,6 +26,7 @@ import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.j
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
+import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
@@ -171,6 +172,12 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const llmInput = promptInput;
+        const llmMessages = normalizeOrphanToolResultsForLlm(llmInput.messages);
+
+        let toolUseLookupMessages: readonly ChatMessage[] | undefined;
+        if (this.deps.listAllSessionMessages != null) {
+          toolUseLookupMessages = await this.deps.listAllSessionMessages();
+        }
 
         const onStream =
           options.stream && publishRunLifecycle
@@ -185,7 +192,8 @@ export class DefaultAgentRunner implements AgentRunner {
             options.applicationModelId,
             "",
             {
-              history: llmInput.messages,
+              history: llmMessages,
+              toolUseLookupMessages,
               system: llmInput.system,
               tools: tools.length > 0 ? tools : undefined,
               stream: options.stream,
