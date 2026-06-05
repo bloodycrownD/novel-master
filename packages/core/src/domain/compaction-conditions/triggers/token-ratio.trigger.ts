@@ -1,7 +1,7 @@
 /**
- * Token-threshold compaction condition (supports -1 and ratio).
+ * Token-ratio compaction condition (v3; uses persisted context window).
  *
- * @module domain/compaction-conditions/triggers/token-threshold.trigger
+ * @module domain/compaction-conditions/triggers/token-ratio.trigger
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
@@ -12,18 +12,17 @@ import type {
   CompactionConditionTrigger,
 } from "../ports/compaction-condition-trigger.port.js";
 
-export interface TokenThresholdTriggerOptions {
-  readonly tokenThreshold: number;
-  readonly tokenRatio?: number;
-  readonly resolveMaxContextTokens: (
+export interface TokenRatioTriggerOptions {
+  readonly tokenRatio: number;
+  readonly resolveContextWindow: (
     evaluation: CompactionEvaluationContext,
-  ) => Promise<number>;
+  ) => Promise<number | null>;
 }
 
-/** Fires when full prompt tokens exceed effective threshold. */
-export class TokenThresholdConditionTrigger implements CompactionConditionTrigger {
+/** Fires when full prompt tokens exceed `floor(contextWindow * tokenRatio)`. */
+export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
   constructor(
-    private readonly options: TokenThresholdTriggerOptions,
+    private readonly options: TokenRatioTriggerOptions,
     private readonly tokenCounters: TokenCounterRegistry,
   ) {}
 
@@ -31,12 +30,11 @@ export class TokenThresholdConditionTrigger implements CompactionConditionTrigge
     _session: AgentSession,
     evaluation: CompactionEvaluationContext,
   ): Promise<boolean> {
-    let threshold = this.options.tokenThreshold;
-    if (threshold === -1) {
-      threshold = await this.options.resolveMaxContextTokens(evaluation);
+    const contextWindow = await this.options.resolveContextWindow(evaluation);
+    if (contextWindow == null) {
+      return false;
     }
-    const ratio = this.options.tokenRatio ?? 1;
-    const effective = Math.floor(threshold * ratio);
+    const effective = Math.floor(contextWindow * this.options.tokenRatio);
 
     const { tokenCount } = await countPromptLlmInput({
       input: evaluation.promptInput,

@@ -24,10 +24,8 @@ export {
   mapVendorModelIdToTiktokenModel,
   isGpt0301TiktokenModel,
 } from "./logic/resolve-tokenizer-family.js";
-export {
-  resolveContextWindowTokens,
-  resolveContextWindowTokensOrDefault,
-} from "./logic/resolve-context-window.js";
+export { resolveContextWindowTokens } from "./logic/resolve-context-window.js";
+export { seedContextWindowTokens } from "./logic/seed-context-window-tokens.js";
 export {
   CONTEXT_WINDOW_RULES,
   DEFAULT_CONTEXT_WINDOW_TOKENS,

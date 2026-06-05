@@ -16,7 +16,6 @@ import type {
   LlmProtocolKind,
 } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
-import type { ModelSamplingProfileService } from "../model-sampling-profile.port.js";
 import type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
@@ -34,7 +33,6 @@ export interface DefaultModelRequestServiceDeps {
   readonly providers: ProviderRepository;
   readonly savedModels: SavedModelRepository;
   readonly secretStore: SecretStore;
-  readonly samplingProfiles: ModelSamplingProfileService;
   /**
    * Optional persisted retry policy (KKV-backed via {@link ModelRetryPolicyService}).
    *
@@ -149,9 +147,11 @@ export class DefaultModelRequestService implements ModelRequestService {
     }
     let sampling = options?.sampling;
     if (sampling === undefined) {
-      const profile = await this.deps.samplingProfiles.getProfile(applicationModelId);
-      if (profile?.enabled && profile.params != null) {
-        sampling = profile.params;
+      if (
+        saved.settings.sampling.enabled &&
+        saved.settings.sampling.params != null
+      ) {
+        sampling = saved.settings.sampling.params;
       }
     }
 

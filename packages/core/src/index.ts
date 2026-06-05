@@ -357,13 +357,17 @@ export {
   ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
 } from "./domain/provider/model/protocol-sampling-defaults.js";
-export type { ModelSamplingProfile } from "./domain/provider/model/model-sampling-profile.js";
+export type { SavedModel } from "./domain/provider/model/saved-model.js";
+export type {
+  SavedModelSettings,
+  SavedModelSamplingSettings,
+  SavedModelSettingsPatch,
+} from "./domain/provider/model/saved-model-settings.js";
+export { defaultSavedModelSettings } from "./domain/provider/model/default-saved-model-settings.js";
 export {
-  modelSamplingProfileFromJson,
-  modelSamplingProfileToJson,
-} from "./domain/provider/model/model-sampling-profile-from-json.js";
-export type { ModelSamplingProfileService } from "./service/provider/model-sampling-profile.port.js";
-export { createModelSamplingProfileService } from "./service/provider/create-model-sampling-profile-service.js";
+  savedModelSettingsFromJson,
+  savedModelSettingsToJson,
+} from "./domain/provider/model/saved-model-settings-from-json.js";
 export type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
@@ -434,7 +438,7 @@ export {
   isGpt0301TiktokenModel,
   tokenizerAssetPaths,
   resolveContextWindowTokens,
-  resolveContextWindowTokensOrDefault,
+  seedContextWindowTokens,
   registerTokenizerDriver,
   getTokenizerDriver,
   resolveTokenizerDriver,

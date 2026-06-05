@@ -7,15 +7,14 @@
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import { CompositeConditionTrigger } from "@/domain/compaction-conditions/triggers/composite-trigger.js";
 import { VisibleFloorTrigger } from "@/domain/compaction-conditions/triggers/visible-floor.trigger.js";
-import { TokenThresholdConditionTrigger } from "@/domain/compaction-conditions/triggers/token-threshold.trigger.js";
+import { TokenRatioConditionTrigger } from "@/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 import type {
   CompactionConditionTrigger,
   CompactionEvaluationContext,
 } from "@/domain/compaction-conditions/ports/compaction-condition-trigger.port.js";
 import type { CompactionConditions } from "@/domain/compaction-conditions/model/compaction-conditions.js";
 import type { TokenCounterRegistry } from "@/infra/tokenizer/ports/token-counter-registry.port.js";
-import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import { resolveContextWindowTokensOrDefault } from "@/infra/tokenizer/logic/resolve-context-window.js";
+import type { ProviderModelService } from "@/service/provider/provider-model.port.js";
 import type { CompactionConditionsStore } from "./compaction-conditions-store.port.js";
 
 /**
@@ -24,7 +23,7 @@ import type { CompactionConditionsStore } from "./compaction-conditions-store.po
  * {@link EventOrchestrator.emit} `session.compaction.requested` (awaited in AgentRunner).
  */
 export interface CompactionConditionEvaluator {
-  /** True when enabled conditions match (token threshold and/or visible floor). */
+  /** True when enabled conditions match (token ratio and/or visible floor). */
   shouldRequestCompaction(
     session: AgentSession,
     evaluation: CompactionEvaluationContext,
@@ -34,6 +33,7 @@ export interface CompactionConditionEvaluator {
 export interface CreateCompactionConditionEvaluatorDeps {
   readonly conditionsStore: CompactionConditionsStore;
   readonly tokenCounters: TokenCounterRegistry;
+  readonly providerModels: ProviderModelService;
 }
 
 function triggersFromConditions(
@@ -41,18 +41,15 @@ function triggersFromConditions(
   deps: CreateCompactionConditionEvaluatorDeps,
 ): CompactionConditionTrigger | null {
   const parts: CompactionConditionTrigger[] = [];
-  if (conditions.tokenThreshold != null) {
+  if (conditions.tokenRatio != null) {
     parts.push(
-      new TokenThresholdConditionTrigger(
+      new TokenRatioConditionTrigger(
         {
-          tokenThreshold: conditions.tokenThreshold,
           tokenRatio: conditions.tokenRatio,
-          resolveMaxContextTokens: async (evaluation) => {
-            const { vendorModelId } = parseApplicationModelId(
+          resolveContextWindow: async (evaluation) =>
+            deps.providerModels.getContextWindow(
               evaluation.modelContext.applicationModelId,
-            );
-            return resolveContextWindowTokensOrDefault(vendorModelId);
-          },
+            ),
         },
         deps.tokenCounters,
       ),

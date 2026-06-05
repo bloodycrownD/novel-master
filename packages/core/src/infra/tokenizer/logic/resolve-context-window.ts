@@ -4,10 +4,7 @@
  * @module infra/tokenizer/logic/resolve-context-window
  */
 
-import {
-  CONTEXT_WINDOW_RULES,
-  DEFAULT_CONTEXT_WINDOW_TOKENS,
-} from "./context-window-map.js";
+import { CONTEXT_WINDOW_RULES } from "./context-window-map.js";
 
 /**
  * Returns context window tokens for a vendor model id, or `undefined` when unknown.
@@ -26,15 +23,4 @@ export function resolveContextWindowTokens(
     }
   }
   return undefined;
-}
-
-/**
- * Context window with fallback for compaction `tokenThreshold === -1`.
- *
- * @param vendorModelId Provider model name.
- */
-export function resolveContextWindowTokensOrDefault(
-  vendorModelId: string,
-): number {
-  return resolveContextWindowTokens(vendorModelId) ?? DEFAULT_CONTEXT_WINDOW_TOKENS;
 }

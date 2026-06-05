@@ -15,6 +15,12 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { createKkvService } from "@/service/kkv/create-kkv-service.js";
+import {
+  migrateAddSavedModelSettingsJson,
+  migrateDropLlmModelSuggestionTable,
+  migratePurgeNmModelSamplingKkv,
+} from "./provider/migrate-model-context-settings.js";
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
@@ -82,6 +88,10 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migrateRegexRuleDepthColumns(tx);
     await migrateAddBatchMessageId(tx);
     await migrateDropProviderDefaultModelId(tx);
+    const kkv = createKkvService(tx);
+    await migratePurgeNmModelSamplingKkv(kkv);
+    await migrateDropLlmModelSuggestionTable(tx);
+    await migrateAddSavedModelSettingsJson(tx);
     await seedBuiltinProviders(tx);
   });
 }

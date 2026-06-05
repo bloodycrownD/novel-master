@@ -6,7 +6,6 @@ import {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
-import { modelSamplingProfileFromJson } from "@novel-master/core";
 import { createModelRetryPolicyService } from "../../src/service/provider/create-model-retry-policy-service.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
@@ -28,8 +27,8 @@ function memorySecretStore(): SecretStore {
   };
 }
 
-describe("ModelRequestService sampling profile merge", () => {
-  it("P2: merges enabled profile when options.sampling omitted", async () => {
+describe("ModelRequestService saved model sampling", () => {
+  it("merges enabled settings.sampling when options.sampling omitted", async () => {
     clearProtocolAdapters();
     let capturedBody: Record<string, unknown> | undefined;
     const fetchFn = mock.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -49,14 +48,12 @@ describe("ModelRequestService sampling profile merge", () => {
       const bundle = createProviderServices(ctx.conn, secrets);
       await secrets.set("provider/openai/apiKey", "sk-test");
       await bundle.providerModels.create("openai", "profile-merge");
-      await bundle.modelSamplingProfiles.setProfile(
-        "openai/profile-merge",
-        modelSamplingProfileFromJson({
-          schemaVersion: 1,
+      await bundle.providerModels.updateSettings("openai", "profile-merge", {
+        sampling: {
           enabled: true,
           params: { protocol: "openai", openai: { temperature: 0.25 } },
-        }),
-      );
+        },
+      });
 
       await bundle.modelRequests.request("openai/profile-merge", "hi", {
         system: "test",
@@ -68,7 +65,7 @@ describe("ModelRequestService sampling profile merge", () => {
     }
   });
 
-  it("P3: disabled or absent profile does not set sampling", async () => {
+  it("disabled or absent sampling does not set sampling", async () => {
     clearProtocolAdapters();
     let capturedBody: Record<string, unknown> | undefined;
     const fetchFn = mock.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -98,7 +95,7 @@ describe("ModelRequestService sampling profile merge", () => {
     }
   });
 
-  it("P5: consumes persisted retry policy in wired modelRequests path", async () => {
+  it("consumes persisted retry policy in wired modelRequests path", async () => {
     clearProtocolAdapters();
     let callCount = 0;
     const fetchFn = mock.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {

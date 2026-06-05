@@ -6,8 +6,8 @@ import type { LlmProtocolAdapter } from "../../src/infra/llm-protocol/ports/adap
 import type { ProviderRepository } from "../../src/domain/provider/repositories/provider.port.js";
 import type { SavedModelRepository } from "../../src/domain/provider/repositories/saved-model.port.js";
 import type { SecretStore } from "../../src/infra/sksp/ports/secret-store.port.js";
-import type { ModelSamplingProfileService } from "../../src/service/provider/model-sampling-profile.port.js";
 import type { ModelRetryPolicyService } from "../../src/service/provider/model-retry-policy.port.js";
+import { defaultSavedModelSettings } from "../../src/domain/provider/model/default-saved-model-settings.js";
 
 const providerRepo: ProviderRepository = {
   list: async () => [],
@@ -33,6 +33,7 @@ const savedModels: SavedModelRepository = {
     providerId: "openai",
     vendorModelId: "gpt-4o-mini",
     displayName: "gpt-4o-mini",
+    settings: defaultSavedModelSettings("gpt-4o-mini"),
     createdAtMs: 0,
     updatedAtMs: 0,
   }),
@@ -46,12 +47,6 @@ const secretStore: SecretStore = {
   get: async () => "k",
   set: async () => undefined,
   delete: async () => undefined,
-};
-
-const samplingProfiles: ModelSamplingProfileService = {
-  getProfile: async () => null,
-  setProfile: async () => undefined,
-  clearProfile: async () => undefined,
 };
 
 const noRetryPolicies: ModelRetryPolicyService = {
@@ -78,7 +73,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -102,7 +96,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -128,7 +121,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -155,7 +147,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -179,7 +170,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -206,7 +196,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 3, baseDelayMs: 50, maxDelayMs: 50, jitterRatio: 0 },
       resolveAdapter: () => adapter,
@@ -237,7 +226,6 @@ describe("DefaultModelRequestService retry", () => {
       providers: providerRepo,
       savedModels,
       secretStore,
-      samplingProfiles,
       retryPolicies: noRetryPolicies,
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,

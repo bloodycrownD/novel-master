@@ -95,6 +95,27 @@ describe("ProviderModelService fetch", () => {
   });
 });
 
+describe("ProviderModelService settings", () => {
+  it("save claude-3-5 gets contextWindowTokens 200_000", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create(
+      "openai",
+      "claude-3-5-sonnet",
+    );
+    assert.equal(saved.settings.contextWindowTokens, 200_000);
+    await ctx.conn.close();
+  });
+
+  it("save unknown model gets contextWindowTokens 128_000", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create("openai", "unknown-model");
+    assert.equal(saved.settings.contextWindowTokens, 128_000);
+    await ctx.conn.close();
+  });
+});
+
 describe("ProviderModelService editSaved", () => {
   it("preserves displayName when omitted", async () => {
     const ctx = await openNovelMasterTestConnection();

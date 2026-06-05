@@ -11,14 +11,18 @@ import {
   queryTemplate,
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
+import { savedModelSettingsFromJson } from "../../model/saved-model-settings-from-json.js";
+import { savedModelSettingsToJson } from "../../model/saved-model-settings-from-json.js";
 import type { SavedModel } from "../../model/saved-model.js";
 import type { SavedModelRepository } from "../saved-model.port.js";
 
 function rowToSaved(row: Row): SavedModel {
+  const settingsJson = String(row.settings_json);
   return {
     providerId: String(row.provider_id),
     vendorModelId: String(row.vendor_model_id),
     displayName: row.display_name != null ? String(row.display_name) : null,
+    settings: savedModelSettingsFromJson(JSON.parse(settingsJson) as unknown),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
@@ -34,7 +38,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT provider_id, vendor_model_id, display_name, created_at_ms, updated_at_ms
+      `SELECT provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
        FROM llm_saved_model WHERE provider_id = #{providerId}
        ORDER BY vendor_model_id`,
       { providerId },
@@ -49,7 +53,7 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT provider_id, vendor_model_id, display_name, created_at_ms, updated_at_ms
+      `SELECT provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
        FROM llm_saved_model
        WHERE provider_id = #{providerId} AND vendor_model_id = #{vendorModelId}`,
       { providerId, vendorModelId },
@@ -65,14 +69,15 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.conn,
       this.parser,
       `INSERT INTO llm_saved_model (
-        provider_id, vendor_model_id, display_name, created_at_ms, updated_at_ms
+        provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
       ) VALUES (
-        #{providerId}, #{vendorModelId}, #{displayName}, #{createdAtMs}, #{updatedAtMs}
+        #{providerId}, #{vendorModelId}, #{displayName}, #{settingsJson}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
         providerId: model.providerId,
         vendorModelId: model.vendorModelId,
         displayName: model.displayName,
+        settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         createdAtMs: model.createdAtMs,
         updatedAtMs: model.updatedAtMs,
       },
@@ -85,12 +90,14 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.parser,
       `UPDATE llm_saved_model SET
         display_name = #{displayName},
+        settings_json = #{settingsJson},
         updated_at_ms = #{updatedAtMs}
        WHERE provider_id = #{providerId} AND vendor_model_id = #{vendorModelId}`,
       {
         providerId: model.providerId,
         vendorModelId: model.vendorModelId,
         displayName: model.displayName,
+        settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         updatedAtMs: model.updatedAtMs,
       },
     );

@@ -1,5 +1,5 @@
 /**
- * Zod schema for compaction conditions wire document.
+ * Zod schema for compaction conditions wire document (v3 only).
  *
  * @module domain/compaction-conditions/model/compaction-conditions.schema
  */
@@ -9,9 +9,8 @@ import type { CompactionConditions } from "./compaction-conditions.js";
 
 const compactionConditionsDocumentSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(3),
     enabled: z.boolean(),
-    tokenThreshold: z.number().optional(),
     tokenRatio: z.number().positive().max(1).optional(),
     visibleFloor: z.number().int().nonnegative().optional(),
     "visible-floor": z.number().int().nonnegative().optional(),
@@ -21,23 +20,22 @@ const compactionConditionsDocumentSchema = z
     if (!doc.enabled) {
       return;
     }
-    const hasToken = doc.tokenThreshold != null;
+    const hasRatio = doc.tokenRatio != null;
     const floor = doc.visibleFloor ?? doc["visible-floor"];
     const hasFloor = floor != null;
-    if (!hasToken && !hasFloor) {
+    if (!hasRatio && !hasFloor) {
       ctx.addIssue({
         code: "custom",
         message:
-          "when enabled, at least one of tokenThreshold or visible-floor is required",
+          "when enabled, at least one of tokenRatio or visible-floor is required",
       });
     }
   });
 
 export const compactionConditionsSchema =
   compactionConditionsDocumentSchema.transform((doc): CompactionConditions => ({
-    schemaVersion: doc.schemaVersion,
+    schemaVersion: 3,
     enabled: doc.enabled,
-    tokenThreshold: doc.tokenThreshold,
     tokenRatio: doc.tokenRatio,
     visibleFloor: doc.visibleFloor ?? doc["visible-floor"],
   }));

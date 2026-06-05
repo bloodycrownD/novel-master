@@ -6,15 +6,13 @@
 
 /** OR trigger fields; at least one required when enabled. */
 export interface CompactionConditionsTrigger {
-  readonly tokenThreshold?: number;
   readonly tokenRatio?: number;
   readonly visibleFloor?: number;
 }
 
 export interface CompactionConditions {
-  readonly schemaVersion: number;
+  readonly schemaVersion: 3;
   readonly enabled: boolean;
-  readonly tokenThreshold?: number;
   readonly tokenRatio?: number;
   readonly visibleFloor?: number;
 }
