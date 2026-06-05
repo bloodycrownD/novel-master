@@ -1,530 +1,577 @@
-/**
- * Session message list with tool cards, streaming tail, and optional batch select.
- */
-import React, {useCallback, useEffect, useMemo, useRef} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-} from 'react-native';
-import type {MessageMenuAnchor} from './MessageActionMenu';
-import type {ChatMessage} from '@novel-master/core';
-import {BatchCheckbox} from '../batch/BatchCheckbox';
-import {RichContentBody} from '../rich-content/RichContentBody';
-import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
-import type {ChatListScrollSnapshot} from '../../services/chat-list-scroll-cache';
-import {useTheme} from '../../theme/ThemeProvider';
-import type {ThemeTokens} from '../../theme/tokens';
-import {buildChatListItems, type ChatListItem} from './message-blocks';
-import {ThinkingBlockCard} from './ThinkingBlockCard';
-import {ToolCallCard} from './ToolCallCard';
-
-type Props = {
-  messages: readonly ChatMessage[];
-  streamingText?: string;
-  streamingThinking?: string;
-  showFullToolParams?: boolean;
-  /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
-  chatRichTextEnabled?: boolean;
-  /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
-  richRenderEpoch?: number;
-  batchMode?: boolean;
-  selectedMessageIds?: ReadonlySet<string>;
-  onToggleMessageSelect?: (messageId: string) => void;
-  onMessageLongPress?: (
-    message: ChatMessage,
-    anchor: MessageMenuAnchor,
-  ) => void;
-  /** Shown at the top of the timeline (e.g. load older history). */
-  listHeaderComponent?: React.ReactElement | null;
-  /** Open session VFS file from vfs.read / write / replace tool cards. */
-  onOpenToolFile?: (path: string) => void;
-  /** Restored scroll position after panel remount (workspace ↔ chat). */
-  initialScroll?: ChatListScrollSnapshot | null;
-  onScrollSnapshot?: (snap: ChatListScrollSnapshot) => void;
-  /** New session with no cache: default to bottom. */
-  defaultScrollToBottom?: boolean;
-};
-
-/** Within this distance from the bottom we treat the user as "following" the tail. */
-const NEAR_BOTTOM_THRESHOLD_PX = 80;
-const SCROLL_TO_END_MIN_INTERVAL_MS = 100;
-const SCROLL_SNAPSHOT_THROTTLE_MS = 100;
-
-interface ChatMessageBodyProps {
-  body: string;
-  tokens: ThemeTokens;
-  isUser: boolean;
-  richTextEnabled: boolean;
-  richRenderEpoch: number;
-  messageId: string;
-  bodyColor: string;
-}
-
-/** Hidden rows use the same palette as normal bubbles, only dimmed (no badge). */
-function chatBubbleColors(
-  tokens: ThemeTokens,
-  isUser: boolean,
-): {backgroundColor: string; bodyColor: string} {
-  return {
-    backgroundColor: isUser ? tokens.primary : tokens.surface,
-    bodyColor: isUser ? '#fff' : tokens.text,
-  };
-}
-
-/** Chat bubble body: plain Text when pref off, else shared rich renderer. */
-const ChatMessageBody = React.memo(function ChatMessageBody({
-  body,
-  tokens,
-  isUser,
-  richTextEnabled,
-  richRenderEpoch,
-  messageId,
-  bodyColor,
-}: ChatMessageBodyProps) {
-  const plainColor = bodyColor;
-  if (!richTextEnabled || isRichContentOverLimit(body)) {
-    return <Text style={{color: plainColor}}>{body}</Text>;
-  }
-  return (
-    <RichContentBody
-      content={body}
-      tokens={tokens}
-      variant={isUser ? 'chat-user' : 'chat-assistant'}
-      fallbackTextColor={plainColor}
-      renderKey={`${messageId}:${richRenderEpoch}`}
-    />
-  );
-});
-
-export function MessageList({
-  messages,
-  streamingText,
-  streamingThinking,
-  showFullToolParams,
-  chatRichTextEnabled = false,
-  richRenderEpoch = 0,
-  batchMode = false,
-  selectedMessageIds,
-  onToggleMessageSelect,
-  onMessageLongPress,
-  listHeaderComponent,
-  onOpenToolFile,
-  initialScroll = null,
-  onScrollSnapshot,
-  defaultScrollToBottom = false,
-}: Props) {
-  const {tokens} = useTheme();
-  const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
-  const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
-  const prevMessageCountRef = useRef(0);
-  const nearBottomRef = useRef(true);
-  const scrollOffsetRef = useRef(0);
-  const viewportHeightRef = useRef(0);
-  const contentHeightRef = useRef(0);
-  const hasAppliedInitialScrollRef = useRef(false);
-  const lastScrollToEndMsRef = useRef(0);
-  const scrollToEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const items = useMemo(() => buildChatListItems(messages), [messages]);
-
-  const currentScrollSnapshot = useCallback(
-    (): ChatListScrollSnapshot => ({
-      offsetY: scrollOffsetRef.current,
-      nearBottom: nearBottomRef.current,
-    }),
-    [],
-  );
-
-  const emitScrollSnapshot = useCallback(() => {
-    onScrollSnapshot?.(currentScrollSnapshot());
-  }, [onScrollSnapshot, currentScrollSnapshot]);
-
-  const scheduleSnapshotEmit = useCallback(() => {
-    if (!onScrollSnapshot) {
-      return;
-    }
-    if (snapshotThrottleRef.current != null) {
-      return;
-    }
-    snapshotThrottleRef.current = setTimeout(() => {
-      snapshotThrottleRef.current = null;
-      emitScrollSnapshot();
-    }, SCROLL_SNAPSHOT_THROTTLE_MS);
-  }, [onScrollSnapshot, emitScrollSnapshot]);
-
-  const scheduleScrollToEnd = useCallback(() => {
-    if (!nearBottomRef.current) {
-      return;
-    }
-    if (scrollToEndTimerRef.current != null) {
-      return;
-    }
-    const now = Date.now();
-    const delay = Math.max(
-      0,
-      SCROLL_TO_END_MIN_INTERVAL_MS - (now - lastScrollToEndMsRef.current),
-    );
-    scrollToEndTimerRef.current = setTimeout(() => {
-      scrollToEndTimerRef.current = null;
-      lastScrollToEndMsRef.current = Date.now();
-      requestAnimationFrame(() => {
-        if (nearBottomRef.current) {
-          listRef.current?.scrollToEnd({animated: false});
-        }
-      });
-    }, delay);
-  }, []);
-
-  const syncNearBottomFromScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
-      scrollOffsetRef.current = contentOffset.y;
-      contentHeightRef.current = contentSize.height;
-      viewportHeightRef.current = layoutMeasurement.height;
-      const distanceFromBottom =
-        contentSize.height - contentOffset.y - layoutMeasurement.height;
-      nearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
-      scheduleSnapshotEmit();
-    },
-    [scheduleSnapshotEmit],
-  );
-
-  useEffect(() => {
-    if (hasAppliedInitialScrollRef.current) {
-      return;
-    }
-    hasAppliedInitialScrollRef.current = true;
-    if (initialScroll?.nearBottom) {
-      nearBottomRef.current = true;
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({animated: false});
-      });
-    } else if (initialScroll) {
-      nearBottomRef.current = initialScroll.nearBottom;
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToOffset({
-          offset: initialScroll.offsetY,
-          animated: false,
-        });
-      });
-    } else if (defaultScrollToBottom) {
-      nearBottomRef.current = true;
-      requestAnimationFrame(() => {
-        listRef.current?.scrollToEnd({animated: false});
-      });
-    }
-  }, [initialScroll, defaultScrollToBottom]);
-
-  useEffect(() => {
-    const firstId = messages[0]?.id;
-    const prevFirstId = prevFirstMessageIdRef.current;
-    const prevCount = prevMessageCountRef.current;
-    const grew = messages.length > prevCount;
-    const prependedOlder =
-      grew &&
-      prevFirstId != null &&
-      firstId != null &&
-      firstId !== prevFirstId;
-
-    if (prependedOlder) {
-      nearBottomRef.current = false;
-    } else if (prevCount === 0 && messages.length > 0) {
-      if (initialScroll != null) {
-        nearBottomRef.current = initialScroll.nearBottom;
-      } else if (defaultScrollToBottom) {
-        nearBottomRef.current = true;
-        scheduleScrollToEnd();
-      }
-    } else if (grew && firstId === prevFirstId) {
-      scheduleScrollToEnd();
-    }
-
-    prevFirstMessageIdRef.current = firstId;
-    prevMessageCountRef.current = messages.length;
-  }, [
-    messages,
-    initialScroll,
-    defaultScrollToBottom,
-    scheduleScrollToEnd,
-  ]);
-
-  useEffect(() => {
-    if (!streamingText && !streamingThinking) {
-      return;
-    }
-    scheduleScrollToEnd();
-  }, [streamingText, streamingThinking, scheduleScrollToEnd]);
-
-  useEffect(() => {
-    return () => {
-      if (snapshotThrottleRef.current != null) {
-        clearTimeout(snapshotThrottleRef.current);
-      }
-      if (scrollToEndTimerRef.current != null) {
-        clearTimeout(scrollToEndTimerRef.current);
-      }
-      onScrollSnapshot?.(currentScrollSnapshot());
-    };
-  }, [onScrollSnapshot, currentScrollSnapshot]);
-
-  const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
-    const list: (ChatListItem | {kind: 'stream'})[] = [...items];
-    if (
-      (streamingText && streamingText.length > 0) ||
-      (streamingThinking && streamingThinking.length > 0)
-    ) {
-      list.push({kind: 'stream'});
-    }
-    return list;
-  }, [items, streamingText, streamingThinking]);
-
-  const renderBubble = (
-    isUser: boolean,
-    body: string,
-    selected: boolean,
-    hidden: boolean,
-    messageId: string,
-    /** Streaming tail always plain Text even when assistant rich text is on. */
-    forcePlainText = false,
-  ) => {
-    const colors = chatBubbleColors(tokens, isUser);
-    return (
-      <View
-        style={[
-          styles.bubble,
-          {
-            backgroundColor: colors.backgroundColor,
-            opacity: hidden ? 0.55 : 1,
-          },
-          batchMode && selected && {
-            borderColor: tokens.primary,
-            borderWidth: 2,
-          },
-        ]}>
-        {forcePlainText ? (
-          <Text style={{color: colors.bodyColor}}>{body}</Text>
-        ) : (
-          <ChatMessageBody
-            body={body}
-            tokens={tokens}
-            isUser={isUser}
-            richTextEnabled={chatRichTextEnabled}
-            richRenderEpoch={richRenderEpoch}
-            messageId={messageId}
-            bodyColor={colors.bodyColor}
-          />
-        )}
-      </View>
-    );
-  };
-
-  return (
-    <FlatList
-      ref={listRef}
-      style={styles.list}
-      data={data}
-      extraData={{chatRichTextEnabled, richRenderEpoch}}
-      ListHeaderComponent={listHeaderComponent ?? undefined}
-      maintainVisibleContentPosition={{
-        minIndexForVisible: 0,
-        autoscrollToTopThreshold: 10,
-      }}
-      onScroll={syncNearBottomFromScroll}
-      scrollEventThrottle={16}
-      onContentSizeChange={() => {
-        scheduleScrollToEnd();
-      }}
-      keyExtractor={(item, index) => {
-        if ('kind' in item && item.kind === 'stream') {
-          return 'stream';
-        }
-        const row = item as ChatListItem;
-        if (row.kind === 'tool') {
-          return `tool-${row.tool.toolUseId}`;
-        }
-        return `msg-${row.message.id}`;
-      }}
-      ListEmptyComponent={
-        !streamingText ? (
-          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-            暂无消息，发送一条开始对话
-          </Text>
-        ) : null
-      }
-      renderItem={({item}) => {
-        if ('kind' in item && item.kind === 'stream') {
-          return (
-            <View style={styles.rowAlignAssistant}>
-              {streamingThinking && streamingThinking.length > 0 ? (
-                <ThinkingBlockCard
-                  text={streamingThinking}
-                  defaultExpanded
-                  richTextEnabled={chatRichTextEnabled}
-                  richRenderEpoch={richRenderEpoch}
-                  contentId="stream-thinking"
-                />
-              ) : null}
-              {streamingText && streamingText.length > 0
-                ? renderBubble(false, streamingText, false, false, 'stream', true)
-                : null}
-            </View>
-          );
-        }
-        const row = item as ChatListItem;
-        if (row.kind === 'tool') {
-          return (
-            <ToolCallCard
-              tool={row.tool}
-              showFullParams={showFullToolParams}
-              onOpenFile={onOpenToolFile}
-            />
-          );
-        }
-        const isUser = row.message.role === 'user';
-        const hidden = row.message.hidden;
-        const body = row.textParts.join('\n\n');
-        const thinking = row.thinkingParts.join('\n\n');
-        if (!body && !thinking) {
-          return null;
-        }
-        const selected = selectedMessageIds?.has(row.message.id) ?? false;
-        const content = (
-          <>
-            {!isUser && thinking ? (
-              <ThinkingBlockCard
-                text={thinking}
-                dimmed={hidden}
-                richTextEnabled={chatRichTextEnabled}
-                richRenderEpoch={richRenderEpoch}
-                contentId={`thinking-${row.message.id}`}
-              />
-            ) : null}
-            {body
-              ? renderBubble(
-                  isUser,
-                  body,
-                  selected,
-                  hidden,
-                  row.message.id,
-                )
-              : null}
-          </>
-        );
-
-        if (batchMode) {
-          return (
-            <Pressable
-              style={styles.batchRow}
-              onPress={() => onToggleMessageSelect?.(row.message.id)}>
-              <View style={styles.batchCheckboxCol}>
-                <BatchCheckbox
-                  checked={selected}
-                  onToggle={() => onToggleMessageSelect?.(row.message.id)}
-                />
-              </View>
-              <View
-                style={[
-                  styles.batchBubbleCol,
-                  isUser
-                    ? styles.batchBubbleColUser
-                    : styles.batchBubbleColAssistant,
-                ]}>
-                {content}
-              </View>
-            </Pressable>
-          );
-        }
-
-        return (
-          <MessageLongPressRow
-            isUser={isUser}
-            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}>
-            {content}
-          </MessageLongPressRow>
-        );
-      }}
-    />
-  );
-}
-
-type MessageLongPressRowProps = {
-  isUser: boolean;
-  onLongPress: (anchor: MessageMenuAnchor) => void;
-  children: React.ReactNode;
-};
-
-/** Measures bubble window rect at long-press time for anchored action menu. */
-function MessageLongPressRow({
-  isUser,
-  onLongPress,
-  children,
-}: MessageLongPressRowProps) {
-  const rowRef = useRef<View>(null);
-  return (
-    <Pressable
-      ref={rowRef}
-      style={[
-        styles.rowAlign,
-        isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
-      ]}
-      onLongPress={() => {
-        rowRef.current?.measureInWindow((x, y, width, height) => {
-          onLongPress({x, y, width, height});
-        });
-      }}>
-      {children}
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  list: {flex: 1},
-  empty: {textAlign: 'center', marginTop: 32, paddingHorizontal: 24},
-  rowAlign: {
-    width: '100%',
-    paddingHorizontal: 12,
-  },
-  rowAlignUser: {
-    alignItems: 'flex-end',
-  },
-  rowAlignAssistant: {
-    alignItems: 'flex-start',
-  },
-  /** Checkbox column fixed at screen left; bubble aligns in the remaining width. */
-  batchRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingLeft: 4,
-    paddingRight: 12,
-  },
-  batchCheckboxCol: {
-    width: 36,
-    paddingTop: 10,
-    alignItems: 'center',
-  },
-  batchBubbleCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  batchBubbleColUser: {
-    alignItems: 'flex-end',
-  },
-  batchBubbleColAssistant: {
-    alignItems: 'flex-start',
-  },
-  bubble: {
-    maxWidth: '85%',
-    marginVertical: 6,
-    padding: 12,
-    borderRadius: 12,
-    flexShrink: 1,
-  },
-});
-
+/**
+ * Session message list with tool cards, streaming tail, and optional batch select.
+ */
+import React, {useCallback, useEffect, useMemo, useRef} from 'react';
+import {
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
+import type {MessageMenuAnchor} from './MessageActionMenu';
+import type {ChatMessage} from '@novel-master/core';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {RichContentBody} from '../rich-content/RichContentBody';
+import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import type {ChatListScrollSnapshot} from '../../services/chat-list-scroll-cache';
+import {useTheme} from '../../theme/ThemeProvider';
+import type {ThemeTokens} from '../../theme/tokens';
+import {buildChatListItems, type ChatListItem} from './message-blocks';
+import {ThinkingBlockCard} from './ThinkingBlockCard';
+import {ToolCallCard} from './ToolCallCard';
+
+type Props = {
+  messages: readonly ChatMessage[];
+  streamingText?: string;
+  streamingThinking?: string;
+  showFullToolParams?: boolean;
+  /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
+  chatRichTextEnabled?: boolean;
+  /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
+  richRenderEpoch?: number;
+  batchMode?: boolean;
+  selectedMessageIds?: ReadonlySet<string>;
+  onToggleMessageSelect?: (messageId: string) => void;
+  onMessageLongPress?: (
+    message: ChatMessage,
+    anchor: MessageMenuAnchor,
+  ) => void;
+  /** Shown at the top of the timeline (e.g. load older history). */
+  listHeaderComponent?: React.ReactElement | null;
+  /** Open session VFS file from vfs.read / write / replace tool cards. */
+  onOpenToolFile?: (path: string) => void;
+  /** Restored scroll position after panel remount (workspace ↔ chat). */
+  initialScroll?: ChatListScrollSnapshot | null;
+  onScrollSnapshot?: (snap: ChatListScrollSnapshot) => void;
+  /** New session with no cache: default to bottom. */
+  defaultScrollToBottom?: boolean;
+};
+
+/** Within this distance from the bottom we treat the user as "following" the tail. */
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
+const SCROLL_TO_END_MIN_INTERVAL_MS = 100;
+const SCROLL_SNAPSHOT_THROTTLE_MS = 100;
+
+interface ChatMessageBodyProps {
+  body: string;
+  tokens: ThemeTokens;
+  isUser: boolean;
+  richTextEnabled: boolean;
+  richRenderEpoch: number;
+  messageId: string;
+  bodyColor: string;
+}
+
+/** Hidden rows use the same palette as normal bubbles, only dimmed (no badge). */
+function chatBubbleColors(
+  tokens: ThemeTokens,
+  isUser: boolean,
+): {backgroundColor: string; bodyColor: string} {
+  return {
+    backgroundColor: isUser ? tokens.primary : tokens.surface,
+    bodyColor: isUser ? '#fff' : tokens.text,
+  };
+}
+
+/** Chat bubble body: plain Text when pref off, else shared rich renderer. */
+const ChatMessageBody = React.memo(function ChatMessageBody({
+  body,
+  tokens,
+  isUser,
+  richTextEnabled,
+  richRenderEpoch,
+  messageId,
+  bodyColor,
+}: ChatMessageBodyProps) {
+  const plainColor = bodyColor;
+  if (!richTextEnabled || isRichContentOverLimit(body)) {
+    return <Text style={{color: plainColor}}>{body}</Text>;
+  }
+  return (
+    <RichContentBody
+      content={body}
+      tokens={tokens}
+      variant={isUser ? 'chat-user' : 'chat-assistant'}
+      fallbackTextColor={plainColor}
+      renderKey={`${messageId}:${richRenderEpoch}`}
+    />
+  );
+});
+
+export function MessageList({
+  messages,
+  streamingText,
+  streamingThinking,
+  showFullToolParams,
+  chatRichTextEnabled = false,
+  richRenderEpoch = 0,
+  batchMode = false,
+  selectedMessageIds,
+  onToggleMessageSelect,
+  onMessageLongPress,
+  listHeaderComponent,
+  onOpenToolFile,
+  initialScroll = null,
+  onScrollSnapshot,
+  defaultScrollToBottom = false,
+}: Props) {
+  const {tokens} = useTheme();
+  const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
+  const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
+  const prevMessageCountRef = useRef(0);
+  // WHY: default true breaks restore — onContentSizeChange runs before useEffect and scrolls to end.
+  const nearBottomRef = useRef(
+    initialScroll != null
+      ? initialScroll.nearBottom
+      : defaultScrollToBottom,
+  );
+  const scrollOffsetRef = useRef(initialScroll?.offsetY ?? 0);
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const hasAppliedInitialScrollRef = useRef(false);
+  const pendingScrollRestoreRef = useRef(
+    initialScroll != null || defaultScrollToBottom,
+  );
+  const lastScrollToEndMsRef = useRef(0);
+  const scrollToEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const items = useMemo(() => buildChatListItems(messages), [messages]);
+
+  const currentScrollSnapshot = useCallback(
+    (): ChatListScrollSnapshot => ({
+      offsetY: scrollOffsetRef.current,
+      nearBottom: nearBottomRef.current,
+    }),
+    [],
+  );
+
+  const emitScrollSnapshot = useCallback(() => {
+    onScrollSnapshot?.(currentScrollSnapshot());
+  }, [onScrollSnapshot, currentScrollSnapshot]);
+
+  const scheduleSnapshotEmit = useCallback(() => {
+    if (!onScrollSnapshot) {
+      return;
+    }
+    if (snapshotThrottleRef.current != null) {
+      return;
+    }
+    snapshotThrottleRef.current = setTimeout(() => {
+      snapshotThrottleRef.current = null;
+      emitScrollSnapshot();
+    }, SCROLL_SNAPSHOT_THROTTLE_MS);
+  }, [onScrollSnapshot, emitScrollSnapshot]);
+
+  const applyPendingScrollRestore = useCallback(
+    (contentHeight?: number) => {
+      if (!pendingScrollRestoreRef.current) {
+        return;
+      }
+      if (contentHeight != null) {
+        contentHeightRef.current = contentHeight;
+      }
+      // WHY: scrollToOffset is a no-op until FlatList has laid out content.
+      if (contentHeightRef.current <= 0) {
+        return;
+      }
+      if (initialScroll?.nearBottom) {
+        listRef.current?.scrollToEnd({animated: false});
+        pendingScrollRestoreRef.current = false;
+        return;
+      }
+      if (initialScroll) {
+        listRef.current?.scrollToOffset({
+          offset: initialScroll.offsetY,
+          animated: false,
+        });
+        pendingScrollRestoreRef.current = false;
+        return;
+      }
+      if (defaultScrollToBottom) {
+        listRef.current?.scrollToEnd({animated: false});
+        pendingScrollRestoreRef.current = false;
+      }
+    },
+    [initialScroll, defaultScrollToBottom],
+  );
+
+  const scheduleScrollToEnd = useCallback(() => {
+    if (pendingScrollRestoreRef.current) {
+      return;
+    }
+    if (!nearBottomRef.current) {
+      return;
+    }
+    if (scrollToEndTimerRef.current != null) {
+      return;
+    }
+    const now = Date.now();
+    const delay = Math.max(
+      0,
+      SCROLL_TO_END_MIN_INTERVAL_MS - (now - lastScrollToEndMsRef.current),
+    );
+    scrollToEndTimerRef.current = setTimeout(() => {
+      scrollToEndTimerRef.current = null;
+      lastScrollToEndMsRef.current = Date.now();
+      requestAnimationFrame(() => {
+        if (nearBottomRef.current) {
+          listRef.current?.scrollToEnd({animated: false});
+        }
+      });
+    }, delay);
+  }, []);
+
+  const syncNearBottomFromScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+      scrollOffsetRef.current = contentOffset.y;
+      contentHeightRef.current = contentSize.height;
+      viewportHeightRef.current = layoutMeasurement.height;
+      const distanceFromBottom =
+        contentSize.height - contentOffset.y - layoutMeasurement.height;
+      nearBottomRef.current = distanceFromBottom <= NEAR_BOTTOM_THRESHOLD_PX;
+      scheduleSnapshotEmit();
+    },
+    [scheduleSnapshotEmit],
+  );
+
+  useEffect(() => {
+    if (hasAppliedInitialScrollRef.current) {
+      return;
+    }
+    hasAppliedInitialScrollRef.current = true;
+    if (initialScroll?.nearBottom) {
+      nearBottomRef.current = true;
+    } else if (initialScroll) {
+      nearBottomRef.current = initialScroll.nearBottom;
+      scrollOffsetRef.current = initialScroll.offsetY;
+    } else if (defaultScrollToBottom) {
+      nearBottomRef.current = true;
+    } else {
+      pendingScrollRestoreRef.current = false;
+    }
+    requestAnimationFrame(() => {
+      applyPendingScrollRestore();
+    });
+  }, [initialScroll, defaultScrollToBottom, applyPendingScrollRestore]);
+
+  useEffect(() => {
+    const firstId = messages[0]?.id;
+    const prevFirstId = prevFirstMessageIdRef.current;
+    const prevCount = prevMessageCountRef.current;
+    const grew = messages.length > prevCount;
+    const prependedOlder =
+      grew &&
+      prevFirstId != null &&
+      firstId != null &&
+      firstId !== prevFirstId;
+
+    if (prependedOlder) {
+      nearBottomRef.current = false;
+    } else if (prevCount === 0 && messages.length > 0) {
+      if (initialScroll != null) {
+        nearBottomRef.current = initialScroll.nearBottom;
+      } else if (defaultScrollToBottom) {
+        nearBottomRef.current = true;
+        scheduleScrollToEnd();
+      }
+    } else if (grew && firstId === prevFirstId) {
+      scheduleScrollToEnd();
+    }
+
+    prevFirstMessageIdRef.current = firstId;
+    prevMessageCountRef.current = messages.length;
+  }, [
+    messages,
+    initialScroll,
+    defaultScrollToBottom,
+    scheduleScrollToEnd,
+  ]);
+
+  useEffect(() => {
+    if (!streamingText && !streamingThinking) {
+      return;
+    }
+    scheduleScrollToEnd();
+  }, [streamingText, streamingThinking, scheduleScrollToEnd]);
+
+  useEffect(() => {
+    return () => {
+      if (snapshotThrottleRef.current != null) {
+        clearTimeout(snapshotThrottleRef.current);
+      }
+      if (scrollToEndTimerRef.current != null) {
+        clearTimeout(scrollToEndTimerRef.current);
+      }
+      onScrollSnapshot?.(currentScrollSnapshot());
+    };
+  }, [onScrollSnapshot, currentScrollSnapshot]);
+
+  const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
+    const list: (ChatListItem | {kind: 'stream'})[] = [...items];
+    if (
+      (streamingText && streamingText.length > 0) ||
+      (streamingThinking && streamingThinking.length > 0)
+    ) {
+      list.push({kind: 'stream'});
+    }
+    return list;
+  }, [items, streamingText, streamingThinking]);
+
+  const renderBubble = (
+    isUser: boolean,
+    body: string,
+    selected: boolean,
+    hidden: boolean,
+    messageId: string,
+    /** Streaming tail always plain Text even when assistant rich text is on. */
+    forcePlainText = false,
+  ) => {
+    const colors = chatBubbleColors(tokens, isUser);
+    return (
+      <View
+        style={[
+          styles.bubble,
+          {
+            backgroundColor: colors.backgroundColor,
+            opacity: hidden ? 0.55 : 1,
+          },
+          batchMode && selected && {
+            borderColor: tokens.primary,
+            borderWidth: 2,
+          },
+        ]}>
+        {forcePlainText ? (
+          <Text style={{color: colors.bodyColor}}>{body}</Text>
+        ) : (
+          <ChatMessageBody
+            body={body}
+            tokens={tokens}
+            isUser={isUser}
+            richTextEnabled={chatRichTextEnabled}
+            richRenderEpoch={richRenderEpoch}
+            messageId={messageId}
+            bodyColor={colors.bodyColor}
+          />
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <FlatList
+      ref={listRef}
+      style={styles.list}
+      data={data}
+      extraData={{chatRichTextEnabled, richRenderEpoch}}
+      ListHeaderComponent={listHeaderComponent ?? undefined}
+      maintainVisibleContentPosition={{
+        minIndexForVisible: 0,
+        autoscrollToTopThreshold: 10,
+      }}
+      onScroll={syncNearBottomFromScroll}
+      scrollEventThrottle={16}
+      onContentSizeChange={(_w, height) => {
+        if (pendingScrollRestoreRef.current) {
+          applyPendingScrollRestore(height);
+          return;
+        }
+        scheduleScrollToEnd();
+      }}
+      onLayout={() => {
+        if (pendingScrollRestoreRef.current) {
+          applyPendingScrollRestore();
+        }
+      }}
+      keyExtractor={(item, index) => {
+        if ('kind' in item && item.kind === 'stream') {
+          return 'stream';
+        }
+        const row = item as ChatListItem;
+        if (row.kind === 'tool') {
+          return `tool-${row.tool.toolUseId}`;
+        }
+        return `msg-${row.message.id}`;
+      }}
+      ListEmptyComponent={
+        !streamingText ? (
+          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+            暂无消息，发送一条开始对话
+          </Text>
+        ) : null
+      }
+      renderItem={({item}) => {
+        if ('kind' in item && item.kind === 'stream') {
+          return (
+            <View style={styles.rowAlignAssistant}>
+              {streamingThinking && streamingThinking.length > 0 ? (
+                <ThinkingBlockCard
+                  text={streamingThinking}
+                  defaultExpanded
+                  richTextEnabled={chatRichTextEnabled}
+                  richRenderEpoch={richRenderEpoch}
+                  contentId="stream-thinking"
+                />
+              ) : null}
+              {streamingText && streamingText.length > 0
+                ? renderBubble(false, streamingText, false, false, 'stream', true)
+                : null}
+            </View>
+          );
+        }
+        const row = item as ChatListItem;
+        if (row.kind === 'tool') {
+          return (
+            <ToolCallCard
+              tool={row.tool}
+              showFullParams={showFullToolParams}
+              onOpenFile={onOpenToolFile}
+            />
+          );
+        }
+        const isUser = row.message.role === 'user';
+        const hidden = row.message.hidden;
+        const body = row.textParts.join('\n\n');
+        const thinking = row.thinkingParts.join('\n\n');
+        if (!body && !thinking) {
+          return null;
+        }
+        const selected = selectedMessageIds?.has(row.message.id) ?? false;
+        const content = (
+          <>
+            {!isUser && thinking ? (
+              <ThinkingBlockCard
+                text={thinking}
+                dimmed={hidden}
+                richTextEnabled={chatRichTextEnabled}
+                richRenderEpoch={richRenderEpoch}
+                contentId={`thinking-${row.message.id}`}
+              />
+            ) : null}
+            {body
+              ? renderBubble(
+                  isUser,
+                  body,
+                  selected,
+                  hidden,
+                  row.message.id,
+                )
+              : null}
+          </>
+        );
+
+        if (batchMode) {
+          return (
+            <Pressable
+              style={styles.batchRow}
+              onPress={() => onToggleMessageSelect?.(row.message.id)}>
+              <View style={styles.batchCheckboxCol}>
+                <BatchCheckbox
+                  checked={selected}
+                  onToggle={() => onToggleMessageSelect?.(row.message.id)}
+                />
+              </View>
+              <View
+                style={[
+                  styles.batchBubbleCol,
+                  isUser
+                    ? styles.batchBubbleColUser
+                    : styles.batchBubbleColAssistant,
+                ]}>
+                {content}
+              </View>
+            </Pressable>
+          );
+        }
+
+        return (
+          <MessageLongPressRow
+            isUser={isUser}
+            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}>
+            {content}
+          </MessageLongPressRow>
+        );
+      }}
+    />
+  );
+}
+
+type MessageLongPressRowProps = {
+  isUser: boolean;
+  onLongPress: (anchor: MessageMenuAnchor) => void;
+  children: React.ReactNode;
+};
+
+/** Measures bubble window rect at long-press time for anchored action menu. */
+function MessageLongPressRow({
+  isUser,
+  onLongPress,
+  children,
+}: MessageLongPressRowProps) {
+  const rowRef = useRef<View>(null);
+  return (
+    <Pressable
+      ref={rowRef}
+      style={[
+        styles.rowAlign,
+        isUser ? styles.rowAlignUser : styles.rowAlignAssistant,
+      ]}
+      onLongPress={() => {
+        rowRef.current?.measureInWindow((x, y, width, height) => {
+          onLongPress({x, y, width, height});
+        });
+      }}>
+      {children}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {flex: 1},
+  empty: {textAlign: 'center', marginTop: 32, paddingHorizontal: 24},
+  rowAlign: {
+    width: '100%',
+    paddingHorizontal: 12,
+  },
+  rowAlignUser: {
+    alignItems: 'flex-end',
+  },
+  rowAlignAssistant: {
+    alignItems: 'flex-start',
+  },
+  /** Checkbox column fixed at screen left; bubble aligns in the remaining width. */
+  batchRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingLeft: 4,
+    paddingRight: 12,
+  },
+  batchCheckboxCol: {
+    width: 36,
+    paddingTop: 10,
+    alignItems: 'center',
+  },
+  batchBubbleCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  batchBubbleColUser: {
+    alignItems: 'flex-end',
+  },
+  batchBubbleColAssistant: {
+    alignItems: 'flex-start',
+  },
+  bubble: {
+    maxWidth: '85%',
+    marginVertical: 6,
+    padding: 12,
+    borderRadius: 12,
+    flexShrink: 1,
+  },
+});
+

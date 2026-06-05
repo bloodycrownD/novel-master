@@ -85,6 +85,21 @@ function flushScrollEffects() {
   });
 }
 
+function triggerContentSizeChange(
+  renderer: TestRenderer.ReactTestRenderer,
+  height = 800,
+) {
+  const flatList = renderer.root.findByType('FlatList' as never);
+  const onContentSizeChange = flatList.props.onContentSizeChange as (
+    w: number,
+    h: number,
+  ) => void;
+  act(() => {
+    onContentSizeChange(400, height);
+  });
+  flushScrollEffects();
+}
+
 describe('MessageList scroll restore', () => {
   beforeEach(() => {
     jest.useFakeTimers();
@@ -98,8 +113,9 @@ describe('MessageList scroll restore', () => {
 
   it('T1: remount with cached offset does not scrollToEnd', () => {
     const messages = [sampleMessage('m1')];
+    let renderer: TestRenderer.ReactTestRenderer;
     act(() => {
-      TestRenderer.create(
+      renderer = TestRenderer.create(
         React.createElement(MessageList, {
           messages,
           initialScroll: {offsetY: 100, nearBottom: false},
@@ -107,6 +123,9 @@ describe('MessageList scroll restore', () => {
       );
     });
     flushScrollEffects();
+    mockScrollToEnd.mockClear();
+    mockScrollToOffset.mockClear();
+    triggerContentSizeChange(renderer!);
     expect(mockScrollToEnd).not.toHaveBeenCalled();
     expect(mockScrollToOffset).toHaveBeenCalledWith(
       expect.objectContaining({offset: 100, animated: false}),
@@ -115,8 +134,9 @@ describe('MessageList scroll restore', () => {
 
   it('T2: new session without cache scrolls to end', () => {
     const messages = [sampleMessage('m1')];
+    let renderer: TestRenderer.ReactTestRenderer;
     act(() => {
-      TestRenderer.create(
+      renderer = TestRenderer.create(
         React.createElement(MessageList, {
           messages,
           defaultScrollToBottom: true,
@@ -124,7 +144,37 @@ describe('MessageList scroll restore', () => {
       );
     });
     flushScrollEffects();
+    mockScrollToEnd.mockClear();
+    triggerContentSizeChange(renderer!);
     expect(mockScrollToEnd).toHaveBeenCalled();
     expect(mockScrollToOffset).not.toHaveBeenCalled();
+  });
+
+  it('T3: onContentSizeChange before restore does not scrollToEnd when cached offset', () => {
+    const messages = [sampleMessage('m1')];
+    let renderer: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        React.createElement(MessageList, {
+          messages,
+          initialScroll: {offsetY: 200, nearBottom: false},
+        }),
+      );
+    });
+    mockScrollToEnd.mockClear();
+    mockScrollToOffset.mockClear();
+    const flatList = renderer!.root.findByType('FlatList' as never);
+    const onContentSizeChange = flatList.props.onContentSizeChange as (
+      w: number,
+      h: number,
+    ) => void;
+    act(() => {
+      onContentSizeChange(400, 800);
+    });
+    flushScrollEffects();
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    expect(mockScrollToOffset).toHaveBeenCalledWith(
+      expect.objectContaining({offset: 200, animated: false}),
+    );
   });
 });
