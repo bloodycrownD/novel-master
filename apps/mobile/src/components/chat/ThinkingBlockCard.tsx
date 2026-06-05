@@ -3,6 +3,8 @@
  */
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {RichContentBody} from '../rich-content/RichContentBody';
+import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -11,12 +13,19 @@ type Props = {
   defaultExpanded?: boolean;
   /** Grey out when parent message is hidden from prompt. */
   dimmed?: boolean;
+  /** Same pref as assistant bubbles; uses RichContentBody when on. */
+  richTextEnabled?: boolean;
+  richRenderEpoch?: number;
+  contentId?: string;
 };
 
 export function ThinkingBlockCard({
   text,
   defaultExpanded = false,
   dimmed = false,
+  richTextEnabled = false,
+  richRenderEpoch = 0,
+  contentId = 'thinking',
 }: Props) {
   const {tokens} = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -24,6 +33,11 @@ export function ThinkingBlockCard({
   if (!trimmed) {
     return null;
   }
+
+  const useRich =
+    expanded &&
+    richTextEnabled &&
+    !isRichContentOverLimit(trimmed);
 
   return (
     <View
@@ -48,9 +62,19 @@ export function ThinkingBlockCard({
         </Text>
       </Pressable>
       {expanded ? (
-        <Text style={[styles.body, {color: tokens.textSecondary}]}>
-          {trimmed}
-        </Text>
+        useRich ? (
+          <RichContentBody
+            content={trimmed}
+            tokens={tokens}
+            variant="chat-assistant"
+            fallbackTextColor={tokens.textSecondary}
+            renderKey={`${contentId}:${richRenderEpoch}`}
+          />
+        ) : (
+          <Text style={[styles.body, {color: tokens.textSecondary}]}>
+            {trimmed}
+          </Text>
+        )
       ) : null}
     </View>
   );
