@@ -349,14 +349,14 @@
 
 ## 7. Agent 配置
 
-### 7.1 Agent 列表（底栏 Tab）
+### 7.1 Agent 列表（agentsSettings 入口）
 
 | 功能 | 原型 |
 |------|------|
 | 列表项 | 名称、meta（步数 · 是否专属模型） |
 | 工作区 agent | `workspaceCurrentAgentId` + localStorage；无「设为默认」 |
 | 新建 | 空白 Agent（system + chat 块） |
-| 行菜单 ⋮ | 设为默认、复制、删除（至少保留 1 个） |
+| 行菜单 ⋮ | 重命名、复制、删除（至少保留 1 个） |
 | 批量删除 | `manage-header` 内联批量头 |
 | 进入编辑 | 点行（非批量） |
 
