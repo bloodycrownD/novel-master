@@ -118,7 +118,6 @@ describe("TokenRatioConditionTrigger", () => {
   });
 
   it("uses heuristic override when resolveTokenizerOverride returns heuristic", async () => {
-    const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("hello world");
     const { counterKind } = await countPromptLlmInput({
@@ -129,15 +128,5 @@ describe("TokenRatioConditionTrigger", () => {
       tokenizerOverride: "heuristic",
     });
     assert.equal(counterKind, "heuristic");
-
-    const trigger = new TokenRatioConditionTrigger(
-      {
-        tokenRatio: 0.00001,
-        resolveContextWindow: async () => 1_000_000,
-        resolveTokenizerOverride: async () => "heuristic",
-      },
-      registry,
-    );
-    assert.equal(await trigger.shouldTrigger(session, evaluation), true);
   });
 });

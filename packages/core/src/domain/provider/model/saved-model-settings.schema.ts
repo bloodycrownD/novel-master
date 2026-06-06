@@ -5,7 +5,10 @@
  */
 
 import { z } from "zod";
-import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+import {
+  isValidTokenCounterModePref,
+  parseTokenCounterModePref,
+} from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import { modelSamplingParamsSchema } from "./model-sampling-params.schema.js";
 import type { SavedModelSettings } from "./saved-model-settings.js";
 
@@ -20,7 +23,8 @@ const savedModelSamplingSettingsSchema = z
 const tokenCounterModeSchema = z
   .string()
   .default("auto")
-  .refine(isValidTokenCounterModePref, { message: "Invalid tokenCounterMode" });
+  .refine(isValidTokenCounterModePref, { message: "Invalid tokenCounterMode" })
+  .transform((raw) => parseTokenCounterModePref(raw));
 
 export const savedModelSettingsDocumentSchema = z
   .object({

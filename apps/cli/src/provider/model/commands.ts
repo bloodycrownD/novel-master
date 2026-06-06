@@ -114,25 +114,29 @@ export async function runProviderModel(
       if (flags.has("resetContextWindow")) {
         await rt.providerModels.resetContextWindowToDefault(pid, vendorModelId);
       } else {
-        const patch: SavedModelSettingsPatch = {};
         const contextWindowRaw = flagString(flags, "contextWindowTokens");
+        const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
+        let contextWindowTokens: number | undefined;
         if (contextWindowRaw != null) {
-          const contextWindowTokens = Number(contextWindowRaw);
+          contextWindowTokens = Number(contextWindowRaw);
           if (!Number.isInteger(contextWindowTokens) || contextWindowTokens <= 0) {
             throw new Error("--contextWindowTokens must be a positive integer");
           }
-          patch.contextWindowTokens = contextWindowTokens;
         }
-        const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
+        let tokenCounterMode: TokenizerOverride | undefined;
         if (tokenCounterModeRaw != null) {
           if (!isValidTokenCounterModePref(tokenCounterModeRaw)) {
             throw new Error(
               `--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`,
             );
           }
-          patch.tokenCounterMode = tokenCounterModeRaw as TokenizerOverride;
+          tokenCounterMode = tokenCounterModeRaw as TokenizerOverride;
         }
-        if (Object.keys(patch).length > 0) {
+        if (contextWindowTokens != null || tokenCounterMode != null) {
+          const patch: SavedModelSettingsPatch = {
+            ...(contextWindowTokens != null ? { contextWindowTokens } : {}),
+            ...(tokenCounterMode != null ? { tokenCounterMode } : {}),
+          };
           await rt.providerModels.updateSettings(pid, vendorModelId, patch);
         }
       }
