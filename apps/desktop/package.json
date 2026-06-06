@@ -12,6 +12,7 @@
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/src/preload/preload.cjs --external:electron",
     "build:renderer": "vite build",
     "dev:vite": "vite",
+    "predev:electron": "npm run build -w @novel-master/core",
     "dev:electron": "node scripts/rebuild-native.mjs && npm run build:main && npm run build:preload && electron .",
     "dev": "concurrently -k \"npm run dev:vite\" \"wait-on tcp:5173 && npm run dev:electron\"",
     "dist": "npm run build && node scripts/rebuild-native.mjs && electron-builder",

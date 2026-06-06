@@ -110,7 +110,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         setPrompts(loadedPrompts);
       }
       if (removed > 0) {
-        showToast("???????????abstract?");
+        showToast("已移除已废弃的摘要块（abstract）");
       }
       const toolsWire = toolsFromDefinition(def);
       setToolsMode(toolsWire.mode);
@@ -170,7 +170,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, [loadAgent]);
 
   if (!agentId) {
-    return <p className="settings-hint">?? agentId</p>;
+    return <p className="settings-hint">缺少 agentId</p>;
   }
 
   const preferredModelId =
@@ -201,8 +201,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        setStatus("???");
-        showToast("??? Agent ??");
+        setStatus("已保存");
+        showToast("已保存 Agent 配置");
       } else {
         setStatus(saveRes.error.message);
         showToast(saveRes.error.message);
@@ -232,7 +232,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const deleteBlock = (index: number) => {
     if (prompts.length <= 1) {
-      showToast("?????? Prompt ?");
+      showToast("至少保留一个 Prompt 块");
       return;
     }
     setPrompts((prev) => prev.filter((_, i) => i !== index));
@@ -268,53 +268,48 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   return (
     <SettingsPanel>
-      {loading ? <p className="settings-hint">????</p> : null}
+      {loading ? <p className="settings-hint">加载中…</p> : null}
       <SettingsFormSection
-        title="Agent ??"
-        desc={`?? ${agentId}${dirty ? " � ???" : ""}`}
+        title="Agent 配置"
+        desc={`\u7f16\u8f91 ${agentId}${dirty ? " · 未保存" : ""}`}
         footer={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "????" : "??"}
+              {saving ? "保存中…" : "保存"}
             </Button>
             <div className="settings-yaml-links">
-              <button type="button" className="settings-link-btn" onClick={() => setConfirmImport(true)}>
-                ?? YAML
-              </button>
+              <button type="button" className="settings-link-btn" onClick={() =>setConfirmImport(true)}>
+                导入 YAML</button>
               <button
                 type="button"
                 className="settings-link-btn"
                 onClick={() =>
                   void ipcAgentYamlExport({ agentId }).then((r) => {
-                    if (r.ok && r.data === "saved") showToast("??? Agent YAML");
+                    if (r.ok && r.data === "saved") showToast("已导出 Agent YAML");
                     else if (!r.ok) showToast(r.error.message);
                   })
                 }
-              >
-                ?? YAML
-              </button>
+              >导出 YAML</button>
             </div>
           </div>
         }
       >
-        <SettingsSection title="????">
-          <SettingsField label="??">
+        <SettingsSection title="基本信息">
+          <SettingsField label="名称">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </SettingsField>
         </SettingsSection>
 
-        <SettingsSection title="??">
+        <SettingsSection title="模型">
           <div className="settings-row settings-row--switch">
-            <span className="settings-row__label">????</span>
-            <Switch checked={modelEnabled} onChange={setModelEnabled} aria-label="????" />
+            <span className="settings-row__label">专属模型</span>
+            <Switch checked={modelEnabled} onChange={setModelEnabled} aria-label="专属模型" />
           </div>
           {!modelEnabled ? (
-            <p className="settings-hint">
-              ???????????????????? / ????
-            </p>
+            <p className="settings-hint">未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。</p>
           ) : (
             <>
-              <SettingsField label="???">
+              <SettingsField label="服务商">
                 <select value={providerId} onChange={(e) => void handleProviderChange(e.target.value)}>
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -323,7 +318,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   ))}
                 </select>
               </SettingsField>
-              <SettingsField label="??">
+              <SettingsField label="模型">
                 <select
                   value={vendorModelId}
                   onChange={(e) => setVendorModelId(e.target.value)}
@@ -336,19 +331,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   ))}
                 </select>
               </SettingsField>
-              <p className="settings-hint">model: {preferredModelId ?? "?"}</p>
+              <p className="settings-hint">model: {preferredModelId ?? "—"}</p>
             </>
           )}
         </SettingsSection>
 
-        <SettingsSection title="???">
-          <SettingsField label="???? maxSteps">
+        <SettingsSection title="运行时">
+          <SettingsField label="最大步数 maxSteps">
             <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
           </SettingsField>
         </SettingsSection>
 
-        <SettingsSection title="????">
-          <SettingsField label="??">
+        <SettingsSection title="工具策略">
+          <SettingsField label="模式">
             <select value={toolsMode} onChange={(e) => setToolsMode(e.target.value as ToolsMode)}>
               {TOOL_MODE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -358,7 +353,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </select>
           </SettingsField>
           {toolsMode !== "default" ? (
-            <SettingsField label={toolsMode === "allow" ? "??????" : "??????"}>
+            <SettingsField label={toolsMode === "allow" ? "白名单工具名" : "黑名单工具名"}>
               <textarea
                 rows={3}
                 value={toolsList}
@@ -367,26 +362,21 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               />
             </SettingsField>
           ) : (
-            <p className="settings-hint">
-              ??????????????vfs.read?vfs.write ???
-            </p>
+            <p className="settings-hint">未配置时使用全部已注册工具（vfs.read、vfs.write 等）。</p>
           )}
         </SettingsSection>
 
-        <SettingsSection title="Prompt ?">
+        <SettingsSection title="Prompt 块">
           <div className="settings-section__actions">
-            <button type="button" className="settings-link-btn" onClick={() => setAddBlockMenu((v) => !v)}>
-              ??
-            </button>
+            <button type="button" className="settings-link-btn" onClick={() =>setAddBlockMenu((v) => !v)}>
+              添加</button>
           </div>
           {addBlockMenu ? (
             <div className="settings-inline-actions">
-              <Button variant="secondary" onClick={() => addBlock("text")}>
-                ???
-              </Button>
-              <Button variant="secondary" onClick={() => addBlock("chat")}>
-                ???
-              </Button>
+              <Button variant="secondary" onClick={() =>addBlock("text")}>
+                文本块</Button>
+              <Button variant="secondary" onClick={() =>addBlock("chat")}>
+                会话块</Button>
             </div>
           ) : null}
           <div className="config-block-list">
@@ -397,26 +387,23 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <span className="config-block-card__name">{block.name}</span>
                   <div className="config-block-card__actions">
                     {index > 0 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, -1)} aria-label="??">
-                        ?
-                      </button>
+                      <button type="button" className="icon-btn" onClick={() =>moveBlock(index, -1)}>
+                        ↑</button>
                     ) : null}
                     {index < prompts.length - 1 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, 1)} aria-label="??">
-                        ?
-                      </button>
+                      <button type="button" className="icon-btn" onClick={() =>moveBlock(index, 1)}>
+                        ↓</button>
                     ) : null}
-                    <button type="button" className="icon-btn" onClick={() => deleteBlock(index)} aria-label="??">
-                      �
-                    </button>
+                    <button type="button" className="icon-btn" onClick={() =>deleteBlock(index)}>
+                      ×</button>
                   </div>
                 </div>
-                <SettingsField label="??">
+                <SettingsField label="名称">
                   <input value={block.name} onChange={(e) => updateBlock(index, { name: e.target.value })} />
                 </SettingsField>
                 {block.type === "text" ? (
                   <>
-                    <SettingsField label="??">
+                    <SettingsField label="角色">
                       <select
                         value={block.role}
                         onChange={(e) =>
@@ -433,10 +420,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         ))}
                       </select>
                     </SettingsField>
-                    <p className="settings-hint">
-                      ? system ??????? LLM system??????? chat ??
-                    </p>
-                    <SettingsField label="??">
+                    <p className="settings-hint">仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。</p>
+                    <SettingsField label="内容">
                       <textarea
                         rows={4}
                         value={block.content}
@@ -445,9 +430,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     </SettingsField>
                   </>
                 ) : (
-                  <p className="settings-hint">
-                    chat ?????????????????? prompt ?????
-                  </p>
+                  <p className="settings-hint">chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。</p>
                 )}
               </div>
             ))}
@@ -457,14 +440,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
-        title="?? YAML"
-        message="????? Agent ????????"
+        title="导入 YAML"
+        message="将覆盖当前 Agent 配置，是否继续？"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcAgentYamlImport({ agentId }).then((r) => {
             if (r.ok && r.data === "imported") {
               void loadAgent();
-              showToast("??? Agent YAML");
+              showToast("已导入 Agent YAML");
             } else if (!r.ok) {
               showToast(r.error.message);
             }

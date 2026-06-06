@@ -21,7 +21,7 @@ Do **not**:
 - Open `http://localhost:5173` in a browser (preload IPC is Electron-only).
 - Run `electron -e "..."` or paste JS into an Electron launch argument (that is not the app entry).
 
-First launch rebuilds native modules for Electron (`better-sqlite3`). If the DB fails to open after `npm install`, run:
+First launch rebuilds native modules for Electron (`better-sqlite3`) and compiles `@novel-master/core` (main process imports its `dist/` output). If the DB fails to open after `npm install`, run:
 
 ```bash
 npx @electron/rebuild -f -w better-sqlite3 -m . -v 35.7.5

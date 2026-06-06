@@ -1,4 +1,73 @@
-import { useCallback, useEffect, useState } from "react";
+/**
+ * Rewrites settings editor TSX with real UTF-8 (Write tool / bad saves corrupt CJK).
+ * Run: node apps/desktop/scripts/fix-settings-utf8.mjs
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const agentPath = join(root, "renderer/features/settings/AgentEditorView.tsx");
+const eventsPath = join(root, "renderer/features/settings/EventsConfigView.tsx");
+
+/** Decode `\uXXXX` sequences in a fragment (file uses single backslash). */
+function decodeUnicodeFragment(text) {
+  return text.replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16)),
+  );
+}
+
+/** Replace JSX text nodes that contain `\u` escapes with decoded UTF-8. */
+function fixJsxUnicodeText(src) {
+  return src.replace(/>([^<{]*\\u[0-9a-fA-F]{4}[^<{]*)</g, (full, inner) => {
+    const trimmed = inner.trim();
+    if (!/\\u[0-9a-fA-F]{4}/.test(trimmed)) {
+      return full;
+    }
+    try {
+      return `>${decodeUnicodeFragment(trimmed)}<`;
+    } catch {
+      return full;
+    }
+  });
+}
+
+/** Restore agent editor from git object and decode JSX unicode text. */
+function fixAgentEditor() {
+  const raw = execSync("git show d825173:apps/desktop/renderer/features/settings/AgentEditorView.tsx", {
+    encoding: "utf8",
+  });
+  const fixed = fixJsxUnicodeText(raw);
+  // String literals like showToast("\u5df2...") compile correctly; decode for file readability.
+  const readable = fixed.replace(
+    /"((?:[^"\\]|\\.)*)"/g,
+    (match, body) => {
+      if (!/\\u[0-9a-fA-F]{4}/.test(body)) return match;
+      try {
+        return `"${decodeUnicodeFragment(body)}"`;
+      } catch {
+        return match;
+      }
+    },
+  );
+  writeFileSync(agentPath, readable, "utf8");
+  if (!readFileSync(agentPath, "utf8").includes("加载中")) {
+    throw new Error("AgentEditorView still missing 加载中 after fix");
+  }
+}
+
+/** Events editor: rewrite user strings (mojibake-safe via JS unicode escapes). */
+function fixEventsEditor() {
+  const t = (s) => s;
+  const lines = readFileSync(eventsPath, "utf8");
+
+  // If already valid UTF-8, skip.
+  if (lines.includes("动作 ") && lines.includes("事件配置") && !lines.includes("å")) {
+    return;
+  }
+
+  const content = `import { useCallback, useEffect, useState } from "react";
 import type { EventActionNode, EventActionType, EventsConfig } from "@novel-master/core";
 import {
   ACTION_ADD_OPTIONS,
@@ -64,31 +133,31 @@ function ActionBlockEditor({
     <div className="config-block-card config-block-card--nested">
       <div className="config-block-card__header">
         <span className="config-block-card__badge">{actionTypeLabel(action.type)}</span>
-        <span className="settings-hint">动作 {index + 1}</span>
+        <span className="settings-hint">${t("\u52a8\u4f5c")} {index + 1}</span>
         <div className="config-block-card__actions">
           {index > 0 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="上移">
-              ↑
+            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="${t("\u4e0a\u79fb")}">
+              ${t("\u2191")}
             </button>
           ) : null}
           {index < total - 1 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="下移">
-              ↓
+            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="${t("\u4e0b\u79fb")}">
+              ${t("\u2193")}
             </button>
           ) : null}
-          <button type="button" className="icon-btn" onClick={onDelete} aria-label="删除">
-            ×
+          <button type="button" className="icon-btn" onClick={onDelete} aria-label="${t("\u5220\u9664")}">
+            ${t("\u00d7")}
           </button>
         </div>
       </div>
       <p className="settings-hint">{actionTypeHint(action.type)}</p>
-      <SettingsField label="依赖（DAG）">
+      <SettingsField label="${t("\u4f9d\u8d56\uff08DAG\uff09")}">
         <div className="config-dep-chips">
           {availableDependencies.map((dep) => (
             <button
               key={dep}
               type="button"
-              className={`config-dep-chip${currentDeps.includes(dep) ? " is-active" : ""}`}
+              className={\`config-dep-chip\${currentDeps.includes(dep) ? " is-active" : ""}\`}
               onClick={() => toggleDep(dep)}
             >
               {actionTypeLabel(dep)}
@@ -98,7 +167,7 @@ function ActionBlockEditor({
       </SettingsField>
       {action.type === "hide-message" ? (
         <>
-          <SettingsField label="起深度">
+          <SettingsField label="${t("\u8d77\u6df1\u5ea6")}">
             <input
               type="number"
               value={action.params.startDepth ?? ""}
@@ -113,7 +182,7 @@ function ActionBlockEditor({
               }
             />
           </SettingsField>
-          <SettingsField label="止深度">
+          <SettingsField label="${t("\u6b62\u6df1\u5ea6")}">
             <input
               type="number"
               value={action.params.endDepth ?? ""}
@@ -169,7 +238,7 @@ function EventBlockEditor({
 
   const deleteAction = (actionIndex: number) => {
     if (block.actions.length <= 1) {
-      showToast("至少保留一个动作");
+      showToast("${t("\u81f3\u5c11\u4fdd\u7559\u4e00\u4e2a\u52a8\u4f5c")}");
       return;
     }
     onChange({ actions: block.actions.filter((_, i) => i !== actionIndex) });
@@ -188,41 +257,41 @@ function EventBlockEditor({
   return (
     <div className="config-block-card config-block-card--event">
       <div className="config-block-card__header">
-        <span className="config-block-card__badge">事件</span>
+        <span className="config-block-card__badge">${t("\u4e8b\u4ef6")}</span>
         <span className="settings-hint">
           {index + 1} / {total}
         </span>
         <div className="config-block-card__actions">
           {index > 0 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="上移">
-              ↑
+            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="${t("\u4e0a\u79fb")}">
+              ${t("\u2191")}
             </button>
           ) : null}
           {index < total - 1 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="下移">
-              ↓
+            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="${t("\u4e0b\u79fb")}">
+              ${t("\u2193")}
             </button>
           ) : null}
-          <button type="button" className="icon-btn" onClick={onDelete} aria-label="删除">
-            ×
+          <button type="button" className="icon-btn" onClick={onDelete} aria-label="${t("\u5220\u9664")}">
+            ${t("\u00d7")}
           </button>
         </div>
       </div>
-      <SettingsField label="事件">
+      <SettingsField label="${t("\u4e8b\u4ef6")}">
         <strong>{eventTypeLabel(block.eventType)}</strong>
       </SettingsField>
       <p className="settings-hint">{eventTypeHint(block.eventType)}</p>
       <p className="settings-hint">
-        DAG：无依赖动作会并发执行；下游需等待所有依赖成功。任一失败将终止后续调度。
+        ${t("\u0044\u0041\u0047\uff1a\u65e0\u4f9d\u8d56\u52a8\u4f5c\u4f1a\u5e76\u53d1\u6267\u884c\uff1b\u4e0b\u6e38\u9700\u7b49\u5f85\u6240\u6709\u4f9d\u8d56\u6210\u529f\u3002\u4efb\u4e00\u5931\u8d25\u5c06\u7ec8\u6b62\u540e\u7eed\u8c03\u5ea6\u3002")}
       </p>
       <div className="settings-section__actions">
-        <span className="settings-section__title">动作</span>
+        <span className="settings-section__title">${t("\u52a8\u4f5c")}</span>
         <button
           type="button"
           className="settings-link-btn"
           onClick={() => setAddActionOpen((v) => !v)}
         >
-          添加
+          ${t("\u6dfb\u52a0")}
         </button>
       </div>
       {addActionOpen ? (
@@ -248,7 +317,7 @@ function EventBlockEditor({
           ] as EventActionType[];
           return (
             <ActionBlockEditor
-              key={`${block.id}-${actionIndex}`}
+              key={\`\${block.id}-\${actionIndex}\`}
               action={action}
               index={actionIndex}
               total={block.actions.length}
@@ -300,7 +369,7 @@ export function EventsConfigView() {
 
   const deleteBlock = (id: string) => {
     if (blocks.length <= 1) {
-      showToast("至少保留一个事件");
+      showToast("${t("\u81f3\u5c11\u4fdd\u7559\u4e00\u4e2a\u4e8b\u4ef6")}");
       return;
     }
     setBlocks((prev) => prev.filter((b) => b.id !== id));
@@ -353,8 +422,8 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsSetConfig({ config });
       if (res.ok) {
-        setStatus("已保存");
-        showToast("已保存事件配置");
+        setStatus("${t("\u5df2\u4fdd\u5b58")}");
+        showToast("${t("\u5df2\u4fdd\u5b58\u4e8b\u4ef6\u914d\u7f6e")}");
       } else {
         setStatus(res.error.message);
         showToast(res.error.message);
@@ -365,18 +434,18 @@ export function EventsConfigView() {
   };
 
   if (loading) {
-    return <p className="settings-hint">加载中…</p>;
+    return <p className="settings-hint">${t("\u52a0\u8f7d\u4e2d\u2026")}</p>;
   }
 
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title="事件配置"
-        desc="按事件编排动作链，支持 DAG；可从 YAML 文件导入/导出。"
+        title="${t("\u4e8b\u4ef6\u914d\u7f6e")}"
+        desc="${t("\u6309\u4e8b\u4ef6\u7f16\u6392\u52a8\u4f5c\u94fe\uff0c\u652f\u6301 DAG\uff1b\u53ef\u4ece YAML \u6587\u4ef6\u5bfc\u5165/\u5bfc\u51fa\u3002")}"
         footer={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "保存中…" : "保存"}
+              {saving ? "${t("\u4fdd\u5b58\u4e2d\u2026")}" : "${t("\u4fdd\u5b58")}"}
             </Button>
             <div className="settings-yaml-links">
               <button
@@ -384,32 +453,32 @@ export function EventsConfigView() {
                 className="settings-link-btn"
                 onClick={() => setConfirmImport(true)}
               >
-                导入 YAML
+                ${t("\u5bfc\u5165 YAML")}
               </button>
               <button
                 type="button"
                 className="settings-link-btn"
                 onClick={() =>
                   void ipcEventsExportYaml().then((r) => {
-                    if (r.ok && r.data === "saved") showToast("已导出 YAML");
+                    if (r.ok && r.data === "saved") showToast("${t("\u5df2\u5bfc\u51fa YAML")}");
                     else if (!r.ok) showToast(r.error.message);
                   })
                 }
               >
-                导出 YAML
+                ${t("\u5bfc\u51fa YAML")}
               </button>
             </div>
           </div>
         }
       >
-        <SettingsSection title="事件">
+        <SettingsSection title="${t("\u4e8b\u4ef6")}">
           <div className="settings-section__actions">
             <button
               type="button"
               className="settings-link-btn"
               onClick={() => setAddEventOpen((v) => !v)}
             >
-              添加事件
+              ${t("\u6dfb\u52a0\u4e8b\u4ef6")}
             </button>
           </div>
           {addEventOpen ? (
@@ -440,14 +509,14 @@ export function EventsConfigView() {
       <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
-        title="导入 YAML"
-        message="将覆盖当前事件配置，是否继续？"
+        title="${t("\u5bfc\u5165 YAML")}"
+        message="${t("\u5c06\u8986\u76d6\u5f53\u524d\u4e8b\u4ef6\u914d\u7f6e\uff0c\u662f\u5426\u7ee7\u7eed\uff1f")}"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcEventsImportYaml().then((r) => {
             if (r.ok && r.data === "imported") {
               void load();
-              showToast("已导入 YAML");
+              showToast("${t("\u5df2\u5bfc\u5165 YAML")}");
             } else if (!r.ok) {
               showToast(r.error.message);
             }
@@ -458,3 +527,21 @@ export function EventsConfigView() {
     </SettingsPanel>
   );
 }
+`;
+
+  writeFileSync(eventsPath, content, "utf8");
+  if (!readFileSync(eventsPath, "utf8").includes("事件配置")) {
+    throw new Error("EventsConfigView still missing 事件配置 after fix");
+  }
+}
+
+async function main() {
+  fixAgentEditor();
+  fixEventsEditor();
+  console.log("OK: settings UTF-8 fixed");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
