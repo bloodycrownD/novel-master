@@ -21,6 +21,10 @@ DerivedData/
 # React Native
 *.jsbundle
 
+# Electron
+**/out/
+**/release/
+
 .env
 .env.*
 !.env.example

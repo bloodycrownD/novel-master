@@ -1,308 +1,256 @@
-<!DOCTYPE html>
+<!doctype html>
+<!--
+  Desktop UI prototype (browser-first).
+  Layout: preview | workspace explorer | chat drill-down.
+  Settings: full-page overlay (not a fourth column).
+-->
 <html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工作区与协作 - 桌面端原型</title>
-    <link rel="stylesheet" href="css/styles.css">
-</head>
-<body>
-    <!-- 主容器：桌面端三栏布局 -->
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Novel Master — Desktop Prototype</title>
+    <link rel="stylesheet" href="./shell.css" />
+  </head>
+  <body>
     <div id="app">
-        <!-- 左侧边栏：导航 + 项目/会话列表 -->
-        <aside id="sidebar">
-            <!-- 顶部：应用标题 + 主题切换 -->
-            <div class="sidebar-header">
-                <h1 class="app-title">Novel Master</h1>
-                <button id="themeToggle" class="icon-btn theme-toggle" aria-label="切换主题">
-                    <svg class="theme-icon theme-icon-light" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="5"/>
-                        <line x1="12" y1="1" x2="12" y2="3"/>
-                        <line x1="12" y1="21" x2="12" y2="23"/>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                        <line x1="1" y1="12" x2="3" y2="12"/>
-                        <line x1="21" y1="12" x2="23" y2="12"/>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-                    </svg>
-                    <svg class="theme-icon theme-icon-dark" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                    </svg>
+      <header id="app-chrome" aria-label="全局操作">
+        <div class="app-chrome__actions">
+          <div class="app-chrome__column-toggles" role="group" aria-label="栏位显示">
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-preview"
+              data-column="preview"
+              aria-label="显示或隐藏左侧栏"
+              title="左侧栏（文件预览）"
+            >
+              ◧
+            </button>
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-explorer"
+              data-column="explorer"
+              aria-label="显示或隐藏中间栏"
+              title="中间栏（工作区）"
+            >
+              ▥
+            </button>
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-chat"
+              data-column="chat"
+              aria-label="显示或隐藏右侧栏"
+              title="右侧栏（聊天）"
+            >
+              ◨
+            </button>
+          </div>
+          <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="切换主题">☀</button>
+          <button type="button" class="icon-btn" id="settings-open" aria-label="打开设置">⚙</button>
+        </div>
+      </header>
+
+      <div id="main-shell">
+        <div class="workspace">
+          <header class="column-header" id="preview-header" aria-label="文件预览">
+            <span class="column-header__title">文件预览</span>
+            <span class="column-header__meta" id="preview-filename">—</span>
+            <div class="column-header__actions">
+              <div class="preview-mode-toggle" role="group" aria-label="预览模式">
+                <button
+                  type="button"
+                  class="preview-mode-btn is-active"
+                  id="preview-mode-read"
+                  data-action="set-preview-mode"
+                  data-preview-mode="read"
+                >
+                  预览
                 </button>
-            </div>
-
-            <!-- 导航标签 -->
-            <nav class="sidebar-nav">
-                <button class="nav-tab active" data-view="sessions">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                    </svg>
-                    <span>会话</span>
+                <button
+                  type="button"
+                  class="preview-mode-btn"
+                  id="preview-mode-edit"
+                  data-action="set-preview-mode"
+                  data-preview-mode="edit"
+                >
+                  编辑
                 </button>
-                <button class="nav-tab" data-view="agents">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
-                    </svg>
-                    <span>Agent</span>
-                </button>
-                <button class="nav-tab" data-view="settings">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
-                    </svg>
-                    <span>设置</span>
-                </button>
-            </nav>
+              </div>
+            </div>
+          </header>
+          <header class="column-header" id="explorer-header" aria-label="工作区">
+            <span class="column-header__title" id="workspace-title">全局工作区</span>
+          </header>
+          <header class="column-header" id="rail-header" aria-label="Chat 导航">
+            <div class="column-header__nav" id="rail-pane-nav"></div>
+          </header>
 
-            <!-- 项目选择器 -->
-            <div class="project-selector">
-                <div class="current-project">
-                    <div class="project-icon">📚</div>
-                    <div class="project-info">
-                        <div class="project-name">科幻小说创作</div>
-                        <div class="project-meta">3 个会话</div>
-                    </div>
-                    <button class="icon-btn-sm" id="projectMenuBtn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M6 9l6 6 6-6"/>
-                        </svg>
-                    </button>
-                </div>
+          <section id="preview-pane" aria-label="文件预览">
+            <div class="preview-body" id="preview-body">
+              <p class="preview-empty">在工作区选择文件以预览</p>
+            </div>
+            <textarea class="preview-editor hidden" id="preview-editor" spellcheck="false" aria-label="文件编辑"></textarea>
+          </section>
+
+          <div
+            class="column-splitter"
+            id="splitter-preview-explorer"
+            data-splitter="preview-explorer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整预览区与工作区宽度"
+            tabindex="0"
+          ></div>
+
+          <section id="explorer-pane" aria-label="工作区">
+            <div class="workspace-trees">
+              <div class="workspace-tree-panel is-visible" data-workspace-panel="global">
+                <div class="explorer-tree" data-tree="global" id="workspace-tree-global"></div>
+              </div>
+              <div class="workspace-tree-panel" data-workspace-panel="session" hidden>
+                <div class="explorer-tree" data-tree="session" id="workspace-tree-session"></div>
+              </div>
+              <div class="workspace-tree-panel" data-workspace-panel="chat" hidden>
+                <div class="explorer-tree" data-tree="chat" id="workspace-tree-chat"></div>
+              </div>
+            </div>
+            <div id="workspace-footer" class="workspace-footer hidden" hidden>
+              <div id="conversation-meta" class="workspace-footer-card"></div>
+            </div>
+          </section>
+
+          <div
+            class="column-splitter"
+            id="splitter-explorer-chat"
+            data-splitter="explorer-chat"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整工作区与聊天区宽度"
+            tabindex="0"
+          ></div>
+
+          <section id="chat-rail" aria-label="Chat 内容">
+            <div class="chat-nav-view is-visible" data-nav-view="projects">
+              <ul class="chat-list" id="project-list">
+                <li class="chat-list__item" data-project-id="proj-stars" data-project-name="星辰之海">
+                  <span class="chat-list__icon">📚</span>
+                  <span class="chat-list__label">星辰之海</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-project-id="proj-mirror" data-project-name="镜中城">
+                  <span class="chat-list__icon">📁</span>
+                  <span class="chat-list__label">镜中城</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-project-id="proj-wind" data-project-name="风语笔记">
+                  <span class="chat-list__icon">📝</span>
+                  <span class="chat-list__label">风语笔记</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+              </ul>
             </div>
 
-            <!-- 会话列表视图 -->
-            <div class="sidebar-content" id="sessionsView">
-                <div class="content-header">
-                    <h2>会话</h2>
-                    <button class="btn-icon" data-action="new-session" title="新建会话">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"/>
-                            <line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="session-list" id="sessionList">
-                    <!-- 会话项将由 JS 动态生成 -->
-                </div>
+            <div class="chat-nav-view" data-nav-view="sessions" hidden>
+              <div class="chat-nav-subheader">会话</div>
+              <ul class="chat-list" id="session-list">
+                <li class="chat-list__item" data-session-id="sess-ch1" data-session-name="第一章草稿">
+                  <span class="chat-list__label">第一章草稿</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-session-id="sess-outline" data-session-name="大纲讨论">
+                  <span class="chat-list__label">大纲讨论</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-session-id="sess-revise" data-session-name="修订反馈">
+                  <span class="chat-list__label">修订反馈</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+              </ul>
             </div>
 
-            <!-- Agent 列表视图 -->
-            <div class="sidebar-content hidden" id="agentsView">
-                <div class="content-header">
-                    <h2>Agent</h2>
-                    <button class="btn-icon" data-action="new-agent" title="新建 Agent">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="5" x2="12" y2="19"/>
-                            <line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                    </button>
+            <div class="chat-nav-view" data-nav-view="conversation" hidden>
+              <div class="conversation-tabs" role="tablist" aria-label="会话内容">
+                <button type="button" class="conversation-tab is-active" data-conversation-tab="chat" role="tab" aria-selected="true">聊天</button>
+                <button type="button" class="conversation-tab" data-conversation-tab="realPrompt" role="tab" aria-selected="false">提示词</button>
+              </div>
+              <div class="conversation-panel is-visible" data-conversation-panel="chat">
+                <div class="chat-messages" id="chat-messages"></div>
+                <div id="chat-batch-bar" class="chat-batch-bar hidden" hidden>
+                  <button type="button" class="chat-batch-bar__cancel" data-action="batch-cancel">取消</button>
+                  <span class="chat-batch-bar__count" id="chat-batch-count">已选 0 项</span>
+                  <div class="chat-batch-bar__actions">
+                    <button type="button" class="chat-batch-bar__btn chat-batch-bar__btn--danger" data-action="batch-delete" disabled>删除</button>
+                    <button type="button" class="chat-batch-bar__btn" data-action="batch-hide" disabled>隐藏</button>
+                    <button type="button" class="chat-batch-bar__btn" data-action="batch-restore" disabled>恢复</button>
+                  </div>
                 </div>
-                <div class="agent-list" id="agentList">
-                    <!-- Agent 项将由 JS 动态生成 -->
+                <div class="chat-composer" id="chat-composer">
+                  <button
+                    type="button"
+                    class="chat-composer__more"
+                    data-action="open-session-actions"
+                    aria-label="更多选项"
+                    aria-haspopup="menu"
+                  >
+                    ⋯
+                  </button>
+                  <textarea disabled placeholder="原型阶段不可用" aria-label="消息输入"></textarea>
+                  <button type="button" class="chat-composer__send" disabled>发送</button>
                 </div>
+              </div>
+              <div class="conversation-panel" data-conversation-panel="realPrompt" hidden>
+                <div class="real-prompt-list" id="real-prompt-list"></div>
+              </div>
             </div>
+          </section>
+        </div>
+      </div>
 
-            <!-- 设置视图 -->
-            <div class="sidebar-content hidden" id="settingsView">
-                <div class="content-header">
-                    <h2>设置</h2>
-                </div>
-                <div class="settings-menu">
-                    <button class="settings-item" data-action="providers">
-                        <span class="settings-icon">🔌</span>
-                        <span>服务商管理</span>
-                    </button>
-                    <button class="settings-item" data-action="compaction">
-                        <span class="settings-icon">🗜️</span>
-                        <span>压缩策略</span>
-                    </button>
-                    <button class="settings-item" data-action="regex">
-                        <span class="settings-icon">🛡️</span>
-                        <span>正则配置</span>
-                    </button>
-                    <button class="settings-item" data-action="global-template">
-                        <span class="settings-icon">🌐</span>
-                        <span>全局模板</span>
-                    </button>
-                </div>
-            </div>
-        </aside>
-
-        <!-- 中间主内容区：聊天界面 -->
-        <main id="mainContent">
-            <!-- 聊天视图 -->
-            <div class="chat-view" id="chatView">
-                <!-- 聊天头部 -->
-                <div class="chat-header">
-                    <div class="chat-title">
-                        <h2 id="chatSessionName">第一卷创作</h2>
-                        <div class="chat-meta">
-                            <span class="meta-item">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
-                                </svg>
-                                默认 Agent
-                            </span>
-                            <span class="meta-item">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <path d="M12 6v6l4 2"/>
-                                </svg>
-                                GPT-4
-                            </span>
-                            <span class="meta-item">2.5K / 8K tokens</span>
-                        </div>
-                    </div>
-                    <div class="chat-actions">
-                        <button class="btn-secondary btn-sm" data-action="switch-model">切换模型</button>
-                        <button class="btn-icon" data-action="session-menu" title="会话菜单">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <circle cx="12" cy="12" r="1"/>
-                                <circle cx="12" cy="5" r="1"/>
-                                <circle cx="12" cy="19" r="1"/>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 消息列表 -->
-                <div class="messages" id="messageList">
-                    <div class="message user">
-                        <div class="message-avatar">U</div>
-                        <div class="message-bubble">
-                            <div class="message-content">帮我续写第三章的内容</div>
-                        </div>
-                    </div>
-                    <div class="message assistant">
-                        <div class="message-avatar">AI</div>
-                        <div class="message-bubble">
-                            <div class="message-content">好的，我会基于当前真实提示词中的内容为第三章续写。让我先查看相关文件...</div>
-                        </div>
-                    </div>
-                    <div class="tool-call">
-                        <div class="tool-header">
-                            <span class="tool-name">📄 read_file</span>
-                            <span class="tool-status success">成功</span>
-                        </div>
-                        <div class="tool-summary">读取 /chapters/chapter-03.md</div>
-                    </div>
-                </div>
-
-                <!-- 输入区 -->
-                <div class="chat-input-area">
-                    <div class="input-wrapper">
-                        <textarea id="chatInput" placeholder="输入消息..." rows="1"></textarea>
-                        <div class="input-actions">
-                            <button class="btn-icon" title="附加文件">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                                </svg>
-                            </button>
-                            <button class="btn-primary btn-icon-lg" id="sendBtn" title="发送">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                                </svg>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Agent 编辑视图 -->
-            <div class="editor-view hidden" id="agentEditorView">
-                <div class="editor-header">
-                    <h2 id="agentEditorTitle">Agent 配置</h2>
-                    <div class="editor-actions">
-                        <button class="btn-secondary" data-action="cancel-agent">取消</button>
-                        <button class="btn-primary" data-action="save-agent">保存</button>
-                    </div>
-                </div>
-                <div class="editor-content" id="agentEditorContent">
-                    <!-- Agent 配置表单将由 JS 动态生成 -->
-                </div>
-            </div>
-
-            <!-- 设置详情视图 -->
-            <div class="editor-view hidden" id="settingsDetailView">
-                <div class="editor-header">
-                    <button class="btn-icon" data-action="back-to-settings">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M19 12H5M12 19l-7-7 7-7"/>
-                        </svg>
-                    </button>
-                    <h2 id="settingsDetailTitle">设置</h2>
-                    <div class="editor-actions">
-                        <button class="btn-primary" data-action="save-settings">保存</button>
-                    </div>
-                </div>
-                <div class="editor-content" id="settingsDetailContent">
-                    <!-- 设置内容将由 JS 动态生成 -->
-                </div>
-            </div>
-        </main>
-
-        <!-- 右侧边栏：工作区文件 / 会话日志 -->
-        <aside id="rightSidebar">
-            <!-- 右侧边栏标签 -->
-            <div class="right-sidebar-tabs">
-                <button class="right-tab active" data-panel="workspace">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
-                        <polyline points="13 2 13 9 20 9"/>
-                    </svg>
-                    <span>工作区</span>
-                </button>
-                <button class="right-tab" data-panel="logs">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <polyline points="12 6 12 12 16 14"/>
-                    </svg>
-                    <span>日志</span>
-                </button>
-            </div>
-
-            <!-- 工作区面板 -->
-            <div class="right-panel active" id="workspacePanel">
-                <div class="panel-header">
-                    <h3>会话工作区</h3>
-                    <button class="btn-icon" title="更多操作">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="1"/>
-                            <circle cx="12" cy="5" r="1"/>
-                            <circle cx="12" cy="19" r="1"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="file-tree" id="fileTree">
-                    <!-- 文件树将由 JS 动态生成 -->
-                </div>
-            </div>
-
-            <!-- 日志面板 -->
-            <div class="right-panel" id="logsPanel">
-                <div class="panel-header">
-                    <h3>会话日志</h3>
-                    <button class="btn-icon" title="清空日志">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="3 6 5 6 21 6"/>
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                        </svg>
-                    </button>
-                </div>
-                <div class="log-list" id="logList">
-                    <!-- 日志项将由 JS 动态生成 -->
-                </div>
-            </div>
-        </aside>
+      <div id="settings-page" class="settings-page hidden" hidden aria-hidden="true">
+        <div class="settings-page__body">
+          <nav class="settings-nav" id="settings-nav" aria-label="设置分类"></nav>
+          <div class="settings-main">
+            <header class="settings-main__header" id="settings-main-header">
+              <button
+                type="button"
+                class="settings-main__back hidden"
+                id="settings-main-back"
+                data-action="settings-back"
+                aria-label="返回上一级"
+              >
+                ‹
+              </button>
+              <h2 class="settings-main__title" id="settings-main-title">常规</h2>
+            </header>
+            <div class="settings-page__content" id="settings-page-root"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Toast 提示 -->
-    <div id="toast" class="toast hidden"></div>
+    <div id="item-menu" class="session-menu hidden" role="menu"></div>
+    <div id="session-actions-menu" class="session-actions-menu hidden" role="menu" aria-label="会话操作"></div>
+    <div id="workspace-context-menu" class="workspace-context-menu hidden" role="menu" aria-label="工作区操作"></div>
+    <div id="workspace-modal" class="workspace-modal hidden" aria-hidden="true">
+      <div class="workspace-modal__backdrop" data-action="close-workspace-modal"></div>
+      <div class="workspace-modal__panel" role="dialog" aria-labelledby="workspace-modal-title">
+        <h3 class="workspace-modal__title" id="workspace-modal-title">—</h3>
+        <div class="workspace-modal__body" id="workspace-modal-body"></div>
+        <div class="workspace-modal__footer" id="workspace-modal-footer"></div>
+      </div>
+    </div>
+    <div id="picker-modal" class="picker-modal hidden" aria-hidden="true">
+      <div class="picker-modal__backdrop" data-action="close-picker"></div>
+      <div class="picker-modal__panel" role="dialog" aria-labelledby="picker-modal-title">
+        <h3 class="picker-modal__title" id="picker-modal-title">—</h3>
+        <div class="picker-modal__list" id="picker-modal-list"></div>
+        <button type="button" class="picker-modal__cancel" data-action="close-picker">取消</button>
+      </div>
+    </div>
+    <div id="shell-toast" class="shell-toast hidden"></div>
 
-    <!-- 模态框容器 -->
-    <div id="modalContainer"></div>
-
-    <script src="js/app.js"></script>
-</body>
+    <script src="./shell.js"></script>
+  </body>
 </html>

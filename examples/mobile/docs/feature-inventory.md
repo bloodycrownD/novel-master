@@ -3,33 +3,34 @@
 > **用途**：RN / Android App 实现的 **UI 与交互权威清单**（以可运行原型为准）。  
 > **代码来源**：[`index.html`](../index.html) + [`js/app.js`](../js/app.js)（2026-05 审计）。  
 > **说明**：只描述用户可见能力；存储为 mock（localStorage / 内存），正式 App 接 Core。  
-> **与旧版差异**：旧清单假设底栏含「文件」「项目」独立 Tab；**实际原型为 3 Tab**，文件与项目嵌入对话流。
+> **与旧版差异**：底栏现为 **2 Tab**（对话 | 我的）；Agent 迁入「我的 → 配置」；对齐 `apps/mobile` ProfileTabScreen。
 
 ---
 
 ## 0. 原型页面与入口一览
 
-### 0.1 底栏 Tab（3 个）
+### 0.1 底栏 Tab（2 个）
 
 | Tab | `pageId` | 说明 |
 |-----|----------|------|
 | 对话 | `chat` | 默认首页；内含会话列表 / 聊天 / 文件浏览器（子 Tab） |
-| Agent | `agents` | Agent 列表；编辑为全屏二级页 |
-| 我的 | `profile` | 配置入口菜单 |
+| 我的 | `profile` | 工作区 / 数据管理 / 配置 三区菜单 |
 
-**无** 独立「文件」「项目」底栏 Tab。
+**无** Agent 底栏 Tab；**无** 独立「文件」「项目」底栏 Tab。
 
 ### 0.2 全屏二级页（压栈，`pageStack`）
 
 | 页面 | `pageId` | 入口 |
 |------|----------|------|
-| Agent 配置编辑 | `agentEditor` | Agent 列表点行 |
+| agent管理 | `agentsSettings` | 我的 → 配置 → agent管理 |
+| Agent 配置编辑 | `agentEditor` | agent 列表点行 |
 | 真实提示词 | `realPrompt` | 会话操作抽屉 |
 | 会话日志 | `sessionLog` | 会话操作抽屉 |
 | 服务商管理 | `providers` | 我的 → 服务商 |
 | 模型管理（组内已保存模型） | `providerDetail` | 服务商列表点行 |
 | 采样配置 | `modelSampling` | 模型行点行（非批量模式） |
-| 压缩策略 | `compactionPolicy` | 我的 → 压缩策略 |
+| 压缩条件 | `compactionConditions` | 我的 → 配置 → 压缩条件 |
+| 事件配置 | `eventsConfig` | 我的 → 配置 → 事件配置 |
 | 全局模板 | `globalTemplate` | 我的 → 全局模板 |
 | 正则组列表 | `regexGroups` | 我的 → 正则配置 |
 | 组内规则列表 | `regexRules` | 正则组点行 |
@@ -58,13 +59,15 @@
 | 抽屉 | 内容 |
 |------|------|
 | 项目抽屉 | 项目列表、新建项目、批量管理删除 |
-| 会话操作抽屉 | 切换模型（展示当前工作区模型）、真实提示词、会话日志 |
+| 会话操作抽屉 | 只读当前 agent/模型、切换 agent、切换模型、真实提示词、会话日志 |
 
 ### 0.5 模态框
 
 | 模态框 | 用途 |
 |--------|------|
 | 工作区模型选择 | 服务商 + 模型下拉；入口：我的「当前模型」、会话抽屉「切换模型」 |
+| Agent 选择 | 工作区 agent 列表；入口：我的「当前 agent」、会话抽屉「切换 agent」 |
+| 正则组选择 | 组列表 +「不启用」；入口：我的「当前正则组」 |
 | 添加已保存模型 | vendorModelId + 展示名；服务商详情页 |
 | 新建项目 | 项目名称 |
 | 新建正则组 | 组 ID + 展示名称 |
@@ -86,7 +89,7 @@
 ### 1.1 信息架构（以实现为准）
 
 ```text
-底栏: 对话 | Agent | 我的
+底栏: 对话 | 我的
 对话 Tab:
   ├─ 当前项目 Banner
   ├─ 子 Tab: 会话 | 项目模板(VFS project)
@@ -95,8 +98,9 @@
   │    └─ ☰ → 会话操作抽屉
   └─ ☰(列表态) → 项目抽屉
 我的:
-  ├─ 当前模型(值+跳转)
-  ├─ 服务商 / 压缩 / 正则 / 全局模板 / 扩展设置 / 开发调试
+  ├─ 工作区: 当前模型/agent/正则组、流式、富文本、Token 计数器
+  ├─ 数据管理: 导出/导入数据库 mock
+  ├─ 配置: agent管理、服务商、压缩条件、事件配置、正则、全局模板
   └─ 各二级全屏页
 ```
 
@@ -187,7 +191,7 @@
 
 | 元素 | 原型 |
 |------|------|
-| Agent 名称 | 来自 **默认 Agent**（`defaultAgentId`），非 per-session 选择 |
+| Agent 名称 | 来自 **工作区当前 agent**（`workspaceCurrentAgentId`） |
 | 模型 | 默认 Agent 的 `preferredModelId` 或工作区当前模型；专属模型无「工作区」后缀 |
 | Token | 静态展示「2.5K / 8K tokens」（示意） |
 | 步数上限 | 未在顶栏展示（在 Agent 编辑页 `maxSteps`） |
@@ -345,14 +349,14 @@
 
 ## 7. Agent 配置
 
-### 7.1 Agent 列表（底栏 Tab）
+### 7.1 Agent 列表（agentsSettings 入口）
 
 | 功能 | 原型 |
 |------|------|
 | 列表项 | 名称、meta（步数 · 是否专属模型） |
-| 默认 Agent | 「默认」徽标 + `defaultAgentId` |
+| 工作区 agent | `workspaceCurrentAgentId` + localStorage；无「设为默认」 |
 | 新建 | 空白 Agent（system + chat 块） |
-| 行菜单 ⋮ | 设为默认、复制、删除（至少保留 1 个） |
+| 行菜单 ⋮ | 重命名、复制、删除（至少保留 1 个） |
 | 批量删除 | `manage-header` 内联批量头 |
 | 进入编辑 | 点行（非批量） |
 
@@ -483,7 +487,7 @@
 | visibleFloor | 可见消息条数阈值 |
 | 触发逻辑 | OR（至少填一项校验）；对齐 Core `CompactionConditions` schemaVersion 3 |
 | 动作 | 不在此页配置；正式 App 由「事件配置」处理 hide/refresh-macros |
-| 保存 | 内存 `globalCompactionPolicy` mock |
+| 保存 | localStorage `globalCompactionConditions` mock |
 
 ### 10.2 扩展设置页（`settings`）
 
