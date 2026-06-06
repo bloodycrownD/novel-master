@@ -4,7 +4,7 @@ import type {
   PromptBlock,
   PromptBlockRole,
 } from "@novel-master/core";
-import { formatApplicationModelId } from "@novel-master/core";
+import { formatApplicationModelId } from "../shared/application-model-id.js";
 
 export type ToolsMode = "default" | "allow" | "deny";
 

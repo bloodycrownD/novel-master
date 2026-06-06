@@ -22,6 +22,7 @@
   "scripts": {
     "build": "tsc --build tsconfig.json --force",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "pretest": "npm run build -w @novel-master/core",
     "test": "tsx --test test/**/*.test.ts"
   },
   "dependencies": {

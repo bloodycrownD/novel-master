@@ -1,7 +1,7 @@
 /**
  * Save-time validation for events config UI drafts.
  */
-import { validateDepthSlice } from "@novel-master/core";
+import { validateDepthSlice } from "../shared/depth-slice.js";
 import type { EventBlockDraft } from "./event-config-state.js";
 import { actionTypeLabel, eventTypeLabel } from "./event-config-labels.js";
 
