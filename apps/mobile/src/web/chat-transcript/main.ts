@@ -8,6 +8,7 @@ import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   ANCHORED_MENU_GAP,
   ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
   ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
   ANCHORED_MENU_MAX_HEIGHT_CAP,
@@ -225,14 +226,15 @@ export function buildTranscriptBootScript(): string {
   }
 
   function viewportHeight() {
-    return window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    // Embedded WebView: clientHeight matches getBoundingClientRect coords; visualViewport often lies on Android.
+    var doc = document.documentElement;
+    return doc.clientHeight || window.innerHeight;
   }
 
-  function layoutContextMenu(anchor, itemCount, menuWidth) {
+  function layoutContextMenu(anchor, contentHeight, menuWidth) {
     var screenW = window.innerWidth;
     var screenH = viewportHeight();
     var heightCap = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
-    var contentHeight = itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT};
     var flipEstimate = Math.min(contentHeight, heightCap);
     var anchorCenterX = anchor.x + anchor.width / 2;
     var left = anchorCenterX - menuWidth / 2;
@@ -346,19 +348,6 @@ export function buildTranscriptBootScript(): string {
     menuEl.id = 'context-menu';
     menuEl.className = 'context-menu';
     var menuWidth = computeContextMenuWidth(menu.items);
-    var layout = layoutContextMenu(menu.anchor, menu.items.length, menuWidth);
-    menuEl.style.left = layout.left + 'px';
-    menuEl.style.top = layout.top + 'px';
-    menuEl.style.width = layout.width + 'px';
-    if (layout.scrollable) {
-      menuEl.className = 'context-menu scrollable';
-      menuEl.style.maxHeight = layout.maxHeight + 'px';
-      menuEl.style.height = 'auto';
-    } else {
-      menuEl.className = 'context-menu';
-      menuEl.style.maxHeight = 'none';
-      menuEl.style.height = 'auto';
-    }
     var html = '';
     for (var i = 0; i < menu.items.length; i++) {
       var item = menu.items[i];
@@ -368,8 +357,27 @@ export function buildTranscriptBootScript(): string {
         escapeHtml(item.label) + '</button>';
     }
     menuEl.innerHTML = html;
+    menuEl.style.visibility = 'hidden';
+    menuEl.style.left = '-9999px';
+    menuEl.style.top = '0';
+    menuEl.style.width = menuWidth + 'px';
     document.body.appendChild(backdrop);
     document.body.appendChild(menuEl);
+    // Measure rendered rows (font scale on device) before deciding scroll.
+    var measured = menuEl.offsetHeight || menuEl.scrollHeight;
+    var layout = layoutContextMenu(menu.anchor, measured, menuWidth);
+    menuEl.style.visibility = '';
+    menuEl.style.left = layout.left + 'px';
+    menuEl.style.top = layout.top + 'px';
+    menuEl.style.width = layout.width + 'px';
+    menuEl.style.height = 'auto';
+    if (layout.scrollable) {
+      menuEl.className = 'context-menu scrollable';
+      menuEl.style.maxHeight = layout.maxHeight + 'px';
+    } else {
+      menuEl.className = 'context-menu';
+      menuEl.style.maxHeight = 'none';
+    }
     state.menuOverlayHandler = handleMenuOverlayEvent;
     document.addEventListener('click', state.menuOverlayHandler, true);
     document.addEventListener('touchend', state.menuOverlayHandler, true);

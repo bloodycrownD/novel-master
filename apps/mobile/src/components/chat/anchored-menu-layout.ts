@@ -3,6 +3,8 @@
 export const ANCHORED_MENU_GAP = 8;
 export const ANCHORED_MENU_SCREEN_MARGIN = 12;
 export const ANCHORED_MENU_ITEM_MIN_HEIGHT = 44;
+/** Layout estimate per row (borders + device font scale headroom). */
+export const ANCHORED_MENU_ITEM_LAYOUT_HEIGHT = 48;
 /** Press-point anchor height — avoids using full bubble rect for tall messages. */
 export const ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = 32;
 export const ANCHORED_MENU_MAX_HEIGHT_CAP = 360;
@@ -24,33 +26,23 @@ export function anchoredMenuMaxHeight(screenHeight: number): number {
 }
 
 export function anchoredMenuContentHeight(itemCount: number): number {
-  return itemCount * ANCHORED_MENU_ITEM_MIN_HEIGHT;
+  return itemCount * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
 }
 
-export interface AnchoredMenuLayout {
-  readonly left: number;
-  readonly top: number;
-  readonly width: number;
-  /** Box height: content-sized, or viewport/cap bound when scrollable. */
-  readonly maxHeight: number;
-  readonly scrollable: boolean;
-}
-
-/** Content-aware width so short labels do not stretch to full screen. */
-export function computeAnchoredMenuWidth(
-  items: readonly {label: string}[],
+/** Same placement math but with a measured or estimated pixel height. */
+export function layoutAnchoredMenuForHeight(
+  anchor: MenuAnchor,
+  contentHeight: number,
+  menuWidth: number,
   screenWidth: number,
-): number {
-  const longest = items.reduce(
-    (max, item) => Math.max(max, item.label.length),
-    0,
-  );
-  const byLabel = longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
-  const cap = screenWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
-  return Math.min(
-    cap,
-    ANCHORED_MENU_MAX_WIDTH,
-    Math.max(ANCHORED_MENU_MIN_WIDTH, byLabel),
+  screenHeight: number,
+): AnchoredMenuLayout {
+  return layoutAnchoredMenuInternal(
+    anchor,
+    contentHeight,
+    menuWidth,
+    screenWidth,
+    screenHeight,
   );
 }
 
@@ -62,8 +54,23 @@ export function layoutAnchoredMenu(
   screenWidth: number,
   screenHeight: number,
 ): AnchoredMenuLayout {
+  return layoutAnchoredMenuInternal(
+    anchor,
+    anchoredMenuContentHeight(itemCount),
+    menuWidth,
+    screenWidth,
+    screenHeight,
+  );
+}
+
+function layoutAnchoredMenuInternal(
+  anchor: MenuAnchor,
+  contentHeight: number,
+  menuWidth: number,
+  screenWidth: number,
+  screenHeight: number,
+): AnchoredMenuLayout {
   const heightCap = anchoredMenuMaxHeight(screenHeight);
-  const contentHeight = anchoredMenuContentHeight(itemCount);
   const flipEstimate = Math.min(contentHeight, heightCap);
 
   const anchorCenterX = anchor.x + anchor.width / 2;
@@ -100,4 +107,31 @@ export function layoutAnchoredMenu(
   );
 
   return {left, top, width: menuWidth, maxHeight: menuHeight, scrollable};
+}
+
+export interface AnchoredMenuLayout {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  /** Box height: content-sized, or viewport/cap bound when scrollable. */
+  readonly maxHeight: number;
+  readonly scrollable: boolean;
+}
+
+/** Content-aware width so short labels do not stretch to full screen. */
+export function computeAnchoredMenuWidth(
+  items: readonly {label: string}[],
+  screenWidth: number,
+): number {
+  const longest = items.reduce(
+    (max, item) => Math.max(max, item.label.length),
+    0,
+  );
+  const byLabel = longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
+  const cap = screenWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
+  return Math.min(
+    cap,
+    ANCHORED_MENU_MAX_WIDTH,
+    Math.max(ANCHORED_MENU_MIN_WIDTH, byLabel),
+  );
 }
