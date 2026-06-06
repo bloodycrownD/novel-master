@@ -18,10 +18,15 @@
           <div class="pane-header">
             <span class="pane-header__label">文件预览</span>
             <span class="pane-header__file" id="preview-filename">—</span>
+            <div class="pane-header__actions">
+              <button type="button" class="icon-btn" id="preview-edit-toggle" data-action="toggle-preview-edit" title="编辑文件">✎</button>
+              <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="切换主题">☀</button>
+            </div>
           </div>
           <div class="preview-body" id="preview-body">
             <p class="preview-empty">在工作区选择文件以预览</p>
           </div>
+          <textarea class="preview-editor hidden" id="preview-editor" spellcheck="false" aria-label="文件编辑"></textarea>
         </section>
 
         <section id="explorer-pane" aria-label="工作区">
@@ -124,6 +129,11 @@
         </section>
 
         <section id="chat-rail" aria-label="Chat 管理">
+          <div class="rail-root-tabs" role="tablist">
+            <button type="button" class="rail-root-tab is-active" data-root-tab="chat" role="tab" aria-selected="true">对话</button>
+            <button type="button" class="rail-root-tab" data-root-tab="profile" role="tab" aria-selected="false">我的</button>
+          </div>
+
           <div class="chat-nav-view is-visible" data-nav-view="projects">
             <div class="chat-nav-header">
               <span class="chat-nav-header__title">项目</span>
@@ -217,7 +227,9 @@
                 <span class="chat-nav-header__subtitle" id="conversation-project-name">—</span>
                 <span class="chat-nav-header__title" id="conversation-session-name">—</span>
               </div>
+              <button type="button" class="chat-nav-menu-btn" data-action="open-session-menu" aria-label="会话操作">☰</button>
             </div>
+            <div class="conversation-meta" id="conversation-meta"></div>
             <div class="chat-messages">
               <div class="chat-message chat-message--user">
                 <span class="chat-message__role">你</span>
@@ -233,9 +245,56 @@
               <button type="button" class="chat-composer__send" disabled>发送</button>
             </div>
           </div>
+
+          <div class="chat-nav-view rail-stack-view" data-nav-view="profile" hidden>
+            <div class="rail-page-host" id="profile-view-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="agentsSettings" hidden>
+            <div class="rail-page-host" id="agents-settings-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="agentEditor" hidden>
+            <div class="rail-page-host" id="agent-editor-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="providers" hidden>
+            <div class="rail-page-host" id="providers-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="providerDetail" hidden>
+            <div class="rail-page-host" id="provider-detail-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="modelSampling" hidden>
+            <div class="rail-page-host" id="model-sampling-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="compactionConditions" hidden>
+            <div class="rail-page-host" id="compaction-conditions-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="eventsConfig" hidden>
+            <div class="rail-page-host" id="events-config-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="regexGroups" hidden>
+            <div class="rail-page-host" id="regex-groups-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="regexRules" hidden>
+            <div class="rail-page-host" id="regex-rules-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="regexRuleEditor" hidden>
+            <div class="rail-page-host" id="regex-rule-editor-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="globalTemplate" hidden>
+            <div class="rail-page-host" id="global-template-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="realPrompt" hidden>
+            <div class="rail-page-host" id="real-prompt-root"></div>
+          </div>
+          <div class="chat-nav-view rail-stack-view" data-nav-view="sessionLog" hidden>
+            <div class="rail-page-host" id="session-log-root"></div>
+          </div>
         </section>
       </div>
     </div>
+
+    <div id="session-menu" class="session-menu hidden" role="menu"></div>
+    <div id="shell-toast" class="shell-toast hidden"></div>
+
     <script src="./shell.js"></script>
   </body>
 </html>
