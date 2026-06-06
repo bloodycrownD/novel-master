@@ -6,6 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
+    title: "Novel Master",
     width: 1280,
     height: 800,
     show: false,

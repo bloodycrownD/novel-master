@@ -1,134 +1,31 @@
 <!doctype html>
-<!--
-  Desktop main shell prototype — static three-pane layout only.
-  Invariants: no cross-pane sync; no @novel-master/core runtime; no settings/agent/theme.
-  Layout: preview (left) | explorer (center) | chat rail (right).
--->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
-    />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Novel Master</title>
-    <link rel="stylesheet" href="./shell.css" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 2rem;
+        color: #333;
+        line-height: 1.6;
+      }
+      code {
+        background: #f2f2f7;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+    </style>
   </head>
   <body>
-    <div id="app">
-      <header class="app-chrome">
-        <div class="app-chrome__brand">
-          <span class="app-chrome__title">Novel Master</span>
-        </div>
-        <div class="app-chrome__context">
-          <span class="context-chip">项目：星辰之海</span>
-          <span class="context-chip">会话：第一章草稿</span>
-        </div>
-      </header>
-
-      <div class="workspace">
-        <section id="preview-pane" aria-label="文件预览">
-          <div class="pane-header">
-            <span class="pane-header__label">文件预览</span>
-            <span class="pane-header__file">chapter-01.md</span>
-          </div>
-          <div class="preview-body">
-            <h1 class="preview-title">第一章 · 启程</h1>
-            <p>
-              选中文件后将在此预览。本期为静态占位内容，不随资源管理器选中项变化。
-            </p>
-            <p>
-              晨光透过舷窗洒在控制台上。林远深吸一口气，启动了跃迁引擎——这是原型界面，仅供布局演示。
-            </p>
-          </div>
-        </section>
-
-        <section id="explorer-pane" aria-label="资源管理器">
-          <div class="pane-header">
-            <span class="pane-header__label">资源管理器</span>
-          </div>
-          <div class="explorer-tree" data-group="explorer">
-            <div class="tree-node tree-node--folder" data-selectable data-id="chapters">
-              <span class="tree-node__icon">📁</span>
-              <span class="tree-node__label">chapters/</span>
-            </div>
-            <div class="tree-node tree-node--nested" data-selectable data-id="chapter-01">
-              <span class="tree-node__icon">📄</span>
-              <span class="tree-node__label">chapter-01.md</span>
-            </div>
-            <div class="tree-node" data-selectable data-id="outline">
-              <span class="tree-node__icon">📄</span>
-              <span class="tree-node__label">outline.md</span>
-            </div>
-            <div class="tree-node tree-node--folder" data-selectable data-id="notes">
-              <span class="tree-node__icon">📁</span>
-              <span class="tree-node__label">notes/</span>
-            </div>
-            <div class="tree-node tree-node--nested" data-selectable data-id="notes-draft">
-              <span class="tree-node__icon">📄</span>
-              <span class="tree-node__label">draft.txt</span>
-            </div>
-          </div>
-        </section>
-
-        <section id="chat-rail" aria-label="Chat 管理">
-          <div class="chat-column" data-group="projects">
-            <div class="chat-column__header">项目</div>
-            <ul class="chat-list">
-              <li class="chat-list__item" data-selectable data-id="proj-stars">
-                星辰之海
-              </li>
-              <li class="chat-list__item" data-selectable data-id="proj-mirror">
-                镜中城
-              </li>
-              <li class="chat-list__item" data-selectable data-id="proj-wind">
-                风语笔记
-              </li>
-            </ul>
-          </div>
-
-          <div class="chat-column" data-group="sessions">
-            <div class="chat-column__header">会话</div>
-            <ul class="chat-list">
-              <li class="chat-list__item" data-selectable data-id="sess-ch1">
-                第一章草稿
-              </li>
-              <li class="chat-list__item" data-selectable data-id="sess-outline">
-                大纲讨论
-              </li>
-              <li class="chat-list__item" data-selectable data-id="sess-revise">
-                修订反馈
-              </li>
-            </ul>
-          </div>
-
-          <div class="chat-column chat-column--conversation" data-group="chat">
-            <div class="chat-column__header">聊天</div>
-            <div class="chat-messages">
-              <div class="chat-message chat-message--user">
-                <span class="chat-message__role">你</span>
-                <p>请帮我润色这一段开场白。</p>
-              </div>
-              <div class="chat-message chat-message--assistant">
-                <span class="chat-message__role">助手</span>
-                <p>好的，这是静态占位回复。原型阶段不接入 Agent 或发送能力。</p>
-              </div>
-            </div>
-            <div class="chat-composer">
-              <textarea
-                disabled
-                placeholder="原型阶段不可用"
-                aria-label="消息输入"
-              ></textarea>
-              <button type="button" class="chat-composer__send" disabled>
-                发送
-              </button>
-            </div>
-          </div>
-        </section>
-      </div>
-    </div>
-    <script src="./shell.js"></script>
+    <h1>Electron shell（占位）</h1>
+    <p>
+      桌面 UI 原型已迁至 <code>examples/desktop/</code>，请在浏览器中迭代。
+    </p>
+    <p>
+      打开方式：<code>npx serve examples/desktop</code> 或直接打开
+      <code>examples/desktop/index.html</code>
+    </p>
+    <p>正式 Electron 应用将使用 React/Vue 重写 renderer，不与 examples 同步。</p>
   </body>
 </html>

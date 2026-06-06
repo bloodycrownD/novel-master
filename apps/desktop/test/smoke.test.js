@@ -6,8 +6,9 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.join(__dirname, "..");
+const repoRoot = path.join(desktopRoot, "..", "..");
 const packageJsonPath = path.join(desktopRoot, "package.json");
-const rendererDir = path.join(desktopRoot, "renderer");
+const prototypeDir = path.join(repoRoot, "examples", "desktop");
 
 test("desktop package declares electron entrypoint", () => {
   const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8"));
@@ -15,21 +16,17 @@ test("desktop package declares electron entrypoint", () => {
   assert.equal(pkg.name, "@novel-master/desktop");
 });
 
-test("T3: renderer index.html declares three-pane shell roots", () => {
-  const html = readFileSync(path.join(rendererDir, "index.html"), "utf8");
+test("UI prototype lives under examples/desktop", () => {
+  const html = readFileSync(path.join(prototypeDir, "index.html"), "utf8");
   assert.match(html, /id="preview-pane"/);
   assert.match(html, /id="explorer-pane"/);
   assert.match(html, /id="chat-rail"/);
-  assert.match(html, /shell\.js/);
-  assert.doesNotMatch(html, /index\.js/);
+  assert.match(html, /id="workspace-title"/);
+  assert.ok(existsSync(path.join(prototypeDir, "shell.css")));
+  assert.ok(existsSync(path.join(prototypeDir, "shell.js")));
 });
 
-test("T4: shell.css and shell.js assets exist", () => {
-  assert.ok(existsSync(path.join(rendererDir, "shell.css")));
-  assert.ok(existsSync(path.join(rendererDir, "shell.js")));
-});
-
-test("T5: apps/desktop has no createNovelMasterRuntime wiring", () => {
+test("apps/desktop has no createNovelMasterRuntime wiring", () => {
   const hits = [];
   const scanRoots = ["renderer", "src"].map((segment) =>
     path.join(desktopRoot, segment),
