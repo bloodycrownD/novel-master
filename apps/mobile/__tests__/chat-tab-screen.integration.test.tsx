@@ -195,6 +195,11 @@ jest.mock('../src/components/ui/TextPromptModal', () => ({
   TextPromptModal: () => null,
 }));
 
+jest.mock('../src/storage/chat-transcript-engine', () => ({
+  defaultChatTranscriptEngine: () => 'legacy-rn',
+  readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
+}));
+
 jest.mock('../src/components/chat/MessageList', () => {
   const ReactNative = require('react-native');
   return {

@@ -35,12 +35,19 @@ import {
   type MessageMenuAnchor,
 } from '../../components/chat/MessageActionMenu';
 import {MessageList} from '../../components/chat/MessageList';
+import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptScrollSnapshot} from '../../components/chat/ChatTranscriptBridge';
 import {
   getScrollSnapshot,
   scrollCacheKey,
   setScrollSnapshot,
   type ChatListScrollSnapshot,
 } from '../../services/chat-list-scroll-cache';
+import {
+  getTranscriptScrollSnapshot,
+  normalizeScrollSnapshot,
+  setTranscriptScrollSnapshot,
+} from '../../services/chat-transcript-scroll-cache';
 import {
   clearSessionViewCache,
   getSessionViewCache,
@@ -80,6 +87,11 @@ import {
 } from '../../services/regex-apply-channel';
 import {prependOlderMessages} from '../../services/message-paging';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
+import {
+  defaultChatTranscriptEngine,
+  readChatTranscriptEngine,
+  type ChatTranscriptEngine,
+} from '../../storage/chat-transcript-engine';
 import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {setMobileAgentActive} from '../../runtime/agent-activity';
 import {useNovelMaster} from '../../runtime/novel-master-context';
@@ -145,6 +157,8 @@ export function ChatTabScreen() {
   );
   const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
+  const [chatTranscriptEngine, setChatTranscriptEngine] =
+    useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
   const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
   const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
   const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
@@ -167,19 +181,36 @@ export function ChatTabScreen() {
     projectId != null && sessionId != null
       ? scrollCacheKey(projectId, sessionId)
       : null;
-  const cachedChatScroll = chatScrollKey
+  const useWebviewTranscript = chatTranscriptEngine === 'webview';
+  const legacyCachedScroll = chatScrollKey
     ? getScrollSnapshot(chatScrollKey)
     : undefined;
+  const transcriptCachedScroll = chatScrollKey
+    ? getTranscriptScrollSnapshot(chatScrollKey)
+    : undefined;
+  const {snapshot: restoredTranscriptScroll} = normalizeScrollSnapshot(
+    transcriptCachedScroll ?? legacyCachedScroll,
+  );
+  const cachedChatScroll = useWebviewTranscript
+    ? restoredTranscriptScroll
+    : legacyCachedScroll;
   const defaultChatScrollToBottom =
     chatScrollKey != null && cachedChatScroll == null;
 
   const handleChatScrollSnapshot = useCallback(
-    (snap: ChatListScrollSnapshot) => {
-      if (chatScrollKey) {
+    (snap: ChatListScrollSnapshot | ChatTranscriptScrollSnapshot) => {
+      if (chatScrollKey == null) {
+        return;
+      }
+      if (useWebviewTranscript && 'schemaVersion' in snap) {
+        setTranscriptScrollSnapshot(chatScrollKey, snap);
+        return;
+      }
+      if (!useWebviewTranscript && !('schemaVersion' in snap)) {
         setScrollSnapshot(chatScrollKey, snap);
       }
     },
-    [chatScrollKey],
+    [chatScrollKey, useWebviewTranscript],
   );
 
   const reloadLists = useCallback(async () => {
@@ -393,10 +424,15 @@ export function ChatTabScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  const refreshChatTranscriptEngine = useCallback(async () => {
+    setChatTranscriptEngine(await readChatTranscriptEngine(appUi));
+  }, [appUi]);
+
   useFocusEffect(
     useCallback(() => {
       refreshChatRichTextPref().catch(() => undefined);
-    }, [refreshChatRichTextPref]),
+      refreshChatTranscriptEngine().catch(() => undefined);
+    }, [refreshChatRichTextPref, refreshChatTranscriptEngine]),
   );
 
   const backFromConversation = useCallback(
@@ -1094,6 +1130,25 @@ export function ChatTabScreen() {
                   }
                 />
               ) : null}
+              {useWebviewTranscript ? (
+                <ChatTranscriptWebView
+                  key={chatScrollKey ?? 'no-session-scroll'}
+                  sessionKey={chatScrollKey ?? 'no-session'}
+                  messages={chatMessages}
+                  streamingText={streamingText}
+                  streamingThinking={streamingThinking}
+                  hasMore={hasMoreMessages}
+                  flags={{
+                    richText: chatRichTextEnabled,
+                    showFullToolParams,
+                    batchMode: messageBatch.active,
+                  }}
+                  initialScroll={cachedChatScroll ?? null}
+                  defaultScrollToBottom={defaultChatScrollToBottom}
+                  onScrollSnapshot={handleChatScrollSnapshot}
+                  onLoadOlder={() => loadOlderMessages().catch(() => undefined)}
+                />
+              ) : (
               <MessageList
                 key={chatScrollKey ?? 'no-session-scroll'}
                 messages={chatMessages}
@@ -1130,6 +1185,7 @@ export function ChatTabScreen() {
                   ) : null
                 }
               />
+              )}
               <ChatComposer
                 scope={{projectId, sessionId}}
                 hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}

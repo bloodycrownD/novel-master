@@ -7,6 +7,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock,
 } from '@novel-master/core';
+import type {TranscriptRow} from './ChatTranscriptBridge';
 
 export type ToolCallStatus = 'pending' | 'success' | 'error';
 
@@ -191,4 +192,50 @@ export function buildChatListItems(
   }
 
   return items;
+}
+
+export type TranscriptStreamState = {
+  readonly text: string;
+  readonly thinking: string;
+};
+
+/** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
+export function buildTranscriptRows(
+  messages: readonly ChatMessage[],
+  stream?: TranscriptStreamState,
+): TranscriptRow[] {
+  const items = buildChatListItems(messages);
+  const rows: TranscriptRow[] = [];
+
+  for (const item of items) {
+    if (item.kind === 'message') {
+      rows.push({
+        kind: 'message',
+        id: item.message.id,
+        role: item.message.role === 'user' ? 'user' : 'assistant',
+        hidden: item.message.hidden,
+        text: item.textParts.join('\n'),
+        thinking: item.thinkingParts.join('\n'),
+      });
+    } else if (item.kind === 'tool') {
+      rows.push({
+        kind: 'tool',
+        toolUseId: item.tool.toolUseId,
+        name: item.tool.name,
+        input: item.tool.input,
+        status: item.tool.status,
+        resultContent: item.tool.resultContent,
+      });
+    }
+  }
+
+  if (stream != null && (stream.text.length > 0 || stream.thinking.length > 0)) {
+    rows.push({
+      kind: 'stream',
+      text: stream.text,
+      thinking: stream.thinking,
+    });
+  }
+
+  return rows;
 }
