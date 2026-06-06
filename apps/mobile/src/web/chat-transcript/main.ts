@@ -18,10 +18,11 @@ export function buildTranscriptBootScript(): string {
     sessionKey: '',
     rows: [],
     hasMore: false,
-    stream: { text: '', thinking: '' },
+    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '' },
     flags: { richText: false, showFullToolParams: false, batchMode: false, menuDisabled: false },
     selectedIds: [],
     menu: null,
+    menuOverlayHandler: null,
     thinkingExpanded: {},
     scrollRaf: null,
     loadOlderArmed: true,
@@ -226,11 +227,38 @@ export function buildTranscriptBootScript(): string {
   function closeContextMenu(notifyHost) {
     if (!state.menu) return;
     state.menu = null;
+    if (state.menuOverlayHandler) {
+      document.removeEventListener('click', state.menuOverlayHandler, true);
+      document.removeEventListener('touchend', state.menuOverlayHandler, true);
+      state.menuOverlayHandler = null;
+    }
     var menuEl = document.getElementById('context-menu');
     if (menuEl) menuEl.remove();
     var backdrop = document.getElementById('menu-backdrop');
     if (backdrop) backdrop.remove();
     if (notifyHost !== false) post('menuClosed', {});
+  }
+
+  function handleMenuOverlayEvent(event) {
+    if (!state.menu) return;
+    var target = event.target;
+    if (!target || !target.closest) return;
+    var menuEl = document.getElementById('context-menu');
+    if (menuEl && menuEl.contains(target)) {
+      var actionEl = target.closest('[data-action="menu-action"]');
+      if (actionEl) {
+        if (event.type === 'touchend') event.preventDefault();
+        var messageId = actionEl.getAttribute('data-message-id');
+        var menuAction = actionEl.getAttribute('data-menu-action');
+        closeContextMenu(true);
+        if (messageId && menuAction) {
+          post('messageMenuAction', { messageId: messageId, action: menuAction });
+        }
+      }
+      return;
+    }
+    // Backdrop lives on document.body outside #rows — capture dismiss here.
+    closeContextMenu(true);
   }
 
   function renderContextMenu() {
@@ -260,6 +288,9 @@ export function buildTranscriptBootScript(): string {
     menuEl.innerHTML = html;
     document.body.appendChild(backdrop);
     document.body.appendChild(menuEl);
+    state.menuOverlayHandler = handleMenuOverlayEvent;
+    document.addEventListener('click', state.menuOverlayHandler, true);
+    document.addEventListener('touchend', state.menuOverlayHandler, true);
   }
 
   function openContextMenu(messageId, pageX, pageY) {
@@ -347,6 +378,41 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
+  function streamTextInner() {
+    if (state.flags.richText && state.stream.textHtml) {
+      return state.stream.textHtml;
+    }
+    return escapeHtml(state.stream.text || '');
+  }
+
+  function streamThinkingHtml() {
+    if (state.flags.richText && state.stream.thinkingHtml) {
+      return state.stream.thinkingHtml;
+    }
+    return null;
+  }
+
+  function streamBubbleRichClass() {
+    return state.flags.richText && state.stream.textHtml ? ' rich' : '';
+  }
+
+  function updateStreamTextBubble(tail) {
+    var bubble = tail.querySelector('.bubble');
+    var useRich = !!(state.flags.richText && state.stream.textHtml);
+    if (bubble) {
+      bubble.className = 'bubble assistant' + (useRich ? ' rich' : '');
+      if (useRich) bubble.innerHTML = streamTextInner();
+      else bubble.textContent = state.stream.text || '';
+      return;
+    }
+    if (!state.stream.text) return;
+    var el = document.createElement('div');
+    el.className = 'bubble assistant' + (useRich ? ' rich' : '');
+    if (useRich) el.innerHTML = streamTextInner();
+    else el.textContent = state.stream.text;
+    tail.appendChild(el);
+  }
+
   function renderLoadOlder() {
     if (!state.hasMore) return '';
     return '<button type="button" class="load-older" data-action="load-older">加载更早消息</button>';
@@ -380,11 +446,16 @@ export function buildTranscriptBootScript(): string {
       }
     }
     if (state.stream.thinking) {
-      html += renderThinkingCard(state.stream.thinking, 'stream:thinking', true, null);
+      html += renderThinkingCard(
+        state.stream.thinking,
+        'stream:thinking',
+        true,
+        streamThinkingHtml()
+      );
     }
     if (state.stream.text) {
-      html += '<div class="row stream" id="stream-tail"><div class="bubble assistant">' +
-        escapeHtml(state.stream.text) + '</div></div>';
+      html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
+        streamBubbleRichClass() + '">' + streamTextInner() + '</div></div>';
     } else if (state.stream.thinking && !state.stream.text) {
       html += '<div class="row stream" id="stream-tail"></div>';
     }
@@ -408,7 +479,7 @@ export function buildTranscriptBootScript(): string {
     state.hasMore = !!payload.hasMore;
     state.loadOlderArmed = true;
     if (intent !== 'preserve' || sessionChanged) {
-      state.stream = { text: '', thinking: '' };
+      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
     }
     if (sessionChanged) {
       closeContextMenu(false);
@@ -459,21 +530,18 @@ export function buildTranscriptBootScript(): string {
     emitScrollSnapshot();
   }
 
-  function appendStreamDelta(kind, delta) {
-    if (kind === 'text') state.stream.text += delta;
-    else state.stream.thinking += delta;
+  function appendStreamDelta(kind, delta, html) {
+    if (kind === 'text') {
+      state.stream.text += delta;
+      if (html) state.stream.textHtml = html;
+    } else {
+      state.stream.thinking += delta;
+      if (html) state.stream.thinkingHtml = html;
+    }
     var tail = document.getElementById('stream-tail');
     if (tail) {
       if (kind === 'text') {
-        var bubble = tail.querySelector('.bubble');
-        if (bubble) {
-          bubble.textContent = state.stream.text || '';
-        } else if (state.stream.text) {
-          var el = document.createElement('div');
-          el.className = 'bubble assistant';
-          el.textContent = state.stream.text;
-          tail.appendChild(el);
-        }
+        updateStreamTextBubble(tail);
       } else {
         renderRows();
       }
@@ -553,10 +621,10 @@ export function buildTranscriptBootScript(): string {
         applyPrependPage(p);
         break;
       case 'streamDelta':
-        appendStreamDelta(p.kind, p.delta || '');
+        appendStreamDelta(p.kind, p.delta || '', p.html || '');
         break;
       case 'streamReset':
-        state.stream = { text: '', thinking: '' };
+        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
         renderRows();
         break;
       case 'flagsUpdate':

@@ -90,7 +90,12 @@ export type HostToTranscriptMessage =
     >
   | BridgeEnvelope<
       'streamDelta',
-      {kind: 'text' | 'thinking'; delta: string}
+      {
+        kind: 'text' | 'thinking';
+        delta: string;
+        /** Full accumulated tail HTML when flags.richText (same limits as persisted rows). */
+        html?: string;
+      }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>

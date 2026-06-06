@@ -151,6 +151,57 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterMoreStream.filter(t => t === 'streamDelta').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('includes stream tail html in streamDelta when richText is enabled', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText=""
+          streamingThinking=""
+          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText="**bold**"
+          streamingThinking=""
+          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+        />,
+      );
+    });
+
+    const streamMessages = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .filter(msg => msg.type === 'streamDelta');
+
+    expect(streamMessages.length).toBeGreaterThanOrEqual(1);
+    const textDelta = streamMessages.find(
+      msg => msg.type === 'streamDelta' && msg.payload.kind === 'text',
+    );
+    expect(textDelta?.type).toBe('streamDelta');
+    if (textDelta?.type === 'streamDelta') {
+      expect(textDelta.payload.html).toBeDefined();
+      expect(textDelta.payload.html).toContain('<strong>');
+    }
+  });
+
   it('T7: menu open path does not post sessionSnapshot or flagsUpdate when flag values unchanged', async () => {
     const messages = [sampleMessage('m1', 1)];
 

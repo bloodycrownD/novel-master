@@ -17,6 +17,7 @@ import {
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
+import {prepareStreamTailHtml} from './prepare-stream-tail-html';
 import {buildTranscriptRows} from './message-blocks';
 import {
   CHAT_TRANSCRIPT_BASE_URL,
@@ -466,25 +467,34 @@ export function ChatTranscriptWebView({
       prevStreamThinkingRef.current = '';
       return;
     }
+    const richText = flags?.richText ?? false;
     const textDelta = streamingText.slice(prevText.length);
     const thinkingDelta = streamingThinking.slice(prevThinking.length);
     if (textDelta.length > 0) {
       postToWeb({
         v: 1,
         type: 'streamDelta',
-        payload: {kind: 'text', delta: textDelta},
+        payload: {
+          kind: 'text',
+          delta: textDelta,
+          html: prepareStreamTailHtml(streamingText, richText),
+        },
       });
     }
     if (thinkingDelta.length > 0) {
       postToWeb({
         v: 1,
         type: 'streamDelta',
-        payload: {kind: 'thinking', delta: thinkingDelta},
+        payload: {
+          kind: 'thinking',
+          delta: thinkingDelta,
+          html: prepareStreamTailHtml(streamingThinking, richText),
+        },
       });
     }
     prevStreamTextRef.current = streamingText;
     prevStreamThinkingRef.current = streamingThinking;
-  }, [webReady, streamingText, streamingThinking, postToWeb]);
+  }, [webReady, streamingText, streamingThinking, flags?.richText, postToWeb]);
 
   return (
     <View style={styles.fill}>

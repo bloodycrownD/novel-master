@@ -66,7 +66,7 @@ describe('chat-transcript-bridge', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'streamDelta' as const,
-      payload: {kind: 'text' as const, delta: 'chunk'},
+      payload: {kind: 'text' as const, delta: 'chunk', html: '<p>chunk</p>'},
     };
     expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(message);
   });
