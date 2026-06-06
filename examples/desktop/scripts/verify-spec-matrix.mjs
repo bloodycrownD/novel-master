@@ -98,16 +98,16 @@ check(
   "D-04",
   "树文件点击更新预览",
   shellJs.includes("function showPreview") &&
-    shellJs.includes("data-file-id") &&
-    desktopHtml.includes('data-file-id="g-shared-md"'),
-  "bindTreeClicks → showPreview for shared-prompt.md"
+    shellJs.includes("renderWorkspaceTree") &&
+    shellJs.includes("workspace-context-menu"),
+  "bindTreeClicks → showPreview + VFS 右键菜单"
 );
 
 check(
   "D-05",
-  "服务商 rail 内列表（非 Toast 占位）",
+  "服务商 settings 页列表（非 Toast 占位）",
   shellJs.includes("function renderProviders") &&
-    desktopHtml.includes('id="providers-root"') &&
+    desktopHtml.includes('id="settings-page-root"') &&
     shellJs.includes('data-action="new-provider"') &&
     !shellJs.includes("添加服务商（原型未实现）"),
   "renderProviders + new-provider in shell.js"

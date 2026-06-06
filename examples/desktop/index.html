@@ -1,8 +1,8 @@
 <!doctype html>
 <!--
   Desktop UI prototype (browser-first).
-  Layout: preview | workspace explorer | chat drill-down (mobile-style).
-  Canonical copy — iterate here; apps/desktop Electron shell is separate (future React rewrite).
+  Layout: preview | workspace explorer | chat drill-down.
+  Settings: full-page overlay (not a fourth column).
 -->
 <html lang="zh-CN">
   <head>
@@ -13,287 +13,242 @@
   </head>
   <body>
     <div id="app">
-      <div class="workspace">
-        <section id="preview-pane" aria-label="文件预览">
-          <div class="pane-header">
-            <span class="pane-header__label">文件预览</span>
-            <span class="pane-header__file" id="preview-filename">—</span>
-            <div class="pane-header__actions">
-              <button type="button" class="icon-btn" id="preview-edit-toggle" data-action="toggle-preview-edit" title="编辑文件">✎</button>
-              <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="切换主题">☀</button>
-            </div>
-          </div>
-          <div class="preview-body" id="preview-body">
-            <p class="preview-empty">在工作区选择文件以预览</p>
-          </div>
-          <textarea class="preview-editor hidden" id="preview-editor" spellcheck="false" aria-label="文件编辑"></textarea>
-        </section>
-
-        <section id="explorer-pane" aria-label="工作区">
-          <div class="workspace-header">
-            <h2 class="workspace-header__title" id="workspace-title">全局工作区</h2>
-          </div>
-          <div class="workspace-trees">
-            <div
-              class="workspace-tree-panel is-visible"
-              data-workspace-panel="global"
+      <header id="app-chrome" aria-label="全局操作">
+        <div class="app-chrome__actions">
+          <div class="app-chrome__column-toggles" role="group" aria-label="栏位显示">
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-preview"
+              data-column="preview"
+              aria-label="显示或隐藏左侧栏"
+              title="左侧栏（文件预览）"
             >
-              <div class="explorer-tree" data-tree="global">
-                <div class="tree-node tree-node--folder">
-                  <span class="tree-node__icon">📁</span>
-                  <span class="tree-node__label">templates/</span>
-                </div>
-                <div class="tree-node tree-node--folder">
-                  <span class="tree-node__icon">📁</span>
-                  <span class="tree-node__label">agents/</span>
-                </div>
-                <div
-                  class="tree-node"
-                  data-file-id="g-global-yaml"
-                  data-file-name="global-rules.yaml"
+              ◧
+            </button>
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-explorer"
+              data-column="explorer"
+              aria-label="显示或隐藏中间栏"
+              title="中间栏（工作区）"
+            >
+              ▥
+            </button>
+            <button
+              type="button"
+              class="icon-btn column-toggle is-active"
+              id="toggle-column-chat"
+              data-column="chat"
+              aria-label="显示或隐藏右侧栏"
+              title="右侧栏（聊天）"
+            >
+              ◨
+            </button>
+          </div>
+          <button type="button" class="icon-btn theme-toggle" id="theme-toggle" aria-label="切换主题">☀</button>
+          <button type="button" class="icon-btn" id="settings-open" aria-label="打开设置">⚙</button>
+        </div>
+      </header>
+
+      <div id="main-shell">
+        <div class="workspace">
+          <header class="column-header" id="preview-header" aria-label="文件预览">
+            <span class="column-header__title">文件预览</span>
+            <span class="column-header__meta" id="preview-filename">—</span>
+            <div class="column-header__actions">
+              <div class="preview-mode-toggle" role="group" aria-label="预览模式">
+                <button
+                  type="button"
+                  class="preview-mode-btn is-active"
+                  id="preview-mode-read"
+                  data-action="set-preview-mode"
+                  data-preview-mode="read"
                 >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">global-rules.yaml</span>
-                </div>
-                <div
-                  class="tree-node"
-                  data-file-id="g-shared-md"
-                  data-file-name="shared-prompt.md"
+                  预览
+                </button>
+                <button
+                  type="button"
+                  class="preview-mode-btn"
+                  id="preview-mode-edit"
+                  data-action="set-preview-mode"
+                  data-preview-mode="edit"
                 >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">shared-prompt.md</span>
-                </div>
+                  编辑
+                </button>
               </div>
             </div>
-            <div class="workspace-tree-panel" data-workspace-panel="session" hidden>
-              <div class="explorer-tree" data-tree="session">
-                <div class="tree-node tree-node--folder">
-                  <span class="tree-node__icon">📁</span>
-                  <span class="tree-node__label">project-template/</span>
-                </div>
-                <div
-                  class="tree-node"
-                  data-file-id="s-inherit"
-                  data-file-name="inherit-from-global.md"
-                >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">inherit-from-global.md</span>
-                </div>
-                <div
-                  class="tree-node"
-                  data-file-id="s-outline"
-                  data-file-name="project-outline.md"
-                >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">project-outline.md</span>
-                </div>
+          </header>
+          <header class="column-header" id="explorer-header" aria-label="工作区">
+            <span class="column-header__title" id="workspace-title">全局工作区</span>
+          </header>
+          <header class="column-header" id="rail-header" aria-label="Chat 导航">
+            <div class="column-header__nav" id="rail-pane-nav"></div>
+          </header>
+
+          <section id="preview-pane" aria-label="文件预览">
+            <div class="preview-body" id="preview-body">
+              <p class="preview-empty">在工作区选择文件以预览</p>
+            </div>
+            <textarea class="preview-editor hidden" id="preview-editor" spellcheck="false" aria-label="文件编辑"></textarea>
+          </section>
+
+          <div
+            class="column-splitter"
+            id="splitter-preview-explorer"
+            data-splitter="preview-explorer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整预览区与工作区宽度"
+            tabindex="0"
+          ></div>
+
+          <section id="explorer-pane" aria-label="工作区">
+            <div class="workspace-trees">
+              <div class="workspace-tree-panel is-visible" data-workspace-panel="global">
+                <div class="explorer-tree" data-tree="global" id="workspace-tree-global"></div>
+              </div>
+              <div class="workspace-tree-panel" data-workspace-panel="session" hidden>
+                <div class="explorer-tree" data-tree="session" id="workspace-tree-session"></div>
+              </div>
+              <div class="workspace-tree-panel" data-workspace-panel="chat" hidden>
+                <div class="explorer-tree" data-tree="chat" id="workspace-tree-chat"></div>
               </div>
             </div>
-            <div class="workspace-tree-panel" data-workspace-panel="chat" hidden>
-              <div class="explorer-tree" data-tree="chat">
-                <div class="tree-node tree-node--folder">
-                  <span class="tree-node__icon">📁</span>
-                  <span class="tree-node__label">chapters/</span>
+            <div id="workspace-footer" class="workspace-footer hidden" hidden>
+              <div id="conversation-meta" class="workspace-footer-card"></div>
+            </div>
+          </section>
+
+          <div
+            class="column-splitter"
+            id="splitter-explorer-chat"
+            data-splitter="explorer-chat"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整工作区与聊天区宽度"
+            tabindex="0"
+          ></div>
+
+          <section id="chat-rail" aria-label="Chat 内容">
+            <div class="chat-nav-view is-visible" data-nav-view="projects">
+              <ul class="chat-list" id="project-list">
+                <li class="chat-list__item" data-project-id="proj-stars" data-project-name="星辰之海">
+                  <span class="chat-list__icon">📚</span>
+                  <span class="chat-list__label">星辰之海</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-project-id="proj-mirror" data-project-name="镜中城">
+                  <span class="chat-list__icon">📁</span>
+                  <span class="chat-list__label">镜中城</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-project-id="proj-wind" data-project-name="风语笔记">
+                  <span class="chat-list__icon">📝</span>
+                  <span class="chat-list__label">风语笔记</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="chat-nav-view" data-nav-view="sessions" hidden>
+              <div class="chat-nav-subheader">会话</div>
+              <ul class="chat-list" id="session-list">
+                <li class="chat-list__item" data-session-id="sess-ch1" data-session-name="第一章草稿">
+                  <span class="chat-list__label">第一章草稿</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-session-id="sess-outline" data-session-name="大纲讨论">
+                  <span class="chat-list__label">大纲讨论</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+                <li class="chat-list__item" data-session-id="sess-revise" data-session-name="修订反馈">
+                  <span class="chat-list__label">修订反馈</span>
+                  <span class="chat-list__chevron">›</span>
+                </li>
+              </ul>
+            </div>
+
+            <div class="chat-nav-view" data-nav-view="conversation" hidden>
+              <div class="conversation-tabs" role="tablist" aria-label="会话内容">
+                <button type="button" class="conversation-tab is-active" data-conversation-tab="chat" role="tab" aria-selected="true">聊天</button>
+                <button type="button" class="conversation-tab" data-conversation-tab="realPrompt" role="tab" aria-selected="false">提示词</button>
+              </div>
+              <div class="conversation-panel is-visible" data-conversation-panel="chat">
+                <div class="chat-messages" id="chat-messages"></div>
+                <div id="chat-batch-bar" class="chat-batch-bar hidden" hidden>
+                  <button type="button" class="chat-batch-bar__cancel" data-action="batch-cancel">取消</button>
+                  <span class="chat-batch-bar__count" id="chat-batch-count">已选 0 项</span>
+                  <div class="chat-batch-bar__actions">
+                    <button type="button" class="chat-batch-bar__btn chat-batch-bar__btn--danger" data-action="batch-delete" disabled>删除</button>
+                    <button type="button" class="chat-batch-bar__btn" data-action="batch-hide" disabled>隐藏</button>
+                    <button type="button" class="chat-batch-bar__btn" data-action="batch-restore" disabled>恢复</button>
+                  </div>
                 </div>
-                <div
-                  class="tree-node tree-node--nested"
-                  data-file-id="c-ch1"
-                  data-file-name="chapter-01.md"
-                >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">chapter-01.md</span>
-                </div>
-                <div
-                  class="tree-node"
-                  data-file-id="c-outline"
-                  data-file-name="outline.md"
-                >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">outline.md</span>
-                </div>
-                <div class="tree-node tree-node--folder">
-                  <span class="tree-node__icon">📁</span>
-                  <span class="tree-node__label">notes/</span>
-                </div>
-                <div
-                  class="tree-node tree-node--nested"
-                  data-file-id="c-draft"
-                  data-file-name="draft.txt"
-                >
-                  <span class="tree-node__icon">📄</span>
-                  <span class="tree-node__label">draft.txt</span>
+                <div class="chat-composer" id="chat-composer">
+                  <button
+                    type="button"
+                    class="chat-composer__more"
+                    data-action="open-session-actions"
+                    aria-label="更多选项"
+                    aria-haspopup="menu"
+                  >
+                    ⋯
+                  </button>
+                  <textarea disabled placeholder="原型阶段不可用" aria-label="消息输入"></textarea>
+                  <button type="button" class="chat-composer__send" disabled>发送</button>
                 </div>
               </div>
+              <div class="conversation-panel" data-conversation-panel="realPrompt" hidden>
+                <div class="real-prompt-list" id="real-prompt-list"></div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        </div>
+      </div>
 
-        <section id="chat-rail" aria-label="Chat 管理">
-          <div class="rail-root-tabs" role="tablist">
-            <button type="button" class="rail-root-tab is-active" data-root-tab="chat" role="tab" aria-selected="true">对话</button>
-            <button type="button" class="rail-root-tab" data-root-tab="profile" role="tab" aria-selected="false">我的</button>
-          </div>
-
-          <div class="chat-nav-view is-visible" data-nav-view="projects">
-            <div class="chat-nav-header">
-              <span class="chat-nav-header__title">项目</span>
-            </div>
-            <ul class="chat-list" id="project-list">
-              <li
-                class="chat-list__item"
-                data-project-id="proj-stars"
-                data-project-name="星辰之海"
-              >
-                <span class="chat-list__icon">📚</span>
-                <span class="chat-list__label">星辰之海</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-              <li
-                class="chat-list__item"
-                data-project-id="proj-mirror"
-                data-project-name="镜中城"
-              >
-                <span class="chat-list__icon">📁</span>
-                <span class="chat-list__label">镜中城</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-              <li
-                class="chat-list__item"
-                data-project-id="proj-wind"
-                data-project-name="风语笔记"
-              >
-                <span class="chat-list__icon">📝</span>
-                <span class="chat-list__label">风语笔记</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-            </ul>
-          </div>
-
-          <div class="chat-nav-view" data-nav-view="sessions" hidden>
-            <div class="chat-nav-header">
+      <div id="settings-page" class="settings-page hidden" hidden aria-hidden="true">
+        <div class="settings-page__body">
+          <nav class="settings-nav" id="settings-nav" aria-label="设置分类"></nav>
+          <div class="settings-main">
+            <header class="settings-main__header" id="settings-main-header">
               <button
                 type="button"
-                class="chat-nav-back"
-                data-action="back-to-projects"
-                aria-label="返回项目列表"
+                class="settings-main__back hidden"
+                id="settings-main-back"
+                data-action="settings-back"
+                aria-label="返回上一级"
               >
                 ‹
               </button>
-              <div class="chat-nav-header__stack">
-                <span class="chat-nav-header__subtitle">当前项目</span>
-                <span class="chat-nav-header__title" id="sessions-project-name">—</span>
-              </div>
-            </div>
-            <div class="chat-nav-subheader">会话</div>
-            <ul class="chat-list" id="session-list">
-              <li
-                class="chat-list__item"
-                data-session-id="sess-ch1"
-                data-session-name="第一章草稿"
-              >
-                <span class="chat-list__label">第一章草稿</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-              <li
-                class="chat-list__item"
-                data-session-id="sess-outline"
-                data-session-name="大纲讨论"
-              >
-                <span class="chat-list__label">大纲讨论</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-              <li
-                class="chat-list__item"
-                data-session-id="sess-revise"
-                data-session-name="修订反馈"
-              >
-                <span class="chat-list__label">修订反馈</span>
-                <span class="chat-list__chevron">›</span>
-              </li>
-            </ul>
+              <h2 class="settings-main__title" id="settings-main-title">常规</h2>
+            </header>
+            <div class="settings-page__content" id="settings-page-root"></div>
           </div>
-
-          <div class="chat-nav-view" data-nav-view="conversation" hidden>
-            <div class="chat-nav-header">
-              <button
-                type="button"
-                class="chat-nav-back"
-                data-action="back-to-sessions"
-                aria-label="返回会话列表"
-              >
-                ‹
-              </button>
-              <div class="chat-nav-header__stack">
-                <span class="chat-nav-header__subtitle" id="conversation-project-name">—</span>
-                <span class="chat-nav-header__title" id="conversation-session-name">—</span>
-              </div>
-              <button type="button" class="chat-nav-menu-btn" data-action="open-session-menu" aria-label="会话操作">☰</button>
-            </div>
-            <div class="conversation-meta" id="conversation-meta"></div>
-            <div class="chat-messages">
-              <div class="chat-message chat-message--user">
-                <span class="chat-message__role">你</span>
-                <p>请帮我润色这一段开场白。</p>
-              </div>
-              <div class="chat-message chat-message--assistant">
-                <span class="chat-message__role">助手</span>
-                <p>好的，这是静态占位回复。原型阶段不接入 Agent 或发送能力。</p>
-              </div>
-            </div>
-            <div class="chat-composer">
-              <textarea disabled placeholder="原型阶段不可用" aria-label="消息输入"></textarea>
-              <button type="button" class="chat-composer__send" disabled>发送</button>
-            </div>
-          </div>
-
-          <div class="chat-nav-view rail-stack-view" data-nav-view="profile" hidden>
-            <div class="rail-page-host" id="profile-view-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="agentsSettings" hidden>
-            <div class="rail-page-host" id="agents-settings-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="agentEditor" hidden>
-            <div class="rail-page-host" id="agent-editor-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="providers" hidden>
-            <div class="rail-page-host" id="providers-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="providerDetail" hidden>
-            <div class="rail-page-host" id="provider-detail-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="modelSampling" hidden>
-            <div class="rail-page-host" id="model-sampling-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="compactionConditions" hidden>
-            <div class="rail-page-host" id="compaction-conditions-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="eventsConfig" hidden>
-            <div class="rail-page-host" id="events-config-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="regexGroups" hidden>
-            <div class="rail-page-host" id="regex-groups-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="regexRules" hidden>
-            <div class="rail-page-host" id="regex-rules-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="regexRuleEditor" hidden>
-            <div class="rail-page-host" id="regex-rule-editor-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="globalTemplate" hidden>
-            <div class="rail-page-host" id="global-template-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="realPrompt" hidden>
-            <div class="rail-page-host" id="real-prompt-root"></div>
-          </div>
-          <div class="chat-nav-view rail-stack-view" data-nav-view="sessionLog" hidden>
-            <div class="rail-page-host" id="session-log-root"></div>
-          </div>
-        </section>
+        </div>
       </div>
     </div>
 
-    <div id="session-menu" class="session-menu hidden" role="menu"></div>
     <div id="item-menu" class="session-menu hidden" role="menu"></div>
+    <div id="session-actions-menu" class="session-actions-menu hidden" role="menu" aria-label="会话操作"></div>
+    <div id="workspace-context-menu" class="workspace-context-menu hidden" role="menu" aria-label="工作区操作"></div>
+    <div id="workspace-modal" class="workspace-modal hidden" aria-hidden="true">
+      <div class="workspace-modal__backdrop" data-action="close-workspace-modal"></div>
+      <div class="workspace-modal__panel" role="dialog" aria-labelledby="workspace-modal-title">
+        <h3 class="workspace-modal__title" id="workspace-modal-title">—</h3>
+        <div class="workspace-modal__body" id="workspace-modal-body"></div>
+        <div class="workspace-modal__footer" id="workspace-modal-footer"></div>
+      </div>
+    </div>
+    <div id="picker-modal" class="picker-modal hidden" aria-hidden="true">
+      <div class="picker-modal__backdrop" data-action="close-picker"></div>
+      <div class="picker-modal__panel" role="dialog" aria-labelledby="picker-modal-title">
+        <h3 class="picker-modal__title" id="picker-modal-title">—</h3>
+        <div class="picker-modal__list" id="picker-modal-list"></div>
+        <button type="button" class="picker-modal__cancel" data-action="close-picker">取消</button>
+      </div>
+    </div>
     <div id="shell-toast" class="shell-toast hidden"></div>
 
     <script src="./shell.js"></script>
