@@ -1,0 +1,4 @@
+dist/
+shared/*.js
+shared/*.d.ts
+shared/*.map

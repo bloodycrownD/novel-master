@@ -1,1 +1,0 @@
-{"version":3,"file":"ipc-types.js","sourceRoot":"","sources":["ipc-types.ts"],"names":[],"mappings":"AAAA;;;GAGG;AAEH,MAAM,CAAC,MAAM,YAAY,GAAG;IAC1B,gBAAgB,EAAE,qBAAqB;IACvC,qBAAqB,EAAE,0BAA0B;IACjD,SAAS,EAAE,cAAc;IACzB,YAAY,EAAE,iBAAiB;CACvB,CAAC"}
