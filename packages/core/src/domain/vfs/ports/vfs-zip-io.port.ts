@@ -6,6 +6,20 @@
 
 import type { VfsScope } from "../logic/vfs-path-mapper.js";
 
+/** Gather output passed to {@link VfsZipBuildFn} (entry names without leading `/`). */
+export type VfsZipBuildInput = {
+  readonly files: ReadonlyMap<string, string>;
+  /** Directory markers (`dirname/`); empty payload in default STORE builder. */
+  readonly directoryEntryNames: readonly string[];
+};
+
+/**
+ * Host-injectable ZIP builder (e.g. Mobile native). Default: fflate STORE via {@link buildVfsZip}.
+ */
+export type VfsZipBuildFn = (
+  input: VfsZipBuildInput,
+) => Uint8Array | Promise<Uint8Array>;
+
 /** Options for domain-scoped ZIP import (full replace). */
 export interface VfsZipImportOptions {
   /** Must be true before any database writes (CLI `--yes` / mobile confirm). */

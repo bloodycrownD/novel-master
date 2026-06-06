@@ -85,6 +85,8 @@ export { parseVfsZip } from "./domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "./errors/vfs-zip-errors.js";
 export type { VfsZipErrorCode } from "./errors/vfs-zip-errors.js";
 export type {
+  VfsZipBuildFn,
+  VfsZipBuildInput,
   VfsZipIoService,
   VfsZipImportOptions,
 } from "./domain/vfs/ports/vfs-zip-io.port.js";

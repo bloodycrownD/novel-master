@@ -8,6 +8,7 @@ import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
   createVfsZipIoService,
   type VfsScope,
+  type VfsZipBuildFn,
   type VfsZipImportOptions,
   VfsZipError,
 } from '@novel-master/core';
@@ -106,14 +107,62 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
   return bytes;
 }
 
+export type ExportVfsZipOptions = {
+  /** Invoked once when native zip fails and export retries with Core default STORE. */
+  onNativeZipFallback?: () => void;
+};
+
+/** Marks failures from the injected buildZip step (native zip), not VFS gather. */
+class NativeZipBuildFailedError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error ? cause.message : 'native zip build failed',
+    );
+    this.name = 'NativeZipBuildFailedError';
+  }
+}
+
+/** Android-only: wrap native buildZip so fallback catches zip step failures only. */
+const androidNativeBuildZip: VfsZipBuildFn = async (input) => {
+  try {
+    return await nativeBuildVfsZip(input);
+  } catch (cause) {
+    throw new NativeZipBuildFailedError(cause);
+  }
+};
+
+async function exportVfsZipBytes(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+  options?: ExportVfsZipOptions,
+): Promise<Uint8Array> {
+  if (Platform.OS !== 'android') {
+    // iOS still uses Core default fflate STORE until M3 native zip is validated.
+    const zipSvc = createVfsZipIoService(runtime.conn);
+    return await zipSvc.export(scope);
+  }
+
+  try {
+    const zipSvc = createVfsZipIoService(runtime.conn, {
+      buildZip: androidNativeBuildZip,
+    });
+    return await zipSvc.export(scope);
+  } catch (error) {
+    if (!(error instanceof NativeZipBuildFailedError)) {
+      throw error;
+    }
+    options?.onNativeZipFallback?.();
+    const fallbackSvc = createVfsZipIoService(runtime.conn);
+    return await fallbackSvc.export(scope);
+  }
+}
+
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
+  options?: ExportVfsZipOptions,
 ): Promise<'saved' | 'cancelled'> {
-  const zipSvc = createVfsZipIoService(runtime.conn, {
-    buildZip: nativeBuildVfsZip,
-  });
-  const bytes = await zipSvc.export(scope);
+  const bytes = await exportVfsZipBytes(runtime, scope, options);
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope);
