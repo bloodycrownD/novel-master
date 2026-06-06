@@ -51,6 +51,16 @@ open index.html
 - `shell.css` — 样式（含 `[data-theme=dark]`）
 - `shell.js` — 导航状态机、mock store、配置页渲染
 
+## QA（spec 手动矩阵静态验收）
+
+```bash
+node examples/desktop/scripts/verify-spec-matrix.mjs
+node --check examples/desktop/shell.js
+npm test --workspace=@novel-master/desktop
+```
+
+覆盖 M-01–M-04（mobile DOM/源码）与 D-01–D-06（desktop DOM/源码）及 Round-2 CR 项。
+
 ## 相关文档
 
 - [prototype-optimization SPEC](../../.apm/kb/docs/Iterations/prototype-optimization/spec.md)

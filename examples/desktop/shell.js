@@ -220,6 +220,38 @@
       .replace(/"/g, "&quot;");
   }
 
+  function deepClone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function slugifyId(text) {
+    var slug = String(text)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\u4e00-\u9fff]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    return slug || "id-" + Date.now();
+  }
+
+  function findProvider(providerId) {
+    return store.providers.find(function (p) { return p.id === providerId; });
+  }
+
+  function findProviderModel(providerId, vendorModelId) {
+    var provider = findProvider(providerId);
+    if (!provider) return null;
+    return provider.models.find(function (m) { return m.vendorModelId === vendorModelId; }) || null;
+  }
+
+  function getSamplingTemperature(model) {
+    if (!model || !model.settings || !model.settings.sampling) return 0.7;
+    var sampling = model.settings.sampling;
+    if (!sampling.enabled || !sampling.params) return 0.7;
+    var openai = sampling.params.openai;
+    if (openai && openai.temperature != null) return openai.temperature;
+    return 0.7;
+  }
+
   function showToast(message) {
     var el = document.getElementById("shell-toast");
     if (!el) return;
@@ -394,10 +426,14 @@
     html += '<div class="rail-list">';
     Object.keys(store.agents).forEach(function (id) {
       var def = store.agents[id].definition;
+      html += '<div class="rail-list-item-row">';
       html +=
         '<button type="button" class="rail-list-item" data-agent-id="' + id + '">' +
         '<span class="rail-list-label">' + escapeHtml(def.name) + "</span>" +
         '<span class="rail-list-chevron">›</span></button>';
+      html +=
+        '<button type="button" class="rail-list-menu-btn" data-agent-menu="' + id + '" aria-label="更多">⋮</button>';
+      html += "</div>";
     });
     html += "</div>";
     root.innerHTML = html;
@@ -422,13 +458,18 @@
     var root = document.getElementById("providers-root");
     if (!root) return;
     var html = renderStackHeader("服务商管理", true);
+    html += '<div class="rail-toolbar"><button type="button" class="btn-primary" data-action="new-provider">新建</button></div>';
     html += '<div class="rail-list">';
     store.providers.forEach(function (p) {
+      html += '<div class="rail-list-item-row">';
       html +=
         '<button type="button" class="rail-list-item" data-provider-id="' + p.id + '">' +
         '<span class="rail-list-label">' + escapeHtml(p.name) + "</span>" +
         '<span class="rail-list-meta">' + p.models.length + " 个模型</span>" +
         '<span class="rail-list-chevron">›</span></button>';
+      html +=
+        '<button type="button" class="rail-list-menu-btn" data-provider-menu="' + p.id + '" aria-label="更多">⋮</button>';
+      html += "</div>";
     });
     html += "</div>";
     root.innerHTML = html;
@@ -454,9 +495,14 @@
   function renderModelSampling() {
     var root = document.getElementById("model-sampling-root");
     if (!root) return;
+    var model = findProviderModel(navState.editingProviderId, navState.editingVendorModelId);
+    var temperature = getSamplingTemperature(model);
     var html = renderStackHeader("采样配置", true);
     html += '<div class="rail-form">';
-    html += '<label class="rail-field"><span>温度</span><input type="number" data-sampling-field="temperature" min="0" max="2" step="0.1" value="0.7"></label>';
+    if (model) {
+      html += '<p class="rail-hint">' + escapeHtml(navState.editingProviderId + "/" + model.vendorModelId) + "</p>";
+    }
+    html += '<label class="rail-field"><span>温度</span><input type="number" data-sampling-field="temperature" min="0" max="2" step="0.1" value="' + temperature + '"></label>';
     html += '<div class="rail-toolbar"><button type="button" class="btn-primary" data-action="save-sampling">保存</button></div>';
     html += "</div>";
     root.innerHTML = html;
@@ -526,11 +572,18 @@
 
   function renderRegexRuleEditor() {
     var root = document.getElementById("regex-rule-editor-root");
-    if (!root) return;
+    if (!root || !navState.editingRegexGroupId) return;
+    var groupId = navState.editingRegexGroupId;
+    var rules = store.regexRules[groupId] || [];
+    var existing = navState.editingRegexRuleId
+      ? rules.find(function (r) { return r.ruleId === navState.editingRegexRuleId; })
+      : null;
+    var name = existing ? existing.name : "新规则";
+    var pattern = existing ? existing.pattern : "";
     var html = renderStackHeader("规则详情", true);
     html += '<div class="rail-form"><p class="rail-hint">正则规则编辑 mock（字段对齐 mobile 原型）。</p>';
-    html += '<label class="rail-field"><span>名称</span><input type="text" value="隐藏系统提示"></label>';
-    html += '<label class="rail-field"><span>模式</span><input type="text" value="SYSTEM:"></label>';
+    html += '<label class="rail-field"><span>名称</span><input type="text" data-regex-field="name" value="' + escapeHtml(name) + '"></label>';
+    html += '<label class="rail-field"><span>模式</span><input type="text" data-regex-field="pattern" value="' + escapeHtml(pattern) + '"></label>';
     html += '<div class="rail-toolbar"><button type="button" class="btn-primary" data-action="save-regex-rule">保存</button></div></div>';
     root.innerHTML = html;
   }
@@ -658,6 +711,147 @@
   function closeSessionMenu() {
     var menu = document.getElementById("session-menu");
     if (menu) menu.classList.add("hidden");
+  }
+
+  var itemMenuHandler = null;
+
+  function closeItemMenu() {
+    var menu = document.getElementById("item-menu");
+    if (menu) menu.classList.add("hidden");
+    itemMenuHandler = null;
+  }
+
+  function openItemMenu(anchor, items, onSelect) {
+    var menu = document.getElementById("item-menu");
+    if (!menu) return;
+    closeSessionMenu();
+    itemMenuHandler = onSelect;
+    menu.innerHTML = items
+      .map(function (item) {
+        var danger = item.danger ? ' class="is-danger"' : "";
+        return (
+          '<button type="button" data-item-menu="' + item.action + '"' + danger + ">" +
+          escapeHtml(item.label) +
+          "</button>"
+        );
+      })
+      .join("");
+    var rect = anchor.getBoundingClientRect();
+    menu.style.top = rect.bottom + 6 + "px";
+    menu.style.right = Math.max(16, window.innerWidth - rect.right) + "px";
+    menu.classList.remove("hidden");
+  }
+
+  function showAgentItemMenu(agentId, anchor) {
+    openItemMenu(
+      anchor,
+      [
+        { label: "重命名", action: "rename" },
+        { label: "复制", action: "duplicate" },
+        { label: "删除", action: "delete", danger: true },
+      ],
+      function (action) {
+        closeItemMenu();
+        var entry = store.agents[agentId];
+        if (!entry) return;
+        if (action === "rename") {
+          var next = prompt("Agent 名称", entry.definition.name);
+          if (!next || !next.trim()) return;
+          entry.definition.name = next.trim();
+          persistStore();
+          renderAgentsSettings();
+          if (navState.editingAgentId === agentId) renderAgentEditor();
+          showToast("已重命名");
+          return;
+        }
+        if (action === "duplicate") {
+          var copyId = "agent-" + Date.now();
+          store.agents[copyId] = { id: copyId, definition: deepClone(entry.definition) };
+          store.agents[copyId].definition.name += "-copy";
+          persistStore();
+          renderAgentsSettings();
+          showToast("已复制 Agent");
+          return;
+        }
+        if (action === "delete") {
+          if (Object.keys(store.agents).length <= 1) {
+            showToast("至少保留一个 Agent");
+            return;
+          }
+          if (store.workspaceCurrentAgentId === agentId) {
+            var remaining = Object.keys(store.agents).filter(function (k) { return k !== agentId; });
+            store.workspaceCurrentAgentId = remaining[0];
+            updateConversationMeta();
+            if (navState.viewId === "profile") renderProfileView();
+          }
+          if (navState.editingAgentId === agentId) {
+            navState.editingAgentId = null;
+            if (navState.viewId === "agentEditor") popNavView();
+          }
+          delete store.agents[agentId];
+          persistStore();
+          renderAgentsSettings();
+          showToast("已删除 Agent");
+        }
+      }
+    );
+  }
+
+  function showProviderItemMenu(providerId, anchor) {
+    openItemMenu(
+      anchor,
+      [
+        { label: "重命名", action: "rename" },
+        { label: "删除", action: "delete", danger: true },
+      ],
+      function (action) {
+        closeItemMenu();
+        var provider = findProvider(providerId);
+        if (!provider) return;
+        if (action === "rename") {
+          var next = prompt("服务商名称", provider.name);
+          if (!next || !next.trim()) return;
+          provider.name = next.trim();
+          persistStore();
+          renderProviders();
+          if (navState.editingProviderId === providerId && navState.viewId === "providerDetail") {
+            renderProviderDetail();
+          }
+          showToast("已重命名");
+          return;
+        }
+        if (action === "delete") {
+          if (store.providers.length <= 1) {
+            showToast("至少保留一个服务商");
+            return;
+          }
+          if (!confirm("确定删除服务商 " + provider.name + "？")) return;
+          store.providers = store.providers.filter(function (p) { return p.id !== providerId; });
+          if (navState.editingProviderId === providerId) {
+            navState.editingProviderId = null;
+            navState.editingVendorModelId = null;
+            if (navState.viewId === "providerDetail" || navState.viewId === "modelSampling") {
+              popNavView();
+              if (navState.viewId === "modelSampling") popNavView();
+            }
+          }
+          persistStore();
+          renderProviders();
+          showToast("已删除服务商");
+        }
+      }
+    );
+  }
+
+  function createNewProvider() {
+    var name = prompt("服务商名称");
+    if (!name || !name.trim()) return;
+    var id = slugifyId(name.trim());
+    while (findProvider(id)) id = id + "-" + Date.now();
+    store.providers.push({ id: id, name: name.trim(), models: [] });
+    persistStore();
+    renderProviders();
+    showToast("已添加服务商");
   }
 
   function pickAgent() {
@@ -847,6 +1041,14 @@
         return;
       }
 
+      var agentMenuBtn = e.target.closest("[data-agent-menu]");
+      if (agentMenuBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        showAgentItemMenu(agentMenuBtn.getAttribute("data-agent-menu"), agentMenuBtn);
+        return;
+      }
+
       var agentBtn = e.target.closest("[data-agent-id]");
       if (agentBtn) {
         navState.editingAgentId = agentBtn.getAttribute("data-agent-id");
@@ -884,6 +1086,19 @@
         return;
       }
 
+      if (e.target.closest("[data-action='new-provider']")) {
+        createNewProvider();
+        return;
+      }
+
+      var providerMenuBtn = e.target.closest("[data-provider-menu]");
+      if (providerMenuBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        showProviderItemMenu(providerMenuBtn.getAttribute("data-provider-menu"), providerMenuBtn);
+        return;
+      }
+
       var providerBtn = e.target.closest("[data-provider-id]");
       if (providerBtn) {
         navState.editingProviderId = providerBtn.getAttribute("data-provider-id");
@@ -899,6 +1114,15 @@
       }
 
       if (e.target.closest("[data-action='save-sampling']")) {
+        var samplingModel = findProviderModel(navState.editingProviderId, navState.editingVendorModelId);
+        if (!samplingModel) return;
+        var tempEl = document.querySelector("[data-sampling-field='temperature']");
+        var temperature = tempEl ? Number(tempEl.value) : 0.7;
+        if (!samplingModel.settings) samplingModel.settings = {};
+        samplingModel.settings.sampling = {
+          enabled: true,
+          params: { protocol: "openai", openai: { temperature: temperature } },
+        };
         persistStore();
         showToast("采样配置已保存");
         return;
@@ -956,6 +1180,40 @@
       }
 
       if (e.target.closest("[data-action='save-regex-rule']")) {
+        var groupId = navState.editingRegexGroupId;
+        if (!groupId) return;
+        var nameEl = document.querySelector("[data-regex-field='name']");
+        var patternEl = document.querySelector("[data-regex-field='pattern']");
+        var ruleName = nameEl ? nameEl.value.trim() : "";
+        var rulePattern = patternEl ? patternEl.value.trim() : "";
+        if (!ruleName || !rulePattern) {
+          showToast("请填写名称和模式");
+          return;
+        }
+        if (!store.regexRules[groupId]) store.regexRules[groupId] = [];
+        var ruleList = store.regexRules[groupId];
+        var ruleId = navState.editingRegexRuleId;
+        var existingRule = ruleId
+          ? ruleList.find(function (r) { return r.ruleId === ruleId; })
+          : null;
+        if (!existingRule) {
+          ruleId = "rule-" + Date.now();
+          existingRule = {
+            ruleId: ruleId,
+            name: ruleName,
+            pattern: rulePattern,
+            scopeUser: true,
+            scopeAssistant: false,
+            minDepth: 0,
+            maxDepth: 99,
+          };
+          ruleList.push(existingRule);
+          navState.editingRegexRuleId = ruleId;
+        } else {
+          existingRule.name = ruleName;
+          existingRule.pattern = rulePattern;
+        }
+        persistStore();
         showToast("规则已保存");
         return;
       }
@@ -971,7 +1229,18 @@
 
     document.addEventListener("click", function () {
       closeSessionMenu();
+      closeItemMenu();
     });
+
+    var itemMenu = document.getElementById("item-menu");
+    if (itemMenu) {
+      itemMenu.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var btn = e.target.closest("[data-item-menu]");
+        if (!btn || !itemMenuHandler) return;
+        itemMenuHandler(btn.getAttribute("data-item-menu"));
+      });
+    }
 
     var sessionMenu = document.getElementById("session-menu");
     if (sessionMenu) {
