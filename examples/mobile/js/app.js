@@ -16,12 +16,16 @@
         currentSessionId: 'session-1',
         currentSessionName: '第一卷创作',
         editingAgentId: null,
-        defaultAgentId: 'agent-writer',
+        workspaceCurrentAgentId: 'agent-writer',
         agentEditorDirty: false,
         rollbackInProgress: false,
-        globalCompactionPolicy: null,
+        globalCompactionConditions: null,
+        globalEventsConfig: null,
         /** Workspace current model (mock nm model use); single source for chat + profile. */
         workspaceCurrentModelId: 'zhipu/glm-4.6',
+        llmStreamEnabled: true,
+        chatRichTextEnabled: false,
+        tokenCounterMode: 'auto',
         editingProviderId: null,
         editingModelApplicationModelId: null,
         regexGroups: [],
@@ -33,9 +37,16 @@
     };
 
     const WORKSPACE_MODEL_STORAGE_KEY = 'nm-mobile-workspace-current-model';
+    const WORKSPACE_AGENT_STORAGE_KEY = 'nm-mobile-workspace-current-agent';
+    const AGENT_CATALOG_STORAGE_KEY = 'nm-mobile-agent-catalog';
     const REGEX_GROUPS_STORAGE_KEY = 'nm-mobile-regex-groups';
     const REGEX_RULES_STORAGE_KEY = 'nm-mobile-regex-rules';
     const WORKSPACE_REGEX_GROUP_STORAGE_KEY = 'nm-mobile-workspace-current-regex-group';
+    const COMPACTION_CONDITIONS_STORAGE_KEY = 'nm-mobile-compaction-conditions';
+    const EVENTS_CONFIG_STORAGE_KEY = 'nm-mobile-events-config';
+    const LLM_STREAM_STORAGE_KEY = 'nm-mobile-llm-stream';
+    const CHAT_RICH_TEXT_STORAGE_KEY = 'nm-mobile-chat-rich-text';
+    const TOKEN_COUNTER_STORAGE_KEY = 'nm-mobile-token-counter-mode';
     const THEME_STORAGE_KEY = 'nm-mobile-theme';
 
     // 主题管理
@@ -61,18 +72,18 @@
 
     const pageConfig = {
         chat: { title: '会话', showBack: false, showNav: true },
-        agents: { title: 'Agent', showBack: false, showNav: true },
         profile: { title: '我的', showBack: false, showNav: true },
+        agentsSettings: { title: 'agent管理', showBack: true, showNav: false },
         realPrompt: { title: '真实提示词', showBack: true, showNav: false },
         sessionLog: { title: '会话日志', showBack: true, showNav: false },
         providers: { title: '服务商管理', showBack: true, showNav: false },
         providerDetail: { title: '模型管理', showBack: true, showNav: false },
         modelSampling: { title: '采样配置', showBack: true, showNav: false },
-        settings: { title: '扩展设置', showBack: true, showNav: false },
         globalTemplate: { title: '全局模板', showBack: true, showNav: false },
         fileEditor: { title: '编辑文件', showBack: true, showNav: false },
         agentEditor: { title: 'Agent 配置', showBack: true, showNav: false },
-        compactionPolicy: { title: '压缩策略', showBack: true, showNav: false },
+        compactionConditions: { title: '压缩条件', showBack: true, showNav: false },
+        eventsConfig: { title: '事件配置', showBack: true, showNav: false },
         regexGroups: { title: '正则配置', showBack: true, showNav: false },
         regexRules: { title: '正则规则', showBack: true, showNav: false },
         regexRuleEditor: { title: '规则详情', showBack: true, showNav: false },
@@ -458,7 +469,8 @@
             btn.addEventListener('click', function () {
                 const action = btn.dataset.sessionAction;
                 closeDrawer();
-                if (action === 'switch-model') openModelPickerModal();
+                if (action === 'switch-agent') openAgentPickerModal();
+                else if (action === 'switch-model') openModelPickerModal();
                 else if (action === 'real-prompt') navigateToPage('realPrompt', true);
                 else if (action === 'session-log') navigateToPage('sessionLog', true);
             });
@@ -901,21 +913,54 @@
 
     function setupMenuItems() {
         document.querySelectorAll('.menu-item').forEach(function (item) {
-            item.addEventListener('click', function () {
+            item.addEventListener('click', function (e) {
                 const action = item.dataset.action;
+                if (action === 'toggle-llm-stream' || action === 'toggle-chat-rich-text') {
+                    return;
+                }
                 if (action === 'current-model') openModelPickerModal();
-                else if (action === 'providers') navigateToPage('providers', true);
-                else if (action === 'compaction-policy') {
-                    renderCompactionPolicyPage();
-                    navigateToPage('compactionPolicy', true);
+                else if (action === 'current-agent') openAgentPickerModal();
+                else if (action === 'current-regex-group') openRegexGroupPickerModal();
+                else if (action === 'token-counter-mode') openTokenCounterPicker();
+                else if (action === 'export-database') exportDatabaseMock();
+                else if (action === 'import-database') importDatabaseMock();
+                else if (action === 'agents-settings') {
+                    renderAgentList();
+                    navigateToPage('agentsSettings', true);
+                } else if (action === 'providers') navigateToPage('providers', true);
+                else if (action === 'compaction-conditions') {
+                    renderCompactionConditionsPage();
+                    navigateToPage('compactionConditions', true);
+                } else if (action === 'events-config') {
+                    renderEventsConfigPage();
+                    navigateToPage('eventsConfig', true);
                 } else if (action === 'regex-config') {
                     renderRegexGroupList();
                     navigateToPage('regexGroups', true);
                 } else if (action === 'global-template') navigateToPage('globalTemplate', true);
-                else if (action === 'settings') navigateToPage('settings', true);
-                else if (action === 'debug') showToast('开发调试功能');
             });
         });
+
+        const llmSwitch = document.getElementById('profileLlmStreamSwitch');
+        if (llmSwitch) {
+            llmSwitch.addEventListener('change', function () {
+                appState.llmStreamEnabled = llmSwitch.checked;
+                try {
+                    localStorage.setItem(LLM_STREAM_STORAGE_KEY, String(llmSwitch.checked));
+                } catch (_e) { /* ignore */ }
+                showToast(llmSwitch.checked ? '已开启流式输出' : '已关闭流式输出', 1500);
+            });
+        }
+        const richTextSwitch = document.getElementById('profileChatRichTextSwitch');
+        if (richTextSwitch) {
+            richTextSwitch.addEventListener('change', function () {
+                appState.chatRichTextEnabled = richTextSwitch.checked;
+                try {
+                    localStorage.setItem(CHAT_RICH_TEXT_STORAGE_KEY, String(richTextSwitch.checked));
+                } catch (_e) { /* ignore */ }
+                showToast(richTextSwitch.checked ? '已开启富文本消息' : '已关闭富文本消息', 1500);
+            });
+        }
     }
 
     function setupBottomSheet() {
@@ -1370,15 +1415,17 @@
         ids.forEach(function (agentId) {
             delete agentCatalog[agentId];
         });
-        if (!agentCatalog[appState.defaultAgentId]) {
-            appState.defaultAgentId = Object.keys(agentCatalog)[0];
+        if (!agentCatalog[appState.workspaceCurrentAgentId]) {
+            appState.workspaceCurrentAgentId = Object.keys(agentCatalog)[0];
+            persistWorkspaceAgent();
         }
         if (appState.editingAgentId && !agentCatalog[appState.editingAgentId]) {
             appState.editingAgentId = null;
             if (appState.currentPage === 'agentEditor') {
-                navigateToPage('agents', false);
+                navigateToPage('agentsSettings', false);
             }
         }
+        persistAgentCatalog();
         renderAgentList();
     }
 
@@ -1970,13 +2017,307 @@
         refreshWorkspaceModelDisplays();
     }
 
-    function refreshWorkspaceModelDisplays() {
-        const label = modelShortLabel(appState.workspaceCurrentModelId);
-        const sessionDrawerEl = document.getElementById('sessionDrawerCurrentModelLabel');
-        if (sessionDrawerEl) sessionDrawerEl.textContent = label;
-        const profileEl = document.getElementById('profileCurrentModelLabel');
-        if (profileEl) profileEl.textContent = label;
+    function agentDisplayLabel(agentId) {
+        const entry = agentCatalog[agentId];
+        return entry ? entry.definition.name : '—';
+    }
+
+    function regexGroupDisplayLabel(groupId) {
+        if (!groupId) return '不启用';
+        const group = findRegexGroup(groupId);
+        return group ? (group.displayName || group.groupId) : '不启用';
+    }
+
+    function refreshWorkspaceDisplays() {
+        const modelLabel = modelShortLabel(appState.workspaceCurrentModelId);
+        const agentLabel = agentDisplayLabel(appState.workspaceCurrentAgentId);
+        const regexLabel = regexGroupDisplayLabel(appState.workspaceCurrentRegexGroupId);
+
+        const sessionModelEl = document.getElementById('sessionDrawerCurrentModelLabel');
+        if (sessionModelEl) sessionModelEl.textContent = modelLabel;
+        const sessionAgentEl = document.getElementById('sessionDrawerCurrentAgentLabel');
+        if (sessionAgentEl) sessionAgentEl.textContent = agentLabel;
+
+        const profileModelEl = document.getElementById('profileCurrentModelLabel');
+        if (profileModelEl) profileModelEl.textContent = modelLabel;
+        const profileAgentEl = document.getElementById('profileCurrentAgentLabel');
+        if (profileAgentEl) profileAgentEl.textContent = agentLabel;
+        const profileRegexEl = document.getElementById('profileCurrentRegexGroupLabel');
+        if (profileRegexEl) profileRegexEl.textContent = regexLabel;
+        const tokenCounterEl = document.getElementById('profileTokenCounterLabel');
+        if (tokenCounterEl) tokenCounterEl.textContent = appState.tokenCounterMode;
+
         updateChatAgentMeta();
+    }
+
+    function refreshWorkspaceModelDisplays() {
+        refreshWorkspaceDisplays();
+    }
+
+    function loadWorkspaceAgent() {
+        try {
+            const stored = localStorage.getItem(WORKSPACE_AGENT_STORAGE_KEY);
+            if (stored && agentCatalog[stored]) appState.workspaceCurrentAgentId = stored;
+        } catch (_e) { /* ignore */ }
+    }
+
+    function persistWorkspaceAgent() {
+        try {
+            localStorage.setItem(WORKSPACE_AGENT_STORAGE_KEY, appState.workspaceCurrentAgentId);
+        } catch (_e) { /* ignore */ }
+    }
+
+    function setWorkspaceAgent(agentId) {
+        if (!agentCatalog[agentId]) return;
+        appState.workspaceCurrentAgentId = agentId;
+        persistWorkspaceAgent();
+        refreshWorkspaceDisplays();
+    }
+
+    function persistAgentCatalog() {
+        try {
+            localStorage.setItem(AGENT_CATALOG_STORAGE_KEY, JSON.stringify(agentCatalog));
+        } catch (_e) { /* ignore */ }
+    }
+
+    function loadAgentCatalog() {
+        try {
+            const stored = localStorage.getItem(AGENT_CATALOG_STORAGE_KEY);
+            if (!stored) return;
+            const parsed = JSON.parse(stored);
+            Object.keys(parsed).forEach(function (id) {
+                agentCatalog[id] = parsed[id];
+            });
+        } catch (_e) { /* ignore */ }
+    }
+
+    function openAgentPickerModal() {
+        const modal = document.getElementById('agentPickerModal');
+        const list = document.getElementById('agentPickerList');
+        if (!modal || !list) return;
+        let html = '';
+        Object.keys(agentCatalog).forEach(function (id) {
+            const def = agentCatalog[id].definition;
+            const selected = id === appState.workspaceCurrentAgentId;
+            html +=
+                '<button type="button" class="agent-picker-item' +
+                (selected ? ' is-selected' : '') +
+                '" data-agent-pick="' +
+                id +
+                '">' +
+                escapeHtml(def.name) +
+                '</button>';
+        });
+        list.innerHTML = html;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeAgentPickerModal() {
+        const modal = document.getElementById('agentPickerModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openRegexGroupPickerModal() {
+        const modal = document.getElementById('regexGroupPickerModal');
+        const list = document.getElementById('regexGroupPickerList');
+        if (!modal || !list) return;
+        let html =
+            '<button type="button" class="agent-picker-item' +
+            (!appState.workspaceCurrentRegexGroupId ? ' is-selected' : '') +
+            '" data-regex-group-pick="">不启用</button>';
+        appState.regexGroups.forEach(function (group) {
+            const selected = group.groupId === appState.workspaceCurrentRegexGroupId;
+            html +=
+                '<button type="button" class="agent-picker-item' +
+                (selected ? ' is-selected' : '') +
+                '" data-regex-group-pick="' +
+                escapeHtml(group.groupId) +
+                '">' +
+                escapeHtml(group.displayName || group.groupId) +
+                '</button>';
+        });
+        list.innerHTML = html;
+        modal.classList.remove('hidden');
+        modal.setAttribute('aria-hidden', 'false');
+    }
+
+    function closeRegexGroupPickerModal() {
+        const modal = document.getElementById('regexGroupPickerModal');
+        if (!modal) return;
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+
+    function openTokenCounterPicker() {
+        const modes = ['auto', 'heuristic', 'tiktoken', 'claude', 'gemma', 'llama3', 'mistral'];
+        showBottomSheet(
+            modes.map(function (mode) {
+                return { label: mode + (mode === appState.tokenCounterMode ? ' ✓' : ''), action: mode };
+            }),
+            function (action) {
+                appState.tokenCounterMode = action;
+                try {
+                    localStorage.setItem(TOKEN_COUNTER_STORAGE_KEY, action);
+                } catch (_e) { /* ignore */ }
+                refreshWorkspaceDisplays();
+                showToast('Token 计数器：' + action, 1500);
+            },
+        );
+    }
+
+    function exportDatabaseMock() {
+        const payload = {
+            exportedAt: new Date().toISOString(),
+            workspaceCurrentModelId: appState.workspaceCurrentModelId,
+            workspaceCurrentAgentId: appState.workspaceCurrentAgentId,
+            workspaceCurrentRegexGroupId: appState.workspaceCurrentRegexGroupId,
+            agentCatalog: agentCatalog,
+            regexGroups: appState.regexGroups,
+            regexRules: appState.regexRules,
+            compactionConditions: appState.globalCompactionConditions,
+            eventsConfig: appState.globalEventsConfig,
+            llmStreamEnabled: appState.llmStreamEnabled,
+            chatRichTextEnabled: appState.chatRichTextEnabled,
+            tokenCounterMode: appState.tokenCounterMode,
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'novel-master-mock-backup.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('数据库已导出');
+    }
+
+    function importDatabaseMock() {
+        const input = document.getElementById('dbImportInput');
+        if (!input) return;
+        input.value = '';
+        input.onchange = function () {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function () {
+                try {
+                    const data = JSON.parse(String(reader.result || '{}'));
+                    if (data.workspaceCurrentModelId) {
+                        setWorkspaceModel(data.workspaceCurrentModelId);
+                    }
+                    if (data.workspaceCurrentAgentId && agentCatalog[data.workspaceCurrentAgentId]) {
+                        setWorkspaceAgent(data.workspaceCurrentAgentId);
+                    }
+                    if (data.agentCatalog) {
+                        Object.keys(agentCatalog).forEach(function (k) { delete agentCatalog[k]; });
+                        Object.keys(data.agentCatalog).forEach(function (k) {
+                            agentCatalog[k] = data.agentCatalog[k];
+                        });
+                        persistAgentCatalog();
+                    }
+                    if (Array.isArray(data.regexGroups)) appState.regexGroups = data.regexGroups;
+                    if (Array.isArray(data.regexRules)) appState.regexRules = data.regexRules;
+                    if (data.workspaceCurrentRegexGroupId !== undefined) {
+                        appState.workspaceCurrentRegexGroupId = data.workspaceCurrentRegexGroupId;
+                    }
+                    if (data.compactionConditions) appState.globalCompactionConditions = data.compactionConditions;
+                    if (data.eventsConfig) appState.globalEventsConfig = data.eventsConfig;
+                    if (data.llmStreamEnabled != null) {
+                        appState.llmStreamEnabled = !!data.llmStreamEnabled;
+                        const sw = document.getElementById('profileLlmStreamSwitch');
+                        if (sw) sw.checked = appState.llmStreamEnabled;
+                    }
+                    if (data.chatRichTextEnabled != null) {
+                        appState.chatRichTextEnabled = !!data.chatRichTextEnabled;
+                        const sw = document.getElementById('profileChatRichTextSwitch');
+                        if (sw) sw.checked = appState.chatRichTextEnabled;
+                    }
+                    if (data.tokenCounterMode) appState.tokenCounterMode = data.tokenCounterMode;
+                    persistAllWorkspacePrefs();
+                    renderAgentList();
+                    renderRegexGroupList();
+                    refreshWorkspaceDisplays();
+                    showToast('数据库已导入，请刷新页面以完全生效');
+                } catch (_e) {
+                    showToast('导入失败：JSON 无效');
+                }
+            };
+            reader.readAsText(file);
+        };
+        if (!confirm('将用所选备份完全替换当前 mock 数据，是否继续？')) return;
+        input.click();
+    }
+
+    function loadWorkspacePrefs() {
+        try {
+            const compaction = localStorage.getItem(COMPACTION_CONDITIONS_STORAGE_KEY);
+            if (compaction) appState.globalCompactionConditions = JSON.parse(compaction);
+            const events = localStorage.getItem(EVENTS_CONFIG_STORAGE_KEY);
+            if (events) appState.globalEventsConfig = JSON.parse(events);
+            const stream = localStorage.getItem(LLM_STREAM_STORAGE_KEY);
+            if (stream != null) appState.llmStreamEnabled = stream === 'true';
+            const rich = localStorage.getItem(CHAT_RICH_TEXT_STORAGE_KEY);
+            if (rich != null) appState.chatRichTextEnabled = rich === 'true';
+            const counter = localStorage.getItem(TOKEN_COUNTER_STORAGE_KEY);
+            if (counter) appState.tokenCounterMode = counter;
+        } catch (_e) { /* ignore */ }
+        const llmSwitch = document.getElementById('profileLlmStreamSwitch');
+        if (llmSwitch) llmSwitch.checked = appState.llmStreamEnabled;
+        const richSwitch = document.getElementById('profileChatRichTextSwitch');
+        if (richSwitch) richSwitch.checked = appState.chatRichTextEnabled;
+    }
+
+    function persistAllWorkspacePrefs() {
+        try {
+            if (appState.globalCompactionConditions) {
+                localStorage.setItem(COMPACTION_CONDITIONS_STORAGE_KEY, JSON.stringify(appState.globalCompactionConditions));
+            }
+            if (appState.globalEventsConfig) {
+                localStorage.setItem(EVENTS_CONFIG_STORAGE_KEY, JSON.stringify(appState.globalEventsConfig));
+            }
+            localStorage.setItem(LLM_STREAM_STORAGE_KEY, String(appState.llmStreamEnabled));
+            localStorage.setItem(CHAT_RICH_TEXT_STORAGE_KEY, String(appState.chatRichTextEnabled));
+            localStorage.setItem(TOKEN_COUNTER_STORAGE_KEY, appState.tokenCounterMode);
+        } catch (_e) { /* ignore */ }
+    }
+
+    function setupAgentPickerModal() {
+        document.querySelectorAll('[data-action="close-agent-picker"]').forEach(function (btn) {
+            btn.addEventListener('click', closeAgentPickerModal);
+        });
+        const list = document.getElementById('agentPickerList');
+        if (list) {
+            list.addEventListener('click', function (e) {
+                const btn = e.target.closest('[data-agent-pick]');
+                if (!btn) return;
+                setWorkspaceAgent(btn.getAttribute('data-agent-pick'));
+                closeAgentPickerModal();
+                showToast('已切换工作区 agent');
+            });
+        }
+    }
+
+    function setupRegexGroupPickerModal() {
+        document.querySelectorAll('[data-action="close-regex-group-picker"]').forEach(function (btn) {
+            btn.addEventListener('click', closeRegexGroupPickerModal);
+        });
+        const list = document.getElementById('regexGroupPickerList');
+        if (list) {
+            list.addEventListener('click', function (e) {
+                const btn = e.target.closest('[data-regex-group-pick]');
+                if (!btn) return;
+                const groupId = btn.getAttribute('data-regex-group-pick') || null;
+                appState.workspaceCurrentRegexGroupId = groupId;
+                try {
+                    localStorage.setItem(WORKSPACE_REGEX_GROUP_STORAGE_KEY, groupId || '');
+                } catch (_e) { /* ignore */ }
+                refreshWorkspaceDisplays();
+                closeRegexGroupPickerModal();
+                showToast(groupId ? '已切换正则组' : '已禁用正则组');
+            });
+        }
     }
 
     function populateModelPickerSelects(providerId, vendorModelId) {
@@ -2054,7 +2395,6 @@
         Object.keys(agentCatalog).forEach(function (id) {
             const entry = agentCatalog[id];
             const def = entry.definition;
-            const isDefault = appState.defaultAgentId === id;
             html +=
                 '<div class="agent-item' +
                 listItemSelectedClass(listId, id) +
@@ -2066,7 +2406,6 @@
             html += '<div class="agent-name">' + def.name + '</div>';
             html += '<div class="agent-meta">' + agentListMeta(def) + '</div>';
             html += '</div>';
-            if (isDefault && !isBatchMode(listId)) html += '<span class="default-badge">默认</span>';
             if (!isBatchMode(listId)) {
                 html += '<button type="button" class="agent-menu-btn" data-agent-menu="' +
                     id +
@@ -2075,7 +2414,7 @@
             html += '</div>';
         });
         host.innerHTML = html;
-        updateChatAgentMeta();
+        refreshWorkspaceDisplays();
     }
 
     function resolveDisplayModelIdForAgent(def) {
@@ -2084,7 +2423,7 @@
     }
 
     function updateChatAgentMeta() {
-        const entry = agentCatalog[appState.defaultAgentId];
+        const entry = agentCatalog[appState.workspaceCurrentAgentId];
         if (!entry) return;
         const def = entry.definition;
         const agentEl = document.querySelector('.chat-meta .agent-name');
@@ -2374,6 +2713,7 @@
             return;
         }
         agentCatalog[appState.editingAgentId].definition = def;
+        persistAgentCatalog();
         clearAgentEditorDirty();
         renderAgentList();
         renderAgentEditor(appState.editingAgentId);
@@ -2394,29 +2734,36 @@
                 ],
             },
         };
+        persistAgentCatalog();
         renderAgentList();
         openAgentEditor(id);
     }
 
     function showAgentItemMenu(agentId) {
-        const isDefault = appState.defaultAgentId === agentId;
         showBottomSheet(
             [
-                { label: '设为默认', action: 'set-default', disabled: isDefault },
+                { label: '重命名', action: 'rename' },
                 { label: '复制', action: 'duplicate' },
                 { label: '删除', action: 'delete', danger: true },
-            ].filter(function (item) { return !item.disabled; }),
+            ],
             function (action) {
-                if (action === 'set-default') {
-                    appState.defaultAgentId = agentId;
+                if (action === 'rename') {
+                    const entry = agentCatalog[agentId];
+                    if (!entry) return;
+                    const next = prompt('Agent 名称', entry.definition.name);
+                    if (!next || !next.trim()) return;
+                    entry.definition.name = next.trim();
+                    persistAgentCatalog();
                     renderAgentList();
-                    showToast('已设为默认 Agent');
+                    if (appState.editingAgentId === agentId) renderAgentEditor(agentId);
+                    showToast('已重命名');
                     return;
                 }
                 if (action === 'duplicate') {
                     const copyId = 'agent-' + Date.now();
                     agentCatalog[copyId] = { id: copyId, definition: deepClone(agentCatalog[agentId].definition) };
                     agentCatalog[copyId].definition.name += '-copy';
+                    persistAgentCatalog();
                     renderAgentList();
                     showToast('已复制 Agent');
                     return;
@@ -2426,11 +2773,12 @@
                         showToast('至少保留一个 Agent');
                         return;
                     }
-                    if (appState.defaultAgentId === agentId) {
+                    if (appState.workspaceCurrentAgentId === agentId) {
                         const remaining = Object.keys(agentCatalog).filter(function (k) { return k !== agentId; });
-                        appState.defaultAgentId = remaining[0];
+                        setWorkspaceAgent(remaining[0]);
                     }
                     delete agentCatalog[agentId];
+                    persistAgentCatalog();
                     renderAgentList();
                     showToast('已删除 Agent');
                 }
@@ -2447,13 +2795,13 @@
         };
     }
 
-    function renderCompactionPolicyPage() {
-        const root = document.getElementById('compactionPolicyRoot');
+    function renderCompactionConditionsPage() {
+        const root = document.getElementById('compactionConditionsRoot');
         if (!root) return;
-        if (!appState.globalCompactionPolicy) {
-            appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
+        if (!appState.globalCompactionConditions) {
+            appState.globalCompactionConditions = defaultGlobalCompactionPolicy();
         }
-        const policy = appState.globalCompactionPolicy;
+        const policy = appState.globalCompactionConditions;
 
         let html = '';
         html += '<section class="agent-form-section"><h3>压缩条件</h3>';
@@ -2468,8 +2816,8 @@
         root.innerHTML = html;
     }
 
-    function collectCompactionPolicyFromForm() {
-        const root = document.getElementById('compactionPolicyRoot');
+    function collectCompactionConditionsFromForm() {
+        const root = document.getElementById('compactionConditionsRoot');
         if (!root) return null;
         const enabledEl = root.querySelector('[data-policy-field="enabled"]');
         const enabled = enabledEl ? enabledEl.checked : false;
@@ -2489,15 +2837,18 @@
         };
     }
 
-    function saveCompactionPolicy() {
-        const policy = collectCompactionPolicyFromForm();
+    function saveCompactionConditions() {
+        const policy = collectCompactionConditionsFromForm();
         if (!policy) return;
-        appState.globalCompactionPolicy = policy;
-        showToast('已保存全局压缩策略');
+        appState.globalCompactionConditions = policy;
+        try {
+            localStorage.setItem(COMPACTION_CONDITIONS_STORAGE_KEY, JSON.stringify(policy));
+        } catch (_e) { /* ignore */ }
+        showToast('已保存压缩条件');
     }
 
-    function setupCompactionPolicyPage() {
-        const root = document.getElementById('compactionPolicyRoot');
+    function setupCompactionConditionsPage() {
+        const root = document.getElementById('compactionConditionsRoot');
         if (!root) return;
         root.addEventListener('change', function (e) {
             if (e.target.matches('[data-policy-field="enabled"]')) {
@@ -2505,8 +2856,92 @@
                 if (panel) panel.classList.toggle('hidden', !e.target.checked);
             }
         });
-        const saveBtn = document.querySelector('[data-action="save-compaction-policy"]');
-        if (saveBtn) saveBtn.addEventListener('click', saveCompactionPolicy);
+        const saveBtn = document.querySelector('[data-action="save-compaction-conditions"]');
+        if (saveBtn) saveBtn.addEventListener('click', saveCompactionConditions);
+    }
+
+    function defaultEventsConfig() {
+        return {
+            schemaVersion: 2,
+            events: {
+                'session.compaction.requested': {
+                    mode: 'parallel',
+                    actions: [
+                        { type: 'hide-message', params: { 'start-depth': 6 } },
+                        { type: 'refresh-macros' },
+                    ],
+                },
+            },
+        };
+    }
+
+    function renderEventsConfigPage() {
+        const root = document.getElementById('eventsConfigRoot');
+        if (!root) return;
+        if (!appState.globalEventsConfig) {
+            appState.globalEventsConfig = defaultEventsConfig();
+        }
+        const config = appState.globalEventsConfig;
+        let html = '';
+        html += '<section class="agent-form-section events-config-block">';
+        html += '<h3>事件块</h3>';
+        html += '<p class="agent-field-hint">满足压缩条件时触发 <code>session.compaction.requested</code>；动作可编辑并持久化。</p>';
+        Object.keys(config.events || {}).forEach(function (eventId) {
+            const block = config.events[eventId];
+            html += '<div class="events-config-event" data-event-id="' + escapeHtml(eventId) + '">';
+            html += '<label class="agent-field"><span>事件 ID</span><input type="text" readonly value="' + escapeHtml(eventId) + '"></label>';
+            html += '<label class="agent-field"><span>执行模式</span><select data-event-field="mode">';
+            ['parallel', 'sequential'].forEach(function (mode) {
+                html += '<option value="' + mode + '"' + (block.mode === mode ? ' selected' : '') + '>' + mode + '</option>';
+            });
+            html += '</select></label>';
+            html += '<label class="agent-field"><span>动作 JSON</span><textarea data-event-field="actions" rows="6">' +
+                escapeHtml(JSON.stringify(block.actions || [], null, 2)) +
+                '</textarea></label>';
+            html += '</div>';
+        });
+        html += '</section>';
+        root.innerHTML = html;
+    }
+
+    function collectEventsConfigFromForm() {
+        const root = document.getElementById('eventsConfigRoot');
+        if (!root) return null;
+        const events = {};
+        const blocks = root.querySelectorAll('[data-event-id]');
+        for (let i = 0; i < blocks.length; i++) {
+            const blockEl = blocks[i];
+            const eventId = blockEl.getAttribute('data-event-id');
+            const modeEl = blockEl.querySelector('[data-event-field="mode"]');
+            const actionsEl = blockEl.querySelector('[data-event-field="actions"]');
+            let actions = [];
+            try {
+                actions = JSON.parse(actionsEl ? actionsEl.value : '[]');
+            } catch (_e) {
+                showToast('动作 JSON 格式无效');
+                return null;
+            }
+            events[eventId] = {
+                mode: modeEl ? modeEl.value : 'parallel',
+                actions: actions,
+            };
+        }
+        return { schemaVersion: 2, events: events };
+    }
+
+    function saveEventsConfig() {
+        const config = collectEventsConfigFromForm();
+        if (!config) return;
+        appState.globalEventsConfig = config;
+        try {
+            localStorage.setItem(EVENTS_CONFIG_STORAGE_KEY, JSON.stringify(config));
+        } catch (_e) { /* ignore */ }
+        showToast('已保存事件配置');
+    }
+
+    function setupEventsConfigPage() {
+        const saveBtn = document.querySelector('[data-action="save-events-config"]');
+        if (saveBtn) saveBtn.addEventListener('click', saveEventsConfig);
     }
 
     function setupAgentEditor() {
@@ -3669,11 +4104,22 @@
         setupListBatchSelection();
         setupFileEditor();
         setupAgentEditor();
-        setupCompactionPolicyPage();
-        appState.globalCompactionPolicy = defaultGlobalCompactionPolicy();
+        loadAgentCatalog();
+        loadWorkspaceAgent();
+        loadWorkspacePrefs();
+        setupCompactionConditionsPage();
+        setupEventsConfigPage();
+        if (!appState.globalCompactionConditions) {
+            appState.globalCompactionConditions = defaultGlobalCompactionPolicy();
+        }
+        if (!appState.globalEventsConfig) {
+            appState.globalEventsConfig = defaultEventsConfig();
+        }
         setupProjectsAndSessions();
         setupAgentsAndProviders();
         setupWorkspaceModel();
+        setupAgentPickerModal();
+        setupRegexGroupPickerModal();
         setupRegexConfig();
 
         navigateToPage('chat');

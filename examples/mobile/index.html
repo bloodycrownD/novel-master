@@ -131,8 +131,8 @@
                 </div>
             </div>
 
-            <!-- Agent 列表（底栏 Tab） -->
-            <div id="agentsPage" class="page">
+            <!-- Agent 管理（从「我的 → 配置」进入） -->
+            <div id="agentsSettingsPage" class="page">
                 <div class="manage-header" data-batch-header="agents">
                     <div class="manage-header-normal section-header">
                         <h2>Agent</h2>
@@ -163,10 +163,64 @@
             <!-- 我的页面 -->
             <div id="profilePage" class="page">
                 <div class="menu-list">
+                    <div class="menu-section-title">工作区</div>
                     <div class="menu-item" data-action="current-model">
                         <div class="menu-icon">🤖</div>
                         <div class="menu-label">当前模型</div>
                         <div id="profileCurrentModelLabel" class="menu-value">—</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="current-agent">
+                        <div class="menu-icon">🧠</div>
+                        <div class="menu-label">当前 agent</div>
+                        <div id="profileCurrentAgentLabel" class="menu-value">—</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="current-regex-group">
+                        <div class="menu-icon">🛡️</div>
+                        <div class="menu-label">当前正则组</div>
+                        <div id="profileCurrentRegexGroupLabel" class="menu-value">不启用</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item menu-item--switch" data-action="toggle-llm-stream">
+                        <div class="menu-icon">⚡</div>
+                        <div class="menu-label">流式输出</div>
+                        <label class="menu-switch">
+                            <input type="checkbox" id="profileLlmStreamSwitch" checked>
+                            <span class="menu-switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="menu-item menu-item--switch" data-action="toggle-chat-rich-text">
+                        <div class="menu-icon">📝</div>
+                        <div class="menu-label">富文本消息</div>
+                        <label class="menu-switch">
+                            <input type="checkbox" id="profileChatRichTextSwitch">
+                            <span class="menu-switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="menu-item" data-action="token-counter-mode">
+                        <div class="menu-icon">🔢</div>
+                        <div class="menu-label">Token 计数器</div>
+                        <div id="profileTokenCounterLabel" class="menu-value">auto</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-section-title">数据管理</div>
+                    <div class="menu-item" data-action="export-database">
+                        <div class="menu-icon">💾</div>
+                        <div class="menu-label">导出数据库</div>
+                        <div class="menu-value">分享备份文件</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="import-database">
+                        <div class="menu-icon">📥</div>
+                        <div class="menu-label">导入数据库</div>
+                        <div class="menu-value">完全替换</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-section-title">配置</div>
+                    <div class="menu-item" data-action="agents-settings">
+                        <div class="menu-icon">🤖</div>
+                        <div class="menu-label">agent管理</div>
                         <div class="menu-arrow">›</div>
                     </div>
                     <div class="menu-item" data-action="providers">
@@ -174,9 +228,14 @@
                         <div class="menu-label">服务商管理</div>
                         <div class="menu-arrow">›</div>
                     </div>
-                    <div class="menu-item" data-action="compaction-policy">
+                    <div class="menu-item" data-action="compaction-conditions">
                         <div class="menu-icon">🗜️</div>
-                        <div class="menu-label">压缩策略</div>
+                        <div class="menu-label">压缩条件</div>
+                        <div class="menu-arrow">›</div>
+                    </div>
+                    <div class="menu-item" data-action="events-config">
+                        <div class="menu-icon">⚡</div>
+                        <div class="menu-label">事件配置</div>
                         <div class="menu-arrow">›</div>
                     </div>
                     <div class="menu-item" data-action="regex-config">
@@ -189,25 +248,23 @@
                         <div class="menu-label">全局模板</div>
                         <div class="menu-arrow">›</div>
                     </div>
-                    <div class="menu-item" data-action="settings">
-                        <div class="menu-icon">⚙️</div>
-                        <div class="menu-label">扩展设置</div>
-                        <div class="menu-arrow">›</div>
-                    </div>
-                    <div class="menu-item" data-action="debug">
-                        <div class="menu-icon">🔧</div>
-                        <div class="menu-label">开发调试</div>
-                        <div class="menu-arrow">›</div>
-                    </div>
                 </div>
             </div>
 
-            <!-- 全局压缩策略（从「我的」进入） -->
-            <div id="compactionPolicyPage" class="page">
+            <!-- 全局压缩条件（从「我的 → 配置」进入） -->
+            <div id="compactionConditionsPage" class="page">
                 <div class="compaction-policy-toolbar">
-                    <button type="button" class="toolbar-btn btn-primary" data-action="save-compaction-policy">保存</button>
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-compaction-conditions">保存</button>
                 </div>
-                <div id="compactionPolicyRoot" class="compaction-policy-form"></div>
+                <div id="compactionConditionsRoot" class="compaction-policy-form"></div>
+            </div>
+
+            <!-- 事件配置（从「我的 → 配置」进入） -->
+            <div id="eventsConfigPage" class="page">
+                <div class="compaction-policy-toolbar">
+                    <button type="button" class="toolbar-btn btn-primary" data-action="save-events-config">保存</button>
+                </div>
+                <div id="eventsConfigRoot" class="events-config-form"></div>
             </div>
 
             <!-- 全局模板（从「我的」进入） -->
@@ -481,12 +538,6 @@ status: draft
                 </svg>
                 <span>对话</span>
             </button>
-            <button class="nav-item" data-page="agents">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-1H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
-                </svg>
-                <span>Agent</span>
-            </button>
             <button class="nav-item" data-page="profile">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
@@ -522,10 +573,16 @@ status: draft
             <h2>会话操作</h2>
         </div>
         <nav class="drawer-menu">
-            <button type="button" class="drawer-menu-item drawer-menu-item--split" data-session-action="switch-model">
-                <span>切换模型</span>
-                <span id="sessionDrawerCurrentModelLabel" class="drawer-menu-item-value">—</span>
-            </button>
+            <div class="drawer-readonly-block">
+                <span class="drawer-readonly-label">当前 agent</span>
+                <span id="sessionDrawerCurrentAgentLabel" class="drawer-readonly-value">—</span>
+            </div>
+            <div class="drawer-readonly-block">
+                <span class="drawer-readonly-label">当前模型</span>
+                <span id="sessionDrawerCurrentModelLabel" class="drawer-readonly-value">—</span>
+            </div>
+            <button type="button" class="drawer-menu-item" data-session-action="switch-agent">切换 agent</button>
+            <button type="button" class="drawer-menu-item" data-session-action="switch-model">切换模型</button>
             <button type="button" class="drawer-menu-item" data-session-action="real-prompt">真实提示词</button>
             <button type="button" class="drawer-menu-item" data-session-action="session-log">会话日志</button>
         </nav>
@@ -643,6 +700,36 @@ status: draft
             </div>
         </div>
     </div>
+
+    <!-- Agent 选择 -->
+    <div id="agentPickerModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-agent-picker"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="选择 agent">
+            <section class="agent-form-section">
+                <h3>选择工作区 agent</h3>
+                <div id="agentPickerList" class="agent-picker-list"></div>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-action="close-agent-picker">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 正则组选择 -->
+    <div id="regexGroupPickerModal" class="modal hidden" aria-hidden="true">
+        <div class="modal-backdrop" data-action="close-regex-group-picker"></div>
+        <div class="modal-panel model-picker-panel" role="dialog" aria-label="选择正则组">
+            <section class="agent-form-section">
+                <h3>选择工作区正则组</h3>
+                <div id="regexGroupPickerList" class="agent-picker-list"></div>
+            </section>
+            <div class="modal-actions">
+                <button type="button" class="btn-secondary" data-action="close-regex-group-picker">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="dbImportInput" accept="application/json,.json" hidden>
 
     <!-- Toast 提示 -->
     <div id="toast" class="toast hidden"></div>
