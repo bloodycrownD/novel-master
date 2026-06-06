@@ -7,7 +7,6 @@
 import { readFile } from "node:fs/promises";
 import {
   applyRegexChannelForLlm,
-  buildPromptLlmInput,
   countPromptLlmInput,
   formatPromptLlmInputForCli,
   loadPromptBlocksFromYaml,
@@ -62,8 +61,7 @@ export async function runPrompt(
   ]);
 
   const ctx = { worktreeDisplay, filetreeDisplay, messages };
-  const input = buildPromptLlmInput(blocks, ctx);
-  const text = formatPromptLlmInputForCli(blocks, input, ctx);
+  const text = formatPromptLlmInputForCli(blocks, ctx);
   if (text.length > 0) {
     process.stdout.write(text);
   }
@@ -78,7 +76,7 @@ export async function runPrompt(
     }
 
     if (applicationModelId == null) {
-      const serialized = serializePromptLlmInput(input);
+      const serialized = serializePromptLlmInput(blocks, ctx);
       const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
       console.error(
         JSON.stringify({
@@ -101,7 +99,8 @@ export async function runPrompt(
     }
 
     const result = await countPromptLlmInput({
-      input,
+      blocks,
+      ctx,
       applicationModelId,
       registry: rt.tokenCounters,
     });

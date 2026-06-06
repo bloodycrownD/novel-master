@@ -21,10 +21,10 @@ export async function buildRealPromptPreviewSegments(
   scope: PromptPreviewScope,
 ): Promise<readonly PromptPreviewSegment[]> {
   const {definition} = await resolveCurrentAgentDefinition(runtime);
-  const {ctx, input} = await buildSessionPromptInput(
+  const {blocks, ctx} = await buildSessionPromptInput(
     runtime,
     scope,
     definition,
   );
-  return buildPromptPreviewSegments(definition.prompts, input, ctx);
+  return buildPromptPreviewSegments(blocks, ctx);
 }

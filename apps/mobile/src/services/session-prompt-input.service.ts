@@ -4,6 +4,7 @@
 import {
   buildPromptLlmInput,
   type AgentDefinition,
+  type PromptBlock,
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core';
@@ -19,6 +20,7 @@ export interface SessionPromptScope {
 
 export interface SessionPromptInputBundle {
   readonly definition: AgentDefinition;
+  readonly blocks: readonly PromptBlock[];
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
 }
@@ -48,5 +50,5 @@ export async function buildSessionPromptInput(
 
   const ctx: PromptRenderContext = {worktreeDisplay, filetreeDisplay, messages};
   const input = buildPromptLlmInput(resolved.prompts, ctx);
-  return {definition: resolved, ctx, input};
+  return {definition: resolved, blocks: resolved.prompts, ctx, input};
 }

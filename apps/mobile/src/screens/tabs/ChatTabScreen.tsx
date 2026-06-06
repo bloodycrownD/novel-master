@@ -815,7 +815,8 @@ export function ChatTabScreen() {
     setStreamingText('');
     setStreamingThinking('');
     await reloadMessages(true);
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
+    void refreshChatTokenLabel();
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
 
   const hideSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
@@ -824,7 +825,8 @@ export function ChatTabScreen() {
     }
     exitMessageBatch();
     await reloadMessages(true);
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
+    void refreshChatTokenLabel();
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
 
   const unhideSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
@@ -833,7 +835,8 @@ export function ChatTabScreen() {
     }
     exitMessageBatch();
     await reloadMessages(true);
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages]);
+    void refreshChatTokenLabel();
+  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
 
   const confirmMessageBatchDelete = useCallback(() => {
     const count = messageBatch.selectedCount;
@@ -895,11 +898,12 @@ export function ChatTabScreen() {
       try {
         await runtime.messages.hide(messageId);
         await reloadMessages(true);
+        void refreshChatTokenLabel();
       } catch (error) {
         showToast(toastMessage('隐藏失败', error));
       }
     },
-    [runtime, reloadMessages, showToast],
+    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleShowMessage = useCallback(
@@ -907,11 +911,12 @@ export function ChatTabScreen() {
       try {
         await runtime.messages.show(messageId);
         await reloadMessages(true);
+        void refreshChatTokenLabel();
       } catch (error) {
         showToast(toastMessage('取消隐藏失败', error));
       }
     },
-    [runtime, reloadMessages, showToast],
+    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleCompactSession = useCallback(() => {
@@ -937,6 +942,7 @@ export function ChatTabScreen() {
                   {sessionId, projectId, trigger: 'manual'},
                 );
                 await reloadMessages(true);
+                void refreshChatTokenLabel();
                 if (!result.ok) {
                   showToast(toastMessage('压缩部分失败', result.failures[0]?.error));
                 } else {
@@ -956,6 +962,7 @@ export function ChatTabScreen() {
     sessionId,
     runtime.eventOrchestrator,
     reloadMessages,
+    refreshChatTokenLabel,
     showToast,
   ]);
 
@@ -966,11 +973,12 @@ export function ChatTabScreen() {
         setStreamingText('');
         setStreamingThinking('');
         await reloadMessages(true);
+        void refreshChatTokenLabel();
       } catch (error) {
         showToast(toastMessage('删除失败', error));
       }
     },
-    [runtime, reloadMessages, showToast],
+    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleMessageMenuAction = useCallback(
