@@ -101,7 +101,8 @@ function macroRoot(ctx: PromptRenderContext): {
 
 /**
  * Single block-order traversal: text macros + chat preview segments.
- * Preview, CLI format, token serialize, and LLM input all derive from this.
+ * Preview, CLI format, and token serialize derive from this; LLM input uses
+ * the same macro expansion and block order via a parallel walk in buildPromptLlmInput.
  */
 export function buildPromptAssembly(
   blocks: readonly PromptBlock[],
