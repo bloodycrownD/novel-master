@@ -1,5 +1,6 @@
 appId: com.novelmaster.desktop
 productName: Novel Master
+electronVersion: "35.7.5"
 directories:
   output: release
 files:

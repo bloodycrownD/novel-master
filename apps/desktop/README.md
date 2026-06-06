@@ -1,19 +1,33 @@
 # @novel-master/desktop
 
-Electron 桌面应用包（**壳 + 占位 renderer**）。
+Electron desktop app — three-column shell, full Novel Master runtime via IPC, settings overlay, and cross-platform packaging.
 
-## UI 原型在哪？
+## UI prototype
 
-**请在 `examples/desktop/` 迭代布局原型**（浏览器打开，无需 Electron）。
-
-本包的 `renderer/` 仅为 Electron 启动占位，**不与 examples 同步**。正式产品将用 React/Vue 重写 renderer。
+Layout reference lives in [`examples/desktop/`](../../examples/desktop/) (browser-openable). Production UI is React in `renderer/`, aligned with prototype DOM ids and `SETTINGS_NAV`.
 
 ## Scripts
 
-- `npm run build -w @novel-master/desktop` — 编译 main/preload TypeScript
-- `npm run dev -w @novel-master/desktop` — 构建并启动 Electron（显示占位页）
-## 目录
+| Script | Description |
+|--------|-------------|
+| `npm run build -w @novel-master/desktop` | Vite renderer + TypeScript main/preload |
+| `npm run dev -w @novel-master/desktop` | Vite dev server + Electron |
+| `npm run dist -w @novel-master/desktop` | Build + electron-builder installers |
+| `npm test -w @novel-master/desktop` | Unit/smoke tests (includes optional `electron-builder --dir`) |
 
-- `src/main.ts` — Electron 主进程
-- `src/preload.ts` — preload 桥（预留）
-- `renderer/index.html` — 占位说明页
+## Data & backup
+
+- Database: `%APPDATA%/novel-master/novel.db` (Windows) or equivalent `userData` path.
+- **Export/import**: Settings → 备份与恢复, or IPC `nm:backup/export` / `nm:backup/import`. Uses `.nmbackup` files (full SQLite copy); compatible with mobile exports.
+- Provider API keys are stored via **SKSP** (Windows DPAPI / macOS Keychain) through `secretStore.set` on create/edit.
+
+## Packaging
+
+- `electron-builder.yml`: NSIS (Win), DMG (mac), tokenizer assets in `extraResources`.
+- Installers are **unsigned** — on macOS, use right-click → Open or adjust Gatekeeper for first launch.
+
+## Layout
+
+- `src/main/` — runtime singleton, IPC handlers, agent run, backup, YAML dialogs
+- `renderer/` — React shell (chat rail, explorer, preview, settings overlay)
+- `shared/ipc-types.ts` — typed IPC channel contract
