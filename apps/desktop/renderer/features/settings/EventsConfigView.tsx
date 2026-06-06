@@ -64,25 +64,25 @@ function ActionBlockEditor({
     <div className="config-block-card config-block-card--nested">
       <div className="config-block-card__header">
         <span className="config-block-card__badge">{actionTypeLabel(action.type)}</span>
-        <span className="settings-hint">动作 {index + 1}</span>
+        <span className="settings-hint">?? {index + 1}</span>
         <div className="config-block-card__actions">
           {index > 0 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(-1)}>
-              ↑
+            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="??">
+              ?
             </button>
           ) : null}
           {index < total - 1 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(1)}>
-              ↓
+            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="??">
+              ?
             </button>
           ) : null}
-          <button type="button" className="icon-btn" onClick={onDelete}>
-            ×
+          <button type="button" className="icon-btn" onClick={onDelete} aria-label="??">
+            �
           </button>
         </div>
       </div>
       <p className="settings-hint">{actionTypeHint(action.type)}</p>
-      <SettingsField label="依赖（DAG）">
+      <SettingsField label="???DAG?">
         <div className="config-dep-chips">
           {availableDependencies.map((dep) => (
             <button
@@ -98,7 +98,7 @@ function ActionBlockEditor({
       </SettingsField>
       {action.type === "hide-message" ? (
         <>
-          <SettingsField label="起深度">
+          <SettingsField label="???">
             <input
               type="number"
               value={action.params.startDepth ?? ""}
@@ -113,7 +113,7 @@ function ActionBlockEditor({
               }
             />
           </SettingsField>
-          <SettingsField label="止深度">
+          <SettingsField label="???">
             <input
               type="number"
               value={action.params.endDepth ?? ""}
@@ -169,7 +169,7 @@ function EventBlockEditor({
 
   const deleteAction = (actionIndex: number) => {
     if (block.actions.length <= 1) {
-      showToast("至少保留一个动作");
+      showToast("????????");
       return;
     }
     onChange({ actions: block.actions.filter((_, i) => i !== actionIndex) });
@@ -188,38 +188,41 @@ function EventBlockEditor({
   return (
     <div className="config-block-card config-block-card--event">
       <div className="config-block-card__header">
-        <span className="config-block-card__badge">事件</span>
+        <span className="config-block-card__badge">??</span>
         <span className="settings-hint">
           {index + 1} / {total}
         </span>
         <div className="config-block-card__actions">
           {index > 0 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(-1)}>
-              ↑
+            <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="??">
+              ?
             </button>
           ) : null}
           {index < total - 1 ? (
-            <button type="button" className="icon-btn" onClick={() => onMove(1)}>
-              ↓
+            <button type="button" className="icon-btn" onClick={() => onMove(1)} aria-label="??">
+              ?
             </button>
           ) : null}
-          <button type="button" className="icon-btn" onClick={onDelete}>
-            ×
+          <button type="button" className="icon-btn" onClick={onDelete} aria-label="??">
+            �
           </button>
         </div>
       </div>
-      <SettingsField label="事件">
+      <SettingsField label="??">
         <strong>{eventTypeLabel(block.eventType)}</strong>
       </SettingsField>
       <p className="settings-hint">{eventTypeHint(block.eventType)}</p>
+      <p className="settings-hint">
+        DAG????????????????????????????????????
+      </p>
       <div className="settings-section__actions">
-        <span className="settings-section__title">动作</span>
+        <span className="settings-section__title">??</span>
         <button
           type="button"
           className="settings-link-btn"
           onClick={() => setAddActionOpen((v) => !v)}
         >
-          添加
+          ??
         </button>
       </div>
       {addActionOpen ? (
@@ -297,7 +300,7 @@ export function EventsConfigView() {
 
   const deleteBlock = (id: string) => {
     if (blocks.length <= 1) {
-      showToast("至少保留一个事件");
+      showToast("????????");
       return;
     }
     setBlocks((prev) => prev.filter((b) => b.id !== id));
@@ -350,8 +353,8 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsSetConfig({ config });
       if (res.ok) {
-        setStatus("已保存");
-        showToast("已保存事件配置");
+        setStatus("???");
+        showToast("???????");
       } else {
         setStatus(res.error.message);
         showToast(res.error.message);
@@ -362,18 +365,18 @@ export function EventsConfigView() {
   };
 
   if (loading) {
-    return <p className="settings-hint">加载中…</p>;
+    return <p className="settings-hint">????</p>;
   }
 
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title="事件配置"
-        desc="按事件编排动作链，支持 DAG；可从 YAML 文件导入/导出。"
+        title="????"
+        desc="??????????? DAG??? YAML ????/???"
         footer={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "保存中…" : "保存"}
+              {saving ? "????" : "??"}
             </Button>
             <div className="settings-yaml-links">
               <button
@@ -381,32 +384,32 @@ export function EventsConfigView() {
                 className="settings-link-btn"
                 onClick={() => setConfirmImport(true)}
               >
-                导入 YAML
+                ?? YAML
               </button>
               <button
                 type="button"
                 className="settings-link-btn"
                 onClick={() =>
                   void ipcEventsExportYaml().then((r) => {
-                    if (r.ok && r.data === "saved") showToast("已导出 YAML");
+                    if (r.ok && r.data === "saved") showToast("??? YAML");
                     else if (!r.ok) showToast(r.error.message);
                   })
                 }
               >
-                导出 YAML
+                ?? YAML
               </button>
             </div>
           </div>
         }
       >
-        <SettingsSection title="事件">
+        <SettingsSection title="??">
           <div className="settings-section__actions">
             <button
               type="button"
               className="settings-link-btn"
               onClick={() => setAddEventOpen((v) => !v)}
             >
-              添加事件
+              ????
             </button>
           </div>
           {addEventOpen ? (
@@ -437,14 +440,14 @@ export function EventsConfigView() {
       <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
-        title="导入 YAML"
-        message="将覆盖当前事件配置，是否继续？"
+        title="?? YAML"
+        message="???????????????"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcEventsImportYaml().then((r) => {
             if (r.ok && r.data === "imported") {
               void load();
-              showToast("已导入 YAML");
+              showToast("??? YAML");
             } else if (!r.ok) {
               showToast(r.error.message);
             }

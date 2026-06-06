@@ -110,7 +110,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         setPrompts(loadedPrompts);
       }
       if (removed > 0) {
-        showToast("\u5df2\u79fb\u9664\u5df2\u5e9f\u5f03\u7684\u6458\u8981\u5757\uff08abstract\uff09");
+        showToast("???????????abstract?");
       }
       const toolsWire = toolsFromDefinition(def);
       setToolsMode(toolsWire.mode);
@@ -170,7 +170,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, [loadAgent]);
 
   if (!agentId) {
-    return <p className="settings-hint">\u7f3a\u5c11 agentId</p>;
+    return <p className="settings-hint">?? agentId</p>;
   }
 
   const preferredModelId =
@@ -201,8 +201,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        setStatus("\u5df2\u4fdd\u5b58");
-        showToast("\u5df2\u4fdd\u5b58 Agent \u914d\u7f6e");
+        setStatus("???");
+        showToast("??? Agent ??");
       } else {
         setStatus(saveRes.error.message);
         showToast(saveRes.error.message);
@@ -232,7 +232,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const deleteBlock = (index: number) => {
     if (prompts.length <= 1) {
-      showToast("\u81f3\u5c11\u4fdd\u7559\u4e00\u4e2a Prompt \u5757");
+      showToast("?????? Prompt ?");
       return;
     }
     setPrompts((prev) => prev.filter((_, i) => i !== index));
@@ -268,51 +268,53 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   return (
     <SettingsPanel>
-      {loading ? <p className="settings-hint">\u52a0\u8f7d\u4e2d\u2026</p> : null}
+      {loading ? <p className="settings-hint">????</p> : null}
       <SettingsFormSection
-        title="Agent \u914d\u7f6e"
-        desc={`\u7f16\u8f91 ${agentId}${dirty ? " \u00b7 \u672a\u4fdd\u5b58" : ""}`}
+        title="Agent ??"
+        desc={`?? ${agentId}${dirty ? " · ???" : ""}`}
         footer={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "\u4fdd\u5b58\u4e2d\u2026" : "\u4fdd\u5b58"}
+              {saving ? "????" : "??"}
             </Button>
             <div className="settings-yaml-links">
               <button type="button" className="settings-link-btn" onClick={() => setConfirmImport(true)}>
-                \u5bfc\u5165 YAML
+                ?? YAML
               </button>
               <button
                 type="button"
                 className="settings-link-btn"
                 onClick={() =>
                   void ipcAgentYamlExport({ agentId }).then((r) => {
-                    if (r.ok && r.data === "saved") showToast("\u5df2\u5bfc\u51fa Agent YAML");
+                    if (r.ok && r.data === "saved") showToast("??? Agent YAML");
                     else if (!r.ok) showToast(r.error.message);
                   })
                 }
               >
-                \u5bfc\u51fa YAML
+                ?? YAML
               </button>
             </div>
           </div>
         }
       >
-        <SettingsSection title="\u57fa\u672c\u4fe1\u606f">
-          <SettingsField label="\u540d\u79f0">
+        <SettingsSection title="????">
+          <SettingsField label="??">
             <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </SettingsField>
         </SettingsSection>
 
-        <SettingsSection title="\u6a21\u578b">
+        <SettingsSection title="??">
           <div className="settings-row settings-row--switch">
-            <span className="settings-row__label">\u4e13\u5c5e\u6a21\u578b</span>
-            <Switch checked={modelEnabled} onChange={setModelEnabled} aria-label="\u4e13\u5c5e\u6a21\u578b" />
+            <span className="settings-row__label">????</span>
+            <Switch checked={modelEnabled} onChange={setModelEnabled} aria-label="????" />
           </div>
           {!modelEnabled ? (
-            <p className="settings-hint">\u672a\u542f\u7528\u65f6\u8ddf\u968f\u5de5\u4f5c\u533a\u5f53\u524d\u6a21\u578b\uff08\u4f1a\u8bdd\u64cd\u4f5c\u62bd\u5c49 / \u6211\u7684\uff09\u3002</p>
+            <p className="settings-hint">
+              ???????????????????? / ????
+            </p>
           ) : (
             <>
-              <SettingsField label="\u670d\u52a1\u5546">
+              <SettingsField label="???">
                 <select value={providerId} onChange={(e) => void handleProviderChange(e.target.value)}>
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
@@ -321,7 +323,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   ))}
                 </select>
               </SettingsField>
-              <SettingsField label="\u6a21\u578b">
+              <SettingsField label="??">
                 <select
                   value={vendorModelId}
                   onChange={(e) => setVendorModelId(e.target.value)}
@@ -334,19 +336,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   ))}
                 </select>
               </SettingsField>
-              <p className="settings-hint">model: {preferredModelId ?? "\u2014"}</p>
+              <p className="settings-hint">model: {preferredModelId ?? "?"}</p>
             </>
           )}
         </SettingsSection>
 
-        <SettingsSection title="\u8fd0\u884c\u65f6">
-          <SettingsField label="\u6700\u5927\u6b65\u6570 maxSteps">
+        <SettingsSection title="???">
+          <SettingsField label="???? maxSteps">
             <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
           </SettingsField>
         </SettingsSection>
 
-        <SettingsSection title="\u5de5\u5177\u7b56\u7565">
-          <SettingsField label="\u6a21\u5f0f">
+        <SettingsSection title="????">
+          <SettingsField label="??">
             <select value={toolsMode} onChange={(e) => setToolsMode(e.target.value as ToolsMode)}>
               {TOOL_MODE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -356,7 +358,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </select>
           </SettingsField>
           {toolsMode !== "default" ? (
-            <SettingsField label={toolsMode === "allow" ? "\u767d\u540d\u5355\u5de5\u5177\u540d" : "\u9ed1\u540d\u5355\u5de5\u5177\u540d"}>
+            <SettingsField label={toolsMode === "allow" ? "??????" : "??????"}>
               <textarea
                 rows={3}
                 value={toolsList}
@@ -365,23 +367,25 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               />
             </SettingsField>
           ) : (
-            <p className="settings-hint">\u672a\u914d\u7f6e\u65f6\u4f7f\u7528\u5168\u90e8\u5df2\u6ce8\u518c\u5de5\u5177\uff08vfs.read\u3001vfs.write \u7b49\uff09\u3002</p>
+            <p className="settings-hint">
+              ??????????????vfs.read?vfs.write ???
+            </p>
           )}
         </SettingsSection>
 
-        <SettingsSection title="Prompt \u5757">
+        <SettingsSection title="Prompt ?">
           <div className="settings-section__actions">
             <button type="button" className="settings-link-btn" onClick={() => setAddBlockMenu((v) => !v)}>
-              \u6dfb\u52a0
+              ??
             </button>
           </div>
           {addBlockMenu ? (
             <div className="settings-inline-actions">
               <Button variant="secondary" onClick={() => addBlock("text")}>
-                \u6587\u672c\u5757
+                ???
               </Button>
               <Button variant="secondary" onClick={() => addBlock("chat")}>
-                \u4f1a\u8bdd\u5757
+                ???
               </Button>
             </div>
           ) : null}
@@ -393,26 +397,26 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <span className="config-block-card__name">{block.name}</span>
                   <div className="config-block-card__actions">
                     {index > 0 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, -1)}>
-                        \u2191
+                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, -1)} aria-label="??">
+                        ?
                       </button>
                     ) : null}
                     {index < prompts.length - 1 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, 1)}>
-                        \u2193
+                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, 1)} aria-label="??">
+                        ?
                       </button>
                     ) : null}
-                    <button type="button" className="icon-btn" onClick={() => deleteBlock(index)}>
-                      \u00d7
+                    <button type="button" className="icon-btn" onClick={() => deleteBlock(index)} aria-label="??">
+                      ×
                     </button>
                   </div>
                 </div>
-                <SettingsField label="\u540d\u79f0">
+                <SettingsField label="??">
                   <input value={block.name} onChange={(e) => updateBlock(index, { name: e.target.value })} />
                 </SettingsField>
                 {block.type === "text" ? (
                   <>
-                    <SettingsField label="\u89d2\u8272">
+                    <SettingsField label="??">
                       <select
                         value={block.role}
                         onChange={(e) =>
@@ -430,9 +434,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       </select>
                     </SettingsField>
                     <p className="settings-hint">
-                      \u4ec5 system \u6587\u672c\u5757\u4f1a\u5408\u5e76\u8fdb LLM system\uff1b\u4f1a\u8bdd\u5386\u53f2\u8bf7\u7528 chat \u5757\u3002
+                      ? system ??????? LLM system??????? chat ??
                     </p>
-                    <SettingsField label="\u5185\u5bb9">
+                    <SettingsField label="??">
                       <textarea
                         rows={4}
                         value={block.content}
@@ -441,7 +445,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     </SettingsField>
                   </>
                 ) : (
-                  <p className="settings-hint">chat \u5757\u5c06\u4f1a\u8bdd\u6d88\u606f\u6ce8\u5165\u6a21\u578b\u4e0a\u4e0b\u6587\uff0c\u901a\u5e38\u653e\u5728 prompt \u5217\u8868\u672b\u5c3e\u3002</p>
+                  <p className="settings-hint">
+                    chat ?????????????????? prompt ?????
+                  </p>
                 )}
               </div>
             ))}
@@ -451,14 +457,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
-        title="\u5bfc\u5165 YAML"
-        message="\u5c06\u8986\u76d6\u5f53\u524d Agent \u914d\u7f6e\uff0c\u662f\u5426\u7ee7\u7eed\uff1f"
+        title="?? YAML"
+        message="????? Agent ????????"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcAgentYamlImport({ agentId }).then((r) => {
             if (r.ok && r.data === "imported") {
               void loadAgent();
-              showToast("\u5df2\u5bfc\u5165 Agent YAML");
+              showToast("??? Agent YAML");
             } else if (!r.ok) {
               showToast(r.error.message);
             }
