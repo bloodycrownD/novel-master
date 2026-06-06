@@ -26,7 +26,7 @@ describe('chat-transcript-bridge', () => {
           },
         ],
         hasMore: false,
-        stream: {text: '', thinking: ''},
+        scrollIntent: 'stick' as const,
       },
     };
     const raw = encodeHostToTranscript(message);

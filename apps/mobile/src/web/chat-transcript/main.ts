@@ -15,6 +15,7 @@ export function buildTranscriptBootScript(): string {
   var state = {
     ready: false,
     nearBottom: true,
+    sessionKey: '',
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '' },
@@ -136,12 +137,29 @@ export function buildTranscriptBootScript(): string {
     return '进行中';
   }
 
-  function renderThinkingCard(text, key, expanded, dimmed) {
+  function assistantBubbleInner(row) {
+    if (state.flags.richText && row.textHtml) {
+      return row.textHtml;
+    }
+    return escapeHtml(row.text || '');
+  }
+
+  function thinkingBodyInner(text, thinkingHtml) {
+    var trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    if (state.flags.richText && thinkingHtml) {
+      return thinkingHtml;
+    }
+    return escapeHtml(trimmed);
+  }
+
+  function renderThinkingCard(text, key, expanded, thinkingHtml) {
     var trimmed = String(text || '').trim();
     if (!trimmed) return '';
     var chevron = expanded ? '▼' : '▶';
+    var richClass = state.flags.richText && thinkingHtml ? ' rich' : '';
     var body = expanded
-      ? '<div class="thinking-body">' + escapeHtml(trimmed) + '</div>'
+      ? '<div class="thinking-body' + richClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
       : '';
     return (
       '<div class="thinking-card" data-thinking-key="' + escapeHtml(key) + '">' +
@@ -182,13 +200,15 @@ export function buildTranscriptBootScript(): string {
     var hidden = row.hidden ? ' hidden' : '';
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
+    var richBubble = state.flags.richText && row.role === 'assistant' && row.textHtml ? ' rich' : '';
     var html =
       '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
     if (row.thinking) {
-      html += renderThinkingCard(row.thinking, thinkingKey, thinkingExpanded, row.hidden);
+      html += renderThinkingCard(row.thinking, thinkingKey, thinkingExpanded, row.thinkingHtml);
     }
     if (row.text) {
-      html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
+      var inner = role === 'user' ? escapeHtml(row.text) : assistantBubbleInner(row);
+      html += '<div class="bubble' + richBubble + '">' + inner + '</div>';
     }
     html += '</div>';
     return html;
@@ -218,7 +238,7 @@ export function buildTranscriptBootScript(): string {
       }
     }
     if (state.stream.thinking) {
-      html += renderThinkingCard(state.stream.thinking, 'stream:thinking', true, false);
+      html += renderThinkingCard(state.stream.thinking, 'stream:thinking', true, null);
     }
     if (state.stream.text) {
       html += '<div class="row stream" id="stream-tail"><div class="bubble assistant">' +
@@ -230,18 +250,47 @@ export function buildTranscriptBootScript(): string {
     list.innerHTML = html;
   }
 
-  function applySnapshot(payload, stickBottom) {
+  /**
+   * I1/I2: scrollIntent from RN — stick on open, restore offsetY from cache, preserve on append.
+   * C1: never apply payload.stream; stream tail owned by streamDelta/streamReset only.
+   */
+  function applySnapshot(payload) {
+    var intent = payload.scrollIntent || 'stick';
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevScrollTop = scroller ? scroller.scrollTop : 0;
+    var sessionChanged = payload.sessionKey && payload.sessionKey !== state.sessionKey;
+
+    state.sessionKey = payload.sessionKey || state.sessionKey;
     state.rows = (payload.rows || []).slice();
     state.hasMore = !!payload.hasMore;
-    state.stream = payload.stream || { text: '', thinking: '' };
     state.loadOlderArmed = true;
-    renderRows();
-    var scroller = document.getElementById('scroller');
-    if (!scroller) return;
-    if (stickBottom) {
-      stickToBottom(scroller);
+    if (intent !== 'preserve' || sessionChanged) {
+      state.stream = { text: '', thinking: '' };
     }
-    scheduleStickIfNearBottom();
+    renderRows();
+    if (!scroller) return;
+
+    if (intent === 'stick') {
+      stickToBottom(scroller);
+    } else if (intent === 'restore' && payload.restoreScroll) {
+      var rs = payload.restoreScroll;
+      if (rs.nearBottom) {
+        stickToBottom(scroller);
+      } else {
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - rs.offsetY
+        );
+      }
+    } else if (intent === 'preserve') {
+      if (wasNearBottom) {
+        stickToBottom(scroller);
+      } else {
+        scroller.scrollTop = prevScrollTop;
+      }
+    }
+    state.nearBottom = isNearBottom(scroller);
     emitScrollSnapshot();
   }
 
@@ -342,7 +391,7 @@ export function buildTranscriptBootScript(): string {
         }
         break;
       case 'sessionSnapshot':
-        applySnapshot(p, true);
+        applySnapshot(p);
         break;
       case 'prependPage':
         applyPrependPage(p);
@@ -383,7 +432,7 @@ export function buildTranscriptBootScript(): string {
     var rows = document.getElementById('rows');
     if (scroller) scroller.addEventListener('scroll', onScroll, { passive: true });
     if (rows) rows.addEventListener('click', onRowsClick);
-    post('ready', { version: 'm1' });
+    post('ready', { version: 'm2' });
     state.ready = true;
   });
 })();

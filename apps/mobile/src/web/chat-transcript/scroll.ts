@@ -28,6 +28,15 @@ export function scrollTopForBottom(scrollHeight: number, clientHeight: number): 
   return Math.max(0, scrollHeight - clientHeight);
 }
 
+/** Restore scrollTop from cached distance-from-bottom (T6 workspace↔chat). */
+export function scrollTopForOffsetFromBottom(
+  scrollHeight: number,
+  clientHeight: number,
+  offsetY: number,
+): number {
+  return Math.max(0, scrollHeight - clientHeight - offsetY);
+}
+
 /**
  * After prependPage (not sessionSnapshot): preserve reading position.
  * scrollTop += scrollHeight - prependedScrollHeight — see spec §prepend 稳定.

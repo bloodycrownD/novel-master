@@ -36,7 +36,13 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
     .tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
     .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .empty-state { align-self: center; margin: auto 0; padding: 24px 16px; text-align: center; font-size: 14px; color: var(--text-secondary, #888); }
+    .bubble.rich, .thinking-body.rich { white-space: normal; }
+    .bubble.rich p, .thinking-body.rich p { margin: 0.35em 0; }
+    .bubble.rich h1, .bubble.rich h2, .bubble.rich h3,
+    .thinking-body.rich h1, .thinking-body.rich h2, .thinking-body.rich h3 { font-size: 1em; font-weight: 700; margin: 0.35em 0; }
+    .bubble.rich code, .thinking-body.rich code { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
+    .bubble.rich pre, .thinking-body.rich pre { overflow-x: auto; margin: 0.35em 0; }
+    .bubble.rich a, .thinking-body.rich a { color: var(--primary, #007aff); }
   </style>
 </head>
 <body>

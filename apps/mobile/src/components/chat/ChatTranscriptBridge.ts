@@ -19,6 +19,9 @@ export type TranscriptRow =
       readonly hidden: boolean;
       readonly text: string;
       readonly thinking: string;
+      /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
+      readonly textHtml?: string;
+      readonly thinkingHtml?: string;
     }
   | {
       readonly kind: 'tool';
@@ -54,6 +57,13 @@ export type TranscriptStreamState = {
   readonly thinking: string;
 };
 
+export type TranscriptScrollIntent = 'stick' | 'restore' | 'preserve';
+
+export type TranscriptRestoreScroll = {
+  readonly offsetY: number;
+  readonly nearBottom: boolean;
+};
+
 /** Host → transcript */
 export type HostToTranscriptMessage =
   | BridgeEnvelope<
@@ -66,7 +76,10 @@ export type HostToTranscriptMessage =
         sessionKey: string;
         rows: readonly TranscriptRow[];
         hasMore: boolean;
-        stream: TranscriptStreamState;
+        /** @deprecated Stream tail is owned by streamDelta/streamReset only. */
+        stream?: TranscriptStreamState;
+        scrollIntent: TranscriptScrollIntent;
+        restoreScroll?: TranscriptRestoreScroll;
       }
     >
   | BridgeEnvelope<

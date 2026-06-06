@@ -12,13 +12,19 @@ import {
   type ChatTranscriptScrollSnapshot,
   type HostToTranscriptMessage,
   type TranscriptFlags,
+  type TranscriptRestoreScroll,
+  type TranscriptScrollIntent,
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
+import {enrichTranscriptRows} from './enrich-transcript-rows';
 import {buildTranscriptRows} from './message-blocks';
 import {
   CHAT_TRANSCRIPT_BASE_URL,
   CHAT_TRANSCRIPT_HTML,
 } from '../../web/chat-transcript/transcript-html';
+import {
+  emitChatTranscriptTelemetry,
+} from '../../services/chat-transcript-telemetry';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export type ChatTranscriptWebViewProps = {
@@ -55,6 +61,49 @@ function themeFromTokens(tokens: {
   };
 }
 
+function resolveOpenScrollIntent(
+  initialScroll: ChatTranscriptScrollSnapshot | null,
+  defaultScrollToBottom: boolean,
+): {intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll} {
+  if (defaultScrollToBottom) {
+    return {intent: 'stick'};
+  }
+  if (initialScroll == null) {
+    return {intent: 'stick'};
+  }
+  if (initialScroll.nearBottom) {
+    return {intent: 'stick'};
+  }
+  return {
+    intent: 'restore',
+    restoreScroll: {
+      offsetY: initialScroll.offsetY,
+      nearBottom: initialScroll.nearBottom,
+    },
+  };
+}
+
+function emitScrollRestoreTelemetry(
+  intent: TranscriptScrollIntent,
+  restoreScroll?: TranscriptRestoreScroll,
+): void {
+  if (intent === 'restore' && restoreScroll != null) {
+    emitChatTranscriptTelemetry({
+      name: 'scroll_restore',
+      mode: restoreScroll.nearBottom ? 'near_bottom' : 'offset',
+      offsetY: restoreScroll.offsetY,
+      nearBottom: restoreScroll.nearBottom,
+    });
+    return;
+  }
+  if (intent === 'stick') {
+    emitChatTranscriptTelemetry({
+      name: 'scroll_restore',
+      mode: 'stick',
+    });
+  }
+}
+
 export function ChatTranscriptWebView({
   sessionKey,
   messages,
@@ -77,6 +126,19 @@ export function ChatTranscriptWebView({
   const sessionKeyRef = useRef(sessionKey);
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
+  const prevRichTextRef = useRef(flags?.richText ?? false);
+  const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
+  const initialScrollRef = useRef(initialScroll);
+  const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
+  const needsOpenSnapshotRef = useRef(true);
+
+  useEffect(() => {
+    initialScrollRef.current = initialScroll;
+  }, [initialScroll]);
+
+  useEffect(() => {
+    defaultScrollToBottomRef.current = defaultScrollToBottom;
+  }, [defaultScrollToBottom]);
 
   const postToWeb = useCallback((message: HostToTranscriptMessage) => {
     webRef.current?.postMessage(encodeHostToTranscript(message));
@@ -95,40 +157,48 @@ export function ChatTranscriptWebView({
     });
   }, [flags, postToWeb, tokens]);
 
-  const sendSessionSnapshot = useCallback(() => {
-    const rows = buildTranscriptRows(messages);
-    postToWeb({
-      v: 1,
-      type: 'sessionSnapshot',
-      payload: {
-        sessionKey,
-        rows,
-        hasMore,
-        stream: {text: streamingText, thinking: streamingThinking},
-      },
-    });
-  }, [
-    messages,
-    streamingText,
-    streamingThinking,
-    hasMore,
-    postToWeb,
-    sessionKey,
-  ]);
+  // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
+  const sendSessionSnapshot = useCallback(
+    (
+      scrollIntent: TranscriptScrollIntent,
+      restoreScroll?: TranscriptRestoreScroll,
+    ) => {
+      const richText = flags?.richText ?? false;
+      const rows = enrichTranscriptRows(buildTranscriptRows(messages), richText);
+      postToWeb({
+        v: 1,
+        type: 'sessionSnapshot',
+        payload: {
+          sessionKey,
+          rows,
+          hasMore,
+          scrollIntent,
+          ...(scrollIntent === 'restore' && restoreScroll != null
+            ? {restoreScroll}
+            : {}),
+        },
+      });
+    },
+    [messages, hasMore, postToWeb, sessionKey, flags?.richText],
+  );
 
   const sendPrependPage = useCallback(
     (prependedCount: number) => {
+      const richText = flags?.richText ?? false;
       const olderMessages = messages.slice(0, prependedCount);
       postToWeb({
         v: 1,
         type: 'prependPage',
         payload: {
-          rows: buildTranscriptRows(olderMessages),
+          rows: enrichTranscriptRows(
+            buildTranscriptRows(olderMessages),
+            richText,
+          ),
           prependedCount,
         },
       });
     },
-    [messages, postToWeb],
+    [messages, postToWeb, flags?.richText],
   );
 
   const handleMessage = useCallback(
@@ -147,6 +217,10 @@ export function ChatTranscriptWebView({
       if (message.type === 'scrollSnapshot') {
         const snap = parseScrollSnapshotFromHost(message);
         if (snap) {
+          lastScrollRef.current = {
+            nearBottom: snap.nearBottom,
+            offsetY: snap.offsetY,
+          };
           onScrollSnapshot?.(snap);
         }
         return;
@@ -190,13 +264,44 @@ export function ChatTranscriptWebView({
     if (!webReady) {
       return;
     }
+    const richText = flags?.richText ?? false;
+    if (prevRichTextRef.current === richText) {
+      return;
+    }
+    prevRichTextRef.current = richText;
+    sendSessionSnapshot('preserve');
+  }, [webReady, flags?.richText, sendSessionSnapshot]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
     if (sessionKeyRef.current !== sessionKey) {
       sessionKeyRef.current = sessionKey;
       prevStreamTextRef.current = '';
       prevStreamThinkingRef.current = '';
       prevFirstMessageIdRef.current = undefined;
       prevMessageCountRef.current = 0;
-      sendSessionSnapshot();
+      needsOpenSnapshotRef.current = true;
+    }
+
+    if (needsOpenSnapshotRef.current) {
+      needsOpenSnapshotRef.current = false;
+      const {intent, restoreScroll} = resolveOpenScrollIntent(
+        initialScrollRef.current,
+        defaultScrollToBottomRef.current,
+      );
+      sendSessionSnapshot(intent, restoreScroll);
+      emitScrollRestoreTelemetry(intent, restoreScroll);
+      emitChatTranscriptTelemetry({
+        name: 'transcript_ready',
+        sessionKey,
+        rowCount: messages.length,
+        hasInitialScroll: initialScrollRef.current != null,
+        defaultScrollToBottom: defaultScrollToBottomRef.current,
+      });
+      prevFirstMessageIdRef.current = messages[0]?.id;
+      prevMessageCountRef.current = messages.length;
       return;
     }
 
@@ -211,10 +316,16 @@ export function ChatTranscriptWebView({
       firstId !== prevFirstId;
 
     if (prependedOlder) {
-      // prependPage: incremental older rows only — avoids full DOM rebuild + scroll jump.
-      sendPrependPage(messages.length - prevCount);
+      const prependedCount = messages.length - prevCount;
+      emitChatTranscriptTelemetry({
+        name: 'prepend_detected',
+        prependedCount,
+        wasNearBottom: lastScrollRef.current.nearBottom,
+        offsetYBefore: lastScrollRef.current.offsetY,
+      });
+      sendPrependPage(prependedCount);
     } else {
-      sendSessionSnapshot();
+      sendSessionSnapshot('preserve');
     }
 
     prevFirstMessageIdRef.current = firstId;
@@ -227,7 +338,10 @@ export function ChatTranscriptWebView({
     }
     const prevText = prevStreamTextRef.current;
     const prevThinking = prevStreamThinkingRef.current;
-    if (streamingText.length < prevText.length || streamingThinking.length < prevThinking.length) {
+    if (
+      streamingText.length < prevText.length ||
+      streamingThinking.length < prevThinking.length
+    ) {
       postToWeb({v: 1, type: 'streamReset', payload: {}});
       prevStreamTextRef.current = '';
       prevStreamThinkingRef.current = '';
@@ -252,9 +366,6 @@ export function ChatTranscriptWebView({
     prevStreamTextRef.current = streamingText;
     prevStreamThinkingRef.current = streamingThinking;
   }, [webReady, streamingText, streamingThinking, postToWeb]);
-
-  void initialScroll;
-  void defaultScrollToBottom;
 
   return (
     <View style={styles.fill}>

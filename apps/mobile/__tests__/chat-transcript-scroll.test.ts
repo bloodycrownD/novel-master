@@ -4,6 +4,7 @@ import {
   offsetFromBottom,
   scrollTopAfterPrepend,
   scrollTopForBottom,
+  scrollTopForOffsetFromBottom,
 } from '../src/web/chat-transcript/scroll';
 
 describe('chat-transcript scroll (forward DOM)', () => {
@@ -23,5 +24,10 @@ describe('chat-transcript scroll (forward DOM)', () => {
 
   it('scrollTopAfterPrepend preserves reading position', () => {
     expect(scrollTopAfterPrepend(50, 400, 600)).toBe(250);
+  });
+
+  it('scrollTopForOffsetFromBottom restores cached offset (T6)', () => {
+    expect(scrollTopForOffsetFromBottom(500, 300, 100)).toBe(100);
+    expect(scrollTopForOffsetFromBottom(500, 300, 0)).toBe(200);
   });
 });
