@@ -13,6 +13,8 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('layoutContextMenu');
     expect(script).toContain('scrollable');
     expect(script).toContain('resolveMenuAnchor');
+    expect(script).toContain('viewportHeight');
+    expect(script).toContain('touchH');
   });
 
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {

@@ -9,6 +9,7 @@ import {
   ANCHORED_MENU_GAP,
   ANCHORED_MENU_H_PADDING,
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
   ANCHORED_MENU_MAX_HEIGHT_CAP,
   ANCHORED_MENU_MAX_WIDTH,
   ANCHORED_MENU_MIN_WIDTH,
@@ -223,11 +224,15 @@ export function buildTranscriptBootScript(): string {
     return Math.min(cap, ${ANCHORED_MENU_MAX_WIDTH}, Math.max(${ANCHORED_MENU_MIN_WIDTH}, byLabel));
   }
 
+  function viewportHeight() {
+    return window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  }
+
   function layoutContextMenu(anchor, itemCount, menuWidth) {
     var screenW = window.innerWidth;
-    var screenH = window.innerHeight;
+    var screenH = viewportHeight();
     var heightCap = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
-    var contentHeight = itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT} + 8;
+    var contentHeight = itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT};
     var flipEstimate = Math.min(contentHeight, heightCap);
     var anchorCenterX = anchor.x + anchor.width / 2;
     var left = anchorCenterX - menuWidth / 2;
@@ -248,12 +253,15 @@ export function buildTranscriptBootScript(): string {
   }
 
   function resolveMenuAnchor(messageId, pageX, pageY) {
+    // Long-press point — not the full bubble rect (tall messages broke flip/height math).
+    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
+    var y = pageY - touchH * 0.5;
     var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
-    if (!rowEl) return { x: pageX, y: pageY, width: 0, height: 0 };
-    var bubble = rowEl.querySelector('.bubble');
-    var target = bubble || rowEl;
-    var rect = target.getBoundingClientRect();
-    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+    if (rowEl) {
+      var rect = rowEl.getBoundingClientRect();
+      y = Math.max(rect.top, Math.min(y, rect.bottom - touchH));
+    }
+    return { x: pageX, y: y, width: 1, height: touchH };
   }
 
   function findMessageRow(messageId) {
@@ -345,9 +353,11 @@ export function buildTranscriptBootScript(): string {
     if (layout.scrollable) {
       menuEl.className = 'context-menu scrollable';
       menuEl.style.maxHeight = layout.maxHeight + 'px';
+      menuEl.style.height = 'auto';
     } else {
       menuEl.className = 'context-menu';
-      menuEl.style.maxHeight = '';
+      menuEl.style.maxHeight = 'none';
+      menuEl.style.height = 'auto';
     }
     var html = '';
     for (var i = 0; i < menu.items.length; i++) {

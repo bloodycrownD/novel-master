@@ -3,6 +3,8 @@
 export const ANCHORED_MENU_GAP = 8;
 export const ANCHORED_MENU_SCREEN_MARGIN = 12;
 export const ANCHORED_MENU_ITEM_MIN_HEIGHT = 44;
+/** Press-point anchor height — avoids using full bubble rect for tall messages. */
+export const ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = 32;
 export const ANCHORED_MENU_MAX_HEIGHT_CAP = 360;
 export const ANCHORED_MENU_MIN_WIDTH = 132;
 export const ANCHORED_MENU_MAX_WIDTH = 200;
@@ -22,7 +24,7 @@ export function anchoredMenuMaxHeight(screenHeight: number): number {
 }
 
 export function anchoredMenuContentHeight(itemCount: number): number {
-  return itemCount * ANCHORED_MENU_ITEM_MIN_HEIGHT + 8;
+  return itemCount * ANCHORED_MENU_ITEM_MIN_HEIGHT;
 }
 
 export interface AnchoredMenuLayout {
