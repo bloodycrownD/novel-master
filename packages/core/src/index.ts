@@ -300,6 +300,7 @@ export {
 } from "./domain/events/model/event-types.js";
 export type {
   NovelMasterEventType,
+  AgentRunFinishedPayload,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
   AgentStepCommittedPayload,
@@ -370,7 +371,10 @@ export {
   savedModelSettingsFromJson,
   savedModelSettingsToJson,
 } from "./domain/provider/model/saved-model-settings-from-json.js";
-export { TOKEN_COUNTER_MODE_OPTIONS } from "./domain/provider/model/token-counter-mode-options.js";
+export {
+  TOKEN_COUNTER_MODE_OPTIONS,
+  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
+} from "./domain/provider/model/token-counter-mode-options.js";
 export { resolveTokenCounterModeForModel } from "./service/provider/logic/resolve-token-counter-mode-for-model.js";
 export type {
   ModelRetryPolicy,
@@ -491,7 +495,10 @@ export {
   applyRegexChannelToMessages,
 } from "./domain/regex/logic/apply-regex-rules.js";
 export type { RegexChannel } from "./domain/regex/logic/apply-regex-rules.js";
-export { listVisibleSorted } from "./domain/chat/logic/message-visible-floor.js";
+export {
+  listVisibleSorted,
+  visibleFloorByMessageId,
+} from "./domain/chat/logic/message-visible-floor.js";
 export { validateRegexRule, validateRegexRuleEntity } from "./domain/regex/logic/validate-regex-rule.js";
 export {
   createRegexRuleSchema,

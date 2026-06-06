@@ -2,7 +2,7 @@
  * Per-model settings: context window + sampling (`settings_json`).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Alert} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import type {
@@ -11,12 +11,11 @@ import type {
   TokenizerOverride,
 } from '@novel-master/core';
 import {
-  mergeSamplingWithDefaults,
   parseApplicationModelId,
-  TOKEN_COUNTER_MODE_OPTIONS,
+  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
 } from '@novel-master/core';
-import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
 import {FormField} from '../../components/form/FormField';
+import {FormSelectField} from '../../components/form/FormSelectField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
@@ -63,6 +62,7 @@ export function ModelSamplingScreen() {
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
     if (!applicationModelId) {
@@ -88,7 +88,7 @@ export function ModelSamplingScreen() {
           saved.settings.sampling.enabled && saved.settings.sampling.params != null
             ? saved.settings.sampling.params
             : undefined;
-        setParams(mergeSamplingWithDefaults(provider.protocol, stored));
+        setParams(stored);
       }
     } catch (error) {
       showToast(toastMessage('加载失败', error));
@@ -139,21 +139,28 @@ export function ModelSamplingScreen() {
     }
   };
 
-  const handleResetContextWindow = async () => {
+  const handleResetSamplingDefaults = async () => {
     if (!applicationModelId) {
       return;
     }
     const {providerId, vendorModelId} =
       parseApplicationModelId(applicationModelId);
+    setResetting(true);
     try {
       const updated = await runtime.providerModels.resetContextWindowToDefault(
         providerId,
         vendorModelId,
       );
+      await runtime.providerModels.updateSettings(providerId, vendorModelId, {
+        sampling: {enabled: false},
+      });
       setContextWindowTokens(String(updated.settings.contextWindowTokens));
-      showToast('已恢复默认上下文上限');
+      setParams(undefined);
+      showToast('已恢复默认采样参数');
     } catch (error) {
       showToast(toastMessage('恢复失败', error));
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -176,8 +183,23 @@ export function ModelSamplingScreen() {
           onPress={() => handleSave().catch(() => undefined)}
         />
       }>
-      <FormSectionCard title="上下文上限" tokens={tokens}>
-        <FormField label="Context window (tokens)" tokens={tokens}>
+      <FormSectionCard
+        title="采样参数"
+        tokens={tokens}
+        hint={sectionHint}
+        rightAction={
+          <Pressable
+            disabled={resetting}
+            style={[styles.resetLink, resetting ? styles.resetDisabled : null]}
+            onPress={() =>
+              handleResetSamplingDefaults().catch(() => undefined)
+            }>
+            <Text style={[styles.resetLinkText, {color: tokens.primary}]}>
+              {resetting ? '恢复中…' : '恢复默认'}
+            </Text>
+          </Pressable>
+        }>
+        <FormField label="上下文上限 (tokens)" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
             value={contextWindowTokens}
@@ -185,14 +207,6 @@ export function ModelSamplingScreen() {
             keyboardType="number-pad"
           />
         </FormField>
-        <StickyFormFooter
-          tokens={tokens}
-          label="恢复默认"
-          loading={false}
-          onPress={() => handleResetContextWindow().catch(() => undefined)}
-        />
-      </FormSectionCard>
-      <FormSectionCard title="采样参数" tokens={tokens} hint={sectionHint}>
         <SamplingForm
           tokens={tokens}
           protocol={protocol}
@@ -201,26 +215,34 @@ export function ModelSamplingScreen() {
         />
       </FormSectionCard>
       <FormSectionCard title="Token 计数器" tokens={tokens}>
-        <ProfileMenuItem
-          icon="🔢"
+        <FormField
           label="计数方式"
-          value={tokenCounterMode}
           tokens={tokens}
-          onPress={() => {
-            Alert.alert(
-              'Token 计数器',
-              '选择计数方式（自动按模型名匹配）',
-              [
-                ...TOKEN_COUNTER_MODE_OPTIONS.map(mode => ({
-                  text: mode,
-                  onPress: () => setTokenCounterMode(mode),
-                })),
-                {text: '取消', style: 'cancel'},
-              ],
-            );
-          }}
-        />
+          hint="自动按模型名匹配分词器族；保存后以本页为准。">
+          <FormSelectField
+            tokens={tokens}
+            value={tokenCounterMode}
+            onChange={v => setTokenCounterMode(v as TokenizerOverride)}
+            options={TOKEN_COUNTER_MODE_SELECT_OPTIONS}
+            sheetTitle="Token 计数器"
+            placeholder="auto"
+          />
+        </FormField>
       </FormSectionCard>
     </ScreenFormLayout>
   );
 }
+
+const styles = StyleSheet.create({
+  resetLink: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  resetDisabled: {
+    opacity: 0.5,
+  },
+  resetLinkText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+});

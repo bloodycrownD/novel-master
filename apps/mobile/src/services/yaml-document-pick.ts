@@ -4,8 +4,8 @@ const YAML_NAME_RE = /\.ya?ml$/i;
 
 function knownTypesForExtension(ext: string): string[] {
   try {
-    const info = isKnownType({kind: 'ext', value: ext});
-    return [info.mimeType, info.uti].filter(
+    const info = isKnownType({kind: 'extension', value: ext});
+    return [info.mimeType].filter(
       (value): value is string => typeof value === 'string' && value.length > 0,
     );
   } catch {

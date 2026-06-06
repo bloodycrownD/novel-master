@@ -1,5 +1,5 @@
 import {StyleSheet} from 'react-native';
-import type {MixedStyleRecord} from 'react-native-render-html';
+import type {MixedStyleDeclaration} from 'react-native-render-html';
 import type {ThemeTokens} from '../../theme/tokens';
 
 export type RichContentVariant =
@@ -20,8 +20,8 @@ const VARIANT_HEADING = {
 } as const;
 
 export interface RichContentStyles {
-  baseStyle: MixedStyleRecord;
-  tagsStyles: Record<string, MixedStyleRecord>;
+  baseStyle: MixedStyleDeclaration;
+  tagsStyles: Record<string, MixedStyleDeclaration>;
 }
 
 /**
@@ -38,12 +38,12 @@ export function buildRichContentStyles(
   const codeBg =
     variant === 'chat-user' ? 'rgba(255,255,255,0.18)' : tokens.bgSecondary;
 
-  const baseStyle: MixedStyleRecord = {
+  const baseStyle: MixedStyleDeclaration = {
     fontSize: body.fontSize,
     lineHeight: body.lineHeight,
   };
 
-  const tagsStyles: Record<string, MixedStyleRecord> = {
+  const tagsStyles: Record<string, MixedStyleDeclaration> = {
     body: {...baseStyle, color: textColor},
     p: {marginTop: 0, marginBottom: 10},
     h1: {

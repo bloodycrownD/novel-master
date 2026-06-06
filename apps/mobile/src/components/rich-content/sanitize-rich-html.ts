@@ -23,7 +23,9 @@ export function sanitizeRichHtml(html: string): string {
     nonTextTags: ['script', 'textarea', 'option'],
     allowedTags: sanitizeHtml.defaults.allowedTags
       .concat(['img', 'div', 'span', 'table', 'thead', 'tbody', 'tr', 'th', 'td'])
-      .filter(tag => !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number])),
+      .filter((tag: string) =>
+        !DISALLOWED_TAGS.includes(tag as (typeof DISALLOWED_TAGS)[number]),
+      ),
     allowedAttributes: {
       ...sanitizeHtml.defaults.allowedAttributes,
       '*': ['style', 'class', 'id'],

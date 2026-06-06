@@ -112,7 +112,8 @@ export function RegexGroupsScreen() {
   };
 
   const deleteGroup = async (groupId: string) => {
-    const title = groupTitle(rows.find(g => g.groupId === groupId) ?? {groupId});
+    const row = rows.find(g => g.groupId === groupId);
+    const title = row != null ? groupTitle(row) : groupId;
     Alert.alert('删除正则组', `确定删除「${title}」？`, [
       {text: '取消', style: 'cancel'},
       {

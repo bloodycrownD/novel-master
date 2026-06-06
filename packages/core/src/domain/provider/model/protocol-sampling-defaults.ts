@@ -14,7 +14,7 @@ import type { ModelSamplingParams } from "./model-sampling-params.js";
 export const OPENAI_SAMPLING_DEFAULTS = {
   temperature: 1,
   top_p: 1,
-  max_tokens: 128_000,
+  max_tokens: 16_000,
 } as const;
 
 /** Anthropic Messages API display defaults. */
@@ -22,7 +22,7 @@ export const ANTHROPIC_SAMPLING_DEFAULTS = {
   temperature: 1,
   top_p: 1,
   top_k: 256,
-  max_tokens: 128_000,
+  max_tokens: 16_000,
 } as const;
 
 /** Gemini generateContent display defaults. */
@@ -30,7 +30,7 @@ export const GEMINI_SAMPLING_DEFAULTS = {
   temperature: 1,
   topP: 0.95,
   topK: 40,
-  maxOutputTokens: 128_000,
+  maxOutputTokens: 16_000,
 } as const;
 
 /** Merges saved params over protocol defaults (for forms and max-token display). */

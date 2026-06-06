@@ -164,7 +164,10 @@ export function VfsFileManager({
       const kindByPath = new Map<string, 'dir' | 'file'>();
       for (const entry of listEntries) {
         childPaths.add(entry.path);
-        kindByPath.set(entry.path, entry.kind);
+        kindByPath.set(
+          entry.path,
+          entry.kind === 'directory' ? 'dir' : entry.kind,
+        );
       }
 
       const orderedPaths = orderedDirectChildPaths({

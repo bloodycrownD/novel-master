@@ -9,6 +9,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
@@ -106,13 +107,16 @@ export function ChatComposer({
         }
       },
     );
-    const subFinished = bus.subscribe(EVENT_AGENT_RUN_FINISHED, payload => {
+    const subFinished = bus.subscribe(
+      EVENT_AGENT_RUN_FINISHED,
+      (payload: AgentRunFinishedPayload) => {
       if (payload.sessionId === sid) {
         const {onMessagesChanged: reload, onStreamReset: reset} =
           streamHandlersRef.current;
         flushRunUi(reload, reset).catch(() => undefined);
       }
-    });
+    },
+    );
     return () => {
       subText.unsubscribe();
       subThinking.unsubscribe();

@@ -228,7 +228,11 @@ export function RegexRuleEditorScreen() {
     setSaving(true);
     try {
       if (ruleId) {
-        await runtime.regexConfig.updateRule(groupId, ruleId, fields);
+        await runtime.regexConfig.updateRule(groupId, ruleId, {
+          ...fields,
+          startDepth: fields.startDepth ?? undefined,
+          endDepth: fields.endDepth ?? undefined,
+        });
       } else {
         const newRuleId = `${slugifyRuleId(fields.name)}-${Date.now()}`;
         await runtime.regexConfig.createRule({

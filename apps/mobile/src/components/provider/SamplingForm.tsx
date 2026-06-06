@@ -119,7 +119,7 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
           />
           <NumberField
             tokens={tokens}
-            label="Max Tokens"
+            label="输出最大长度"
             value={numStr(openai.max_tokens)}
             onChangeText={v =>
               onChange(patchOpenAi(params, {max_tokens: parseNumber(v)}))
@@ -157,7 +157,7 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
           />
           <NumberField
             tokens={tokens}
-            label="Max Tokens"
+            label="输出最大长度"
             value={numStr(anthropic.max_tokens)}
             onChangeText={v =>
               onChange(
@@ -195,7 +195,7 @@ export function SamplingForm({tokens, protocol, params, onChange}: Props) {
           />
           <NumberField
             tokens={tokens}
-            label="Max Output Tokens"
+            label="输出最大长度"
             value={numStr(gemini.maxOutputTokens)}
             onChangeText={v =>
               onChange(

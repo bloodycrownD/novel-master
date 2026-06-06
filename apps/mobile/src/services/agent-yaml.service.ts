@@ -8,6 +8,7 @@ import {
   stringifyText,
   ToolRegistry,
   validateAgentDefinition,
+  type AgentDefinition,
 } from '@novel-master/core';
 import {
   errorCodes,
@@ -44,7 +45,7 @@ export function decodeAgentYamlText(yaml: string) {
   return decode(raw, agentDefinitionSchema);
 }
 
-export function encodeAgentYamlText(def: unknown): string {
+export function encodeAgentYamlText(def: AgentDefinition): string {
   const doc = encode(def, agentDefinitionSchema);
   return stringifyText(doc, 'yaml');
 }

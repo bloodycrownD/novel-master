@@ -31,6 +31,6 @@ describe("mergeSamplingWithDefaults", () => {
 describe("maxOutputTokensFromSampling", () => {
   it("reads max_tokens from effective openai params", () => {
     const merged = mergeSamplingWithDefaults("openai", undefined);
-    assert.equal(maxOutputTokensFromSampling(merged), 128_000);
+    assert.equal(maxOutputTokensFromSampling(merged), 16_000);
   });
 });

@@ -1,4 +1,4 @@
-import type {MixedStyleRecord} from 'react-native-render-html';
+import type {MixedStyleDeclaration} from 'react-native-render-html';
 
 const OPEN_TAG_RE = /<([a-z][a-z0-9]*)(\s[^>]*?)>/gi;
 
@@ -26,7 +26,7 @@ function stripColorFromStyle(style: string): string {
  */
 export function materializeInlineColors(
   html: string,
-  classesStyles: Record<string, MixedStyleRecord>,
+  classesStyles: Record<string, MixedStyleDeclaration>,
 ): string {
   const colorToClass = new Map<string, string>();
 
