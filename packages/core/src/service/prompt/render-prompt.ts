@@ -5,6 +5,7 @@
  */
 
 import type { ChatMessage } from "../../domain/chat/model/message.js";
+import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
@@ -36,6 +37,15 @@ export interface PromptLlmInput {
   readonly messages: readonly ChatMessage[];
 }
 
+/** One segment from the single assembly traversal (preview / serialize / LLM derive). */
+export interface PromptAssemblySegment {
+  readonly id: string;
+  readonly role: string;
+  readonly title: string;
+  readonly body: string;
+  readonly source: "template" | "message";
+}
+
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
 export interface PromptPreviewSegment {
   readonly id: string;
@@ -63,7 +73,7 @@ function buildDot(ctx: PromptRenderContext): PromptRenderDot {
   };
 }
 
-function renderSystemMacroContent(
+function renderMacroContent(
   content: string,
   dotRecord: Readonly<Record<string, unknown>>,
   root: { readonly time: string; readonly week_cn: string },
@@ -74,13 +84,11 @@ function renderSystemMacroContent(
   });
 }
 
-/**
- * Builds LLM input: merge system text blocks and render macros.
- */
-export function buildPromptLlmInput(
-  blocks: readonly PromptBlock[],
-  ctx: PromptRenderContext,
-): PromptLlmInput {
+function macroRoot(ctx: PromptRenderContext): {
+  readonly now: Date;
+  readonly dotRecord: Readonly<Record<string, unknown>>;
+  readonly root: { readonly time: string; readonly week_cn: string };
+} {
   const now = ctx.now ?? new Date();
   const dot = buildDot(ctx);
   const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
@@ -88,56 +96,35 @@ export function buildPromptLlmInput(
     time: formatLocalDateTime(now),
     week_cn: formatWeekCn(now),
   };
-
-  const systemParts: string[] = [];
-
-  for (const block of blocks) {
-    if (block.type === "text" && block.role === "system") {
-      systemParts.push(renderSystemMacroContent(block.content, dotRecord, root));
-    }
-  }
-
-  const system =
-    systemParts.length > 0 ? systemParts.join("\n") : undefined;
-
-  return {
-    system,
-    messages: ctx.messages,
-  };
+  return { now, dotRecord, root };
 }
 
 /**
- * Builds ordered preview segments (one card per role-prefixed bubble).
+ * Single block-order traversal: text macros + chat preview segments.
+ * Preview, CLI format, token serialize, and LLM input all derive from this.
  */
-export function buildPromptPreviewSegments(
+export function buildPromptAssembly(
   blocks: readonly PromptBlock[],
-  input: PromptLlmInput,
   ctx: PromptRenderContext,
-): PromptPreviewSegment[] {
-  const now = ctx.now ?? new Date();
-  const dot = buildDot(ctx);
-  const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
-  const root = {
-    time: formatLocalDateTime(now),
-    week_cn: formatWeekCn(now),
-  };
-
-  const segments: PromptPreviewSegment[] = [];
+): readonly PromptAssemblySegment[] {
+  const { dotRecord, root } = macroRoot(ctx);
+  const segments: PromptAssemblySegment[] = [];
   let segmentIndex = 0;
 
   for (const block of blocks) {
     if (block.type === "text") {
-      const content = renderSystemMacroContent(block.content, dotRecord, root);
+      const content = renderMacroContent(block.content, dotRecord, root);
       segments.push({
         id: `text-${block.name}`,
         role: block.role,
         title: block.name,
         body: content,
+        source: "template",
       });
       continue;
     }
 
-    for (const message of input.messages) {
+    for (const message of ctx.messages) {
       const messageSegments = formatChatMessageForCliPreview(message);
       for (let i = 0; i < messageSegments.length; i++) {
         const segment = messageSegments[i]!;
@@ -146,6 +133,7 @@ export function buildPromptPreviewSegments(
           role: segment.role,
           title: `#${message.seq} · ${segment.role}`,
           body: segment.body,
+          source: "message",
         });
         segmentIndex += 1;
       }
@@ -155,15 +143,82 @@ export function buildPromptPreviewSegments(
   return segments;
 }
 
+/** Ephemeral template message — not persisted; satisfies mapper shape only. */
+function syntheticTemplateMessage(
+  block: Extract<PromptBlock, { type: "text" }>,
+  expanded: string,
+  ctx: PromptRenderContext,
+): ChatMessage {
+  return {
+    id: `prompt:${block.name}`,
+    sessionId: ctx.messages[0]?.sessionId ?? "",
+    seq: 0,
+    role: block.role,
+    content: textBlocks(expanded),
+    provider: null,
+    raw: null,
+    createdAtMs: 0,
+    hidden: false,
+  };
+}
+
 /**
- * Formats {@link PromptLlmInput} as role-prefixed plain text for CLI preview.
+ * Builds LLM input: system text blocks, synthetic template messages, then chat history.
+ */
+export function buildPromptLlmInput(
+  blocks: readonly PromptBlock[],
+  ctx: PromptRenderContext,
+): PromptLlmInput {
+  const { dotRecord, root } = macroRoot(ctx);
+  const systemParts: string[] = [];
+  const messages: ChatMessage[] = [];
+
+  for (const block of blocks) {
+    if (block.type === "text") {
+      const expanded = renderMacroContent(block.content, dotRecord, root);
+      if (block.role === "system") {
+        systemParts.push(expanded);
+      } else {
+        messages.push(syntheticTemplateMessage(block, expanded, ctx));
+      }
+      continue;
+    }
+
+    messages.push(...ctx.messages);
+  }
+
+  const system =
+    systemParts.length > 0 ? systemParts.join("\n") : undefined;
+
+  return {
+    system,
+    messages,
+  };
+}
+
+/**
+ * Builds ordered preview segments (one card per role-prefixed bubble).
+ */
+export function buildPromptPreviewSegments(
+  blocks: readonly PromptBlock[],
+  ctx: PromptRenderContext,
+): PromptPreviewSegment[] {
+  return buildPromptAssembly(blocks, ctx).map((segment) => ({
+    id: segment.id,
+    role: segment.role,
+    title: segment.title,
+    body: segment.body,
+  }));
+}
+
+/**
+ * Formats prompt assembly as role-prefixed plain text for CLI preview and token counting.
  */
 export function formatPromptLlmInputForCli(
   blocks: readonly PromptBlock[],
-  input: PromptLlmInput,
   ctx: PromptRenderContext,
 ): string {
-  return buildPromptPreviewSegments(blocks, input, ctx)
+  return buildPromptAssembly(blocks, ctx)
     .map((segment) => formatSegment(segment.role, segment.body))
     .join("\n");
 }

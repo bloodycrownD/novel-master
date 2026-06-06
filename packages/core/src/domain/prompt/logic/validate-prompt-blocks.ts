@@ -118,6 +118,13 @@ export function validatePromptBlocksFromMap(raw: unknown): readonly PromptBlock[
     }
     blocks.push(validateBlockEntry(name, item));
   }
+  const chatBlocks = blocks.filter((b) => b.type === "chat");
+  if (chatBlocks.length > 1) {
+    throw new PromptError(
+      "INVALID_YAML",
+      "prompt must contain at most one chat block",
+    );
+  }
   return blocks;
 }
 

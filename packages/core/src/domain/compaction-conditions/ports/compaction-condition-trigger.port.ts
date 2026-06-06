@@ -5,7 +5,11 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { PromptLlmInput } from "@/service/prompt/render-prompt.js";
+import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import type {
+  PromptLlmInput,
+  PromptRenderContext,
+} from "@/service/prompt/render-prompt.js";
 
 export interface CompactionConditionModelContext {
   readonly workspaceModelId: string;
@@ -15,6 +19,8 @@ export interface CompactionConditionModelContext {
 export interface CompactionEvaluationContext {
   readonly modelContext: CompactionConditionModelContext;
   readonly promptInput: PromptLlmInput;
+  readonly blocks: readonly PromptBlock[];
+  readonly ctx: PromptRenderContext;
 }
 
 /** Returns true when this trigger slice is satisfied. */

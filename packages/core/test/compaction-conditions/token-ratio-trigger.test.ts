@@ -7,8 +7,29 @@ import {
   countPromptLlmInput,
   createDefaultTokenCounterRegistry,
 } from "@novel-master/core";
-import type { PromptLlmInput } from "../../src/service/prompt/render-prompt.js";
+import type { PromptBlock } from "../../src/domain/prompt/model/prompt-block.js";
+import type { PromptRenderContext } from "../../src/service/prompt/render-prompt.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
+
+function systemOnlyEvaluation(systemContent: string) {
+  const blocks: PromptBlock[] = [
+    { name: "s", type: "text", role: "system", content: systemContent },
+  ];
+  const ctx: PromptRenderContext = {
+    worktreeDisplay: "",
+    filetreeDisplay: "",
+    messages: [],
+  };
+  return {
+    modelContext: {
+      workspaceModelId: "openai/gpt-4o",
+      applicationModelId: "openai/gpt-4o",
+    },
+    promptInput: { system: systemContent, messages: [] },
+    blocks,
+    ctx,
+  };
+}
 
 describe("TokenRatioConditionTrigger", () => {
   beforeEach(() => {
@@ -18,13 +39,7 @@ describe("TokenRatioConditionTrigger", () => {
   it("does not fire below threshold or when context window is unknown", async () => {
     const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const evaluation = {
-      modelContext: {
-        workspaceModelId: "openai/gpt-4o",
-        applicationModelId: "openai/gpt-4o",
-      },
-      promptInput: { system: "sys", messages: [] } satisfies PromptLlmInput,
-    };
+    const evaluation = systemOnlyEvaluation("sys");
 
     const below = new TokenRatioConditionTrigger(
       {
@@ -50,20 +65,17 @@ describe("TokenRatioConditionTrigger", () => {
   it("ratio 0.8 × 100k: 85001 triggers", async () => {
     const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const promptInput: PromptLlmInput = {
-      system: "x".repeat(340_004),
-      messages: [],
-    };
     const evaluation = {
+      ...systemOnlyEvaluation("x".repeat(340_004)),
       modelContext: {
         workspaceModelId: "openai/test",
         applicationModelId: "openai/test",
       },
-      promptInput,
     };
     const { tokenCount } = await countPromptLlmInput({
-      input: promptInput,
-      applicationModelId: "openai/test",
+      blocks: evaluation.blocks,
+      ctx: evaluation.ctx,
+      applicationModelId: evaluation.modelContext.applicationModelId,
       registry,
     });
     assert.ok(tokenCount > 80_000);
@@ -81,19 +93,10 @@ describe("TokenRatioConditionTrigger", () => {
   it("85000 tokens at effective threshold does not trigger (strict >)", async () => {
     const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const promptInput: PromptLlmInput = {
-      system: "x".repeat(340_000),
-      messages: [],
-    };
-    const evaluation = {
-      modelContext: {
-        workspaceModelId: "openai/test",
-        applicationModelId: "openai/test",
-      },
-      promptInput,
-    };
+    const evaluation = systemOnlyEvaluation("x".repeat(340_000));
     const { tokenCount } = await countPromptLlmInput({
-      input: promptInput,
+      blocks: evaluation.blocks,
+      ctx: evaluation.ctx,
       applicationModelId: "openai/test",
       registry,
     });

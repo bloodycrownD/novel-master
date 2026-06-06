@@ -99,6 +99,22 @@ describe("validatePromptBlocks", () => {
     );
   });
 
+  it("rejects more than one chat block", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks({
+          history_a: { type: "chat" },
+          history_b: { type: "chat" },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_YAML");
+        assert.match(error.message, /at most one chat block/i);
+        return true;
+      },
+    );
+  });
+
   it("rejects when on text block", () => {
     assert.throws(
       () =>

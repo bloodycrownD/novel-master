@@ -249,11 +249,13 @@ export {
   validatePromptBlocksFromMap,
 } from "./domain/prompt/logic/validate-prompt-blocks.js";
 export {
+  buildPromptAssembly,
   buildPromptLlmInput,
   formatPromptLlmInputForCli,
   buildPromptPreviewSegments,
 } from "./service/prompt/render-prompt.js";
 export type {
+  PromptAssemblySegment,
   PromptRenderContext,
   PromptRenderDot,
   PromptMacroContext,

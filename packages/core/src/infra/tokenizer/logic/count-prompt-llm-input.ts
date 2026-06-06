@@ -5,7 +5,8 @@
  */
 
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import type { PromptLlmInput } from "@/service/prompt/render-prompt.js";
+import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import type { PromptRenderContext } from "@/service/prompt/render-prompt.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";
@@ -14,7 +15,8 @@ import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 
 export interface CountPromptLlmInputParams {
-  readonly input: PromptLlmInput;
+  readonly blocks: readonly PromptBlock[];
+  readonly ctx: PromptRenderContext;
   readonly applicationModelId: string;
   readonly registry: TokenCounterRegistry;
   readonly tokenizerOverride?: TokenizerOverride;
@@ -30,7 +32,7 @@ export interface PromptTokenCountResult {
 }
 
 /**
- * Counts tokens for a full {@link PromptLlmInput} via registered NMTP driver.
+ * Counts tokens for a full prompt via registered NMTP driver (assembly serialize).
  */
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
@@ -42,10 +44,10 @@ export async function countPromptLlmInput(
 export async function countPromptLlmInputHeuristicOnly(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { applicationModelId, registry, input } = params;
+  const { applicationModelId, registry, blocks, ctx } = params;
   const { vendorModelId } = parseApplicationModelId(applicationModelId);
   const family = resolveTokenizerFamily(vendorModelId, "auto");
-  const serialized = serializePromptLlmInput(input);
+  const serialized = serializePromptLlmInput(blocks, ctx);
   const tokenCount = registry.heuristic.countText(serialized);
   return {
     tokenCount,

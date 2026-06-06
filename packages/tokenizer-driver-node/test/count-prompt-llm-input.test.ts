@@ -5,7 +5,8 @@ import {
   createDefaultTokenCounterRegistry,
   resolveContextWindowTokens,
   type ChatMessage,
-  type PromptLlmInput,
+  type PromptBlock,
+  type PromptRenderContext,
 } from "@novel-master/core";
 import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
 
@@ -25,11 +26,25 @@ function msg(role: ChatMessage["role"], text: string): ChatMessage {
   };
 }
 
-function fixtureInput(overrides?: Partial<PromptLlmInput>): PromptLlmInput {
+function fixtureParams(overrides?: {
+  readonly systemContent?: string;
+  readonly messages?: readonly ChatMessage[];
+}): {
+  readonly blocks: readonly PromptBlock[];
+  readonly ctx: PromptRenderContext;
+} {
+  const systemContent = overrides?.systemContent ?? "You are helpful.";
+  const messages = overrides?.messages ?? [msg("user", "Hello")];
   return {
-    system: "You are helpful.",
-    messages: [msg("user", "Hello")],
-    ...overrides,
+    blocks: [
+      { name: "s", type: "text", role: "system", content: systemContent },
+      { name: "c", type: "chat" },
+    ],
+    ctx: {
+      worktreeDisplay: "",
+      filetreeDisplay: "",
+      messages,
+    },
   };
 }
 
@@ -41,14 +56,16 @@ describe("countPromptLlmInput", () => {
   const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
 
   it("C1: stable count for same input and model", async () => {
-    const input = fixtureInput();
+    const { blocks, ctx } = fixtureParams();
     const a = await countPromptLlmInput({
-      input,
+      blocks,
+      ctx,
       applicationModelId: "openai/gpt-4o",
       registry,
     });
     const b = await countPromptLlmInput({
-      input,
+      blocks,
+      ctx,
       applicationModelId: "openai/gpt-4o",
       registry,
     });
@@ -58,12 +75,12 @@ describe("countPromptLlmInput", () => {
 
   it("C2: larger system increases token count", async () => {
     const base = await countPromptLlmInput({
-      input: fixtureInput(),
+      ...fixtureParams(),
       applicationModelId: "openai/gpt-4o",
       registry,
     });
     const larger = await countPromptLlmInput({
-      input: fixtureInput({ system: "You are helpful. ".repeat(20) }),
+      ...fixtureParams({ systemContent: "You are helpful. ".repeat(20) }),
       applicationModelId: "openai/gpt-4o",
       registry,
     });
@@ -72,7 +89,7 @@ describe("countPromptLlmInput", () => {
 
   it("claude model on openai provider uses claude family", async () => {
     const result = await countPromptLlmInput({
-      input: fixtureInput(),
+      ...fixtureParams(),
       applicationModelId: "openai/claude-3-5-sonnet",
       registry,
     });
@@ -83,7 +100,7 @@ describe("countPromptLlmInput", () => {
 
   it("unknown model uses heuristic", async () => {
     const result = await countPromptLlmInput({
-      input: fixtureInput(),
+      ...fixtureParams(),
       applicationModelId: "openai/my-custom/foo",
       registry,
     });

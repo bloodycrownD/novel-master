@@ -134,10 +134,14 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        const promptInput = buildPromptLlmInput(options.definition.prompts, {
+        const promptRenderCtx = {
           ...promptContext,
           messages: visible,
-        });
+        };
+        const promptInput = buildPromptLlmInput(
+          options.definition.prompts,
+          promptRenderCtx,
+        );
 
         if (persistMessages && this.deps.compactionConditions != null) {
           const shouldCompact =
@@ -149,6 +153,8 @@ export class DefaultAgentRunner implements AgentRunner {
                   applicationModelId: options.applicationModelId,
                 },
                 promptInput,
+                blocks: options.definition.prompts,
+                ctx: promptRenderCtx,
               },
             );
           if (signal?.aborted) {

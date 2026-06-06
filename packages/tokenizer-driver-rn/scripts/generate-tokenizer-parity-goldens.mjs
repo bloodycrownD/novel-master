@@ -15,9 +15,17 @@ function distUrl(packageName, ...segments) {
   return pathToFileURL(join(repoRoot, "packages", packageName, "dist", ...segments)).href;
 }
 
-function fixtureInput() {
+function fixtureBlocks() {
+  return [
+    { name: "s", type: "text", role: "system", content: "You are helpful." },
+    { name: "c", type: "chat" },
+  ];
+}
+
+function fixtureCtx() {
   return {
-    system: "You are helpful.",
+    worktreeDisplay: "",
+    filetreeDisplay: "",
     messages: [
       {
         id: "1",
@@ -48,8 +56,9 @@ async function main() {
     getTokenizerOverride: async () => "auto",
   });
 
-  const input = fixtureInput();
-  const serialized = serializePromptLlmInput(input);
+  const blocks = fixtureBlocks();
+  const ctx = fixtureCtx();
+  const serialized = serializePromptLlmInput(blocks, ctx);
 
   const cases = [
     {
@@ -69,7 +78,8 @@ async function main() {
   const outCases = [];
   for (const c of cases) {
     const result = await countPromptLlmInput({
-      input,
+      blocks,
+      ctx,
       applicationModelId: c.applicationModelId,
       registry,
     });
