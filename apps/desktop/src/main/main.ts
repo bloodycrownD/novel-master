@@ -1,9 +1,16 @@
 /**
- * Electron main process: window lifecycle and Vite renderer load (D0 scaffold).
+ * Electron main process: window lifecycle, Vite renderer load, IPC, runtime teardown.
  */
 import { app, BrowserWindow } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { closeDesktopConnection } from "./runtime/connection.js";
+import {
+  attachEventBusForwarder,
+  setEventBusForwardTarget,
+} from "./ipc/forward-event-bus.js";
+import { registerIpcHandlers } from "./ipc/register-handlers.js";
+import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
@@ -35,6 +42,11 @@ function createMainWindow(): BrowserWindow {
     window.show();
   });
 
+  setEventBusForwardTarget(() => {
+    const focused = BrowserWindow.getFocusedWindow();
+    return (focused ?? window).webContents;
+  });
+
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
   } else {
@@ -44,7 +56,14 @@ function createMainWindow(): BrowserWindow {
   return window;
 }
 
-app.whenReady().then(() => {
+async function bootstrapMainServices(): Promise<void> {
+  registerIpcHandlers();
+  const runtime = await getDesktopRuntime();
+  attachEventBusForwarder(runtime.eventBus);
+}
+
+app.whenReady().then(async () => {
+  await bootstrapMainServices();
   createMainWindow();
 
   app.on("activate", () => {
@@ -58,4 +77,8 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("before-quit", () => {
+  void closeDesktopConnection();
 });

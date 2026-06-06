@@ -34,6 +34,23 @@ test("preload exposes novelMasterDesktop IPC bridge API", () => {
   assert.match(preload, /version/);
 });
 
+test("desktop runtime factory is wired in main process", () => {
+  const runtimeFactory = readFileSync(
+    path.join(desktopRoot, "src/main/runtime/create-desktop-runtime.ts"),
+    "utf8",
+  );
+  assert.match(runtimeFactory, /export async function createDesktopNovelMasterRuntime/);
+  assert.match(runtimeFactory, /registerPlatformSkspDriver|getPlatformSkspName/);
+});
+
+test("renderer build output exists after workspace build", () => {
+  const rendererIndex = path.join(desktopRoot, "dist/renderer/index.html");
+  assert.ok(
+    existsSync(rendererIndex),
+    "dist/renderer/index.html missing — run npm run build -w @novel-master/desktop",
+  );
+});
+
 test("UI prototype lives under examples/desktop", () => {
   const html = readFileSync(path.join(prototypeDir, "index.html"), "utf8");
   assert.match(html, /id="preview-pane"/);
