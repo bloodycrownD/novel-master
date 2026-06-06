@@ -4,15 +4,25 @@
 import {
   countPromptLlmInput,
   messageBodyText,
-  parseApplicationModelId,
   resolveApplicationModelId,
+  resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {formatPromptTokenUsageLabel} from '../utils/format-token-count';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';
 
-/** Token label for chat header (e.g. `88% • 327/128K`). */
+function formatChatTokenLabel(
+  result: {tokenCount: number; estimated: boolean; counterKind: string},
+  contextWindow: number | undefined,
+): string {
+  const base = formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
+    estimated: result.estimated,
+  });
+  return `${base} · ${result.counterKind}`;
+}
+
+/** Token label for chat header (e.g. `88% • 327/128K · gemma`). */
 export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -28,22 +38,29 @@ export async function loadChatPromptTokenLabel(
   if (!applicationModelId) {
     const serialized = serializePromptLlmInput(blocks, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
-    return formatPromptTokenUsageLabel(count, undefined, {estimated: true});
+    return formatChatTokenLabel(
+      {tokenCount: count, estimated: true, counterKind: 'heuristic'},
+      undefined,
+    );
   }
+
+  const tokenizerOverride = await resolveTokenCounterModeForModel(
+    runtime.providerModels,
+    applicationModelId,
+  );
 
   const result = await countPromptLlmInput({
     blocks,
     ctx,
     applicationModelId,
     registry: runtime.tokenCounters,
+    tokenizerOverride,
   });
 
   const contextWindow =
     await runtime.providerModels.getContextWindow(applicationModelId);
 
-  return formatPromptTokenUsageLabel(result.tokenCount, contextWindow ?? undefined, {
-    estimated: result.estimated,
-  });
+  return formatChatTokenLabel(result, contextWindow ?? undefined);
 }
 
 /** Message-only heuristic when full prompt build fails (still useful in meta bar). */
@@ -81,7 +98,10 @@ async function loadChatPromptTokenLabelFallback(
     }
   }
 
-  return formatPromptTokenUsageLabel(count, contextWindow, {estimated: true});
+  return formatChatTokenLabel(
+    {tokenCount: count, estimated: true, counterKind: 'heuristic'},
+    contextWindow,
+  );
 }
 
 /**
@@ -100,4 +120,3 @@ export async function loadChatPromptTokenLabelResilient(
     return loadChatPromptTokenLabelFallback(runtime, scope);
   }
 }
-

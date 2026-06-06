@@ -50,6 +50,10 @@ function triggersFromConditions(
             deps.providerModels.getContextWindow(
               evaluation.modelContext.applicationModelId,
             ),
+          resolveTokenizerOverride: async (evaluation) =>
+            deps.providerModels.getTokenCounterMode(
+              evaluation.modelContext.applicationModelId,
+            ),
         },
         deps.tokenCounters,
       ),

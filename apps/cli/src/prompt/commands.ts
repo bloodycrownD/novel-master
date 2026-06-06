@@ -25,6 +25,7 @@ export async function runPrompt(
     | "state"
     | "regexConfig"
     | "tokenCounters"
+    | "providerModels"
   >,
   subcommand: string,
   args: readonly string[],
@@ -98,11 +99,15 @@ export async function runPrompt(
       );
     }
 
+    const tokenizerOverride = await rt.providerModels.getTokenCounterMode(
+      applicationModelId,
+    );
     const result = await countPromptLlmInput({
       blocks,
       ctx,
       applicationModelId,
       registry: rt.tokenCounters,
+      tokenizerOverride,
     });
 
     console.error(
