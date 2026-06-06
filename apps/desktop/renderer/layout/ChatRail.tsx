@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ProjectDto, SessionDto } from "../../shared/ipc-types";
+import { BatchCheckbox } from "../components/batch/BatchCheckbox";
+import { ManageHeader } from "../components/batch/ManageHeader";
+import { useBatchSelection } from "../hooks/useBatchSelection";
 import {
+  ipcProjectsDelete,
   ipcProjectsList,
+  ipcSessionsDelete,
   ipcSessionsListByProject,
 } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
+import { loadDesktopScope } from "../state/desktop-scope";
 import { railPaneNavTitle } from "../state/nav-workspace";
 
 export function ChatRail() {
@@ -12,12 +18,33 @@ export function ChatRail() {
     viewId,
     projectId,
     projectName,
+    sessionId,
     sessionName,
     openProject,
     openSession,
     goBackToProjects,
     goBackToSessions,
+    showNavView,
   } = useShellNav();
+
+  const {
+    active: projectBatchActive,
+    selectedIds: projectSelectedIds,
+    selectedCount: projectSelectedCount,
+    enter: enterProjectBatch,
+    exit: exitProjectBatch,
+    toggle: toggleProjectBatch,
+    isSelected: isProjectSelected,
+  } = useBatchSelection();
+  const {
+    active: sessionBatchActive,
+    selectedIds: sessionSelectedIds,
+    selectedCount: sessionSelectedCount,
+    enter: enterSessionBatch,
+    exit: exitSessionBatch,
+    toggle: toggleSessionBatch,
+    isSelected: isSessionSelected,
+  } = useBatchSelection();
 
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [sessions, setSessions] = useState<SessionDto[]>([]);
@@ -57,6 +84,81 @@ export function ChatRail() {
       void loadSessions(projectId);
     }
   }, [viewId, projectId, loadSessions]);
+
+  useEffect(() => {
+    if (viewId !== "projects") {
+      exitProjectBatch();
+    }
+  }, [viewId, exitProjectBatch]);
+
+  useEffect(() => {
+    if (viewId !== "sessions") {
+      exitSessionBatch();
+    }
+  }, [viewId, exitSessionBatch]);
+
+  const deleteSelectedProjects = useCallback(async () => {
+    const ids = [...projectSelectedIds];
+    for (const id of ids) {
+      await ipcProjectsDelete({ id });
+    }
+    exitProjectBatch();
+    await loadDesktopScope();
+    await loadProjects();
+    if (projectId != null && ids.includes(projectId)) {
+      goBackToProjects();
+    }
+  }, [
+    projectSelectedIds,
+    exitProjectBatch,
+    loadProjects,
+    projectId,
+    goBackToProjects,
+  ]);
+
+  const deleteSelectedSessions = useCallback(async () => {
+    const ids = [...sessionSelectedIds];
+    for (const id of ids) {
+      await ipcSessionsDelete({ id });
+    }
+    exitSessionBatch();
+    await loadDesktopScope();
+    if (projectId) {
+      await loadSessions(projectId);
+    }
+    if (sessionId != null && ids.includes(sessionId)) {
+      showNavView("sessions");
+    }
+  }, [
+    sessionSelectedIds,
+    exitSessionBatch,
+    projectId,
+    sessionId,
+    loadSessions,
+    showNavView,
+  ]);
+
+  const confirmProjectBatchDelete = useCallback(() => {
+    if (projectSelectedCount === 0) {
+      return;
+    }
+    if (
+      window.confirm(
+        `确定删除选中的 ${projectSelectedCount} 个项目？将同时移除其下所有会话。`,
+      )
+    ) {
+      void deleteSelectedProjects();
+    }
+  }, [projectSelectedCount, deleteSelectedProjects]);
+
+  const confirmSessionBatchDelete = useCallback(() => {
+    if (sessionSelectedCount === 0) {
+      return;
+    }
+    if (window.confirm(`确定删除选中的 ${sessionSelectedCount} 个会话？`)) {
+      void deleteSelectedSessions();
+    }
+  }, [sessionSelectedCount, deleteSelectedSessions]);
 
   const showBack = viewId === "sessions" || viewId === "conversation";
 
@@ -100,6 +202,15 @@ export function ChatRail() {
           data-nav-view="projects"
           hidden={viewId !== "projects"}
         >
+          <ManageHeader
+            title="项目"
+            batchMode={projectBatchActive}
+            selectedCount={projectSelectedCount}
+            onEnterBatch={enterProjectBatch}
+            onCancelBatch={exitProjectBatch}
+            onDelete={confirmProjectBatchDelete}
+            hint="选择要删除的项目（将同时移除其下所有会话）"
+          />
           <ul className="chat-list" id="project-list">
             {loadingProjects ? (
               <li className="chat-list__item">
@@ -113,22 +224,41 @@ export function ChatRail() {
               projects.map((project) => (
                 <li
                   key={project.id}
-                  className="chat-list__item"
+                  className={`chat-list__item${isProjectSelected(project.id) ? " is-selected" : ""}`}
                   data-project-id={project.id}
                   data-project-name={project.name}
                   role="button"
                   tabIndex={0}
-                  onClick={() => void openProject(project)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+                  onClick={() => {
+                    if (projectBatchActive) {
+                      toggleProjectBatch(project.id);
+                    } else {
                       void openProject(project);
                     }
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (projectBatchActive) {
+                        toggleProjectBatch(project.id);
+                      } else {
+                        void openProject(project);
+                      }
+                    }
+                  }}
                 >
-                  <span className="chat-list__icon">📚</span>
+                  {projectBatchActive ? (
+                    <BatchCheckbox
+                      checked={isProjectSelected(project.id)}
+                      onToggle={() => toggleProjectBatch(project.id)}
+                    />
+                  ) : (
+                    <span className="chat-list__icon">📚</span>
+                  )}
                   <span className="chat-list__label">{project.name}</span>
-                  <span className="chat-list__chevron">›</span>
+                  {!projectBatchActive ? (
+                    <span className="chat-list__chevron">›</span>
+                  ) : null}
                 </li>
               ))
             )}
@@ -140,7 +270,15 @@ export function ChatRail() {
           data-nav-view="sessions"
           hidden={viewId !== "sessions"}
         >
-          <div className="chat-nav-subheader">会话</div>
+          <ManageHeader
+            title="会话"
+            batchMode={sessionBatchActive}
+            selectedCount={sessionSelectedCount}
+            onEnterBatch={enterSessionBatch}
+            onCancelBatch={exitSessionBatch}
+            onDelete={confirmSessionBatchDelete}
+            hint="选择要删除的会话"
+          />
           <ul className="chat-list" id="session-list">
             {loadingSessions ? (
               <li className="chat-list__item">
@@ -154,25 +292,41 @@ export function ChatRail() {
               sessions.map((session) => (
                 <li
                   key={session.id}
-                  className="chat-list__item"
+                  className={`chat-list__item${isSessionSelected(session.id) ? " is-selected" : ""}`}
                   data-session-id={session.id}
                   data-session-name={session.title ?? ""}
                   role="button"
                   tabIndex={0}
-                  onClick={() =>
-                    void openSession(session, projectName ?? "—")
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
+                  onClick={() => {
+                    if (sessionBatchActive) {
+                      toggleSessionBatch(session.id);
+                    } else {
                       void openSession(session, projectName ?? "—");
                     }
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      if (sessionBatchActive) {
+                        toggleSessionBatch(session.id);
+                      } else {
+                        void openSession(session, projectName ?? "—");
+                      }
+                    }
+                  }}
                 >
+                  {sessionBatchActive ? (
+                    <BatchCheckbox
+                      checked={isSessionSelected(session.id)}
+                      onToggle={() => toggleSessionBatch(session.id)}
+                    />
+                  ) : null}
                   <span className="chat-list__label">
                     {session.title ?? "未命名会话"}
                   </span>
-                  <span className="chat-list__chevron">›</span>
+                  {!sessionBatchActive ? (
+                    <span className="chat-list__chevron">›</span>
+                  ) : null}
                 </li>
               ))
             )}
