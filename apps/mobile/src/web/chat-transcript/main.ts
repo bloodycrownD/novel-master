@@ -197,7 +197,7 @@ export function buildTranscriptBootScript(): string {
       html += '<div class="tool-summary">' + summary + '</div>';
     }
     if (canOpen) {
-      html += '<div class="tool-open-hint">点击查看 · 会话工作区</div>';
+      html += '<div class="tool-open-hint">点击查看 · 聊天工作区</div>';
     }
     html += '</div></div>';
     return html;

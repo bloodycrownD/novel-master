@@ -19,9 +19,9 @@ type Props = {
 
 function confirmMessage(scope: Props['scope']): string {
   if (scope.kind === 'project') {
-    return '将从全局模板覆盖当前项目模板，本地修改将丢失。确定继续？';
+    return '将从全局工作区覆盖当前项目工作区，本地修改将丢失。确定继续？';
   }
-  return '将从项目模板覆盖当前会话工作区，本地修改将丢失。确定继续？';
+  return '将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？';
 }
 
 export function TemplatePullButton({scope, onPulled, compact = false}: Props) {

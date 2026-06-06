@@ -33,7 +33,7 @@ export function GlobalTemplateScreen() {
       <View style={styles.bannerWrap}>
         <FormSectionCard
           tokens={tokens}
-          hint="全应用共享；项目可通过「从上级同步」拉取此处模板。"
+          hint="全应用共享；项目可通过「从上级同步」拉取此处工作区内容。"
         />
       </View>
       <VfsFileManager

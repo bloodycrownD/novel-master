@@ -38,7 +38,7 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
         title = chat.sessionTitle ?? '会话';
         showBack = true;
       } else if (chat.sessionListPanel === 'template') {
-        title = '项目模板';
+        title = '项目工作区';
       }
       return {
         title,

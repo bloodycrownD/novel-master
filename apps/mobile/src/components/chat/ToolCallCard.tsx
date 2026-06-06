@@ -72,7 +72,7 @@ export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
       ) : null}
       {canOpen ? (
         <Text style={[styles.openHint, {color: tokens.primary}]}>
-          点击查看 · 会话工作区
+          点击查看 · 聊天工作区
         </Text>
       ) : null}
     </>

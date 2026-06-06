@@ -79,7 +79,7 @@ export function RealPromptScreen() {
           }
           ListFooterComponent={
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              在会话工作区调整纳入规则可改变预览内容。默认折叠以减轻长文本渲染压力。
+              在聊天工作区调整纳入规则可改变预览内容。默认折叠以减轻长文本渲染压力。
             </Text>
           }
           renderItem={({item}) => <PromptPreviewSegmentCard segment={item} />}

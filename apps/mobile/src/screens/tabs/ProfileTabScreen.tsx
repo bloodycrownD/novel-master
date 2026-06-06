@@ -58,7 +58,7 @@ const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackPar
     {icon: '🗜️', label: '压缩条件', route: 'CompactionConditions'},
     {icon: '⚡', label: '事件配置', route: 'EventsConfig'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
-    {icon: '🌐', label: '全局模板', route: 'GlobalTemplate'},
+    {icon: '🌐', label: '全局工作区', route: 'GlobalTemplate'},
   ];
 
 export function ProfileTabScreen() {
