@@ -129,6 +129,56 @@ describe("ProviderModelService settings", () => {
     );
     await ctx.conn.close();
   });
+
+  it("new saved model defaults tokenCounterMode to auto", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create("openai", "gpt-4o");
+    assert.equal(saved.settings.tokenCounterMode, "auto");
+    await ctx.conn.close();
+  });
+
+  it("updateSettings persists tokenCounterMode round-trip", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    await bundle.providerModels.create("openai", "gpt-4o");
+    const updated = await bundle.providerModels.updateSettings(
+      "openai",
+      "gpt-4o",
+      { tokenCounterMode: "gemma" },
+    );
+    assert.equal(updated.settings.tokenCounterMode, "gemma");
+    const appId = formatApplicationModelId("openai", "gpt-4o");
+    assert.equal(
+      await bundle.providerModels.getTokenCounterMode(appId),
+      "gemma",
+    );
+    await ctx.conn.close();
+  });
+
+  it("getTokenCounterMode returns auto for unsaved model", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    assert.equal(
+      await bundle.providerModels.getTokenCounterMode("openai/unknown"),
+      "auto",
+    );
+    await ctx.conn.close();
+  });
+
+  it("updateSettings rejects invalid tokenCounterMode", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    await bundle.providerModels.create("openai", "gpt-4o");
+    await assert.rejects(
+      () =>
+        bundle.providerModels.updateSettings("openai", "gpt-4o", {
+          tokenCounterMode: "not-a-mode" as "auto",
+        }),
+      (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
+    );
+    await ctx.conn.close();
+  });
 });
 
 describe("ProviderModelService editSaved", () => {

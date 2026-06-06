@@ -29,6 +29,11 @@ const VALID_FAMILIES: ReadonlySet<string> = new Set([
   "gpt2",
 ]);
 
+/** True when `raw` is a known token counter mode (schema / patch validation). */
+export function isValidTokenCounterModePref(raw: string): boolean {
+  return VALID_FAMILIES.has(raw);
+}
+
 /** Parses stored preference value into registry override. */
 export function parseTokenCounterModePref(raw: string | undefined): TokenizerOverride {
   if (raw == null || raw === "" || raw === "auto") {

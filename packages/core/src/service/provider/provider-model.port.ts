@@ -1,6 +1,7 @@
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";
 import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 import type { SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
+import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 
 export interface ProviderModelService {
   suggestList(providerId: string): Promise<ModelSuggestion[]>;
@@ -33,4 +34,5 @@ export interface ProviderModelService {
 
   getSaved(applicationModelId: string): Promise<SavedModel | null>;
   getContextWindow(applicationModelId: string): Promise<number | null>;
+  getTokenCounterMode(applicationModelId: string): Promise<TokenizerOverride>;
 }

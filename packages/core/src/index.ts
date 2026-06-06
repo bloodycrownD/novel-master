@@ -370,6 +370,8 @@ export {
   savedModelSettingsFromJson,
   savedModelSettingsToJson,
 } from "./domain/provider/model/saved-model-settings-from-json.js";
+export { TOKEN_COUNTER_MODE_OPTIONS } from "./domain/provider/model/token-counter-mode-options.js";
+export { resolveTokenCounterModeForModel } from "./service/provider/logic/resolve-token-counter-mode-for-model.js";
 export type {
   ModelRetryPolicy,
   ModelRetryPolicyService,
@@ -458,8 +460,8 @@ export {
   type TokenizerErrorCode,
 } from "./infra/tokenizer/index.js";
 export {
-  readTokenCounterModeFromPreferences,
   parseTokenCounterModePref,
+  isValidTokenCounterModePref,
   TOKEN_COUNTER_MODE_PREF_KEY,
 } from "./infra/tokenizer/index.js";
 export { applyRegexChannelForLlm } from "./service/prompt/apply-regex-channel-for-llm.js";

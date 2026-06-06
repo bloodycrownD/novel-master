@@ -19,6 +19,8 @@ import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
 
 import type { SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
+import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
+import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 
 import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 
@@ -339,6 +341,17 @@ export class DefaultProviderModelService implements ProviderModelService {
       );
     }
 
+    if (
+      patch.tokenCounterMode != null &&
+      !isValidTokenCounterModePref(patch.tokenCounterMode)
+    ) {
+      throw new ProviderError(
+        "INVALID_ARGUMENT",
+        `Invalid tokenCounterMode: ${patch.tokenCounterMode}`,
+        { providerId, modelId: `${providerId}/${vendorModelId}` },
+      );
+    }
+
     const updated: SavedModel = {
 
       ...existing,
@@ -354,6 +367,10 @@ export class DefaultProviderModelService implements ProviderModelService {
           : {}),
 
         ...(patch.sampling != null ? { sampling: patch.sampling } : {}),
+
+        ...(patch.tokenCounterMode != null
+          ? { tokenCounterMode: patch.tokenCounterMode }
+          : {}),
 
       },
 
@@ -406,6 +423,16 @@ export class DefaultProviderModelService implements ProviderModelService {
     const saved = await this.getSaved(applicationModelId);
 
     return saved?.settings.contextWindowTokens ?? null;
+
+  }
+
+
+
+  async getTokenCounterMode(applicationModelId: string): Promise<TokenizerOverride> {
+
+    const saved = await this.getSaved(applicationModelId);
+
+    return saved?.settings.tokenCounterMode ?? "auto";
 
   }
 

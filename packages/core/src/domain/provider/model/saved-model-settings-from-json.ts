@@ -36,6 +36,7 @@ export function savedModelSettingsToJson(
     schemaVersion: 1,
     contextWindowTokens: settings.contextWindowTokens,
     sampling: settings.sampling,
+    tokenCounterMode: settings.tokenCounterMode,
   };
 }
 
@@ -44,5 +45,6 @@ function documentToSettings(doc: SavedModelSettingsDocument): SavedModelSettings
     schemaVersion: 1,
     contextWindowTokens: doc.contextWindowTokens,
     sampling: doc.sampling,
+    tokenCounterMode: doc.tokenCounterMode,
   };
 }

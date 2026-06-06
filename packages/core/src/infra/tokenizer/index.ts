@@ -42,6 +42,7 @@ export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
   readTokenCounterModeFromPreferences,
   parseTokenCounterModePref,
+  isValidTokenCounterModePref,
   TOKEN_COUNTER_MODE_PREF_KEY,
 } from "./logic/read-token-counter-mode-pref.js";
 export {

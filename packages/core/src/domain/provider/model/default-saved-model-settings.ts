@@ -17,5 +17,6 @@ export function defaultSavedModelSettings(vendorModelId: string): SavedModelSett
     schemaVersion: 1,
     contextWindowTokens: seedContextWindowTokens(vendorModelId),
     sampling: { enabled: false },
+    tokenCounterMode: "auto",
   };
 }
