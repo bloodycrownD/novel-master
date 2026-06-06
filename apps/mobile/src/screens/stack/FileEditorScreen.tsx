@@ -28,6 +28,13 @@ import {formatCharCount} from '../../hooks/useAgentStreamMetrics';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
+/** VFS logical path → file name segment for toolbar (full path stays in route params). */
+function vfsBasename(logicalPath: string): string {
+  const trimmed = logicalPath.replace(/\/+$/, '');
+  const slash = trimmed.lastIndexOf('/');
+  return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+}
+
 /** Last-saved timestamp for the stats row (device local time). */
 function formatFileMtime(ms: number): string {
   return new Date(ms).toLocaleString('zh-CN', {
@@ -181,15 +188,15 @@ export function FileEditorScreen() {
             {saving ? '保存中…' : '保存'}
           </Text>
         </Pressable>
-        {/* flex:1 + minWidth:0 lets long VFS paths ellipsize without squeezing buttons. */}
+        {/* Show basename only; tail ellipsis when the filename is long. */}
         <Text
           style={[
             styles.toolbarPath,
             {color: isDirty ? tokens.danger : tokens.textSecondary},
           ]}
           numberOfLines={1}
-          ellipsizeMode="middle">
-          {isDirty ? '未保存' : path}
+          ellipsizeMode="tail">
+          {isDirty ? '未保存' : vfsBasename(path)}
         </Text>
         <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
           <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
