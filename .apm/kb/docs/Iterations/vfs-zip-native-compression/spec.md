@@ -292,8 +292,20 @@ apps/mobile/package.json                   # + zip 原生依赖
 
 ---
 
+## 实现状态（2026-06-06）
+
+| 里程碑 | 状态 | 备注 |
+|--------|------|------|
+| M1 — Core `buildZip` 注入 | **完成** | `VfsZipBuildFn` / `CreateVfsZipIoServiceOptions`；Z-buildZip-1–3 通过 |
+| M2 — Mobile 原生封装（Android） | **完成** | `nativeBuildVfsZip` + `react-native-zip-archive` STORE；M-native-1/2 通过 |
+| M3 — iOS | **延期** | Android-first；iOS 仍走默认 fflate STORE，待 follow-up |
+| M4 — 降级与文档 | **完成** | 原生失败 → `buildVfsZip` fallback + toast；M-native-3 通过 |
+| 手工 QA（Android 真机） | **通过** | 用户确认 40 文件 fixture 导出/往返无问题 |
+
+---
+
 ## 实现前确认（编码门禁）
 
-- [ ] 用户确认本 `spec.md`
-- [ ] 原生库选型（Android / iOS）在 M2 开工前书面确认
-- [ ] 分支 `perf/vfs-zip-native-compression` 已创建且基于最新 `main`
+- [x] 用户确认本 `spec.md`
+- [x] 原生库选型（Android）：`react-native-zip-archive`；iOS 延期
+- [x] 分支 `perf/vfs-zip-native-compression` 已创建且基于最新 `main`
