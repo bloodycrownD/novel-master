@@ -16,7 +16,9 @@
     "link:cli": "npm run build -w @novel-master/cli && npm link -w @novel-master/cli",
     "mobile:start": "npm run start -w @novel-master/mobile",
     "mobile:android": "npm run android -w @novel-master/mobile",
-    "mobile:log": "npm run log-android -w @novel-master/mobile"
+    "mobile:log": "npm run log-android -w @novel-master/mobile",
+    "desktop:dev": "npm run dev -w @novel-master/desktop",
+    "desktop:build": "npm run build -w @novel-master/desktop"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

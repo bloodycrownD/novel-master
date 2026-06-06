@@ -1,0 +1,20 @@
+{
+  "name": "@novel-master/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "npm run build && electron .",
+    "start": "electron .",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
+    "test": "node --test test/**/*.test.js"
+  },
+  "dependencies": {
+    "@novel-master/core": "*"
+  },
+  "devDependencies": {
+    "electron": "^35.7.5"
+  }
+}
