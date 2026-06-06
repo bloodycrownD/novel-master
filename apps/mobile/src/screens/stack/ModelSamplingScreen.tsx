@@ -2,14 +2,20 @@
  * Per-model settings: context window + sampling (`settings_json`).
  */
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator} from 'react-native';
+import {ActivityIndicator, Alert} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import type {LlmProtocolKind, ModelSamplingParams} from '@novel-master/core';
+import type {
+  LlmProtocolKind,
+  ModelSamplingParams,
+  TokenizerOverride,
+} from '@novel-master/core';
 import {
   mergeSamplingWithDefaults,
   parseApplicationModelId,
+  TOKEN_COUNTER_MODE_OPTIONS,
 } from '@novel-master/core';
+import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
 import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormTextInput} from '../../components/form/FormTextInput';
@@ -52,6 +58,8 @@ export function ModelSamplingScreen() {
   const [protocol, setProtocol] = useState<LlmProtocolKind>('openai');
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
   const [contextWindowTokens, setContextWindowTokens] = useState('');
+  const [tokenCounterMode, setTokenCounterMode] =
+    useState<TokenizerOverride>('auto');
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,6 +83,7 @@ export function ModelSamplingScreen() {
       const saved = await runtime.providerModels.getSaved(applicationModelId);
       if (saved) {
         setContextWindowTokens(String(saved.settings.contextWindowTokens));
+        setTokenCounterMode(saved.settings.tokenCounterMode);
         const stored =
           saved.settings.sampling.enabled && saved.settings.sampling.params != null
             ? saved.settings.sampling.params
@@ -119,6 +128,7 @@ export function ModelSamplingScreen() {
       await runtime.providerModels.updateSettings(providerId, vendorModelId, {
         contextWindowTokens: contextWindow,
         sampling,
+        tokenCounterMode,
       });
       showToast('已保存模型设置');
       navigation.goBack();
@@ -188,6 +198,27 @@ export function ModelSamplingScreen() {
           protocol={protocol}
           params={params}
           onChange={setParams}
+        />
+      </FormSectionCard>
+      <FormSectionCard title="Token 计数器" tokens={tokens}>
+        <ProfileMenuItem
+          icon="🔢"
+          label="计数方式"
+          value={tokenCounterMode}
+          tokens={tokens}
+          onPress={() => {
+            Alert.alert(
+              'Token 计数器',
+              '选择计数方式（自动按模型名匹配）',
+              [
+                ...TOKEN_COUNTER_MODE_OPTIONS.map(mode => ({
+                  text: mode,
+                  onPress: () => setTokenCounterMode(mode),
+                })),
+                {text: '取消', style: 'cancel'},
+              ],
+            );
+          }}
         />
       </FormSectionCard>
     </ScreenFormLayout>

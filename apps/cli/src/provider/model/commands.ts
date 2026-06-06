@@ -4,7 +4,12 @@
  * @module provider/model/commands
  */
 
-import { formatApplicationModelId } from "@novel-master/core";
+import {
+  formatApplicationModelId,
+  isValidTokenCounterModePref,
+  type TokenizerOverride,
+} from "@novel-master/core";
+import type { SavedModelSettingsPatch } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
@@ -96,7 +101,7 @@ export async function runProviderModel(
       const modelId = flagString(flags, "modelId");
       if (!modelId) {
         throw new Error(
-          "Usage: nm provider model edit --modelId <provider>/<vendor> [--displayName] [--contextWindowTokens N] [--resetContextWindow]",
+          "Usage: nm provider model edit --modelId <provider>/<vendor> [--displayName] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]",
         );
       }
       const { providerId: pid, vendorModelId } = parseApplicationModelId(modelId);
@@ -109,15 +114,26 @@ export async function runProviderModel(
       if (flags.has("resetContextWindow")) {
         await rt.providerModels.resetContextWindowToDefault(pid, vendorModelId);
       } else {
+        const patch: SavedModelSettingsPatch = {};
         const contextWindowRaw = flagString(flags, "contextWindowTokens");
         if (contextWindowRaw != null) {
           const contextWindowTokens = Number(contextWindowRaw);
           if (!Number.isInteger(contextWindowTokens) || contextWindowTokens <= 0) {
             throw new Error("--contextWindowTokens must be a positive integer");
           }
-          await rt.providerModels.updateSettings(pid, vendorModelId, {
-            contextWindowTokens,
-          });
+          patch.contextWindowTokens = contextWindowTokens;
+        }
+        const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
+        if (tokenCounterModeRaw != null) {
+          if (!isValidTokenCounterModePref(tokenCounterModeRaw)) {
+            throw new Error(
+              `--tokenCounterMode must be one of: auto, heuristic, tiktoken, claude, ...`,
+            );
+          }
+          patch.tokenCounterMode = tokenCounterModeRaw as TokenizerOverride;
+        }
+        if (Object.keys(patch).length > 0) {
+          await rt.providerModels.updateSettings(pid, vendorModelId, patch);
         }
       }
       return;
