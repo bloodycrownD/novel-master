@@ -13,6 +13,8 @@ export const ANCHORED_MENU_MAX_WIDTH = 200;
 export const ANCHORED_MENU_H_PADDING = 32;
 /** Rough width per glyph for CJK/Latin labels without native measure. */
 export const ANCHORED_MENU_CHAR_WIDTH_EST = 14;
+/** Standard chat message action count — never scroll inside WebView wedge. */
+export const MESSAGE_ACTION_MENU_ITEM_COUNT = 6;
 
 export interface MenuAnchor {
   readonly x: number;
@@ -91,12 +93,18 @@ function layoutAnchoredMenuInternal(
     (placeAbove ? spaceAbove : spaceBelow) -
     ANCHORED_MENU_GAP -
     ANCHORED_MENU_SCREEN_MARGIN;
-  const viewportBoundedMax = Math.min(
-    heightCap,
-    Math.max(ANCHORED_MENU_ITEM_MIN_HEIGHT, availableSpace),
+  const availableMax = Math.max(
+    ANCHORED_MENU_ITEM_MIN_HEIGHT,
+    availableSpace,
   );
-  const scrollable = contentHeight > viewportBoundedMax;
-  const menuHeight = scrollable ? viewportBoundedMax : contentHeight;
+  const scrollable = contentHeight > availableMax + 1;
+  let menuHeight = scrollable
+    ? Math.min(contentHeight, availableMax)
+    : contentHeight;
+  // Cap only oversized scroll regions; do not clip when content fits the wedge.
+  if (scrollable && menuHeight > heightCap) {
+    menuHeight = heightCap;
+  }
 
   let top = placeAbove
     ? anchor.y - menuHeight - ANCHORED_MENU_GAP

@@ -50,6 +50,19 @@ describe('layoutAnchoredMenu', () => {
     expect(layout.maxHeight).toBe(anchoredMenuContentHeight(items.length));
   });
 
+  it('does not scroll six items in a short WebView-sized viewport when wedge fits', () => {
+    const menuWidth = computeAnchoredMenuWidth(items, 360);
+    const layout = layoutAnchoredMenu(
+      {x: 200, y: 316, width: 120, height: 40},
+      items.length,
+      menuWidth,
+      360,
+      469,
+    );
+    expect(layout.scrollable).toBe(false);
+    expect(layout.maxHeight).toBe(anchoredMenuContentHeight(items.length));
+  });
+
   it('scrolls when content exceeds the height cap', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(

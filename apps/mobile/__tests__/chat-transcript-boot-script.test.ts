@@ -13,8 +13,10 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('layoutContextMenu');
     expect(script).toContain('scrollable');
     expect(script).toContain('resolveMenuAnchor');
-    expect(script).toContain('offsetHeight');
-    expect(script).toContain('clientHeight');
+    expect(script).toContain('touch.clientX');
+    expect(script).toContain('querySelector(\'.bubble\')');
+    expect(script).toContain('menu.items.length <= 6');
+    expect(script).toContain('measuredHeight');
     expect(script).toContain('touchH');
   });
 

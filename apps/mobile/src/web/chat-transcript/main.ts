@@ -11,6 +11,7 @@ import {
   ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
   ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
+  MESSAGE_ACTION_MENU_ITEM_COUNT,
   ANCHORED_MENU_MAX_HEIGHT_CAP,
   ANCHORED_MENU_MAX_WIDTH,
   ANCHORED_MENU_MIN_WIDTH,
@@ -226,7 +227,7 @@ export function buildTranscriptBootScript(): string {
   }
 
   function viewportHeight() {
-    // Embedded WebView: clientHeight matches getBoundingClientRect coords; visualViewport often lies on Android.
+    // position:fixed menus share the WebView layout viewport (not #scroller scroll box).
     var doc = document.documentElement;
     return doc.clientHeight || window.innerHeight;
   }
@@ -244,9 +245,12 @@ export function buildTranscriptBootScript(): string {
     // Prefer below; flip above when bottom space is too tight.
     var placeAbove = spaceBelow < flipEstimate + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
     var availableSpace = (placeAbove ? spaceAbove : spaceBelow) - ${ANCHORED_MENU_GAP} - ${ANCHORED_MENU_SCREEN_MARGIN};
-    var viewportBoundedMax = Math.min(heightCap, Math.max(${ANCHORED_MENU_ITEM_MIN_HEIGHT}, availableSpace));
-    var scrollable = contentHeight > viewportBoundedMax;
-    var menuHeight = scrollable ? viewportBoundedMax : contentHeight;
+    var availableMax = Math.max(${ANCHORED_MENU_ITEM_MIN_HEIGHT}, availableSpace);
+    var scrollable = contentHeight > availableMax + 1;
+    var menuHeight = scrollable ? Math.min(contentHeight, availableMax) : contentHeight;
+    if (scrollable && menuHeight > heightCap) {
+      menuHeight = heightCap;
+    }
     var top = placeAbove
       ? anchor.y - menuHeight - ${ANCHORED_MENU_GAP}
       : anchor.y + anchor.height + ${ANCHORED_MENU_GAP};
@@ -254,16 +258,16 @@ export function buildTranscriptBootScript(): string {
     return { left: left, top: top, width: menuWidth, maxHeight: menuHeight, scrollable: scrollable };
   }
 
-  function resolveMenuAnchor(messageId, pageX, pageY) {
-    // Long-press point — not the full bubble rect (tall messages broke flip/height math).
-    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
-    var y = pageY - touchH * 0.5;
+  function resolveMenuAnchor(messageId, clientX, clientY) {
+    // Same as RN MessageLongPressRow: full bubble window rect at long-press time.
     var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
-    if (rowEl) {
-      var rect = rowEl.getBoundingClientRect();
-      y = Math.max(rect.top, Math.min(y, rect.bottom - touchH));
+    var boundsEl = rowEl ? (rowEl.querySelector('.bubble') || rowEl) : null;
+    if (boundsEl) {
+      var rect = boundsEl.getBoundingClientRect();
+      return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
     }
-    return { x: pageX, y: y, width: 1, height: touchH };
+    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
+    return { x: clientX, y: clientY - touchH * 0.5, width: 1, height: touchH };
   }
 
   function findMessageRow(messageId) {
@@ -357,15 +361,29 @@ export function buildTranscriptBootScript(): string {
         escapeHtml(item.label) + '</button>';
     }
     menuEl.innerHTML = html;
-    menuEl.style.visibility = 'hidden';
-    menuEl.style.left = '-9999px';
-    menuEl.style.top = '0';
-    menuEl.style.width = menuWidth + 'px';
     document.body.appendChild(backdrop);
     document.body.appendChild(menuEl);
-    // Measure rendered rows (font scale on device) before deciding scroll.
-    var measured = menuEl.offsetHeight || menuEl.scrollHeight;
-    var layout = layoutContextMenu(menu.anchor, measured, menuWidth);
+    // Measure rendered rows (CSS min-height + borders); estimate 48px/row overshoots on device.
+    menuEl.style.position = 'fixed';
+    menuEl.style.visibility = 'hidden';
+    menuEl.style.left = '0';
+    menuEl.style.top = '0';
+    menuEl.style.width = menuWidth + 'px';
+    menuEl.style.maxHeight = 'none';
+    var measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
+    var contentHeight = measuredHeight > 0
+      ? measuredHeight
+      : menu.items.length * ${ANCHORED_MENU_ITEM_LAYOUT_HEIGHT};
+    var layout = layoutContextMenu(menu.anchor, contentHeight, menuWidth);
+    if (menu.items.length <= ${MESSAGE_ACTION_MENU_ITEM_COUNT}) {
+      layout = {
+        left: layout.left,
+        top: layout.top,
+        width: layout.width,
+        maxHeight: contentHeight,
+        scrollable: false,
+      };
+    }
     menuEl.style.visibility = '';
     menuEl.style.left = layout.left + 'px';
     menuEl.style.top = layout.top + 'px';
@@ -417,7 +435,11 @@ export function buildTranscriptBootScript(): string {
     var touch = event.touches && event.touches[0];
     if (!touch) return;
     clearLongPress();
-    state.longPressTarget = { messageId: messageId, pageX: touch.pageX, pageY: touch.pageY };
+    state.longPressTarget = {
+      messageId: messageId,
+      pageX: touch.clientX,
+      pageY: touch.clientY,
+    };
     state.longPressTimer = setTimeout(function () {
       state.longPressTimer = null;
       var target = state.longPressTarget;
