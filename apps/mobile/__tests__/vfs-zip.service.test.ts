@@ -1,7 +1,9 @@
 import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
+import {nativeBuildVfsZip} from '../src/native/vfs-zip-native';
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();
+const mockCreateVfsZipIoService = jest.fn();
 const mockPick = jest.fn();
 const mockSaveDocuments = jest.fn();
 const mockKeepLocalCopy = jest.fn();
@@ -13,10 +15,7 @@ const mockUnlink = jest.fn();
 const mockParseVfsZip = jest.fn();
 
 jest.mock('@novel-master/core', () => ({
-  createVfsZipIoService: () => ({
-    export: mockExport,
-    import: mockImport,
-  }),
+  createVfsZipIoService: (...args: unknown[]) => mockCreateVfsZipIoService(...args),
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
   VfsZipError: class VfsZipError extends Error {
     code: string;
@@ -26,6 +25,10 @@ jest.mock('@novel-master/core', () => ({
       this.code = code;
     }
   },
+}));
+
+jest.mock('../src/native/vfs-zip-native', () => ({
+  nativeBuildVfsZip: jest.fn(),
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
@@ -69,6 +72,7 @@ describe('vfs-zip.service', () => {
   beforeEach(() => {
     mockExport.mockReset();
     mockImport.mockReset();
+    mockCreateVfsZipIoService.mockReset();
     mockPick.mockReset();
     mockSaveDocuments.mockReset();
     mockKeepLocalCopy.mockReset();
@@ -78,6 +82,10 @@ describe('vfs-zip.service', () => {
     mockStat.mockReset();
     mockUnlink.mockReset();
     mockParseVfsZip.mockReset();
+    mockCreateVfsZipIoService.mockReturnValue({
+      export: mockExport,
+      import: mockImport,
+    });
     mockExport.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]));
     mockSaveDocuments.mockResolvedValue([
       {uri: 'content://saved', name: 'x.zip', error: null},
@@ -97,6 +105,14 @@ describe('vfs-zip.service', () => {
     ]);
     mockExists.mockResolvedValue(true);
     mockReadFile.mockResolvedValue(ZIP_PK_BASE64);
+  });
+
+  it('M-native-1: export passes native buildZip to createVfsZipIoService', async () => {
+    await exportVfsZip(runtime, scope);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(
+      runtime.conn,
+      expect.objectContaining({buildZip: nativeBuildVfsZip}),
+    );
   });
 
   it('writes cache zip then opens save-as dialog', async () => {
