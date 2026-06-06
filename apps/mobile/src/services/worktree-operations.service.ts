@@ -28,6 +28,8 @@ export function inclusionLabelToMode(label: string): InclusionMode {
       return 'show';
     case '隐藏':
       return 'hide';
+    case '跟随':
+      return 'auto';
     default:
       return 'auto';
   }
@@ -46,21 +48,77 @@ export async function cycleFileInclusion(
   return next;
 }
 
+/** Set directory rule enabled; root cannot be disabled. */
+export async function setDirRuleEnabled(
+  worktree: WorktreeService,
+  logicalPath: string,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled && isWorktreeRootPath(worktree.scope, logicalPath)) {
+    throw new Error('根目录规则不可关闭');
+  }
+  await worktree.setDirRule({
+    logicalPath,
+    ruleEnabled: enabled,
+  });
+}
+
 /** Toggle directory rule on/off; root directory cannot be disabled. */
 export async function toggleDirRuleEnabled(
   worktree: WorktreeService,
   logicalPath: string,
   currentlyEnabled: boolean,
 ): Promise<boolean> {
-  if (currentlyEnabled && isWorktreeRootPath(worktree.scope, logicalPath)) {
-    throw new Error('根目录规则不可关闭');
-  }
   const nextEnabled = !currentlyEnabled;
-  await worktree.setDirRule({
-    logicalPath,
-    ruleEnabled: nextEnabled,
-  });
+  await setDirRuleEnabled(worktree, logicalPath, nextEnabled);
   return nextEnabled;
+}
+
+/**
+ * Batch enable/disable rules on selected directory rows; skips files and root when disabling.
+ */
+export async function batchSetDirRulesEnabled(
+  worktree: WorktreeService,
+  paths: readonly string[],
+  dirPaths: ReadonlySet<string>,
+): Promise<{applied: number; skipped: number}> {
+  let applied = 0;
+  let skipped = 0;
+  for (const path of paths) {
+    if (!dirPaths.has(path)) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await setDirRuleEnabled(worktree, path, true);
+      applied += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
+  return {applied, skipped};
+}
+
+export async function batchSetDirRulesDisabled(
+  worktree: WorktreeService,
+  paths: readonly string[],
+  dirPaths: ReadonlySet<string>,
+): Promise<{applied: number; skipped: number}> {
+  let applied = 0;
+  let skipped = 0;
+  for (const path of paths) {
+    if (!dirPaths.has(path)) {
+      skipped += 1;
+      continue;
+    }
+    try {
+      await setDirRuleEnabled(worktree, path, false);
+      applied += 1;
+    } catch {
+      skipped += 1;
+    }
+  }
+  return {applied, skipped};
 }
 
 /** Map persisted directory rule to sheet form input. */

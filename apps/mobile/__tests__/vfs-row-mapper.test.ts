@@ -21,7 +21,7 @@ describe('vfs-row-mapper', () => {
     kind: 'file',
     path: '/readme.md',
     ruleState: '',
-    inclusionMode: '继承',
+    inclusionMode: '跟随',
     displayState: '全内容',
   };
 
@@ -58,8 +58,8 @@ describe('vfs-row-mapper', () => {
 
   it('maps inherit file badge as follow tone without expanding display', () => {
     const mapped = mapWorktreeRow(fileRowAuto);
-    expect(mapped.subtitle).toBe('继承·全内容');
-    expect(mapped.badge).toEqual({label: '继承', tone: 'follow'});
+    expect(mapped.subtitle).toBe('跟随·全内容');
+    expect(mapped.badge).toEqual({label: '跟随', tone: 'follow'});
   });
 
   it('maps show file badge as in tone', () => {
@@ -80,7 +80,7 @@ describe('vfs-row-mapper', () => {
         kind: 'file',
         path: '/shared/nested.md',
         ruleState: '',
-        inclusionMode: '继承',
+        inclusionMode: '跟随',
         displayState: '文件名',
       },
     ];
@@ -96,7 +96,7 @@ describe('vfs-row-mapper', () => {
   it('fallback vfs file path mapping', () => {
     const mapped: MappedVfsRow = mapVfsFilePath('/new.md');
     expect(mapped.name).toBe('new.md');
-    expect(mapped.subtitle).toBe('继承·全内容');
+    expect(mapped.subtitle).toBe('跟随·全内容');
   });
 
   it('maps vfs list directory entry', () => {

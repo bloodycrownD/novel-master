@@ -3,6 +3,7 @@
  */
 import React, {useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text} from 'react-native';
+import {SyncPullIcon} from '../icons/TabIcons';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
@@ -15,6 +16,8 @@ type Props = {
   onPulled?: () => void;
   /** Inline toolbar: smaller padding, no border box. */
   compact?: boolean;
+  /** Icon-only toolbar button (replaces text label). */
+  iconOnly?: boolean;
 };
 
 function confirmMessage(scope: Props['scope']): string {
@@ -24,7 +27,12 @@ function confirmMessage(scope: Props['scope']): string {
   return '将从项目工作区覆盖当前聊天工作区，本地修改将丢失。确定继续？';
 }
 
-export function TemplatePullButton({scope, onPulled, compact = false}: Props) {
+export function TemplatePullButton({
+  scope,
+  onPulled,
+  compact = false,
+  iconOnly = false,
+}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
@@ -60,11 +68,20 @@ export function TemplatePullButton({scope, onPulled, compact = false}: Props) {
 
   return (
     <Pressable
-      style={compact ? styles.btnCompact : [styles.btn, {borderColor: tokens.border}]}
+      accessibilityLabel="从上级同步"
+      style={
+        iconOnly
+          ? styles.iconBtn
+          : compact
+            ? styles.btnCompact
+            : [styles.btn, {borderColor: tokens.border}]
+      }
       disabled={pulling}
       onPress={confirmPull}>
       {pulling ? (
         <ActivityIndicator size="small" color={tokens.primary} />
+      ) : iconOnly ? (
+        <SyncPullIcon color={tokens.primary} />
       ) : (
         <Text
           style={
@@ -92,5 +109,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 8,
     alignItems: 'center',
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 10,
   },
 });

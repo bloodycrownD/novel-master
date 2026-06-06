@@ -1,8 +1,9 @@
 /**
  * VFS file manager (prototype vfs-fm): list, rules, CRUD, open file editor.
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Pressable,
@@ -20,7 +21,9 @@ import type {
   WorktreeListRow,
   WorktreeService,
 } from '@novel-master/core';
-import {ParentDirIcon} from '../icons/TabIcons';
+import {ParentDirIcon, ZipExportIcon, ZipImportIcon} from '../icons/TabIcons';
+import {BatchCheckbox} from '../batch/BatchCheckbox';
+import {VfsBatchHeader} from '../batch/VfsBatchHeader';
 import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
 import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
@@ -41,14 +44,16 @@ import {
   renameVfsFile,
 } from '../../services/vfs-operations.service';
 import {
+  batchSetDirRulesDisabled,
+  batchSetDirRulesEnabled,
   cycleFileInclusion,
   defaultDirRuleForm,
   dirRuleToForm,
   migrateWorktreeDirRename,
-  toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
 import {toastMessage} from '../../errors/toast-message';
+import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {
@@ -105,13 +110,16 @@ export function VfsFileManager({
   >();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [promptValue, setPromptValue] = useState('');
+  const batch = useBatchSelection();
+  const [exportingZip, setExportingZip] = useState(false);
 
   const dismissAllOverlays = useCallback(() => {
     setMenuPath(null);
     setMoreOpen(false);
     setDirRuleOpen(false);
     setPrompt(null);
-  }, []);
+    batch.exit();
+  }, [batch.exit]);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
@@ -210,6 +218,74 @@ export function VfsFileManager({
     reload().catch(() => undefined);
   }, [reload]);
 
+  useEffect(() => {
+    batch.exit();
+  }, [currentPath, batch.exit]);
+
+  const dirPathSet = useMemo(
+    () => new Set(rows.filter(r => r.kind === 'dir').map(r => r.path)),
+    [rows],
+  );
+
+  const confirmBatchDelete = useCallback(() => {
+    const paths = [...batch.selectedIds];
+    if (paths.length === 0) {
+      return;
+    }
+    Alert.alert(
+      '确认删除',
+      `确定删除选中的 ${paths.length} 项？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              try {
+                for (const path of paths) {
+                  await deleteVfsEntry(vfs, path, {recursive: true});
+                }
+                batch.exit();
+                await reloadAfterMutation();
+              } catch (err) {
+                showToast(toastMessage('删除失败', err));
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [batch, vfs, reloadAfterMutation, showToast]);
+
+  const runBatchSetRules = useCallback(
+    async (enabled: boolean) => {
+      const paths = [...batch.selectedIds];
+      if (paths.length === 0) {
+        return;
+      }
+      try {
+        const result = enabled
+          ? await batchSetDirRulesEnabled(worktree, paths, dirPathSet)
+          : await batchSetDirRulesDisabled(worktree, paths, dirPathSet);
+        batch.exit();
+        await reloadAfterMutation();
+        if (result.skipped > 0) {
+          showToast(
+            enabled
+              ? `已开启 ${result.applied} 个目录规则，跳过 ${result.skipped} 项`
+              : `已关闭 ${result.applied} 个目录规则，跳过 ${result.skipped} 项`,
+          );
+        } else {
+          showToast(enabled ? '目录规则已开启' : '目录规则已关闭');
+        }
+      } catch (error) {
+        showToast(toastMessage('操作失败', error));
+      }
+    },
+    [batch, worktree, dirPathSet, reloadAfterMutation, showToast],
+  );
+
   const canGoUp = currentPath !== root;
   const metaForMenu = menuPath
     ? worktreeRows.find(r => r.path === menuPath)
@@ -227,8 +303,6 @@ export function VfsFileManager({
   const entityMenuItems: SheetMenuItem[] = menuRow
     ? menuRow.kind === 'dir'
       ? [
-          {label: '进入', action: 'open'},
-          {label: '规则开关', action: 'toggle-status'},
           {label: '重命名', action: 'rename'},
           {label: '删除', action: 'delete', danger: true},
         ]
@@ -244,8 +318,7 @@ export function VfsFileManager({
     {label: '新建目录', action: 'create-directory'},
     {label: '新建文件', action: 'create-file'},
     {label: '目录规则', action: 'directory-rule'},
-    {label: '导出 ZIP', action: 'export-zip'},
-    {label: '导入 ZIP', action: 'import-zip'},
+    {label: '批量操作', action: 'batch'},
   ];
 
   const openPrompt = (state: PromptState) => {
@@ -265,16 +338,6 @@ export function VfsFileManager({
         } else {
           onOpenFile(menuPath);
         }
-        return;
-      }
-      if (action === 'toggle-status' && menuRow.kind === 'dir') {
-        const next = await toggleDirRuleEnabled(
-          worktree,
-          menuPath,
-          menuRow.ruleEnabled,
-        );
-        showToast(next ? '目录规则已开启' : '目录规则已关闭');
-        await reloadAfterMutation();
         return;
       }
       if (action === 'toggle-include' && menuRow.kind === 'file' && meta) {
@@ -336,6 +399,38 @@ export function VfsFileManager({
     }
   };
 
+  const handleExportZip = useCallback(() => {
+    setExportingZip(true);
+    exportVfsZip(runtime, scope)
+      .then(result => {
+        if (result === 'saved') {
+          showToast('ZIP 已保存到所选位置');
+        }
+      })
+      .catch(err => showToast(toastMessage('导出失败', err)))
+      .finally(() => setExportingZip(false));
+  }, [runtime, scope, showToast]);
+
+  const handleImportZip = useCallback(() => {
+    Alert.alert(
+      '导入 ZIP',
+      '将完全替换当前工作区文件，是否继续？',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '导入',
+          style: 'destructive',
+          onPress: () => {
+            importVfsZip(runtime, scope, {confirmed: true})
+              .then(() => reloadAfterMutation())
+              .then(() => showToast('ZIP 导入完成'))
+              .catch(err => showToast(toastMessage('导入失败', err)));
+          },
+        },
+      ],
+    );
+  }, [runtime, scope, reloadAfterMutation, showToast]);
+
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
       openPrompt({
@@ -354,36 +449,6 @@ export function VfsFileManager({
           await createVfsFile(vfs, path);
         },
       });
-      return;
-    }
-    if (action === 'export-zip') {
-      exportVfsZip(runtime, scope)
-        .then(result => {
-          if (result === 'saved') {
-            showToast('ZIP 已保存到所选位置');
-          }
-        })
-        .catch(err => showToast(toastMessage('导出失败', err)));
-      return;
-    }
-    if (action === 'import-zip') {
-      Alert.alert(
-        '导入 ZIP',
-        '将完全替换当前工作区文件，是否继续？',
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '导入',
-            style: 'destructive',
-            onPress: () => {
-              importVfsZip(runtime, scope, {confirmed: true})
-                .then(() => reloadAfterMutation())
-                .then(() => showToast('ZIP 导入完成'))
-                .catch(err => showToast(toastMessage('导入失败', err)));
-            },
-          },
-        ],
-      );
       return;
     }
     if (action === 'create-directory') {
@@ -420,6 +485,11 @@ export function VfsFileManager({
           showToast(toastMessage('加载规则失败', error));
         }
       })();
+      return;
+    }
+    if (action === 'batch') {
+      batch.enter();
+      return;
     }
   };
 
@@ -459,17 +529,51 @@ export function VfsFileManager({
             {currentPath}
           </Text>
         </View>
-        {pullFromParent ? (
-          <TemplatePullButton
-            compact
-            scope={pullFromParent.scope}
-            onPulled={pullFromParent.onPulled}
-          />
-        ) : null}
-        <Pressable onPress={() => setMoreOpen(true)} style={styles.moreBtn}>
-          <Text style={{color: tokens.text, fontSize: 20}}>⋯</Text>
-        </Pressable>
+        <View style={styles.toolbarActions}>
+          {pullFromParent ? (
+            <TemplatePullButton
+              iconOnly
+              scope={pullFromParent.scope}
+              onPulled={pullFromParent.onPulled}
+            />
+          ) : null}
+          <Pressable
+            accessibilityLabel="导出 ZIP"
+            disabled={exportingZip}
+            onPress={handleExportZip}
+            style={[styles.iconBtn, exportingZip && styles.iconBtnDisabled]}>
+            {exportingZip ? (
+              <ActivityIndicator size="small" color={tokens.primary} />
+            ) : (
+              <ZipExportIcon color={tokens.primary} />
+            )}
+          </Pressable>
+          <Pressable
+            accessibilityLabel="导入 ZIP"
+            onPress={handleImportZip}
+            style={styles.iconBtn}>
+            <ZipImportIcon color={tokens.primary} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="更多操作"
+            onPress={() => setMoreOpen(true)}
+            style={styles.iconBtn}>
+            <Text style={{color: tokens.text, fontSize: 20, lineHeight: 22}}>
+              ⋯
+            </Text>
+          </Pressable>
+        </View>
       </View>
+
+      {batch.active ? (
+        <VfsBatchHeader
+          selectedCount={batch.selectedCount}
+          onCancel={() => batch.exit()}
+          onDelete={confirmBatchDelete}
+          onEnable={() => runBatchSetRules(true).catch(() => undefined)}
+          onDisable={() => runBatchSetRules(false).catch(() => undefined)}
+        />
+      ) : null}
 
       {loading ? (
         <Text style={[styles.empty, {color: tokens.textSecondary}]}>
@@ -484,11 +588,25 @@ export function VfsFileManager({
               空目录
             </Text>
           }
-          renderItem={({item}) => (
+          renderItem={({item}) => {
+            const selected = batch.isSelected(item.path);
+            return (
             <View style={[styles.row, {borderBottomColor: tokens.border}]}>
+              {batch.active ? (
+                <View style={styles.batchCheckCol}>
+                  <BatchCheckbox
+                    checked={selected}
+                    onToggle={() => batch.toggle(item.path)}
+                  />
+                </View>
+              ) : null}
               <Pressable
                 style={styles.item}
                 onPress={() => {
+                  if (batch.active) {
+                    batch.toggle(item.path);
+                    return;
+                  }
                   if (item.kind === 'dir') {
                     setCurrentPath(item.path);
                   } else {
@@ -525,6 +643,7 @@ export function VfsFileManager({
                   </View>
                 ) : null}
               </Pressable>
+              {batch.active ? null : (
               <Pressable
                 onPress={() => setMenuPath(item.path)}
                 style={styles.menuBtn}
@@ -533,8 +652,10 @@ export function VfsFileManager({
                   ⋮
                 </Text>
               </Pressable>
+              )}
             </View>
-          )}
+            );
+          }}
         />
       )}
 
@@ -554,6 +675,7 @@ export function VfsFileManager({
         visible={dirRuleOpen}
         logicalPath={currentPath}
         initial={dirRuleInitial}
+        rootRuleLocked={currentPath === root}
         onClose={() => setDirRuleOpen(false)}
         onSave={async input => {
           await worktree.setDirRule(input);
@@ -630,11 +752,21 @@ const styles = StyleSheet.create({
   },
   iconBtnDisabled: {opacity: 0.4},
   path: {flex: 1, fontFamily: 'monospace', fontSize: 13},
-  moreBtn: {padding: 8},
+  toolbarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  batchCheckCol: {
+    width: 28,
+    paddingLeft: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   item: {flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12},
   kind: {fontSize: 18, marginRight: 8},

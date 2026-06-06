@@ -19,6 +19,7 @@ import {
   type SortOrder,
 } from '@novel-master/core';
 import {AppModal} from '../ui/AppModal';
+import {FormSwitchRow} from '../form/FormSwitchRow';
 import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -26,6 +27,8 @@ type Props = {
   visible: boolean;
   logicalPath: string;
   initial?: Partial<SetDirRuleInput>;
+  /** When true, rule must stay enabled (scope root). */
+  rootRuleLocked?: boolean;
   onClose: () => void;
   onSave: (input: SetDirRuleInput) => Promise<void>;
 };
@@ -51,6 +54,7 @@ export function DirectoryRuleSheet({
   visible,
   logicalPath,
   initial,
+  rootRuleLocked = false,
   onClose,
   onSave,
 }: Props) {
@@ -71,6 +75,7 @@ export function DirectoryRuleSheet({
   const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
     DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
   );
+  const [ruleEnabled, setRuleEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -90,7 +95,12 @@ export function DirectoryRuleSheet({
         initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
       ),
     );
-  }, [visible, initial, logicalPath]);
+    setRuleEnabled(
+      rootRuleLocked
+        ? true
+        : (initial?.ruleEnabled ?? true),
+    );
+  }, [visible, initial, logicalPath, rootRuleLocked]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -102,7 +112,7 @@ export function DirectoryRuleSheet({
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
         fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
-        ruleEnabled: true,
+        ruleEnabled: rootRuleLocked ? true : ruleEnabled,
       });
       onClose();
     } finally {
@@ -128,13 +138,20 @@ export function DirectoryRuleSheet({
           <Text style={[styles.heading, {color: tokens.text}]}>
             目录规则
           </Text>
-          <Text style={[styles.path, {color: tokens.textSecondary}]}>
-            {logicalPath}
-          </Text>
           <ScrollView
             style={styles.form}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
+            <FormSwitchRow
+              label="规则启用"
+              tokens={tokens}
+              value={ruleEnabled}
+              onValueChange={setRuleEnabled}
+              disabled={rootRuleLocked}
+              description={
+                rootRuleLocked ? '根目录规则不可关闭' : undefined
+              }
+            />
             <FieldLabel tokens={tokens} text="排序字段" />
             <OptionRow
               options={SORT_FIELDS}
@@ -268,8 +285,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     overflow: 'hidden',
   },
-  heading: {fontSize: 18, fontWeight: '600', marginBottom: 4},
-  path: {fontSize: 12, marginBottom: 12},
+  heading: {fontSize: 18, fontWeight: '600', marginBottom: 12},
   form: {maxHeight: 360},
   label: {fontSize: 12, marginTop: 12, marginBottom: 6},
   input: {

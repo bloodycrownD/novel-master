@@ -23,14 +23,14 @@ describe('orderedDirectChildPaths', () => {
       kind: 'file',
       path: '/p/a/f',
       ruleState: '',
-      inclusionMode: '继承',
+      inclusionMode: '跟随',
       displayState: '全内容',
     },
     {
       kind: 'file',
       path: '/p/b.md',
       ruleState: '',
-      inclusionMode: '继承',
+      inclusionMode: '跟随',
       displayState: '全内容',
     },
   ];

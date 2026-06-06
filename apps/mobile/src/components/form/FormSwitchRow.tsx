@@ -11,6 +11,7 @@ type Props = {
   value: boolean;
   onValueChange: (value: boolean) => void;
   description?: string;
+  disabled?: boolean;
 };
 
 export function FormSwitchRow({
@@ -19,6 +20,7 @@ export function FormSwitchRow({
   value,
   onValueChange,
   description,
+  disabled = false,
 }: Props) {
   return (
     <View style={styles.row}>
@@ -33,6 +35,7 @@ export function FormSwitchRow({
       <Switch
         value={value}
         onValueChange={onValueChange}
+        disabled={disabled}
         trackColor={{false: tokens.border, true: tokens.primary}}
       />
     </View>

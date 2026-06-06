@@ -17,7 +17,7 @@ export function ruleStateLabel(state: RuleState): string {
 export function inclusionModeLabel(mode: InclusionMode): string {
   switch (mode) {
     case "auto":
-      return "继承";
+      return "跟随";
     case "show":
       return "展示";
     case "hide":

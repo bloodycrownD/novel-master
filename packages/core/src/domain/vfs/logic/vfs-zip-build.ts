@@ -22,5 +22,6 @@ export function buildVfsZip(
   for (const [entryName, content] of files) {
     payload[entryName] = strToU8(content);
   }
-  return zipSync(payload);
+  // level 0 (STORE): UTF-8 markdown rarely shrinks on mobile; DEFLATE blocks RN JS for seconds.
+  return zipSync(payload, { level: 0 });
 }

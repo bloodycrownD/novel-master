@@ -87,7 +87,7 @@ export function mapWorktreeRow(
   } else if (row.inclusionMode === '展示') {
     badge = {label: '展示', tone: 'in'};
   } else {
-    badge = {label: '继承', tone: 'follow'};
+    badge = {label: '跟随', tone: 'follow'};
   }
 
   return {
@@ -108,7 +108,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
       name: entryName(entry.path),
       kind: 'dir',
       subtitle: '',
-      badge: {label: '继承', tone: 'follow'},
+      badge: {label: '跟随', tone: 'follow'},
       ruleEnabled: false,
     };
   }
@@ -116,8 +116,8 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
     path: entry.path,
     name: entryName(entry.path),
     kind: 'file',
-    subtitle: '继承·全内容',
-    badge: {label: '继承', tone: 'follow'},
+    subtitle: '跟随·全内容',
+    badge: {label: '跟随', tone: 'follow'},
     ruleEnabled: false,
   };
 }
