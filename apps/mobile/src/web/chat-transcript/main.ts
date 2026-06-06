@@ -19,10 +19,14 @@ export function buildTranscriptBootScript(): string {
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '' },
-    flags: { richText: false, showFullToolParams: false, batchMode: false },
+    flags: { richText: false, showFullToolParams: false, batchMode: false, menuDisabled: false },
+    selectedIds: [],
+    menu: null,
     thinkingExpanded: {},
     scrollRaf: null,
     loadOlderArmed: true,
+    longPressTimer: null,
+    longPressTarget: null,
   };
 
   function post(type, payload) {
@@ -195,14 +199,140 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
+  function findMessageRow(messageId) {
+    for (var i = 0; i < state.rows.length; i++) {
+      var row = state.rows[i];
+      if (row.kind === 'message' && row.id === messageId) return row;
+    }
+    return null;
+  }
+
+  function isSelected(messageId) {
+    return state.selectedIds.indexOf(messageId) >= 0;
+  }
+
+  function buildMenuItems(row) {
+    var items = [];
+    if (row.text) items.push({ label: '编辑', action: 'edit' });
+    if (row.hidden) items.push({ label: '取消隐藏', action: 'unhide' });
+    else items.push({ label: '隐藏', action: 'hide' });
+    items.push({ label: '复制', action: 'copy' });
+    items.push({ label: 'Fork', action: 'fork' });
+    items.push({ label: '回滚', action: 'rollback', danger: true });
+    items.push({ label: '删除', action: 'delete', danger: true });
+    return items;
+  }
+
+  function closeContextMenu(notifyHost) {
+    if (!state.menu) return;
+    state.menu = null;
+    var menuEl = document.getElementById('context-menu');
+    if (menuEl) menuEl.remove();
+    var backdrop = document.getElementById('menu-backdrop');
+    if (backdrop) backdrop.remove();
+    if (notifyHost !== false) post('menuClosed', {});
+  }
+
+  function renderContextMenu() {
+    if (!state.menu) return;
+    var menu = state.menu;
+    var existingMenu = document.getElementById('context-menu');
+    if (existingMenu) existingMenu.remove();
+    var existingBackdrop = document.getElementById('menu-backdrop');
+    if (existingBackdrop) existingBackdrop.remove();
+    var backdrop = document.createElement('div');
+    backdrop.id = 'menu-backdrop';
+    backdrop.className = 'menu-backdrop';
+    backdrop.setAttribute('data-action', 'close-menu');
+    var menuEl = document.createElement('div');
+    menuEl.id = 'context-menu';
+    menuEl.className = 'context-menu';
+    menuEl.style.left = Math.max(8, menu.pageX - 66) + 'px';
+    menuEl.style.top = Math.max(8, menu.pageY - 12) + 'px';
+    var html = '';
+    for (var i = 0; i < menu.items.length; i++) {
+      var item = menu.items[i];
+      html +=
+        '<button type="button" class="menu-item' + (item.danger ? ' danger' : '') + '" data-action="menu-action" data-message-id="' +
+        escapeHtml(menu.messageId) + '" data-menu-action="' + escapeHtml(item.action) + '">' +
+        escapeHtml(item.label) + '</button>';
+    }
+    menuEl.innerHTML = html;
+    document.body.appendChild(backdrop);
+    document.body.appendChild(menuEl);
+  }
+
+  function openContextMenu(messageId, pageX, pageY) {
+    if (state.flags.menuDisabled || state.flags.batchMode) return;
+    var row = findMessageRow(messageId);
+    if (!row) return;
+    post('openMessageMenu', { messageId: messageId, pageX: pageX, pageY: pageY });
+    post('menuOpened', {});
+    state.menu = {
+      messageId: messageId,
+      pageX: pageX,
+      pageY: pageY,
+      items: buildMenuItems(row),
+    };
+    renderContextMenu();
+  }
+
+  function clearLongPress() {
+    if (state.longPressTimer != null) {
+      clearTimeout(state.longPressTimer);
+      state.longPressTimer = null;
+    }
+    state.longPressTarget = null;
+  }
+
+  function onMessagePointerDown(event) {
+    if (state.flags.batchMode || state.flags.menuDisabled) return;
+    var rowEl = event.target && event.target.closest ? event.target.closest('.row.message') : null;
+    if (!rowEl) return;
+    var messageId = rowEl.getAttribute('data-id');
+    if (!messageId) return;
+    var touch = event.touches && event.touches[0];
+    if (!touch) return;
+    clearLongPress();
+    state.longPressTarget = { messageId: messageId, pageX: touch.pageX, pageY: touch.pageY };
+    state.longPressTimer = setTimeout(function () {
+      state.longPressTimer = null;
+      var target = state.longPressTarget;
+      state.longPressTarget = null;
+      if (target) openContextMenu(target.messageId, target.pageX, target.pageY);
+    }, 450);
+  }
+
+  function onMessagePointerUp() {
+    clearLongPress();
+  }
+
+  function applyTheme(theme) {
+    if (!theme) return;
+    var root = document.documentElement;
+    root.style.setProperty('--bg', theme.background || '#fff');
+    root.style.setProperty('--text', theme.text || '#111');
+    root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
+    root.style.setProperty('--primary', theme.primary || '#007aff');
+    root.style.setProperty('--surface', theme.surface || '#f2f2f7');
+    root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
+  }
+
   function renderMessageRow(row) {
     var role = row.role === 'user' ? 'user' : 'assistant';
     var hidden = row.hidden ? ' hidden' : '';
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
     var richBubble = state.flags.richText && row.role === 'assistant' && row.textHtml ? ' rich' : '';
-    var html =
-      '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
+    var selected = isSelected(row.id);
+    var selectedClass = selected ? ' selected' : '';
+    var html = '';
+    if (state.flags.batchMode) {
+      html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
+        '" aria-hidden="true">' +
+        (selected ? '✓' : '') + '</div><div class="batch-content">';
+    }
+    html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '">';
     if (row.thinking) {
       html += renderThinkingCard(row.thinking, thinkingKey, thinkingExpanded, row.thinkingHtml);
     }
@@ -211,6 +341,9 @@ export function buildTranscriptBootScript(): string {
       html += '<div class="bubble' + richBubble + '">' + inner + '</div>';
     }
     html += '</div>';
+    if (state.flags.batchMode) {
+      html += '</div></div>';
+    }
     return html;
   }
 
@@ -267,6 +400,9 @@ export function buildTranscriptBootScript(): string {
     state.loadOlderArmed = true;
     if (intent !== 'preserve' || sessionChanged) {
       state.stream = { text: '', thinking: '' };
+    }
+    if (sessionChanged) {
+      closeContextMenu(false);
     }
     renderRows();
     if (!scroller) return;
@@ -344,6 +480,24 @@ export function buildTranscriptBootScript(): string {
     var actionEl = target.closest('[data-action]');
     if (!actionEl) return;
     var action = actionEl.getAttribute('data-action');
+    if (action === 'toggle-select') {
+      var selectId = actionEl.getAttribute('data-id');
+      if (selectId) post('toggleMessageSelect', { messageId: selectId });
+      return;
+    }
+    if (action === 'close-menu') {
+      closeContextMenu(true);
+      return;
+    }
+    if (action === 'menu-action') {
+      var messageId = actionEl.getAttribute('data-message-id');
+      var menuAction = actionEl.getAttribute('data-menu-action');
+      closeContextMenu(true);
+      if (messageId && menuAction) {
+        post('messageMenuAction', { messageId: messageId, action: menuAction });
+      }
+      return;
+    }
     if (action === 'toggle-thinking') {
       var key = actionEl.getAttribute('data-thinking-key');
       if (key) {
@@ -373,20 +527,13 @@ export function buildTranscriptBootScript(): string {
     var p = msg.payload || {};
     switch (msg.type) {
       case 'init':
-        if (p.theme) {
-          var root = document.documentElement;
-          root.style.setProperty('--bg', p.theme.background || '#fff');
-          root.style.setProperty('--text', p.theme.text || '#111');
-          root.style.setProperty('--text-secondary', p.theme.textSecondary || '#666');
-          root.style.setProperty('--primary', p.theme.primary || '#007aff');
-          root.style.setProperty('--surface', p.theme.surface || '#f2f2f7');
-          root.style.setProperty('--border', p.theme.borderLight || '#e5e5ea');
-        }
+        applyTheme(p.theme);
         if (p.flags) {
           state.flags = {
             richText: !!p.flags.richText,
             showFullToolParams: !!p.flags.showFullToolParams,
             batchMode: !!p.flags.batchMode,
+            menuDisabled: !!p.flags.menuDisabled,
           };
         }
         break;
@@ -409,9 +556,23 @@ export function buildTranscriptBootScript(): string {
             richText: !!p.flags.richText,
             showFullToolParams: !!p.flags.showFullToolParams,
             batchMode: !!p.flags.batchMode,
+            menuDisabled: !!p.flags.menuDisabled,
           };
+          if (state.flags.batchMode || state.flags.menuDisabled) {
+            closeContextMenu(true);
+          }
           renderRows();
         }
+        break;
+      case 'themeUpdate':
+        applyTheme(p.theme);
+        break;
+      case 'selectionUpdate':
+        state.selectedIds = (p.selectedMessageIds || []).slice();
+        renderRows();
+        break;
+      case 'closeMenu':
+        closeContextMenu(true);
         break;
       default:
         break;
@@ -431,8 +592,13 @@ export function buildTranscriptBootScript(): string {
     var scroller = document.getElementById('scroller');
     var rows = document.getElementById('rows');
     if (scroller) scroller.addEventListener('scroll', onScroll, { passive: true });
-    if (rows) rows.addEventListener('click', onRowsClick);
-    post('ready', { version: 'm2' });
+    if (rows) {
+      rows.addEventListener('click', onRowsClick);
+      rows.addEventListener('touchstart', onMessagePointerDown, { passive: true });
+      rows.addEventListener('touchend', onMessagePointerUp, { passive: true });
+      rows.addEventListener('touchcancel', onMessagePointerUp, { passive: true });
+    }
+    post('ready', { version: 'm3' });
     state.ready = true;
   });
 })();

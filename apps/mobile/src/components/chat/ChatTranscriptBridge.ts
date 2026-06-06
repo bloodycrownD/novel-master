@@ -50,6 +50,8 @@ export type TranscriptFlags = {
   readonly richText: boolean;
   readonly showFullToolParams: boolean;
   readonly batchMode: boolean;
+  /** When true, long-press menu is suppressed (e.g. agent running). */
+  readonly menuDisabled?: boolean;
 };
 
 export type TranscriptStreamState = {
@@ -93,7 +95,9 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'streamReset', Record<string, never>>
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
-  | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>;
+  | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
+  | BridgeEnvelope<'selectionUpdate', {selectedMessageIds: readonly string[]}>
+  | BridgeEnvelope<'closeMenu', Record<string, never>>;
 
 /** Transcript → host */
 export const CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION = 2 as const;
@@ -121,6 +125,12 @@ export type TranscriptToHostMessage =
     >
   | BridgeEnvelope<'openToolFile', {path: string}>
   | BridgeEnvelope<'toggleMessageSelect', {messageId: string}>
+  | BridgeEnvelope<
+      'messageMenuAction',
+      {messageId: string; action: string}
+    >
+  | BridgeEnvelope<'menuOpened', Record<string, never>>
+  | BridgeEnvelope<'menuClosed', Record<string, never>>
   | BridgeEnvelope<
       'log',
       {level: string; message: string; fields?: Record<string, unknown>}

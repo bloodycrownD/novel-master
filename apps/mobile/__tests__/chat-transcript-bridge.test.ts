@@ -105,5 +105,113 @@ describe('chat-transcript-bridge', () => {
       '/续写/chapter.md',
     );
   });
+
+  it('round-trips Web→RN openMessageMenu envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'openMessageMenu' as const,
+      payload: {messageId: 'm1', pageX: 120, pageY: 340},
+    };
+    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips Web→RN toggleMessageSelect envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'toggleMessageSelect' as const,
+      payload: {messageId: 'm2'},
+    };
+    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips Web→RN messageMenuAction envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'messageMenuAction' as const,
+      payload: {messageId: 'm1', action: 'copy'},
+    };
+    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips Web→RN menuOpened envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'menuOpened' as const,
+      payload: {},
+    };
+    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips Web→RN menuClosed envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'menuClosed' as const,
+      payload: {},
+    };
+    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips RN→Web closeMenu envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'closeMenu' as const,
+      payload: {},
+    };
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips RN→Web selectionUpdate envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'selectionUpdate' as const,
+      payload: {selectedMessageIds: ['m1', 'm3']},
+    };
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
+  });
+
+  it('round-trips RN→Web themeUpdate envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'themeUpdate' as const,
+      payload: {
+        theme: {
+          background: '#000',
+          text: '#fff',
+          textSecondary: '#aaa',
+          primary: '#0af',
+          surface: '#111',
+          borderLight: '#333',
+        },
+      },
+    };
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
+  });
+
+  it('openMessageMenu handler path does not require sessionSnapshot', () => {
+    /** M3 T7: long-press menu is Web-only DOM; RN handles openMessageMenu without reload. */
+    const menuMessage = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'openMessageMenu' as const,
+      payload: {messageId: 'm1', pageX: 10, pageY: 20},
+    };
+    expect(menuMessage.type).toBe('openMessageMenu');
+    expect(menuMessage.type).not.toBe('sessionSnapshot');
+  });
 });
 

@@ -180,4 +180,20 @@ describe('useAndroidChatBackHandler', () => {
     expect(closeAgentPicker).toHaveBeenCalledTimes(1);
     expect(backFromConversation).not.toHaveBeenCalled();
   });
+
+  it('T9: web message menu closes first without leaving conversation', () => {
+    const backFromConversation = jest.fn();
+    const closeMessageMenu = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({
+        chatSubview: 'conversation',
+        messageMenuOpen: true,
+      }),
+      defaultActions({backFromConversation, closeMessageMenu}),
+    );
+
+    expect(handler()).toBe(true);
+    expect(closeMessageMenu).toHaveBeenCalledTimes(1);
+    expect(backFromConversation).not.toHaveBeenCalled();
+  });
 });

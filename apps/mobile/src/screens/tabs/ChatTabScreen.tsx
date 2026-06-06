@@ -170,6 +170,8 @@ export function ChatTabScreen() {
   const [messageMenuAnchor, setMessageMenuAnchor] = useState<
     MessageMenuAnchor | undefined
   >();
+  const [webMenuOpen, setWebMenuOpen] = useState(false);
+  const [webMenuCloseSignal, setWebMenuCloseSignal] = useState(0);
   const [messageBatchPurpose, setMessageBatchPurpose] = useState<
     MessageBatchPurpose | null
   >(null);
@@ -443,6 +445,8 @@ export function ChatTabScreen() {
   const closeMessageMenu = useCallback(() => {
     setMessageMenuTarget(undefined);
     setMessageMenuAnchor(undefined);
+    setWebMenuOpen(false);
+    setWebMenuCloseSignal(signal => signal + 1);
   }, []);
 
   const dismissAllOverlays = useCallback(() => {
@@ -464,7 +468,7 @@ export function ChatTabScreen() {
       conversationPanel,
       sessionListPanel,
       sessionDrawerOpen,
-      messageMenuOpen: messageMenuTarget != null,
+      messageMenuOpen: messageMenuTarget != null || webMenuOpen,
       messageBatchActive: messageBatch.active,
       messageEditOpen: messageEditPrompt != null,
       modelPickerOpen,
@@ -944,6 +948,56 @@ export function ChatTabScreen() {
     [runtime, reloadMessages, showToast],
   );
 
+  const handleMessageMenuAction = useCallback(
+    (target: ChatMessage, action: string) => {
+      if (action === 'edit') {
+        const initial = editableTextFromMessage(target);
+        if (initial == null) {
+          showToast(toastMessage('无法编辑', '该消息包含工具调用，暂不支持编辑'));
+          return;
+        }
+        setMessageEditPrompt({
+          messageId: target.id,
+          initialText: initial,
+        });
+      } else if (action === 'hide') {
+        handleHideMessage(target.id).catch(() => undefined);
+      } else if (action === 'unhide') {
+        handleShowMessage(target.id).catch(() => undefined);
+      } else if (action === 'copy') {
+        const text = editableTextFromMessage(target);
+        if (text == null) {
+          showToast(toastMessage('无法复制', '该消息没有可复制的文本'));
+          return;
+        }
+        Clipboard.setString(text);
+        showToast('已复制');
+      } else if (action === 'fork') {
+        handleForkFromMessage(target.id).catch(() => undefined);
+      } else if (action === 'rollback') {
+        handleRollbackFromMessage(target.id);
+      } else if (action === 'delete') {
+        Alert.alert('删除消息', '确定删除这条消息？', [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '删除',
+            style: 'destructive',
+            onPress: () =>
+              handleDeleteMessage(target.id).catch(() => undefined),
+          },
+        ]);
+      }
+    },
+    [
+      handleDeleteMessage,
+      handleForkFromMessage,
+      handleHideMessage,
+      handleRollbackFromMessage,
+      handleShowMessage,
+      showToast,
+    ],
+  );
+
   const handleSaveMessageEdit = useCallback(
     async (messageId: string, text: string) => {
       const trimmed = text.trim();
@@ -1138,16 +1192,50 @@ export function ChatTabScreen() {
                   streamingText={streamingText}
                   streamingThinking={streamingThinking}
                   hasMore={hasMoreMessages}
+                  agentRunning={agentRunning}
                   flags={{
                     richText: chatRichTextEnabled,
                     showFullToolParams,
                     batchMode: messageBatch.active,
                   }}
+                  selectedMessageIds={messageBatch.selectedIds}
+                  menuCloseSignal={webMenuCloseSignal}
                   initialScroll={restoredTranscriptScroll ?? null}
                   defaultScrollToBottom={defaultChatScrollToBottom}
                   onScrollSnapshot={handleChatScrollSnapshot}
                   onLoadOlder={() => loadOlderMessages().catch(() => undefined)}
                   onOpenToolFile={openSessionFilePreview}
+                  onWebMenuOpenChange={open => {
+                    setWebMenuOpen(open);
+                    if (!open) {
+                      setMessageMenuTarget(undefined);
+                      setMessageMenuAnchor(undefined);
+                    }
+                  }}
+                  onOpenMessageMenu={(messageId, pageX, pageY) => {
+                    if (agentRunning) {
+                      return;
+                    }
+                    const msg = chatMessages.find(m => m.id === messageId);
+                    if (msg == null) {
+                      return;
+                    }
+                    setMessageMenuTarget(msg);
+                    setMessageMenuAnchor({
+                      x: pageX,
+                      y: pageY,
+                      width: 0,
+                      height: 0,
+                    });
+                  }}
+                  onMessageMenuAction={(messageId, action) => {
+                    const target = chatMessages.find(m => m.id === messageId);
+                    if (target == null) {
+                      return;
+                    }
+                    handleMessageMenuAction(target, action);
+                  }}
+                  onToggleMessageSelect={messageBatch.toggle}
                 />
               ) : (
               <MessageList
@@ -1278,61 +1366,21 @@ export function ChatTabScreen() {
           }}
         />
         <MessageActionMenu
-          visible={messageMenuTarget != null}
+          visible={!useWebviewTranscript && messageMenuTarget != null}
           anchor={messageMenuAnchor}
           items={
             messageMenuTarget != null
               ? buildMessageActionItems(messageMenuTarget)
               : []
           }
-          onClose={() => {
-            setMessageMenuTarget(undefined);
-            setMessageMenuAnchor(undefined);
-          }}
+          onClose={closeMessageMenu}
           onSelect={action => {
             const target = messageMenuTarget;
-            setMessageMenuTarget(undefined);
-            setMessageMenuAnchor(undefined);
+            closeMessageMenu();
             if (target == null) {
               return;
             }
-            if (action === 'edit') {
-              const initial = editableTextFromMessage(target);
-              if (initial == null) {
-                showToast(toastMessage('无法编辑', '该消息包含工具调用，暂不支持编辑'));
-                return;
-              }
-              setMessageEditPrompt({
-                messageId: target.id,
-                initialText: initial,
-              });
-            } else if (action === 'hide') {
-              handleHideMessage(target.id).catch(() => undefined);
-            } else if (action === 'unhide') {
-              handleShowMessage(target.id).catch(() => undefined);
-            } else if (action === 'copy') {
-              const text = editableTextFromMessage(target);
-              if (text == null) {
-                showToast(toastMessage('无法复制', '该消息没有可复制的文本'));
-                return;
-              }
-              Clipboard.setString(text);
-              showToast('已复制');
-            } else if (action === 'fork') {
-              handleForkFromMessage(target.id).catch(() => undefined);
-            } else if (action === 'rollback') {
-              handleRollbackFromMessage(target.id);
-            } else if (action === 'delete') {
-              Alert.alert('删除消息', '确定删除这条消息？', [
-                {text: '取消', style: 'cancel'},
-                {
-                  text: '删除',
-                  style: 'destructive',
-                  onPress: () =>
-                    handleDeleteMessage(target.id).catch(() => undefined),
-                },
-              ]);
-            }
+            handleMessageMenuAction(target, action);
           }}
         />
         <MessageEditModal

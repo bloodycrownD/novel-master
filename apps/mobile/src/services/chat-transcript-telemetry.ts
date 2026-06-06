@@ -21,6 +21,9 @@ export type ChatTranscriptTelemetryEvent =
       readonly prependedCount: number;
       readonly wasNearBottom: boolean;
       readonly offsetYBefore: number;
+    }
+  | {
+      readonly name: 'menu_open';
     };
 
 export function emitChatTranscriptTelemetry(

@@ -37,10 +37,21 @@ export type ChatTranscriptWebViewProps = {
   readonly initialScroll?: ChatTranscriptScrollSnapshot | null;
   /** No cached snapshot: open pinned to bottom. */
   readonly defaultScrollToBottom?: boolean;
+  readonly agentRunning?: boolean;
+  readonly selectedMessageIds?: ReadonlySet<string>;
+  readonly menuCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
   readonly onOpenToolFile?: (path: string) => void;
+  readonly onOpenMessageMenu?: (
+    messageId: string,
+    pageX: number,
+    pageY: number,
+  ) => void;
+  readonly onMessageMenuAction?: (messageId: string, action: string) => void;
+  readonly onWebMenuOpenChange?: (open: boolean) => void;
+  readonly onToggleMessageSelect?: (messageId: string) => void;
 };
 
 function themeFromTokens(tokens: {
@@ -113,10 +124,17 @@ export function ChatTranscriptWebView({
   flags,
   initialScroll = null,
   defaultScrollToBottom = true,
+  agentRunning = false,
+  selectedMessageIds,
+  menuCloseSignal = 0,
   onScrollSnapshot,
   onReady,
   onLoadOlder,
   onOpenToolFile,
+  onOpenMessageMenu,
+  onMessageMenuAction,
+  onWebMenuOpenChange,
+  onToggleMessageSelect,
 }: ChatTranscriptWebViewProps) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
@@ -149,13 +167,14 @@ export function ChatTranscriptWebView({
       richText: flags?.richText ?? false,
       showFullToolParams: flags?.showFullToolParams ?? false,
       batchMode: flags?.batchMode ?? false,
+      menuDisabled: agentRunning,
     };
     postToWeb({
       v: 1,
       type: 'init',
       payload: {theme: themeFromTokens(tokens), flags: resolvedFlags},
     });
-  }, [flags, postToWeb, tokens]);
+  }, [flags, postToWeb, tokens, agentRunning]);
 
   // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
   const sendSessionSnapshot = useCallback(
@@ -231,9 +250,50 @@ export function ChatTranscriptWebView({
       }
       if (message.type === 'openToolFile') {
         onOpenToolFile?.(message.payload.path);
+        return;
+      }
+      if (message.type === 'openMessageMenu') {
+        if (agentRunning) {
+          return;
+        }
+        emitChatTranscriptTelemetry({name: 'menu_open'});
+        onOpenMessageMenu?.(
+          message.payload.messageId,
+          message.payload.pageX,
+          message.payload.pageY,
+        );
+        return;
+      }
+      if (message.type === 'messageMenuAction') {
+        onMessageMenuAction?.(
+          message.payload.messageId,
+          message.payload.action,
+        );
+        return;
+      }
+      if (message.type === 'menuOpened') {
+        onWebMenuOpenChange?.(true);
+        return;
+      }
+      if (message.type === 'menuClosed') {
+        onWebMenuOpenChange?.(false);
+        return;
+      }
+      if (message.type === 'toggleMessageSelect') {
+        onToggleMessageSelect?.(message.payload.messageId);
       }
     },
-    [onReady, onScrollSnapshot, onLoadOlder, onOpenToolFile],
+    [
+      onReady,
+      onScrollSnapshot,
+      onLoadOlder,
+      onOpenToolFile,
+      onOpenMessageMenu,
+      onMessageMenuAction,
+      onWebMenuOpenChange,
+      onToggleMessageSelect,
+      agentRunning,
+    ],
   );
 
   useEffect(() => {
@@ -255,10 +315,44 @@ export function ChatTranscriptWebView({
           richText: flags?.richText ?? false,
           showFullToolParams: flags?.showFullToolParams ?? false,
           batchMode: flags?.batchMode ?? false,
+          menuDisabled: agentRunning,
         },
       },
     });
-  }, [webReady, flags, postToWeb]);
+  }, [webReady, flags, agentRunning, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'themeUpdate',
+      payload: {theme: themeFromTokens(tokens)},
+    });
+  }, [webReady, tokens, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'selectionUpdate',
+      payload: {
+        selectedMessageIds: selectedMessageIds
+          ? [...selectedMessageIds]
+          : [],
+      },
+    });
+  }, [webReady, selectedMessageIds, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady || menuCloseSignal === 0) {
+      return;
+    }
+    postToWeb({v: 1, type: 'closeMenu', payload: {}});
+  }, [webReady, menuCloseSignal, postToWeb]);
 
   useEffect(() => {
     if (!webReady) {
