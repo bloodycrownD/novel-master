@@ -18,6 +18,62 @@ import {
   handleBootstrapStatus,
 } from "./handlers/bootstrap.js";
 import { handleCompactionManual } from "./handlers/compaction.js";
+import { handleCompactionConditionsGet, handleCompactionConditionsSet } from "./handlers/compaction-conditions.js";
+import {
+  handleAgentRegistryCreateBlank,
+  handleAgentRegistryDelete,
+  handleAgentRegistryGet,
+  handleAgentRegistryList,
+  handleAgentRegistryUpsert,
+  handleAgentYamlExport,
+  handleAgentYamlImport,
+} from "./handlers/agent-registry.js";
+import {
+  handleBackupExport,
+  handleBackupImport,
+} from "./handlers/backup.js";
+import {
+  handleEventsClearConfig,
+  handleEventsExportYaml,
+  handleEventsGetConfig,
+  handleEventsImportYaml,
+  handleEventsSetConfig,
+} from "./handlers/events.js";
+import {
+  handlePreferencesGetSessionFsVersionCheck,
+  handlePreferencesSetSessionFsVersionCheck,
+} from "./handlers/preferences.js";
+import {
+  handleProviderModelsDeleteSaved,
+  handleProviderModelsFetch,
+  handleProviderModelsGetSaved,
+  handleProviderModelsResetContextWindow,
+  handleProviderModelsSave,
+  handleProviderModelsSavedList,
+  handleProviderModelsSuggestList,
+  handleProviderModelsUpdateSettings,
+} from "./handlers/provider-models.js";
+import {
+  handleProvidersCreate,
+  handleProvidersDelete,
+  handleProvidersEdit,
+  handleProvidersGet,
+  handleProvidersList,
+} from "./handlers/providers.js";
+import {
+  handleRegexCreateGroup,
+  handleRegexCreateRule,
+  handleRegexDeleteGroup,
+  handleRegexDeleteRule,
+  handleRegexGetGroup,
+  handleRegexGetRule,
+  handleRegexListGroups,
+  handleRegexListPicker,
+  handleRegexListRules,
+  handleRegexSetCurrent,
+  handleRegexUpdateGroup,
+  handleRegexUpdateRule,
+} from "./handlers/regex.js";
 import {
   handleMessagesAppend,
   handleMessagesDelete,
@@ -207,4 +263,128 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.COMPACTION_MANUAL, (_event, req) =>
     handleCompactionManual(req),
   );
+
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK, () =>
+    handlePreferencesGetSessionFsVersionCheck(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
+    (_event, enabled: boolean) =>
+      handlePreferencesSetSessionFsVersionCheck(enabled),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, () => handleProvidersList());
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_GET, (_event, req) =>
+    handleProvidersGet(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_CREATE, (_event, req) =>
+    handleProvidersCreate(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_EDIT, (_event, req) =>
+    handleProvidersEdit(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDERS_DELETE, (_event, req) =>
+    handleProvidersDelete(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST, (_event, req) =>
+    handleProviderModelsSavedList(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_FETCH, (_event, req) =>
+    handleProviderModelsFetch(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST, (_event, req) =>
+    handleProviderModelsSuggestList(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_SAVE, (_event, req) =>
+    handleProviderModelsSave(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, (_event, req) =>
+    handleProviderModelsDeleteSaved(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, (_event, req) =>
+    handleProviderModelsGetSaved(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS, (_event, req) =>
+    handleProviderModelsUpdateSettings(req),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW,
+    (_event, req) => handleProviderModelsResetContextWindow(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_LIST, () =>
+    handleAgentRegistryList(),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_GET, (_event, req) =>
+    handleAgentRegistryGet(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, (_event, req) =>
+    handleAgentRegistryUpsert(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_DELETE, (_event, req) =>
+    handleAgentRegistryDelete(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK, () =>
+    handleAgentRegistryCreateBlank(),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_YAML_EXPORT, (_event, req) =>
+    handleAgentYamlExport(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.AGENT_YAML_IMPORT, (_event, req) =>
+    handleAgentYamlImport(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.REGEX_LIST_GROUPS, () => handleRegexListGroups());
+  ipcMain.handle(IPC_CHANNELS.REGEX_GET_GROUP, (_event, req) =>
+    handleRegexGetGroup(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_CREATE_GROUP, (_event, req) =>
+    handleRegexCreateGroup(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_UPDATE_GROUP, (_event, req) =>
+    handleRegexUpdateGroup(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_DELETE_GROUP, (_event, req) =>
+    handleRegexDeleteGroup(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_LIST_RULES, (_event, req) =>
+    handleRegexListRules(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_GET_RULE, (_event, req) =>
+    handleRegexGetRule(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_CREATE_RULE, (_event, req) =>
+    handleRegexCreateRule(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_UPDATE_RULE, (_event, req) =>
+    handleRegexUpdateRule(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_DELETE_RULE, (_event, req) =>
+    handleRegexDeleteRule(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.REGEX_LIST_PICKER, () => handleRegexListPicker());
+  ipcMain.handle(IPC_CHANNELS.REGEX_SET_CURRENT, (_event, req) =>
+    handleRegexSetCurrent(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.EVENTS_GET_CONFIG, () => handleEventsGetConfig());
+  ipcMain.handle(IPC_CHANNELS.EVENTS_SET_CONFIG, (_event, req) =>
+    handleEventsSetConfig(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.EVENTS_CLEAR_CONFIG, () =>
+    handleEventsClearConfig(),
+  );
+  ipcMain.handle(IPC_CHANNELS.EVENTS_EXPORT_YAML, () => handleEventsExportYaml());
+  ipcMain.handle(IPC_CHANNELS.EVENTS_IMPORT_YAML, () => handleEventsImportYaml());
+
+  ipcMain.handle(IPC_CHANNELS.COMPACTION_CONDITIONS_GET, () =>
+    handleCompactionConditionsGet(),
+  );
+  ipcMain.handle(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, (_event, req) =>
+    handleCompactionConditionsSet(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, () => handleBackupExport());
+  ipcMain.handle(IPC_CHANNELS.BACKUP_IMPORT, () => handleBackupImport());
 }

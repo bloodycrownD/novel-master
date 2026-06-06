@@ -369,4 +369,179 @@ export async function ipcCompactionManual(
   return bridge().invoke(IPC_CHANNELS.COMPACTION_MANUAL, req);
 }
 
+export async function ipcPreferencesGetSessionFsVersionCheck(): Promise<
+  IpcResult<boolean>
+> {
+  return bridge().invoke(IPC_CHANNELS.PREFERENCES_GET_SESSION_FS_VERSION_CHECK);
+}
+
+export async function ipcPreferencesSetSessionFsVersionCheck(
+  enabled: boolean,
+): Promise<IpcResult<void>> {
+  return bridge().invoke(
+    IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
+    enabled,
+  );
+}
+
+export async function ipcProvidersList() {
+  return bridge().invoke(IPC_CHANNELS.PROVIDERS_LIST);
+}
+
+export async function ipcProvidersGet(req: { providerId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDERS_GET, req);
+}
+
+export async function ipcProvidersCreate(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDERS_CREATE, req);
+}
+
+export async function ipcProvidersEdit(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDERS_EDIT, req);
+}
+
+export async function ipcProvidersDelete(req: { providerId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDERS_DELETE, req);
+}
+
+export async function ipcProviderModelsSavedList(req: { providerId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST, req);
+}
+
+export async function ipcProviderModelsFetch(req: { providerId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_FETCH, req);
+}
+
+export async function ipcProviderModelsSuggestList(req: { providerId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST, req);
+}
+
+export async function ipcProviderModelsSave(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_SAVE, req);
+}
+
+export async function ipcProviderModelsDeleteSaved(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, req);
+}
+
+export async function ipcProviderModelsGetSaved(req: { applicationModelId: string }) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, req);
+}
+
+export async function ipcProviderModelsUpdateSettings(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS, req);
+}
+
+export async function ipcProviderModelsResetContextWindow(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW, req);
+}
+
+export async function ipcAgentRegistryList() {
+  return bridge().invoke(IPC_CHANNELS.AGENT_REGISTRY_LIST);
+}
+
+export async function ipcAgentRegistryGet(req: { agentId: string }) {
+  return bridge().invoke(IPC_CHANNELS.AGENT_REGISTRY_GET, req);
+}
+
+export async function ipcAgentRegistryUpsert(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, req);
+}
+
+export async function ipcAgentRegistryDelete(req: { agentId: string }) {
+  return bridge().invoke(IPC_CHANNELS.AGENT_REGISTRY_DELETE, req);
+}
+
+export async function ipcAgentRegistryCreateBlank() {
+  return bridge().invoke(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK);
+}
+
+export async function ipcAgentYamlExport(req: { agentId: string }) {
+  return bridge().invoke(IPC_CHANNELS.AGENT_YAML_EXPORT, req);
+}
+
+export async function ipcAgentYamlImport(req: { agentId: string }) {
+  return bridge().invoke(IPC_CHANNELS.AGENT_YAML_IMPORT, req);
+}
+
+export async function ipcRegexListGroups() {
+  return bridge().invoke(IPC_CHANNELS.REGEX_LIST_GROUPS);
+}
+
+export async function ipcRegexCreateGroup(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_CREATE_GROUP, req);
+}
+
+export async function ipcRegexUpdateGroup(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_UPDATE_GROUP, req);
+}
+
+export async function ipcRegexDeleteGroup(req: { groupId: string }) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_DELETE_GROUP, req);
+}
+
+export async function ipcRegexListRules(req: { groupId: string }) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_LIST_RULES, req);
+}
+
+export async function ipcRegexGetRule(req: { groupId: string; ruleId: string }) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_GET_RULE, req);
+}
+
+export async function ipcRegexCreateRule(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_CREATE_RULE, req);
+}
+
+export async function ipcRegexUpdateRule(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_UPDATE_RULE, req);
+}
+
+export async function ipcRegexDeleteRule(req: { groupId: string; ruleId: string }) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_DELETE_RULE, req);
+}
+
+export async function ipcRegexListPicker() {
+  return bridge().invoke(IPC_CHANNELS.REGEX_LIST_PICKER);
+}
+
+export async function ipcRegexSetCurrent(req: { groupId: string | null }) {
+  return bridge().invoke(IPC_CHANNELS.REGEX_SET_CURRENT, req);
+}
+
+export async function ipcEventsGetConfig() {
+  return bridge().invoke(IPC_CHANNELS.EVENTS_GET_CONFIG);
+}
+
+export async function ipcEventsSetConfig(req: { config: unknown }) {
+  return bridge().invoke(IPC_CHANNELS.EVENTS_SET_CONFIG, req);
+}
+
+export async function ipcEventsClearConfig() {
+  return bridge().invoke(IPC_CHANNELS.EVENTS_CLEAR_CONFIG);
+}
+
+export async function ipcEventsExportYaml() {
+  return bridge().invoke(IPC_CHANNELS.EVENTS_EXPORT_YAML);
+}
+
+export async function ipcEventsImportYaml() {
+  return bridge().invoke(IPC_CHANNELS.EVENTS_IMPORT_YAML);
+}
+
+export async function ipcCompactionConditionsGet() {
+  return bridge().invoke(IPC_CHANNELS.COMPACTION_CONDITIONS_GET);
+}
+
+export async function ipcCompactionConditionsSet(req: unknown) {
+  return bridge().invoke(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, req);
+}
+
+export async function ipcBackupExport() {
+  return bridge().invoke(IPC_CHANNELS.BACKUP_EXPORT);
+}
+
+export async function ipcBackupImport() {
+  return bridge().invoke(IPC_CHANNELS.BACKUP_IMPORT);
+}
+
 export { vfsScope };

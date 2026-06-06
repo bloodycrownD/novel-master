@@ -68,6 +68,61 @@ export const IPC_CHANNELS = {
   PROMPT_AGENT_META: "nm:prompt/agentMeta",
 
   COMPACTION_MANUAL: "nm:compaction/manual",
+
+  PREFERENCES_GET_SESSION_FS_VERSION_CHECK:
+    "nm:preferences/getSessionFsVersionCheck",
+  PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
+    "nm:preferences/setSessionFsVersionCheck",
+
+  PROVIDERS_LIST: "nm:providers/list",
+  PROVIDERS_GET: "nm:providers/get",
+  PROVIDERS_CREATE: "nm:providers/create",
+  PROVIDERS_EDIT: "nm:providers/edit",
+  PROVIDERS_DELETE: "nm:providers/delete",
+
+  PROVIDER_MODELS_SAVED_LIST: "nm:providerModels/savedList",
+  PROVIDER_MODELS_FETCH: "nm:providerModels/fetch",
+  PROVIDER_MODELS_SUGGEST_LIST: "nm:providerModels/suggestList",
+  PROVIDER_MODELS_SAVE: "nm:providerModels/save",
+  PROVIDER_MODELS_DELETE_SAVED: "nm:providerModels/deleteSaved",
+  PROVIDER_MODELS_GET_SAVED: "nm:providerModels/getSaved",
+  PROVIDER_MODELS_UPDATE_SETTINGS: "nm:providerModels/updateSettings",
+  PROVIDER_MODELS_RESET_CONTEXT_WINDOW:
+    "nm:providerModels/resetContextWindow",
+
+  AGENT_REGISTRY_LIST: "nm:agentRegistry/list",
+  AGENT_REGISTRY_GET: "nm:agentRegistry/get",
+  AGENT_REGISTRY_UPSERT: "nm:agentRegistry/upsert",
+  AGENT_REGISTRY_DELETE: "nm:agentRegistry/delete",
+  AGENT_REGISTRY_CREATE_BLANK: "nm:agentRegistry/createBlank",
+
+  AGENT_YAML_EXPORT: "nm:agentYaml/export",
+  AGENT_YAML_IMPORT: "nm:agentYaml/import",
+
+  REGEX_LIST_GROUPS: "nm:regex/listGroups",
+  REGEX_GET_GROUP: "nm:regex/getGroup",
+  REGEX_CREATE_GROUP: "nm:regex/createGroup",
+  REGEX_UPDATE_GROUP: "nm:regex/updateGroup",
+  REGEX_DELETE_GROUP: "nm:regex/deleteGroup",
+  REGEX_LIST_RULES: "nm:regex/listRules",
+  REGEX_GET_RULE: "nm:regex/getRule",
+  REGEX_CREATE_RULE: "nm:regex/createRule",
+  REGEX_UPDATE_RULE: "nm:regex/updateRule",
+  REGEX_DELETE_RULE: "nm:regex/deleteRule",
+  REGEX_LIST_PICKER: "nm:regex/listPicker",
+  REGEX_SET_CURRENT: "nm:regex/setCurrent",
+
+  EVENTS_GET_CONFIG: "nm:events/getConfig",
+  EVENTS_SET_CONFIG: "nm:events/setConfig",
+  EVENTS_CLEAR_CONFIG: "nm:events/clearConfig",
+  EVENTS_EXPORT_YAML: "nm:events/exportYaml",
+  EVENTS_IMPORT_YAML: "nm:events/importYaml",
+
+  COMPACTION_CONDITIONS_GET: "nm:compactionConditions/get",
+  COMPACTION_CONDITIONS_SET: "nm:compactionConditions/set",
+
+  BACKUP_EXPORT: "nm:backup/export",
+  BACKUP_IMPORT: "nm:backup/import",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -401,3 +456,183 @@ export type PreviewFileSelection = {
   readonly path: string;
   readonly name: string;
 };
+
+export type ProviderListItemDto = {
+  readonly id: string;
+  readonly displayName: string | null;
+  readonly protocol: string;
+  readonly baseUrl: string;
+  readonly isBuiltin: boolean;
+  readonly apiKeyStatus: "set" | "not set";
+  readonly savedCount: number;
+};
+
+export type ProviderDetailDto = {
+  readonly id: string;
+  readonly displayName: string | null;
+  readonly protocol: string;
+  readonly baseUrl: string;
+  readonly isBuiltin: boolean;
+  readonly headers: Record<string, string>;
+  readonly apiKeyStatus: "set" | "not set";
+};
+
+export type ProviderCreateRequest = {
+  readonly id: string;
+  readonly protocol: "openai" | "anthropic" | "gemini";
+  readonly baseUrl: string;
+  readonly displayName?: string;
+  readonly apiKey: string;
+  readonly headers?: Record<string, string>;
+};
+
+export type ProviderEditRequest = {
+  readonly providerId: string;
+  readonly protocol?: "openai" | "anthropic" | "gemini";
+  readonly baseUrl?: string;
+  readonly displayName?: string | null;
+  readonly apiKey?: string;
+  readonly headers?: Record<string, string>;
+};
+
+export type ProviderIdRequest = {
+  readonly providerId: string;
+};
+
+export type ProviderModelSavedDto = {
+  readonly vendorModelId: string;
+  readonly displayName: string;
+  readonly applicationModelId: string;
+};
+
+export type ProviderModelsSavedListRequest = ProviderIdRequest;
+
+export type ProviderModelsFetchRequest = ProviderIdRequest;
+
+export type ProviderModelsSaveRequest = ProviderIdRequest & {
+  readonly vendorModelId: string;
+  readonly displayName?: string;
+};
+
+export type ProviderModelsDeleteSavedRequest = ProviderIdRequest & {
+  readonly vendorModelId: string;
+};
+
+export type ProviderModelsGetSavedRequest = {
+  readonly applicationModelId: string;
+};
+
+export type ProviderModelsUpdateSettingsRequest = ProviderIdRequest & {
+  readonly vendorModelId: string;
+  readonly contextWindowTokens: number;
+  readonly tokenCounterMode: string;
+  readonly sampling: unknown;
+};
+
+export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {
+  readonly vendorModelId: string;
+};
+
+export type AgentRegistryListItemDto = {
+  readonly agentId: string;
+  readonly name: string;
+};
+
+export type AgentRegistryGetRequest = {
+  readonly agentId: string;
+};
+
+export type AgentRegistryUpsertRequest = {
+  readonly agentId: string;
+  readonly definition: unknown;
+};
+
+export type AgentRegistryDeleteRequest = {
+  readonly agentId: string;
+};
+
+export type AgentYamlExportRequest = {
+  readonly agentId: string;
+};
+
+export type AgentYamlImportRequest = {
+  readonly agentId: string;
+};
+
+export type RegexGroupDto = {
+  readonly groupId: string;
+  readonly displayName: string | null;
+  readonly ruleCount: number;
+};
+
+export type RegexGroupIdRequest = {
+  readonly groupId: string;
+};
+
+export type RegexCreateGroupRequest = {
+  readonly groupId: string;
+  readonly displayName?: string;
+};
+
+export type RegexUpdateGroupRequest = {
+  readonly groupId: string;
+  readonly displayName?: string | null;
+};
+
+export type RegexRuleDto = {
+  readonly ruleId: string;
+  readonly name: string;
+  readonly pattern: string;
+  readonly flags: string;
+  readonly enabled: boolean;
+  readonly llmReplace: string | null;
+  readonly displayReplace: string | null;
+  readonly startDepth: number | null;
+  readonly endDepth: number | null;
+  readonly scopeUser: boolean;
+  readonly scopeAssistant: boolean;
+};
+
+export type RegexRuleIdRequest = RegexGroupIdRequest & {
+  readonly ruleId: string;
+};
+
+export type RegexCreateRuleRequest = RegexGroupIdRequest & {
+  readonly rule: Omit<RegexRuleDto, "ruleId"> & { readonly ruleId?: string };
+};
+
+export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
+  readonly patch: Partial<Omit<RegexRuleDto, "ruleId">>;
+};
+
+export type RegexPickerRowDto = {
+  readonly groupId: string;
+  readonly label: string;
+};
+
+export type RegexListPickerResponse = {
+  readonly rows: readonly RegexPickerRowDto[];
+  readonly currentId: string | undefined;
+};
+
+export type RegexSetCurrentRequest = {
+  readonly groupId: string | null;
+};
+
+export type EventsSetConfigRequest = {
+  readonly config: unknown;
+};
+
+export type CompactionConditionsDto = {
+  readonly schemaVersion: number;
+  readonly enabled: boolean;
+  readonly tokenRatio?: number;
+  readonly visibleFloor?: number;
+};
+
+export type CompactionConditionsSetRequest = {
+  readonly conditions: CompactionConditionsDto;
+};
+
+export type BackupExportResult = "saved" | "cancelled";
+export type BackupImportResult = "imported" | "cancelled";
