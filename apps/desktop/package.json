@@ -5,7 +5,8 @@
   "type": "module",
   "main": "./dist/src/main/main.js",
   "scripts": {
-    "build": "vite build && npm run build:main && npm run build:preload",
+    "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
+    "build:icons": "node scripts/generate-icons.mjs",
     "build:main": "tsc -p tsconfig.json",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/src/preload/preload.cjs --external:electron",
     "build:renderer": "vite build",
@@ -35,6 +36,8 @@
     "electron": "35.7.5",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.25.5",
+    "png-to-ico": "^2.1.8",
+    "sharp": "^0.34.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vite": "^6.3.5",

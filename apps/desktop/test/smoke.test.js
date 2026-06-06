@@ -54,6 +54,14 @@ test("renderer build output exists after workspace build", () => {
   );
 });
 
+test("build/icons/icon.ico exists after build:icons", () => {
+  const iconIco = path.join(desktopRoot, "build/icons/icon.ico");
+  assert.ok(
+    existsSync(iconIco),
+    "build/icons/icon.ico missing — run npm run build:icons -w @novel-master/desktop",
+  );
+});
+
 test("UI prototype lives under examples/desktop", () => {
   const html = readFileSync(path.join(prototypeDir, "index.html"), "utf8");
   assert.match(html, /id="preview-pane"/);

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Switch } from "../../components/ui/Switch";
 
 export function SettingsPanel({ children }: { children: ReactNode }) {
   return <div className="settings-panel">{children}</div>;
@@ -56,14 +57,10 @@ export function SettingsSwitchRow({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <label className="settings-row settings-row--switch">
+    <div className="settings-row settings-row--switch">
       <span className="settings-row__label">{label}</span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-    </label>
+      <Switch checked={checked} onChange={onChange} aria-label={label} />
+    </div>
   );
 }
 

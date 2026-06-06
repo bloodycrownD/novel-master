@@ -11,6 +11,7 @@ import { MainShell } from "./layout/MainShell";
 import { SettingsOverlay } from "./layout/SettingsOverlay";
 import { NovelMasterProvider } from "./providers/NovelMasterProvider";
 import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
+import { ToastHost } from "./components/ui/Toast";
 import { ThemeProvider } from "./providers/ThemeProvider";
 
 function DesktopOverlays() {
@@ -182,6 +183,7 @@ function DesktopOverlays() {
           </button>
         ))}
       </div>
+      <ToastHost />
     </>
   );
 }

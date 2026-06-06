@@ -1015,6 +1015,47 @@ html:not([data-theme="dark"]) #app-chrome {
   background: var(--primary-hover);
 }
 
+.btn-secondary {
+  padding: 8px 14px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition-speed) ease, border-color var(--transition-speed) ease;
+}
+
+.btn-secondary:hover {
+  background: var(--surface-muted);
+  border-color: var(--border);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--danger);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity var(--transition-speed) ease;
+}
+
+.btn-danger:hover {
+  opacity: 0.9;
+}
+
+.btn-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .rail-list {
   flex: 1;
   overflow-y: auto;
@@ -2687,15 +2728,16 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   gap: 2px;
   padding: 12px 16px;
   border: none;
-  background: transparent;
+  background: var(--surface-muted);
   text-align: left;
   cursor: pointer;
   font: inherit;
   color: var(--text);
+  transition: background var(--transition-speed) ease;
 }
 
 .settings-list-item__main:hover {
-  background: var(--background);
+  background: var(--surface-inset);
 }
 
 .settings-list-item__title {
@@ -2858,6 +2900,41 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .text-prompt-modal__btn--primary:disabled {
   color: var(--text-tertiary);
   cursor: default;
+}
+
+.confirm-modal {
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.confirm-modal__title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.confirm-modal__message {
+  margin: 0 0 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.confirm-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.explorer-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
 }
 
 /* ── Tool call cards ── */
