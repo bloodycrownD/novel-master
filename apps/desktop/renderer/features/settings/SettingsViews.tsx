@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseApplicationModelId } from "@novel-master/core";
 import type { AgentDefinition } from "@novel-master/core";
+export { AgentEditorView } from "./AgentEditorView";
+export { EventsConfigView } from "./EventsConfigView";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { TextPromptModal } from "../../components/ui/TextPromptModal";
-import { showToast } from "../../components/ui/toast";
+import { showToast } from "../../components/ui/show-toast";
 import { useNovelMaster } from "../../providers/NovelMasterProvider";
 import {
   ipcAgentRegistryCreateBlank,
@@ -324,111 +326,6 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         onConfirm={() => void confirmDeleteAgent()}
         onCancel={() => setDeleteConfirm(null)}
       />
-    </SettingsPanel>
-  );
-}
-
-export function AgentEditorView({ nav }: { nav: Nav }) {
-  const agentId = nav.navState.editingAgentId;
-  const [name, setName] = useState("");
-  const [maxSteps, setMaxSteps] = useState("20");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [status, setStatus] = useState<string | undefined>();
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!agentId) return;
-    setLoading(true);
-    ipcAgentRegistryGet({ agentId })
-      .then((res) => {
-        if (!res.ok) return;
-        const def = res.data as AgentDefinition;
-        setName(def.name ?? "");
-        setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-        const system = def.prompts?.find(
-          (p) => p.type === "text" && p.role === "system",
-        );
-        setSystemPrompt(system && "content" in system ? system.content : "");
-      })
-      .finally(() => setLoading(false));
-  }, [agentId]);
-
-  if (!agentId) {
-    return <p className="settings-hint">缺少 agentId</p>;
-  }
-
-  const save = async () => {
-    const res = await ipcAgentRegistryGet({ agentId });
-    if (!res.ok) return;
-    const prev = res.data as AgentDefinition;
-    const prompts = [...(prev.prompts ?? [])];
-    const idx = prompts.findIndex((p) => p.type === "text" && p.role === "system");
-    const systemBlock = {
-      name: "system",
-      type: "text" as const,
-      role: "system" as const,
-      content: systemPrompt,
-    };
-    if (idx >= 0) prompts[idx] = systemBlock;
-    else prompts.unshift(systemBlock);
-
-    const next: AgentDefinition = {
-      ...prev,
-      name: name.trim() || agentId,
-      runtime: { ...prev.runtime, maxSteps: Number(maxSteps) || 20 },
-      prompts,
-    };
-    const saveRes = await ipcAgentRegistryUpsert({ agentId, definition: next });
-    setStatus(saveRes.ok ? "已保存" : saveRes.error.message);
-  };
-
-  return (
-    <SettingsPanel>
-      {loading ? <p className="settings-hint">加载中…</p> : null}
-      <SettingsFormSection
-        title="Agent 配置"
-        desc={`编辑 ${agentId}`}
-        footer={
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" className="btn-primary" onClick={() => void save()}>
-              保存
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void ipcAgentYamlExport({ agentId }).then((r) =>
-                  setStatus(r.ok ? (r.data === "saved" ? "已导出 YAML" : "已取消") : r.error.message),
-                )
-              }
-            >
-              导出 YAML
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void ipcAgentYamlImport({ agentId }).then((r) => {
-                  if (r.ok && r.data === "imported") window.location.reload();
-                  else if (r.ok) setStatus("已取消");
-                  else setStatus(r.error.message);
-                })
-              }
-            >
-              导入 YAML
-            </button>
-          </div>
-        }
-      >
-        <SettingsField label="名称">
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-        </SettingsField>
-        <SettingsField label="最大步数">
-          <input type="number" value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
-        </SettingsField>
-        <SettingsField label="System 提示词">
-          <textarea rows={6} value={systemPrompt} onChange={(e) => setSystemPrompt(e.target.value)} />
-        </SettingsField>
-      </SettingsFormSection>
-      <SettingsStatus message={status} />
     </SettingsPanel>
   );
 }
@@ -843,72 +740,6 @@ export function CompactionConditionsView() {
             </SettingsField>
           </>
         ) : null}
-      </SettingsFormSection>
-      <SettingsStatus message={status} />
-    </SettingsPanel>
-  );
-}
-
-export function EventsConfigView() {
-  const [jsonText, setJsonText] = useState("{}");
-  const [status, setStatus] = useState<string | undefined>();
-
-  useEffect(() => {
-    ipcEventsGetConfig().then((res) => {
-      if (res.ok) setJsonText(JSON.stringify(res.data, null, 2));
-    });
-  }, []);
-
-  const save = async () => {
-    try {
-      const config = JSON.parse(jsonText);
-      const res = await ipcEventsSetConfig({ config });
-      setStatus(res.ok ? "已保存" : res.error.message);
-    } catch (e) {
-      setStatus(e instanceof Error ? e.message : "JSON 无效");
-    }
-  };
-
-  return (
-    <SettingsPanel>
-      <SettingsFormSection
-        title="事件配置"
-        desc="编辑 events.config JSON；也可用 YAML 导入导出。"
-        footer={
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" className="btn-primary" onClick={() => void save()}>
-              保存
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void ipcEventsExportYaml().then((r) =>
-                  setStatus(r.ok ? (r.data === "saved" ? "已导出 YAML" : "已取消") : r.error.message),
-                )
-              }
-            >
-              导出 YAML
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                void ipcEventsImportYaml().then((r) => {
-                  if (r.ok && r.data === "imported") {
-                    ipcEventsGetConfig().then((cfg) => {
-                      if (cfg.ok) setJsonText(JSON.stringify(cfg.data, null, 2));
-                    });
-                    setStatus("已导入 YAML");
-                  } else if (r.ok) setStatus("已取消");
-                  else setStatus(r.error.message);
-                })
-              }
-            >
-              导入 YAML
-            </button>
-          </div>
-        }
-      >
-        <textarea rows={16} value={jsonText} onChange={(e) => setJsonText(e.target.value)} style={{ width: "100%", fontFamily: "monospace" }} />
       </SettingsFormSection>
       <SettingsStatus message={status} />
     </SettingsPanel>

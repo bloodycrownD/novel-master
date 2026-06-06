@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { subscribeToast } from "./toast";
+import { subscribeToast } from "./toast-bus";
 
 export function ToastHost() {
   const [message, setMessage] = useState("");

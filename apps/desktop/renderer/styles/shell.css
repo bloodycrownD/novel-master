@@ -1700,6 +1700,122 @@ html:not([data-theme="dark"]) #app-chrome {
   margin-top: 4px;
   padding-top: 0;
   border-top: none;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.settings-yaml-links {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.settings-link-btn {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.settings-link-btn:hover {
+  text-decoration: underline;
+}
+
+.settings-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.settings-section__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-section__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.config-block-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-block-card {
+  padding: 14px;
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.config-block-card--nested {
+  background: var(--background);
+}
+
+.config-block-card--event {
+  border-color: var(--border);
+}
+
+.config-block-card__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.config-block-card__badge {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--primary-muted);
+  color: var(--primary);
+}
+
+.config-block-card__name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-block-card__actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.config-dep-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-dep-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  background: var(--background);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.config-dep-chip.is-active {
+  border-color: var(--primary-ring);
+  background: var(--primary-muted);
+  color: var(--primary);
 }
 
 .settings-page .btn-primary {

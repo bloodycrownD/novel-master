@@ -5,7 +5,7 @@ import { ManageHeader } from "../components/batch/ManageHeader";
 import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { TextPromptModal } from "../components/ui/TextPromptModal";
-import { showToast } from "../components/ui/toast";
+import { showToast } from "../components/ui/show-toast";
 import { ConversationPanel } from "../features/chat/ConversationPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import {

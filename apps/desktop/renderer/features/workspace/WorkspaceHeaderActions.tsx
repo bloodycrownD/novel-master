@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import type { WorkspacePanelScope } from "../../../shared/ipc-types";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { IconButton } from "../../components/ui/IconButton";
-import { showToast } from "../../components/ui/toast";
+import { showToast } from "../../components/ui/show-toast";
 import {
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
