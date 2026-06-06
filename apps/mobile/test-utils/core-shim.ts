@@ -32,4 +32,5 @@ export type {
   WorktreeDirRule,
   WorktreeListRow,
 } from "../../../packages/core/dist/domain/worktree/model/worktree-types.js";
+export { messageBodyText } from "../../../packages/core/dist/domain/chat/content/message-body-text.js";
 
