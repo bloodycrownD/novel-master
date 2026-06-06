@@ -1,5 +1,6 @@
 /**
  * Row selection checkbox for batch list mode.
+ * 18px square aligns visually with WebView 20px round .batch-check.
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -31,13 +32,13 @@ export function BatchCheckbox({checked, onToggle}: Props) {
 
 const styles = StyleSheet.create({
   box: {
-    width: 22,
-    height: 22,
+    width: 18,
+    height: 18,
     borderRadius: 4,
-    borderWidth: 2,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 8,
   },
-  mark: {color: '#fff', fontSize: 14, fontWeight: '700'},
+  mark: {color: '#fff', fontSize: 11, fontWeight: '700'},
 });

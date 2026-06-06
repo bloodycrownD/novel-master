@@ -554,8 +554,8 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   batchCheckboxCol: {
-    width: 36,
-    paddingTop: 10,
+    width: 28,
+    paddingTop: 8,
     alignItems: 'center',
   },
   batchBubbleCol: {

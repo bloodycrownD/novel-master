@@ -39,8 +39,9 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     ${CHAT_TRANSCRIPT_RICH_CSS}
     .empty-state { align-self: center; margin-top: 32px; padding: 0 24px; text-align: center; color: var(--text-secondary, #666); font-size: 14px; }
-    .batch-row { display: flex; flex-direction: row; align-items: flex-start; width: 100%; gap: 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .batch-check { flex-shrink: 0; width: 28px; height: 28px; margin-top: 8px; border-radius: 14px; border: 2px solid var(--border, #c7c7cc); background: var(--bg, #fff); color: var(--primary, #007aff); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    /* Visual size reduced; row tap target via .batch-row toggle-select */
+    .batch-row { display: flex; flex-direction: row; align-items: flex-start; width: 100%; gap: 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .batch-check { flex-shrink: 0; width: 20px; height: 20px; margin-top: 6px; border-radius: 10px; border: 1.5px solid var(--border, #c7c7cc); background: var(--bg, #fff); color: var(--primary, #007aff); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
     .batch-check.checked { border-color: var(--primary, #007aff); background: var(--primary, #007aff); color: #fff; }
     .batch-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .row.message.selected .bubble { box-shadow: 0 0 0 2px var(--primary, #007aff); }
