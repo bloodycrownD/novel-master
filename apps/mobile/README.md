@@ -135,6 +135,28 @@ nm vfs list / -r
 - Acceptance fixtures: `apps/mobile/__fixtures__/rich-content/` (`sample-assistant.md`, `sample-assistant.html-snippet.md`).
 - Manual check (Android/iOS): toggle off → assistant HTML shows raw characters; toggle on → re-enter chat → styled; open `.md` preview in editor with switch off → still formatted.
 
+## Chat transcript (WebView engine)
+
+Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/`).
+
+| Setting | Default | Notes |
+|---------|---------|-------|
+| `chatTranscriptEngine` KKV | `webview` in **`__DEV__`** | Local dev exercises WebView path |
+| Production build | `legacy-rn` | Falls back to RN `MessageList` until M4 device QA (PRD T1–T11) |
+| Override | App UI prefs key `chatTranscriptEngine` | Set to `webview` or `legacy-rn` |
+
+**Rollback:** set `chatTranscriptEngine` to `legacy-rn` to restore the RN FlatList transcript without inverted-list experiments.
+
+**Scroll cache:** WebView uses schema v2 snapshots (`chat-transcript-scroll-cache.ts`). Legacy v1 inverted-list snapshots are discarded on read; telemetry emits `legacy_cache_discarded`.
+
+**Tests:**
+
+```bash
+npm test -w @novel-master/mobile -- --testPathPattern="chat-transcript|build-transcript"
+```
+
+Spec: `.apm/kb/docs/Iterations/mobile-webview-chat-transcript/spec.md`
+
 ## Tests
 
 ```bash

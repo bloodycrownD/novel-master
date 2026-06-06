@@ -1,6 +1,10 @@
 /**
  * Feature flag: legacy RN MessageList vs WebView transcript engine.
- * Default webview in __DEV__ for M0 POC; production stays legacy until M4.
+ *
+ * - `__DEV__` default: `webview` (local transcript development)
+ * - Production default: `legacy-rn` (safe rollback until M4 device QA completes)
+ *
+ * Override via KKV `chatTranscriptEngine` in app UI prefs (`legacy-rn` | `webview`).
  */
 import type {AppUiPreferences} from './app-ui-prefs';
 

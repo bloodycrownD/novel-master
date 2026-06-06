@@ -1,5 +1,8 @@
 /**
  * Session message list with tool cards, streaming tail, and optional batch select.
+ *
+ * @deprecated Transcript path uses {@link ChatTranscriptWebView}; retained only when
+ * `chatTranscriptEngine` is `legacy-rn` (production default until M4 rollout).
  */
 import React, {useCallback, useEffect, useMemo, useRef} from 'react';
 import {
