@@ -48,6 +48,7 @@ import {
   normalizeScrollSnapshot,
   setTranscriptScrollSnapshot,
 } from '../../services/chat-transcript-scroll-cache';
+import {emitChatTranscriptTelemetry} from '../../services/chat-transcript-telemetry';
 import {
   clearSessionViewCache,
   getSessionViewCache,
@@ -190,9 +191,25 @@ export function ChatTabScreen() {
   const transcriptCachedScroll = chatScrollKey
     ? getTranscriptScrollSnapshot(chatScrollKey)
     : undefined;
-  const {snapshot: restoredTranscriptScroll} = normalizeScrollSnapshot(
-    transcriptCachedScroll ?? legacyCachedScroll,
-  );
+  const rawCachedScroll = transcriptCachedScroll ?? legacyCachedScroll;
+  const {snapshot: restoredTranscriptScroll, discardedLegacy} =
+    normalizeScrollSnapshot(rawCachedScroll);
+
+  useEffect(() => {
+    if (!useWebviewTranscript || !discardedLegacy || rawCachedScroll == null) {
+      return;
+    }
+    const seenVersion =
+      'schemaVersion' in rawCachedScroll &&
+      typeof rawCachedScroll.schemaVersion === 'number'
+        ? rawCachedScroll.schemaVersion
+        : undefined;
+    emitChatTranscriptTelemetry({
+      name: 'legacy_cache_discarded',
+      reason: 'wrong_version',
+      ...(seenVersion != null ? {seenVersion} : {}),
+    });
+  }, [useWebviewTranscript, discardedLegacy, chatScrollKey, rawCachedScroll]);
   const cachedChatScroll = useWebviewTranscript
     ? restoredTranscriptScroll
     : legacyCachedScroll;
@@ -1238,6 +1255,7 @@ export function ChatTabScreen() {
                   onToggleMessageSelect={messageBatch.toggle}
                 />
               ) : (
+              /* legacy-rn engine fallback — see chat-transcript-engine.ts + README */
               <MessageList
                 key={chatScrollKey ?? 'no-session-scroll'}
                 messages={chatMessages}

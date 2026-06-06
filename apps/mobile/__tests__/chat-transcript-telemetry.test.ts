@@ -38,4 +38,19 @@ describe('chat-transcript-telemetry', () => {
       expect.objectContaining({mode: 'offset', offsetY: 120}),
     );
   });
+
+  it('logs legacy_cache_discarded with wrong_version reason', () => {
+    if (!CHAT_TRANSCRIPT_TELEMETRY_ENABLED) {
+      return;
+    }
+    emitChatTranscriptTelemetry({
+      name: 'legacy_cache_discarded',
+      reason: 'wrong_version',
+    });
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[ChatTranscriptTelemetry]',
+      'legacy_cache_discarded',
+      expect.objectContaining({reason: 'wrong_version'}),
+    );
+  });
 });

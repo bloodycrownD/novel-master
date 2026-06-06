@@ -24,6 +24,11 @@ export type ChatTranscriptTelemetryEvent =
     }
   | {
       readonly name: 'menu_open';
+    }
+  | {
+      readonly name: 'legacy_cache_discarded';
+      readonly reason: 'wrong_version';
+      readonly seenVersion?: number;
     };
 
 export function emitChatTranscriptTelemetry(
