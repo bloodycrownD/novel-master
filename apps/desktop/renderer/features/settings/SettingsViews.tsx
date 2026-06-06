@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseApplicationModelId } from "@novel-master/core";
 import type { AgentDefinition } from "@novel-master/core";
+import { Button } from "../../components/ui/Button";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { ContextMenu } from "../../components/ui/ContextMenu";
 import { TextPromptModal } from "../../components/ui/TextPromptModal";
+import { showToast } from "../../components/ui/toast";
 import { useNovelMaster } from "../../providers/NovelMasterProvider";
 import {
   ipcAgentRegistryCreateBlank,
@@ -73,6 +76,7 @@ export function DataManagementView() {
   const { retry } = useNovelMaster();
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | undefined>();
+  const [confirmImport, setConfirmImport] = useState(false);
 
   const runExport = async () => {
     setBusy(true);
@@ -90,7 +94,7 @@ export function DataManagementView() {
   };
 
   const runImport = async () => {
-    if (!window.confirm("导入将完全替换当前数据库，确定继续？")) return;
+    setConfirmImport(false);
     setBusy(true);
     setStatus(undefined);
     try {
@@ -126,12 +130,21 @@ export function DataManagementView() {
         title="导入"
         desc="用备份文件完全替换当前数据库，操作不可撤销。"
         action={
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => void runImport()}>
+          <Button variant="primary" disabled={busy} onClick={() => setConfirmImport(true)}>
             导入数据库
-          </button>
+          </Button>
         }
       />
       <SettingsStatus message={status} />
+      <ConfirmModal
+        open={confirmImport}
+        title="确认导入"
+        message="导入将完全替换当前数据库，确定继续？"
+        danger
+        busy={busy}
+        onConfirm={() => void runImport()}
+        onCancel={() => !busy && setConfirmImport(false)}
+      />
     </SettingsPanel>
   );
 }
@@ -147,6 +160,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const [renamePrompt, setRenamePrompt] = useState<{
     agentId: string;
     initialName: string;
+  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    agentId: string;
+    name: string;
   } | null>(null);
 
   const reload = useCallback(async () => {
@@ -206,24 +223,30 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     }
     if (action === "delete") {
       if (rows.length <= 1) {
-        window.alert("至少保留一个 Agent");
+        showToast("至少保留一个 Agent");
         return;
       }
-      if (!window.confirm(`删除 Agent「${row.name}」？`)) {
-        return;
-      }
-      const currentRes = await ipcAgentResolveCurrent();
-      await ipcAgentRegistryDelete({ agentId: row.agentId });
-      if (currentRes.ok && currentRes.data.agentId === row.agentId) {
-        const remaining = rows
-          .map((r) => r.agentId)
-          .filter((id) => id !== row.agentId);
-        if (remaining.length > 0) {
-          await ipcAgentSetCurrent({ agentId: remaining[0]! });
-        }
-      }
-      await reload();
+      setDeleteConfirm({ agentId: row.agentId, name: row.name });
     }
+  };
+
+  const confirmDeleteAgent = async () => {
+    const target = deleteConfirm;
+    setDeleteConfirm(null);
+    if (!target) {
+      return;
+    }
+    const currentRes = await ipcAgentResolveCurrent();
+    await ipcAgentRegistryDelete({ agentId: target.agentId });
+    if (currentRes.ok && currentRes.data.agentId === target.agentId) {
+      const remaining = rows
+        .map((r) => r.agentId)
+        .filter((id) => id !== target.agentId);
+      if (remaining.length > 0) {
+        await ipcAgentSetCurrent({ agentId: remaining[0]! });
+      }
+    }
+    await reload();
   };
 
   const handleRename = async (name: string) => {
@@ -292,6 +315,14 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         initialValue={renamePrompt?.initialName ?? ""}
         onClose={() => setRenamePrompt(null)}
         onConfirm={handleRename}
+      />
+      <ConfirmModal
+        open={deleteConfirm != null}
+        title="删除 Agent"
+        message={`删除 Agent「${deleteConfirm?.name ?? ""}」？`}
+        danger
+        onConfirm={() => void confirmDeleteAgent()}
+        onCancel={() => setDeleteConfirm(null)}
       />
     </SettingsPanel>
   );
@@ -406,6 +437,10 @@ export function ProvidersView({ nav }: { nav: Nav }) {
   const [rows, setRows] = useState<
     Array<{ id: string; displayName: string | null; savedCount: number; apiKeyStatus: string }>
   >([]);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    providerId: string;
+    label: string;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     const res = await ipcProvidersList();
@@ -442,13 +477,28 @@ export function ProvidersView({ nav }: { nav: Nav }) {
               nav.push("providerDetail");
             }}
             onMenu={() => {
-              if (window.confirm(`删除服务商「${p.displayName ?? p.id}」？`)) {
-                void ipcProvidersDelete({ providerId: p.id }).then(() => reload());
-              }
+              setDeleteConfirm({
+                providerId: p.id,
+                label: p.displayName ?? p.id,
+              });
             }}
           />
         ))}
       </SettingsListSection>
+      <ConfirmModal
+        open={deleteConfirm != null}
+        title="删除服务商"
+        message={`删除服务商「${deleteConfirm?.label ?? ""}」？`}
+        danger
+        onConfirm={() => {
+          const target = deleteConfirm;
+          setDeleteConfirm(null);
+          if (target) {
+            void ipcProvidersDelete({ providerId: target.providerId }).then(() => reload());
+          }
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </SettingsPanel>
   );
 }
@@ -608,9 +658,9 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             <button type="button" className="btn-primary" disabled={fetching} onClick={() => void fetchModels()}>
               {fetching ? "拉取中…" : "拉取模型"}
             </button>
-            <button type="button" onClick={() => nav.push("providerEdit")}>
+            <Button variant="secondary" onClick={() => nav.push("providerEdit")}>
               编辑服务商
-            </button>
+            </Button>
           </div>
         }
       >
@@ -778,10 +828,11 @@ export function CompactionConditionsView() {
           </button>
         }
       >
-        <label className="settings-row settings-row--switch">
-          <span className="settings-row__label">启用自动压缩</span>
-          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-        </label>
+        <SettingsSwitchRow
+          label="启用自动压缩"
+          checked={enabled}
+          onChange={setEnabled}
+        />
         {enabled ? (
           <>
             <SettingsField label="Token 比例">
@@ -867,6 +918,7 @@ export function EventsConfigView() {
 export function RegexGroupsView({ nav }: { nav: Nav }) {
   const [rows, setRows] = useState<Array<{ groupId: string; displayName: string | null; ruleCount: number }>>([]);
   const [newId, setNewId] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const res = await ipcRegexListGroups();
@@ -906,13 +958,25 @@ export function RegexGroupsView({ nav }: { nav: Nav }) {
               nav.push("regexRules");
             }}
             onMenu={() => {
-              if (window.confirm(`删除正则组「${g.groupId}」？`)) {
-                void ipcRegexDeleteGroup({ groupId: g.groupId }).then(() => reload());
-              }
+              setDeleteConfirm(g.groupId);
             }}
           />
         ))}
       </SettingsListSection>
+      <ConfirmModal
+        open={deleteConfirm != null}
+        title="删除正则组"
+        message={`删除正则组「${deleteConfirm ?? ""}」？`}
+        danger
+        onConfirm={() => {
+          const groupId = deleteConfirm;
+          setDeleteConfirm(null);
+          if (groupId) {
+            void ipcRegexDeleteGroup({ groupId }).then(() => reload());
+          }
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </SettingsPanel>
   );
 }
