@@ -24,6 +24,7 @@ DerivedData/
 # Electron
 **/out/
 **/release/
+apps/desktop/build/
 
 .env
 .env.*
