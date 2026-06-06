@@ -126,7 +126,8 @@ export function FileMarkdownPreview({
           <RichDocumentWebView
             html={bodyHtml}
             plain={body}
-            overLimit={overLimit || bodyHtml == null}
+            // Match RichContentBody: over-limit hint only when body exceeds char cap, not on prepare failure.
+            overLimit={overLimit}
             style={previewFill ? styles.webBody : undefined}
           />
         ) : (

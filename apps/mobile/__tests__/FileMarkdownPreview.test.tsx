@@ -18,14 +18,20 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
-  RichDocumentWebView: () => {
+  RichDocumentWebView: jest.fn((props: Record<string, unknown>) => {
     const React = require('react');
     const {View} = require('react-native');
-    return React.createElement(View, {testID: 'rich-document-webview'});
-  },
+    return React.createElement(View, {testID: 'rich-document-webview', ...props});
+  }),
 }));
 
 import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
+import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import {RICH_CONTENT_MAX_CHARS} from '../src/components/rich-content/rich-content-limits';
+
+const mockRichDocumentWebView = RichDocumentWebView as jest.MockedFunction<
+  typeof RichDocumentWebView
+>;
 
 jest.mock('../src/components/rich-content/RichContentBody', () => ({
   RichContentBody: () => {
@@ -51,6 +57,7 @@ describe('FileMarkdownPreview', () => {
   beforeEach(() => {
     mockReadEngine.mockReset();
     mockReadEngine.mockResolvedValue('webview');
+    mockRichDocumentWebView.mockClear();
   });
 
   it('mounts RichDocumentWebView when webview flag and closed FM body', async () => {
@@ -98,6 +105,33 @@ Hello body
       await Promise.resolve();
     });
     expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
+  });
+
+  it('passes plain + overLimit to RichDocumentWebView when body exceeds char cap (T7)', async () => {
+    const longBody = 'x'.repeat(RICH_CONTENT_MAX_CHARS + 1);
+    const content = `---
+title: Long
+---
+${longBody}`;
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/long.md"
+          content={content}
+          tokens={tokens}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(mockRichDocumentWebView).toHaveBeenCalled();
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall).toMatchObject({
+      plain: longBody,
+      overLimit: true,
+      html: undefined,
+    });
   });
 
   it('does not render Web body when front matter is unclosed', async () => {
