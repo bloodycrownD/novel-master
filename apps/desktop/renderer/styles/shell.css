@@ -1805,6 +1805,104 @@ html:not([data-theme="dark"]) #app-chrome {
   flex-shrink: 0;
 }
 
+.list-manage-header {
+  padding: 12px 16px 8px;
+  border-bottom: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.list-manage-header__normal-row,
+.list-manage-header__batch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.list-manage-header__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.list-manage-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.list-manage-header__btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-manage-header__btn:hover {
+  background: var(--bg-secondary);
+}
+
+.list-manage-header__link {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.list-manage-header__link--danger:not(:disabled) {
+  color: var(--danger, #d32f2f);
+}
+
+.list-manage-header__link:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.list-manage-header__count {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.list-manage-header__hint {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.batch-check {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.batch-check.checked {
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
+.chat-list__item.is-selected {
+  border-color: var(--primary-ring);
+  box-shadow: 0 0 0 1px var(--primary-ring);
+}
+
 .chat-nav-back {
   flex-shrink: 0;
   width: 28px;

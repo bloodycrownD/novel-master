@@ -6,6 +6,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type RefObject,
@@ -15,6 +16,11 @@ const COLUMN_SPLITTER_SIZE = 5;
 const COLUMN_PREVIEW_MIN_WIDTH = 450;
 const COLUMN_EXPLORER_MIN_WIDTH = 300;
 const COLUMN_CHAT_MIN_WIDTH = 350;
+const NARROW_VIEWPORT_MAX_WIDTH = 900;
+
+function isNarrowViewport(): boolean {
+  return window.innerWidth <= NARROW_VIEWPORT_MAX_WIDTH;
+}
 
 type ColumnKey = "preview" | "explorer" | "chat";
 
@@ -263,9 +269,18 @@ export function useColumnSplitters(): UseColumnSplittersResult {
     explorer: true,
     chat: true,
   });
+  const [narrowViewport, setNarrowViewport] = useState(isNarrowViewport);
 
   const widthsRef = useRef({ preview: 0, explorer: 0 });
   const materializedRef = useRef(false);
+
+  const layoutVisibility = useMemo(
+    () => ({
+      ...columnVisibility,
+      preview: columnVisibility.preview && !narrowViewport,
+    }),
+    [columnVisibility, narrowViewport],
+  );
 
   const commitColumnWidths = useCallback(
     (
@@ -337,6 +352,12 @@ export function useColumnSplitters(): UseColumnSplittersResult {
   );
 
   useEffect(() => {
+    const onResize = () => setNarrowViewport(isNarrowViewport());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
     const workspace = workspaceRef.current;
     if (!workspace) return;
 
@@ -344,7 +365,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
     commitColumnWidths(
       workspace,
       getDefaultColumnWidths(workspace),
-      columnVisibility,
+      layoutVisibility,
     );
 
     const clampPreviewExplorerDragDelta = (deltaX: number) => {
@@ -366,7 +387,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
 
     const clampExplorerChatDragDelta = (deltaX: number) => {
       const explorer = widthsRef.current.explorer;
-      const vis = columnVisibility;
+      const vis = layoutVisibility;
       const total = getWorkspaceUsableWidth(workspace, vis);
       const previewWidth = vis.preview ? widthsRef.current.preview : 0;
       if (deltaX > 0) {
@@ -386,7 +407,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
 
     const clampPreviewChatDragDelta = (deltaX: number) => {
       const preview = widthsRef.current.preview;
-      const total = getWorkspaceUsableWidth(workspace, columnVisibility);
+      const total = getWorkspaceUsableWidth(workspace, layoutVisibility);
       if (deltaX < 0) {
         const maxShrinkPreview = preview - getColumnMinWidth("preview");
         if (maxShrinkPreview <= 0) return 0;
@@ -404,7 +425,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
     const materializeFlexColumns = () => {
       if (materializedRef.current) return;
       materializedRef.current = true;
-      const vis = columnVisibility;
+      const vis = layoutVisibility;
       const widths = {
         preview: widthsRef.current.preview,
         explorer: widthsRef.current.explorer,
@@ -454,7 +475,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
       return () => splitterEl.removeEventListener("mousedown", onMouseDown);
     };
 
-    const vis = columnVisibility;
+    const vis = layoutVisibility;
     const unbindPreviewExplorer = bindSplitter(
       document.getElementById("splitter-preview-explorer"),
       (deltaX) => {
@@ -523,7 +544,7 @@ export function useColumnSplitters(): UseColumnSplittersResult {
       unbindExplorerChat();
       window.removeEventListener("resize", onResize);
     };
-  }, [columnVisibility, commitColumnWidths, snapColumnWidthsForVisibility]);
+  }, [layoutVisibility, commitColumnWidths, snapColumnWidthsForVisibility]);
 
   return { workspaceRef, columnVisibility, toggleColumn };
 }
