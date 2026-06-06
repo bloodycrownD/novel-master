@@ -7,6 +7,11 @@
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
+import {
+  cleanseReplyTextAndThinking,
+  feedInlineThinkingAwareTextDelta,
+  finishInlineThinkingAwareText,
+} from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -25,6 +30,7 @@ export type GeminiSseParserState = {
   thinkingParts: string[];
   functionCalls: Map<string, FunctionCallAccumulator>;
   streamRaw: unknown;
+  inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
 };
 
 export function createGeminiSseParserState(): GeminiSseParserState {
@@ -88,8 +94,8 @@ function processGeminiResponseChunk(
         state.thinkingParts.push(part.text);
         onStream?.({ type: "thinking-delta", text: part.text });
       } else {
-        state.textParts.push(part.text);
-        onStream?.({ type: "text-delta", text: part.text });
+        // Gemini gateways may also embed <thought> / >thought markers in plain text.
+        feedInlineThinkingAwareTextDelta(state, part.text, onStream);
       }
     }
     if (part.functionCall != null) {
@@ -186,14 +192,18 @@ export function finishGeminiSse(
     feedGeminiSseChunk(state, "\n", onStream);
   }
 
+  finishInlineThinkingAwareText(state, onStream);
+  const cleansed = cleanseReplyTextAndThinking(
+    state.textParts.join(""),
+    state.thinkingParts.join(""),
+  );
+
   const blocks: ContentBlock[] = [];
-  const text = state.textParts.join("");
-  if (text !== "") {
-    blocks.push({ type: "text", text });
+  if (cleansed.thinking !== "") {
+    blocks.push({ type: "thinking", text: cleansed.thinking });
   }
-  const thinking = state.thinkingParts.join("");
-  if (thinking !== "") {
-    blocks.push({ type: "thinking", text: thinking });
+  if (cleansed.visible !== "") {
+    blocks.push({ type: "text", text: cleansed.visible });
   }
   blocks.push(...emitToolUsesFromAccumulators(functionCallsToToolUses(state), onStream));
 
@@ -220,10 +230,15 @@ export function finishGeminiSsePartial(
     feedGeminiSseChunk(state, "\n", onStream);
   }
 
+  finishInlineThinkingAwareText(state, onStream);
+  const cleansed = cleanseReplyTextAndThinking(
+    state.textParts.join(""),
+    state.thinkingParts.join(""),
+  );
   const blocks = buildStreamPartialBlocks(
     {
-      text: state.textParts.join(""),
-      thinking: state.thinkingParts.join(""),
+      text: cleansed.visible,
+      thinking: cleansed.thinking,
       toolUses: functionCallsToToolUses(state),
     },
     onStream,
