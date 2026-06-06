@@ -1,5 +1,7 @@
 /**
  * Shared MD/HTML body renderer (chat assistant + file preview).
+ * @deprecated file-preview variant: primary path is {@link RichDocumentWebView} when
+ * `vfsMarkdownPreviewEngine` is `webview`; retained for KKV `rn` rollback and legacy chat.
  */
 import React, {useMemo} from 'react';
 import {StyleSheet, Text, useWindowDimensions, View} from 'react-native';

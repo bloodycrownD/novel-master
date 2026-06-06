@@ -1,7 +1,6 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
 
 const mockReadEngine = jest.fn(async () => 'webview' as const);
 
@@ -25,6 +24,8 @@ jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
     return React.createElement(View, {testID: 'rich-document-webview'});
   },
 }));
+
+import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
 
 jest.mock('../src/components/rich-content/RichContentBody', () => ({
   RichContentBody: () => {

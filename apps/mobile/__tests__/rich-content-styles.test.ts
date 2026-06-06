@@ -13,6 +13,6 @@ describe('rich-content-styles', () => {
   it('builds compound selectors for multiple roots', () => {
     const css = buildRichContentCssRules(['.a.rich', '.b.rich']);
     expect(css).toContain('.a.rich p, .b.rich p');
-    expect(css).toContain('.a.rich ol, .a.rich ul, .b.rich ol, .b.rich ul');
+    expect(css).toContain('.a.rich ol, .b.rich ol, .a.rich ul, .b.rich ul');
   });
 });
