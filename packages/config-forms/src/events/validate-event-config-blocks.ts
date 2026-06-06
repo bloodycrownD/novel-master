@@ -1,12 +1,12 @@
 /**
  * Save-time validation for events config UI drafts.
  */
-import {validateDepthSlice} from '@novel-master/core';
-import type {EventBlockDraft} from './event-config-state';
-import {actionTypeLabel, eventTypeLabel} from './event-config-labels';
+import { validateDepthSlice } from "@novel-master/core";
+import type { EventBlockDraft } from "./event-config-state.js";
+import { actionTypeLabel, eventTypeLabel } from "./event-config-labels.js";
 
 function validateDag(
-  actions: readonly {type: string; dependency?: readonly string[]}[],
+  actions: readonly { type: string; dependency?: readonly string[] }[],
 ): string | null {
   const seen = new Set<string>();
   for (const a of actions) {
@@ -26,7 +26,6 @@ function validateDag(
     }
   }
 
-  // Kahn cycle detection
   const indegree = new Map<string, number>();
   const out = new Map<string, string[]>();
   for (const a of actions) {
@@ -54,7 +53,7 @@ function validateDag(
     }
   }
   if (visited !== actions.length) {
-    return '依赖存在循环（DAG 必须无环）';
+    return "依赖存在循环（DAG 必须无环）";
   }
   return null;
 }
@@ -63,14 +62,14 @@ export function validateEventConfigBlocks(
   blocks: readonly EventBlockDraft[],
 ): string | null {
   if (blocks.length === 0) {
-    return '至少添加一个事件';
+    return "至少添加一个事件";
   }
   const seenEvents = new Set<string>();
   for (const block of blocks) {
     const key = block.eventType.trim();
     const eventLabel = eventTypeLabel(key);
-    if (key === '') {
-      return '请为每个事件选择类型';
+    if (key === "") {
+      return "请为每个事件选择类型";
     }
     if (seenEvents.has(key)) {
       return `事件「${eventLabel}」重复，请删除多余项后再保存`;
@@ -88,16 +87,16 @@ export function validateEventConfigBlocks(
       }
       seenActions.add(action.type);
 
-      if (action.type === 'run-agent') {
+      if (action.type === "run-agent") {
         const agentId =
-          'agentId' in action.params ? String(action.params.agentId).trim() : '';
-        if (agentId === '') {
+          "agentId" in action.params ? String(action.params.agentId).trim() : "";
+        if (agentId === "") {
           return `「${eventLabel}」· 运行 Agent：请填写 agentId`;
         }
         continue;
       }
 
-      if (action.type !== 'hide-message') {
+      if (action.type !== "hide-message") {
         continue;
       }
       try {

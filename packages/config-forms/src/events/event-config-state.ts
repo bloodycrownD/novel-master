@@ -1,7 +1,7 @@
 /**
  * Draft state for events config UI (array of blocks ↔ KKV document).
  */
-import type {EventActionNode, EventsConfig} from '@novel-master/core';
+import type { EventActionNode, EventsConfig } from "@novel-master/core";
 
 export type EventBlockDraft = {
   readonly id: string;
@@ -31,10 +31,10 @@ export function eventBlocksToConfig(
   const events: Record<string, EventActionNode[]> = {};
   for (const block of blocks) {
     const key = block.eventType.trim();
-    if (key === '') {
+    if (key === "") {
       continue;
     }
     events[key] = block.actions;
   }
-  return {schemaVersion, events};
+  return { schemaVersion, events };
 }

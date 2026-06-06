@@ -3,12 +3,18 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
-import type {
-  AgentDefinition,
-  AgentToolPolicy,
-  PromptBlock,
-  PromptBlockRole,
-} from '@novel-master/core';
+import type {AgentDefinition, PromptBlock, PromptBlockRole} from '@novel-master/core';
+import {
+  ROLE_OPTIONS,
+  TOOL_MODE_OPTIONS,
+  blockTypeLabel,
+  buildAgentDefinitionFromForm,
+  buildToolsPolicy,
+  formSnapshotJson,
+  stripRemovedPromptBlocks,
+  toolsFromDefinition,
+  type ToolsMode,
+} from '@novel-master/config-forms/agent';
 import {
   formatApplicationModelId,
   parseApplicationModelId,
@@ -35,97 +41,6 @@ type Props = {
   onDirtyChange?: (dirty: boolean) => void;
   onSaved?: () => void;
 };
-
-type ToolsMode = 'default' | 'allow' | 'deny';
-
-const ROLES = ['system', 'user', 'assistant'] as const;
-const TOOL_MODE_OPTIONS: Array<{value: ToolsMode; label: string}> = [
-  {value: 'default', label: '默认（全部工具）'},
-  {value: 'allow', label: '白名单'},
-  {value: 'deny', label: '黑名单'},
-];
-
-function parseToolsList(text: string): string[] {
-  return text
-    .split(/[,\n]+/)
-    .map(part => part.trim())
-    .filter(part => part.length > 0);
-}
-
-function buildToolsPolicy(
-  mode: ToolsMode,
-  listText: string,
-): AgentToolPolicy | undefined {
-  if (mode === 'default') {
-    return undefined;
-  }
-  const names = parseToolsList(listText);
-  if (mode === 'allow') {
-    return {allow: names};
-  }
-  return {deny: names};
-}
-
-function toolsFromDefinition(def: AgentDefinition): {
-  mode: ToolsMode;
-  listText: string;
-} {
-  if (def.tools?.allow != null) {
-    return {mode: 'allow', listText: def.tools.allow.join(', ')};
-  }
-  if (def.tools?.deny != null) {
-    return {mode: 'deny', listText: def.tools.deny.join(', ')};
-  }
-  return {mode: 'default', listText: ''};
-}
-const ROLE_OPTIONS = ROLES.map(role => ({value: role, label: role}));
-
-function blockTypeLabel(type: PromptBlock['type']): string {
-  return type === 'text' ? '文本' : '会话';
-}
-
-/** Drop removed `abstract` blocks from legacy agent configs. */
-function stripRemovedPromptBlocks(
-  blocks: readonly PromptBlock[],
-): {readonly prompts: PromptBlock[]; readonly removed: number} {
-  const kept: PromptBlock[] = [];
-  let removed = 0;
-  for (const block of blocks) {
-    if ((block as {type: string}).type === 'abstract') {
-      removed += 1;
-      continue;
-    }
-    kept.push(block);
-  }
-  return {prompts: kept, removed};
-}
-
-/** Stable JSON for dirty check; omits model ids when专属模型 is off. */
-function formSnapshotJson(input: {
-  name: string;
-  maxSteps: string;
-  modelEnabled: boolean;
-  providerId: string;
-  vendorModelId: string;
-  toolsMode: ToolsMode;
-  toolsList: string;
-  prompts: readonly PromptBlock[];
-}): string {
-  return JSON.stringify({
-    name: input.name,
-    maxSteps: input.maxSteps,
-    modelEnabled: input.modelEnabled,
-    toolsMode: input.toolsMode,
-    toolsList: input.toolsList,
-    ...(input.modelEnabled
-      ? {
-          providerId: input.providerId,
-          vendorModelId: input.vendorModelId,
-        }
-      : {}),
-    prompts: input.prompts,
-  });
-}
 
 export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const {tokens} = useTheme();
@@ -289,38 +204,22 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     ? formatApplicationModelId(providerId, vendorModelId)
     : undefined;
 
-  const buildDefinition = (): AgentDefinition | null => {
-    if (!name.trim()) {
-      showToast('请填写 Agent 名称');
-      return null;
-    }
-    if (prompts.length === 0) {
-      showToast('至少保留一个 Prompt 块');
-      return null;
-    }
-    const steps = Number(maxSteps);
-    const tools = buildToolsPolicy(toolsMode, toolsList);
-    const def: AgentDefinition = {
-      name: name.trim(),
-      prompts,
-      ...(Number.isFinite(steps) && steps > 0
-        ? {runtime: {maxSteps: steps}}
-        : {}),
-      ...(modelEnabled && providerId && vendorModelId
-        ? {
-            model: formatApplicationModelId(providerId, vendorModelId),
-          }
-        : {}),
-      ...(tools != null ? {tools} : {}),
-    };
-    return def;
-  };
-
   const handleSave = async () => {
-    const def = buildDefinition();
-    if (!def) {
+    const built = buildAgentDefinitionFromForm({
+      name,
+      maxSteps,
+      modelEnabled,
+      providerId,
+      vendorModelId,
+      toolsMode,
+      toolsList,
+      prompts,
+    });
+    if (!built.ok) {
+      showToast(built.message);
       return;
     }
+    const def = built.definition;
     setSaving(true);
     try {
       const probe = new ToolRegistry();

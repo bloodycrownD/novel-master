@@ -19,6 +19,7 @@
     "test": "tsx --test test/**/*.test.ts test/**/*.test.js"
   },
   "dependencies": {
+    "@novel-master/config-forms": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-mac": "*",
     "@novel-master/sksp-windows": "*",

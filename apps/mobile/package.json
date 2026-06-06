@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.2",
+    "@novel-master/config-forms": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-android": "*",
     "@novel-master/tdbc-driver-rn": "*",

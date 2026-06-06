@@ -8,16 +8,14 @@ import {EventBlockEditor} from '../../components/events/EventConfigBlocks';
 import {
   ACTION_ADD_OPTIONS,
   EVENT_ADD_OPTIONS,
+  configToEventBlocks,
   createDefaultAction,
   defaultDagForEvent,
-} from '../../components/events/event-config-labels';
-import {
-  configToEventBlocks,
   eventBlocksToConfig,
   newEventBlockId,
+  validateEventConfigBlocks,
   type EventBlockDraft,
-} from '../../components/events/event-config-state';
-import {validateEventConfigBlocks} from '../../components/events/validate-event-config-blocks';
+} from '@novel-master/config-forms/events';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
