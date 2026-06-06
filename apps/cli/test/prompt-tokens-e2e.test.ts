@@ -201,6 +201,73 @@ describe("prompt render --tokens CLI e2e", () => {
     }
   });
 
+  it("T9: per-model tokenCounterMode claude flows to prompt render --tokens", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-prompt-tokens-permodel-"));
+    const dbPath = join(dir, "novel.db");
+    const promptPath = join(dir, "prompt.yaml");
+    try {
+      await writeFile(promptPath, PROMPT_YAML, "utf8");
+      runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
+      runNm([
+        "provider",
+        "model",
+        "create",
+        "--vendorModelId",
+        "gpt-4o",
+        "--db",
+        dbPath,
+      ]);
+      runNm([
+        "provider",
+        "model",
+        "edit",
+        "--modelId",
+        "openai/gpt-4o",
+        "--tokenCounterMode",
+        "claude",
+        "--db",
+        dbPath,
+      ]);
+
+      const { projectId, sessionId } = await setupSession(dbPath);
+      runNm([
+        "message",
+        "append",
+        "--session",
+        sessionId,
+        "--role",
+        "user",
+        "--content",
+        "per-model counter",
+        "--db",
+        dbPath,
+      ]);
+
+      const render = runNm([
+        "prompt",
+        "render",
+        "--path",
+        promptPath,
+        "--tokens",
+        "--model",
+        "openai/gpt-4o",
+        "--project",
+        projectId,
+        "--session",
+        sessionId,
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(render.status, 0, render.stderr);
+
+      const tokens = parseTokenJsonLine(render.stderr);
+      assert.ok(tokens.tokenCount > 0);
+      assert.equal(tokens.counter, "claude");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("CLI4: --tokens --model openai/claude-3-5-sonnet uses claude counter", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-prompt-tokens-claude-"));
     const dbPath = join(dir, "novel.db");

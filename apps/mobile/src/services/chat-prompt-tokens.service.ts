@@ -1,5 +1,12 @@
 /**
- * Estimates full prompt token usage for chat meta bar (aligns with CLI `prompt render --tokens`).
+ * Chat meta bar token labels (aligns with CLI `prompt render --tokens`).
+ *
+ * @module services/chat-prompt-tokens
+ *
+ * Boundary: per-model counter mode comes from
+ * {@link resolveTokenCounterModeForModel} → `countPromptLlmInput({ tokenizerOverride })`.
+ * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
+ * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
  */
 import {
   countPromptLlmInput,

@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { registerNodeTokenizerDriverForTests } from "../helpers/register-node-tokenizer-driver-for-tests.js";
+import {
+  clearTokenizerDrivers,
+  registerTokenizerDriver,
+} from "../../src/infra/nmtp/index.js";
+import { countPromptLlmInput as nodeCountPromptLlmInput } from "../../../tokenizer-driver-node/src/count-prompt-llm-input.js";
+import {
+  createNodeTokenizerLoader,
+  defaultTokenizerAssetsRoot,
+  setNodeTokenizerLoader,
+} from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
+import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
 import {
   InMemoryAgentSession,
@@ -117,16 +128,37 @@ describe("TokenRatioConditionTrigger", () => {
     assert.equal(await trigger.shouldTrigger(session, evaluation), false);
   });
 
-  it("uses heuristic override when resolveTokenizerOverride returns heuristic", async () => {
+  it("uses heuristic override when resolveTokenizerOverride returns heuristic (T5)", async () => {
+    const captured: { tokenizerOverride?: string; counterKind?: string } = {};
+    clearTokenizerDrivers();
+    setNodeTokenizerLoader(
+      createNodeTokenizerLoader(defaultTokenizerAssetsRoot()),
+    );
+    registerTokenizerDriver({
+      name: NODE_DRIVER_NAME,
+      countPromptLlmInput: async (params) => {
+        const result = await nodeCountPromptLlmInput(params);
+        captured.tokenizerOverride = params.tokenizerOverride;
+        captured.counterKind = result.counterKind;
+        return result;
+      },
+    });
+
+    const session = new InMemoryAgentSession();
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("hello world");
-    const { counterKind } = await countPromptLlmInput({
-      blocks: evaluation.blocks,
-      ctx: evaluation.ctx,
-      applicationModelId: evaluation.modelContext.applicationModelId,
+
+    const trigger = new TokenRatioConditionTrigger(
+      {
+        tokenRatio: 0.8,
+        resolveContextWindow: async () => 100_000,
+        resolveTokenizerOverride: async () => "heuristic",
+      },
       registry,
-      tokenizerOverride: "heuristic",
-    });
-    assert.equal(counterKind, "heuristic");
+    );
+
+    await trigger.shouldTrigger(session, evaluation);
+    assert.equal(captured.tokenizerOverride, "heuristic");
+    assert.equal(captured.counterKind, "heuristic");
   });
 });

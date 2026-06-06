@@ -1,5 +1,8 @@
 import {formatPromptTokenUsageLabel} from '../src/utils/format-token-count';
-import {loadChatPromptTokenLabel} from '../src/services/chat-prompt-tokens.service';
+import {
+  loadChatPromptTokenLabel,
+  loadChatPromptTokenLabelResilient,
+} from '../src/services/chat-prompt-tokens.service';
 import type {MobileNovelMasterRuntime} from '../src/runtime/types';
 
 const mockCountPromptLlmInput = jest.fn();
@@ -100,6 +103,26 @@ describe('chat-prompt-tokens.service', () => {
     mockResolveApplicationModelId.mockReturnValue(undefined);
 
     const label = await loadChatPromptTokenLabel(stubRuntime(), {
+      sessionId: 's1',
+      projectId: 'p1',
+    });
+
+    expect(label).toBe('~1K tokens (est.) · heuristic');
+  });
+
+  it('T7: loadChatPromptTokenLabelResilient falls back to heuristic suffix on build error', async () => {
+    mockBuildSessionPromptInput.mockRejectedValue(new Error('prompt build failed'));
+    const runtime = stubRuntime({contextWindow: null});
+    (runtime.state.getCurrentModelId as jest.Mock).mockResolvedValue('');
+    (runtime.messages.listBySession as jest.Mock).mockResolvedValue([
+      {
+        role: 'user',
+        content: {blocks: [{type: 'text', text: 'hello'}]},
+        hidden: false,
+      },
+    ]);
+
+    const label = await loadChatPromptTokenLabelResilient(runtime, {
       sessionId: 's1',
       projectId: 'p1',
     });

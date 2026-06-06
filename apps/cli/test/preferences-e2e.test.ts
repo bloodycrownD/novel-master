@@ -92,6 +92,25 @@ describe("preferences CLI e2e", () => {
     }
   });
 
+  it("T8: preferences set tokenCounter.mode is rejected", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-tc-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      const set = runNm([
+        "preferences",
+        "set",
+        "tokenCounter.mode",
+        "heuristic",
+        "--db",
+        dbPath,
+      ]);
+      assert.notEqual(set.status, 0);
+      assert.match(set.stderr, /Usage: nm preferences set/);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("C5: versionCheck false allows session vfs write without version", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-"));
     const dbPath = join(dir, "novel.db");
