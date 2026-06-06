@@ -141,9 +141,8 @@ Conversation messages render in a single `react-native-webview` (`ChatTranscript
 
 | Setting | Default | Notes |
 |---------|---------|-------|
-| `chatTranscriptEngine` KKV | `webview` in **`__DEV__`** | Local dev exercises WebView path |
-| Production build | `legacy-rn` | Falls back to RN `MessageList` until M4 device QA (PRD T1–T11) |
-| Override | App UI prefs key `chatTranscriptEngine` | Set to `webview` or `legacy-rn` |
+| `chatTranscriptEngine` KKV | **`webview`** | Release and Debug |
+| Override | App UI prefs key `chatTranscriptEngine` | Set to `legacy-rn` to roll back to RN `MessageList` |
 
 **Rollback:** set `chatTranscriptEngine` to `legacy-rn` to restore the RN FlatList transcript without inverted-list experiments.
 

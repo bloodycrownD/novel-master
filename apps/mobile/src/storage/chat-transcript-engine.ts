@@ -1,10 +1,8 @@
 /**
  * Feature flag: legacy RN MessageList vs WebView transcript engine.
  *
- * - `__DEV__` default: `webview` (local transcript development)
- * - Production default: `legacy-rn` (safe rollback until M4 device QA completes)
- *
- * Override via KKV `chatTranscriptEngine` in app UI prefs (`legacy-rn` | `webview`).
+ * Default: `webview` (Release and Debug). Override via KKV `chatTranscriptEngine`
+ * (`legacy-rn` | `webview`) for rollback without reinstalling.
  */
 import type {AppUiPreferences} from './app-ui-prefs';
 
@@ -12,9 +10,7 @@ export type ChatTranscriptEngine = 'legacy-rn' | 'webview';
 
 export const APP_UI_KEY_CHAT_TRANSCRIPT_ENGINE = 'chatTranscriptEngine';
 
-const DEFAULT_ENGINE: ChatTranscriptEngine = __DEV__
-  ? 'webview'
-  : 'legacy-rn';
+const DEFAULT_ENGINE: ChatTranscriptEngine = 'webview';
 
 export function defaultChatTranscriptEngine(): ChatTranscriptEngine {
   return DEFAULT_ENGINE;
