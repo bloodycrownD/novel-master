@@ -1730,6 +1730,42 @@ html:not([data-theme="dark"]) #app-chrome {
   background: var(--background);
 }
 
+.message-actions-menu {
+  position: fixed;
+  z-index: 115;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 12px;
+  box-shadow: var(--shadow-elevated);
+  padding: 6px;
+}
+
+.message-actions-menu.hidden {
+  display: none;
+}
+
+.message-actions-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.message-actions-menu button:hover {
+  background: var(--background);
+}
+
+.message-actions-menu button.is-danger {
+  color: #c0392b;
+}
+
 .session-actions-menu {
   position: fixed;
   z-index: 110;
@@ -2199,8 +2235,34 @@ html:not([data-theme="dark"]) #app-chrome {
   margin: 0;
 }
 
+.chat-message__menu-btn {
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.chat-message:hover .chat-message__menu-btn,
+.chat-message__menu-btn:focus-visible {
+  opacity: 1;
+}
+
+.chat-message__menu-btn:hover {
+  color: var(--text);
+  background: var(--background);
+}
+
 .chat-message__role {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);

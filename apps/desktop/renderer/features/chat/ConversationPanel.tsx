@@ -6,8 +6,10 @@ import {
   ipcMessagesDelete,
   ipcMessagesHide,
   ipcMessagesList,
+  ipcMessagesRollback,
 } from "../../ipc/client";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
+import { useShellNav } from "../../providers/ShellNavProvider";
 import { ChatComposer } from "./ChatComposer";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
@@ -25,10 +27,16 @@ export function ConversationPanel({
   onOpenSessionActions,
   messageBatch,
 }: ConversationPanelProps) {
+  const { refreshWorkspaceTrees } = useShellNav();
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [messageMenu, setMessageMenu] = useState<{
+    message: ChatMessageDto;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
@@ -104,6 +112,69 @@ export function ConversationPanel({
     await reloadMessages();
   };
 
+  const closeMessageMenu = useCallback(() => {
+    setMessageMenu(null);
+  }, []);
+
+  useEffect(() => {
+    const onDocClick = () => closeMessageMenu();
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [closeMessageMenu]);
+
+  const openMessageMenu = useCallback(
+    (message: ChatMessageDto, position: { x: number; y: number }) => {
+      setMessageMenu({
+        message,
+        x: Math.max(8, Math.min(position.x, window.innerWidth - 180)),
+        y: Math.max(8, Math.min(position.y, window.innerHeight - 120)),
+      });
+    },
+    [],
+  );
+
+  const copyMessage = useCallback(async (message: ChatMessageDto) => {
+    const text = message.bodyText?.trim();
+    if (!text) {
+      window.alert("该消息没有可复制的文本");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.alert("复制失败");
+    }
+  }, []);
+
+  const rollbackToMessage = useCallback(
+    async (messageId: string) => {
+      if (running) {
+        window.alert("Agent 运行中无法回滚");
+        return;
+      }
+      if (
+        !window.confirm(
+          "将删除此消息之后的对话，并撤销相关文件修改。是否继续？",
+        )
+      ) {
+        return;
+      }
+      const result = await ipcMessagesRollback({
+        projectId,
+        sessionId,
+        messageId,
+      });
+      if (!result.ok) {
+        window.alert(result.error.message);
+        return;
+      }
+      setStreamingText("");
+      await reloadMessages();
+      refreshWorkspaceTrees();
+    },
+    [running, projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
+  );
+
   return (
     <>
       <div className="conversation-tabs" role="tablist" aria-label="会话内容">
@@ -143,7 +214,49 @@ export function ConversationPanel({
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
             onToggleSelect={messageBatch.toggle}
+            onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
           />
+        </div>
+        <div
+          id="message-actions-menu"
+          className={`message-actions-menu${messageMenu ? "" : " hidden"}`}
+          role="menu"
+          aria-label="消息操作"
+          hidden={!messageMenu}
+          style={
+            messageMenu
+              ? { left: messageMenu.x, top: messageMenu.y }
+              : undefined
+          }
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            data-message-action="copy"
+            onClick={() => {
+              const target = messageMenu?.message;
+              closeMessageMenu();
+              if (target) {
+                void copyMessage(target);
+              }
+            }}
+          >
+            复制
+          </button>
+          <button
+            type="button"
+            data-message-action="rollback"
+            className="is-danger"
+            onClick={() => {
+              const target = messageMenu?.message;
+              closeMessageMenu();
+              if (target) {
+                void rollbackToMessage(target.id);
+              }
+            }}
+          >
+            回滚到此
+          </button>
         </div>
         <div
           id="chat-batch-bar"
