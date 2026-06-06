@@ -12,6 +12,7 @@ import {
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "../../ipc/client";
+import { PickerModal } from "../../components/ui/PickerModal";
 import {
   SettingsPanel,
   SettingsRow,
@@ -22,61 +23,6 @@ import {
 
 const KEY_LLM_STREAM = "llmStream";
 const KEY_CHAT_RICH_TEXT = "chatRichText";
-
-interface PickerModalProps {
-  open: boolean;
-  title: string;
-  rows: Array<{ id: string; label: string }>;
-  currentId?: string;
-  onSelect: (id: string | null) => void;
-  onClose: () => void;
-  allowNone?: boolean;
-}
-
-function PickerModal({
-  open,
-  title,
-  rows,
-  currentId,
-  onSelect,
-  onClose,
-  allowNone,
-}: PickerModalProps) {
-  if (!open) return null;
-  return (
-    <div className="settings-modal-overlay" onClick={onClose}>
-      <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-        <header className="settings-modal__header">
-          <h3>{title}</h3>
-          <button type="button" onClick={onClose} aria-label="关闭">
-            ×
-          </button>
-        </header>
-        <div className="settings-modal__list">
-          {allowNone ? (
-            <button
-              type="button"
-              className={`settings-modal__item${currentId == null ? " is-active" : ""}`}
-              onClick={() => onSelect(null)}
-            >
-              不启用
-            </button>
-          ) : null}
-          {rows.map((row) => (
-            <button
-              key={row.id}
-              type="button"
-              className={`settings-modal__item${row.id === currentId ? " is-active" : ""}`}
-              onClick={() => onSelect(row.id)}
-            >
-              {row.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function WorkspaceSettingsView() {
   const [modelLabel, setModelLabel] = useState("—");

@@ -193,12 +193,12 @@ body {
 .column-splitter::before {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 8px;
+  bottom: 8px;
   left: 50%;
   width: 1px;
   transform: translateX(-50%);
-  background: var(--border-light);
+  background: transparent;
   transition: background 0.15s ease, width 0.15s ease;
 }
 
@@ -322,6 +322,11 @@ html:not([data-theme="dark"]) #rail-header::before {
   overflow: hidden;
 }
 
+.column-pane {
+  border-radius: 8px;
+  overflow: hidden;
+}
+
 #preview-pane,
 #explorer-pane,
 #chat-rail {
@@ -329,6 +334,13 @@ html:not([data-theme="dark"]) #rail-header::before {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  border-radius: 0 0 8px 8px;
+}
+
+#preview-header,
+#explorer-header,
+#rail-header {
+  border-radius: 8px 8px 0 0;
 }
 
 #preview-pane {
@@ -1486,6 +1498,7 @@ html:not([data-theme="dark"]) #app-chrome {
   overflow: hidden;
 }
 
+.settings-list-item,
 .settings-row {
   display: flex;
   align-items: center;
@@ -1501,10 +1514,12 @@ html:not([data-theme="dark"]) #app-chrome {
   color: inherit;
 }
 
+.settings-list-item:last-child,
 .settings-row:last-child {
   border-bottom: none;
 }
 
+.settings-list-item:hover,
 .settings-row:hover {
   background: var(--surface);
 }
@@ -1753,6 +1768,7 @@ html:not([data-theme="dark"]) #app-chrome {
   border: 1px solid var(--border-light);
   border-radius: 12px;
   background: var(--surface);
+  box-shadow: var(--shadow-card-subtle);
 }
 
 .config-block-card--nested {
@@ -2665,30 +2681,6 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   }
 }
 
-.workspace-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.workspace-toolbar__btn {
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.workspace-toolbar__btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
 .preview-markdown {
   padding: 16px;
   overflow: auto;
@@ -2825,78 +2817,6 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .settings-status {
   padding: 8px 16px 16px;
   font-size: 13px;
-}
-
-.settings-list-item {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.settings-list-item__main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 12px 16px;
-  border: none;
-  background: var(--surface-muted);
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text);
-  transition: background var(--transition-speed) ease;
-}
-
-.settings-list-item__main:hover {
-  background: var(--surface-inset);
-}
-
-.settings-list-item__title {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.settings-list-item__meta {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.settings-list-item__menu {
-  flex-shrink: 0;
-  width: 40px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-size: 18px;
-}
-
-.settings-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-.settings-field__label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.settings-field input,
-.settings-field textarea,
-.settings-field select {
-  width: 100%;
-  padding: 8px 10px;
-  font: inherit;
-  font-size: 14px;
-  border: 1px solid var(--border-light);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text);
 }
 
 /* ── Context menu / text prompt ── */

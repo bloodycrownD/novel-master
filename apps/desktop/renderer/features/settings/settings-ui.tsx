@@ -90,25 +90,34 @@ export function SettingsListItem({
   onClick?: () => void;
   onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
+  const itemButton = (
+    <button type="button" className="settings-list-item" onClick={onClick}>
+      <span className="settings-list-item__label">{title}</span>
+      {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
+      <span className="settings-list-item__chevron" aria-hidden="true">
+        ›
+      </span>
+    </button>
+  );
+
+  if (!onMenu) {
+    return itemButton;
+  }
+
   return (
-    <div className="settings-list-item">
-      <button type="button" className="settings-list-item__main" onClick={onClick}>
-        <span className="settings-list-item__title">{title}</span>
-        {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
+    <div className="settings-list-item-row">
+      {itemButton}
+      <button
+        type="button"
+        className="settings-list-item__menu-btn"
+        aria-label="更多"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMenu(e);
+        }}
+      >
+        ⋮
       </button>
-      {onMenu ? (
-        <button
-          type="button"
-          className="settings-list-item__menu"
-          aria-label="更多"
-          onClick={(e) => {
-            e.stopPropagation();
-            onMenu(e);
-          }}
-        >
-          ⋯
-        </button>
-      ) : null}
     </div>
   );
 }
