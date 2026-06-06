@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { PickerModal } from "../../components/ui/PickerModal";
+import { showToast } from "../../components/ui/show-toast";
 import {
   ipcAgentListPicker,
   ipcAgentSetCurrent,
@@ -17,6 +19,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   const [agentName, setAgentName] = useState("—");
   const [modelLabel, setModelLabel] = useState("—");
   const [tokenLabel, setTokenLabel] = useState("");
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [agentRows, setAgentRows] = useState<Array<{ agentId: string; label: string }>>([]);
+  const [modelRows, setModelRows] = useState<Array<{ applicationModelId: string; label: string }>>([]);
 
   const reload = useCallback(async () => {
     const [meta, tokens] = await Promise.all([
@@ -39,40 +45,21 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   const openAgentPicker = async () => {
     const result = await ipcAgentListPicker();
     if (!result.ok || result.data.rows.length === 0) {
-      window.alert("暂无 Agent，请先在设置中配置。");
+      showToast("暂无 Agent，请先在设置中配置。");
       return;
     }
-    const labels = result.data.rows.map((r) => r.label).join("\n");
-    const pick = window.prompt(
-      `选择 Agent（当前：${agentName}）\n${result.data.rows.map((r, i) => `${i + 1}. ${r.label}`).join("\n")}\n输入序号：`,
-    );
-    const idx = Number(pick) - 1;
-    if (!Number.isFinite(idx) || idx < 0 || idx >= result.data.rows.length) {
-      return;
-    }
-    await ipcAgentSetCurrent({
-      agentId: result.data.rows[idx]!.agentId,
-    });
-    await reload();
+    setAgentRows(result.data.rows);
+    setAgentPickerOpen(true);
   };
 
   const openModelPicker = async () => {
     const result = await ipcModelListPicker();
     if (!result.ok || result.data.rows.length === 0) {
-      window.alert("暂无模型，请先在设置中配置 Provider。");
+      showToast("暂无模型，请先在设置中配置 Provider。");
       return;
     }
-    const pick = window.prompt(
-      `选择模型（当前：${modelLabel}）\n${result.data.rows.map((r, i) => `${i + 1}. ${r.label}`).join("\n")}\n输入序号：`,
-    );
-    const idx = Number(pick) - 1;
-    if (!Number.isFinite(idx) || idx < 0 || idx >= result.data.rows.length) {
-      return;
-    }
-    await ipcModelSetCurrent({
-      applicationModelId: result.data.rows[idx]!.applicationModelId,
-    });
-    await reload();
+    setModelRows(result.data.rows);
+    setModelPickerOpen(true);
   };
 
   return (
@@ -119,6 +106,24 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
           </div>
         </div>
       ) : null}
+      <PickerModal
+        open={agentPickerOpen}
+        title={`选择 Agent（当前：${agentName}）`}
+        rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
+        onClose={() => setAgentPickerOpen(false)}
+        onSelect={(agentId) => {
+          void ipcAgentSetCurrent({ agentId }).then(() => reload());
+        }}
+      />
+      <PickerModal
+        open={modelPickerOpen}
+        title={`选择模型（当前：${modelLabel}）`}
+        rows={modelRows.map((r) => ({ id: r.applicationModelId, label: r.label }))}
+        onClose={() => setModelPickerOpen(false)}
+        onSelect={(applicationModelId) => {
+          void ipcModelSetCurrent({ applicationModelId }).then(() => reload());
+        }}
+      />
     </div>
   );
 }

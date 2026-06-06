@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useColumnSplitters } from "./hooks/useColumnSplitters";
 import { useBatchSelection } from "./hooks/useBatchSelection";
-import { runSessionAction } from "./features/chat/ConversationPanel";
+import { runCompaction, runSessionAction } from "./features/chat/ConversationPanel";
 import { ConfirmModal } from "./components/ui/ConfirmModal";
 import { TextPromptModal } from "./components/ui/TextPromptModal";
-import { showToast } from "./components/ui/toast";
+import { showToast } from "./components/ui/show-toast";
 import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
@@ -20,7 +20,7 @@ import { MainShell } from "./layout/MainShell";
 import { SettingsOverlay } from "./layout/SettingsOverlay";
 import { NovelMasterProvider } from "./providers/NovelMasterProvider";
 import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
-import { ToastHost } from "./components/ui/Toast";
+import { ToastHost } from "./components/ui/ToastHost";
 import { ThemeProvider } from "./providers/ThemeProvider";
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
@@ -49,6 +49,7 @@ function DesktopOverlays() {
     left: number;
     bottom: number;
   } | null>(null);
+  const [confirmCompact, setConfirmCompact] = useState(false);
 
   const closeMenus = useCallback(() => {
     setWorkspaceMenu(null);
@@ -263,18 +264,26 @@ function DesktopOverlays() {
           onClick={() => {
             closeMenus();
             if (projectId && sessionId) {
-              void runSessionAction(
-                "compact-chat",
-                projectId,
-                sessionId,
-                messageBatch.enter,
-              );
+              setConfirmCompact(true);
             }
           }}
         >
           压缩聊天
         </button>
       </div>
+
+      <ConfirmModal
+        open={confirmCompact}
+        title="压缩聊天"
+        message="将按照事件配置压缩上下文。是否继续？"
+        onConfirm={() => {
+          setConfirmCompact(false);
+          if (projectId && sessionId) {
+            void runCompaction(projectId, sessionId);
+          }
+        }}
+        onCancel={() => setConfirmCompact(false)}
+      />
 
       <div
         id="workspace-context-menu"

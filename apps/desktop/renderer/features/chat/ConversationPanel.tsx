@@ -14,6 +14,8 @@ import {
 } from "../../ipc/client";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useShellNav } from "../../providers/ShellNavProvider";
+import { ConfirmModal } from "../../components/ui/ConfirmModal";
+import { showToast } from "../../components/ui/show-toast";
 import { ChatComposer } from "./ChatComposer";
 import {
   buildMessageActionItems,
@@ -51,6 +53,12 @@ export function ConversationPanel({
     messageId: string;
     initialText: string;
   } | null>(null);
+  const [confirmState, setConfirmState] = useState<
+    | { kind: "batch-delete"; count: number }
+    | { kind: "rollback"; messageId: string }
+    | { kind: "delete-message"; messageId: string }
+    | null
+  >(null);
 
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
@@ -105,15 +113,13 @@ export function ConversationPanel({
     return () => document.removeEventListener("click", handler);
   }, [onOpenSessionActions]);
 
-  const batchDelete = async () => {
-    const ids = [...messageBatch.selectedIds];
-    if (ids.length === 0) {
-      return;
-    }
-    if (!window.confirm(`确定删除选中的 ${ids.length} 条消息？`)) {
-      return;
-    }
-    for (const id of ids) {
+  const batchDelete = () => {
+    if (messageBatch.selectedCount === 0) return;
+    setConfirmState({ kind: "batch-delete", count: messageBatch.selectedCount });
+  };
+
+  const runBatchDelete = async () => {
+    for (const id of messageBatch.selectedIds) {
       await ipcMessagesDelete({ messageId: id });
     }
     messageBatch.exit();
@@ -161,43 +167,44 @@ export function ConversationPanel({
   const copyMessage = useCallback(async (message: ChatMessageDto) => {
     const text = editableTextFromMessage(message) ?? message.bodyText?.trim();
     if (!text) {
-      window.alert("该消息没有可复制的文本");
+      showToast("该消息没有可复制的文本");
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
+      showToast("已复制");
     } catch {
-      window.alert("复制失败");
+      showToast("复制失败");
     }
   }, []);
 
   const rollbackToMessage = useCallback(
     async (messageId: string) => {
       if (running) {
-        window.alert("Agent 运行中无法回滚");
+        showToast("Agent 运行中无法回滚");
         return;
       }
-      if (
-        !window.confirm(
-          "将删除此消息之后的对话，并撤销相关文件修改。是否继续？",
-        )
-      ) {
-        return;
-      }
+      setConfirmState({ kind: "rollback", messageId });
+    },
+    [running],
+  );
+
+  const executeRollback = useCallback(
+    async (messageId: string) => {
       const result = await ipcMessagesRollback({
         projectId,
         sessionId,
         messageId,
       });
       if (!result.ok) {
-        window.alert(result.error.message);
+        showToast(result.error.message);
         return;
       }
       setStreamingText("");
       await reloadMessages();
       refreshWorkspaceTrees();
     },
-    [running, projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
+    [projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
   );
 
   const handleMessageAction = useCallback(
@@ -205,7 +212,7 @@ export function ConversationPanel({
       if (action === "edit") {
         const initial = editableTextFromMessage(message);
         if (initial == null) {
-          window.alert("该消息包含工具调用，暂不支持编辑");
+          showToast("该消息包含工具调用，暂不支持编辑");
           return;
         }
         setMessageEdit({ messageId: message.id, initialText: initial });
@@ -227,7 +234,7 @@ export function ConversationPanel({
       }
       if (action === "fork") {
         if (running) {
-          window.alert("Agent 运行中无法分叉");
+          showToast("Agent 运行中无法分叉");
           return;
         }
         const result = await ipcMessagesFork({
@@ -235,7 +242,7 @@ export function ConversationPanel({
           messageId: message.id,
         });
         if (!result.ok) {
-          window.alert(result.error.message);
+          showToast(result.error.message);
           return;
         }
         setStreamingText("");
@@ -248,12 +255,7 @@ export function ConversationPanel({
         return;
       }
       if (action === "delete") {
-        if (!window.confirm("确定删除这条消息？")) {
-          return;
-        }
-        await ipcMessagesDelete({ messageId: message.id });
-        setStreamingText("");
-        await reloadMessages();
+        setConfirmState({ kind: "delete-message", messageId: message.id });
       }
     },
     [
@@ -272,13 +274,42 @@ export function ConversationPanel({
     async (messageId: string, text: string) => {
       const result = await ipcMessagesEdit({ messageId, text });
       if (!result.ok) {
-        window.alert(result.error.message);
+        showToast(result.error.message);
         return;
       }
       await reloadMessages();
     },
     [reloadMessages],
   );
+
+  const deleteSingleMessage = useCallback(
+    async (messageId: string) => {
+      await ipcMessagesDelete({ messageId });
+      setStreamingText("");
+      await reloadMessages();
+    },
+    [reloadMessages],
+  );
+
+  const handleConfirm = useCallback(async () => {
+    const state = confirmState;
+    setConfirmState(null);
+    if (!state) return;
+    if (state.kind === "batch-delete") await runBatchDelete();
+    else if (state.kind === "rollback") await executeRollback(state.messageId);
+    else if (state.kind === "delete-message") await deleteSingleMessage(state.messageId);
+  }, [confirmState, runBatchDelete, executeRollback, deleteSingleMessage]);
+
+  const confirmMessage = (() => {
+    if (!confirmState) return "";
+    if (confirmState.kind === "batch-delete") {
+      return `确定删除选中的 ${confirmState.count} 条消息？`;
+    }
+    if (confirmState.kind === "rollback") {
+      return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
+    }
+    return "确定删除这条消息？";
+  })();
 
   return (
     <>
@@ -407,24 +438,35 @@ export function ConversationPanel({
           visible={tab === "realPrompt"}
         />
       </div>
+      <ConfirmModal
+        open={confirmState != null}
+        title="确认操作"
+        message={confirmMessage}
+        danger={
+          confirmState?.kind === "batch-delete" ||
+          confirmState?.kind === "delete-message"
+        }
+        onConfirm={() => void handleConfirm()}
+        onCancel={() => setConfirmState(null)}
+      />
     </>
   );
 }
 
 export async function runSessionAction(
   action: string,
-  projectId: string,
-  sessionId: string,
+  _projectId: string,
+  _sessionId: string,
   enterBatch: () => void,
 ): Promise<void> {
   if (action === "batch-ops") {
     enterBatch();
-    return;
   }
-  if (action === "compact-chat") {
-    if (!window.confirm("将按照事件配置压缩上下文。是否继续？")) {
-      return;
-    }
-    await ipcCompactionManual({ projectId, sessionId });
-  }
+}
+
+export async function runCompaction(
+  projectId: string,
+  sessionId: string,
+): Promise<void> {
+  await ipcCompactionManual({ projectId, sessionId });
 }
