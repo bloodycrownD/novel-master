@@ -1,7 +1,7 @@
 /**
  * Shared multi-select state for list batch management (prototype list-batch-active).
  */
-import {useCallback, useState} from 'react';
+import {useCallback, useMemo, useState} from 'react';
 
 export function useBatchSelection() {
   const [active, setActive] = useState(false);
@@ -13,8 +13,8 @@ export function useBatchSelection() {
   }, []);
 
   const exit = useCallback(() => {
-    setActive(false);
-    setSelectedIds(new Set());
+    setActive(prev => (prev ? false : prev));
+    setSelectedIds(prev => (prev.size === 0 ? prev : new Set()));
   }, []);
 
   const toggle = useCallback((id: string) => {
@@ -34,14 +34,17 @@ export function useBatchSelection() {
     [selectedIds],
   );
 
-  return {
-    active,
-    selectedIds,
-    selectedCount: selectedIds.size,
-    enter,
-    exit,
-    toggle,
-    isSelected,
-    setSelectedIds,
-  };
+  return useMemo(
+    () => ({
+      active,
+      selectedIds,
+      selectedCount: selectedIds.size,
+      enter,
+      exit,
+      toggle,
+      isSelected,
+      setSelectedIds,
+    }),
+    [active, selectedIds, enter, exit, toggle, isSelected, setSelectedIds],
+  );
 }
