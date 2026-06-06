@@ -1,7 +1,7 @@
+import { WorkspaceHeaderActions } from "../features/workspace/WorkspaceHeaderActions";
 import {
   WorkspaceTree,
   type WorkspaceContextTarget,
-  handleWorkspaceContextAction,
 } from "../features/workspace/WorkspaceTree";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { workspaceTitleForScope } from "../state/nav-workspace";
@@ -9,9 +9,13 @@ import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
 
 interface ExplorerPaneProps {
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
+  onBlankContextMenu: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
 
-export function ExplorerPane({ onOpenContextMenu }: ExplorerPaneProps) {
+export function ExplorerPane({
+  onOpenContextMenu,
+  onBlankContextMenu,
+}: ExplorerPaneProps) {
   const {
     workspaceScope,
     viewId,
@@ -25,6 +29,10 @@ export function ExplorerPane({ onOpenContextMenu }: ExplorerPaneProps) {
   return (
     <>
       <header className="column-header" id="explorer-header" aria-label="工作区">
+        <WorkspaceHeaderActions
+          panelScope={workspaceScope}
+          onRefresh={refreshWorkspaceTrees}
+        />
         <span className="column-header__title" id="workspace-title">
           {title}
         </span>
@@ -49,8 +57,8 @@ export function ExplorerPane({ onOpenContextMenu }: ExplorerPaneProps) {
                     <WorkspaceTree
                       panelScope={scope}
                       refreshToken={treeRefreshToken}
-                      onRefresh={refreshWorkspaceTrees}
                       onOpenContextMenu={onOpenContextMenu}
+                      onBlankContextMenu={onBlankContextMenu}
                     />
                   ) : null}
                 </div>
@@ -75,19 +83,3 @@ export function ExplorerPane({ onOpenContextMenu }: ExplorerPaneProps) {
 }
 
 export type { WorkspaceContextTarget };
-
-export async function runWorkspaceContextAction(
-  target: WorkspaceContextTarget,
-  action: string,
-  projectId: string | undefined,
-  sessionId: string | undefined,
-  refresh: () => void,
-): Promise<void> {
-  await handleWorkspaceContextAction(
-    target,
-    action,
-    projectId,
-    sessionId,
-    refresh,
-  );
-}

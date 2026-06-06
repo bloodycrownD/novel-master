@@ -8,6 +8,9 @@ import { PreviewPane } from "./PreviewPane";
 interface MainShellProps {
   workspaceRef: RefObject<HTMLDivElement | null>;
   onOpenWorkspaceContextMenu: (target: WorkspaceContextTarget) => void;
+  onBlankWorkspaceContextMenu: (
+    target: Extract<WorkspaceContextTarget, { kind: "blank" }>,
+  ) => void;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   messageBatch: ReturnType<typeof useBatchSelection>;
 }
@@ -15,6 +18,7 @@ interface MainShellProps {
 export function MainShell({
   workspaceRef,
   onOpenWorkspaceContextMenu,
+  onBlankWorkspaceContextMenu,
   onOpenSessionActions,
   messageBatch,
 }: MainShellProps) {
@@ -32,7 +36,10 @@ export function MainShell({
         tabIndex={0}
       />
 
-      <ExplorerPane onOpenContextMenu={onOpenWorkspaceContextMenu} />
+      <ExplorerPane
+        onOpenContextMenu={onOpenWorkspaceContextMenu}
+        onBlankContextMenu={onBlankWorkspaceContextMenu}
+      />
 
       <div
         className="column-splitter"

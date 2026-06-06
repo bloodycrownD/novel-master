@@ -2,10 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import { useColumnSplitters } from "./hooks/useColumnSplitters";
 import { useBatchSelection } from "./hooks/useBatchSelection";
 import { runSessionAction } from "./features/chat/ConversationPanel";
+import { ConfirmModal } from "./components/ui/ConfirmModal";
+import { TextPromptModal } from "./components/ui/TextPromptModal";
+import { showToast } from "./components/ui/toast";
 import {
-  runWorkspaceContextAction,
-  type WorkspaceContextTarget,
-} from "./layout/ExplorerPane";
+  createWorkspaceEntry,
+  deleteWorkspaceEntry,
+  entryLabelForTarget,
+  renameWorkspaceEntry,
+  runDirectWorkspaceAction,
+  setDirRuleEnabled,
+} from "./features/workspace/workspace-actions";
+import { workspaceMenuItems } from "./features/workspace/workspace-context";
+import type { WorkspaceContextTarget } from "./features/workspace/WorkspaceTree";
 import { AppChrome } from "./layout/AppChrome";
 import { MainShell } from "./layout/MainShell";
 import { SettingsOverlay } from "./layout/SettingsOverlay";
@@ -14,15 +23,28 @@ import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
 import { ToastHost } from "./components/ui/Toast";
 import { ThemeProvider } from "./providers/ThemeProvider";
 
+type WorkspaceMenuState = WorkspaceContextTarget & {
+  items: ReturnType<typeof workspaceMenuItems>;
+};
+
+type WorkspacePromptState =
+  | { kind: "create-file"; target: WorkspaceContextTarget }
+  | { kind: "create-folder"; target: WorkspaceContextTarget }
+  | { kind: "rename"; target: WorkspaceContextTarget; initialName: string };
+
+type WorkspaceConfirmState =
+  | { kind: "delete"; target: WorkspaceContextTarget }
+  | { kind: "dir-rule"; target: WorkspaceContextTarget };
+
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
   const { projectId, sessionId, refreshWorkspaceTrees } = useShellNav();
 
-  const [workspaceMenu, setWorkspaceMenu] = useState<
-    (WorkspaceContextTarget & { items: Array<{ action: string; label: string; danger?: boolean }> }) | null
-  >(null);
+  const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
+  const [workspacePrompt, setWorkspacePrompt] = useState<WorkspacePromptState | null>(null);
+  const [workspaceConfirm, setWorkspaceConfirm] = useState<WorkspaceConfirmState | null>(null);
   const [sessionMenu, setSessionMenu] = useState<{
     left: number;
     bottom: number;
@@ -40,23 +62,16 @@ function DesktopOverlays() {
   }, [closeMenus]);
 
   const openWorkspaceContextMenu = useCallback((target: WorkspaceContextTarget) => {
-    const isDir = target.row.kind === "dir";
-    const items = isDir
-      ? [
-          { action: "rule-config", label: "规则配置" },
-          { action: "rename", label: "重命名" },
-          { action: "delete", label: "删除", danger: true },
-        ]
-      : [
-          { action: "include-hide", label: "隐藏文件" },
-          { action: "include-show", label: "展示文件" },
-          { action: "include-follow", label: "跟随目录" },
-          { action: "rename", label: "重命名" },
-          { action: "delete", label: "删除文件", danger: true },
-        ];
-    setWorkspaceMenu({ ...target, items });
+    setWorkspaceMenu({ ...target, items: workspaceMenuItems(target) });
     setSessionMenu(null);
   }, []);
+
+  const openBlankWorkspaceContextMenu = useCallback(
+    (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => {
+      openWorkspaceContextMenu(target);
+    },
+    [openWorkspaceContextMenu],
+  );
 
   const openSessionActions = useCallback((anchor: HTMLElement) => {
     const rect = anchor.getBoundingClientRect();
@@ -66,6 +81,124 @@ function DesktopOverlays() {
     });
     setWorkspaceMenu(null);
   }, []);
+
+  const handleWorkspaceAction = useCallback(
+    async (target: WorkspaceContextTarget, action: string) => {
+      if (action === "create-file") {
+        setWorkspacePrompt({ kind: "create-file", target });
+        return;
+      }
+      if (action === "create-folder") {
+        setWorkspacePrompt({ kind: "create-folder", target });
+        return;
+      }
+      if (action === "rename" && target.kind === "row") {
+        setWorkspacePrompt({
+          kind: "rename",
+          target,
+          initialName: entryLabelForTarget(target),
+        });
+        return;
+      }
+      if (action === "delete") {
+        setWorkspaceConfirm({ kind: "delete", target });
+        return;
+      }
+      if (action === "rule-config") {
+        setWorkspaceConfirm({ kind: "dir-rule", target });
+        return;
+      }
+
+      const result = await runDirectWorkspaceAction(
+        target,
+        action,
+        projectId,
+        sessionId,
+      );
+      if (result.ok) {
+        refreshWorkspaceTrees();
+      } else {
+        showToast(result.message);
+      }
+    },
+    [projectId, sessionId, refreshWorkspaceTrees],
+  );
+
+  const handleWorkspacePromptConfirm = useCallback(
+    async (value: string) => {
+      const prompt = workspacePrompt;
+      setWorkspacePrompt(null);
+      if (!prompt) {
+        return;
+      }
+      let result: { ok: true } | { ok: false; message: string };
+      if (prompt.kind === "create-file") {
+        result = await createWorkspaceEntry(
+          prompt.target,
+          "file",
+          value,
+          projectId,
+          sessionId,
+        );
+      } else if (prompt.kind === "create-folder") {
+        result = await createWorkspaceEntry(
+          prompt.target,
+          "folder",
+          value,
+          projectId,
+          sessionId,
+        );
+      } else {
+        result = await renameWorkspaceEntry(
+          prompt.target,
+          value,
+          projectId,
+          sessionId,
+        );
+      }
+      if (result.ok) {
+        refreshWorkspaceTrees();
+      } else {
+        showToast(result.message);
+      }
+    },
+    [workspacePrompt, projectId, sessionId, refreshWorkspaceTrees],
+  );
+
+  const handleWorkspaceConfirm = useCallback(async () => {
+    const confirm = workspaceConfirm;
+    setWorkspaceConfirm(null);
+    if (!confirm) {
+      return;
+    }
+    if (confirm.kind === "delete") {
+      const result = await deleteWorkspaceEntry(
+        confirm.target,
+        projectId,
+        sessionId,
+      );
+      if (result.ok) {
+        refreshWorkspaceTrees();
+      } else {
+        showToast(result.message);
+      }
+      return;
+    }
+    if (confirm.kind === "dir-rule") {
+      const result = await setDirRuleEnabled(
+        confirm.target,
+        true,
+        projectId,
+        sessionId,
+      );
+      if (result.ok) {
+        refreshWorkspaceTrees();
+        showToast("目录规则已开启");
+      } else {
+        showToast(result.message);
+      }
+    }
+  }, [workspaceConfirm, projectId, sessionId, refreshWorkspaceTrees]);
 
   return (
     <>
@@ -83,6 +216,7 @@ function DesktopOverlays() {
           <MainShell
             workspaceRef={columnLayout.workspaceRef}
             onOpenWorkspaceContextMenu={openWorkspaceContextMenu}
+            onBlankWorkspaceContextMenu={openBlankWorkspaceContextMenu}
             onOpenSessionActions={openSessionActions}
             messageBatch={messageBatch}
           />
@@ -170,19 +304,68 @@ function DesktopOverlays() {
               if (!menu) {
                 return;
               }
-              void runWorkspaceContextAction(
-                menu,
-                item.action,
-                projectId,
-                sessionId,
-                refreshWorkspaceTrees,
-              );
+              void handleWorkspaceAction(menu, item.action);
             }}
           >
             {item.label}
           </button>
         ))}
       </div>
+
+      <TextPromptModal
+        open={workspacePrompt != null}
+        title={
+          workspacePrompt?.kind === "create-file"
+            ? "新建文件"
+            : workspacePrompt?.kind === "create-folder"
+              ? "新建文件夹"
+              : "重命名"
+        }
+        placeholder={
+          workspacePrompt?.kind === "create-folder" ? "文件夹名称" : "名称"
+        }
+        initialValue={
+          workspacePrompt?.kind === "rename" ? workspacePrompt.initialName : ""
+        }
+        onClose={() => setWorkspacePrompt(null)}
+        onConfirm={handleWorkspacePromptConfirm}
+      />
+
+      <ConfirmModal
+        open={workspaceConfirm?.kind === "delete"}
+        title="确认删除"
+        message={`确定删除「${workspaceConfirm ? entryLabelForTarget(workspaceConfirm.target) : ""}」？`}
+        danger
+        onConfirm={handleWorkspaceConfirm}
+        onCancel={() => setWorkspaceConfirm(null)}
+      />
+
+      <ConfirmModal
+        open={workspaceConfirm?.kind === "dir-rule"}
+        title="目录规则"
+        message="是否开启该目录的规则？"
+        confirmLabel="开启"
+        onConfirm={handleWorkspaceConfirm}
+        onCancel={async () => {
+          const confirm = workspaceConfirm;
+          setWorkspaceConfirm(null);
+          if (confirm?.kind === "dir-rule") {
+            const result = await setDirRuleEnabled(
+              confirm.target,
+              false,
+              projectId,
+              sessionId,
+            );
+            if (result.ok) {
+              refreshWorkspaceTrees();
+              showToast("目录规则已关闭");
+            } else {
+              showToast(result.message);
+            }
+          }
+        }}
+      />
+
       <ToastHost />
     </>
   );

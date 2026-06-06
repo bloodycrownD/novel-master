@@ -2930,11 +2930,19 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   gap: 10px;
 }
 
-.explorer-header__actions {
+#explorer-header .explorer-header__actions {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-right: auto;
+  flex-shrink: 0;
+}
+
+#explorer-header .column-header__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Tool call cards ── */

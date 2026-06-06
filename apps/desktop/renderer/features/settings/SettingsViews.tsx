@@ -1128,8 +1128,8 @@ export function GlobalTemplateView() {
         <WorkspaceTree
           panelScope="global"
           refreshToken={refreshToken}
-          onRefresh={() => setRefreshToken((t) => t + 1)}
           onOpenContextMenu={() => undefined}
+          onBlankContextMenu={() => undefined}
         />
       </div>
     </SettingsPanel>
