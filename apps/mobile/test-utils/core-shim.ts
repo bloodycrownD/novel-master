@@ -32,5 +32,4 @@ export type {
   WorktreeDirRule,
   WorktreeListRow,
 } from "../../../packages/core/dist/domain/worktree/model/worktree-types.js";
-export { messageBodyText } from "../../../packages/core/dist/domain/prompt/logic/message-body.js";
 

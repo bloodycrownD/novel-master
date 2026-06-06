@@ -39,5 +39,17 @@ module.exports = {
       repoRoot,
       'packages/tokenizer-driver-rn/dist/index.js',
     ),
+    '^@novel-master/config-forms/events$': path.join(
+      repoRoot,
+      'packages/config-forms/dist/events/index.js',
+    ),
+    '^@novel-master/config-forms/agent$': path.join(
+      repoRoot,
+      'packages/config-forms/dist/agent/index.js',
+    ),
+    '^@novel-master/config-forms$': path.join(
+      repoRoot,
+      'packages/config-forms/dist/index.js',
+    ),
   },
 };
