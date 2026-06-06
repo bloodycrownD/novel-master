@@ -75,7 +75,7 @@ apps/mobile/src/
   web/
     rich-content-styles.ts          # NEW 共享 rich CSS 字符串（从 transcript-html 抽出）
     rich-document/
-      transcript-html.ts            # NEW HTML 模板 + boot IIFE
+      document-html.ts            # NEW HTML 模板 + boot IIFE
       main.ts                       # NEW buildRichDocumentBootScript()
   components/
     vfs/
