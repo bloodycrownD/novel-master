@@ -8,6 +8,7 @@ import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
   createVfsZipIoService,
   type VfsScope,
+  type VfsZipBuildFn,
   type VfsZipImportOptions,
   VfsZipError,
 } from '@novel-master/core';
@@ -111,18 +112,45 @@ export type ExportVfsZipOptions = {
   onNativeZipFallback?: () => void;
 };
 
+/** Marks failures from the injected buildZip step (native zip), not VFS gather. */
+class NativeZipBuildFailedError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error ? cause.message : 'native zip build failed',
+    );
+    this.name = 'NativeZipBuildFailedError';
+  }
+}
+
+/** Android-only: wrap native buildZip so fallback catches zip step failures only. */
+const androidNativeBuildZip: VfsZipBuildFn = async (input) => {
+  try {
+    return await nativeBuildVfsZip(input);
+  } catch (cause) {
+    throw new NativeZipBuildFailedError(cause);
+  }
+};
+
 async function exportVfsZipBytes(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
   options?: ExportVfsZipOptions,
 ): Promise<Uint8Array> {
+  if (Platform.OS !== 'android') {
+    // iOS still uses Core default fflate STORE until M3 native zip is validated.
+    const zipSvc = createVfsZipIoService(runtime.conn);
+    return await zipSvc.export(scope);
+  }
+
   try {
     const zipSvc = createVfsZipIoService(runtime.conn, {
-      buildZip: nativeBuildVfsZip,
+      buildZip: androidNativeBuildZip,
     });
     return await zipSvc.export(scope);
-  } catch {
-    // Native zip failed — retry gather+pack with Core default fflate STORE (no custom buildZip).
+  } catch (error) {
+    if (!(error instanceof NativeZipBuildFailedError)) {
+      throw error;
+    }
     options?.onNativeZipFallback?.();
     const fallbackSvc = createVfsZipIoService(runtime.conn);
     return await fallbackSvc.export(scope);
