@@ -20,6 +20,7 @@ import {
   types,
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {nativeBuildVfsZip} from '../native/vfs-zip-native';
 
 function vfsZipExportFileName(scope: VfsScope): string {
   if (scope.kind === 'global') {
@@ -109,7 +110,9 @@ export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
 ): Promise<'saved' | 'cancelled'> {
-  const zipSvc = createVfsZipIoService(runtime.conn);
+  const zipSvc = createVfsZipIoService(runtime.conn, {
+    buildZip: nativeBuildVfsZip,
+  });
   const bytes = await zipSvc.export(scope);
   assertZipArchive(bytes);
 
@@ -158,4 +161,4 @@ export async function importVfsZip(
     confirmed: options.confirmed,
   });
 }
-
+
