@@ -90,7 +90,7 @@ flowchart TB
 | `init` | WebView load 完成 | `theme`, `flags`（richText, showFullToolParams, batchMode） |
 | `sessionSnapshot` | 切换会话 / reload | `sessionKey`, `rows[]`, `hasMore`, `stream` |
 | `prependPage` | 加载更早完成 | `rows[]`（仅新增 older 行）, `prependedCount` |
-| `streamDelta` | 流式增量 | `kind: 'text' \| 'thinking'`, `delta` |
+| `streamDelta` | 流式增量 | `kind: 'text' \| 'thinking'`, `delta`, `html?`（rich 开启时累计 tail 的 sanitized HTML） |
 | `streamReset` | 流结束/中止 | — |
 | `messagePatch` | 单条更新（编辑/隐藏） | `messageId`, `patch` |
 | `themeUpdate` | 主题切换 | `theme` |
@@ -168,7 +168,7 @@ export type ChatTranscriptScrollSnapshot = {
 - Web 内：**markdown-it**（`html: true`）+ **DOMPurify**（或等价）→ `innerHTML` / patch DOM。  
 - 规则对齐 `apps/mobile/src/components/rich-content/prepare-rich-html.ts`（测试向量可共享 fixture）。  
 - User 气泡：plain text（与现网一致）。  
-- Stream tail：plain text；thinking 块在 rich 开启时可用简化 MD。  
+- Stream tail：当 `flags.richText === true` 且未超 `RICH_CONTENT_MAX_CHARS` 时，**assistant 正文与 thinking 块均支持流式增量 HTML**（RN 侧 `prepareStreamTailHtml` → `streamDelta.html`，Web 侧 `innerHTML` 更新 tail；超限时回退 plain）。  
 - **禁止** 在 Web transcript 再嵌套 RN `RenderHTML`。
 
 ---

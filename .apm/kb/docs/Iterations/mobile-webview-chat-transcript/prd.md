@@ -50,7 +50,8 @@ Mobile 聊天 transcript（气泡、Thinking、Tool、流式 tail、富文本、
 
 4. **富文本**  
    - Web 内直接渲染 HTML（复用 `prepareRichHtml` / sanitize **语义**；实现可在 Web bundle 内用 markdown-it + DOMPurify 或预编译共享逻辑）。  
-   - 流式 tail 仍为 plain text（与现网一致）；落库后由 snapshot 刷新该行。
+   - 当 `chatRichTextEnabled` 且内容未超限时，**流式 tail（assistant 正文 + thinking）支持增量 rich HTML**（RN `prepareStreamTailHtml` → bridge `streamDelta.html`；落库后仍由 snapshot 刷新该行）。  
+   - Legacy `MessageList` 流式正文仍为 plain；WebView 路径优先。
 
 5. **滚动快照**  
    - 新 schema（`schemaVersion: 2`，Web 语义）；旧 RN inverted 快照（v1）**丢弃**，默认贴底。
@@ -75,7 +76,7 @@ Mobile 聊天 transcript（气泡、Thinking、Tool、流式 tail、富文本、
 - Kotlin/Swift 原生 transcript 列表
 - Core/DB、分页 API、display 正则通道改造
 - Composer、键盘、工作区 VFS、CLI/Web 端
-- assistant 流式实时富 HTML（非 V1，与现网一致）
+- Legacy `MessageList` 流式 assistant 正文实时富 HTML（WebView 路径已支持；legacy 仍 plain）
 - 将整 App 改为 Capacitor/Electron
 
 ## 验收标准
