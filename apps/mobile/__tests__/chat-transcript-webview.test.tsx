@@ -202,6 +202,54 @@ describe('ChatTranscriptWebView', () => {
     }
   });
 
+  it('includes thinking stream html in streamDelta when richText is enabled', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText=""
+          streamingThinking=""
+          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          streamingText=""
+          streamingThinking="*reason*"
+          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+        />,
+      );
+    });
+
+    const thinkingDelta = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(
+        msg => msg.type === 'streamDelta' && msg.payload.kind === 'thinking',
+      );
+    expect(thinkingDelta?.type).toBe('streamDelta');
+    if (thinkingDelta?.type === 'streamDelta') {
+      expect(thinkingDelta.payload.html).toBeDefined();
+      expect(thinkingDelta.payload.html).toContain('<em>');
+    }
+  });
+
   it('T7: menu open path does not post sessionSnapshot or flagsUpdate when flag values unchanged', async () => {
     const messages = [sampleMessage('m1', 1)];
 

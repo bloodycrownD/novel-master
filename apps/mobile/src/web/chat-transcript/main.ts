@@ -2,12 +2,14 @@
  * WebView transcript boot script (IIFE) — mirrors scroll.ts semantics in the WebView.
  * Bundled into CHAT_TRANSCRIPT_HTML; keep nearBottom threshold in sync with scroll.ts.
  */
+import {MENU_OPEN_GRACE_MS} from './menu-overlay-guards';
 import {NEAR_BOTTOM_THRESHOLD_PX} from './scroll';
 
 export function buildTranscriptBootScript(): string {
   return `
 (function () {
   var NEAR_BOTTOM = ${NEAR_BOTTOM_THRESHOLD_PX};
+  var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};
   var SCROLL_TOP_LOAD_OLDER = 24;
   var SCHEMA_V = 2;
   var BRIDGE_V = 1;
@@ -28,6 +30,7 @@ export function buildTranscriptBootScript(): string {
     loadOlderArmed: true,
     longPressTimer: null,
     longPressTarget: null,
+    menuOpenedAt: 0,
   };
 
   function post(type, payload) {
@@ -227,6 +230,7 @@ export function buildTranscriptBootScript(): string {
   function closeContextMenu(notifyHost) {
     if (!state.menu) return;
     state.menu = null;
+    state.menuOpenedAt = 0;
     if (state.menuOverlayHandler) {
       document.removeEventListener('click', state.menuOverlayHandler, true);
       document.removeEventListener('touchend', state.menuOverlayHandler, true);
@@ -255,6 +259,11 @@ export function buildTranscriptBootScript(): string {
           post('messageMenuAction', { messageId: messageId, action: menuAction });
         }
       }
+      return;
+    }
+    var rowEl = target.closest('.row.message');
+    if (rowEl && event.type === 'touchend' && state.menuOpenedAt &&
+        Date.now() - state.menuOpenedAt < MENU_OPEN_GRACE_MS) {
       return;
     }
     // Backdrop lives on document.body outside #rows — capture dismiss here.
@@ -305,6 +314,7 @@ export function buildTranscriptBootScript(): string {
       pageY: pageY,
       items: buildMenuItems(row),
     };
+    state.menuOpenedAt = Date.now();
     renderContextMenu();
   }
 
@@ -533,10 +543,18 @@ export function buildTranscriptBootScript(): string {
   function appendStreamDelta(kind, delta, html) {
     if (kind === 'text') {
       state.stream.text += delta;
-      if (html) state.stream.textHtml = html;
+      if (html) {
+        state.stream.textHtml = html;
+      } else if (state.flags.richText) {
+        state.stream.textHtml = '';
+      }
     } else {
       state.stream.thinking += delta;
-      if (html) state.stream.thinkingHtml = html;
+      if (html) {
+        state.stream.thinkingHtml = html;
+      } else if (state.flags.richText) {
+        state.stream.thinkingHtml = '';
+      }
     }
     var tail = document.getElementById('stream-tail');
     if (tail) {
