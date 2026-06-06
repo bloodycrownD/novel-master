@@ -1,40 +1,53 @@
 import type { RefObject } from "react";
+import type { useBatchSelection } from "../hooks/useBatchSelection";
+import type { WorkspaceContextTarget } from "../features/workspace/WorkspaceTree";
 import { ChatRail } from "./ChatRail";
 import { ExplorerPane } from "./ExplorerPane";
 import { PreviewPane } from "./PreviewPane";
 
 interface MainShellProps {
   workspaceRef: RefObject<HTMLDivElement | null>;
+  onOpenWorkspaceContextMenu: (target: WorkspaceContextTarget) => void;
+  onOpenSessionActions: (anchor: HTMLElement) => void;
+  messageBatch: ReturnType<typeof useBatchSelection>;
 }
 
-export function MainShell({ workspaceRef }: MainShellProps) {
+export function MainShell({
+  workspaceRef,
+  onOpenWorkspaceContextMenu,
+  onOpenSessionActions,
+  messageBatch,
+}: MainShellProps) {
   return (
     <div className="workspace" ref={workspaceRef}>
-        <PreviewPane />
+      <PreviewPane />
 
-        <div
-          className="column-splitter"
-          id="splitter-preview-explorer"
-          data-splitter="preview-explorer"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整预览区与工作区宽度"
-          tabIndex={0}
-        />
+      <div
+        className="column-splitter"
+        id="splitter-preview-explorer"
+        data-splitter="preview-explorer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整预览区与工作区宽度"
+        tabIndex={0}
+      />
 
-        <ExplorerPane />
+      <ExplorerPane onOpenContextMenu={onOpenWorkspaceContextMenu} />
 
-        <div
-          className="column-splitter"
-          id="splitter-explorer-chat"
-          data-splitter="explorer-chat"
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="调整工作区与聊天区宽度"
-          tabIndex={0}
-        />
+      <div
+        className="column-splitter"
+        id="splitter-explorer-chat"
+        data-splitter="explorer-chat"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整工作区与聊天区宽度"
+        tabIndex={0}
+      />
 
-        <ChatRail />
+      <ChatRail
+        onOpenSessionActions={onOpenSessionActions}
+        messageBatch={messageBatch}
+      />
     </div>
   );
 }

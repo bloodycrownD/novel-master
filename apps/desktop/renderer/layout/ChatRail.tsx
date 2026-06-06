@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ProjectDto, SessionDto } from "../../shared/ipc-types";
 import { BatchCheckbox } from "../components/batch/BatchCheckbox";
 import { ManageHeader } from "../components/batch/ManageHeader";
+import { ConversationPanel } from "../features/chat/ConversationPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import {
   ipcProjectsDelete,
@@ -13,7 +14,15 @@ import { useShellNav } from "../providers/ShellNavProvider";
 import { loadDesktopScope } from "../state/desktop-scope";
 import { railPaneNavTitle } from "../state/nav-workspace";
 
-export function ChatRail() {
+interface ChatRailProps {
+  onOpenSessionActions: (anchor: HTMLElement) => void;
+  messageBatch: ReturnType<typeof useBatchSelection>;
+}
+
+export function ChatRail({
+  onOpenSessionActions,
+  messageBatch,
+}: ChatRailProps) {
   const {
     viewId,
     projectId,
@@ -338,65 +347,16 @@ export function ChatRail() {
           data-nav-view="conversation"
           hidden={viewId !== "conversation"}
         >
-          <div className="conversation-tabs" role="tablist" aria-label="会话内容">
-            <button
-              type="button"
-              className="conversation-tab is-active"
-              data-conversation-tab="chat"
-              role="tab"
-              aria-selected
-            >
-              聊天
-            </button>
-            <button
-              type="button"
-              className="conversation-tab"
-              data-conversation-tab="realPrompt"
-              role="tab"
-              aria-selected={false}
-            >
-              提示词
-            </button>
-          </div>
-          <div
-            className="conversation-panel is-visible"
-            data-conversation-panel="chat"
-          >
-            <div className="chat-messages" id="chat-messages">
-              <p className="preview-empty">对话功能将在后续版本提供</p>
-            </div>
-            <div
-              id="chat-batch-bar"
-              className="chat-batch-bar hidden"
-              hidden
+          {projectId && sessionId ? (
+            <ConversationPanel
+              projectId={projectId}
+              sessionId={sessionId}
+              onOpenSessionActions={onOpenSessionActions}
+              messageBatch={messageBatch}
             />
-            <div className="chat-composer" id="chat-composer">
-              <button
-                type="button"
-                className="chat-composer__more"
-                data-action="open-session-actions"
-                aria-label="更多选项"
-                aria-haspopup="menu"
-              >
-                ⋯
-              </button>
-              <textarea
-                disabled
-                placeholder="请先配置模型（D5）"
-                aria-label="消息输入"
-              />
-              <button type="button" className="chat-composer__send" disabled>
-                发送
-              </button>
-            </div>
-          </div>
-          <div
-            className="conversation-panel"
-            data-conversation-panel="realPrompt"
-            hidden
-          >
-            <div className="real-prompt-list" id="real-prompt-list" />
-          </div>
+          ) : (
+            <p className="preview-empty">请选择会话</p>
+          )}
         </div>
       </section>
     </>

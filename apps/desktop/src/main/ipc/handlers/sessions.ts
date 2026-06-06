@@ -7,6 +7,7 @@ import type {
   SessionDeleteRequest,
   SessionDto,
   SessionListByProjectRequest,
+  SessionPullTemplateRequest,
   SessionRenameRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -76,6 +77,20 @@ export async function handleSessionsDelete(
   try {
     const rt = await getDesktopRuntime();
     await rt.sessions.delete(req.id);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleSessionsPullTemplate(
+  req: SessionPullTemplateRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.sessions.pullTemplate(req.sessionId);
+    const session = await rt.sessions.get(req.sessionId);
+    rt.macroCache.clear(session.projectId, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

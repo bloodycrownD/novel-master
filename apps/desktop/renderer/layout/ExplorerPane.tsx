@@ -1,8 +1,25 @@
+import {
+  WorkspaceTree,
+  type WorkspaceContextTarget,
+  handleWorkspaceContextAction,
+} from "../features/workspace/WorkspaceTree";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { workspaceTitleForScope } from "../state/nav-workspace";
+import { WorkspaceFooter } from "../features/chat/WorkspaceFooter";
 
-export function ExplorerPane() {
-  const { workspaceScope } = useShellNav();
+interface ExplorerPaneProps {
+  onOpenContextMenu: (target: WorkspaceContextTarget) => void;
+}
+
+export function ExplorerPane({ onOpenContextMenu }: ExplorerPaneProps) {
+  const {
+    workspaceScope,
+    viewId,
+    projectId,
+    sessionId,
+    treeRefreshToken,
+    refreshWorkspaceTrees,
+  } = useShellNav();
   const title = workspaceTitleForScope(workspaceScope);
 
   return (
@@ -28,16 +45,49 @@ export function ExplorerPane() {
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
                 >
-                  <p className="tree-empty">加载中…</p>
+                  {visible ? (
+                    <WorkspaceTree
+                      panelScope={scope}
+                      refreshToken={treeRefreshToken}
+                      onRefresh={refreshWorkspaceTrees}
+                      onOpenContextMenu={onOpenContextMenu}
+                    />
+                  ) : null}
                 </div>
               </div>
             );
           })}
         </div>
-        <div id="workspace-footer" className="workspace-footer hidden" hidden>
-          <div id="conversation-meta" className="workspace-footer-card" />
+        <div
+          id="workspace-footer"
+          className={`workspace-footer${viewId === "conversation" ? "" : " hidden"}`}
+          hidden={viewId !== "conversation"}
+        >
+          {viewId === "conversation" && projectId && sessionId ? (
+            <WorkspaceFooter projectId={projectId} sessionId={sessionId} />
+          ) : (
+            <div id="conversation-meta" className="workspace-footer-card" />
+          )}
         </div>
       </section>
     </>
+  );
+}
+
+export type { WorkspaceContextTarget };
+
+export async function runWorkspaceContextAction(
+  target: WorkspaceContextTarget,
+  action: string,
+  projectId: string | undefined,
+  sessionId: string | undefined,
+  refresh: () => void,
+): Promise<void> {
+  await handleWorkspaceContextAction(
+    target,
+    action,
+    projectId,
+    sessionId,
+    refresh,
   );
 }

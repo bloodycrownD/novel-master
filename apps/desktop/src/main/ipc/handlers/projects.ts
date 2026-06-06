@@ -6,6 +6,7 @@ import type {
   ProjectCreateRequest,
   ProjectDeleteRequest,
   ProjectDto,
+  ProjectPullTemplateRequest,
   ProjectRenameRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -71,6 +72,18 @@ export async function handleProjectsDelete(
   try {
     const rt = await getDesktopRuntime();
     await rt.projects.delete(req.id);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleProjectsPullTemplate(
+  req: ProjectPullTemplateRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.projects.pullTemplate(req.projectId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

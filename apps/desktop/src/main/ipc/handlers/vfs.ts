@@ -1,0 +1,200 @@
+/**
+ * VFS IPC handlers — list/read/write/mkdir/delete/rename for global/project/session scopes.
+ *
+ * @module ipc/handlers/vfs
+ */
+import type {
+  IpcResult,
+  VfsDeleteRequest,
+  VfsListEntryDto,
+  VfsListRequest,
+  VfsMkdirRequest,
+  VfsReadRequest,
+  VfsReadResultDto,
+  VfsRenameRequest,
+  VfsWriteRequest,
+  VfsZipExportResult,
+  VfsZipImportResult,
+  VfsZipRequest,
+} from "../../../../shared/ipc-types.js";
+import { BrowserWindow } from "electron";
+import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
+import {
+  deleteVfsEntry,
+  renameVfsDirectory,
+  renameVfsFile,
+} from "../../services/vfs-operations.service.js";
+import {
+  exportVfsZipWithDialog,
+  importVfsZipWithDialog,
+} from "../../services/vfs-zip.service.js";
+import {
+  getVfsForScope,
+  invalidateSessionMacroCache,
+  resolveVfsScopeFromRequest,
+} from "../resolve-vfs-scope.js";
+
+function formatError(err: unknown): { code: string; message: string } {
+  if (err instanceof Error) {
+    return { code: err.name || "ERROR", message: err.message };
+  }
+  return { code: "ERROR", message: String(err) };
+}
+
+function focusedWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow() ?? undefined;
+}
+
+export async function handleVfsList(
+  req: VfsListRequest,
+): Promise<IpcResult<VfsListEntryDto[]>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    const entries = await vfs.list(req.path, { recursive: req.recursive });
+    return {
+      ok: true,
+      data: entries.map((e) => ({
+        path: e.path,
+        kind: e.kind === "directory" ? "directory" : "file",
+      })),
+    };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsRead(
+  req: VfsReadRequest,
+): Promise<IpcResult<VfsReadResultDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    const result = await vfs.read(req.path);
+    return {
+      ok: true,
+      data: {
+        content: result.content,
+        version: result.version,
+        mtimeMs: result.mtimeMs,
+      },
+    };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsWrite(
+  req: VfsWriteRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    if (req.expectedVersion != null) {
+      await vfs.write(req.path, req.content, {
+        expectedVersion: req.expectedVersion,
+        versionCheck: req.versionCheck !== false,
+      });
+    } else {
+      await vfs.write(req.path, req.content, {
+        versionCheck: req.versionCheck ?? false,
+      });
+    }
+    invalidateSessionMacroCache(rt, scope);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsMkdir(
+  req: VfsMkdirRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    await vfs.mkdir(req.path);
+    invalidateSessionMacroCache(rt, scope);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsDelete(
+  req: VfsDeleteRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    await deleteVfsEntry(vfs, req.path, { recursive: req.recursive });
+    invalidateSessionMacroCache(rt, scope);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsRename(
+  req: VfsRenameRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const vfs = getVfsForScope(rt, scope);
+    const parentPath =
+      req.oldPath.lastIndexOf("/") > 0
+        ? req.oldPath.slice(0, req.oldPath.lastIndexOf("/"))
+        : "/";
+    const siblings = await vfs.list(parentPath);
+    const entry = siblings.find((e) => e.path === req.oldPath);
+    if (entry?.kind === "directory") {
+      await renameVfsDirectory(vfs, req.oldPath, req.newPath);
+    } else {
+      await renameVfsFile(vfs, req.oldPath, req.newPath);
+    }
+    invalidateSessionMacroCache(rt, scope);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsZipExport(
+  req: VfsZipRequest,
+): Promise<IpcResult<VfsZipExportResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const result = await exportVfsZipWithDialog(rt, scope, focusedWindow());
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+export async function handleVfsZipImport(
+  req: VfsZipRequest,
+): Promise<IpcResult<VfsZipImportResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const scope = resolveVfsScopeFromRequest(req);
+    const result = await importVfsZipWithDialog(
+      rt,
+      scope,
+      { confirmed: req.confirmed === true },
+      focusedWindow(),
+    );
+    if (result === "imported") {
+      invalidateSessionMacroCache(rt, scope);
+    }
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}

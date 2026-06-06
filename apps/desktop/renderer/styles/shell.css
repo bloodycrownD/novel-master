@@ -2395,3 +2395,50 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
     grid-column: 3;
   }
 }
+
+.workspace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.workspace-toolbar__btn {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.workspace-toolbar__btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.preview-markdown {
+  padding: 16px;
+  overflow: auto;
+  height: 100%;
+}
+
+.preview-text {
+  padding: 16px;
+  white-space: pre-wrap;
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.chat-composer__error {
+  color: var(--danger);
+  font-size: 12px;
+  padding: 4px 12px;
+}
+
+.chat-message--streaming {
+  opacity: 0.85;
+}

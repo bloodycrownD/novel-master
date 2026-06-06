@@ -22,7 +22,8 @@
     "@novel-master/tdbc-driver-better-sqlite3": "*",
     "@novel-master/tokenizer-driver-node": "*",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "react-markdown": "^10.1.0"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",
