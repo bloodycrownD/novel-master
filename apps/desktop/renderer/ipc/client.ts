@@ -63,7 +63,13 @@ import {
 
 function bridge() {
   if (!window.novelMasterDesktop) {
-    throw new Error("novelMasterDesktop preload bridge is unavailable");
+    const inBrowser =
+      typeof navigator !== "undefined" && !/Electron/i.test(navigator.userAgent);
+    throw new Error(
+      inBrowser
+        ? "novelMasterDesktop 仅在 Electron 中可用。请运行 npm run desktop:dev，不要直接在浏览器打开 localhost:5173。"
+        : "novelMasterDesktop preload bridge is unavailable（preload 未加载，请重新 build 后启动 Electron）",
+    );
   }
   return window.novelMasterDesktop;
 }

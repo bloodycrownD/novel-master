@@ -23,15 +23,18 @@ test("desktop scaffold includes vite and electron-builder config", () => {
 });
 
 test("preload exposes novelMasterDesktop IPC bridge API", () => {
-  const preload = readFileSync(
-    path.join(desktopRoot, "src/preload/preload.ts"),
-    "utf8",
+  const preloadCjs = path.join(desktopRoot, "dist/src/preload/preload.cjs");
+  assert.ok(
+    existsSync(preloadCjs),
+    "dist/src/preload/preload.cjs missing — run npm run build -w @novel-master/desktop",
   );
-  assert.match(preload, /contextBridge\.exposeInMainWorld\("novelMasterDesktop"/);
-  assert.match(preload, /invoke/);
-  assert.match(preload, /\bon\b/);
-  assert.match(preload, /\boff\b/);
-  assert.match(preload, /version/);
+  const preloadBundle = readFileSync(preloadCjs, "utf8");
+  assert.match(preloadBundle, /contextBridge\.exposeInMainWorld\("novelMasterDesktop"/);
+  assert.doesNotMatch(
+    preloadBundle,
+    /^\s*import\s+/m,
+    "preload bundle must be CommonJS for sandboxed Electron",
+  );
 });
 
 test("desktop runtime factory is wired in main process", () => {

@@ -17,7 +17,8 @@ const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
 
 function resolvePreloadPath(): string {
-  return path.join(__dirname, "../preload/preload.js");
+  // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
+  return path.join(__dirname, "../preload/preload.cjs");
 }
 
 function resolveRendererIndex(): string {
@@ -36,6 +37,10 @@ function createMainWindow(): BrowserWindow {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  window.webContents.on("preload-error", (_event, preloadPath, err) => {
+    console.error("[desktop] preload failed:", preloadPath, err);
   });
 
   window.once("ready-to-show", () => {

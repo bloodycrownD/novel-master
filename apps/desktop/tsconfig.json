@@ -5,7 +5,8 @@
     "outDir": "./dist",
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["src/**/*", "shared/**/*"],
+  "include": ["src/main/**/*", "shared/**/*"],
+  "exclude": ["src/preload/**/*"],
   "references": [
     { "path": "../../packages/core" },
     { "path": "../../packages/tdbc-driver-better-sqlite3" },
