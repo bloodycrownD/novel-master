@@ -6,7 +6,6 @@ import {
   ActivityIndicator,
   Keyboard,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -194,12 +193,15 @@ export function FileEditorScreen() {
         </View>
       ) : null}
       {previewMode ? (
-        <ScrollView
-          style={[styles.preview, {backgroundColor: tokens.surface}]}
-          contentContainerStyle={styles.previewContent}
-          keyboardShouldPersistTaps="handled">
-          <FileMarkdownPreview path={path} content={content} tokens={tokens} />
-        </ScrollView>
+        /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
+        <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
+          <FileMarkdownPreview
+            path={path}
+            content={content}
+            tokens={tokens}
+            previewFill
+          />
+        </View>
       ) : (
         <TextInput
           style={[
@@ -241,6 +243,5 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 14,
   },
-  preview: {flex: 1},
-  previewContent: {padding: 12},
+  preview: {flex: 1, minHeight: 0, padding: 12},
 });

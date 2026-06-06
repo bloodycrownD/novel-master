@@ -1,12 +1,22 @@
 /**
  * Markdown file preview with Front Matter card and themed body rendering.
  */
-import React, {useMemo} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/front-matter';
 import type {ThemeTokens} from '../../theme/tokens';
+import {useNovelMaster} from '../../runtime/novel-master-context';
+import {
+  defaultVfsMarkdownPreviewEngine,
+  readVfsMarkdownPreviewEngine,
+  type VfsMarkdownPreviewEngine,
+} from '../../storage/vfs-markdown-preview-engine';
 import {RichContentBody} from '../rich-content/RichContentBody';
+import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {parseFrontMatterFields} from './front-matter-fields';
+import {RichDocumentWebView} from './RichDocumentWebView';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
 
@@ -18,13 +28,35 @@ interface FileMarkdownPreviewProps {
   path: string;
   content: string;
   tokens: ThemeTokens;
+  /** When true, WebView body expands (flex:1) — caller must not wrap WebView in ScrollView. */
+  previewFill?: boolean;
 }
 
 export function FileMarkdownPreview({
   path,
   content,
   tokens,
+  previewFill = false,
 }: FileMarkdownPreviewProps) {
+  const {appUi} = useNovelMaster();
+  const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(
+    defaultVfsMarkdownPreviewEngine(),
+  );
+
+  const refreshPreviewEngine = useCallback(async () => {
+    setPreviewEngine(await readVfsMarkdownPreviewEngine(appUi));
+  }, [appUi]);
+
+  useEffect(() => {
+    refreshPreviewEngine().catch(() => undefined);
+  }, [refreshPreviewEngine]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshPreviewEngine().catch(() => undefined);
+    }, [refreshPreviewEngine]),
+  );
+
   const useMarkdown = isMarkdownPreviewPath(path);
   const split = useMemo(
     () => (useMarkdown ? splitMarkdownFrontMatter(content) : null),
@@ -39,6 +71,25 @@ export function FileMarkdownPreview({
       : [];
   const body =
     useMarkdown && split?.closed ? (split.body ?? '').trim() : '';
+
+  const overLimit = isRichContentOverLimit(body);
+  const bodyHtml = useMemo(() => {
+    if (!body || overLimit || previewEngine !== 'webview') {
+      return undefined;
+    }
+    try {
+      // Same sanitize path as chat transcript WebView (prepareTranscriptRichHtml).
+      return prepareTranscriptRichHtml(body);
+    } catch {
+      return undefined;
+    }
+  }, [body, overLimit, previewEngine]);
+
+  const useWebViewBody =
+    previewEngine === 'webview' &&
+    useMarkdown &&
+    split?.closed === true &&
+    body.length > 0;
 
   if (!content.trim()) {
     return (
@@ -55,7 +106,7 @@ export function FileMarkdownPreview({
   }
 
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, previewFill && useWebViewBody && styles.fillRoot]}>
       {showFrontMatter ? (
         <FrontMatterCard
           tokens={tokens}
@@ -71,11 +122,25 @@ export function FileMarkdownPreview({
         </Text>
       ) : null}
       {body ? (
-        <RichContentBody
-          content={body}
-          tokens={tokens}
-          variant="file-preview"
-        />
+        useWebViewBody ? (
+          <RichDocumentWebView
+            html={bodyHtml}
+            plain={body}
+            overLimit={overLimit || bodyHtml == null}
+            style={previewFill ? styles.webBody : undefined}
+          />
+        ) : (
+          <ScrollView
+            style={previewFill ? styles.rnBodyScroll : undefined}
+            contentContainerStyle={styles.rnBodyContent}
+            keyboardShouldPersistTaps="handled">
+            <RichContentBody
+              content={body}
+              tokens={tokens}
+              variant="file-preview"
+            />
+          </ScrollView>
+        )
       ) : split?.closed && showFrontMatter ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           （正文为空）
@@ -153,6 +218,10 @@ function FrontMatterCard({
 
 const styles = StyleSheet.create({
   root: {gap: 16},
+  fillRoot: {flex: 1, minHeight: 0},
+  webBody: {flex: 1, minHeight: 0},
+  rnBodyScroll: {flex: 1, minHeight: 0},
+  rnBodyContent: {flexGrow: 1},
   empty: {fontSize: 14},
   plain: {fontFamily: 'monospace', fontSize: 14, lineHeight: 20},
   fmCard: {
