@@ -24,6 +24,8 @@ export type RichDocumentSetPayload = {
   readonly html?: string;
   readonly plain?: string;
   readonly overLimit?: boolean;
+  /** FM card HTML prepended inside #doc so FM and body scroll together. */
+  readonly frontMatterHtml?: string;
 };
 
 /** Host → document WebView */

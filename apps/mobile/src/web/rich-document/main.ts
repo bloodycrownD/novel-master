@@ -26,26 +26,31 @@ export function buildRichDocumentBootScript(): string {
     if (theme.borderLight) root.style.setProperty('--border', theme.borderLight);
   }
 
-  function setOverLimitHint(visible) {
-    var hint = document.getElementById('over-limit-hint');
-    if (!hint) return;
-    hint.textContent = OVER_LIMIT_HINT;
-    hint.style.display = visible ? 'block' : 'none';
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   function setDocument(payload) {
     var doc = document.getElementById('doc');
     if (!doc) return;
+    var fm = (payload && payload.frontMatterHtml) || '';
     var mode = payload && payload.mode;
     var overLimit = !!(payload && payload.overLimit);
-    setOverLimitHint(overLimit);
+    var bodyHtml = '';
     if (mode === 'html' && payload.html) {
-      doc.innerHTML = payload.html;
-      doc.classList.add('rich');
-      return;
+      bodyHtml = '<div class="doc-body rich">' + payload.html + '</div>';
+    } else if (payload.plain) {
+      bodyHtml =
+        '<div class="doc-body">' + escapeHtml(payload.plain) + '</div>';
     }
-    doc.textContent = (payload && payload.plain) || '';
-    doc.classList.remove('rich');
+    var hint = overLimit
+      ? '<div class="over-limit-hint">' + OVER_LIMIT_HINT + '</div>'
+      : '';
+    doc.innerHTML = fm + bodyHtml + hint;
   }
 
   function handleHostMessage(raw) {

@@ -15,6 +15,7 @@ import {
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
@@ -85,11 +86,29 @@ export function FileMarkdownPreview({
     }
   }, [body, overLimit, previewEngine]);
 
-  const useWebViewBody =
+  const useWebViewPreview =
     previewEngine === 'webview' &&
     useMarkdown &&
     split?.closed === true &&
-    body.length > 0;
+    (body.length > 0 || showFrontMatter);
+
+  const frontMatterHtml = useMemo(() => {
+    if (!useWebViewPreview || !showFrontMatter) {
+      return undefined;
+    }
+    return buildFrontMatterDocumentHtml({
+      fields: fmFields,
+      invalid: !split?.closed,
+      empty: split?.closed === true && fmLines.length === 0,
+      rawLines: !split?.closed ? fmLines : undefined,
+    });
+  }, [
+    useWebViewPreview,
+    showFrontMatter,
+    fmFields,
+    split?.closed,
+    fmLines,
+  ]);
 
   if (!content.trim()) {
     return (
@@ -106,31 +125,31 @@ export function FileMarkdownPreview({
   }
 
   return (
-    <View style={[styles.root, previewFill && useWebViewBody && styles.fillRoot]}>
-      {showFrontMatter ? (
-        <FrontMatterCard
-          tokens={tokens}
-          fields={fmFields}
-          invalid={!split?.closed}
-          empty={split?.closed === true && fmLines.length === 0}
-          rawLines={!split?.closed ? fmLines : undefined}
-        />
-      ) : null}
+    <View style={[styles.root, previewFill && useWebViewPreview && styles.fillRoot]}>
       {!split?.closed ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           请返回编辑并补全结束的 --- 后再预览正文。
         </Text>
       ) : null}
-      {body ? (
-        useWebViewBody ? (
-          <RichDocumentWebView
-            html={bodyHtml}
-            plain={body}
-            // Match RichContentBody: over-limit hint only when body exceeds char cap, not on prepare failure.
-            overLimit={overLimit}
-            style={previewFill ? styles.webBody : undefined}
-          />
-        ) : (
+      {useWebViewPreview ? (
+        <RichDocumentWebView
+          html={bodyHtml}
+          plain={body}
+          overLimit={overLimit}
+          frontMatterHtml={frontMatterHtml}
+          style={previewFill ? styles.webBody : undefined}
+        />
+      ) : body ? (
+        <>
+          {showFrontMatter ? (
+            <FrontMatterCard
+              tokens={tokens}
+              fields={fmFields}
+              invalid={!split?.closed}
+              empty={split?.closed === true && fmLines.length === 0}
+              rawLines={!split?.closed ? fmLines : undefined}
+            />
+          ) : null}
           <ScrollView
             style={previewFill ? styles.rnBodyScroll : undefined}
             contentContainerStyle={styles.rnBodyContent}
@@ -141,11 +160,19 @@ export function FileMarkdownPreview({
               variant="file-preview"
             />
           </ScrollView>
-        )
+        </>
       ) : split?.closed && showFrontMatter ? (
-        <Text style={{color: tokens.textSecondary, fontSize: 14}}>
-          （正文为空）
-        </Text>
+        <>
+          <FrontMatterCard
+            tokens={tokens}
+            fields={fmFields}
+            invalid={false}
+            empty={fmLines.length === 0}
+          />
+          <Text style={{color: tokens.textSecondary, fontSize: 14}}>
+            （正文为空）
+          </Text>
+        </>
       ) : null}
     </View>
   );

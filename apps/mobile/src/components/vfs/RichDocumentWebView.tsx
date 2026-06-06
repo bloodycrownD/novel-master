@@ -21,6 +21,7 @@ export type RichDocumentWebViewProps = {
   readonly html?: string;
   readonly plain?: string;
   readonly overLimit?: boolean;
+  readonly frontMatterHtml?: string;
   readonly style?: StyleProp<ViewStyle>;
 };
 
@@ -39,12 +40,14 @@ function buildSetDocumentPayload(
   html: string | undefined,
   plain: string | undefined,
   overLimit: boolean,
+  frontMatterHtml: string | undefined,
 ): HostToRichDocumentMessage {
+  const fm = frontMatterHtml || undefined;
   if (html != null && html.length > 0 && !overLimit) {
     return {
       v: 1,
       type: 'setDocument',
-      payload: {mode: 'html', html, overLimit: false},
+      payload: {mode: 'html', html, overLimit: false, frontMatterHtml: fm},
     };
   }
   return {
@@ -54,6 +57,7 @@ function buildSetDocumentPayload(
       mode: 'plain',
       plain: plain ?? '',
       overLimit,
+      frontMatterHtml: fm,
     },
   };
 }
@@ -62,6 +66,7 @@ export function RichDocumentWebView({
   html,
   plain,
   overLimit = false,
+  frontMatterHtml,
   style,
 }: RichDocumentWebViewProps) {
   const {tokens} = useTheme();
@@ -113,8 +118,8 @@ export function RichDocumentWebView({
     if (!webReady) {
       return;
     }
-    postToWeb(buildSetDocumentPayload(html, plain, overLimit));
-  }, [webReady, html, plain, overLimit, postToWeb]);
+    postToWeb(buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml));
+  }, [webReady, html, plain, overLimit, frontMatterHtml, postToWeb]);
 
   return (
     <View style={[styles.fill, style]}>

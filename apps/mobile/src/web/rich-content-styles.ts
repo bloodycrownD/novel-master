@@ -1,6 +1,6 @@
 /**
  * Shared rich-text CSS for WebView surfaces (chat bubbles + document preview).
- * Single source of truth — chat transcript wraps selectors; document uses #doc.rich.
+ * Single source of truth — chat transcript wraps selectors; document uses #doc .doc-body.rich.
  */
 
 /** Builds compound-selector rules (e.g. `.bubble.rich p, .thinking-body.rich p`). */
@@ -30,5 +30,7 @@ export const CHAT_TRANSCRIPT_RICH_CSS = buildRichContentCssRules([
   '.thinking-body.rich',
 ]);
 
-/** Document preview body (#doc.rich) — same typography as chat bubbles. */
-export const RICH_DOCUMENT_RICH_CSS = buildRichContentCssRules(['#doc.rich']);
+/** Document preview body (.doc-body.rich inside #doc) — same typography as chat bubbles. */
+export const RICH_DOCUMENT_RICH_CSS = buildRichContentCssRules([
+  '#doc .doc-body.rich',
+]);

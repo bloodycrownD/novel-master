@@ -82,6 +82,9 @@ title: Test
       await Promise.resolve();
     });
     expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+    const lastCall = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(lastCall?.frontMatterHtml).toContain('fm-card');
+    expect(lastCall?.frontMatterHtml).toContain('title');
   });
 
   it('mounts RichContentBody when rn flag', async () => {
@@ -132,6 +135,7 @@ ${longBody}`;
       overLimit: true,
       html: undefined,
     });
+    expect(lastCall?.frontMatterHtml).toContain('fm-card');
   });
 
   it('does not render Web body when front matter is unclosed', async () => {

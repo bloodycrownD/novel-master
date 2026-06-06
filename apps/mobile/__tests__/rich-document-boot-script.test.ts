@@ -14,6 +14,8 @@ describe('rich-document boot script', () => {
   it('shows over-limit hint in plain fallback mode', () => {
     const script = buildRichDocumentBootScript();
     expect(script).toContain('over-limit-hint');
+    expect(script).toContain('frontMatterHtml');
+    expect(script).toContain('doc-body');
     expect(script).toContain('内容过长，已显示原文');
   });
 });
