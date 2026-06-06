@@ -1,18 +1,40 @@
-import { NovelMasterProvider, useNovelMaster } from "./providers/NovelMasterProvider";
+import { useState } from "react";
+import { useColumnSplitters } from "./hooks/useColumnSplitters";
+import { AppChrome } from "./layout/AppChrome";
+import { MainShell } from "./layout/MainShell";
+import { SettingsOverlay } from "./layout/SettingsOverlay";
+import { NovelMasterProvider } from "./providers/NovelMasterProvider";
+import { ShellNavProvider } from "./providers/ShellNavProvider";
+import { ThemeProvider } from "./providers/ThemeProvider";
+
+function DesktopShell() {
+  const columnLayout = useColumnSplitters();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  return (
+    <ThemeProvider>
+      <ShellNavProvider>
+        <div id="app">
+          <AppChrome
+            columnLayout={columnLayout}
+            settingsOpen={settingsOpen}
+            onToggleSettings={() => setSettingsOpen((open) => !open)}
+          />
+          <div id="main-shell" hidden={settingsOpen} className={settingsOpen ? "hidden" : undefined}>
+            <MainShell workspaceRef={columnLayout.workspaceRef} />
+          </div>
+          <SettingsOverlay
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </div>
+      </ShellNavProvider>
+    </ThemeProvider>
+  );
+}
 
 function AppContent() {
-  const { status } = useNovelMaster();
-
-  if (status === "ready") {
-    return (
-      <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
-        <h1>Runtime ready</h1>
-        <p>Novel Master desktop runtime is connected via IPC.</p>
-      </main>
-    );
-  }
-
-  return null;
+  return <DesktopShell />;
 }
 
 export function App() {
