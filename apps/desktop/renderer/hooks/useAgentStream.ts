@@ -11,7 +11,7 @@ import {
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
-} from "@novel-master/core";
+} from "../../shared/agent-event-types.js";
 import { onAgentStream } from "../ipc/client";
 
 export interface UseAgentStreamOptions {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { parseApplicationModelId } from "@novel-master/core";
 import type { AgentDefinition } from "@novel-master/core";
+import { parseApplicationModelId } from "@novel-master/config-forms/agent";
 export { AgentEditorView } from "./AgentEditorView";
 export { EventsConfigView } from "./EventsConfigView";
 import { Button } from "../../components/ui/Button";
