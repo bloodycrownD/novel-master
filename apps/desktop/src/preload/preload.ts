@@ -12,22 +12,38 @@ export interface NovelMasterDesktopBridge {
   off(channel: IpcChannel, callback: (payload: unknown) => void): void;
 }
 
+// on() registers an internal ipcRenderer listener wrapper; off() must resolve the same
+// wrapper from the user callback or removeListener never matches the subscription.
+const ipcListenerByCallback = new WeakMap<
+  (payload: unknown) => void,
+  (_event: Electron.IpcRendererEvent, payload: unknown) => void
+>();
+
 const novelMasterDesktop: NovelMasterDesktopBridge = {
   version: "0.0.0",
   invoke(channel, payload) {
     return ipcRenderer.invoke(channel, payload);
   },
   on(channel, callback) {
-    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
-      callback(payload);
-    };
+    let listener = ipcListenerByCallback.get(callback);
+    if (!listener) {
+      listener = (_event: Electron.IpcRendererEvent, payload: unknown) => {
+        callback(payload);
+      };
+      ipcListenerByCallback.set(callback, listener);
+    }
     ipcRenderer.on(channel, listener);
     return () => {
       ipcRenderer.removeListener(channel, listener);
+      ipcListenerByCallback.delete(callback);
     };
   },
   off(channel, callback) {
-    ipcRenderer.removeListener(channel, callback as never);
+    const listener = ipcListenerByCallback.get(callback);
+    if (listener) {
+      ipcRenderer.removeListener(channel, listener);
+      ipcListenerByCallback.delete(callback);
+    }
   },
 };
 

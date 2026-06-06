@@ -50,4 +50,13 @@ describe("createDesktopNovelMasterRuntime", () => {
     assert.equal(project.name, "Desktop test");
     await closeDesktopConnection();
   });
+
+  it("round-trips secretStore set/get via platform SKSP", async () => {
+    const runtime = await createDesktopNovelMasterRuntime();
+    const ref = "provider/desktop-test/apiKey";
+    const value = "sk-desktop-round-trip";
+    await runtime.secretStore.set(ref, value);
+    assert.equal(await runtime.secretStore.get(ref), value);
+    await closeDesktopConnection();
+  });
 });
