@@ -9,7 +9,7 @@
 
 ## 设计目标
 
-1. **预览正文单 WebView**：`.md` 预览正文用浏览器排版；Front Matter 保留 RN。
+1. **预览正文单 WebView**：`.md` 预览正文用浏览器排版；Front Matter 卡片 HTML 注入同一 WebView（与正文统一滚动，见 `0314e4b`）；flag `rn` 回滚路径仍用 RN `FrontMatterCard`。
 2. **复用富文本管线**：Markdown → `prepareTranscriptRichHtml` → sanitize → Web `innerHTML`（与聊天一致）。
 3. **共享 CSS**：从 `transcript-html.ts` 抽出 rich 样式，聊天 transcript 与文档预览共用。
 4. **轻量桥**：无 scroll/stream/menu；仅 `init` / `setDocument` / `ready` / 可选 `themeUpdate`。
@@ -58,13 +58,13 @@ flowchart TB
 ```text
 ┌ Toolbar 保存 | 路径 | 预览/编辑 (RN) ─┐
 ├ Stats 字数/更新时间 (RN) ──────────────┤
-├ Front Matter 卡片 (RN, 可选) ────────┤
+├ SegmentedControl Markdown | 文本 (RN) ─┤  ← 仅 .md/.markdown 预览模式
 ├ 错误/提示 (RN, FM 未闭合等) ─────────┤
-├ RichDocumentWebView (flex:1) ────────┤  ← 仅 Markdown 正文
+├ RichDocumentWebView (flex:1) ────────┤  ← FM 卡片 HTML + Markdown 正文（统一滚动）
 └ (无嵌套 ScrollView 包 WebView) ──────┘
 ```
 
-**WHY 去掉外层 ScrollView**：WebView 自带滚动；RN ScrollView 嵌 WebView 会导致高度测量与双滚动条。FM 较短，固定于 WebView 上方 RN `View` 即可。
+**WHY 去掉外层 ScrollView**：WebView 自带滚动；RN ScrollView 嵌 WebView 会导致高度测量与双滚动条。`0314e4b` 将 FM 卡片 HTML 注入 WebView 顶部，与正文同一滚动容器，避免 FM 固定于 WebView 外导致双滚动/截断。
 
 ---
 
@@ -125,9 +125,9 @@ apps/mobile/src/
 | `transcript-html.ts` | 引用共享 styles |
 | `rich-document/main.ts` | IIFE：`setDocument` 写 `#doc` innerHTML 或 textContent；overLimit 显示 hint |
 | `RichDocumentWebView.tsx` | WebView + theme + `setDocument` effect on content change |
-| `FileMarkdownPreview.tsx` | FM 逻辑不变；`body` → `RichDocumentWebView`；flag 分支 `RichContentBody` |
+| `FileMarkdownPreview.tsx` | FM HTML → `frontMatterHtml`；`body` → `RichDocumentWebView`；flag 分支 `RichContentBody`；prop `renderKind?: PreviewRenderKind`（`'markdown' \| 'txt'`） |
 | `vfs-markdown-preview-engine.ts` | `default: 'webview'`；KKV key `vfsMarkdownPreviewEngine` |
-| `FileEditorScreen.tsx` | 预览区：`View flex:1` + FM + RichDocumentWebView；移除包裹全页的 ScrollView |
+| `FileEditorScreen.tsx` | 预览区：`View flex:1` + `SegmentedControl`（Markdown/文本，仅 `.md` 预览）+ `FileMarkdownPreview`；移除包裹全页的 ScrollView |
 | `README.md` | 文档 flag 与回滚说明 |
 
 ---
@@ -161,6 +161,15 @@ apps/mobile/src/
 2. 默认 `webview`；README 更新。
 3. 可选：deprecated 注释 on `RichContentBody` file-preview variant（保留至 flag 移除）。
 
+### M3 — 预览 Markdown / 文本切换
+
+1. `FileEditorScreen`：`.md` / `.markdown` 且 `previewMode` 时渲染 `SegmentedControl`（`Markdown` | `文本`），state `previewRenderKind` 传入 `FileMarkdownPreview`。
+2. `FileMarkdownPreview`：
+   - `renderKind='txt'`：跳过 FM 拆分与 WebView/Markdown 管线，以 RN `Text` monospace 展示 **完整** `content`（含 Front Matter 分隔线）。
+   - `renderKind='markdown'`（默认）：现有行为（WebView 或 `RichContentBody`，依 `vfsMarkdownPreviewEngine`）。
+3. 非 `.md` 路径不显示分段控件；预览仍为纯文本 monospace。
+4. 单测 U6 覆盖 `renderKind` 两分支；真机验收 PRD **T12**。
+
 ---
 
 ## 测试策略
@@ -174,7 +183,7 @@ apps/mobile/src/
 | U3 | `rich-document-bridge.test.ts` | round-trip `setDocument` envelope |
 | U4 | `vfs-markdown-preview-engine.test.ts` | 默认 webview；KKV rn  override |
 | U5 | `prepare-transcript-rich-html.test.ts` | 已有；sanitize 仍 pass |
-| U6 | `FileMarkdownPreview.test.tsx` | mock WebView：webview flag 挂载 RichDocumentWebView |
+| U6 | `FileMarkdownPreview.test.tsx` | webview flag 挂载 `RichDocumentWebView`（含 `frontMatterHtml`）；`rn` flag 挂载 `RichContentBody`；`renderKind='txt'` 不挂载 WebView、展示完整源文；`renderKind='markdown'` 仍走 WebView；overLimit 传 `plain`+`overLimit` |
 
 ### 真机（PRD T1–T11）
 
@@ -193,7 +202,7 @@ npm test -w @novel-master/mobile -- --testPathPattern="rich-document|rich-conten
 | 风险 | 处理 |
 |------|------|
 | WebView 首次加载慢 | 可接受；仅进入预览时 mount |
-| FM + WebView 布局 | FM 固定高度 RN；WebView flex 1 |
+| FM + WebView 布局 | FM HTML 注入 WebView（`0314e4b` 统一滚动）；WebView flex 1 |
 | 与聊天 CSS 漂移 | 单文件 `rich-content-styles.ts` |
 
 **回滚**：`vfsMarkdownPreviewEngine='rn'` → `RichContentBody`，无需 reinstall。

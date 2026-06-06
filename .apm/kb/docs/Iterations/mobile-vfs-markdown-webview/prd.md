@@ -44,6 +44,9 @@
 - 主题 token 注入（背景、文字、链接色与 `ThemeProvider` 一致）
 - RN↔Web 轻量桥：`init`（theme）+ `setDocument`（html / plain fallback）+ `ready`
 - Feature flag：`vfsMarkdownPreviewEngine: 'rn' | 'webview'`（KKV），默认 **webview**
+- **预览渲染切换**（仅 `.md` / `.markdown` 且处于预览模式）：分段控件 **Markdown** vs **文本**
+  - **Markdown**：现有 WebView 富文本渲染（或 flag `rn` 时 `RichContentBody`）
+  - **文本**：完整源文 monospace（含 Front Matter），不经 Markdown 管线
 - 单测 + 真机验收清单（Android 优先）
 
 ### 不包含
@@ -63,6 +66,7 @@
 5. **单 WebView 原则**：预览屏 **至多一个** WebView（与 chat-transcript 一致）；禁止 ScrollView 内嵌多个 WebView。
 6. **复用富文本 CSS**：列表缩进、代码块、blockquote 等与 [`transcript-html.ts`](../../../../apps/mobile/src/web/chat-transcript/transcript-html.ts) 对齐，抽共享样式模块避免双份维护。
 7. **可回滚 flag**：KKV `vfsMarkdownPreviewEngine=rn` 恢复 `RichContentBody` 路径。
+8. **预览 Markdown / 文本切换**：`.md` 预览模式下提供分段控件；**文本** 显示完整 buffer 原文（含 `---` FM），**Markdown** 走现有预览管线。
 
 ## 验收标准
 
@@ -85,6 +89,7 @@
 ### 回滚
 
 - **T11** KKV 设 `vfsMarkdownPreviewEngine=rn` 后，预览走 `RichContentBody`，App 正常启动。
+- **T12** `.md` 预览：切 **文本** 显示完整源文（含 Front Matter）monospace；切 **Markdown** 显示渲染预览（WebView 或 RN 富文本，依 flag）。
 
 ## 约束与依赖
 
