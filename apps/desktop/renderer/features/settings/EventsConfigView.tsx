@@ -64,25 +64,25 @@ function ActionBlockEditor({
     <div className="config-block-card config-block-card--nested">
       <div className="config-block-card__header">
         <span className="config-block-card__badge">{actionTypeLabel(action.type)}</span>
-        <span className="settings-hint">Â?®‰Ω? {index + 1}</span>
+        <span className="settings-hint">Âä®‰Ωú {index + 1}</span>
         <div className="config-block-card__actions">
           {index > 0 ? (
             <button type="button" className="icon-btn" onClick={() => onMove(-1)}>
-              ‚??
+              ‚Üë
             </button>
           ) : null}
           {index < total - 1 ? (
             <button type="button" className="icon-btn" onClick={() => onMove(1)}>
-              ‚??
+              ‚Üì
             </button>
           ) : null}
           <button type="button" className="icon-btn" onClick={onDelete}>
-            √?
+            √ó
           </button>
         </div>
       </div>
       <p className="settings-hint">{actionTypeHint(action.type)}</p>
-      <SettingsField label="‰æùËµ?Ôº?DAGÔº?">
+      <SettingsField label="‰æùËµñÔºàDAGÔºâ">
         <div className="config-dep-chips">
           {availableDependencies.map((dep) => (
             <button
@@ -98,7 +98,7 @@ function ActionBlockEditor({
       </SettingsField>
       {action.type === "hide-message" ? (
         <>
-          <SettingsField label="Ëµ∑Âß?Ê∑±Â∫¶">
+          <SettingsField label="Ëµ∑Ê∑±Â∫¶">
             <input
               type="number"
               value={action.params.startDepth ?? ""}
@@ -113,7 +113,7 @@ function ActionBlockEditor({
               }
             />
           </SettingsField>
-          <SettingsField label="Áª?Êù?Ê∑±Â∫¶">
+          <SettingsField label="Ê≠¢Ê∑±Â∫¶">
             <input
               type="number"
               value={action.params.endDepth ?? ""}
@@ -169,7 +169,7 @@ function EventBlockEditor({
 
   const deleteAction = (actionIndex: number) => {
     if (block.actions.length <= 1) {
-      showToast("Ë?≥Â∞?‰øùÁ??‰∏?‰∏™Â?®‰Ω?");
+      showToast("Ëá≥Â∞ë‰øùÁïô‰∏Ä‰∏™Âä®‰Ωú");
       return;
     }
     onChange({ actions: block.actions.filter((_, i) => i !== actionIndex) });
@@ -188,38 +188,38 @@ function EventBlockEditor({
   return (
     <div className="config-block-card config-block-card--event">
       <div className="config-block-card__header">
-        <span className="config-block-card__badge">‰∫?‰ª∂</span>
+        <span className="config-block-card__badge">‰∫ã‰ª∂</span>
         <span className="settings-hint">
           {index + 1} / {total}
         </span>
         <div className="config-block-card__actions">
           {index > 0 ? (
             <button type="button" className="icon-btn" onClick={() => onMove(-1)}>
-              ‚??
+              ‚Üë
             </button>
           ) : null}
           {index < total - 1 ? (
             <button type="button" className="icon-btn" onClick={() => onMove(1)}>
-              ‚??
+              ‚Üì
             </button>
           ) : null}
           <button type="button" className="icon-btn" onClick={onDelete}>
-            √?
+            √ó
           </button>
         </div>
       </div>
-      <SettingsField label="Á±ªÂ??">
+      <SettingsField label="‰∫ã‰ª∂">
         <strong>{eventTypeLabel(block.eventType)}</strong>
       </SettingsField>
       <p className="settings-hint">{eventTypeHint(block.eventType)}</p>
       <div className="settings-section__actions">
-        <span className="settings-section__title">Â?®‰Ω?</span>
+        <span className="settings-section__title">Âä®‰Ωú</span>
         <button
           type="button"
           className="settings-link-btn"
           onClick={() => setAddActionOpen((v) => !v)}
         >
-          Ê∑ªÂ?†
+          Ê∑ªÂä†
         </button>
       </div>
       {addActionOpen ? (
@@ -297,7 +297,7 @@ export function EventsConfigView() {
 
   const deleteBlock = (id: string) => {
     if (blocks.length <= 1) {
-      showToast("Ë?≥Â∞?‰øùÁ??‰∏?‰∏™‰∫?‰ª∂");
+      showToast("Ëá≥Â∞ë‰øùÁïô‰∏Ä‰∏™‰∫ã‰ª∂");
       return;
     }
     setBlocks((prev) => prev.filter((b) => b.id !== id));
@@ -350,8 +350,8 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsSetConfig({ config });
       if (res.ok) {
-        setStatus("Â∑≤‰øùÂ≠?");
-        showToast("Â∑≤‰øùÂ≠?‰∫?‰ª∂È?çÁΩÆ");
+        setStatus("Â∑≤‰øùÂ≠ò");
+        showToast("Â∑≤‰øùÂ≠ò‰∫ã‰ª∂ÈÖçÁΩÆ");
       } else {
         setStatus(res.error.message);
         showToast(res.error.message);
@@ -362,18 +362,18 @@ export function EventsConfigView() {
   };
 
   if (loading) {
-    return <p className="settings-hint">Â?†ËΩΩ‰∏≠‚?¶</p>;
+    return <p className="settings-hint">Âä†ËΩΩ‰∏≠‚Ä¶</p>;
   }
 
   return (
     <SettingsPanel>
       <SettingsFormSection
-        title="‰∫?‰ª∂È?çÁΩÆ"
-        desc="Ê??‰∫?‰ª∂Áº?Ëæ?Â?®‰Ω?È?æÔº?Ê?ØÊ?Å DAGÔº?„??YAML ‰ª?‰Ω?ÂØºÂ?•/ÂØºÂ?∫„??"
+        title="‰∫ã‰ª∂ÈÖçÁΩÆ"
+        desc="Êåâ‰∫ã‰ª∂ÁºñÊéíÂä®‰ΩúÈìæÔºåÊîØÊåÅ DAGÔºõÂèØ‰ªé YAML Êñá‰ª∂ÂØºÂÖ•/ÂØºÂá∫„ÄÇ"
         footer={
           <div className="settings-form-actions settings-form-actions--solo">
             <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "‰øùÂ≠?‰∏≠‚?¶" : "‰øùÂ≠?"}
+              {saving ? "‰øùÂ≠ò‰∏≠‚Ä¶" : "‰øùÂ≠ò"}
             </Button>
             <div className="settings-yaml-links">
               <button
@@ -381,32 +381,32 @@ export function EventsConfigView() {
                 className="settings-link-btn"
                 onClick={() => setConfirmImport(true)}
               >
-                ÂØºÂ?• YAML
+                ÂØºÂÖ• YAML
               </button>
               <button
                 type="button"
                 className="settings-link-btn"
                 onClick={() =>
                   void ipcEventsExportYaml().then((r) => {
-                    if (r.ok && r.data === "saved") showToast("Â∑≤ÂØºÂ?∫ YAML");
+                    if (r.ok && r.data === "saved") showToast("Â∑≤ÂØºÂá∫ YAML");
                     else if (!r.ok) showToast(r.error.message);
                   })
                 }
               >
-                ÂØºÂ?∫ YAML
+                ÂØºÂá∫ YAML
               </button>
             </div>
           </div>
         }
       >
-        <SettingsSection title="‰∫?‰ª∂Âù?">
+        <SettingsSection title="‰∫ã‰ª∂">
           <div className="settings-section__actions">
             <button
               type="button"
               className="settings-link-btn"
               onClick={() => setAddEventOpen((v) => !v)}
             >
-              Ê∑ªÂ?†‰∫?‰ª∂
+              Ê∑ªÂä†‰∫ã‰ª∂
             </button>
           </div>
           {addEventOpen ? (
@@ -437,14 +437,14 @@ export function EventsConfigView() {
       <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
-        title="ÂØºÂ?• YAML"
-        message="Â∞?Ë¶?Á??ÂΩ?Â?ç‰∫?‰ª∂È?çÁΩÆÔº?Ê?ØÂê¶ÁªßÁª≠Ôº?"
+        title="ÂØºÂÖ• YAML"
+        message="Â∞ÜË¶ÜÁõñÂΩìÂâç‰∫ã‰ª∂ÈÖçÁΩÆÔºåÊòØÂê¶ÁªßÁª≠Ôºü"
         onConfirm={() => {
           setConfirmImport(false);
           void ipcEventsImportYaml().then((r) => {
             if (r.ok && r.data === "imported") {
               void load();
-              showToast("Â∑≤ÂØºÂ?• YAML");
+              showToast("Â∑≤ÂØºÂÖ• YAML");
             } else if (!r.ok) {
               showToast(r.error.message);
             }
