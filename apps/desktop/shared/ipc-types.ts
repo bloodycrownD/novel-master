@@ -51,7 +51,9 @@ export const IPC_CHANNELS = {
   MESSAGES_APPEND: "nm:messages/append",
   MESSAGES_EDIT: "nm:messages/edit",
   MESSAGES_HIDE: "nm:messages/hide",
+  MESSAGES_SHOW: "nm:messages/show",
   MESSAGES_DELETE: "nm:messages/delete",
+  MESSAGES_FORK: "nm:messages/fork",
   MESSAGES_ROLLBACK: "nm:messages/rollback",
 
   AGENT_RUN: "nm:agent/run",
@@ -349,6 +351,21 @@ export type MessagesListRequest = {
   readonly sessionId: string;
 };
 
+export type ContentBlockDto =
+  | { readonly type: "text"; readonly text: string }
+  | { readonly type: "thinking"; readonly text: string }
+  | {
+      readonly type: "tool_use";
+      readonly id: string;
+      readonly name: string;
+      readonly input: Record<string, unknown>;
+    }
+  | {
+      readonly type: "tool_result";
+      readonly toolUseId: string;
+      readonly content: string;
+    };
+
 export type ChatMessageDto = {
   readonly id: string;
   readonly sessionId: string;
@@ -357,6 +374,7 @@ export type ChatMessageDto = {
   readonly seq: number;
   readonly createdAtMs: number;
   readonly bodyText: string;
+  readonly contentBlocks: readonly ContentBlockDto[];
 };
 
 export type MessagesAppendRequest = {
@@ -374,7 +392,16 @@ export type MessagesHideRequest = {
   readonly messageId: string;
 };
 
+export type MessagesShowRequest = {
+  readonly messageId: string;
+};
+
 export type MessagesDeleteRequest = {
+  readonly messageId: string;
+};
+
+export type MessagesForkRequest = {
+  readonly sessionId: string;
   readonly messageId: string;
 };
 

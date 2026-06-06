@@ -91,7 +91,7 @@ export function SettingsListItem({
   title: string;
   meta?: string;
   onClick?: () => void;
-  onMenu?: () => void;
+  onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <div className="settings-list-item">
@@ -104,7 +104,10 @@ export function SettingsListItem({
           type="button"
           className="settings-list-item__menu"
           aria-label="更多"
-          onClick={onMenu}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMenu(e);
+          }}
         >
           ⋯
         </button>

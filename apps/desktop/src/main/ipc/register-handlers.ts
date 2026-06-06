@@ -78,9 +78,11 @@ import {
   handleMessagesAppend,
   handleMessagesDelete,
   handleMessagesEdit,
+  handleMessagesFork,
   handleMessagesHide,
   handleMessagesList,
   handleMessagesRollback,
+  handleMessagesShow,
 } from "./handlers/messages.js";
 import {
   handlePromptAgentMeta,
@@ -227,8 +229,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.MESSAGES_HIDE, (_event, req) =>
     handleMessagesHide(req),
   );
+  ipcMain.handle(IPC_CHANNELS.MESSAGES_SHOW, (_event, req) =>
+    handleMessagesShow(req),
+  );
   ipcMain.handle(IPC_CHANNELS.MESSAGES_DELETE, (_event, req) =>
     handleMessagesDelete(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.MESSAGES_FORK, (_event, req) =>
+    handleMessagesFork(req),
   );
   ipcMain.handle(IPC_CHANNELS.MESSAGES_ROLLBACK, (_event, req) =>
     handleMessagesRollback(req),

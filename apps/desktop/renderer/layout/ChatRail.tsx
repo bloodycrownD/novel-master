@@ -2,13 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import type { ProjectDto, SessionDto } from "../../shared/ipc-types";
 import { BatchCheckbox } from "../components/batch/BatchCheckbox";
 import { ManageHeader } from "../components/batch/ManageHeader";
+import { ContextMenu } from "../components/ui/ContextMenu";
+import { TextPromptModal } from "../components/ui/TextPromptModal";
 import { ConversationPanel } from "../features/chat/ConversationPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import {
+  ipcProjectsCreate,
   ipcProjectsDelete,
   ipcProjectsList,
+  ipcProjectsRename,
+  ipcSessionsCreate,
   ipcSessionsDelete,
   ipcSessionsListByProject,
+  ipcSessionsRename,
 } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { loadDesktopScope } from "../state/desktop-scope";
@@ -18,6 +24,16 @@ interface ChatRailProps {
   onOpenSessionActions: (anchor: HTMLElement) => void;
   messageBatch: ReturnType<typeof useBatchSelection>;
 }
+
+type NamePromptState =
+  | { mode: "create-project" }
+  | { mode: "rename-project"; projectId: string; initialName: string }
+  | { mode: "create-session" }
+  | { mode: "rename-session"; sessionId: string; initialName: string };
+
+type ListMenuState =
+  | { kind: "project"; projectId: string; x: number; y: number }
+  | { kind: "session"; sessionId: string; x: number; y: number };
 
 export function ChatRail({
   onOpenSessionActions,
@@ -59,6 +75,8 @@ export function ChatRail({
   const [sessions, setSessions] = useState<SessionDto[]>([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
+  const [listMenu, setListMenu] = useState<ListMenuState | null>(null);
 
   const loadProjects = useCallback(async () => {
     setLoadingProjects(true);
@@ -169,6 +187,170 @@ export function ChatRail({
     }
   }, [sessionSelectedCount, deleteSelectedSessions]);
 
+  const handleNamePromptConfirm = useCallback(
+    async (name: string) => {
+      if (!namePrompt) {
+        return;
+      }
+      if (namePrompt.mode === "create-project") {
+        const result = await ipcProjectsCreate({ name });
+        if (result.ok) {
+          await loadProjects();
+          await openProject(result.data);
+        }
+        return;
+      }
+      if (namePrompt.mode === "rename-project") {
+        const result = await ipcProjectsRename({
+          id: namePrompt.projectId,
+          name,
+        });
+        if (result.ok) {
+          await loadProjects();
+        }
+        return;
+      }
+      if (namePrompt.mode === "create-session" && projectId) {
+        const result = await ipcSessionsCreate({
+          projectId,
+          title: name,
+        });
+        if (result.ok) {
+          await loadSessions(projectId);
+          await openSession(result.data, projectName ?? "—");
+        }
+        return;
+      }
+      if (namePrompt.mode === "rename-session") {
+        const result = await ipcSessionsRename({
+          id: namePrompt.sessionId,
+          title: name,
+        });
+        if (result.ok && projectId) {
+          await loadSessions(projectId);
+        }
+      }
+    },
+    [namePrompt, loadProjects, openProject, projectId, projectName, loadSessions, openSession],
+  );
+
+  const openProjectMenu = (
+    project: ProjectDto,
+    event: React.MouseEvent,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setListMenu({
+      kind: "project",
+      projectId: project.id,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 140)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 100)),
+    });
+  };
+
+  const openSessionMenu = (
+    session: SessionDto,
+    event: React.MouseEvent,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setListMenu({
+      kind: "session",
+      sessionId: session.id,
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 140)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 100)),
+    });
+  };
+
+  const handleListMenuSelect = useCallback(
+    (action: string) => {
+      if (!listMenu) {
+        return;
+      }
+      if (listMenu.kind === "project") {
+        const project = projects.find((p) => p.id === listMenu.projectId);
+        if (!project) {
+          return;
+        }
+        if (action === "rename") {
+          setNamePrompt({
+            mode: "rename-project",
+            projectId: project.id,
+            initialName: project.name,
+          });
+        } else if (action === "delete") {
+          if (
+            window.confirm(
+              `确定删除项目「${project.name}」？将同时移除其下所有会话。`,
+            )
+          ) {
+            void ipcProjectsDelete({ id: project.id }).then(async () => {
+              await loadDesktopScope();
+              await loadProjects();
+              if (projectId === project.id) {
+                goBackToProjects();
+              }
+            });
+          }
+        }
+        return;
+      }
+      const session = sessions.find((s) => s.id === listMenu.sessionId);
+      if (!session) {
+        return;
+      }
+      if (action === "rename") {
+        setNamePrompt({
+          mode: "rename-session",
+          sessionId: session.id,
+          initialName: session.title ?? "",
+        });
+      } else if (action === "delete") {
+        const label = session.title?.trim() || "该会话";
+        if (window.confirm(`确定删除会话「${label}」？`)) {
+          void ipcSessionsDelete({ id: session.id }).then(async () => {
+            await loadDesktopScope();
+            if (projectId) {
+              await loadSessions(projectId);
+            }
+            if (sessionId === session.id) {
+              showNavView("sessions");
+            }
+          });
+        }
+      }
+    },
+    [
+      listMenu,
+      projects,
+      sessions,
+      loadProjects,
+      projectId,
+      goBackToProjects,
+      loadSessions,
+      sessionId,
+      showNavView,
+    ],
+  );
+
+  const namePromptTitle = (() => {
+    if (!namePrompt) {
+      return "";
+    }
+    switch (namePrompt.mode) {
+      case "create-project":
+        return "新建项目";
+      case "rename-project":
+        return "重命名项目";
+      case "create-session":
+        return "新建会话";
+      case "rename-session":
+        return "重命名会话";
+      default:
+        return "";
+    }
+  })();
+
   const showBack = viewId === "sessions" || viewId === "conversation";
 
   return (
@@ -219,6 +401,15 @@ export function ChatRail({
             onCancelBatch={exitProjectBatch}
             onDelete={confirmProjectBatchDelete}
             hint="选择要删除的项目（将同时移除其下所有会话）"
+            normalActions={
+              <button
+                type="button"
+                className="list-manage-header__btn list-manage-header__btn--primary"
+                onClick={() => setNamePrompt({ mode: "create-project" })}
+              >
+                新建
+              </button>
+            }
           />
           <ul className="chat-list" id="project-list">
             {loadingProjects ? (
@@ -226,8 +417,15 @@ export function ChatRail({
                 <span className="chat-list__label">加载中…</span>
               </li>
             ) : projects.length === 0 ? (
-              <li className="chat-list__item">
+              <li className="chat-list__item chat-list__item--empty">
                 <span className="chat-list__label">暂无项目</span>
+                <button
+                  type="button"
+                  className="chat-list__create-btn"
+                  onClick={() => setNamePrompt({ mode: "create-project" })}
+                >
+                  新建项目
+                </button>
               </li>
             ) : (
               projects.map((project) => (
@@ -266,7 +464,17 @@ export function ChatRail({
                   )}
                   <span className="chat-list__label">{project.name}</span>
                   {!projectBatchActive ? (
-                    <span className="chat-list__chevron">›</span>
+                    <>
+                      <button
+                        type="button"
+                        className="chat-list__menu-btn"
+                        aria-label="项目操作"
+                        onClick={(e) => openProjectMenu(project, e)}
+                      >
+                        ⋮
+                      </button>
+                      <span className="chat-list__chevron">›</span>
+                    </>
                   ) : null}
                 </li>
               ))
@@ -287,6 +495,15 @@ export function ChatRail({
             onCancelBatch={exitSessionBatch}
             onDelete={confirmSessionBatchDelete}
             hint="选择要删除的会话"
+            normalActions={
+              <button
+                type="button"
+                className="list-manage-header__btn list-manage-header__btn--primary"
+                onClick={() => setNamePrompt({ mode: "create-session" })}
+              >
+                新建
+              </button>
+            }
           />
           <ul className="chat-list" id="session-list">
             {loadingSessions ? (
@@ -294,8 +511,15 @@ export function ChatRail({
                 <span className="chat-list__label">加载中…</span>
               </li>
             ) : sessions.length === 0 ? (
-              <li className="chat-list__item">
+              <li className="chat-list__item chat-list__item--empty">
                 <span className="chat-list__label">暂无会话</span>
+                <button
+                  type="button"
+                  className="chat-list__create-btn"
+                  onClick={() => setNamePrompt({ mode: "create-session" })}
+                >
+                  新建会话
+                </button>
               </li>
             ) : (
               sessions.map((session) => (
@@ -334,7 +558,17 @@ export function ChatRail({
                     {session.title ?? "未命名会话"}
                   </span>
                   {!sessionBatchActive ? (
-                    <span className="chat-list__chevron">›</span>
+                    <>
+                      <button
+                        type="button"
+                        className="chat-list__menu-btn"
+                        aria-label="会话操作"
+                        onClick={(e) => openSessionMenu(session, e)}
+                      >
+                        ⋮
+                      </button>
+                      <span className="chat-list__chevron">›</span>
+                    </>
                   ) : null}
                 </li>
               ))
@@ -359,6 +593,33 @@ export function ChatRail({
           )}
         </div>
       </section>
+
+      <TextPromptModal
+        open={namePrompt != null}
+        title={namePromptTitle}
+        initialValue={
+          namePrompt?.mode === "rename-project"
+            ? namePrompt.initialName
+            : namePrompt?.mode === "rename-session"
+              ? namePrompt.initialName
+              : ""
+        }
+        placeholder="请输入名称"
+        onClose={() => setNamePrompt(null)}
+        onConfirm={handleNamePromptConfirm}
+      />
+
+      <ContextMenu
+        open={listMenu != null}
+        x={listMenu?.x ?? 0}
+        y={listMenu?.y ?? 0}
+        items={[
+          { label: "重命名", action: "rename" },
+          { label: "删除", action: "delete", danger: true },
+        ]}
+        onSelect={handleListMenuSelect}
+        onClose={() => setListMenu(null)}
+      />
     </>
   );
 }

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseApplicationModelId } from "@novel-master/core";
 import type { AgentDefinition } from "@novel-master/core";
+import { ContextMenu } from "../../components/ui/ContextMenu";
+import { TextPromptModal } from "../../components/ui/TextPromptModal";
 import { useNovelMaster } from "../../providers/NovelMasterProvider";
 import {
   ipcAgentRegistryCreateBlank,
@@ -8,6 +10,8 @@ import {
   ipcAgentRegistryGet,
   ipcAgentRegistryList,
   ipcAgentRegistryUpsert,
+  ipcAgentResolveCurrent,
+  ipcAgentSetCurrent,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
   ipcBackupExport,
@@ -135,6 +139,15 @@ export function DataManagementView() {
 export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const [rows, setRows] = useState<Array<{ agentId: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
+  const [agentMenu, setAgentMenu] = useState<{
+    agentId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<{
+    agentId: string;
+    initialName: string;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -159,6 +172,78 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     }
   };
 
+  const handleAgentMenuSelect = async (action: string) => {
+    const menu = agentMenu;
+    setAgentMenu(null);
+    if (!menu) {
+      return;
+    }
+    const row = rows.find((r) => r.agentId === menu.agentId);
+    if (!row) {
+      return;
+    }
+    if (action === "rename") {
+      setRenamePrompt({ agentId: row.agentId, initialName: row.name });
+      return;
+    }
+    if (action === "duplicate") {
+      const getRes = await ipcAgentRegistryGet({ agentId: row.agentId });
+      if (!getRes.ok) {
+        return;
+      }
+      const copyId = `agent-${Date.now()}`;
+      const def = getRes.data as AgentDefinition;
+      const saveRes = await ipcAgentRegistryUpsert({
+        agentId: copyId,
+        definition: { ...def, name: `${def.name ?? row.name}-copy` },
+      });
+      if (saveRes.ok) {
+        nav.navState.editingAgentId = copyId;
+        nav.push("agentEditor");
+        await reload();
+      }
+      return;
+    }
+    if (action === "delete") {
+      if (rows.length <= 1) {
+        window.alert("至少保留一个 Agent");
+        return;
+      }
+      if (!window.confirm(`删除 Agent「${row.name}」？`)) {
+        return;
+      }
+      const currentRes = await ipcAgentResolveCurrent();
+      await ipcAgentRegistryDelete({ agentId: row.agentId });
+      if (currentRes.ok && currentRes.data.agentId === row.agentId) {
+        const remaining = rows
+          .map((r) => r.agentId)
+          .filter((id) => id !== row.agentId);
+        if (remaining.length > 0) {
+          await ipcAgentSetCurrent({ agentId: remaining[0]! });
+        }
+      }
+      await reload();
+    }
+  };
+
+  const handleRename = async (name: string) => {
+    const prompt = renamePrompt;
+    setRenamePrompt(null);
+    if (!prompt) {
+      return;
+    }
+    const getRes = await ipcAgentRegistryGet({ agentId: prompt.agentId });
+    if (!getRes.ok) {
+      return;
+    }
+    const def = getRes.data as AgentDefinition;
+    await ipcAgentRegistryUpsert({
+      agentId: prompt.agentId,
+      definition: { ...def, name },
+    });
+    await reload();
+  };
+
   return (
     <SettingsPanel>
       <SettingsListSection
@@ -178,14 +263,36 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
               nav.navState.editingAgentId = row.agentId;
               nav.push("agentEditor");
             }}
-            onMenu={() => {
-              if (window.confirm(`删除 Agent「${row.name}」？`)) {
-                void ipcAgentRegistryDelete({ agentId: row.agentId }).then(() => reload());
-              }
+            onMenu={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setAgentMenu({
+                agentId: row.agentId,
+                x: Math.max(8, rect.left),
+                y: Math.max(8, rect.bottom + 4),
+              });
             }}
           />
         ))}
       </SettingsListSection>
+      <ContextMenu
+        open={agentMenu != null}
+        x={agentMenu?.x ?? 0}
+        y={agentMenu?.y ?? 0}
+        items={[
+          { label: "重命名", action: "rename" },
+          { label: "复制", action: "duplicate" },
+          { label: "删除", action: "delete", danger: true },
+        ]}
+        onSelect={(action) => void handleAgentMenuSelect(action)}
+        onClose={() => setAgentMenu(null)}
+      />
+      <TextPromptModal
+        open={renamePrompt != null}
+        title="重命名 Agent"
+        initialValue={renamePrompt?.initialName ?? ""}
+        onClose={() => setRenamePrompt(null)}
+        onConfirm={handleRename}
+      />
     </SettingsPanel>
   );
 }

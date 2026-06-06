@@ -1,16 +1,25 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
+  ipcAppUiGet,
   ipcCompactionManual,
   ipcMessagesDelete,
+  ipcMessagesEdit,
+  ipcMessagesFork,
   ipcMessagesHide,
   ipcMessagesList,
   ipcMessagesRollback,
+  ipcMessagesShow,
 } from "../../ipc/client";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useShellNav } from "../../providers/ShellNavProvider";
 import { ChatComposer } from "./ChatComposer";
+import {
+  buildMessageActionItems,
+  editableTextFromMessage,
+} from "./message-edit";
+import { MessageEditModal } from "./MessageEditModal";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
 
@@ -27,15 +36,20 @@ export function ConversationPanel({
   onOpenSessionActions,
   messageBatch,
 }: ConversationPanelProps) {
-  const { refreshWorkspaceTrees } = useShellNav();
+  const { refreshWorkspaceTrees, openSession, projectName } = useShellNav();
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [chatRichText, setChatRichText] = useState(false);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
     x: number;
     y: number;
+  } | null>(null);
+  const [messageEdit, setMessageEdit] = useState<{
+    messageId: string;
+    initialText: string;
   } | null>(null);
 
   const reloadMessages = useCallback(async () => {
@@ -48,6 +62,12 @@ export function ConversationPanel({
   useEffect(() => {
     void reloadMessages();
   }, [reloadMessages]);
+
+  useEffect(() => {
+    ipcAppUiGet("chatRichText")
+      .then((res) => setChatRichText(res.value === "true"))
+      .catch(() => undefined);
+  }, []);
 
   const onTextDelta = useCallback((delta: string) => {
     setStreamingText((prev) => prev + delta);
@@ -127,14 +147,19 @@ export function ConversationPanel({
       setMessageMenu({
         message,
         x: Math.max(8, Math.min(position.x, window.innerWidth - 180)),
-        y: Math.max(8, Math.min(position.y, window.innerHeight - 120)),
+        y: Math.max(8, Math.min(position.y, window.innerHeight - 200)),
       });
     },
     [],
   );
 
+  const menuItems = useMemo(
+    () => (messageMenu ? buildMessageActionItems(messageMenu.message) : []),
+    [messageMenu],
+  );
+
   const copyMessage = useCallback(async (message: ChatMessageDto) => {
-    const text = message.bodyText?.trim();
+    const text = editableTextFromMessage(message) ?? message.bodyText?.trim();
     if (!text) {
       window.alert("该消息没有可复制的文本");
       return;
@@ -175,6 +200,86 @@ export function ConversationPanel({
     [running, projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
   );
 
+  const handleMessageAction = useCallback(
+    async (message: ChatMessageDto, action: string) => {
+      if (action === "edit") {
+        const initial = editableTextFromMessage(message);
+        if (initial == null) {
+          window.alert("该消息包含工具调用，暂不支持编辑");
+          return;
+        }
+        setMessageEdit({ messageId: message.id, initialText: initial });
+        return;
+      }
+      if (action === "hide") {
+        await ipcMessagesHide({ messageId: message.id });
+        await reloadMessages();
+        return;
+      }
+      if (action === "unhide") {
+        await ipcMessagesShow({ messageId: message.id });
+        await reloadMessages();
+        return;
+      }
+      if (action === "copy") {
+        await copyMessage(message);
+        return;
+      }
+      if (action === "fork") {
+        if (running) {
+          window.alert("Agent 运行中无法分叉");
+          return;
+        }
+        const result = await ipcMessagesFork({
+          sessionId,
+          messageId: message.id,
+        });
+        if (!result.ok) {
+          window.alert(result.error.message);
+          return;
+        }
+        setStreamingText("");
+        await openSession(result.data, projectName ?? "—");
+        refreshWorkspaceTrees();
+        return;
+      }
+      if (action === "rollback") {
+        await rollbackToMessage(message.id);
+        return;
+      }
+      if (action === "delete") {
+        if (!window.confirm("确定删除这条消息？")) {
+          return;
+        }
+        await ipcMessagesDelete({ messageId: message.id });
+        setStreamingText("");
+        await reloadMessages();
+      }
+    },
+    [
+      running,
+      sessionId,
+      reloadMessages,
+      copyMessage,
+      rollbackToMessage,
+      openSession,
+      projectName,
+      refreshWorkspaceTrees,
+    ],
+  );
+
+  const saveMessageEdit = useCallback(
+    async (messageId: string, text: string) => {
+      const result = await ipcMessagesEdit({ messageId, text });
+      if (!result.ok) {
+        window.alert(result.error.message);
+        return;
+      }
+      await reloadMessages();
+    },
+    [reloadMessages],
+  );
+
   return (
     <>
       <div className="conversation-tabs" role="tablist" aria-label="会话内容">
@@ -213,6 +318,7 @@ export function ConversationPanel({
             streamingText={running ? streamingText : undefined}
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
+            chatRichText={chatRichText}
             onToggleSelect={messageBatch.toggle}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
           />
@@ -230,34 +336,37 @@ export function ConversationPanel({
           }
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            type="button"
-            data-message-action="copy"
-            onClick={() => {
-              const target = messageMenu?.message;
-              closeMessageMenu();
-              if (target) {
-                void copyMessage(target);
-              }
-            }}
-          >
-            复制
-          </button>
-          <button
-            type="button"
-            data-message-action="rollback"
-            className="is-danger"
-            onClick={() => {
-              const target = messageMenu?.message;
-              closeMessageMenu();
-              if (target) {
-                void rollbackToMessage(target.id);
-              }
-            }}
-          >
-            回滚到此
-          </button>
+          {menuItems.map((item) => (
+            <button
+              key={item.action}
+              type="button"
+              data-message-action={item.action}
+              className={item.danger ? "is-danger" : undefined}
+              onClick={() => {
+                const target = messageMenu?.message;
+                closeMessageMenu();
+                if (target) {
+                  void handleMessageAction(target, item.action);
+                }
+              }}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
+        <MessageEditModal
+          open={messageEdit != null}
+          title="编辑消息"
+          initialValue={messageEdit?.initialText ?? ""}
+          onClose={() => setMessageEdit(null)}
+          onConfirm={async (value) => {
+            const edit = messageEdit;
+            setMessageEdit(null);
+            if (edit) {
+              await saveMessageEdit(edit.messageId, value);
+            }
+          }}
+        />
         <div
           id="chat-batch-bar"
           className={`chat-batch-bar${messageBatch.active ? "" : " hidden"}`}

@@ -17,8 +17,10 @@ import {
   type MessagesAppendRequest,
   type MessagesDeleteRequest,
   type MessagesEditRequest,
+  type MessagesForkRequest,
   type MessagesHideRequest,
   type MessagesListRequest,
+  type MessagesShowRequest,
   type ModelListPickerResponse,
   type ModelSetCurrentRequest,
   type ProjectCreateRequest,
@@ -291,10 +293,22 @@ export async function ipcMessagesHide(
   return bridge().invoke(IPC_CHANNELS.MESSAGES_HIDE, req);
 }
 
+export async function ipcMessagesShow(
+  req: MessagesShowRequest,
+): Promise<IpcResult<void>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_SHOW, req);
+}
+
 export async function ipcMessagesDelete(
   req: MessagesDeleteRequest,
 ): Promise<IpcResult<void>> {
   return bridge().invoke(IPC_CHANNELS.MESSAGES_DELETE, req);
+}
+
+export async function ipcMessagesFork(
+  req: MessagesForkRequest,
+): Promise<IpcResult<SessionDto>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_FORK, req);
 }
 
 export async function ipcMessagesRollback(

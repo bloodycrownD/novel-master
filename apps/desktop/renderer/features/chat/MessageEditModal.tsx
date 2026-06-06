@@ -1,0 +1,82 @@
+import { useEffect, useState } from "react";
+
+type MessageEditModalProps = {
+  open: boolean;
+  title: string;
+  initialValue?: string;
+  onClose: () => void;
+  onConfirm: (value: string) => void | Promise<void>;
+};
+
+export function MessageEditModal({
+  open,
+  title,
+  initialValue = "",
+  onClose,
+  onConfirm,
+}: MessageEditModalProps) {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setValue(initialValue);
+    }
+  }, [open, initialValue]);
+
+  if (!open) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const canSubmit = trimmed.length > 0 && !saving;
+
+  const handleConfirm = async () => {
+    if (!canSubmit) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await onConfirm(trimmed);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="text-prompt-overlay" onClick={onClose}>
+      <div
+        className="text-prompt-modal text-prompt-modal--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="message-edit-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 id="message-edit-title" className="text-prompt-modal__title">
+          {title}
+        </h3>
+        <textarea
+          className="text-prompt-modal__textarea"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoFocus
+          rows={6}
+        />
+        <div className="text-prompt-modal__actions">
+          <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
+            取消
+          </button>
+          <button
+            type="button"
+            className="text-prompt-modal__btn text-prompt-modal__btn--primary"
+            disabled={!canSubmit}
+            onClick={() => void handleConfirm()}
+          >
+            {saving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

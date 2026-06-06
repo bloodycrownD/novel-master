@@ -2021,6 +2021,59 @@ html:not([data-theme="dark"]) #app-chrome {
   font-weight: 300;
 }
 
+.chat-list__menu-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.chat-list__menu-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text);
+}
+
+.chat-list__item--empty {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: default;
+}
+
+.chat-list__item--empty:hover {
+  background: transparent;
+}
+
+.chat-list__create-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chat-list__create-btn:hover {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.list-manage-header__btn--primary {
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.list-manage-header__btn--primary:hover {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
 /* ── Conversation ── */
 
 .conversation-tabs {
@@ -2689,4 +2742,188 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   border-radius: 8px;
   background: var(--surface);
   color: var(--text);
+}
+
+/* ── Context menu / text prompt ── */
+
+.context-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 140px;
+  padding: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.context-menu button:hover {
+  background: var(--bg-secondary);
+}
+
+.context-menu button.is-danger {
+  color: var(--danger);
+}
+
+.text-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 24px;
+}
+
+.text-prompt-modal {
+  width: 100%;
+  max-width: 360px;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.text-prompt-modal--wide {
+  max-width: 480px;
+}
+
+.text-prompt-modal__title {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.text-prompt-modal__label {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.text-prompt-modal__input,
+.text-prompt-modal__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 15px;
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  background: var(--background);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.text-prompt-modal__textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.text-prompt-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.text-prompt-modal__btn {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px 4px;
+}
+
+.text-prompt-modal__btn--primary {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.text-prompt-modal__btn--primary:disabled {
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+/* ── Tool call cards ── */
+
+.tool-call-card {
+  margin: 6px 12px;
+  padding: 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.tool-call-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tool-call-card__name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-call-card__status {
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.tool-call-card__status--success {
+  color: var(--primary);
+}
+
+.tool-call-card__status--error {
+  color: var(--danger);
+}
+
+.tool-call-card__status--pending {
+  color: var(--text-secondary);
+}
+
+.tool-call-card__summary {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.chat-message__markdown {
+  margin: 0;
+  font-size: inherit;
+  line-height: 1.5;
+}
+
+.chat-message__thinking {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-message__thinking summary {
+  cursor: pointer;
+  font-weight: 500;
 }
