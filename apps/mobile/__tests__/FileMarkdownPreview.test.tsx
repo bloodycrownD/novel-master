@@ -138,6 +138,61 @@ ${longBody}`;
     expect(lastCall?.frontMatterHtml).toContain('fm-card');
   });
 
+  it('renderKind txt shows plain source and does not mount RichDocumentWebView', async () => {
+    const content = `---
+title: Test
+---
+# Hello
+
+- item one
+`;
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.md"
+          content={content}
+          tokens={tokens}
+          renderKind="txt"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
+    const textNodes = tree!.root.findAllByType(
+      require('react-native').Text as React.ComponentType,
+    );
+    const combined = textNodes.map(n => n.props.children).join('');
+    expect(combined).toContain('---');
+    expect(combined).toContain('# Hello');
+    expect(combined).toContain('title: Test');
+  });
+
+  it('renderKind markdown (default) still mounts WebView when webview engine', async () => {
+    const content = `---
+title: Test
+---
+# Hello
+`;
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.md"
+          content={content}
+          tokens={tokens}
+          renderKind="markdown"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+  });
+
   it('does not render Web body when front matter is unclosed', async () => {
     const content = `---
 title: broken

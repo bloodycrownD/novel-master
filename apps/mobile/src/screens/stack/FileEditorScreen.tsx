@@ -19,7 +19,11 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
-import {FileMarkdownPreview} from '../../components/vfs/FileMarkdownPreview';
+import {
+  FileMarkdownPreview,
+  isMarkdownPreviewPath,
+} from '../../components/vfs/FileMarkdownPreview';
+import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {formatCharCount} from '../../hooks/useAgentStreamMetrics';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
@@ -50,6 +54,9 @@ export function FileEditorScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(true);
+  const [previewRenderKind, setPreviewRenderKind] = useState<
+    'markdown' | 'txt'
+  >('markdown');
 
   const isDirty = content !== savedContent;
   useUnsavedGuard(isDirty);
@@ -192,6 +199,17 @@ export function FileEditorScreen() {
           </Text>
         </View>
       ) : null}
+      {previewMode && isMarkdownPreviewPath(path) ? (
+        <SegmentedControl
+          options={[
+            {value: 'markdown', label: 'Markdown'},
+            {value: 'txt', label: '文本'},
+          ]}
+          value={previewRenderKind}
+          onChange={setPreviewRenderKind}
+          tokens={tokens}
+        />
+      ) : null}
       {previewMode ? (
         /* WebView owns scroll — no outer ScrollView (avoids nested scroll + height bugs). */
         <View style={[styles.preview, {backgroundColor: tokens.surface}]}>
@@ -200,6 +218,7 @@ export function FileEditorScreen() {
             content={content}
             tokens={tokens}
             previewFill
+            renderKind={previewRenderKind}
           />
         </View>
       ) : (

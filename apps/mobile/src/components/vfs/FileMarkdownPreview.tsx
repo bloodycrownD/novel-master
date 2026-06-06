@@ -25,12 +25,16 @@ export function isMarkdownPreviewPath(path: string): boolean {
   return MARKDOWN_PATH.test(path);
 }
 
+export type PreviewRenderKind = 'markdown' | 'txt';
+
 interface FileMarkdownPreviewProps {
   path: string;
   content: string;
   tokens: ThemeTokens;
   /** When true, WebView body expands (flex:1) — caller must not wrap WebView in ScrollView. */
   previewFill?: boolean;
+  /** Markdown paths only: 'txt' shows raw source; 'markdown' runs the preview pipeline. */
+  renderKind?: PreviewRenderKind;
 }
 
 export function FileMarkdownPreview({
@@ -38,6 +42,7 @@ export function FileMarkdownPreview({
   content,
   tokens,
   previewFill = false,
+  renderKind = 'markdown',
 }: FileMarkdownPreviewProps) {
   const {appUi} = useNovelMaster();
   const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(
@@ -122,6 +127,24 @@ export function FileMarkdownPreview({
     return (
       <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
     );
+  }
+
+  // Txt mode: show full source as-is — bypass FM split, WebView, and markdown rendering.
+  if (renderKind === 'txt') {
+    const plain = (
+      <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
+    );
+    if (previewFill) {
+      return (
+        <ScrollView
+          style={styles.rnBodyScroll}
+          contentContainerStyle={styles.rnBodyContent}
+          keyboardShouldPersistTaps="handled">
+          {plain}
+        </ScrollView>
+      );
+    }
+    return plain;
   }
 
   return (
