@@ -1,5 +1,6 @@
 import {describe, expect, it} from '@jest/globals';
 import {
+  anchoredMenuContentHeight,
   computeAnchoredMenuWidth,
   layoutAnchoredMenu,
 } from '../src/components/chat/anchored-menu-layout';
@@ -34,5 +35,31 @@ describe('layoutAnchoredMenu', () => {
     expect(layout.top).toBeGreaterThanOrEqual(
       topAnchor.y + topAnchor.height + 8,
     );
+  });
+
+  it('does not scroll for six items when viewport has room', () => {
+    const menuWidth = computeAnchoredMenuWidth(items, 360);
+    const layout = layoutAnchoredMenu(
+      {x: 40, y: 200, width: 200, height: 48},
+      items.length,
+      menuWidth,
+      360,
+      640,
+    );
+    expect(layout.scrollable).toBe(false);
+    expect(layout.maxHeight).toBe(anchoredMenuContentHeight(items.length));
+  });
+
+  it('scrolls when content exceeds the height cap', () => {
+    const menuWidth = computeAnchoredMenuWidth(items, 360);
+    const layout = layoutAnchoredMenu(
+      {x: 40, y: 200, width: 200, height: 48},
+      10,
+      menuWidth,
+      360,
+      640,
+    );
+    expect(layout.scrollable).toBe(true);
+    expect(layout.maxHeight).toBe(288);
   });
 });

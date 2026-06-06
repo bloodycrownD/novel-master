@@ -65,6 +65,25 @@ export function MessageActionMenu({
     );
   }, [anchor, items, window.width, window.height]);
 
+  const menuItems = items.map(item => (
+    <Pressable
+      key={item.action}
+      style={[styles.item, {borderBottomColor: tokens.border}]}
+      onPress={() => {
+        onClose();
+        onSelect(item.action);
+      }}>
+      <Text
+        style={{
+          color: item.danger ? tokens.danger : tokens.text,
+          fontSize: 15,
+          textAlign: 'center',
+        }}>
+        {item.label}
+      </Text>
+    </Pressable>
+  ));
+
   return (
     <AppModal
       visible={visible && layout != null}
@@ -81,37 +100,21 @@ export function MessageActionMenu({
                 left: layout.left,
                 top: layout.top,
                 width: layout.width,
-                maxHeight: layout.maxHeight,
+                ...(layout.scrollable ? {maxHeight: layout.maxHeight} : {}),
                 backgroundColor: tokens.surfaceElevated,
                 borderColor: tokens.border,
               },
             ]}>
-            <ScrollView
-              bounces={false}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={items.length > 5}>
-              {items.map(item => (
-                <Pressable
-                  key={item.action}
-                  style={[
-                    styles.item,
-                    {borderBottomColor: tokens.border},
-                  ]}
-                  onPress={() => {
-                    onClose();
-                    onSelect(item.action);
-                  }}>
-                  <Text
-                    style={{
-                      color: item.danger ? tokens.danger : tokens.text,
-                      fontSize: 15,
-                      textAlign: 'center',
-                    }}>
-                    {item.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
+            {layout.scrollable ? (
+              <ScrollView
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator>
+                {menuItems}
+              </ScrollView>
+            ) : (
+              menuItems
+            )}
           </View>
         ) : null}
       </View>

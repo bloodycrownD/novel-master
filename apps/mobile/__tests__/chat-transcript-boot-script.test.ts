@@ -11,6 +11,7 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
     expect(script).toContain('state.menuOpenedAt');
     expect(script).toContain('layoutContextMenu');
+    expect(script).toContain('scrollable');
     expect(script).toContain('resolveMenuAnchor');
   });
 

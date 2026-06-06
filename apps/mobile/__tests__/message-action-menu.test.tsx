@@ -75,9 +75,35 @@ describe('MessageActionMenu', () => {
     jest.clearAllMocks();
   });
 
-  it('renders ScrollView when six action items are shown', () => {
+  it('does not use ScrollView for six action items when there is room', () => {
     const items = buildMessageActionItems(sampleMessage());
     expect(items).toHaveLength(6);
+
+    let tree: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <MessageActionMenu
+          visible
+          anchor={{x: 40, y: 200, width: 200, height: 48}}
+          items={items}
+          onSelect={jest.fn()}
+          onClose={jest.fn()}
+        />,
+      );
+    });
+
+    const scrollViews = tree!.root.findAllByType('ScrollView' as never);
+    expect(scrollViews).toHaveLength(0);
+  });
+
+  it('uses ScrollView when the menu exceeds the height cap', () => {
+    const items = [
+      ...buildMessageActionItems(sampleMessage()),
+      {label: 'Extra 1', action: 'extra1'},
+      {label: 'Extra 2', action: 'extra2'},
+      {label: 'Extra 3', action: 'extra3'},
+      {label: 'Extra 4', action: 'extra4'},
+    ];
 
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {
@@ -103,7 +129,7 @@ describe('MessageActionMenu', () => {
     expect(width).toBeGreaterThanOrEqual(132);
   });
 
-  it('layoutAnchoredMenu returns bounded maxHeight for six items', () => {
+  it('layoutAnchoredMenu returns content height for six items', () => {
     const items = buildMessageActionItems(sampleMessage());
     const menuWidth = computeMessageActionMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
@@ -114,8 +140,8 @@ describe('MessageActionMenu', () => {
       640,
     );
     expect(layout.width).toBe(menuWidth);
-    expect(layout.maxHeight).toBeLessThanOrEqual(360);
-    expect(layout.maxHeight).toBe(288);
+    expect(layout.scrollable).toBe(false);
+    expect(layout.maxHeight).toBe(6 * 44 + 8);
     expect(layout.top).toBeGreaterThanOrEqual(200 + 48 + 8);
   });
 });

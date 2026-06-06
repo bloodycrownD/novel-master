@@ -21,6 +21,19 @@ export function anchoredMenuMaxHeight(screenHeight: number): number {
   return Math.min(ANCHORED_MENU_MAX_HEIGHT_CAP, screenHeight * 0.45);
 }
 
+export function anchoredMenuContentHeight(itemCount: number): number {
+  return itemCount * ANCHORED_MENU_ITEM_MIN_HEIGHT + 8;
+}
+
+export interface AnchoredMenuLayout {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  /** Box height: content-sized, or viewport/cap bound when scrollable. */
+  readonly maxHeight: number;
+  readonly scrollable: boolean;
+}
+
 /** Content-aware width so short labels do not stretch to full screen. */
 export function computeAnchoredMenuWidth(
   items: readonly {label: string}[],
@@ -46,12 +59,10 @@ export function layoutAnchoredMenu(
   menuWidth: number,
   screenWidth: number,
   screenHeight: number,
-): {left: number; top: number; width: number; maxHeight: number} {
-  const maxHeight = anchoredMenuMaxHeight(screenHeight);
-  const estimatedHeight = Math.min(
-    maxHeight,
-    itemCount * ANCHORED_MENU_ITEM_MIN_HEIGHT + 8,
-  );
+): AnchoredMenuLayout {
+  const heightCap = anchoredMenuMaxHeight(screenHeight);
+  const contentHeight = anchoredMenuContentHeight(itemCount);
+  const flipEstimate = Math.min(contentHeight, heightCap);
 
   const anchorCenterX = anchor.x + anchor.width / 2;
   let left = anchorCenterX - menuWidth / 2;
@@ -64,15 +75,27 @@ export function layoutAnchoredMenu(
   const spaceBelow = screenHeight - (anchor.y + anchor.height);
   // Prefer below unless it would clip; flip above when bottom space is tighter.
   const placeAbove =
-    spaceBelow < estimatedHeight + ANCHORED_MENU_GAP &&
+    spaceBelow < flipEstimate + ANCHORED_MENU_GAP &&
     spaceAbove >= spaceBelow;
+
+  const availableSpace =
+    (placeAbove ? spaceAbove : spaceBelow) -
+    ANCHORED_MENU_GAP -
+    ANCHORED_MENU_SCREEN_MARGIN;
+  const viewportBoundedMax = Math.min(
+    heightCap,
+    Math.max(ANCHORED_MENU_ITEM_MIN_HEIGHT, availableSpace),
+  );
+  const scrollable = contentHeight > viewportBoundedMax;
+  const menuHeight = scrollable ? viewportBoundedMax : contentHeight;
+
   let top = placeAbove
-    ? anchor.y - estimatedHeight - ANCHORED_MENU_GAP
+    ? anchor.y - menuHeight - ANCHORED_MENU_GAP
     : anchor.y + anchor.height + ANCHORED_MENU_GAP;
   top = Math.max(
     ANCHORED_MENU_SCREEN_MARGIN,
-    Math.min(top, screenHeight - estimatedHeight - ANCHORED_MENU_SCREEN_MARGIN),
+    Math.min(top, screenHeight - menuHeight - ANCHORED_MENU_SCREEN_MARGIN),
   );
 
-  return {left, top, width: menuWidth, maxHeight};
+  return {left, top, width: menuWidth, maxHeight: menuHeight, scrollable};
 }

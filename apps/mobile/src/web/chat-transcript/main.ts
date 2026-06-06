@@ -226,20 +226,25 @@ export function buildTranscriptBootScript(): string {
   function layoutContextMenu(anchor, itemCount, menuWidth) {
     var screenW = window.innerWidth;
     var screenH = window.innerHeight;
-    var maxHeight = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
-    var estimatedHeight = Math.min(maxHeight, itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT} + 8);
+    var heightCap = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
+    var contentHeight = itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT} + 8;
+    var flipEstimate = Math.min(contentHeight, heightCap);
     var anchorCenterX = anchor.x + anchor.width / 2;
     var left = anchorCenterX - menuWidth / 2;
     left = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(left, screenW - menuWidth - ${ANCHORED_MENU_SCREEN_MARGIN}));
     var spaceAbove = anchor.y;
     var spaceBelow = screenH - (anchor.y + anchor.height);
     // Prefer below; flip above when bottom space is too tight.
-    var placeAbove = spaceBelow < estimatedHeight + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
+    var placeAbove = spaceBelow < flipEstimate + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
+    var availableSpace = (placeAbove ? spaceAbove : spaceBelow) - ${ANCHORED_MENU_GAP} - ${ANCHORED_MENU_SCREEN_MARGIN};
+    var viewportBoundedMax = Math.min(heightCap, Math.max(${ANCHORED_MENU_ITEM_MIN_HEIGHT}, availableSpace));
+    var scrollable = contentHeight > viewportBoundedMax;
+    var menuHeight = scrollable ? viewportBoundedMax : contentHeight;
     var top = placeAbove
-      ? anchor.y - estimatedHeight - ${ANCHORED_MENU_GAP}
+      ? anchor.y - menuHeight - ${ANCHORED_MENU_GAP}
       : anchor.y + anchor.height + ${ANCHORED_MENU_GAP};
-    top = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(top, screenH - estimatedHeight - ${ANCHORED_MENU_SCREEN_MARGIN}));
-    return { left: left, top: top, width: menuWidth, maxHeight: maxHeight };
+    top = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(top, screenH - menuHeight - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    return { left: left, top: top, width: menuWidth, maxHeight: menuHeight, scrollable: scrollable };
   }
 
   function resolveMenuAnchor(messageId, pageX, pageY) {
@@ -337,7 +342,13 @@ export function buildTranscriptBootScript(): string {
     menuEl.style.left = layout.left + 'px';
     menuEl.style.top = layout.top + 'px';
     menuEl.style.width = layout.width + 'px';
-    menuEl.style.maxHeight = layout.maxHeight + 'px';
+    if (layout.scrollable) {
+      menuEl.className = 'context-menu scrollable';
+      menuEl.style.maxHeight = layout.maxHeight + 'px';
+    } else {
+      menuEl.className = 'context-menu';
+      menuEl.style.maxHeight = '';
+    }
     var html = '';
     for (var i = 0; i < menu.items.length; i++) {
       var item = menu.items[i];
