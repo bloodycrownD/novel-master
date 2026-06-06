@@ -1,10 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": "./src",
+    "rootDir": ".",
     "outDir": "./dist",
     "lib": ["ES2022", "DOM"]
   },
-  "include": ["src/**/*"],
-  "references": [{ "path": "../../packages/core" }]
+  "include": ["src/**/*", "shared/**/*"],
+  "references": [
+    { "path": "../../packages/core" },
+    { "path": "../../packages/tdbc-driver-better-sqlite3" },
+    { "path": "../../packages/tokenizer-driver-node" },
+    { "path": "../../packages/sksp-windows" },
+    { "path": "../../packages/sksp-mac" }
+  ]
 }

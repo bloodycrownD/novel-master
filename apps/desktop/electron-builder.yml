@@ -1,0 +1,19 @@
+appId: com.novelmaster.desktop
+productName: Novel Master
+directories:
+  output: release
+files:
+  - dist/**
+  - package.json
+extraResources:
+  - from: ../../packages/tokenizer-driver-node/assets/tokenizers
+    to: tokenizers
+    filter:
+      - "**/*"
+npmRebuild: true
+win:
+  target:
+    - nsis
+mac:
+  target:
+    - dmg

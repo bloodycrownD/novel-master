@@ -12,8 +12,26 @@ const prototypeDir = path.join(repoRoot, "examples", "desktop");
 
 test("desktop package declares electron entrypoint", () => {
   const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8"));
-  assert.equal(pkg.main, "./dist/main.js");
+  assert.equal(pkg.main, "./dist/src/main/main.js");
   assert.equal(pkg.name, "@novel-master/desktop");
+});
+
+test("desktop scaffold includes vite and electron-builder config", () => {
+  assert.ok(existsSync(path.join(desktopRoot, "vite.config.ts")));
+  assert.ok(existsSync(path.join(desktopRoot, "electron-builder.yml")));
+  assert.ok(existsSync(path.join(desktopRoot, "tsconfig.renderer.json")));
+});
+
+test("preload exposes novelMasterDesktop IPC bridge API", () => {
+  const preload = readFileSync(
+    path.join(desktopRoot, "src/preload/preload.ts"),
+    "utf8",
+  );
+  assert.match(preload, /contextBridge\.exposeInMainWorld\("novelMasterDesktop"/);
+  assert.match(preload, /invoke/);
+  assert.match(preload, /\bon\b/);
+  assert.match(preload, /\boff\b/);
+  assert.match(preload, /version/);
 });
 
 test("UI prototype lives under examples/desktop", () => {
@@ -50,7 +68,9 @@ test("apps/desktop has no createNovelMasterRuntime wiring", () => {
   }
 
   for (const root of scanRoots) {
-    walk(root);
+    if (existsSync(root)) {
+      walk(root);
+    }
   }
   assert.deepEqual(
     hits,

@@ -18,7 +18,8 @@
     "mobile:android": "npm run android -w @novel-master/mobile",
     "mobile:log": "npm run log-android -w @novel-master/mobile",
     "desktop:dev": "npm run dev -w @novel-master/desktop",
-    "desktop:build": "npm run build -w @novel-master/desktop"
+    "desktop:build": "npm run build -w @novel-master/desktop",
+    "desktop:dist": "npm run dist -w @novel-master/desktop"
   },
   "devDependencies": {
     "@types/node": "^25.6.2",

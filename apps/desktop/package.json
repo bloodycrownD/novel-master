@@ -3,18 +3,40 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "main": "./dist/main.js",
+  "main": "./dist/src/main/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "dev": "npm run build && electron .",
+    "build": "vite build && tsc -p tsconfig.json",
+    "build:renderer": "vite build",
+    "dev:vite": "vite",
+    "dev:electron": "electron .",
+    "dev": "concurrently -k \"npm run dev:vite\" \"wait-on tcp:5173 && npm run dev:electron\"",
+    "dist": "npm run build && electron-builder",
     "start": "electron .",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
-    "test": "node --test test/**/*.test.js"
+    "test": "tsx --test test/**/*.test.ts test/**/*.test.js"
   },
   "dependencies": {
-    "@novel-master/core": "*"
+    "@novel-master/core": "*",
+    "@novel-master/sksp-mac": "*",
+    "@novel-master/sksp-windows": "*",
+    "@novel-master/tdbc-driver-better-sqlite3": "*",
+    "@novel-master/tokenizer-driver-node": "*",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
-    "electron": "^35.7.5"
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^9.2.0",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.0.12",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vite": "^6.3.5",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "extends": "electron-builder.yml"
   }
 }
