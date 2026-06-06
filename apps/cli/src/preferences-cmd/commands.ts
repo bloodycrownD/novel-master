@@ -4,10 +4,7 @@
  * @module preferences-cmd/commands
  */
 
-import {
-  TOKEN_COUNTER_MODE_PREF_KEY,
-  type PersistentPreferences,
-} from "@novel-master/core";
+import type { PersistentPreferences } from "@novel-master/core";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 const KEY_VERSION_CHECK = "session-fs.versionCheck";
@@ -27,14 +24,7 @@ export async function runPreferences(
         console.log(enabled ? "true" : "false");
         return;
       }
-      if (key === TOKEN_COUNTER_MODE_PREF_KEY) {
-        const raw = await preferences.getPreference(key);
-        console.log(raw ?? "auto");
-        return;
-      }
-      throw new Error(
-        `Usage: nm preferences get <${KEY_VERSION_CHECK}|${TOKEN_COUNTER_MODE_PREF_KEY}>`,
-      );
+      throw new Error(`Usage: nm preferences get <${KEY_VERSION_CHECK}>`);
     }
     case "set": {
       const key = positional[0];
@@ -48,18 +38,7 @@ export async function runPreferences(
         await preferences.setSessionFsVersionCheck(raw === "true");
         return;
       }
-      if (key === TOKEN_COUNTER_MODE_PREF_KEY) {
-        if (typeof raw !== "string" || raw.length === 0) {
-          throw new Error(
-            `Usage: nm preferences set ${TOKEN_COUNTER_MODE_PREF_KEY} <auto|heuristic|claude|...>`,
-          );
-        }
-        await preferences.setPreference(key, raw);
-        return;
-      }
-      throw new Error(
-        `Usage: nm preferences set <${KEY_VERSION_CHECK}|${TOKEN_COUNTER_MODE_PREF_KEY}> <value>`,
-      );
+      throw new Error(`Usage: nm preferences set <${KEY_VERSION_CHECK}> <value>`);
     }
     case "reset": {
       const key = positional[0];
@@ -78,7 +57,7 @@ export async function runPreferences(
     }
     default:
       throw new Error(
-        `Usage: nm preferences <get|set|reset|list> ${KEY_VERSION_CHECK}|${TOKEN_COUNTER_MODE_PREF_KEY} ...`,
+        `Usage: nm preferences <get|set|reset|list> ${KEY_VERSION_CHECK} ...`,
       );
   }
 }

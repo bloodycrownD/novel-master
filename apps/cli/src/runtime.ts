@@ -13,7 +13,6 @@ import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
   createDefaultTokenCounterRegistry,
-  readTokenCounterModeFromPreferences,
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
@@ -147,9 +146,7 @@ export async function createNovelMasterRuntime(
       ? createAgentMockModelRequests()
       : providerBundle.modelRequests;
 
-  const tokenCounters = createDefaultTokenCounterRegistry({
-    getTokenizerOverride: () => readTokenCounterModeFromPreferences(preferences),
-  });
+  const tokenCounters = createDefaultTokenCounterRegistry({});
 
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
