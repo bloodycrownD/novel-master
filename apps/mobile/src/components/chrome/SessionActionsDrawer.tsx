@@ -1,5 +1,6 @@
 /**
  * Session actions drawer: read-only current agent/model + action rows.
+ * Drawer only renders labels and fires callbacks; batch semantics live in ChatTabScreen.
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -17,9 +18,7 @@ type Props = {
   onSwitchModel?: () => void;
   onSwitchAgent?: () => void;
   onRealPrompt?: () => void;
-  onBatchDeleteMessages?: () => void;
-  onBatchHideMessages?: () => void;
-  onBatchUnhideMessages?: () => void;
+  onBatchMessages?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -30,9 +29,7 @@ export function SessionActionsDrawer({
   onSwitchModel,
   onSwitchAgent,
   onRealPrompt,
-  onBatchDeleteMessages,
-  onBatchHideMessages,
-  onBatchUnhideMessages,
+  onBatchMessages,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
@@ -76,14 +73,12 @@ export function SessionActionsDrawer({
   }, [visible, runtime]);
 
   const items = [
-    {label: '重命名', action: onRename},
+    {label: '聊天重命名', action: onRename},
     {label: '切换模型', action: onSwitchModel},
     {label: '切换 agent', action: onSwitchAgent},
-    {label: '真实提示词', action: onRealPrompt},
-    {label: '压缩会话', action: onCompact},
-    {label: '批量删除消息', action: onBatchDeleteMessages},
-    {label: '批量隐藏消息', action: onBatchHideMessages},
-    {label: '批量取消隐藏', action: onBatchUnhideMessages},
+    {label: '查看提示词', action: onRealPrompt},
+    {label: '压缩上下文', action: onCompact},
+    {label: '批量操作', action: onBatchMessages},
   ];
 
   return (

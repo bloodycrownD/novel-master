@@ -63,6 +63,7 @@ import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
 import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
+import {MessageBatchHeader} from '../../components/batch/MessageBatchHeader';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
@@ -105,7 +106,6 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
 type ChatSubview = 'sessions' | 'conversation';
 type ConversationPanel = 'chat' | 'workspace';
-type MessageBatchPurpose = 'delete' | 'hide' | 'unhide';
 const CHAT_PAGE_SIZE = 40;
 
 export function ChatTabScreen() {
@@ -173,9 +173,6 @@ export function ChatTabScreen() {
   >();
   const [webMenuOpen, setWebMenuOpen] = useState(false);
   const [webMenuCloseSignal, setWebMenuCloseSignal] = useState(0);
-  const [messageBatchPurpose, setMessageBatchPurpose] = useState<
-    MessageBatchPurpose | null
-  >(null);
   const [messageEditPrompt, setMessageEditPrompt] = useState<
     {messageId: string; initialText: string} | undefined
   >();
@@ -790,21 +787,16 @@ export function ChatTabScreen() {
 
   const exitMessageBatch = useCallback(() => {
     messageBatch.exit();
-    setMessageBatchPurpose(null);
   }, [messageBatch]);
 
-  const enterMessageBatch = useCallback(
-    (purpose: MessageBatchPurpose) => {
-      if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法批量操作消息'));
-        return;
-      }
-      messageBatch.exit();
-      setMessageBatchPurpose(purpose);
-      messageBatch.enter();
-    },
-    [agentRunning, messageBatch, showToast],
-  );
+  const enterMessageBatch = useCallback(() => {
+    if (agentRunning) {
+      showToast(toastMessage('请稍候', 'Agent 运行中无法批量操作消息'));
+      return;
+    }
+    messageBatch.exit();
+    messageBatch.enter();
+  }, [agentRunning, messageBatch, showToast]);
 
   const deleteSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
@@ -881,12 +873,12 @@ export function ChatTabScreen() {
       return;
     }
     Alert.alert(
-      '确认取消隐藏',
-      `确定取消隐藏选中的 ${count} 条消息？`,
+      '确认恢复',
+      `确定恢复选中的 ${count} 条消息？`,
       [
         {text: '取消', style: 'cancel'},
         {
-          text: '取消隐藏',
+          text: '恢复',
           onPress: () => unhideSelectedMessages().catch(() => undefined),
         },
       ],
@@ -928,8 +920,8 @@ export function ChatTabScreen() {
       return;
     }
     Alert.alert(
-      '压缩会话',
-      '将按照事件配置执行相应动作。是否继续？',
+      '压缩上下文',
+      '将按照事件配置压缩上下文。是否继续？',
       [
         {text: '取消', style: 'cancel'},
         {
@@ -1169,7 +1161,7 @@ export function ChatTabScreen() {
           onChange={setConversationPanel}
           options={[
             {value: 'chat', label: '聊天'},
-            {value: 'workspace', label: '会话工作区'},
+            {value: 'workspace', label: '聊天工作区'},
           ]}
         />
         {projectId != null && sessionId != null ? (
@@ -1185,36 +1177,12 @@ export function ChatTabScreen() {
                 <ChatStreamMetricsBar metrics={streamMetrics} />
               ) : null}
               {messageBatch.active ? (
-                <ManageHeader
-                  title="消息"
-                  batchMode
+                <MessageBatchHeader
                   selectedCount={messageBatch.selectedCount}
-                  onEnterBatch={() => undefined}
-                  onCancelBatch={exitMessageBatch}
-                  primaryActionLabel={
-                    messageBatchPurpose === 'hide'
-                      ? '隐藏'
-                      : messageBatchPurpose === 'unhide'
-                        ? '取消隐藏'
-                        : '删除'
-                  }
-                  onPrimaryAction={
-                    messageBatchPurpose === 'hide'
-                      ? confirmBatchHideMessages
-                      : messageBatchPurpose === 'unhide'
-                        ? confirmBatchUnhideMessages
-                        : confirmMessageBatchDelete
-                  }
-                  primaryActionTone={
-                    messageBatchPurpose === 'delete' ? 'danger' : 'primary'
-                  }
-                  hint={
-                    messageBatchPurpose === 'hide'
-                      ? '选择要隐藏的消息'
-                      : messageBatchPurpose === 'unhide'
-                        ? '选择要取消隐藏的消息'
-                        : '选择要删除的消息'
-                  }
+                  onCancel={exitMessageBatch}
+                  onDelete={confirmMessageBatchDelete}
+                  onHide={confirmBatchHideMessages}
+                  onRestore={confirmBatchUnhideMessages}
                 />
               ) : null}
               {useWebviewTranscript ? (
@@ -1334,7 +1302,7 @@ export function ChatTabScreen() {
             ) : conversationPanel === 'workspace' ? (
               <View style={styles.placeholder}>
                 <Text style={{color: tokens.textSecondary}}>
-                  会话工作区不可用
+                  聊天工作区不可用
                 </Text>
               </View>
             ) : null}
@@ -1366,17 +1334,9 @@ export function ChatTabScreen() {
             setAgentPickerOpen(true);
           }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
-          onBatchDeleteMessages={() => {
+          onBatchMessages={() => {
             setSessionDrawerOpen(false);
-            enterMessageBatch('delete');
-          }}
-          onBatchHideMessages={() => {
-            setSessionDrawerOpen(false);
-            enterMessageBatch('hide');
-          }}
-          onBatchUnhideMessages={() => {
-            setSessionDrawerOpen(false);
-            enterMessageBatch('unhide');
+            enterMessageBatch();
           }}
         />
         <MessageActionMenu
@@ -1454,7 +1414,7 @@ export function ChatTabScreen() {
         onChange={setSessionListPanel}
         options={[
           {value: 'sessions', label: '会话'},
-          {value: 'template', label: '项目模板'},
+          {value: 'template', label: '项目工作区'},
         ]}
       />
       {sessionListPanel === 'template' ? (
