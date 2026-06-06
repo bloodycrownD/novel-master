@@ -405,7 +405,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       </button>
                     ) : null}
                     <button type="button" className="icon-btn" onClick={() => deleteBlock(index)}>
-                      �
+                      ×
                     </button>
                   </div>
                 </div>

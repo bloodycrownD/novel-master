@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/src/main/main.js",
   "scripts": {
+    "prebuild": "npm run build -w @novel-master/config-forms",
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "build:icons": "node scripts/generate-icons.mjs",
     "build:main": "tsc -p tsconfig.json",

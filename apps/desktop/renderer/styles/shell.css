@@ -1486,7 +1486,6 @@ html:not([data-theme="dark"]) #app-chrome {
   overflow: hidden;
 }
 
-.settings-list-item,
 .settings-row {
   display: flex;
   align-items: center;
@@ -1502,12 +1501,10 @@ html:not([data-theme="dark"]) #app-chrome {
   color: inherit;
 }
 
-.settings-list-item:last-child,
 .settings-row:last-child {
   border-bottom: none;
 }
 
-.settings-list-item:hover,
 .settings-row:hover {
   background: var(--surface);
 }
