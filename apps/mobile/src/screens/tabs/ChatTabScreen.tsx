@@ -185,6 +185,14 @@ export function ChatTabScreen() {
       ? scrollCacheKey(projectId, sessionId)
       : null;
   const useWebviewTranscript = chatTranscriptEngine === 'webview';
+  const transcriptFlags = useMemo(
+    () => ({
+      richText: chatRichTextEnabled,
+      showFullToolParams,
+      batchMode: messageBatch.active,
+    }),
+    [chatRichTextEnabled, showFullToolParams, messageBatch.active],
+  );
   const legacyCachedScroll = chatScrollKey
     ? getScrollSnapshot(chatScrollKey)
     : undefined;
@@ -1210,11 +1218,7 @@ export function ChatTabScreen() {
                   streamingThinking={streamingThinking}
                   hasMore={hasMoreMessages}
                   agentRunning={agentRunning}
-                  flags={{
-                    richText: chatRichTextEnabled,
-                    showFullToolParams,
-                    batchMode: messageBatch.active,
-                  }}
+                  flags={transcriptFlags}
                   selectedMessageIds={messageBatch.selectedIds}
                   menuCloseSignal={webMenuCloseSignal}
                   initialScroll={restoredTranscriptScroll ?? null}
@@ -1228,22 +1232,6 @@ export function ChatTabScreen() {
                       setMessageMenuTarget(undefined);
                       setMessageMenuAnchor(undefined);
                     }
-                  }}
-                  onOpenMessageMenu={(messageId, pageX, pageY) => {
-                    if (agentRunning) {
-                      return;
-                    }
-                    const msg = chatMessages.find(m => m.id === messageId);
-                    if (msg == null) {
-                      return;
-                    }
-                    setMessageMenuTarget(msg);
-                    setMessageMenuAnchor({
-                      x: pageX,
-                      y: pageY,
-                      width: 0,
-                      height: 0,
-                    });
                   }}
                   onMessageMenuAction={(messageId, action) => {
                     const target = chatMessages.find(m => m.id === messageId);

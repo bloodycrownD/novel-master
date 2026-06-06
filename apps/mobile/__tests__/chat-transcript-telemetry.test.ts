@@ -53,4 +53,18 @@ describe('chat-transcript-telemetry', () => {
       expect.objectContaining({reason: 'wrong_version'}),
     );
   });
+
+  it('logs menu_open event', () => {
+    if (!CHAT_TRANSCRIPT_TELEMETRY_ENABLED) {
+      emitChatTranscriptTelemetry({name: 'menu_open'});
+      expect(infoSpy).not.toHaveBeenCalled();
+      return;
+    }
+    emitChatTranscriptTelemetry({name: 'menu_open'});
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[ChatTranscriptTelemetry]',
+      'menu_open',
+      expect.objectContaining({name: 'menu_open'}),
+    );
+  });
 });

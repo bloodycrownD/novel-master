@@ -11,6 +11,11 @@ import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
+import {emitChatTranscriptTelemetry} from '../src/services/chat-transcript-telemetry';
+
+const mockEmitTelemetry = emitChatTranscriptTelemetry as jest.MockedFunction<
+  typeof emitChatTranscriptTelemetry
+>;
 
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -50,8 +55,10 @@ function messageTypesSince(clearAfterIndex: number): string[] {
   });
 }
 
-function simulateWebReady(
+function simulateWebMessage(
   root: TestRenderer.ReactTestInstance,
+  type: string,
+  payload: Record<string, unknown> = {},
 ): void {
   const webView = root.findByType(
     require('react-native-webview').default as React.ComponentType<{
@@ -63,17 +70,24 @@ function simulateWebReady(
       nativeEvent: {
         data: JSON.stringify({
           v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
-          type: 'ready',
-          payload: {version: 'test'},
+          type,
+          payload,
         }),
       },
     });
   });
 }
 
+function simulateWebReady(
+  root: TestRenderer.ReactTestInstance,
+): void {
+  simulateWebMessage(root, 'ready', {version: 'test'});
+}
+
 describe('ChatTranscriptWebView', () => {
   beforeEach(() => {
     clearMockWebViewPostMessages();
+    mockEmitTelemetry.mockClear();
   });
 
   afterEach(() => {
@@ -135,5 +149,96 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterMoreStream = messageTypesSince(baseline2);
     expect(typesAfterMoreStream).not.toContain('sessionSnapshot');
     expect(typesAfterMoreStream.filter(t => t === 'streamDelta').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('T7: menu open path does not post sessionSnapshot or flagsUpdate when flag values unchanged', async () => {
+    const messages = [sampleMessage('m1', 1)];
+
+    function UnstableFlagsParent() {
+      const [, setMenuTick] = React.useState(0);
+      return (
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{
+            richText: false,
+            showFullToolParams: false,
+            batchMode: false,
+          }}
+          onOpenMessageMenu={() => {
+            setMenuTick(tick => tick + 1);
+          }}
+        />
+      );
+    }
+
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<UnstableFlagsParent />);
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    simulateWebMessage(tree!.root, 'openMessageMenu', {
+      messageId: 'm1',
+      pageX: 120,
+      pageY: 240,
+    });
+    simulateWebMessage(tree!.root, 'menuOpened', {});
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const typesAfterMenu = messageTypesSince(baseline);
+    expect(typesAfterMenu).not.toContain('sessionSnapshot');
+    expect(typesAfterMenu).not.toContain('flagsUpdate');
+    expect(mockEmitTelemetry).toHaveBeenCalledWith({name: 'menu_open'});
+  });
+
+  it('T7: new flags object ref with same values does not post flagsUpdate', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    const baseFlags = {
+      richText: false,
+      showFullToolParams: false,
+      batchMode: false,
+    };
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={baseFlags}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{...baseFlags}}
+        />,
+      );
+    });
+
+    const typesAfterRerender = messageTypesSince(baseline);
+    expect(typesAfterRerender).not.toContain('flagsUpdate');
+    expect(typesAfterRerender).not.toContain('sessionSnapshot');
   });
 });

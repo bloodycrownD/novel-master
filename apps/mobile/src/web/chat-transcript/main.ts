@@ -358,6 +358,15 @@ export function buildTranscriptBootScript(): string {
     return '<div class="empty-state">暂无消息</div>';
   }
 
+  function flagsEqual(a, b) {
+    return (
+      a.richText === b.richText &&
+      a.showFullToolParams === b.showFullToolParams &&
+      a.batchMode === b.batchMode &&
+      a.menuDisabled === b.menuDisabled
+    );
+  }
+
   function renderRows() {
     var list = document.getElementById('rows');
     if (!list) return;
@@ -552,12 +561,16 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'flagsUpdate':
         if (p.flags) {
-          state.flags = {
+          var nextFlags = {
             richText: !!p.flags.richText,
             showFullToolParams: !!p.flags.showFullToolParams,
             batchMode: !!p.flags.batchMode,
             menuDisabled: !!p.flags.menuDisabled,
           };
+          if (flagsEqual(state.flags, nextFlags)) {
+            break;
+          }
+          state.flags = nextFlags;
           if (state.flags.batchMode || state.flags.menuDisabled) {
             closeContextMenu(true);
           }

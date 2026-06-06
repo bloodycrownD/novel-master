@@ -145,6 +145,7 @@ export function ChatTranscriptWebView({
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
   const prevRichTextRef = useRef(flags?.richText ?? false);
+  const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
   const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
   const initialScrollRef = useRef(initialScroll);
   const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
@@ -174,7 +175,14 @@ export function ChatTranscriptWebView({
       type: 'init',
       payload: {theme: themeFromTokens(tokens), flags: resolvedFlags},
     });
-  }, [flags, postToWeb, tokens, agentRunning]);
+  }, [
+    flags?.richText,
+    flags?.showFullToolParams,
+    flags?.batchMode,
+    postToWeb,
+    tokens,
+    agentRunning,
+  ]);
 
   // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
   const sendSessionSnapshot = useCallback(
@@ -307,19 +315,36 @@ export function ChatTranscriptWebView({
     if (!webReady) {
       return;
     }
+    const resolvedFlags: TranscriptFlags = {
+      richText: flags?.richText ?? false,
+      showFullToolParams: flags?.showFullToolParams ?? false,
+      batchMode: flags?.batchMode ?? false,
+      menuDisabled: agentRunning,
+    };
+    const prev = prevSentFlagsRef.current;
+    if (
+      prev != null &&
+      prev.richText === resolvedFlags.richText &&
+      prev.showFullToolParams === resolvedFlags.showFullToolParams &&
+      prev.batchMode === resolvedFlags.batchMode &&
+      prev.menuDisabled === resolvedFlags.menuDisabled
+    ) {
+      return;
+    }
+    prevSentFlagsRef.current = resolvedFlags;
     postToWeb({
       v: 1,
       type: 'flagsUpdate',
-      payload: {
-        flags: {
-          richText: flags?.richText ?? false,
-          showFullToolParams: flags?.showFullToolParams ?? false,
-          batchMode: flags?.batchMode ?? false,
-          menuDisabled: agentRunning,
-        },
-      },
+      payload: {flags: resolvedFlags},
     });
-  }, [webReady, flags, agentRunning, postToWeb]);
+  }, [
+    webReady,
+    flags?.richText,
+    flags?.showFullToolParams,
+    flags?.batchMode,
+    agentRunning,
+    postToWeb,
+  ]);
 
   useEffect(() => {
     if (!webReady) {
