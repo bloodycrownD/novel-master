@@ -70,4 +70,40 @@ describe('chat-transcript-bridge', () => {
     };
     expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(message);
   });
+
+  it('round-trips RN→Web prependPage envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'prependPage' as const,
+      payload: {
+        rows: [
+          {
+            kind: 'message' as const,
+            id: 'm0',
+            role: 'user' as const,
+            hidden: false,
+            text: 'older',
+            thinking: '',
+          },
+        ],
+        prependedCount: 1,
+      },
+    };
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(message);
+  });
+
+  it('round-trips Web→RN openToolFile envelope', () => {
+    const message = {
+      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
+      type: 'openToolFile' as const,
+      payload: {path: '/续写/chapter.md'},
+    };
+    const raw = encodeTranscriptToHost(message);
+    const parsed = decodeTranscriptToHost(raw);
+    expect(parsed).toEqual(message);
+    expect(parsed.type === 'openToolFile' ? parsed.payload.path : '').toBe(
+      '/续写/chapter.md',
+    );
+  });
 });
+

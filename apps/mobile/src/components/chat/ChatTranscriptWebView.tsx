@@ -34,6 +34,7 @@ export type ChatTranscriptWebViewProps = {
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
   readonly onLoadOlder?: () => void;
+  readonly onOpenToolFile?: (path: string) => void;
 };
 
 function themeFromTokens(tokens: {
@@ -66,6 +67,7 @@ export function ChatTranscriptWebView({
   onScrollSnapshot,
   onReady,
   onLoadOlder,
+  onOpenToolFile,
 }: ChatTranscriptWebViewProps) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
@@ -73,6 +75,8 @@ export function ChatTranscriptWebView({
   const prevStreamTextRef = useRef('');
   const prevStreamThinkingRef = useRef('');
   const sessionKeyRef = useRef(sessionKey);
+  const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
+  const prevMessageCountRef = useRef(0);
 
   const postToWeb = useCallback((message: HostToTranscriptMessage) => {
     webRef.current?.postMessage(encodeHostToTranscript(message));
@@ -112,6 +116,21 @@ export function ChatTranscriptWebView({
     sessionKey,
   ]);
 
+  const sendPrependPage = useCallback(
+    (prependedCount: number) => {
+      const olderMessages = messages.slice(0, prependedCount);
+      postToWeb({
+        v: 1,
+        type: 'prependPage',
+        payload: {
+          rows: buildTranscriptRows(olderMessages),
+          prependedCount,
+        },
+      });
+    },
+    [messages, postToWeb],
+  );
+
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
       let message;
@@ -134,9 +153,13 @@ export function ChatTranscriptWebView({
       }
       if (message.type === 'loadOlder') {
         onLoadOlder?.();
+        return;
+      }
+      if (message.type === 'openToolFile') {
+        onOpenToolFile?.(message.payload.path);
       }
     },
-    [onReady, onScrollSnapshot, onLoadOlder],
+    [onReady, onScrollSnapshot, onLoadOlder, onOpenToolFile],
   );
 
   useEffect(() => {
@@ -150,13 +173,53 @@ export function ChatTranscriptWebView({
     if (!webReady) {
       return;
     }
+    postToWeb({
+      v: 1,
+      type: 'flagsUpdate',
+      payload: {
+        flags: {
+          richText: flags?.richText ?? false,
+          showFullToolParams: flags?.showFullToolParams ?? false,
+          batchMode: flags?.batchMode ?? false,
+        },
+      },
+    });
+  }, [webReady, flags, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
     if (sessionKeyRef.current !== sessionKey) {
       sessionKeyRef.current = sessionKey;
       prevStreamTextRef.current = '';
       prevStreamThinkingRef.current = '';
+      prevFirstMessageIdRef.current = undefined;
+      prevMessageCountRef.current = 0;
+      sendSessionSnapshot();
+      return;
     }
-    sendSessionSnapshot();
-  }, [webReady, sessionKey, sendSessionSnapshot]);
+
+    const firstId = messages[0]?.id;
+    const prevFirstId = prevFirstMessageIdRef.current;
+    const prevCount = prevMessageCountRef.current;
+    const grew = messages.length > prevCount;
+    const prependedOlder =
+      grew &&
+      prevFirstId != null &&
+      firstId != null &&
+      firstId !== prevFirstId;
+
+    if (prependedOlder) {
+      // prependPage: incremental older rows only — avoids full DOM rebuild + scroll jump.
+      sendPrependPage(messages.length - prevCount);
+    } else {
+      sendSessionSnapshot();
+    }
+
+    prevFirstMessageIdRef.current = firstId;
+    prevMessageCountRef.current = messages.length;
+  }, [webReady, sessionKey, messages, sendSessionSnapshot, sendPrependPage]);
 
   useEffect(() => {
     if (!webReady) {

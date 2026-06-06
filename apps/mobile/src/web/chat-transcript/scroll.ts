@@ -28,7 +28,10 @@ export function scrollTopForBottom(scrollHeight: number, clientHeight: number): 
   return Math.max(0, scrollHeight - clientHeight);
 }
 
-/** After prepend: preserve reading position (M1; exported for tests). */
+/**
+ * After prependPage (not sessionSnapshot): preserve reading position.
+ * scrollTop += scrollHeight - prependedScrollHeight — see spec §prepend 稳定.
+ */
 export function scrollTopAfterPrepend(
   previousScrollTop: number,
   previousScrollHeight: number,

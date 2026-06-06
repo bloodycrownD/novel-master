@@ -1143,10 +1143,11 @@ export function ChatTabScreen() {
                     showFullToolParams,
                     batchMode: messageBatch.active,
                   }}
-                  initialScroll={cachedChatScroll ?? null}
+                  initialScroll={restoredTranscriptScroll ?? null}
                   defaultScrollToBottom={defaultChatScrollToBottom}
                   onScrollSnapshot={handleChatScrollSnapshot}
                   onLoadOlder={() => loadOlderMessages().catch(() => undefined)}
+                  onOpenToolFile={openSessionFilePreview}
                 />
               ) : (
               <MessageList
