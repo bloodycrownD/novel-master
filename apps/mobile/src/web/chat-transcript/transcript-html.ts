@@ -1,6 +1,7 @@
 /**
  * Inline HTML bundle for ChatTranscriptWebView (template + boot IIFE).
  */
+import {CHAT_TRANSCRIPT_RICH_CSS} from '../rich-content-styles';
 import {buildTranscriptBootScript} from './main';
 
 const HTML_TEMPLATE = `<!DOCTYPE html>
@@ -36,21 +37,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
     .tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
     .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .bubble.rich, .thinking-body.rich { white-space: normal; overflow-wrap: anywhere; }
-    .bubble.rich p, .thinking-body.rich p { margin: 0.35em 0; }
-    /* Global reset strips list padding; indent so outside markers stay inside the bubble. */
-    .bubble.rich ol, .bubble.rich ul,
-    .thinking-body.rich ol, .thinking-body.rich ul { margin: 0.35em 0; padding-left: 1.35em; }
-    .bubble.rich li, .thinking-body.rich li { margin: 0.15em 0; }
-    .bubble.rich blockquote, .thinking-body.rich blockquote {
-      margin: 0.35em 0; padding-left: 0.75em;
-      border-left: 3px solid var(--border, #e5e5ea);
-    }
-    .bubble.rich h1, .bubble.rich h2, .bubble.rich h3,
-    .thinking-body.rich h1, .thinking-body.rich h2, .thinking-body.rich h3 { font-size: 1em; font-weight: 700; margin: 0.35em 0; }
-    .bubble.rich code, .thinking-body.rich code { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
-    .bubble.rich pre, .thinking-body.rich pre { overflow-x: auto; margin: 0.35em 0; }
-    .bubble.rich a, .thinking-body.rich a { color: var(--primary, #007aff); }
+    ${CHAT_TRANSCRIPT_RICH_CSS}
     .empty-state { align-self: center; margin-top: 32px; padding: 0 24px; text-align: center; color: var(--text-secondary, #666); font-size: 14px; }
     .batch-row { display: flex; flex-direction: row; align-items: flex-start; width: 100%; gap: 4px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .batch-check { flex-shrink: 0; width: 28px; height: 28px; margin-top: 8px; border-radius: 14px; border: 2px solid var(--border, #c7c7cc); background: var(--bg, #fff); color: var(--primary, #007aff); font-size: 14px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
