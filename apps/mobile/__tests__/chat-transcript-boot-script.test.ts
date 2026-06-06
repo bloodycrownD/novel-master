@@ -10,6 +10,8 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('Backdrop lives on document.body outside #rows');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
     expect(script).toContain('state.menuOpenedAt');
+    expect(script).toContain('layoutContextMenu');
+    expect(script).toContain('resolveMenuAnchor');
   });
 
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {

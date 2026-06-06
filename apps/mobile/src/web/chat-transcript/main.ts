@@ -4,6 +4,16 @@
  */
 import {MENU_OPEN_GRACE_MS} from './menu-overlay-guards';
 import {NEAR_BOTTOM_THRESHOLD_PX} from './scroll';
+import {
+  ANCHORED_MENU_CHAR_WIDTH_EST,
+  ANCHORED_MENU_GAP,
+  ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_MAX_HEIGHT_CAP,
+  ANCHORED_MENU_MAX_WIDTH,
+  ANCHORED_MENU_MIN_WIDTH,
+  ANCHORED_MENU_SCREEN_MARGIN,
+} from '../../components/chat/anchored-menu-layout';
 
 export function buildTranscriptBootScript(): string {
   return `
@@ -203,6 +213,44 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
+  function computeContextMenuWidth(items) {
+    var longest = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].label.length > longest) longest = items[i].label.length;
+    }
+    var byLabel = longest * ${ANCHORED_MENU_CHAR_WIDTH_EST} + ${ANCHORED_MENU_H_PADDING};
+    var cap = window.innerWidth - ${ANCHORED_MENU_SCREEN_MARGIN} * 2;
+    return Math.min(cap, ${ANCHORED_MENU_MAX_WIDTH}, Math.max(${ANCHORED_MENU_MIN_WIDTH}, byLabel));
+  }
+
+  function layoutContextMenu(anchor, itemCount, menuWidth) {
+    var screenW = window.innerWidth;
+    var screenH = window.innerHeight;
+    var maxHeight = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
+    var estimatedHeight = Math.min(maxHeight, itemCount * ${ANCHORED_MENU_ITEM_MIN_HEIGHT} + 8);
+    var anchorCenterX = anchor.x + anchor.width / 2;
+    var left = anchorCenterX - menuWidth / 2;
+    left = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(left, screenW - menuWidth - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    var spaceAbove = anchor.y;
+    var spaceBelow = screenH - (anchor.y + anchor.height);
+    // Prefer below; flip above when bottom space is too tight.
+    var placeAbove = spaceBelow < estimatedHeight + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
+    var top = placeAbove
+      ? anchor.y - estimatedHeight - ${ANCHORED_MENU_GAP}
+      : anchor.y + anchor.height + ${ANCHORED_MENU_GAP};
+    top = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(top, screenH - estimatedHeight - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    return { left: left, top: top, width: menuWidth, maxHeight: maxHeight };
+  }
+
+  function resolveMenuAnchor(messageId, pageX, pageY) {
+    var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
+    if (!rowEl) return { x: pageX, y: pageY, width: 0, height: 0 };
+    var bubble = rowEl.querySelector('.bubble');
+    var target = bubble || rowEl;
+    var rect = target.getBoundingClientRect();
+    return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+  }
+
   function findMessageRow(messageId) {
     for (var i = 0; i < state.rows.length; i++) {
       var row = state.rows[i];
@@ -284,8 +332,12 @@ export function buildTranscriptBootScript(): string {
     var menuEl = document.createElement('div');
     menuEl.id = 'context-menu';
     menuEl.className = 'context-menu';
-    menuEl.style.left = Math.max(8, menu.pageX - 66) + 'px';
-    menuEl.style.top = Math.max(8, menu.pageY - 12) + 'px';
+    var menuWidth = computeContextMenuWidth(menu.items);
+    var layout = layoutContextMenu(menu.anchor, menu.items.length, menuWidth);
+    menuEl.style.left = layout.left + 'px';
+    menuEl.style.top = layout.top + 'px';
+    menuEl.style.width = layout.width + 'px';
+    menuEl.style.maxHeight = layout.maxHeight + 'px';
     var html = '';
     for (var i = 0; i < menu.items.length; i++) {
       var item = menu.items[i];
@@ -312,6 +364,7 @@ export function buildTranscriptBootScript(): string {
       messageId: messageId,
       pageX: pageX,
       pageY: pageY,
+      anchor: resolveMenuAnchor(messageId, pageX, pageY),
       items: buildMenuItems(row),
     };
     state.menuOpenedAt = Date.now();

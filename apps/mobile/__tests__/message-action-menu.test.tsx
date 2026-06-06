@@ -116,5 +116,6 @@ describe('MessageActionMenu', () => {
     expect(layout.width).toBe(menuWidth);
     expect(layout.maxHeight).toBeLessThanOrEqual(360);
     expect(layout.maxHeight).toBe(288);
+    expect(layout.top).toBeGreaterThanOrEqual(200 + 48 + 8);
   });
 });

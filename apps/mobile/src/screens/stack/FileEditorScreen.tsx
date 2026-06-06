@@ -168,6 +168,7 @@ export function FileEditorScreen() {
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
+          style={styles.toolbarBtn}
           onPress={() => handleSave().catch(() => undefined)}
           disabled={saving || !isDirty || previewMode}>
           <Text
@@ -180,10 +181,17 @@ export function FileEditorScreen() {
             {saving ? '保存中…' : '保存'}
           </Text>
         </Pressable>
-        <Text style={{color: isDirty ? tokens.danger : tokens.textSecondary}}>
+        {/* flex:1 + minWidth:0 lets long VFS paths ellipsize without squeezing buttons. */}
+        <Text
+          style={[
+            styles.toolbarPath,
+            {color: isDirty ? tokens.danger : tokens.textSecondary},
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="middle">
           {isDirty ? '未保存' : path}
         </Text>
-        <Pressable onPress={togglePreview}>
+        <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
           <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
             {previewMode ? '编辑' : '预览'}
           </Text>
@@ -244,11 +252,20 @@ const styles = StyleSheet.create({
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   toolbar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarBtn: {
+    flexShrink: 0,
+  },
+  toolbarPath: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: 'center',
   },
   statsRow: {
     paddingHorizontal: 16,

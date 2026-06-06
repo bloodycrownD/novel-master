@@ -46,7 +46,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .batch-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .row.message.selected .bubble { box-shadow: 0 0 0 2px var(--primary, #007aff); }
     .menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.35); }
-    .context-menu { position: fixed; z-index: 9999; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+    .context-menu { position: fixed; z-index: 9999; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow-x: hidden; overflow-y: auto; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
     .menu-item { display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .menu-item:last-child { border-bottom: none; }
     .menu-item.danger { color: #ff3b30; }
