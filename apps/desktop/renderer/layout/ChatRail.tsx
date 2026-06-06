@@ -2,8 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { ProjectDto, SessionDto } from "../../shared/ipc-types";
 import { BatchCheckbox } from "../components/batch/BatchCheckbox";
 import { ManageHeader } from "../components/batch/ManageHeader";
+import { ConfirmModal } from "../components/ui/ConfirmModal";
 import { ContextMenu } from "../components/ui/ContextMenu";
 import { TextPromptModal } from "../components/ui/TextPromptModal";
+import { showToast } from "../components/ui/toast";
 import { ConversationPanel } from "../features/chat/ConversationPanel";
 import { useBatchSelection } from "../hooks/useBatchSelection";
 import {
@@ -19,6 +21,7 @@ import {
 import { useShellNav } from "../providers/ShellNavProvider";
 import { loadDesktopScope } from "../state/desktop-scope";
 import { railPaneNavTitle } from "../state/nav-workspace";
+import { nextDefaultSessionTitle } from "../utils/session-default-title";
 
 interface ChatRailProps {
   onOpenSessionActions: (anchor: HTMLElement) => void;
@@ -28,8 +31,13 @@ interface ChatRailProps {
 type NamePromptState =
   | { mode: "create-project" }
   | { mode: "rename-project"; projectId: string; initialName: string }
-  | { mode: "create-session" }
   | { mode: "rename-session"; sessionId: string; initialName: string };
+
+type ConfirmState =
+  | { kind: "delete-projects-batch"; count: number }
+  | { kind: "delete-sessions-batch"; count: number }
+  | { kind: "delete-project"; projectId: string; name: string }
+  | { kind: "delete-session"; sessionId: string; label: string };
 
 type ListMenuState =
   | { kind: "project"; projectId: string; x: number; y: number }
@@ -76,6 +84,7 @@ export function ChatRail({
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [namePrompt, setNamePrompt] = useState<NamePromptState | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [listMenu, setListMenu] = useState<ListMenuState | null>(null);
 
   const loadProjects = useCallback(async () => {
@@ -169,23 +178,80 @@ export function ChatRail({
     if (projectSelectedCount === 0) {
       return;
     }
-    if (
-      window.confirm(
-        `确定删除选中的 ${projectSelectedCount} 个项目？将同时移除其下所有会话。`,
-      )
-    ) {
-      void deleteSelectedProjects();
-    }
-  }, [projectSelectedCount, deleteSelectedProjects]);
+    setConfirmState({
+      kind: "delete-projects-batch",
+      count: projectSelectedCount,
+    });
+  }, [projectSelectedCount]);
 
   const confirmSessionBatchDelete = useCallback(() => {
     if (sessionSelectedCount === 0) {
       return;
     }
-    if (window.confirm(`确定删除选中的 ${sessionSelectedCount} 个会话？`)) {
-      void deleteSelectedSessions();
+    setConfirmState({
+      kind: "delete-sessions-batch",
+      count: sessionSelectedCount,
+    });
+  }, [sessionSelectedCount]);
+
+  const createSession = useCallback(async () => {
+    if (!projectId) {
+      return;
     }
-  }, [sessionSelectedCount, deleteSelectedSessions]);
+    const title = nextDefaultSessionTitle(sessions.map((s) => s.title));
+    const result = await ipcSessionsCreate({ projectId, title });
+    if (result.ok) {
+      await loadSessions(projectId);
+      await openSession(result.data, projectName ?? "—");
+    } else {
+      showToast(result.error.message);
+    }
+  }, [projectId, sessions, loadSessions, openSession, projectName]);
+
+  const handleConfirmAction = useCallback(async () => {
+    const state = confirmState;
+    setConfirmState(null);
+    if (!state) {
+      return;
+    }
+    if (state.kind === "delete-projects-batch") {
+      await deleteSelectedProjects();
+      return;
+    }
+    if (state.kind === "delete-sessions-batch") {
+      await deleteSelectedSessions();
+      return;
+    }
+    if (state.kind === "delete-project") {
+      await ipcProjectsDelete({ id: state.projectId });
+      await loadDesktopScope();
+      await loadProjects();
+      if (projectId === state.projectId) {
+        goBackToProjects();
+      }
+      return;
+    }
+    if (state.kind === "delete-session") {
+      await ipcSessionsDelete({ id: state.sessionId });
+      await loadDesktopScope();
+      if (projectId) {
+        await loadSessions(projectId);
+      }
+      if (sessionId === state.sessionId) {
+        showNavView("sessions");
+      }
+    }
+  }, [
+    confirmState,
+    deleteSelectedProjects,
+    deleteSelectedSessions,
+    loadProjects,
+    projectId,
+    goBackToProjects,
+    loadSessions,
+    sessionId,
+    showNavView,
+  ]);
 
   const handleNamePromptConfirm = useCallback(
     async (name: string) => {
@@ -207,17 +273,6 @@ export function ChatRail({
         });
         if (result.ok) {
           await loadProjects();
-        }
-        return;
-      }
-      if (namePrompt.mode === "create-session" && projectId) {
-        const result = await ipcSessionsCreate({
-          projectId,
-          title: name,
-        });
-        if (result.ok) {
-          await loadSessions(projectId);
-          await openSession(result.data, projectName ?? "—");
         }
         return;
       }
@@ -279,19 +334,11 @@ export function ChatRail({
             initialName: project.name,
           });
         } else if (action === "delete") {
-          if (
-            window.confirm(
-              `确定删除项目「${project.name}」？将同时移除其下所有会话。`,
-            )
-          ) {
-            void ipcProjectsDelete({ id: project.id }).then(async () => {
-              await loadDesktopScope();
-              await loadProjects();
-              if (projectId === project.id) {
-                goBackToProjects();
-              }
-            });
-          }
+          setConfirmState({
+            kind: "delete-project",
+            projectId: project.id,
+            name: project.name,
+          });
         }
         return;
       }
@@ -306,18 +353,11 @@ export function ChatRail({
           initialName: session.title ?? "",
         });
       } else if (action === "delete") {
-        const label = session.title?.trim() || "该会话";
-        if (window.confirm(`确定删除会话「${label}」？`)) {
-          void ipcSessionsDelete({ id: session.id }).then(async () => {
-            await loadDesktopScope();
-            if (projectId) {
-              await loadSessions(projectId);
-            }
-            if (sessionId === session.id) {
-              showNavView("sessions");
-            }
-          });
-        }
+        setConfirmState({
+          kind: "delete-session",
+          sessionId: session.id,
+          label: session.title?.trim() || "该会话",
+        });
       }
     },
     [
@@ -342,8 +382,6 @@ export function ChatRail({
         return "新建项目";
       case "rename-project":
         return "重命名项目";
-      case "create-session":
-        return "新建会话";
       case "rename-session":
         return "重命名会话";
       default:
@@ -499,7 +537,7 @@ export function ChatRail({
               <button
                 type="button"
                 className="list-manage-header__btn list-manage-header__btn--primary"
-                onClick={() => setNamePrompt({ mode: "create-session" })}
+                onClick={() => void createSession()}
               >
                 新建
               </button>
@@ -516,7 +554,7 @@ export function ChatRail({
                 <button
                   type="button"
                   className="chat-list__create-btn"
-                  onClick={() => setNamePrompt({ mode: "create-session" })}
+                  onClick={() => void createSession()}
                 >
                   新建会话
                 </button>
@@ -619,6 +657,29 @@ export function ChatRail({
         ]}
         onSelect={handleListMenuSelect}
         onClose={() => setListMenu(null)}
+      />
+
+      <ConfirmModal
+        open={confirmState != null}
+        title="确认删除"
+        message={(() => {
+          if (!confirmState) return "";
+          switch (confirmState.kind) {
+            case "delete-projects-batch":
+              return `确定删除选中的 ${confirmState.count} 个项目？将同时移除其下所有会话。`;
+            case "delete-sessions-batch":
+              return `确定删除选中的 ${confirmState.count} 个会话？`;
+            case "delete-project":
+              return `确定删除项目「${confirmState.name}」？将同时移除其下所有会话。`;
+            case "delete-session":
+              return `确定删除会话「${confirmState.label}」？`;
+            default:
+              return "";
+          }
+        })()}
+        danger
+        onConfirm={handleConfirmAction}
+        onCancel={() => setConfirmState(null)}
       />
     </>
   );
