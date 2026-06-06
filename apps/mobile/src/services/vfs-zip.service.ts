@@ -106,14 +106,35 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
   return bytes;
 }
 
+export type ExportVfsZipOptions = {
+  /** Invoked once when native zip fails and export retries with Core default STORE. */
+  onNativeZipFallback?: () => void;
+};
+
+async function exportVfsZipBytes(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+  options?: ExportVfsZipOptions,
+): Promise<Uint8Array> {
+  try {
+    const zipSvc = createVfsZipIoService(runtime.conn, {
+      buildZip: nativeBuildVfsZip,
+    });
+    return await zipSvc.export(scope);
+  } catch {
+    // Native zip failed — retry gather+pack with Core default fflate STORE (no custom buildZip).
+    options?.onNativeZipFallback?.();
+    const fallbackSvc = createVfsZipIoService(runtime.conn);
+    return await fallbackSvc.export(scope);
+  }
+}
+
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
+  options?: ExportVfsZipOptions,
 ): Promise<'saved' | 'cancelled'> {
-  const zipSvc = createVfsZipIoService(runtime.conn, {
-    buildZip: nativeBuildVfsZip,
-  });
-  const bytes = await zipSvc.export(scope);
+  const bytes = await exportVfsZipBytes(runtime, scope, options);
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope);

@@ -115,7 +115,7 @@ describe('vfs-zip.service', () => {
     );
   });
 
-  it('writes cache zip then opens save-as dialog', async () => {
+  it('M-native-2: writes cache zip then opens save-as dialog', async () => {
     const result = await exportVfsZip(runtime, scope);
     expect(result).toBe('saved');
     expect(mockWriteFile).toHaveBeenCalledWith(
@@ -131,6 +131,37 @@ describe('vfs-zip.service', () => {
       }),
     );
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
+  });
+
+  it('M-native-3: native zip failure falls back to default STORE export', async () => {
+    const mockFallbackExport = jest.fn();
+    mockCreateVfsZipIoService.mockImplementation(
+      (_conn: unknown, opts?: {buildZip?: unknown}) => {
+        if (opts?.buildZip != null) {
+          return {
+            export: jest.fn().mockRejectedValue(new Error('native zip failed')),
+            import: mockImport,
+          };
+        }
+        return {export: mockFallbackExport, import: mockImport};
+      },
+    );
+    mockFallbackExport.mockResolvedValue(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]),
+    );
+
+    const onNativeZipFallback = jest.fn();
+    const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
+
+    expect(result).toBe('saved');
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(2);
+    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({buildZip: nativeBuildVfsZip}),
+    );
+    expect(mockCreateVfsZipIoService.mock.calls[1]?.[1]).toBeUndefined();
+    expect(onNativeZipFallback).toHaveBeenCalledTimes(1);
+    expect(mockFallbackExport).toHaveBeenCalledWith(scope);
+    expect(mockSaveDocuments).toHaveBeenCalled();
   });
 
   it('returns cancelled when save-as dialog dismissed', async () => {
