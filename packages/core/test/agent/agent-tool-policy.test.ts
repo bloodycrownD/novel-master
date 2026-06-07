@@ -5,7 +5,9 @@ import {
   registerVfsTools,
   resolveAgentToolRegistry,
   toolsFromRegistry,
+  ToolError,
   ToolRegistry,
+  ToolRunner,
   validateAgentDefinition,
   validateAgentToolPolicy,
   type AgentDefinition,
@@ -110,5 +112,21 @@ describe("agent tool policy", () => {
     registerVfsTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
+  });
+
+  it("A10: allow read-only rejects vfs.move with NOT_FOUND", async () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { allow: ["vfs.read", "vfs.grep"] },
+    };
+    const base = new ToolRegistry();
+    registerVfsTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    const runner = new ToolRunner(filtered);
+
+    await assert.rejects(
+      () => runner.call("vfs.move", { from: "/a", to: "/b" }, {}),
+      (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
+    );
   });
 });

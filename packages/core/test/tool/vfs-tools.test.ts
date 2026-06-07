@@ -400,4 +400,28 @@ describe("Builtin vfs.* tools (integration)", () => {
     );
     await ctx.conn.close();
   });
+
+  it("vfs.delete on missing path wraps VfsError NOT_FOUND as FAILED", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await assert.rejects(
+      () => runner.call("vfs.delete", { path: "/missing.txt" }, baseCtx),
+      (e: unknown) => {
+        assert.ok(e instanceof ToolError);
+        assert.equal(e.code, "FAILED");
+        assert.equal(e.toolName, "vfs.delete");
+        assert.ok(isVfsError(e.cause, "NOT_FOUND"));
+        return true;
+      },
+    );
+    await ctx.conn.close();
+  });
 });
