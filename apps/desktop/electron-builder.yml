@@ -12,7 +12,7 @@ extraResources:
     to: tokenizers
     filter:
       - "**/*"
-npmRebuild: true
+npmRebuild: false
 win:
   target:
     - nsis

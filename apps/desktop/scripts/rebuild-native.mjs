@@ -1,5 +1,6 @@
 /**
- * Rebuild better-sqlite3 for Electron after npm install.
+ * Rebuild Electron native modules after npm install.
+ * better-sqlite3: all platforms. @primno/dpapi: Windows SKSP only.
  * Skips silently when build tools are unavailable (user can run manually).
  */
 import { execSync } from "node:child_process";
@@ -17,17 +18,24 @@ const pkg = JSON.parse(
 const electronVersion =
   (pkg.devDependencies?.electron ?? "35.7.5").replace(/^[^\d]*/, "");
 
+const nativeModules = ["better-sqlite3"];
+if (process.platform === "win32") {
+  nativeModules.push("@primno/dpapi");
+}
+
+const rebuildArgs = nativeModules.map((name) => `-w ${name}`).join(" ");
+
 try {
   execSync(
-    `npx @electron/rebuild -f -w better-sqlite3 -m "${repoRoot}" -v ${electronVersion}`,
+    `npx @electron/rebuild -f ${rebuildArgs} -m "${repoRoot}" -v ${electronVersion}`,
     { stdio: "inherit", cwd: desktopRoot },
   );
 } catch (err) {
   if (process.env.CI) {
-    console.error("[desktop] better-sqlite3 electron rebuild failed in CI.");
+    console.error("[desktop] native module electron rebuild failed in CI.");
     throw err;
   }
   console.warn(
-    "[desktop] better-sqlite3 electron rebuild skipped (optional for dev).",
+    "[desktop] native module electron rebuild skipped (optional for dev).",
   );
 }
