@@ -23,11 +23,11 @@ if (process.platform === "win32") {
   nativeModules.push("@primno/dpapi");
 }
 
-const rebuildArgs = nativeModules.map((name) => `-w ${name}`).join(" ");
+const onlyModules = nativeModules.join(",");
 
 try {
   execSync(
-    `npx @electron/rebuild -f ${rebuildArgs} -m "${repoRoot}" -v ${electronVersion}`,
+    `npx @electron/rebuild -f -o ${onlyModules} -m "${repoRoot}" -v ${electronVersion}`,
     { stdio: "inherit", cwd: desktopRoot },
   );
 } catch (err) {
