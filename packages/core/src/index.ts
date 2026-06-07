@@ -64,6 +64,7 @@ export {
   isSessionFsError,
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
+  sessionFsRollbackNoCheckpoint,
 } from "./errors/session-fs-errors.js";
 export type { SessionFsErrorCode } from "./errors/session-fs-errors.js";
 export type {
@@ -333,6 +334,7 @@ export type {
   EventAction,
   EventActionNode,
   EventActionType,
+  HideMessageActionParams,
   RunAgentActionParams,
 } from "./domain/events-config/model/events-config.js";
 export { eventsConfigSchema } from "./domain/events-config/model/events-config.schema.js";

@@ -24,6 +24,9 @@ export interface MessageCheckpointRepository {
   /** Returns whether a checkpoint row exists for the message. */
   hasCheckpoint(sessionId: string, messageId: string): Promise<boolean>;
 
+  /** Returns whether the session has any message checkpoint rows. */
+  hasAnyCheckpointForSession(sessionId: string): Promise<boolean>;
+
   /**
    * Inserts checkpoint anchor + file pointers (replaces existing rows for the message).
    */

@@ -49,6 +49,18 @@ export class SqliteMessageCheckpointRepository
     return rows.length > 0;
   }
 
+  async hasAnyCheckpointForSession(sessionId: string): Promise<boolean> {
+    const rows = await queryTemplate<{ one: number }>(
+      this.conn,
+      this.parser,
+      `SELECT 1 AS one FROM message_checkpoint
+       WHERE session_id = #{sessionId}
+       LIMIT 1`,
+      { sessionId },
+    );
+    return rows.length > 0;
+  }
+
   async insertCheckpoint(input: MessageCheckpointInsertInput): Promise<void> {
     await executeTemplate(
       this.conn,

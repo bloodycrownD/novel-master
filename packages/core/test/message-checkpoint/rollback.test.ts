@@ -137,4 +137,29 @@ describe("MessageRollbackService (revision model)", () => {
 
     await ctx.conn.close();
   });
+
+  it("rejects rollback to pre-checkpoint assistant anchor", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+
+    const assistant = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "legacy" }],
+    });
+    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+
+    await assert.rejects(
+      () =>
+        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id),
+      (error: unknown) => {
+        assert.equal(
+          error instanceof Error ? error.message : String(error),
+          "该消息无回滚点",
+        );
+        return true;
+      },
+    );
+
+    await ctx.conn.close();
+  });
 });

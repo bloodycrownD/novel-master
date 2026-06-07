@@ -8,6 +8,7 @@
 export type SessionFsErrorCode =
   | "ROLLBACK_MESSAGE_NOT_FOUND"
   | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
+  | "ROLLBACK_NO_CHECKPOINT"
   | "RESTORE_REVISION_MISSING";
 
 /**
@@ -94,5 +95,22 @@ export function sessionFsRestoreRevisionMissing(
     "RESTORE_REVISION_MISSING",
     `恢复所需 revision 缺失：${logicalPath} v${revisionVersion}`,
     { logicalPath, revisionVersion },
+  );
+}
+
+/**
+ * Raised when rollback is requested but the session has no v2 checkpoint for the anchor.
+ *
+ * @remarks Typical after upgrading from pre-checkpoint storage: legacy messages have no
+ *          `message_checkpoint` rows, so workspace restore is unavailable.
+ */
+export function sessionFsRollbackNoCheckpoint(
+  messageId: string,
+  sessionId: string,
+): SessionFsError {
+  return new SessionFsError(
+    "ROLLBACK_NO_CHECKPOINT",
+    "该消息无回滚点",
+    { messageId, sessionId },
   );
 }
