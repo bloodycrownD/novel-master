@@ -6,11 +6,37 @@
 - **KKV 仅作 core 内部实现**（`kkv_entry` 表不变）；状态与配置分属不同 KKV `module`，禁止再写入 `global-config`。
 - **v1 冻结**：状态 4 指针；配置仅 `session-fs.versionCheck`（默认 `true`）。
 - **本迭代交付范围（实现）**：仅 **`packages/core` + `apps/cli`**。RN App、Electron **不改动、不新建**；后续迭代再接入同一公开 API。
-- **不自动迁移** `global-config` 历史行；升级后需重新 `use` / 设置偏好。
+- **v1 不自动迁移** `global-config` 历史行；v2 bootstrap 会 **purge** 遗留 `global-config` KKV（指针改走 `nm-workspace-state`）。
 
 **与 PRD 差异**：PRD 要求三端同发；本 SPEC 按产品拍板 **先出 CLI**。App/Electron 跨端验收移至后续迭代；core 公开 API 已按多客户端设计，供未来直接消费。
 
 **Supersedes**：迭代 `global-config-system`（实现合并后在彼 `prd.md` / `spec.md` 顶部加 superseded 注记）。
+
+### Preferences v2 注记（2026-06-07，`feature/preferences-v2`）
+
+v2 在 v1 基础上将跨端**行为配置**上收到 `nm-preferences`，由 `PersistentPreferences` 显式 API 暴露。详见 [storage-schema-alignment/spec.md](../storage-schema-alignment/spec.md)。
+
+| 新 key（`nm-preferences`） | 类型 | 默认 | 来源（bootstrap 迁移） |
+| --- | --- | --- | --- |
+| `session-fs.versionCheck` | boolean | `true` | v1 已有 |
+| `chat.llmStream` | boolean | `true` | `nm-mobile-ui` / `nm-desktop-ui` → `llmStream` |
+| `chat.showFullToolParams` | boolean | `false` | `nm-mobile-ui` → `showFullToolParams` |
+| `session-fs.checkpointRetention` | int string | `"100"` | `nm-mobile-ui` → `checkpointRetention` |
+
+**端口**：`PersistentPreferences` v2 方法（`getLlmStreamEnabled`、`getShowFullToolParams`、`getCheckpointRetention` 等）；UI **禁止**裸写 `setPreference` 写上述 key（CLI `nm preferences` 除外）。
+
+**Bootstrap**：`migrateClientUiBehaviorPrefsToPreferences` — new 不存在时 copy、始终删 old Client UI key；`migratePurgeGlobalConfigKkv` 删除遗留 `global-config` 行。
+
+**KKV 导出收敛**：主入口 `@novel-master/core` **不再**导出 `createKkvService` / `KkvService`；App Client UI 经 `@novel-master/core/kkv` 子路径获取工厂（仅 runtime / `AppUiPreferences` 使用）。
+
+| 客户端 | wiring 状态（2026-06-07） |
+| --- | --- |
+| **CLI** | ✅ `nm preferences` 支持全部 v2 key |
+| **Mobile** | ✅ Profile 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` 开关 |
+| **Desktop** | ✅ WorkspaceSettings 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` |
+| **checkpointRetention Banner** | ⏸ 待会话日志屏（可选 2b，当前无独立 UI） |
+
+**指针契约（不变）**：`currentProviderId` **CLI 专用**；mobile/desktop **不**调用 `setCurrentProviderId`；app 以 `currentModelId` 为 LLM 权威。
 
 ---
 
@@ -249,7 +275,7 @@ apps/cli/test/
 
 | 项 | 策略 |
 |----|------|
-| `global-config` 行 | 不读、不写、不迁移；留在库内无害 |
+| `global-config` 行 | 不读、不写；v2 bootstrap `migratePurgeGlobalConfigKkv` 删除遗留行 |
 | `config.json` | 已移除多年；无动作 |
 | 公开 API | **Breaking**：依赖 `ConfigService` / `KkvService` 的外部代码需改用 Persistent* |
 | CLI | **Breaking**：`nm config` / `nm kkv` 移除；`nm preferences` 替代配置侧操作 |
