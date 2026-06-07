@@ -22,6 +22,17 @@ export interface VfsEntryRepository {
 
   insert(path: string, content: string): Promise<{ version: number }>;
 
+  /**
+   * Inserts a new file entry at an explicit head version.
+   *
+   * @remarks Used when re-creating a path whose vfs_entry was removed but revision history remains.
+   */
+  insertAtVersion(
+    path: string,
+    content: string,
+    version: number,
+  ): Promise<{ version: number }>;
+
   insertDirectory(path: string): Promise<void>;
 
   update(

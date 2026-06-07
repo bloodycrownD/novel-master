@@ -132,16 +132,24 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
   }
 
   async insert(path: string, content: string): Promise<{ version: number }> {
+    return this.insertAtVersion(path, content, 1);
+  }
+
+  async insertAtVersion(
+    path: string,
+    content: string,
+    version: number,
+  ): Promise<{ version: number }> {
     const normalized = normalizePath(path);
     const mtimeMs = Date.now();
     await executeTemplate(
       this.conn,
       this.parser,
       `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
-       VALUES (#{path}, #{content}, 1, 1, #{mtimeMs}, 'inline', 'file')`,
-      { path: normalized, content, mtimeMs },
+       VALUES (#{path}, #{content}, #{version}, #{version}, #{mtimeMs}, 'inline', 'file')`,
+      { path: normalized, content, version, mtimeMs },
     );
-    return { version: 1 };
+    return { version };
   }
 
   async insertDirectory(path: string): Promise<void> {

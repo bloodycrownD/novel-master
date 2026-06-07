@@ -23,6 +23,13 @@ export interface VfsRevisionRepository {
     version: number,
   ): Promise<VfsRevision | null>;
 
+  /**
+   * Returns the highest stored revision version for a path.
+   *
+   * @returns `null` when no revision rows exist for the path.
+   */
+  findMaxVersionForPath(path: string): Promise<number | null>;
+
   /** Appends a new revision row; never updates existing rows. */
   append(input: VfsRevisionAppendInput): Promise<void>;
 }

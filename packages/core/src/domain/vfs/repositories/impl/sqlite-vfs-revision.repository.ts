@@ -44,6 +44,18 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
 
   constructor(private readonly conn: TdbcConnection) {}
 
+  async findMaxVersionForPath(path: string): Promise<number | null> {
+    const normalized = normalizePath(path);
+    const rows = await queryTemplate<{ max_version: number | null }>(
+      this.conn,
+      this.parser,
+      `SELECT MAX(version) AS max_version FROM vfs_revision WHERE path = #{path}`,
+      { path: normalized },
+    );
+    const max = rows[0]?.max_version;
+    return max == null ? null : Number(max);
+  }
+
   async findByPathAndVersion(
     path: string,
     version: number,

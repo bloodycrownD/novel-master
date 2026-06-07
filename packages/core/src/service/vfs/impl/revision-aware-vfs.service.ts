@@ -173,8 +173,15 @@ async function writeWithRevision(
 
   if (existing == null) {
     await ensureParentDirectories(entryRepo, normalized);
-    const inserted = await entryRepo.insert(normalized, content);
-    version = inserted.version;
+    const maxRevision = await revisionRepo.findMaxVersionForPath(normalized);
+    if (maxRevision != null) {
+      // Boundary: vfs_entry removed but revision history retained (e.g. batch rollback restore).
+      version = maxRevision + 1;
+      await entryRepo.insertAtVersion(normalized, content, version);
+    } else {
+      const inserted = await entryRepo.insert(normalized, content);
+      version = inserted.version;
+    }
     await revisionRepo.append({
       path: normalized,
       version,
