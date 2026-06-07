@@ -52,8 +52,6 @@ describe("Builtin vfs.* tools (integration)", () => {
     assert.equal(read.content, "hello there");
     assert.equal(read.version, 2);
 
-    const batches = await ctx.sessionFs.listBatches(session.id);
-    assert.equal(batches.length, 0);
     await ctx.conn.close();
   });
 

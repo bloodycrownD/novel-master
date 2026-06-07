@@ -148,38 +148,6 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
   const { positional, flags } = parseCliArgs(args);
   const { projectId, sessionId } = await deps.scope.resolveProjectSession(flags);
   const group = positional[0];
-  const rest = positional.slice(1);
-
-  if (group === "snapshot") {
-    const sub = rest[0];
-    const file = flags.get("file");
-    if (typeof file !== "string") {
-      throw new Error("Missing --file <logicalPath>");
-    }
-    if (sub === "list") {
-      const snaps = await deps.sessionFs.listSnapshots(sessionId, file);
-      for (const s of snaps) {
-        console.log(
-          `v${s.snapshotRev}\t${s.status}\t${s.createdBy}\t${s.createdAtMs}`,
-        );
-      }
-      return;
-    }
-    if (sub === "rollback") {
-      const revRaw = flags.get("rev");
-      if (typeof revRaw !== "string") {
-        throw new Error("Missing --rev <n>");
-      }
-      await deps.sessionFs.rollbackSnapshot(
-        sessionId,
-        projectId,
-        file,
-        Number.parseInt(revRaw, 10),
-      );
-      return;
-    }
-    throw new Error("Usage: nm session vfs snapshot <list|rollback> ...");
-  }
 
   if (group === "export-zip") {
     const idx = args.indexOf(group);
@@ -212,7 +180,7 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
 
   if (group == null || !(group in SESSION_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...> | snapshot ...",
+      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...>",
     );
   }
 

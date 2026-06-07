@@ -5,8 +5,7 @@ import {
   createWorktreeService,
   textBlocks,
 } from "@novel-master/core";
-import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
-import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("template pull", () => {
@@ -94,7 +93,7 @@ describe("template pull", () => {
     await ctx.conn.close();
   });
 
-  it("session pull clears session-fs but keeps messages", async () => {
+  it("session pull clears message checkpoints but keeps messages", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     await ctx.projectVfs(project.id).write("/x.md", "X");
@@ -102,11 +101,17 @@ describe("template pull", () => {
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only.md", "local");
     await ctx.messages.append(session.id, "user", textBlocks("hi"));
-    await ctx.sessionFs.execute(
+    const assistant = await ctx.messages.append(
       session.id,
-      project.id,
-      [{ function: "write", path: "/x.md", content: "snap" }],
-      "user",
+      "assistant",
+      textBlocks("wrote"),
+    );
+    await svfs.write("/x.md", "snap", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+    assert.equal(
+      await checkpointRepo.hasCheckpoint(session.id, assistant.id),
+      true,
     );
 
     await ctx.projectVfs(project.id).write("/x.md", "NEW", {
@@ -119,12 +124,11 @@ describe("template pull", () => {
       .map((e) => e.path);
     assert.deepEqual(paths, ["/x.md"]);
     assert.equal((await svfs.read("/x.md")).content, "NEW");
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
-
-    const execute = new SqliteSessionExecuteRepository(ctx.conn);
-    const snapshots = new SqliteSessionSnapshotRepository(ctx.conn);
-    assert.equal((await execute.listBatches(session.id)).length, 0);
-    assert.equal((await snapshots.listByPath(session.id, "/x.md")).length, 0);
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
+    assert.equal(
+      (await checkpointRepo.listFilePointersForSession(session.id)).length,
+      0,
+    );
     await ctx.conn.close();
   });
 });
