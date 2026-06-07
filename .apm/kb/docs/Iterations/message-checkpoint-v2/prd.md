@@ -92,9 +92,9 @@
 4. **FileEditor 不在 checkpoint 体系内**  
    手动保存写入 revision 并更新 live head，但不写 `message_checkpoint`；回滚到 Agent anchor 时按 checkpoint 树覆盖相关 path。
 
-5. **Revision 清理与 checkpoint 联动**  
-   - 回滚：删除 tail messages/checkpoints 后，GC 不可达 revision  
-   - 删除单条消息：删除其 checkpoint（若有）并 GC  
+5. **Revision 清理与 checkpoint 联动**
+   - 回滚：删除 tail messages/checkpoints 后，GC 不可达 revision
+   - 删除单条消息：删除其 checkpoint（若有）并 GC；**不** restore / reconcile VFS
    - 暂不设全局 FIFO 上限
 
 6. **Tool 并发**  
@@ -127,7 +127,7 @@
 
 ### 升级边界（无回滚点迁移）
 
-- **Given** 自 v2 升级前的会话含历史 Agent message，**When** 用户尝试回滚到升级前某条 message，**Then** 无可用 checkpoint，操作失败或提示「该消息无回滚点」（升级后新产生的 checkpoint 正常可用）。
+- **Given** 自 v2 升级前的会话含历史 Agent message（会话内无 v2 `message_checkpoint`），**When** 用户尝试回滚到升级前某条 **assistant** message，**Then** 操作失败并提示「该消息无回滚点」（升级后新产生的 checkpoint 正常可用；回滚至 **user** 消息且 tail 无 checkpoint 时仍允许纯消息截断）。
 
 ### 跨端与 guard
 

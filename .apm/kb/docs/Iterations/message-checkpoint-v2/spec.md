@@ -234,8 +234,12 @@ async rollbackToMessage(sessionId, projectId, anchorMessageId): Promise<void> {
 
 **Anchor 无 checkpoint 策略（定案）**：
 
-- 若 anchor message **无** checkpoint 行：target tree = **该 message 之前最近一条 checkpoint** 的树；若从未有过 checkpoint，target = **session 初始空树**（仅 session 前缀下 files）。
-- 与 PRD「回滚到该 message 执行完成时」对齐：无 mutating 的 message 回滚 = 工作区保持上一 checkpoint 状态，只删 tail 消息。
+- 若 anchor message **有** checkpoint 行：target tree = 该 message 的 checkpoint 树。
+- 若 anchor **无** checkpoint 且存在 **seq ≤ anchor** 的最近 checkpoint：target tree = 该前序 checkpoint 树（R9）。
+- 若 anchor **无** checkpoint 且会话 **从未** 写入 v2 checkpoint：对 **assistant** anchor **拒绝回滚**（`ROLLBACK_NO_CHECKPOINT` /「该消息无回滚点」）；**user** anchor 仍允许纯消息截断（R3）。
+- 若 anchor **无** checkpoint、会话已有其它 checkpoint、但 seq 之前无 checkpoint：target = **空树**（R2）。
+
+**升级边界（定案）**：升级前 legacy 消息无 `message_checkpoint` 行；回滚至此类 **assistant** 消息时失败并提示「该消息无回滚点」。升级后新产生的 checkpoint 正常可用。
 
 #### Restore path
 
@@ -264,7 +268,9 @@ async sweep(sessionId): Promise<void> {
 }
 ```
 
-触发：**rollbackToMessage** 事务末尾、**deleteMessage**（若删 checkpoint）后。
+触发：**rollbackToMessage** 事务末尾、**deleteMessage**（删除对应 checkpoint 若有）后。
+
+**单条消息删除（定案）**：`MessageService.delete` 在删消息后删除该 message 的 checkpoint 行（若有），并 `sweepSessionRevisions`；**不** reconcile VFS 文件（与 rollback 不同）。
 
 ### Tool 层重构
 
@@ -455,8 +461,8 @@ packages/core/test/
 | R8 | rollback 后 GC 删除 tail-only revision |
 | R9 | anchor 无 checkpoint → 用前序 checkpoint 树 |
 | R10 | Agent 运行中 rollback 被拒绝（app 层 mock） |
-| P1 | capture 1000 files P95 &lt; 200ms（desktop SQLite 基准） |
-| P2 | rollback diff 1000 files P95 &lt; 500ms |
+| P1 | capture 1000 files P95 &lt; 200ms（desktop SQLite 基准；CI 测试 4× slack） |
+| P2 | rollback diff 1000 files P95 &lt; 500ms（CI 测试 4× slack） |
 
 ### 非功能指标（定案）
 
