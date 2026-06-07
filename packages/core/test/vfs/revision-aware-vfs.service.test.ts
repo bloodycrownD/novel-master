@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { migrateVfsRevisionBaseline } from "@/bootstrap/vfs/migrate-vfs-revision.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { openVfsTestConnection } from "./helpers.js";
 
@@ -66,19 +67,52 @@ describe("RevisionAwareVfsService (integration)", () => {
       `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
        VALUES ('/legacy.txt', 'legacy', 3, 3, 1000, 'inline', 'file')`,
     );
-    await conn.execute(`
-INSERT INTO vfs_revision (path, version, content, status, mtime_ms, storage_kind)
-SELECT path, head_version, content, 'active', mtime_ms, storage_kind
-FROM vfs_entry
-WHERE entry_kind = 'file'
-  AND NOT EXISTS (
-    SELECT 1 FROM vfs_revision r
-    WHERE r.path = vfs_entry.path AND r.version = vfs_entry.head_version
-  )`);
+    await migrateVfsRevisionBaseline(conn);
 
     const baseline = await revisions.findByPathAndVersion("/legacy.txt", 3);
     assert.ok(baseline);
     assert.equal(baseline.content, "legacy");
+
+    await conn.close();
+  });
+
+  it("delete appends deleted revision at head+1 and removes entry", async () => {
+    const { conn, vfs } = await openVfsTestConnection();
+    const revisions = new SqliteVfsRevisionRepository(conn);
+
+    const written = await vfs.write("/del.txt", "content");
+    await vfs.delete("/del.txt");
+
+    const deleted = await revisions.findByPathAndVersion(
+      "/del.txt",
+      written.version + 1,
+    );
+    assert.ok(deleted);
+    assert.equal(deleted.status, "deleted");
+    assert.equal(deleted.content, null);
+    await assert.rejects(() => vfs.read("/del.txt"));
+
+    await conn.close();
+  });
+
+  it("re-create after delete allocates max revision version + 1", async () => {
+    const { conn, vfs } = await openVfsTestConnection();
+    const revisions = new SqliteVfsRevisionRepository(conn);
+
+    await vfs.write("/again.txt", "v1");
+    await vfs.write("/again.txt", "v2", { expectedVersion: 1 });
+    await vfs.delete("/again.txt");
+
+    const restored = await vfs.write("/again.txt", "restored", {
+      versionCheck: false,
+    });
+    assert.equal(restored.version, 4);
+
+    const rev = await revisions.findByPathAndVersion("/again.txt", 4);
+    assert.ok(rev);
+    assert.equal(rev.content, "restored");
+    assert.equal(rev.status, "active");
+    assert.equal((await vfs.read("/again.txt")).content, "restored");
 
     await conn.close();
   });

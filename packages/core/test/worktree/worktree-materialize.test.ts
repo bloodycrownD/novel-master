@@ -23,6 +23,7 @@ function createSpyingWorktreeService(
       return baseRepo.findByPath(...args);
     },
     insert: (...args) => baseRepo.insert(...args),
+    insertAtVersion: (...args) => baseRepo.insertAtVersion(...args),
     insertDirectory: (...args) => baseRepo.insertDirectory(...args),
     update: (...args) => baseRepo.update(...args),
     delete: (...args) => baseRepo.delete(...args),
