@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   bootstrapNovelMaster,
+  createMessageCheckpointService,
   createPersistentState,
   open,
   type TdbcConnection,
@@ -101,4 +102,37 @@ export async function readCliState(dbPath: string): Promise<CliState> {
 /** Directory containing the DB file (for custom `--db` layout tests). */
 export function dbDir(dbPath: string): string {
   return dirname(dbPath);
+}
+
+/** Captures a message checkpoint (Agent step boundary) for e2e setup. */
+export async function captureMessageCheckpoint(
+  dbPath: string,
+  sessionId: string,
+  projectId: string,
+  messageId: string,
+): Promise<void> {
+  const conn = await openConn(dbPath);
+  try {
+    const checkpoint = createMessageCheckpointService(conn);
+    await checkpoint.capture(sessionId, projectId, messageId);
+  } finally {
+    await conn.close();
+  }
+}
+
+/** Counts checkpoint file pointers stored for a session. */
+export async function countSessionCheckpointPointers(
+  dbPath: string,
+  sessionId: string,
+): Promise<number> {
+  const conn = await openConn(dbPath);
+  try {
+    const rows = await conn.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM message_checkpoint_file WHERE session_id = ?",
+      [sessionId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  } finally {
+    await conn.close();
+  }
 }

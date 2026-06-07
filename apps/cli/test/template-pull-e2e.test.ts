@@ -3,10 +3,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { runNm, vfsListFilePaths } from "./helpers.js";
+import {
+  captureMessageCheckpoint,
+  countSessionCheckpointPointers,
+  runNm,
+  vfsListFilePaths,
+} from "./helpers.js";
 
 describe("template pull CLI e2e", () => {
-  it("T3 session pull restores template vfs and clears snapshots", async () => {
+  it("T3 session pull restores template vfs and clears checkpoints", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-tpl-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -65,19 +70,40 @@ describe("template pull CLI e2e", () => {
         { input: "changed" },
       );
       runNm([
-        "session",
-        "vfs",
-        "snapshot",
-        "list",
-        "--file",
-        "/base.md",
-        "--project",
-        projectId,
+        "message",
+        "append",
         "--session",
         sessionId,
+        "--role",
+        "user",
+        "--content",
+        "hi",
         "--db",
         dbPath,
       ]);
+      const assistant = runNm([
+        "message",
+        "append",
+        "--session",
+        sessionId,
+        "--role",
+        "assistant",
+        "--content",
+        "wrote",
+        "--db",
+        dbPath,
+      ]);
+      const assistantId = assistant.stdout.trim();
+      await captureMessageCheckpoint(
+        dbPath,
+        sessionId,
+        projectId,
+        assistantId,
+      );
+      assert.ok(
+        (await countSessionCheckpointPointers(dbPath, sessionId)) > 0,
+        "expected checkpoint pointers before template pull",
+      );
       runNm([
         "session",
         "template",
@@ -118,21 +144,25 @@ describe("template pull CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(read.stdout, "base");
-      const snaps = runNm([
-        "session",
-        "vfs",
-        "snapshot",
+      assert.equal(
+        await countSessionCheckpointPointers(dbPath, sessionId),
+        0,
+        "template pull should clear message checkpoints",
+      );
+      const messages = runNm([
+        "message",
         "list",
-        "--file",
-        "/base.md",
-        "--project",
-        projectId,
         "--session",
         sessionId,
         "--db",
         dbPath,
       ]);
-      assert.equal(snaps.stdout.trim(), "");
+      assert.equal(messages.status, 0, messages.stderr);
+      assert.equal(
+        messages.stdout.trim().split("\n").filter(Boolean).length,
+        2,
+        "template pull should keep chat messages",
+      );
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
