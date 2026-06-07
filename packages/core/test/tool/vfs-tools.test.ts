@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
@@ -9,19 +9,17 @@ import {
 } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core";
-import type { SessionFsService } from "../../src/service/session-fs/session-fs.port.js";
 
 function toolCtx(
   vfs: VfsToolContext["vfs"],
-  sessionFs: SessionFsService,
   projectId: string,
   sessionId: string,
 ): VfsToolContext {
-  return { vfs, sessionFs, projectId, sessionId };
+  return { vfs, projectId, sessionId };
 }
 
 describe("Builtin vfs.* tools (integration)", () => {
-  it("write/replace/read flow via sessionFs", async () => {
+  it("write/replace/read flow via revision-aware vfs", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
@@ -30,7 +28,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const registry = new ToolRegistry<VfsToolContext>();
     registerVfsTools(registry);
     const runner = new ToolRunner(registry);
-    const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
 
     const written = await runner.call<{ version: number }>(
       "vfs.write",
@@ -55,67 +53,53 @@ describe("Builtin vfs.* tools (integration)", () => {
     assert.equal(read.version, 2);
 
     const batches = await ctx.sessionFs.listBatches(session.id);
-    assert.equal(batches.length, 2);
-    assert.equal(batches.every((b) => b.createdBy === "assistant"), true);
+    assert.equal(batches.length, 0);
     await ctx.conn.close();
   });
 
-  it("vfs.write calls sessionFs.execute with actor assistant", async () => {
+  it("vfs.write respects versionCheck and expectedVersion options", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
-    const execute = mock.fn(async () => ({
-      batchId: "batch-1",
-      results: [{ function: "write" as const, path: "/t.txt", version: 9 }],
-    }));
-    const sessionFs = { execute } as unknown as SessionFsService;
-
     const registry = new ToolRegistry<VfsToolContext>();
     registerVfsTools(registry);
     const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    const result = await runner.call<{ version: number }>(
+    await runner.call("vfs.write", { path: "/t.txt", content: "v1" }, baseCtx);
+    const second = await runner.call<{ version: number }>(
       "vfs.write",
-      { path: "/t.txt", content: "x", options: { versionCheck: false } },
-      toolCtx(vfs, sessionFs, project.id, session.id),
+      {
+        path: "/t.txt",
+        content: "v2",
+        options: { expectedVersion: 1, versionCheck: true },
+      },
+      baseCtx,
+    );
+    assert.equal(second.version, 2);
+
+    await assert.rejects(
+      () =>
+        runner.call(
+          "vfs.write",
+          {
+            path: "/t.txt",
+            content: "stale",
+            options: { expectedVersion: 1, versionCheck: true },
+          },
+          baseCtx,
+        ),
+      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
 
-    assert.equal(result.version, 9);
-    assert.equal(execute.mock.callCount(), 1);
-    const [, , actions, actor, options] = execute.mock.calls[0]!.arguments;
-    assert.deepEqual(actions, [{ function: "write", path: "/t.txt", content: "x" }]);
-    assert.equal(actor, "assistant");
-    assert.deepEqual(options, { versionCheck: false });
-    await ctx.conn.close();
-  });
-
-  it("vfs.write forwards options.expectedVersion to sessionFs.execute", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("p");
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-
-    const execute = mock.fn(async () => ({
-      batchId: "batch-2",
-      results: [{ function: "write" as const, path: "/t.txt", version: 4 }],
-    }));
-    const sessionFs = { execute } as unknown as SessionFsService;
-
-    const registry = new ToolRegistry<VfsToolContext>();
-    registerVfsTools(registry);
-    const runner = new ToolRunner(registry);
-
-    await runner.call<{ version: number }>(
+    const unchecked = await runner.call<{ version: number }>(
       "vfs.write",
-      { path: "/t.txt", content: "y", options: { expectedVersion: 3 } },
-      toolCtx(vfs, sessionFs, project.id, session.id),
+      { path: "/t.txt", content: "v3", options: { versionCheck: false } },
+      baseCtx,
     );
-
-    assert.equal(execute.mock.callCount(), 1);
-    const [, , , , options] = execute.mock.calls[0]!.arguments;
-    assert.deepEqual(options, { versionCheck: true, expectedVersion: 3 });
+    assert.equal(unchecked.version, 3);
     await ctx.conn.close();
   });
 
@@ -130,7 +114,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const registry = new ToolRegistry<VfsToolContext>();
     registerVfsTools(registry);
     const runner = new ToolRunner(registry);
-    const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
 
     const listed = await runner.call<Array<{ path: string; kind: string }>>(
       "vfs.list",
@@ -159,7 +143,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const registry = new ToolRegistry<VfsToolContext>();
     registerVfsTools(registry);
     const runner = new ToolRunner(registry);
-    const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call("vfs.mkdir", { path: "/agent-dir" }, baseCtx);
     const listed = await runner.call<Array<{ path: string; kind: string }>>(
@@ -182,7 +166,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const registry = new ToolRegistry<VfsToolContext>();
     registerVfsTools(registry);
     const runner = new ToolRunner(registry);
-    const baseCtx = toolCtx(vfs, ctx.sessionFs, project.id, session.id);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await assert.rejects(
       () => runner.call("vfs.read", { path: "/missing.txt" }, baseCtx),

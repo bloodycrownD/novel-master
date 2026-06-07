@@ -119,7 +119,16 @@ export { ToolError } from "./errors/tool-errors.js";
 export type { ToolErrorCode } from "./errors/tool-errors.js";
 export { ToolRegistry } from "./domain/tool/logic/tool-registry.js";
 export { ToolRunner } from "./domain/tool/logic/tool-runner.js";
-export { createVfsTools, registerVfsTools } from "./domain/tool/builtin/vfs-tools.js";
+export type {
+  ToolCall,
+  ParallelToolOutcome,
+} from "./domain/tool/logic/tool-runner.js";
+export {
+  createVfsTools,
+  registerVfsTools,
+  isMutatingVfsToolName,
+  MUTATING_VFS_TOOL_NAMES,
+} from "./domain/tool/builtin/vfs-tools.js";
 export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 
 /**
