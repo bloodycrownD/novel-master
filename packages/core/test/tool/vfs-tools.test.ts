@@ -4,6 +4,8 @@ import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import {
+  isMutatingVfsToolName,
+  MUTATING_VFS_TOOL_NAMES,
   registerVfsTools,
   type VfsToolContext,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
@@ -153,6 +155,226 @@ describe("Builtin vfs.* tools (integration)", () => {
       listed.some((e) => e.path === "/agent-dir" && e.kind === "directory"),
     );
     await ctx.conn.close();
+  });
+
+  it("registers exactly 10 vfs tools", () => {
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    assert.equal(registry.list().length, 10);
+    assert.deepEqual(registry.list().sort(), [
+      "vfs.copy",
+      "vfs.delete",
+      "vfs.glob",
+      "vfs.grep",
+      "vfs.list",
+      "vfs.mkdir",
+      "vfs.move",
+      "vfs.read",
+      "vfs.replace",
+      "vfs.write",
+    ]);
+  });
+
+  it("vfs.delete removes a file (non-recursive default)", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/a.txt", "gone");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    const result = await runner.call<{ ok: true }>(
+      "vfs.delete",
+      { path: "/a.txt" },
+      baseCtx,
+    );
+    assert.deepEqual(result, { ok: true });
+    await assert.rejects(
+      () => runner.call("vfs.read", { path: "/a.txt" }, baseCtx),
+      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+    );
+    await ctx.conn.close();
+  });
+
+  it("vfs.delete non-recursive fails on non-empty directory", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/dir");
+    await vfs.write("/dir/a.txt", "stay");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await assert.rejects(
+      () => runner.call("vfs.delete", { path: "/dir" }, baseCtx),
+      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+    );
+    assert.equal((await vfs.read("/dir/a.txt")).content, "stay");
+    await ctx.conn.close();
+  });
+
+  it("vfs.delete recursive removes directory tree", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/dir");
+    await vfs.write("/dir/a.txt", "gone");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call(
+      "vfs.delete",
+      { path: "/dir", options: { recursive: true } },
+      baseCtx,
+    );
+    await assert.rejects(
+      () => vfs.read("/dir/a.txt"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+    await ctx.conn.close();
+  });
+
+  it("vfs.move migrates file content", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/old.md", "body");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call(
+      "vfs.move",
+      { from: "/old.md", to: "/new.md" },
+      baseCtx,
+    );
+    assert.equal((await vfs.read("/new.md")).content, "body");
+    await assert.rejects(
+      () => vfs.read("/old.md"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+    await ctx.conn.close();
+  });
+
+  it("vfs.move migrates directory tree", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/src");
+    await vfs.mkdir("/src/sub");
+    await vfs.write("/src/a.md", "a");
+    await vfs.write("/src/sub/b.md", "b");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call("vfs.move", { from: "/src", to: "/dst" }, baseCtx);
+    assert.equal((await vfs.read("/dst/a.md")).content, "a");
+    assert.equal((await vfs.read("/dst/sub/b.md")).content, "b");
+    await assert.rejects(
+      () => vfs.read("/src/a.md"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+    await ctx.conn.close();
+  });
+
+  it("vfs.copy duplicates file and keeps source", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/src/x.md", "x");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call(
+      "vfs.copy",
+      { from: "/src/x.md", to: "/dst/x.md" },
+      baseCtx,
+    );
+    assert.equal((await vfs.read("/src/x.md")).content, "x");
+    assert.equal((await vfs.read("/dst/x.md")).content, "x");
+    await ctx.conn.close();
+  });
+
+  it("vfs.copy recursive duplicates directory tree", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/src");
+    await vfs.write("/src/x.md", "x");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call(
+      "vfs.copy",
+      { from: "/src", to: "/dst", options: { recursive: true } },
+      baseCtx,
+    );
+    assert.equal((await vfs.read("/src/x.md")).content, "x");
+    assert.equal((await vfs.read("/dst/x.md")).content, "x");
+    await ctx.conn.close();
+  });
+
+  it("vfs.copy without recursive fails on directory", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("p");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/src");
+    await vfs.write("/src/x.md", "x");
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await assert.rejects(
+      () => runner.call("vfs.copy", { from: "/src", to: "/dst" }, baseCtx),
+      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+    );
+    await ctx.conn.close();
+  });
+
+  it("mutating vfs tool names include write/replace/delete/mkdir/move/copy only", () => {
+    assert.deepEqual([...MUTATING_VFS_TOOL_NAMES].sort(), [
+      "vfs.copy",
+      "vfs.delete",
+      "vfs.mkdir",
+      "vfs.move",
+      "vfs.replace",
+      "vfs.write",
+    ]);
+    assert.equal(isMutatingVfsToolName("vfs.read"), false);
+    assert.equal(isMutatingVfsToolName("vfs.list"), false);
+    assert.equal(isMutatingVfsToolName("vfs.glob"), false);
+    assert.equal(isMutatingVfsToolName("vfs.grep"), false);
+    assert.equal(isMutatingVfsToolName("vfs.move"), true);
   });
 
   it("wraps VfsError as FAILED and preserves cause", async () => {

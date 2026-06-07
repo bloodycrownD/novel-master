@@ -23,6 +23,9 @@ export function formatToolOutputForLlm(out: unknown): string {
       const n = rec.replacements;
       return n === 1 ? "ok" : `ok (${n} replacements)`;
     }
+    if (keys.length === 1 && rec.ok === true) {
+      return "ok";
+    }
   }
   return JSON.stringify(out, null, 2);
 }

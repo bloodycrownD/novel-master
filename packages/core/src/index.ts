@@ -109,6 +109,14 @@ export {
   scopePhysicalPrefix,
   projectVfsPrefix,
 } from "./domain/vfs/logic/vfs-path-mapper.js";
+export {
+  moveVfsPath,
+  remapPathUnderDir,
+  normalizeDirPath,
+  mkdirIgnoreExists,
+} from "./domain/vfs/logic/vfs-move.js";
+export { copyVfsPath } from "./domain/vfs/logic/vfs-copy.js";
+export type { CopyVfsPathOptions } from "./domain/vfs/logic/vfs-copy.js";
 
 /**
  * Tool system: schema-validated registry + runner, plus builtin `vfs.*` tools.

@@ -24,6 +24,10 @@ describe("formatToolOutputForLlm", () => {
     );
   });
 
+  it("returns ok for { ok: true } mutating tool results", () => {
+    assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
+  });
+
   it("keeps structured read results as JSON", () => {
     const out = formatToolOutputForLlm({
       path: "/a.md",
