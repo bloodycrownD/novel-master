@@ -80,8 +80,12 @@ export interface SessionFsService {
   ): Promise<void>;
 
   /**
-   * Rolls back VFS batches tied to messages after the anchor, then deletes messages with `seq > anchor.seq`.
-   * Anchor message and its batch (if any) are preserved.
+   * Restores the session workspace to the anchor message checkpoint tree (v2 forward-restore),
+   * then deletes messages with `seq > anchor.seq` and tail checkpoints.
+   *
+   * Reconciles only paths in `tail checkpoint files ∪ target tree keys` — pre-anchor manual
+   * VFS writes (FileEditor) stay unless a tail checkpoint touched the same path.
+   * Anchor without its own checkpoint uses the nearest prior checkpoint tree (or empty baseline).
    */
   rollbackToMessage(
     sessionId: string,

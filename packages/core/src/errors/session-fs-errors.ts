@@ -9,7 +9,8 @@ export type SessionFsErrorCode =
   | "ROLLBACK_LEGACY_BATCH"
   | "ROLLBACK_SNAPSHOT_MISSING"
   | "ROLLBACK_MESSAGE_NOT_FOUND"
-  | "ROLLBACK_MESSAGE_SESSION_MISMATCH";
+  | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
+  | "RESTORE_REVISION_MISSING";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -19,6 +20,8 @@ export class SessionFsError extends Error {
   readonly sessionId?: string;
   readonly messageId?: string;
   readonly batchId?: string;
+  readonly logicalPath?: string;
+  readonly revisionVersion?: number;
 
   constructor(
     code: SessionFsErrorCode,
@@ -27,6 +30,8 @@ export class SessionFsError extends Error {
       sessionId?: string;
       messageId?: string;
       batchId?: string;
+      logicalPath?: string;
+      revisionVersion?: number;
     },
   ) {
     super(message);
@@ -35,6 +40,8 @@ export class SessionFsError extends Error {
     this.sessionId = options?.sessionId;
     this.messageId = options?.messageId;
     this.batchId = options?.batchId;
+    this.logicalPath = options?.logicalPath;
+    this.revisionVersion = options?.revisionVersion;
   }
 }
 
@@ -100,5 +107,16 @@ export function sessionFsRollbackMessageSessionMismatch(
     "ROLLBACK_MESSAGE_SESSION_MISMATCH",
     `消息不属于当前会话：${messageId}`,
     { messageId, sessionId },
+  );
+}
+
+export function sessionFsRestoreRevisionMissing(
+  logicalPath: string,
+  revisionVersion: number,
+): SessionFsError {
+  return new SessionFsError(
+    "RESTORE_REVISION_MISSING",
+    `恢复所需 revision 缺失：${logicalPath} v${revisionVersion}`,
+    { logicalPath, revisionVersion },
   );
 }

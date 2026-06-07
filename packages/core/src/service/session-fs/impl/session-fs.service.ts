@@ -8,7 +8,6 @@ import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
 import { sessionFsRollbackSnapshotMissing } from "@/errors/session-fs-errors.js";
-import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { MessageRollbackService } from "@/service/message-checkpoint/message-rollback.port.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
 import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";
@@ -31,7 +30,6 @@ export interface SessionFsServiceDeps {
   readonly conn: TdbcConnection;
   readonly snapshots: SessionSnapshotRepository;
   readonly execute: SessionExecuteRepository;
-  readonly messages: MessageRepository;
   readonly messageRollback: MessageRollbackService;
 }
 

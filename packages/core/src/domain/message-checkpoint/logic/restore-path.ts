@@ -11,6 +11,7 @@ import {
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { sessionFsRestoreRevisionMissing } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 
@@ -46,9 +47,7 @@ export async function restorePathToRevision(
   const physical = toPhysicalPath(scope, logicalPath);
   const rev = await revisionRepo.findByPathAndVersion(physical, version);
   if (rev == null) {
-    throw new Error(
-      `Missing revision for ${logicalPath} v${version} (physical ${physical})`,
-    );
+    throw sessionFsRestoreRevisionMissing(logicalPath, version);
   }
 
   if (rev.status === "deleted") {

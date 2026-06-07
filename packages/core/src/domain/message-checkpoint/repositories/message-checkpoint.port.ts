@@ -65,4 +65,7 @@ export interface MessageCheckpointRepository {
     sessionId: string,
     messageIds: ReadonlyArray<string>,
   ): Promise<void>;
+
+  /** Deletes all checkpoint rows for a session (used on session delete). */
+  deleteCheckpointsForSession(sessionId: string): Promise<void>;
 }

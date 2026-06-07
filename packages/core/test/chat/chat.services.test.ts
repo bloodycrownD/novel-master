@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { MessageContent, TdbcConnection } from "@novel-master/core";
 import { textBlocks } from "@novel-master/core";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteSessionExecuteRepository } from "@/domain/session-fs/repositories/impl/sqlite-execute.repository.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
@@ -18,8 +19,10 @@ async function assertNoSessionFsData(
 ): Promise<void> {
   const execute = new SqliteSessionExecuteRepository(conn);
   const snapshots = new SqliteSessionSnapshotRepository(conn);
+  const checkpoints = new SqliteMessageCheckpointRepository(conn);
   assert.equal((await execute.listBatches(sessionId)).length, 0);
   assert.equal((await snapshots.listByPath(sessionId, "/purge.md")).length, 0);
+  assert.equal((await checkpoints.listFilePointersForSession(sessionId)).length, 0);
 }
 
 describe("Chat services", () => {
@@ -269,6 +272,22 @@ describe("Chat services", () => {
         .length,
       1,
     );
+
+    const assistant = await ctx.messages.append(
+      session.id,
+      "assistant",
+      textBlocks("checkpoint"),
+    );
+    await ctx.sessionVfs(project.id, session.id).write("/cp.md", "v1", {
+      versionCheck: false,
+    });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant.id);
+    const checkpointRepo = new SqliteMessageCheckpointRepository(ctx.conn);
+    assert.equal(
+      await checkpointRepo.hasCheckpoint(session.id, assistant.id),
+      true,
+    );
+    assert.ok((await checkpointRepo.listFilePointersForSession(session.id)).length > 0);
 
     await ctx.sessions.delete(session.id);
     await assertNoSessionFsData(ctx.conn, session.id);

@@ -199,4 +199,19 @@ export class SqliteMessageCheckpointRepository
       { sessionId, ...bindings },
     );
   }
+
+  async deleteCheckpointsForSession(sessionId: string): Promise<void> {
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM message_checkpoint_file WHERE session_id = #{sessionId}`,
+      { sessionId },
+    );
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM message_checkpoint WHERE session_id = #{sessionId}`,
+      { sessionId },
+    );
+  }
 }
