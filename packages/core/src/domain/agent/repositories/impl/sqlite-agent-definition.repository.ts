@@ -42,7 +42,7 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT agent_id, model, runtime_json, prompts_json
+      `SELECT agent_id, prompts_json
        FROM agent_definition WHERE agent_id = #{agentId}`,
       { agentId },
     );
@@ -56,24 +56,20 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
     const now = Date.now();
     const wire = encode(def, agentDefinitionSchema);
     const promptsJson = JSON.stringify(wire);
-    const runtimeJson =
-      def.runtime != null ? JSON.stringify(def.runtime) : null;
-    const model = def.model ?? null;
 
+    // Legacy columns `model` / `runtime_json` are not written; `prompts_json` is canonical.
     await executeTemplate(
       this.conn,
       this.parser,
       `INSERT INTO agent_definition (
         agent_id, model, runtime_json, prompts_json, created_at_ms, updated_at_ms
       ) VALUES (
-        #{agentId}, #{model}, #{runtimeJson}, #{promptsJson}, #{now}, #{now}
+        #{agentId}, NULL, NULL, #{promptsJson}, #{now}, #{now}
       )
       ON CONFLICT(agent_id) DO UPDATE SET
-        model = excluded.model,
-        runtime_json = excluded.runtime_json,
         prompts_json = excluded.prompts_json,
         updated_at_ms = excluded.updated_at_ms`,
-      { agentId, model, runtimeJson, promptsJson, now },
+      { agentId, promptsJson, now },
     );
   }
 
