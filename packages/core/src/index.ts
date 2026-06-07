@@ -186,6 +186,12 @@ export type { MessageService } from "./service/chat/message.port.js";
  * Session file system: execute batches, snapshots, rollback.
  */
 export { createSessionFsService } from "./service/session-fs/create-session-fs-service.js";
+export {
+  createMessageCheckpointService,
+  createMessageRollbackService,
+} from "./service/message-checkpoint/create-message-checkpoint-services.js";
+export type { MessageCheckpointService } from "./service/message-checkpoint/message-checkpoint.port.js";
+export type { MessageRollbackService } from "./service/message-checkpoint/message-rollback.port.js";
 export type {
   SessionFsService,
   SessionFsActor,

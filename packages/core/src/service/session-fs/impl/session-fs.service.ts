@@ -7,14 +7,9 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { isVfsError, vfsNotFound } from "@/errors/vfs-errors.js";
-import {
-  sessionFsRollbackLegacyBatch,
-  sessionFsRollbackMessageNotFound,
-  sessionFsRollbackMessageSessionMismatch,
-  sessionFsRollbackSnapshotMissing,
-} from "@/errors/session-fs-errors.js";
+import { sessionFsRollbackSnapshotMissing } from "@/errors/session-fs-errors.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
+import type { MessageRollbackService } from "@/service/message-checkpoint/message-rollback.port.js";
 import type { SessionExecuteRepository } from "@/domain/session-fs/repositories/execute.port.js";
 import type { SessionSnapshotRepository } from "@/domain/session-fs/repositories/snapshot.port.js";
 import { SqliteSessionSnapshotRepository } from "@/domain/session-fs/repositories/impl/sqlite-snapshot.repository.js";
@@ -37,6 +32,7 @@ export interface SessionFsServiceDeps {
   readonly snapshots: SessionSnapshotRepository;
   readonly execute: SessionExecuteRepository;
   readonly messages: MessageRepository;
+  readonly messageRollback: MessageRollbackService;
 }
 
 interface RunActionsCtx {
@@ -134,62 +130,20 @@ export class DefaultSessionFsService implements SessionFsService {
   }
 
   /**
-   * Rolls back batches for messages after the anchor, then truncates the chat tail.
-   * Batches are undone newest-first inside one transaction so snapshot cleanup stays consistent.
+   * Rolls back to an anchor message via message checkpoint forward-restore (v2).
+   *
+   * @remarks Legacy batch/snapshot undo is no longer used; callers must capture checkpoints.
    */
   async rollbackToMessage(
     sessionId: string,
     projectId: string,
     messageId: string,
   ): Promise<void> {
-    const anchor = await this.deps.messages.findById(messageId);
-    if (anchor == null) {
-      throw sessionFsRollbackMessageNotFound(messageId);
-    }
-    if (anchor.sessionId !== sessionId) {
-      throw sessionFsRollbackMessageSessionMismatch(messageId, sessionId);
-    }
-
-    const allMessages = await this.deps.messages.listBySession(sessionId);
-    const tail = allMessages.filter((m) => m.seq > anchor.seq);
-    const tailMessageIds = new Set(tail.map((m) => m.id));
-
-    const batches = await this.deps.execute.listBatches(sessionId);
-    const toRollback = batches.filter(
-      (b) => b.messageId != null && tailMessageIds.has(b.messageId),
+    await this.deps.messageRollback.rollbackToMessage(
+      sessionId,
+      projectId,
+      messageId,
     );
-
-    // Legacy batches (no message_id) after the anchor with mutating actions block message rollback.
-    for (const b of batches) {
-      if (b.messageId != null) {
-        continue;
-      }
-      if (b.createdAtMs <= anchor.createdAtMs) {
-        continue;
-      }
-      const actions = await this.deps.execute.listActions(b.id);
-      if (actions.some((a) => a.function !== "read")) {
-        throw sessionFsRollbackLegacyBatch(sessionId);
-      }
-    }
-
-    const sorted = [...toRollback].sort(
-      (a, b) => b.createdAtMs - a.createdAtMs,
-    );
-
-    await this.deps.conn.transaction(async (tx) => {
-      for (const batch of sorted) {
-        await this.rollbackBatchInTx(
-          tx,
-          sessionId,
-          projectId,
-          batch.id,
-          batch.createdAtMs,
-        );
-      }
-      const messages = new SqliteMessageRepository(tx);
-      await messages.deleteAfterSeq(sessionId, anchor.seq);
-    });
   }
 
   async listSnapshots(
