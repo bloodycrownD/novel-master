@@ -1,13 +1,11 @@
 /**
- * Session FS errors: message rollback and batch restore failures.
+ * Session FS errors: message rollback failures.
  *
  * @module errors/session-fs-errors
  */
 
 /** Discriminant codes for {@link SessionFsError}. */
 export type SessionFsErrorCode =
-  | "ROLLBACK_LEGACY_BATCH"
-  | "ROLLBACK_SNAPSHOT_MISSING"
   | "ROLLBACK_MESSAGE_NOT_FOUND"
   | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
   | "RESTORE_REVISION_MISSING";
@@ -19,7 +17,6 @@ export class SessionFsError extends Error {
   readonly code: SessionFsErrorCode;
   readonly sessionId?: string;
   readonly messageId?: string;
-  readonly batchId?: string;
   readonly logicalPath?: string;
   readonly revisionVersion?: number;
 
@@ -29,7 +26,6 @@ export class SessionFsError extends Error {
     options?: {
       sessionId?: string;
       messageId?: string;
-      batchId?: string;
       logicalPath?: string;
       revisionVersion?: number;
     },
@@ -39,7 +35,6 @@ export class SessionFsError extends Error {
     this.code = code;
     this.sessionId = options?.sessionId;
     this.messageId = options?.messageId;
-    this.batchId = options?.batchId;
     this.logicalPath = options?.logicalPath;
     this.revisionVersion = options?.revisionVersion;
   }
@@ -70,25 +65,6 @@ export function isSessionFsError(
     return false;
   }
   return code === undefined || err.code === code;
-}
-
-export function sessionFsRollbackLegacyBatch(sessionId: string): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_LEGACY_BATCH",
-    "存在无法关联的旧检查点，请使用 nm session vfs records rollback --batch",
-    { sessionId },
-  );
-}
-
-export function sessionFsRollbackSnapshotMissing(
-  batchId: string,
-  path: string,
-): SessionFsError {
-  return new SessionFsError(
-    "ROLLBACK_SNAPSHOT_MISSING",
-    `回滚所需快照缺失：batch=${batchId} path=${path}`,
-    { batchId },
-  );
 }
 
 export function sessionFsRollbackMessageNotFound(messageId: string): SessionFsError {

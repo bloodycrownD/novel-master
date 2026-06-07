@@ -62,8 +62,6 @@ export type { VfsErrorCode } from "./errors/vfs-errors.js";
 export {
   SessionFsError,
   isSessionFsError,
-  sessionFsRollbackLegacyBatch,
-  sessionFsRollbackSnapshotMissing,
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
 } from "./errors/session-fs-errors.js";
@@ -192,7 +190,7 @@ export type { SessionService } from "./service/chat/session.port.js";
 export type { MessageService } from "./service/chat/message.port.js";
 
 /**
- * Session file system: execute batches, snapshots, rollback.
+ * Session workspace rollback (message checkpoint facade).
  */
 export { createSessionFsService } from "./service/session-fs/create-session-fs-service.js";
 export {
@@ -201,16 +199,7 @@ export {
 } from "./service/message-checkpoint/create-message-checkpoint-services.js";
 export type { MessageCheckpointService } from "./service/message-checkpoint/message-checkpoint.port.js";
 export type { MessageRollbackService } from "./service/message-checkpoint/message-rollback.port.js";
-export type {
-  SessionFsService,
-  SessionFsActor,
-  SessionFsAction,
-  SessionFsExecuteOptions,
-  SessionFsExecuteRound,
-  SessionFsExecuteResult,
-  SessionFsBatchSummary,
-  SessionFsSnapshotSummary,
-} from "./service/session-fs/session-fs.port.js";
+export type { SessionFsService } from "./service/session-fs/session-fs.port.js";
 
 /**
  * Virtual worktree: display rules, list, and template inheritance.
