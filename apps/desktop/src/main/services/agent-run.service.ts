@@ -125,8 +125,6 @@ export async function runAgentTurn(
 
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const registry = resolveAgentToolRegistry(toolProbe, definition);
-  const executeRound = { messageId: "", batchId: null as string | null };
-
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
   const wt = runtime.worktree({
@@ -144,11 +142,10 @@ export async function runAgentTurn(
     registry,
     toolCtx: {
       vfs,
-      sessionFs: runtime.sessionFs,
       projectId: scope.projectId,
       sessionId: scope.sessionId,
-      executeRound,
     },
+    messageCheckpoint: runtime.messageCheckpoint,
     regexConfig: runtime.regexConfig,
     listAllSessionMessages: () =>
       runtime.messages.listBySession(scope.sessionId),

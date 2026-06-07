@@ -17,6 +17,7 @@ import {
   createProjectService,
   createProviderServices,
   createRegexConfigService,
+  createMessageCheckpointService,
   createRunAgentHandlerDeps,
   createScopedVfsService,
   createSessionFsService,
@@ -87,13 +88,13 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
       modelRequests: providerBundle.modelRequests,
       macroCache,
       worktree: (s) => createWorktreeService(conn, s),
-      sessionFs: createSessionFsService(conn),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
           kind: "session",
           projectId,
           sessionId,
         }),
+      messageCheckpoint: createMessageCheckpointService(conn),
       eventBus,
       state,
       regexConfig,
@@ -118,6 +119,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     sessions: createSessionService(conn),
     messages,
     sessionFs: createSessionFsService(conn),
+    messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

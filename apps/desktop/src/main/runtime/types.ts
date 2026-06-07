@@ -9,6 +9,7 @@ import type {
   CompactionConditionsStore,
   EventOrchestrator,
   EventsConfigStore,
+  MessageCheckpointService,
   MessageService,
   ModelRequestService,
   PersistentPreferences,
@@ -42,6 +43,7 @@ export interface DesktopNovelMasterRuntime {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
+  readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;

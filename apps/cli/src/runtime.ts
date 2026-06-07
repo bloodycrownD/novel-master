@@ -20,6 +20,7 @@ import {
   createPersistentPreferences,
   createPersistentState,
   createProjectService,
+  createMessageCheckpointService,
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
@@ -41,6 +42,7 @@ import {
   type ProviderService,
   type RegexConfigService,
   type SecretStore,
+  type MessageCheckpointService,
   type MessageService,
   type ProjectService,
   type SessionFsService,
@@ -89,6 +91,7 @@ export interface NovelMasterRuntime {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
+  readonly messageCheckpoint: MessageCheckpointService;
   readonly scope: CliScopeResolver;
   readonly eventBus: SimpleEventBus;
   readonly eventsConfig: EventsConfigStore;
@@ -174,9 +177,9 @@ export async function createNovelMasterRuntime(
       modelRequests,
       macroCache,
       worktree: (s) => createWorktreeService(conn, s),
-      sessionFs: createSessionFsService(conn),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
+      messageCheckpoint: createMessageCheckpointService(conn),
       eventBus,
       state,
       regexConfig,
@@ -200,6 +203,7 @@ export async function createNovelMasterRuntime(
     sessions: createSessionService(conn),
     messages,
     sessionFs: createSessionFsService(conn),
+    messageCheckpoint: createMessageCheckpointService(conn),
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>

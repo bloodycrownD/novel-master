@@ -14,7 +14,7 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { RunAgentHandlerDeps } from "./impl/actions/run-agent.handler.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
-import type { SessionFsService } from "@/service/session-fs/session-fs.port.js";
+import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
@@ -40,8 +40,8 @@ export function createRunAgentHandlerDeps(input: {
   readonly modelRequests: ModelRequestService;
   readonly macroCache: SessionMacroCache;
   readonly worktree: (scope: VfsScope) => WorktreeService;
-  readonly sessionFs: SessionFsService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
+  readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;
   readonly state: PersistentState;
   readonly regexConfig?: RegexConfigService;
@@ -52,8 +52,8 @@ export function createRunAgentHandlerDeps(input: {
     modelRequests: input.modelRequests,
     macroCache: input.macroCache,
     worktree: input.worktree,
-    sessionFs: input.sessionFs,
     sessionVfs: input.sessionVfs,
+    messageCheckpoint: input.messageCheckpoint,
     eventBus: input.eventBus,
     getWorkspaceModelId: () => input.state.getCurrentModelId(),
     regexConfig: input.regexConfig,

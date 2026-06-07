@@ -199,10 +199,10 @@ export async function runAgent(
         registry,
         toolCtx: {
           vfs,
-          sessionFs: rt.sessionFs,
           projectId,
           sessionId,
         },
+        messageCheckpoint: rt.messageCheckpoint,
         regexConfig: rt.regexConfig,
         listAllSessionMessages: () => rt.messages.listBySession(sessionId),
         eventBus: rt.eventBus,

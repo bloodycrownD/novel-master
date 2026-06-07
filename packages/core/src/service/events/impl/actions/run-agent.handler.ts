@@ -18,7 +18,7 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
-import type { SessionFsService } from "@/service/session-fs/session-fs.port.js";
+import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
@@ -31,8 +31,8 @@ export interface RunAgentHandlerDeps {
   readonly modelRequests: ModelRequestService;
   readonly macroCache: SessionMacroCache;
   readonly worktree: (scope: VfsScope) => WorktreeService;
-  readonly sessionFs: SessionFsService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
+  readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;
   readonly getWorkspaceModelId: () => Promise<string | undefined>;
   readonly regexConfig?: RegexConfigService;
@@ -68,7 +68,6 @@ export async function runRunAgentAction(
   const vfs = deps.sessionVfs(ctx.projectId, ctx.sessionId);
   const registry = resolveAgentToolRegistry(probe, definition);
   const session = new ChatAgentSession(deps.messages, ctx.sessionId);
-  const executeRound = { messageId: "", batchId: null as string | null };
 
   const runner = createAgentRunner({
     session,
@@ -76,11 +75,10 @@ export async function runRunAgentAction(
     registry,
     toolCtx: {
       vfs,
-      sessionFs: deps.sessionFs,
       projectId: ctx.projectId,
       sessionId: ctx.sessionId,
-      executeRound,
     },
+    messageCheckpoint: deps.messageCheckpoint,
     eventBus: deps.eventBus,
     macroCache: deps.macroCache,
     regexConfig: deps.regexConfig,
