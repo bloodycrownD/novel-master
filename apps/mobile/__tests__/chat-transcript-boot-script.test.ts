@@ -15,8 +15,15 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('resolveMenuAnchor');
     expect(script).toContain('touch.clientX');
     expect(script).toContain('querySelector(\'.bubble\')');
+    expect(script).toContain('Long-press finger point');
     expect(script).toContain('menu.items.length <= 6');
     expect(script).toContain('measuredHeight');
+    expect(script).toContain('onMessagePointerMove');
+    expect(script).toContain('shouldCancelLongPressForMove');
+    expect(script).toContain('decodeLiteralHtmlEntities');
+    expect(script).toContain('richToggledOn');
+    expect(script).toContain('attachMenuNativeTextBlock');
+    expect(script).toContain('menu-open');
     expect(script).toContain('touchH');
   });
 

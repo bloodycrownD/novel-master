@@ -2,7 +2,11 @@
  * WebView transcript boot script (IIFE) — mirrors scroll.ts semantics in the WebView.
  * Bundled into CHAT_TRANSCRIPT_HTML; keep nearBottom threshold in sync with scroll.ts.
  */
-import {MENU_OPEN_GRACE_MS} from './menu-overlay-guards';
+import {
+  LONG_PRESS_MOVE_TOLERANCE_PX,
+  MENU_OPEN_GRACE_MS,
+  shouldCancelLongPressForMove,
+} from './menu-overlay-guards';
 import {NEAR_BOTTOM_THRESHOLD_PX} from './scroll';
 import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
@@ -17,6 +21,7 @@ import {
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_SCREEN_MARGIN,
 } from '../../components/chat/anchored-menu-layout';
+import {DECODE_LITERAL_HTML_ENTITIES_BOOT} from '../../components/rich-content/decode-literal-html-entities';
 
 export function buildTranscriptBootScript(): string {
   return `
@@ -38,6 +43,7 @@ export function buildTranscriptBootScript(): string {
     selectedIds: [],
     menu: null,
     menuOverlayHandler: null,
+    menuNativeTextBlockHandler: null,
     thinkingExpanded: {},
     scrollRaf: null,
     loadOlderArmed: true,
@@ -101,6 +107,9 @@ export function buildTranscriptBootScript(): string {
   function onScroll() {
     var scroller = document.getElementById('scroller');
     if (!scroller) return;
+    if (state.longPressTimer != null || state.longPressTarget != null) {
+      clearLongPress();
+    }
     state.nearBottom = isNearBottom(scroller);
     if (scroller.scrollTop <= SCROLL_TOP_LOAD_OLDER) {
       requestLoadOlder();
@@ -113,12 +122,18 @@ export function buildTranscriptBootScript(): string {
   }
 
   function escapeHtml(s) {
+    return escapeHtmlRaw(decodeLiteralHtmlEntities(s));
+  }
+
+  function escapeHtmlRaw(s) {
     return String(s)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;');
   }
+
+  ${DECODE_LITERAL_HTML_ENTITIES_BOOT}
 
   function vfsToolFilePath(name, input) {
     if (!VFS_FILE_TOOLS[name]) return null;
@@ -259,15 +274,17 @@ export function buildTranscriptBootScript(): string {
   }
 
   function resolveMenuAnchor(messageId, clientX, clientY) {
-    // Same as RN MessageLongPressRow: full bubble window rect at long-press time.
+    // Long-press finger point (viewport coords); clamp Y inside bubble for tall messages.
+    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
+    var y = clientY - touchH * 0.5;
+    var x = clientX;
     var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
     var boundsEl = rowEl ? (rowEl.querySelector('.bubble') || rowEl) : null;
     if (boundsEl) {
       var rect = boundsEl.getBoundingClientRect();
-      return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+      y = Math.max(rect.top, Math.min(y, rect.bottom - touchH));
     }
-    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
-    return { x: clientX, y: clientY - touchH * 0.5, width: 1, height: touchH };
+    return { x: x, y: y, width: 1, height: touchH };
   }
 
   function findMessageRow(messageId) {
@@ -294,10 +311,38 @@ export function buildTranscriptBootScript(): string {
     return items;
   }
 
+  function suppressNativeTextMenu(event) {
+    event.preventDefault();
+  }
+
+  function attachMenuNativeTextBlock() {
+    if (state.menuNativeTextBlockHandler) return;
+    state.menuNativeTextBlockHandler = function (event) {
+      var menuEl = document.getElementById('context-menu');
+      var backdrop = document.getElementById('menu-backdrop');
+      var target = event.target;
+      if (!menuEl || !target || !target.closest) return;
+      if (menuEl.contains(target) || (backdrop && backdrop.contains(target))) {
+        suppressNativeTextMenu(event);
+      }
+    };
+    document.addEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+    document.addEventListener('selectstart', state.menuNativeTextBlockHandler, true);
+  }
+
+  function detachMenuNativeTextBlock() {
+    if (!state.menuNativeTextBlockHandler) return;
+    document.removeEventListener('contextmenu', state.menuNativeTextBlockHandler, true);
+    document.removeEventListener('selectstart', state.menuNativeTextBlockHandler, true);
+    state.menuNativeTextBlockHandler = null;
+    document.body.classList.remove('menu-open');
+  }
+
   function closeContextMenu(notifyHost) {
     if (!state.menu) return;
     state.menu = null;
     state.menuOpenedAt = 0;
+    detachMenuNativeTextBlock();
     if (state.menuOverlayHandler) {
       document.removeEventListener('click', state.menuOverlayHandler, true);
       document.removeEventListener('touchend', state.menuOverlayHandler, true);
@@ -396,6 +441,8 @@ export function buildTranscriptBootScript(): string {
       menuEl.className = 'context-menu';
       menuEl.style.maxHeight = 'none';
     }
+    document.body.classList.add('menu-open');
+    attachMenuNativeTextBlock();
     state.menuOverlayHandler = handleMenuOverlayEvent;
     document.addEventListener('click', state.menuOverlayHandler, true);
     document.addEventListener('touchend', state.menuOverlayHandler, true);
@@ -446,6 +493,17 @@ export function buildTranscriptBootScript(): string {
       state.longPressTarget = null;
       if (target) openContextMenu(target.messageId, target.pageX, target.pageY);
     }, 450);
+  }
+
+  function onMessagePointerMove(event) {
+    if (!state.longPressTarget) return;
+    var touch = event.touches && event.touches[0];
+    if (!touch) return;
+    var dx = touch.clientX - state.longPressTarget.pageX;
+    var dy = touch.clientY - state.longPressTarget.pageY;
+    if (shouldCancelLongPressForMove(dx, dy, ${LONG_PRESS_MOVE_TOLERANCE_PX})) {
+      clearLongPress();
+    }
   }
 
   function onMessagePointerUp() {
@@ -513,17 +571,16 @@ export function buildTranscriptBootScript(): string {
   function updateStreamTextBubble(tail) {
     var bubble = tail.querySelector('.bubble');
     var useRich = !!(state.flags.richText && state.stream.textHtml);
+    var inner = streamTextInner();
     if (bubble) {
       bubble.className = 'bubble assistant' + (useRich ? ' rich' : '');
-      if (useRich) bubble.innerHTML = streamTextInner();
-      else bubble.textContent = state.stream.text || '';
+      bubble.innerHTML = inner;
       return;
     }
     if (!state.stream.text) return;
     var el = document.createElement('div');
     el.className = 'bubble assistant' + (useRich ? ' rich' : '');
-    if (useRich) el.innerHTML = streamTextInner();
-    else el.textContent = state.stream.text;
+    el.innerHTML = inner;
     tail.appendChild(el);
   }
 
@@ -760,11 +817,15 @@ export function buildTranscriptBootScript(): string {
           if (flagsEqual(state.flags, nextFlags)) {
             break;
           }
+          var richToggledOn = !state.flags.richText && nextFlags.richText;
           state.flags = nextFlags;
           if (state.flags.batchMode || state.flags.menuDisabled) {
             closeContextMenu(true);
           }
-          renderRows();
+          // Rich on: wait for sessionSnapshot rows with textHtml (avoid escapeHtml fallback).
+          if (!richToggledOn) {
+            renderRows();
+          }
         }
         break;
       case 'themeUpdate':
@@ -798,6 +859,7 @@ export function buildTranscriptBootScript(): string {
     if (rows) {
       rows.addEventListener('click', onRowsClick);
       rows.addEventListener('touchstart', onMessagePointerDown, { passive: true });
+      rows.addEventListener('touchmove', onMessagePointerMove, { passive: true });
       rows.addEventListener('touchend', onMessagePointerUp, { passive: true });
       rows.addEventListener('touchcancel', onMessagePointerUp, { passive: true });
     }

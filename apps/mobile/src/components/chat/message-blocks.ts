@@ -8,6 +8,7 @@ import type {
   ToolUseBlock,
 } from '@novel-master/core';
 import type {TranscriptRow} from './ChatTranscriptBridge';
+import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'pending' | 'success' | 'error';
 
@@ -214,8 +215,8 @@ export function buildTranscriptRows(
         id: item.message.id,
         role: item.message.role === 'user' ? 'user' : 'assistant',
         hidden: item.message.hidden,
-        text: item.textParts.join('\n'),
-        thinking: item.thinkingParts.join('\n'),
+        text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
+        thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
       });
     } else if (item.kind === 'tool') {
       rows.push({

@@ -7,6 +7,7 @@ const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
 const monorepoRoot = path.resolve(__dirname, '../..');
 const coreDistRoot = path.resolve(monorepoRoot, 'packages/core/dist');
+const coreSrcRoot = path.resolve(monorepoRoot, 'packages/core/src');
 /** Metro resolves `@novel-master/core` to dist; stale dist misses new domain modules. */
 const coreDistSmokeFiles = [
   'index.js',
@@ -77,6 +78,27 @@ function resolveZodModule(moduleName) {
   return null;
 }
 
+/** Core dist keeps TS `@/*` path aliases; Metro must map them to dist (or src) files. */
+function resolveCorePathAlias(moduleName) {
+  if (!moduleName.startsWith('@/')) {
+    return null;
+  }
+  const rel = moduleName.slice(2);
+  const withoutJs = rel.replace(/\.js$/, '');
+  const candidates = [
+    path.join(coreDistRoot, rel),
+    path.join(coreDistRoot, `${withoutJs}.js`),
+    path.join(coreSrcRoot, rel),
+    path.join(coreSrcRoot, `${withoutJs}.ts`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 /** Block Node-only tokenizer-driver-node from RN bundles. */
 const metroBlockList = [
   /[\\/]packages[\\/]tokenizer-driver-node[\\/]/,
@@ -122,6 +144,11 @@ const config = {
         fs.existsSync(entitiesDecodeCodepoint)
       ) {
         return {type: 'sourceFile', filePath: entitiesDecodeCodepoint};
+      }
+
+      const coreAliasPath = resolveCorePathAlias(moduleName);
+      if (coreAliasPath != null) {
+        return {type: 'sourceFile', filePath: coreAliasPath};
       }
 
       if (defaultResolveRequest != null) {

@@ -1,5 +1,7 @@
 import {
+  LONG_PRESS_MOVE_TOLERANCE_PX,
   MENU_OPEN_GRACE_MS,
+  shouldCancelLongPressForMove,
   shouldIgnoreMenuOutsideDismiss,
 } from '../src/web/chat-transcript/menu-overlay-guards';
 
@@ -12,6 +14,18 @@ describe('menu-overlay-guards', () => {
     expect(
       shouldIgnoreMenuOutsideDismiss('touchend', openedAt, openedAt + MENU_OPEN_GRACE_MS - 1, true),
     ).toBe(true);
+  });
+
+  it('cancels long-press when finger moves beyond tolerance', () => {
+    expect(shouldCancelLongPressForMove(0, 0)).toBe(false);
+    expect(shouldCancelLongPressForMove(10, 0)).toBe(false);
+    expect(
+      shouldCancelLongPressForMove(
+        LONG_PRESS_MOVE_TOLERANCE_PX + 1,
+        0,
+      ),
+    ).toBe(true);
+    expect(shouldCancelLongPressForMove(0, 12)).toBe(true);
   });
 
   it('allows dismiss after grace or on backdrop (non-row target)', () => {

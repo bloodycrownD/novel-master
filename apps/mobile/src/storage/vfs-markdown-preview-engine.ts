@@ -1,5 +1,5 @@
 /**
- * Feature flag: RN RichContentBody vs WebView for VFS markdown preview body.
+ * Feature flag: plain-text RN rollback vs WebView for VFS markdown preview body.
  *
  * Default: `webview`. Override via KKV `vfsMarkdownPreviewEngine` (`rn` | `webview`)
  * for rollback without reinstalling.

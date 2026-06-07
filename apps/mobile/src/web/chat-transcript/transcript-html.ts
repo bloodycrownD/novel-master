@@ -45,10 +45,11 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .batch-check.checked { border-color: var(--primary, #007aff); background: var(--primary, #007aff); color: #fff; }
     .batch-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .row.message.selected .bubble { box-shadow: 0 0 0 2px var(--primary, #007aff); }
-    .menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.35); }
-    .context-menu { position: fixed; z-index: 9999; display: flex; flex-direction: column; flex-shrink: 0; height: fit-content; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow-x: hidden; overflow-y: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15); }
+    .menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.35); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+    .context-menu { position: fixed; z-index: 9999; display: flex; flex-direction: column; flex-shrink: 0; height: fit-content; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow-x: hidden; overflow-y: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
     .context-menu.scrollable { overflow-y: auto; -webkit-overflow-scrolling: touch; }
-    .menu-item { flex: 0 0 auto; display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .menu-item { flex: 0 0 auto; display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+    body.menu-open { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .menu-item:last-child { border-bottom: none; }
     .menu-item.danger { color: #ff3b30; }
   </style>
