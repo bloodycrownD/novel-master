@@ -28,6 +28,13 @@ import {formatCharCount} from '../../hooks/useAgentStreamMetrics';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 
+/** VFS logical path → file name segment for toolbar (full path stays in route params). */
+function vfsBasename(logicalPath: string): string {
+  const trimmed = logicalPath.replace(/\/+$/, '');
+  const slash = trimmed.lastIndexOf('/');
+  return slash >= 0 ? trimmed.slice(slash + 1) : trimmed;
+}
+
 /** Last-saved timestamp for the stats row (device local time). */
 function formatFileMtime(ms: number): string {
   return new Date(ms).toLocaleString('zh-CN', {
@@ -168,6 +175,7 @@ export function FileEditorScreen() {
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <View style={[styles.toolbar, {borderBottomColor: tokens.border}]}>
         <Pressable
+          style={styles.toolbarBtn}
           onPress={() => handleSave().catch(() => undefined)}
           disabled={saving || !isDirty || previewMode}>
           <Text
@@ -180,10 +188,17 @@ export function FileEditorScreen() {
             {saving ? '保存中…' : '保存'}
           </Text>
         </Pressable>
-        <Text style={{color: isDirty ? tokens.danger : tokens.textSecondary}}>
-          {isDirty ? '未保存' : path}
+        {/* Show basename only; tail ellipsis when the filename is long. */}
+        <Text
+          style={[
+            styles.toolbarPath,
+            {color: isDirty ? tokens.danger : tokens.textSecondary},
+          ]}
+          numberOfLines={1}
+          ellipsizeMode="tail">
+          {isDirty ? '未保存' : vfsBasename(path)}
         </Text>
-        <Pressable onPress={togglePreview}>
+        <Pressable style={styles.toolbarBtn} onPress={togglePreview}>
           <Text style={{color: previewMode ? tokens.primary : tokens.textSecondary}}>
             {previewMode ? '编辑' : '预览'}
           </Text>
@@ -244,11 +259,20 @@ const styles = StyleSheet.create({
   center: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   toolbar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  toolbarBtn: {
+    flexShrink: 0,
+  },
+  toolbarPath: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: 'center',
   },
   statsRow: {
     paddingHorizontal: 16,

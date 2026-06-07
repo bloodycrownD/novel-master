@@ -35,6 +35,28 @@ describe("gemini-sse-parser", () => {
     }
   });
 
+  it("T7b: strips inline >thought leak when structured thought parts exist", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(
+      state,
+      [
+        'data: {"candidates":[{"content":{"parts":[{"text":"plan","thought":true}]}}]}',
+        "",
+        'data: {"candidates":[{"content":{"parts":[{"text":"黎明前94>thought plan\\n\\n"}]}}]}',
+        "",
+        'data: {"candidates":[{"content":{"parts":[{"text":"你好。"}]}}]}',
+        "",
+      ].join("\n"),
+    );
+    const { blocks } = finishGeminiSse(state);
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0]?.type, "thinking");
+    assert.equal(blocks[1]?.type, "text");
+    if (blocks[1]?.type === "text") {
+      assert.equal(blocks[1].text, "你好。");
+    }
+  });
+
   it("T7: abort partial keeps thinking without empty text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(

@@ -10,7 +10,12 @@ import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import { cleanseReplyTextAndThinking } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
+import {
+  feedInlineThinkingAwareTextDelta,
+  finishInlineThinkingAwareText,
+} from "./inline-thinking-parser.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -26,8 +31,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * text blocks (content_json rejects `text: ""`). Thinking-only replies are valid.
  */
 function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
-  const text = textRaw;
-  const thinking = thinkingRaw;
+  // Final pass: proxies may duplicate structured reasoning inside content text.
+  const { visible: text, thinking } = cleanseReplyTextAndThinking(
+    textRaw,
+    thinkingRaw,
+  );
   const blocks: ContentBlock[] = [];
   if (thinking.trim() !== "") {
     blocks.push({ type: "thinking", text: thinking });
@@ -39,13 +47,16 @@ function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBl
 }
 
 function appendOpenAiStreamTextDelta(
-  state: { textParts: string[] },
+  state: {
+    textParts: string[];
+    thinkingParts: string[];
+    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
+  },
   content: unknown,
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
   if (typeof content === "string" && content !== "") {
-    state.textParts.push(content);
-    onStream?.({ type: "text-delta", text: content });
+    feedInlineThinkingAwareTextDelta(state, content, onStream);
     return;
   }
   if (!Array.isArray(content)) {
@@ -56,8 +67,7 @@ function appendOpenAiStreamTextDelta(
       continue;
     }
     if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
-      state.textParts.push(part.text);
-      onStream?.({ type: "text-delta", text: part.text });
+      feedInlineThinkingAwareTextDelta(state, part.text, onStream);
     }
   }
 }
@@ -199,7 +209,14 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
 
   const content = message.content;
   if (typeof content === "string" && content !== "") {
-    textParts.push(content);
+    const split = cleanseReplyTextAndThinking(content, thinkingParts.join(""));
+    if (split.thinking !== "") {
+      thinkingParts.length = 0;
+      thinkingParts.push(split.thinking);
+    }
+    if (split.visible !== "") {
+      textParts.push(split.visible);
+    }
   } else if (Array.isArray(content)) {
     for (const part of content) {
       if (!isRecord(part)) {
@@ -285,6 +302,7 @@ export function openAiStreamDeltaToEvents(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
+    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
@@ -337,9 +355,11 @@ export function openAiStreamAccumulatorsToBlocks(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
+    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
+  finishInlineThinkingAwareText(state, onStream);
   const blocks = blocksFromReplyStrings(
     state.textParts.join(""),
     state.thinkingParts.join(""),
@@ -383,13 +403,19 @@ export function openAiStreamAccumulatorsToPartialBlocks(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
+    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
+  finishInlineThinkingAwareText(state, onStream);
+  const cleansed = cleanseReplyTextAndThinking(
+    state.textParts.join(""),
+    state.thinkingParts.join(""),
+  );
   const blocks = buildStreamPartialBlocks(
     {
-      text: state.textParts.join(""),
-      thinking: state.thinkingParts.join(""),
+      text: cleansed.visible,
+      thinking: cleansed.thinking,
     },
     onStream,
   );

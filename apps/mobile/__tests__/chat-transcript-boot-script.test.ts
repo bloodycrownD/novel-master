@@ -10,6 +10,14 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('Backdrop lives on document.body outside #rows');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
     expect(script).toContain('state.menuOpenedAt');
+    expect(script).toContain('layoutContextMenu');
+    expect(script).toContain('scrollable');
+    expect(script).toContain('resolveMenuAnchor');
+    expect(script).toContain('touch.clientX');
+    expect(script).toContain('querySelector(\'.bubble\')');
+    expect(script).toContain('menu.items.length <= 6');
+    expect(script).toContain('measuredHeight');
+    expect(script).toContain('touchH');
   });
 
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {

@@ -1,5 +1,7 @@
+import {Platform} from 'react-native';
 import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
 import {nativeBuildVfsZip} from '../src/native/vfs-zip-native';
+import {VfsZipError} from '@novel-master/core';
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();
@@ -45,7 +47,7 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 jest.mock('react-native', () => ({
-  Platform: {OS: 'android'},
+  Platform: {OS: 'android' as 'android' | 'ios'},
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -70,6 +72,8 @@ describe('vfs-zip.service', () => {
   const scope = {kind: 'session', projectId: 'p', sessionId: 's'} as const;
 
   beforeEach(() => {
+    Platform.OS = 'android';
+    jest.mocked(nativeBuildVfsZip).mockReset();
     mockExport.mockReset();
     mockImport.mockReset();
     mockCreateVfsZipIoService.mockReset();
@@ -107,15 +111,23 @@ describe('vfs-zip.service', () => {
     mockReadFile.mockResolvedValue(ZIP_PK_BASE64);
   });
 
-  it('M-native-1: export passes native buildZip to createVfsZipIoService', async () => {
+  it('M-native-1: Android export passes buildZip to createVfsZipIoService', async () => {
     await exportVfsZip(runtime, scope);
     expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(
       runtime.conn,
-      expect.objectContaining({buildZip: nativeBuildVfsZip}),
+      expect.objectContaining({buildZip: expect.any(Function)}),
     );
   });
 
-  it('writes cache zip then opens save-as dialog', async () => {
+  it('iOS export omits buildZip and uses Core default STORE until M3', async () => {
+    Platform.OS = 'ios';
+    await exportVfsZip(runtime, scope);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
+    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
+  });
+
+  it('M-native-2: writes cache zip then opens save-as dialog', async () => {
     const result = await exportVfsZip(runtime, scope);
     expect(result).toBe('saved');
     expect(mockWriteFile).toHaveBeenCalledWith(
@@ -131,6 +143,59 @@ describe('vfs-zip.service', () => {
       }),
     );
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
+  });
+
+  it('M-native-3: native zip failure falls back to default STORE export', async () => {
+    const mockFallbackExport = jest.fn();
+    jest.mocked(nativeBuildVfsZip).mockRejectedValue(new Error('native zip failed'));
+    mockCreateVfsZipIoService.mockImplementation(
+      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => {
+        if (opts?.buildZip != null) {
+          return {
+            export: () =>
+              opts.buildZip!({
+                files: new Map<string, string>(),
+                directoryEntryNames: [],
+              }),
+            import: mockImport,
+          };
+        }
+        return {export: mockFallbackExport, import: mockImport};
+      },
+    );
+    mockFallbackExport.mockResolvedValue(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]),
+    );
+
+    const onNativeZipFallback = jest.fn();
+    const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
+
+    expect(result).toBe('saved');
+    expect(nativeBuildVfsZip).toHaveBeenCalled();
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(2);
+    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toEqual(
+      expect.objectContaining({buildZip: expect.any(Function)}),
+    );
+    expect(mockCreateVfsZipIoService.mock.calls[1]?.[1]).toBeUndefined();
+    expect(onNativeZipFallback).toHaveBeenCalledTimes(1);
+    expect(mockFallbackExport).toHaveBeenCalledWith(scope);
+    expect(mockSaveDocuments).toHaveBeenCalled();
+  });
+
+  it('does not fallback when export throws VfsZipError during gather', async () => {
+    const vfsErr = new VfsZipError(
+      'EXTERNAL_NOT_SUPPORTED',
+      'external storage not supported',
+    );
+    mockExport.mockRejectedValue(vfsErr);
+    const onNativeZipFallback = jest.fn();
+
+    await expect(
+      exportVfsZip(runtime, scope, {onNativeZipFallback}),
+    ).rejects.toThrow('external storage not supported');
+
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
+    expect(onNativeZipFallback).not.toHaveBeenCalled();
   });
 
   it('returns cancelled when save-as dialog dismissed', async () => {

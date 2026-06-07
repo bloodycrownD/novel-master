@@ -1,4 +1,16 @@
+import {parseVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js';
+import {buildVfsZip} from '../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js';
 import {nativeBuildVfsZip} from '../src/native/vfs-zip-native';
+
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...slice);
+  }
+  return globalThis.btoa(binary);
+}
 
 const mockZip = jest.fn();
 const mockWriteFile = jest.fn();
@@ -50,7 +62,7 @@ describe('nativeBuildVfsZip', () => {
     mockUnlink.mockResolvedValue(undefined);
   });
 
-  it('M-native-2: writes entries, zips work dir with STORE, returns bytes', async () => {
+  it('native zip STORE packs gather payload', async () => {
     const bytes = await nativeBuildVfsZip({
       files: new Map([
         ['a.md', 'A'],
@@ -79,6 +91,25 @@ describe('nativeBuildVfsZip', () => {
       'base64',
     );
     expect(bytes).toEqual(new Uint8Array([0x64, 0x61, 0x74, 0x61]));
+  });
+
+  it('includes empty directory entry parseable by parseVfsZip', async () => {
+    const input = {
+      files: new Map([['a.md', 'A']]),
+      directoryEntryNames: ['empty/'],
+    };
+
+    mockZip.mockImplementation(async () => {
+      const zipBytes = buildVfsZip(input.files, input.directoryEntryNames);
+      mockReadFile.mockResolvedValue(bytesToBase64(zipBytes));
+      return '/cache/vfs-export-test.zip';
+    });
+
+    const bytes = await nativeBuildVfsZip(input);
+    const entries = parseVfsZip(bytes);
+
+    expect(entries.has('empty/')).toBe(true);
+    expect(entries.get('a.md')).toEqual(new TextEncoder().encode('A'));
   });
 
   it('cleans temp work dir and zip in finally', async () => {

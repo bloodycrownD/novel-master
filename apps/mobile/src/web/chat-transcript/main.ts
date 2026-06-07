@@ -4,6 +4,19 @@
  */
 import {MENU_OPEN_GRACE_MS} from './menu-overlay-guards';
 import {NEAR_BOTTOM_THRESHOLD_PX} from './scroll';
+import {
+  ANCHORED_MENU_CHAR_WIDTH_EST,
+  ANCHORED_MENU_GAP,
+  ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
+  ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
+  MESSAGE_ACTION_MENU_ITEM_COUNT,
+  ANCHORED_MENU_MAX_HEIGHT_CAP,
+  ANCHORED_MENU_MAX_WIDTH,
+  ANCHORED_MENU_MIN_WIDTH,
+  ANCHORED_MENU_SCREEN_MARGIN,
+} from '../../components/chat/anchored-menu-layout';
 
 export function buildTranscriptBootScript(): string {
   return `
@@ -203,6 +216,60 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
+  function computeContextMenuWidth(items) {
+    var longest = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (items[i].label.length > longest) longest = items[i].label.length;
+    }
+    var byLabel = longest * ${ANCHORED_MENU_CHAR_WIDTH_EST} + ${ANCHORED_MENU_H_PADDING};
+    var cap = window.innerWidth - ${ANCHORED_MENU_SCREEN_MARGIN} * 2;
+    return Math.min(cap, ${ANCHORED_MENU_MAX_WIDTH}, Math.max(${ANCHORED_MENU_MIN_WIDTH}, byLabel));
+  }
+
+  function viewportHeight() {
+    // position:fixed menus share the WebView layout viewport (not #scroller scroll box).
+    var doc = document.documentElement;
+    return doc.clientHeight || window.innerHeight;
+  }
+
+  function layoutContextMenu(anchor, contentHeight, menuWidth) {
+    var screenW = window.innerWidth;
+    var screenH = viewportHeight();
+    var heightCap = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
+    var flipEstimate = Math.min(contentHeight, heightCap);
+    var anchorCenterX = anchor.x + anchor.width / 2;
+    var left = anchorCenterX - menuWidth / 2;
+    left = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(left, screenW - menuWidth - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    var spaceAbove = anchor.y;
+    var spaceBelow = screenH - (anchor.y + anchor.height);
+    // Prefer below; flip above when bottom space is too tight.
+    var placeAbove = spaceBelow < flipEstimate + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
+    var availableSpace = (placeAbove ? spaceAbove : spaceBelow) - ${ANCHORED_MENU_GAP} - ${ANCHORED_MENU_SCREEN_MARGIN};
+    var availableMax = Math.max(${ANCHORED_MENU_ITEM_MIN_HEIGHT}, availableSpace);
+    var scrollable = contentHeight > availableMax + 1;
+    var menuHeight = scrollable ? Math.min(contentHeight, availableMax) : contentHeight;
+    if (scrollable && menuHeight > heightCap) {
+      menuHeight = heightCap;
+    }
+    var top = placeAbove
+      ? anchor.y - menuHeight - ${ANCHORED_MENU_GAP}
+      : anchor.y + anchor.height + ${ANCHORED_MENU_GAP};
+    top = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(top, screenH - menuHeight - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    return { left: left, top: top, width: menuWidth, maxHeight: menuHeight, scrollable: scrollable };
+  }
+
+  function resolveMenuAnchor(messageId, clientX, clientY) {
+    // Same as RN MessageLongPressRow: full bubble window rect at long-press time.
+    var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
+    var boundsEl = rowEl ? (rowEl.querySelector('.bubble') || rowEl) : null;
+    if (boundsEl) {
+      var rect = boundsEl.getBoundingClientRect();
+      return { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+    }
+    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
+    return { x: clientX, y: clientY - touchH * 0.5, width: 1, height: touchH };
+  }
+
   function findMessageRow(messageId) {
     for (var i = 0; i < state.rows.length; i++) {
       var row = state.rows[i];
@@ -284,8 +351,7 @@ export function buildTranscriptBootScript(): string {
     var menuEl = document.createElement('div');
     menuEl.id = 'context-menu';
     menuEl.className = 'context-menu';
-    menuEl.style.left = Math.max(8, menu.pageX - 66) + 'px';
-    menuEl.style.top = Math.max(8, menu.pageY - 12) + 'px';
+    var menuWidth = computeContextMenuWidth(menu.items);
     var html = '';
     for (var i = 0; i < menu.items.length; i++) {
       var item = menu.items[i];
@@ -297,6 +363,39 @@ export function buildTranscriptBootScript(): string {
     menuEl.innerHTML = html;
     document.body.appendChild(backdrop);
     document.body.appendChild(menuEl);
+    // Measure rendered rows (CSS min-height + borders); estimate 48px/row overshoots on device.
+    menuEl.style.position = 'fixed';
+    menuEl.style.visibility = 'hidden';
+    menuEl.style.left = '0';
+    menuEl.style.top = '0';
+    menuEl.style.width = menuWidth + 'px';
+    menuEl.style.maxHeight = 'none';
+    var measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
+    var contentHeight = measuredHeight > 0
+      ? measuredHeight
+      : menu.items.length * ${ANCHORED_MENU_ITEM_LAYOUT_HEIGHT};
+    var layout = layoutContextMenu(menu.anchor, contentHeight, menuWidth);
+    if (menu.items.length <= ${MESSAGE_ACTION_MENU_ITEM_COUNT}) {
+      layout = {
+        left: layout.left,
+        top: layout.top,
+        width: layout.width,
+        maxHeight: contentHeight,
+        scrollable: false,
+      };
+    }
+    menuEl.style.visibility = '';
+    menuEl.style.left = layout.left + 'px';
+    menuEl.style.top = layout.top + 'px';
+    menuEl.style.width = layout.width + 'px';
+    menuEl.style.height = 'auto';
+    if (layout.scrollable) {
+      menuEl.className = 'context-menu scrollable';
+      menuEl.style.maxHeight = layout.maxHeight + 'px';
+    } else {
+      menuEl.className = 'context-menu';
+      menuEl.style.maxHeight = 'none';
+    }
     state.menuOverlayHandler = handleMenuOverlayEvent;
     document.addEventListener('click', state.menuOverlayHandler, true);
     document.addEventListener('touchend', state.menuOverlayHandler, true);
@@ -312,6 +411,7 @@ export function buildTranscriptBootScript(): string {
       messageId: messageId,
       pageX: pageX,
       pageY: pageY,
+      anchor: resolveMenuAnchor(messageId, pageX, pageY),
       items: buildMenuItems(row),
     };
     state.menuOpenedAt = Date.now();
@@ -335,7 +435,11 @@ export function buildTranscriptBootScript(): string {
     var touch = event.touches && event.touches[0];
     if (!touch) return;
     clearLongPress();
-    state.longPressTarget = { messageId: messageId, pageX: touch.pageX, pageY: touch.pageY };
+    state.longPressTarget = {
+      messageId: messageId,
+      pageX: touch.clientX,
+      pageY: touch.clientY,
+    };
     state.longPressTimer = setTimeout(function () {
       state.longPressTimer = null;
       var target = state.longPressTarget;

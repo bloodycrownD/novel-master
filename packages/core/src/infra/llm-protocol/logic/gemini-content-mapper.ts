@@ -13,6 +13,7 @@ import type {
 } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmToolDefinition } from "../ports/adapter.port.js";
+import { splitInlineThinkingFromText } from "./inline-thinking-parser.js";
 
 type GeminiPart = Record<string, unknown>;
 type GeminiContent = { role: string; parts: GeminiPart[] };
@@ -222,7 +223,13 @@ export function geminiPartsToBlocks(
       if (part.thought === true) {
         blocks.push({ type: "thinking", text: part.text });
       } else {
-        blocks.push({ type: "text", text: part.text });
+        const split = splitInlineThinkingFromText(part.text);
+        if (split.thinking !== "") {
+          blocks.push({ type: "thinking", text: split.thinking });
+        }
+        if (split.visible !== "") {
+          blocks.push({ type: "text", text: split.visible });
+        }
       }
       continue;
     }

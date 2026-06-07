@@ -1,5 +1,27 @@
 /**
- * Native VFS ZIP builder: write gather payload to temp dir, zip on native thread.
+ * Native VFS ZIP builder for Mobile export.
+ *
+ * @module native/vfs-zip-native
+ *
+ * **Responsible for**
+ * - Writing gather payload (`files`, `directoryEntryNames`) to a temp cache directory
+ * - Invoking `react-native-zip-archive` at STORE level 0 on the native thread
+ * - Reading zip bytes as `Uint8Array` and deleting temp dir + zip in `finally`
+ *
+ * **Not responsible for**
+ * - VFS gather (`scanContents`, path mapping, `external` checks) — Core `DefaultVfsZipIoService.export`
+ * - ZIP parse / import validation — Core `parseVfsZip` + `zipSvc.import`
+ * - Save-as UI and cache write for the system picker — `vfs-zip.service` `exportVfsZip`
+ * - Fallback to fflate STORE when native zip fails — `vfs-zip.service` retries without `buildZip`
+ *
+ * **Invariants**
+ * - ZIP entry names have no leading `/`; directory markers use a trailing `/`
+ * - Compression level 0 (STORE) matches Core default `buildVfsZip`
+ * - Temp work dir and zip file are removed in `finally`, even when `zip()` throws
+ *
+ * **Call chain**
+ * `VfsFileManager.handleExportZip` → `exportVfsZip` → `createVfsZipIoService({ buildZip })`
+ * → `DefaultVfsZipIoService.export` (gather) → `nativeBuildVfsZip` → `zip()` → `Uint8Array`
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {zip} from 'react-native-zip-archive';
