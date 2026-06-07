@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core";
-import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
-describe("rollbackToMessage", () => {
-  it("assistant anchor keeps that round write and rolls back later checkpoints", async () => {
+describe("MessageRollbackService (revision model)", () => {
+  it("R1: rollback to assistant anchor restores earlier file content", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
@@ -40,7 +39,7 @@ describe("rollbackToMessage", () => {
     await ctx.conn.close();
   });
 
-  it("user anchor removes later assistant write and truncates messages", async () => {
+  it("R2: user anchor removes file created by later assistant", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
@@ -67,7 +66,7 @@ describe("rollbackToMessage", () => {
     await ctx.conn.close();
   });
 
-  it("text-only tail truncates messages without vfs changes", async () => {
+  it("R3: text-only tail truncates messages without vfs changes", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
@@ -89,20 +88,52 @@ describe("rollbackToMessage", () => {
     await ctx.conn.close();
   });
 
-  it("deleteAfterSeq removes only higher seq", async () => {
+  it("R4: restore creates parent directories for nested paths", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
-    const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
-    await ctx.messages.append(session.id, "user", textBlocks("2"));
-    await ctx.messages.append(session.id, "user", textBlocks("3"));
+    const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const repo = new SqliteMessageRepository(ctx.conn);
-    await repo.deleteAfterSeq(session.id, m1.seq);
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "nested" }],
+    });
+    await svfs.write("/deep/nested/file.md", "content", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
 
-    const left = await ctx.messages.listBySession(session.id);
-    assert.equal(left.length, 1);
-    assert.equal(left[0]!.id, m1.id);
+    await svfs.delete("/deep/nested/file.md", { recursive: true });
+    await svfs.delete("/deep", { recursive: true });
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+
+    assert.equal((await svfs.read("/deep/nested/file.md")).content, "content");
+
+    await ctx.conn.close();
+  });
+
+  it("R9: anchor without checkpoint uses prior checkpoint tree", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "mutate" }],
+    });
+    await svfs.write("/state.md", "v1", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+
+    const textOnly = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "no tools" }],
+    });
+    await svfs.write("/state.md", "v2", { versionCheck: false });
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, textOnly.id);
+
+    assert.equal((await svfs.read("/state.md")).content, "v1");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[1]!.id, textOnly.id);
 
     await ctx.conn.close();
   });

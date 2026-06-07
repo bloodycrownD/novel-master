@@ -5,9 +5,11 @@ import {
   createPersistentState,
   createProjectService,
   createScopedVfsService,
+  createMessageCheckpointService,
   createSessionFsService,
   createSessionService,
   open,
+  type MessageCheckpointService,
   type MessageService,
   type PersistentPreferences,
   type PersistentState,
@@ -30,6 +32,7 @@ export interface NovelMasterTestContext {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
+  readonly messageCheckpoint: MessageCheckpointService;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
   sessionVfs(projectId: string, sessionId: string): VfsService;
@@ -50,6 +53,7 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
     sessionFs: createSessionFsService(conn),
+    messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),
