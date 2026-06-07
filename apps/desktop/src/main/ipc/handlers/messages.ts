@@ -17,15 +17,9 @@ import type {
   SessionDto,
   SessionFsRollbackRequest,
 } from "../../../../shared/ipc-types.js";
+import { formatIpcError } from "../format-ipc-error.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadSessionMessagesForDisplay } from "../../services/regex-apply-channel.service.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
 
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   switch (block.type) {
@@ -83,7 +77,7 @@ export async function handleMessagesList(
     const messages = await loadSessionMessagesForDisplay(rt, req.sessionId);
     return { ok: true, data: messages.map(toDto) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -99,7 +93,7 @@ export async function handleMessagesAppend(
     );
     return { ok: true, data: toDto(msg) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -114,7 +108,7 @@ export async function handleMessagesEdit(
     );
     return { ok: true, data: toDto(msg) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -126,7 +120,7 @@ export async function handleMessagesHide(
     await rt.messages.hide(req.messageId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -138,7 +132,7 @@ export async function handleMessagesShow(
     await rt.messages.show(req.messageId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -150,7 +144,7 @@ export async function handleMessagesDelete(
     await rt.messages.delete(req.messageId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -178,7 +172,7 @@ export async function handleMessagesFork(
     const forked = await rt.messages.fork(req.sessionId, req.messageId);
     return { ok: true, data: toSessionDto(forked) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -195,6 +189,6 @@ export async function handleMessagesRollback(
     rt.macroCache.clear(req.projectId, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
