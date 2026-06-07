@@ -13,6 +13,7 @@ import {
   PreferencesError,
   PromptError,
   ProviderError,
+  SessionFsError,
   TdbcError,
   VfsError,
   VfsZipError,
@@ -37,6 +38,7 @@ export function formatCliError(error: unknown): string {
     error instanceof PromptError ||
     error instanceof TdbcError ||
     error instanceof ProviderError ||
+    error instanceof SessionFsError ||
     error instanceof SkspError
   ) {
     return error.message;
@@ -62,6 +64,7 @@ export function exitCodeForError(error: unknown): number {
     error instanceof PromptError ||
     error instanceof TdbcError ||
     error instanceof ProviderError ||
+    error instanceof SessionFsError ||
     error instanceof SkspError
   ) {
     return EXIT_RUNTIME;

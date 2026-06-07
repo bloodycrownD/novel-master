@@ -16,6 +16,7 @@ import {AppModal} from '../ui/AppModal';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {
   SetDirRuleInput,
+  VfsListEntry,
   VfsScope,
   VfsService,
   WorktreeListRow,
@@ -195,7 +196,7 @@ export function VfsFileManager({
                 : undefined;
             return mapWorktreeRow(meta, count);
           }
-          const vfsEntry = listEntries.find(e => e.path === path);
+          const vfsEntry = listEntries.find((e: VfsListEntry) => e.path === path);
           if (vfsEntry) {
             return mapVfsListEntry(vfsEntry);
           }

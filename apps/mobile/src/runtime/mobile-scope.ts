@@ -26,8 +26,9 @@ export async function loadMobileScope(
     await runtime.state.resetCurrentProjectId();
   }
   if (projectId == null && projects.length > 0) {
-    projectId = projects[0]!.id;
-    await runtime.state.setCurrentProjectId(projectId);
+    const nextProjectId = projects[0]!.id;
+    projectId = nextProjectId;
+    await runtime.state.setCurrentProjectId(nextProjectId);
   }
 
   if (projectId == null) {
@@ -43,8 +44,9 @@ export async function loadMobileScope(
     await runtime.state.resetCurrentSessionId();
   }
   if (sessionId == null && sessions.length > 0) {
-    sessionId = sessions[0]!.id;
-    await runtime.state.setCurrentSessionId(sessionId);
+    const nextSessionId = sessions[0]!.id;
+    sessionId = nextSessionId;
+    await runtime.state.setCurrentSessionId(nextSessionId);
   }
 
   return {projectId, sessionId};

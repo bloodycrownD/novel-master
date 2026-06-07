@@ -5,6 +5,7 @@ import {
   AgentError,
   ChatError,
   ProviderError,
+  SessionFsError,
   TdbcError,
   ToolError,
   VfsError,
@@ -32,7 +33,8 @@ export function formatError(error: unknown): string {
     error instanceof VfsZipError ||
     error instanceof ProviderError ||
     error instanceof ChatError ||
-    error instanceof AgentError
+    error instanceof AgentError ||
+    error instanceof SessionFsError
   ) {
     return error.message;
   }
