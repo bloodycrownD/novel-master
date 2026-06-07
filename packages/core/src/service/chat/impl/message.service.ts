@@ -15,6 +15,11 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { nextForkSessionTitle } from "@/domain/chat/logic/fork-session-title.js";
 import { copyVfsTree } from "@/domain/vfs/logic/vfs-tree-copy.js";
+import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -35,6 +40,8 @@ export interface MessageServiceDeps {
   readonly sessions: SessionRepository;
   readonly messages: MessageRepository;
   readonly vfs: VfsEntryRepository;
+  readonly checkpoints: MessageCheckpointRepository;
+  readonly revisions: VfsRevisionRepository;
 }
 
 /**
@@ -102,10 +109,36 @@ export class DefaultMessageService implements MessageService {
   }
 
   async delete(id: string): Promise<void> {
-    const deleted = await this.deps.messages.delete(id);
-    if (!deleted) {
+    const message = await this.deps.messages.findById(id);
+    if (message == null) {
       throw chatNotFound("message", id);
     }
+
+    const session = await this.deps.sessions.findById(message.sessionId);
+    if (session == null) {
+      throw chatNotFound("session", message.sessionId);
+    }
+
+    await this.deps.conn.transaction(async (tx) => {
+      const messages = new SqliteMessageRepository(tx);
+      const checkpoints = new SqliteMessageCheckpointRepository(tx);
+      const entries = new SqliteVfsEntryRepository(tx);
+      const revisions = new SqliteVfsRevisionRepository(tx);
+
+      const deleted = await messages.delete(id);
+      if (!deleted) {
+        throw chatNotFound("message", id);
+      }
+
+      await checkpoints.deleteCheckpointsForMessages(message.sessionId, [id]);
+      await sweepSessionRevisions(
+        revisions,
+        entries,
+        checkpoints,
+        session.projectId,
+        message.sessionId,
+      );
+    });
   }
 
   async updateContent(

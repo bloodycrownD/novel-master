@@ -9,6 +9,8 @@ import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
+import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { DefaultProjectService } from "./impl/project.service.js";
 import { DefaultSessionService } from "./impl/session.service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
@@ -32,6 +34,8 @@ export function createChatServices(conn: TdbcConnection): ChatServiceBundle {
   const sessionRepo = new SqliteSessionRepository(conn);
   const messageRepo = new SqliteMessageRepository(conn);
   const vfsRepo = new SqliteVfsEntryRepository(conn);
+  const checkpointRepo = new SqliteMessageCheckpointRepository(conn);
+  const revisionRepo = new SqliteVfsRevisionRepository(conn);
 
   const projects = new DefaultProjectService({
     conn,
@@ -54,6 +58,8 @@ export function createChatServices(conn: TdbcConnection): ChatServiceBundle {
     sessions: sessionRepo,
     messages: messageRepo,
     vfs: vfsRepo,
+    checkpoints: checkpointRepo,
+    revisions: revisionRepo,
   });
 
   return { projects, sessions, messages };
