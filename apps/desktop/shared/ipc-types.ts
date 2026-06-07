@@ -316,7 +316,7 @@ export type WorktreeSetDirRuleRequest = VfsScopeRequest & {
   readonly sortOrder?: "asc" | "desc";
   readonly headCount?: number;
   readonly tailCount?: number;
-  readonly fillPolicy?: "hidden" | "filename" | "header" | "full";
+  readonly fillPolicy?: "hidden" | "filename" | "header";
 };
 
 export type WorktreeSetFileRuleRequest = VfsScopeRequest & {

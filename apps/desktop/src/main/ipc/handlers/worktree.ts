@@ -18,6 +18,22 @@ import {
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 
+function toIpcFillPolicy(
+  fillPolicy: string | undefined,
+): WorktreeSetDirRuleRequest["fillPolicy"] {
+  if (fillPolicy === "full") {
+    return "hidden";
+  }
+  if (
+    fillPolicy === "hidden" ||
+    fillPolicy === "filename" ||
+    fillPolicy === "header"
+  ) {
+    return fillPolicy;
+  }
+  return undefined;
+}
+
 function formatError(err: unknown): { code: string; message: string } {
   if (err instanceof Error) {
     return { code: err.name || "ERROR", message: err.message };
@@ -123,7 +139,7 @@ export async function handleWorktreeGetDirRule(
         sortOrder: rule.sortOrder,
         headCount: rule.headCount,
         tailCount: rule.tailCount,
-        fillPolicy: rule.fillPolicy,
+        fillPolicy: toIpcFillPolicy(rule.fillPolicy),
       },
     };
   } catch (err) {
