@@ -40,7 +40,6 @@ export {
 export { serializePromptLlmInput } from "./logic/serialize-prompt-input.js";
 export { tokenizerAssetPaths } from "./logic/tokenizer-asset-paths.js";
 export {
-  readTokenCounterModeFromPreferences,
   parseTokenCounterModePref,
   isValidTokenCounterModePref,
   TOKEN_COUNTER_MODE_PREF_KEY,

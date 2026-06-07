@@ -15,7 +15,7 @@ import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 
 /** Registry construction options. */
 export interface CreateDefaultTokenCounterRegistryDeps {
-  /** Reads `tokenCounter.mode` from preferences when set. */
+  /** Optional override hook for tokenizer drivers/tests; product runtimes do not inject. */
   readonly getTokenizerOverride?: () => Promise<TokenizerOverride>;
 }
 

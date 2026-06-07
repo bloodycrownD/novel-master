@@ -1,10 +1,12 @@
 /**
- * Reads `tokenCounter.mode` from `nm-preferences` for registry override.
+ * Saved-model `tokenCounterMode` validation helpers.
+ *
+ * WHY: global `nm-preferences` key `tokenCounter.mode` is deprecated; per-model
+ * settings use these parsers only — no public preferences read path.
  *
  * @module infra/tokenizer/logic/read-token-counter-mode-pref
  */
 
-import type { PersistentPreferences } from "@/service/persistent-preferences/persistent-preferences.port.js";
 import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 import type { TokenizerFamily } from "../ports/token-counter.port.js";
 
@@ -46,13 +48,4 @@ export function parseTokenCounterModePref(raw: string | undefined): TokenizerOve
     return raw as TokenizerFamily;
   }
   return "auto";
-}
-
-/** Loads `tokenCounter.mode` via {@link PersistentPreferences.list}. */
-export async function readTokenCounterModeFromPreferences(
-  preferences: PersistentPreferences,
-): Promise<TokenizerOverride> {
-  const entries = await preferences.list();
-  const row = entries.find((e) => e.key === TOKEN_COUNTER_MODE_PREF_KEY);
-  return parseTokenCounterModePref(row?.value);
 }

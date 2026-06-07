@@ -14,7 +14,7 @@ export interface ForVendorModelOptions {
 /** Resolves {@link TokenCounter} by vendor model id (protocol-independent). */
 export interface TokenCounterRegistry {
   readonly heuristic: TokenCounter;
-  /** Optional preference override (`tokenCounter.mode`). */
+  /** Optional override for tokenizer drivers when caller passes no explicit mode. */
   getTokenizerOverride?(): Promise<TokenizerOverride>;
   /**
    * Resolve counter for `applicationModelId` (`providerId/vendorModelId`).
