@@ -16,6 +16,7 @@ import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
+import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
 import {
   migrateAddSavedModelSettingsJson,
   migrateDropLlmModelSuggestionTable,
@@ -87,6 +88,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     }
     await migrateRegexRuleDepthColumns(tx);
     await migrateAddBatchMessageId(tx);
+    await migrateChatMessageHidden(tx);
     await migrateDropProviderDefaultModelId(tx);
     const kkv = createKkvService(tx);
     await migratePurgeNmModelSamplingKkv(kkv);
