@@ -34,7 +34,7 @@ v2 在 v1 基础上将跨端**行为配置**上收到 `nm-preferences`，由 `Pe
 | **CLI** | ✅ `nm preferences` 支持全部 v2 key |
 | **Mobile** | ✅ Profile 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` 开关 |
 | **Desktop** | ✅ WorkspaceSettings 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` |
-| **checkpointRetention Banner** | ⏸ 待会话日志屏（可选 2b，当前无独立 UI） |
+| **checkpointRetention** | ✅ Profile/Workspace 偏好读写；Core SessionFs FIFO 后续消费 |
 
 **指针契约（不变）**：`currentProviderId` **CLI 专用**；mobile/desktop **不**调用 `setCurrentProviderId`；app 以 `currentModelId` 为 LLM 权威。
 
