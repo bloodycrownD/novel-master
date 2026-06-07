@@ -1,0 +1,355 @@
+# Build Android APKs + Electron (Windows & macOS) and publish a GitHub Release on version tags.
+#
+# Tag examples: v0.1.0, v1.2.3-beta.1
+#
+# Optional repository secrets (Android release signing):
+#   ANDROID_KEYSTORE_BASE64      — base64-encoded .jks / .keystore
+#   ANDROID_KEYSTORE_PASSWORD
+#   ANDROID_KEY_ALIAS
+#   ANDROID_KEY_PASSWORD
+# Without these, APKs are signed with the checked-in debug keystore.
+#
+# Desktop installers (NSIS / DMG) are unsigned — no signing secrets required.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-version:
+    name: Resolve version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      name: ${{ steps.version.outputs.name }}
+      code: ${{ steps.version.outputs.code }}
+    steps:
+      - id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          NAME="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "code=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+  android-release:
+    name: Build Android APKs
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;27.1.12297006
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('apps/mobile/android/**/*.gradle*', 'apps/mobile/android/gradle/wrapper/gradle-wrapper.properties', 'packages/sksp-android/android/**/*.gradle*') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build workspace packages
+        run: npm run build -w @novel-master/core -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn
+
+      - name: Prepare release keystore
+        id: keystore
+        working-directory: apps/mobile/android/app
+        shell: bash
+        run: |
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret; Gradle will use debug signing."
+            echo "path=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KEYSTORE_PATH="${GITHUB_WORKSPACE}/apps/mobile/android/app/release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > release.keystore
+          echo "path=${KEYSTORE_PATH}" >> "$GITHUB_OUTPUT"
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Build release APKs (all ABIs + universal)
+        working-directory: apps/mobile/android
+        shell: bash
+        env:
+          VERSION_NAME: ${{ needs.resolve-version.outputs.name }}
+          VERSION_CODE: ${{ needs.resolve-version.outputs.code }}
+          ANDROID_KEYSTORE_FILE: ${{ steps.keystore.outputs.path }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:assembleRelease \
+            --no-daemon \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64 \
+            -PversionName="$VERSION_NAME" \
+            -PversionCode="$VERSION_CODE"
+
+      - name: Collect APK artifacts
+        shell: bash
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.name }}"
+          OUT="${RUNNER_TEMP}/release-android"
+          mkdir -p "$OUT"
+
+          shopt -s nullglob
+          apks=(apps/mobile/android/app/build/outputs/apk/release/*-release.apk)
+          if [ "${#apks[@]}" -eq 0 ]; then
+            echo "No release APKs found under app/build/outputs/apk/release/"
+            ls -laR apps/mobile/android/app/build/outputs || true
+            exit 1
+          fi
+
+          for apk in "${apks[@]}"; do
+            base="$(basename "$apk")"
+            abi="${base#app-}"
+            abi="${abi%-release.apk}"
+            if [ "$abi" = "universal" ]; then
+              dest="NovelMaster-${VERSION}-universal.apk"
+            else
+              dest="NovelMaster-${VERSION}-${abi}.apk"
+            fi
+            cp "$apk" "${OUT}/${dest}"
+          done
+
+      - name: Upload Android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android
+          path: ${{ runner.temp }}/release-android/*
+          if-no-files-found: error
+
+  desktop-windows:
+    name: Build Electron (Windows)
+    needs: resolve-version
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Prepare app icon
+        shell: bash
+        run: cp assets/icon.webp icon.webp
+
+      - name: Set desktop package version
+        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --workspace=@novel-master/desktop
+
+      - name: Build desktop dependencies
+        run: npm run build -w @novel-master/core -w @novel-master/config-forms -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
+
+      - name: Build and package Windows installer
+        shell: bash
+        env:
+          CI: true
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist -w @novel-master/desktop -- --win --publish never
+
+      - name: Collect Windows installer
+        shell: bash
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.name }}"
+          OUT="${RUNNER_TEMP}/release-desktop-windows"
+          mkdir -p "$OUT"
+
+          shopt -s nullglob
+          exes=(apps/desktop/release/*.exe)
+          if [ "${#exes[@]}" -eq 0 ]; then
+            echo "No .exe found in apps/desktop/release/"
+            ls -laR apps/desktop/release || true
+            exit 1
+          fi
+
+          setup=""
+          for f in "${exes[@]}"; do
+            base="$(basename "$f")"
+            if [[ "$base" == *Setup* ]]; then
+              setup="$f"
+              break
+            fi
+          done
+          if [ -z "$setup" ]; then
+            setup="${exes[0]}"
+          fi
+          cp "$setup" "$OUT/NovelMaster-${VERSION}-windows-setup.exe"
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-windows
+          path: ${{ runner.temp }}/release-desktop-windows/*
+          if-no-files-found: error
+
+  desktop-macos:
+    name: Build Electron (macOS)
+    needs: resolve-version
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Prepare app icon
+        run: cp assets/icon.webp icon.webp
+
+      - name: Set desktop package version
+        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --workspace=@novel-master/desktop
+
+      - name: Build desktop dependencies
+        run: npm run build -w @novel-master/core -w @novel-master/config-forms -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
+
+      - name: Build and package macOS DMG
+        env:
+          CI: true
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: npm run dist -w @novel-master/desktop -- --mac --publish never
+
+      - name: Collect macOS DMG
+        shell: bash
+        run: |
+          VERSION="${{ needs.resolve-version.outputs.name }}"
+          OUT="${RUNNER_TEMP}/release-desktop-macos"
+          mkdir -p "$OUT"
+
+          shopt -s nullglob
+          dmgs=(apps/desktop/release/*.dmg)
+          if [ "${#dmgs[@]}" -eq 0 ]; then
+            echo "No .dmg found in apps/desktop/release/"
+            ls -laR apps/desktop/release || true
+            exit 1
+          fi
+          cp "${dmgs[0]}" "$OUT/NovelMaster-${VERSION}-macos.dmg"
+
+      - name: Upload macOS DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-desktop-macos
+          path: ${{ runner.temp }}/release-desktop-macos/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs:
+      - resolve-version
+      - android-release
+      - desktop-windows
+      - desktop-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Compose release notes
+        shell: bash
+        run: |
+          TAG="${{ needs.resolve-version.outputs.tag }}"
+          VERSION="${{ needs.resolve-version.outputs.name }}"
+          OUT="release-assets/RELEASE_NOTES.md"
+
+          {
+            echo "# Novel Master ${TAG}"
+            echo ""
+            echo "## Android"
+            echo ""
+            echo "| APK | ABI |"
+            echo "| --- | --- |"
+            shopt -s nullglob
+            for f in release-assets/NovelMaster-"${VERSION}"-*.apk; do
+              name="$(basename "$f")"
+              if [[ "$name" == *-universal.apk ]]; then
+                echo "| ${name} | all (fat) |"
+              else
+                abi="${name#NovelMaster-${VERSION}-}"
+                abi="${abi%.apk}"
+                echo "| ${name} | ${abi} |"
+              fi
+            done
+            echo ""
+            echo "**Install tip:** use \`universal\` on most phones; use per-ABI builds for smaller downloads."
+            echo ""
+            echo "## Desktop"
+            echo ""
+            echo "| Platform | File |"
+            echo "| --- | --- |"
+            if [ -f "release-assets/NovelMaster-${VERSION}-windows-setup.exe" ]; then
+              echo "| Windows (NSIS) | NovelMaster-${VERSION}-windows-setup.exe |"
+            fi
+            if [ -f "release-assets/NovelMaster-${VERSION}-macos.dmg" ]; then
+              echo "| macOS (DMG, Apple Silicon) | NovelMaster-${VERSION}-macos.dmg |"
+            fi
+            echo ""
+            echo "**Desktop note:** installers are **unsigned**. On macOS, use right-click → Open for first launch."
+          } > "$OUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Novel Master ${{ needs.resolve-version.outputs.tag }}
+          tag_name: ${{ github.ref_name }}
+          body_path: release-assets/RELEASE_NOTES.md
+          files: |
+            release-assets/NovelMaster-*
+          fail_on_unmatched_files: true
+          generate_release_notes: true

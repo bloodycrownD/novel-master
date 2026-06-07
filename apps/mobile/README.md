@@ -181,18 +181,24 @@ Spec: `.apm/kb/docs/Iterations/mobile-webview-chat-transcript/spec.md`
 npm test -w @novel-master/mobile
 ```
 
-## GitHub Release (Android)
+## GitHub Release
 
-Push a version tag to trigger [`.github/workflows/release-android.yml`](../../.github/workflows/release-android.yml):
+Push a version tag to trigger [`.github/workflows/release.yml`](../../.github/workflows/release.yml):
 
 ```bash
 git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The workflow builds release APKs for **armeabi-v7a**, **arm64-v8a**, **x86**, **x86_64**, plus a **universal** fat APK, and attaches them to a GitHub Release.
+The workflow builds in parallel:
 
-Optional repository secrets for production signing (otherwise the debug keystore is used):
+- **Android** — release APKs for **armeabi-v7a**, **arm64-v8a**, **x86**, **x86_64**, plus a **universal** fat APK
+- **Electron Windows** — NSIS installer (unsigned)
+- **Electron macOS** — DMG for Apple Silicon (unsigned)
+
+All artifacts are attached to a single GitHub Release.
+
+Optional repository secrets for Android production signing (otherwise the debug keystore is used):
 
 | Secret | Description |
 |--------|-------------|

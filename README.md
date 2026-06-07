@@ -1,6 +1,26 @@
-# Novel Master
+<p align="center">
+  <img src="./assets/icon.webp" alt="Novel Master" width="96">
+</p>
 
-面向**长篇小说创作**与 **AI Agent 协作**的写作工具。把设定、章节、提示词等放进统一的虚拟文件树里，在「项目 → 会话」中一边改稿一边对话，Agent 通过 `vfs.*` 工具直接读写工作区文件。
+<h1 align="center">Novel Master</h1>
+
+<p align="center">
+  面向<strong>长篇小说创作</strong>与 <strong>AI Agent 协作</strong>的写作工具
+</p>
+
+<p align="center">
+  <img src="./assets/desktop.png" alt="桌面端：文件预览、会话工作区与 Agent 对话" width="780">
+  <br>
+  <sub>桌面端 — 文件预览 · 会话工作区 · Agent 对话与工具调用</sub>
+</p>
+
+<p align="center">
+  <img src="./assets/mobile.png" alt="移动端：流式对话与 vfs 工具调用" width="320">
+  <br>
+  <sub>移动端 — 流式对话 · Agent 工具调用 · 聊天工作区</sub>
+</p>
+
+把设定、章节、提示词等放进统一的虚拟文件树里，在「项目 → 会话」中一边改稿一边对话，Agent 通过 `vfs.*` 工具直接读写工作区文件。
 
 当前交付：**Android 移动端** + **`nm` 命令行** + 共享 **Core** 领域层（CLI / App 行为一致）。
 

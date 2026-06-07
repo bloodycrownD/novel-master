@@ -46,6 +46,7 @@ npx @electron/rebuild -f -w better-sqlite3 -m . -v 35.7.5
 
 - `electron-builder.yml`: NSIS (Win), DMG (mac), tokenizer assets in `extraResources`.
 - Installers are **unsigned** — on macOS, use right-click → Open or adjust Gatekeeper for first launch.
+- CI: push a `v*` tag to run [`.github/workflows/release.yml`](../../.github/workflows/release.yml) (Android APKs + Win/macOS installers in one Release).
 
 ## Layout
 

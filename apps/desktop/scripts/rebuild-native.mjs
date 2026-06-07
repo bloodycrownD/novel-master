@@ -22,7 +22,11 @@ try {
     `npx @electron/rebuild -f -w better-sqlite3 -m "${repoRoot}" -v ${electronVersion}`,
     { stdio: "inherit", cwd: desktopRoot },
   );
-} catch {
+} catch (err) {
+  if (process.env.CI) {
+    console.error("[desktop] better-sqlite3 electron rebuild failed in CI.");
+    throw err;
+  }
   console.warn(
     "[desktop] better-sqlite3 electron rebuild skipped (optional for dev).",
   );
