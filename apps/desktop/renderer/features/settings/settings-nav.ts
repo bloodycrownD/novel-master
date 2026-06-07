@@ -10,7 +10,6 @@ export type SettingsViewId =
   | "providerCreate"
   | "providerEdit"
   | "modelSampling"
-  | "compactionConditions"
   | "eventsConfig"
   | "regexGroups"
   | "regexRules"
@@ -31,7 +30,6 @@ export const SETTINGS_NAV = [
   {
     label: "高级",
     items: [
-      { id: "compactionConditions" as const, label: "压缩条件", icon: "🗜️" },
       { id: "eventsConfig" as const, label: "事件配置", icon: "⚡" },
       { id: "regexGroups" as const, label: "正则过滤", icon: "🛡️" },
     ],
@@ -47,7 +45,6 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   dataManagement: "备份与恢复",
   agentsSettings: "Agent",
   providers: "服务商与模型",
-  compactionConditions: "压缩条件",
   eventsConfig: "事件配置",
   regexGroups: "正则过滤",
 };

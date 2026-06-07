@@ -5,13 +5,13 @@ import { runCompaction, runSessionAction } from "./features/chat/ConversationPan
 import { ConfirmModal } from "./components/ui/ConfirmModal";
 import { TextPromptModal } from "./components/ui/TextPromptModal";
 import { showToast } from "./components/ui/show-toast";
+import { DirectoryRuleModal } from "./features/workspace/DirectoryRuleModal";
 import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   entryLabelForTarget,
   renameWorkspaceEntry,
   runDirectWorkspaceAction,
-  setDirRuleEnabled,
 } from "./features/workspace/workspace-actions";
 import { workspaceMenuItems } from "./features/workspace/workspace-context";
 import type { WorkspaceContextTarget } from "./features/workspace/WorkspaceTree";
@@ -32,19 +32,19 @@ type WorkspacePromptState =
   | { kind: "create-folder"; target: WorkspaceContextTarget }
   | { kind: "rename"; target: WorkspaceContextTarget; initialName: string };
 
-type WorkspaceConfirmState =
-  | { kind: "delete"; target: WorkspaceContextTarget }
-  | { kind: "dir-rule"; target: WorkspaceContextTarget };
+type WorkspaceConfirmState = { kind: "delete"; target: WorkspaceContextTarget };
 
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
-  const { projectId, sessionId, refreshWorkspaceTrees } = useShellNav();
+  const { projectId, sessionId, refreshWorkspaceTrees, notifyAgentConfigChanged } =
+    useShellNav();
 
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
   const [workspacePrompt, setWorkspacePrompt] = useState<WorkspacePromptState | null>(null);
   const [workspaceConfirm, setWorkspaceConfirm] = useState<WorkspaceConfirmState | null>(null);
+  const [dirRuleTarget, setDirRuleTarget] = useState<WorkspaceContextTarget | null>(null);
   const [sessionMenu, setSessionMenu] = useState<{
     left: number;
     bottom: number;
@@ -106,7 +106,7 @@ function DesktopOverlays() {
         return;
       }
       if (action === "rule-config") {
-        setWorkspaceConfirm({ kind: "dir-rule", target });
+        setDirRuleTarget(target);
         return;
       }
 
@@ -185,20 +185,6 @@ function DesktopOverlays() {
       }
       return;
     }
-    if (confirm.kind === "dir-rule") {
-      const result = await setDirRuleEnabled(
-        confirm.target,
-        true,
-        projectId,
-        sessionId,
-      );
-      if (result.ok) {
-        refreshWorkspaceTrees();
-        showToast("目录规则已开启");
-      } else {
-        showToast(result.message);
-      }
-    }
   }, [workspaceConfirm, projectId, sessionId, refreshWorkspaceTrees]);
 
   return (
@@ -224,7 +210,10 @@ function DesktopOverlays() {
         </div>
         <SettingsOverlay
           open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => {
+            setSettingsOpen(false);
+            notifyAgentConfigChanged();
+          }}
         />
       </div>
 
@@ -349,29 +338,15 @@ function DesktopOverlays() {
         onCancel={() => setWorkspaceConfirm(null)}
       />
 
-      <ConfirmModal
-        open={workspaceConfirm?.kind === "dir-rule"}
-        title="目录规则"
-        message="是否开启该目录的规则？"
-        confirmLabel="开启"
-        onConfirm={handleWorkspaceConfirm}
-        onCancel={async () => {
-          const confirm = workspaceConfirm;
-          setWorkspaceConfirm(null);
-          if (confirm?.kind === "dir-rule") {
-            const result = await setDirRuleEnabled(
-              confirm.target,
-              false,
-              projectId,
-              sessionId,
-            );
-            if (result.ok) {
-              refreshWorkspaceTrees();
-              showToast("目录规则已关闭");
-            } else {
-              showToast(result.message);
-            }
-          }
+      <DirectoryRuleModal
+        open={dirRuleTarget != null}
+        target={dirRuleTarget}
+        projectId={projectId}
+        sessionId={sessionId}
+        onClose={() => setDirRuleTarget(null)}
+        onSaved={() => {
+          refreshWorkspaceTrees();
+          showToast("目录规则已保存");
         }}
       />
 

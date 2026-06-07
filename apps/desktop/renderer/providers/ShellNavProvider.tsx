@@ -78,6 +78,9 @@ export interface ShellNavContextValue {
   clearPreviewFile: () => void;
   treeRefreshToken: number;
   refreshWorkspaceTrees: () => void;
+  /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
+  agentConfigRevision: number;
+  notifyAgentConfigChanged: () => void;
 }
 
 
@@ -138,6 +141,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
+  const [agentConfigRevision, setAgentConfigRevision] = useState(0);
 
   const selectPreviewFile = useCallback(
     (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
@@ -156,6 +160,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const refreshWorkspaceTrees = useCallback(() => {
     setTreeRefreshToken((t) => t + 1);
+  }, []);
+
+  const notifyAgentConfigChanged = useCallback(() => {
+    setAgentConfigRevision((r) => r + 1);
   }, []);
 
 
@@ -414,6 +422,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       refreshWorkspaceTrees,
 
+      agentConfigRevision,
+
+      notifyAgentConfigChanged,
+
     }),
 
     [
@@ -449,6 +461,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       treeRefreshToken,
 
       refreshWorkspaceTrees,
+
+      agentConfigRevision,
+
+      notifyAgentConfigChanged,
 
     ],
 

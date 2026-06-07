@@ -1,5 +1,46 @@
 /** VFS tree row display helpers (aligned with mobile vfs-row-mapper). */
-import type { WorktreeListRowDto } from "../../shared/ipc-types";
+import type { WorktreeListRowDto } from "../../../shared/ipc-types";
+
+/** Parent logical path; session root `/` stays `/`. */
+export function parentLogicalPath(path: string): string | null {
+  if (path === "/") {
+    return null;
+  }
+  const idx = path.lastIndexOf("/");
+  if (idx <= 0) {
+    return "/";
+  }
+  return path.slice(0, idx);
+}
+
+/** Whether `childPath` is under `ancestorPath` (strict descendant). */
+export function isDescendantPath(
+  ancestorPath: string,
+  childPath: string,
+): boolean {
+  if (ancestorPath === childPath) {
+    return false;
+  }
+  if (ancestorPath === "/") {
+    return childPath !== "/";
+  }
+  return childPath.startsWith(`${ancestorPath}/`);
+}
+
+/** Row visible when every ancestor directory is expanded. */
+export function isTreeRowVisible(
+  path: string,
+  expandedDirs: ReadonlySet<string>,
+): boolean {
+  let current = parentLogicalPath(path);
+  while (current !== null) {
+    if (!expandedDirs.has(current)) {
+      return false;
+    }
+    current = parentLogicalPath(current);
+  }
+  return true;
+}
 
 export function entryName(path: string): string {
   if (path === "/") {

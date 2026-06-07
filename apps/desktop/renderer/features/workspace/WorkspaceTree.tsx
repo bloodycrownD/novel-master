@@ -9,6 +9,7 @@ import { useShellNav } from "../../providers/ShellNavProvider";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
   entryName,
+  isTreeRowVisible,
   pathDepth,
   vfsEntryStatusText,
 } from "./vfs-tree-utils";
@@ -38,6 +39,9 @@ export function WorkspaceTree({
 }: WorkspaceTreeProps) {
   const { projectId, sessionId, previewFile, selectPreviewFile } = useShellNav();
   const [rows, setRows] = useState<WorktreeListRowDto[]>([]);
+  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
+    () => new Set(["/"]),
+  );
   const [loading, setLoading] = useState(true);
 
   const req = useMemo(
@@ -50,13 +54,14 @@ export function WorkspaceTree({
     try {
       const result = await ipcWorktreeBuildListRows(req);
       if (result.ok) {
-        const sorted = [...result.data].sort((a, b) => {
-          if (a.kind !== b.kind) {
-            return a.kind === "dir" ? -1 : 1;
-          }
-          return entryName(a.path).localeCompare(entryName(b.path), "zh-CN");
-        });
-        setRows(sorted);
+        setRows(result.data);
+        setExpandedDirs(
+          new Set(
+            result.data
+              .filter((row) => row.kind === "dir")
+              .map((row) => row.path),
+          ),
+        );
       }
     } finally {
       setLoading(false);
@@ -66,6 +71,23 @@ export function WorkspaceTree({
   useEffect(() => {
     void reload();
   }, [reload, refreshToken]);
+
+  const visibleRows = useMemo(
+    () => rows.filter((row) => isTreeRowVisible(row.path, expandedDirs)),
+    [rows, expandedDirs],
+  );
+
+  const toggleDir = useCallback((dirPath: string) => {
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      if (next.has(dirPath)) {
+        next.delete(dirPath);
+      } else {
+        next.add(dirPath);
+      }
+      return next;
+    });
+  }, []);
 
   if (loading) {
     return (
@@ -80,9 +102,10 @@ export function WorkspaceTree({
       {rows.length === 0 ? (
         <p className="tree-empty">空目录</p>
       ) : (
-        rows.map((row) => {
+        visibleRows.map((row) => {
           const isDir = row.kind === "dir";
           const depth = pathDepth(row.path);
+          const expanded = isDir && expandedDirs.has(row.path);
           const active =
             previewFile?.path === row.path &&
             previewFile.workspaceScope === panelScope;
@@ -95,10 +118,13 @@ export function WorkspaceTree({
               style={{ paddingLeft: `${10 + depth * 14}px` }}
               role="button"
               tabIndex={0}
+              aria-expanded={isDir ? expanded : undefined}
               onClick={() => {
-                if (!isDir) {
-                  selectPreviewFile(panelScope, row.path);
+                if (isDir) {
+                  toggleDir(row.path);
+                  return;
                 }
+                selectPreviewFile(panelScope, row.path);
               }}
               onContextMenu={(e) => {
                 e.preventDefault();
@@ -112,11 +138,23 @@ export function WorkspaceTree({
                 });
               }}
               onKeyDown={(e) => {
-                if ((e.key === "Enter" || e.key === " ") && !isDir) {
-                  selectPreviewFile(panelScope, row.path);
+                if (e.key !== "Enter" && e.key !== " ") {
+                  return;
                 }
+                e.preventDefault();
+                if (isDir) {
+                  toggleDir(row.path);
+                  return;
+                }
+                selectPreviewFile(panelScope, row.path);
               }}
             >
+              <span
+                className={`tree-node__chevron${isDir ? "" : " tree-node__chevron--leaf"}${expanded ? "" : " tree-node__chevron--collapsed"}`}
+                aria-hidden
+              >
+                {isDir ? "▾" : ""}
+              </span>
               <span className="tree-node__icon">{isDir ? "📁" : "📄"}</span>
               <span className="tree-node__label">{entryName(row.path)}</span>
               <span className="tree-node__meta">{vfsEntryStatusText(row)}</span>

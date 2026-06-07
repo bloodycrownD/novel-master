@@ -10,7 +10,6 @@ import {
 import {
   AgentEditorView,
   AgentsSettingsView,
-  CompactionConditionsView,
   DataManagementView,
   EventsConfigView,
   ModelSamplingView,
@@ -103,8 +102,6 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <ProviderDetailView nav={nav} />;
       case "modelSampling":
         return <ModelSamplingView nav={nav} />;
-      case "compactionConditions":
-        return <CompactionConditionsView />;
       case "eventsConfig":
         return <EventsConfigView />;
       case "regexGroups":
@@ -175,7 +172,9 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
             </button>
           </header>
           <div className="settings-page__content" id="settings-page-root">
-            {renderContent()}
+            <div key={viewId} className="settings-view">
+              {renderContent()}
+            </div>
           </div>
         </div>
       </div>

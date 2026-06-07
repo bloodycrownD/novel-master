@@ -63,7 +63,10 @@ export async function handleRegexCreateGroup(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.regexConfig.createGroup(req);
+    await rt.regexConfig.createGroup({
+      groupId: req.groupId,
+      displayName: req.displayName,
+    });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -148,9 +151,9 @@ export async function handleRegexCreateRule(
       displayReplace: rule.displayReplace ?? undefined,
       scopeUser: rule.scopeUser,
       scopeAssistant: rule.scopeAssistant,
-      startDepth: rule.startDepth,
-      endDepth: rule.endDepth,
-    });
+      ...(rule.startDepth != null ? { startDepth: rule.startDepth } : {}),
+      ...(rule.endDepth != null ? { endDepth: rule.endDepth } : {}),
+    } as Parameters<typeof rt.regexConfig.createRule>[0]);
     return { ok: true, data: { ruleId: created.ruleId } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

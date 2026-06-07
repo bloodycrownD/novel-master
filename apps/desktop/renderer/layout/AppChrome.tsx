@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { useTheme } from "../providers/ThemeProvider";
 import type { UseColumnSplittersResult } from "../hooks/useColumnSplitters";
-import { AppMenuBar } from "./AppMenuBar";
+import { Tooltip } from "../components/ui/Tooltip";
 import { getDesktopBridge } from "../ipc/client";
+import appIcon from "../../../../icon.webp";
 
 interface AppChromeProps {
   columnLayout: Pick<
@@ -13,15 +14,14 @@ interface AppChromeProps {
   onToggleSettings: () => void;
 }
 
-function readShellFlags(): { customTitleBar: boolean; inWindowMenuBar: boolean } {
+function readShellFlags(): { customTitleBar: boolean } {
   try {
     const bridge = getDesktopBridge();
     return {
       customTitleBar: bridge.customTitleBar,
-      inWindowMenuBar: bridge.inWindowMenuBar,
     };
   } catch {
-    return { customTitleBar: false, inWindowMenuBar: false };
+    return { customTitleBar: false };
   }
 }
 
@@ -32,7 +32,7 @@ export function AppChrome({
 }: AppChromeProps) {
   const { mode, toggleMode } = useTheme();
   const { columnVisibility, toggleColumn } = columnLayout;
-  const { customTitleBar, inWindowMenuBar } = readShellFlags();
+  const { customTitleBar } = readShellFlags();
 
   useEffect(() => {
     if (customTitleBar) {
@@ -46,20 +46,20 @@ export function AppChrome({
   return (
     <header
       id="app-chrome"
-      className={
-        customTitleBar
-          ? "app-chrome--custom-titlebar"
-          : inWindowMenuBar
-            ? "app-chrome--with-menubar"
-            : undefined
-      }
+      className={customTitleBar ? "app-chrome--custom-titlebar" : undefined}
       aria-label="全局操作"
     >
       <div className="app-chrome__leading">
-        {inWindowMenuBar ? <AppMenuBar /> : null}
+        <img
+          src={appIcon}
+          alt=""
+          className="app-chrome__app-icon"
+          width={20}
+          height={20}
+          draggable={false}
+        />
       </div>
-
-      <div className="app-chrome__center">
+      <div className="app-chrome__trailing">
         <div className="app-chrome__actions">
           <div
             className="app-chrome__column-toggles"
@@ -74,30 +74,32 @@ export function AppChrome({
               };
               const icons = { preview: "◧", explorer: "▥", chat: "◨" };
               return (
-                <button
-                  key={key}
-                  type="button"
-                  className={`icon-btn column-toggle${columnVisibility[key] ? " is-active" : ""}`}
-                  id={`toggle-column-${key}`}
-                  data-column={key}
-                  aria-label={`显示或隐藏${labels[key]}`}
-                  title={labels[key]}
-                  onClick={() => toggleColumn(key)}
-                >
-                  {icons[key]}
-                </button>
+                <Tooltip key={key} content={labels[key]}>
+                  <button
+                    type="button"
+                    className={`icon-btn column-toggle${columnVisibility[key] ? " is-active" : ""}`}
+                    id={`toggle-column-${key}`}
+                    data-column={key}
+                    aria-label={`显示或隐藏${labels[key]}`}
+                    onClick={() => toggleColumn(key)}
+                  >
+                    {icons[key]}
+                  </button>
+                </Tooltip>
               );
             })}
           </div>
-          <button
-            type="button"
-            className="icon-btn theme-toggle"
-            id="theme-toggle"
-            aria-label="切换主题"
-            onClick={() => void toggleMode()}
-          >
-            {mode === "dark" ? "☾" : "☀"}
-          </button>
+          <Tooltip content={mode === "dark" ? "切换浅色主题" : "切换深色主题"}>
+            <button
+              type="button"
+              className="icon-btn theme-toggle"
+              id="theme-toggle"
+              aria-label="切换主题"
+              onClick={() => void toggleMode()}
+            >
+              {mode === "dark" ? "☾" : "☀"}
+            </button>
+          </Tooltip>
           <button
             type="button"
             className={`icon-btn${settingsOpen ? " is-active" : ""}`}
@@ -109,8 +111,6 @@ export function AppChrome({
           </button>
         </div>
       </div>
-
-      <div className="app-chrome__trailing" aria-hidden="true" />
     </header>
   );
 }

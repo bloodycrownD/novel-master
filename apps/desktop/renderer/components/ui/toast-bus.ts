@@ -9,7 +9,7 @@ export function subscribeToast(listener: ToastListener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function showToast(message: string, durationMs = 2800): void {
+export function showToast(message: string, durationMs = 3200): void {
   for (const listener of listeners) {
     listener(message);
   }

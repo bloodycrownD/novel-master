@@ -8,6 +8,30 @@ interface RealPromptPanelProps {
   visible: boolean;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  system: "System",
+  user: "User",
+  assistant: "Assistant",
+};
+
+function previewLine(body: string): string {
+  const line = body.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
+  if (line.length === 0) {
+    return "空内容";
+  }
+  if (line.length <= 72) {
+    return line;
+  }
+  return `${line.slice(0, 69)}…`;
+}
+
+function collapsedHint(body: string): string {
+  const charCount = body.length;
+  const hint = charCount === 0 ? "空内容" : previewLine(body);
+  const countSuffix = charCount > 0 ? ` · ${charCount} 字` : "";
+  return `${hint}${countSuffix}`;
+}
+
 export function RealPromptPanel({
   projectId,
   sessionId,
@@ -37,8 +61,13 @@ export function RealPromptPanel({
     <div className="real-prompt-list" id="real-prompt-list">
       {segments.map((segment) => {
         const open = expanded[segment.id] ?? false;
+        const roleLabel = ROLE_LABELS[segment.role] ?? segment.role;
         return (
-          <div key={segment.id} className="prompt-segment" data-segment-id={segment.id}>
+          <div
+            key={segment.id}
+            className={`prompt-segment${open ? " is-expanded" : ""}`}
+            data-segment-id={segment.id}
+          >
             <button
               type="button"
               className="prompt-segment__header"
@@ -48,18 +77,17 @@ export function RealPromptPanel({
               }
             >
               <span className="prompt-segment__text">
-                <span className="prompt-segment__role">{segment.role}</span>
+                <span className="prompt-segment__role">{roleLabel}</span>
                 <span className="prompt-segment__title">{segment.title}</span>
+                <span className="prompt-segment__preview">
+                  {collapsedHint(segment.body)}
+                </span>
               </span>
               <span className="prompt-segment__chevron" aria-hidden="true">
                 {open ? "▼" : "▶"}
               </span>
             </button>
-            {open ? (
-              <pre className="prompt-segment__body">
-                {segment.body || "（空）"}
-              </pre>
-            ) : null}
+            <pre className="prompt-segment__body">{segment.body || "（空）"}</pre>
           </div>
         );
       })}

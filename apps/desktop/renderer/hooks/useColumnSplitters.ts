@@ -154,27 +154,38 @@ function getFlexibleWorkspaceColumn(
   return null;
 }
 
+/** 剩余空间扩展优先级：左侧栏 > 右侧栏 > 中间栏（三栏同显时由右侧栏伸缩）。 */
+function resolveFlexColumn(vis: Record<ColumnKey, boolean>): ColumnKey | null {
+  if (countVisibleWorkspaceColumns(vis) === 3) {
+    return "chat";
+  }
+  if (vis.preview) {
+    return "preview";
+  }
+  if (vis.chat) {
+    return "chat";
+  }
+  if (vis.explorer) {
+    return "explorer";
+  }
+  return null;
+}
+
 function trackForColumn(
   key: ColumnKey,
   widths: { preview: number; explorer: number },
-  flexKey: ColumnKey | null,
   vis: Record<ColumnKey, boolean>,
-  columnLayoutMaterialized: boolean,
 ): string {
+  const flexKey = resolveFlexColumn(vis);
   if (flexKey === key) {
     return `minmax(${getColumnMinWidth(key)}px, 1fr)`;
   }
-  if (columnLayoutMaterialized && key === "chat" && vis.chat) {
-    const visibleCount = countVisibleWorkspaceColumns(vis);
-    if (
-      visibleCount === 3 ||
-      (visibleCount === 2 && !vis.preview && vis.explorer)
-    ) {
-      return `minmax(${getColumnMinWidth("chat")}px, 1fr)`;
-    }
+  if (key === "preview") {
+    return `${widths.preview}px`;
   }
-  if (key === "preview") return `${widths.preview}px`;
-  if (key === "explorer") return `${widths.explorer}px`;
+  if (key === "explorer") {
+    return `${widths.explorer}px`;
+  }
   return `${getColumnMinWidth("chat")}px`;
 }
 
@@ -196,7 +207,6 @@ function applyWorkspaceLayout(
   widths: { preview: number; explorer: number },
   columnLayoutMaterialized: boolean,
 ) {
-  const flexKey = getFlexibleWorkspaceColumn(vis, columnLayoutMaterialized);
   const tracks: string[] = [];
   let col = 1;
   const visibleColumns: ColumnKey[] = [];
@@ -207,7 +217,7 @@ function applyWorkspaceLayout(
 
   if (vis.preview) {
     visibleColumns.push("preview");
-    tracks.push(trackForColumn("preview", widths, flexKey, vis, columnLayoutMaterialized));
+    tracks.push(trackForColumn("preview", widths, vis));
     setWorkspaceGridItem("preview-header", col, true);
     setWorkspaceGridItem("preview-pane", col, true);
     col += 1;
@@ -225,7 +235,7 @@ function applyWorkspaceLayout(
       col += 1;
     }
     visibleColumns.push("explorer");
-    tracks.push(trackForColumn("explorer", widths, flexKey, vis, columnLayoutMaterialized));
+    tracks.push(trackForColumn("explorer", widths, vis));
     setWorkspaceGridItem("explorer-header", col, true);
     setWorkspaceGridItem("explorer-pane", col, true);
     col += 1;
@@ -243,7 +253,7 @@ function applyWorkspaceLayout(
       col += 1;
     }
     visibleColumns.push("chat");
-    tracks.push(trackForColumn("chat", widths, flexKey, vis, columnLayoutMaterialized));
+    tracks.push(trackForColumn("chat", widths, vis));
     setWorkspaceGridItem("rail-header", col, true);
     setWorkspaceGridItem("chat-rail", col, true);
     col += 1;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types";
 import { PickerModal } from "../../components/ui/PickerModal";
+import { Tooltip } from "../../components/ui/Tooltip";
 import { showToast } from "../../components/ui/show-toast";
 import {
   ipcAgentListPicker,
@@ -10,6 +11,7 @@ import {
   ipcPromptAgentMeta,
   ipcPromptChatTokenLabel,
 } from "../../ipc/client";
+import { useShellNav } from "../../providers/ShellNavProvider";
 import { formatTokenCount } from "../../utils/format-token-count";
 
 interface WorkspaceFooterProps {
@@ -29,6 +31,7 @@ function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
 }
 
 export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) {
+  const { notifyAgentConfigChanged } = useShellNav();
   const [agentName, setAgentName] = useState("—");
   const [modelLabel, setModelLabel] = useState("—");
   const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
@@ -150,9 +153,11 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
             <span className="workspace-token-stats__count">
               {tokenCountLabel(tokenStats)}
             </span>
-            <span className="workspace-token-stats__tokenizer" title="分词器">
-              {tokenStats.counterKind}
-            </span>
+            <Tooltip content="分词器" placement="top">
+              <span className="workspace-token-stats__tokenizer">
+                {tokenStats.counterKind}
+              </span>
+            </Tooltip>
           </div>
         </div>
       ) : null}
@@ -162,7 +167,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
         rows={agentRows.map((r) => ({ id: r.agentId, label: r.label }))}
         onClose={() => setAgentPickerOpen(false)}
         onSelect={(agentId) => {
-          void ipcAgentSetCurrent({ agentId }).then(() => reload());
+          void ipcAgentSetCurrent({ agentId }).then(() => {
+            void reload();
+            notifyAgentConfigChanged();
+          });
         }}
       />
       <PickerModal
@@ -171,7 +179,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
         rows={modelRows.map((r) => ({ id: r.applicationModelId, label: r.label }))}
         onClose={() => setModelPickerOpen(false)}
         onSelect={(applicationModelId) => {
-          void ipcModelSetCurrent({ applicationModelId }).then(() => reload());
+          void ipcModelSetCurrent({ applicationModelId }).then(() => {
+            void reload();
+            notifyAgentConfigChanged();
+          });
         }}
       />
     </div>

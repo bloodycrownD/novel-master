@@ -10,6 +10,7 @@ import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
 } from "./ipc/forward-event-bus.js";
+import { attachSessionWorktreeSync } from "./session-worktree-sync.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -120,6 +121,7 @@ async function bootstrapMainServices(): Promise<void> {
   registerIpcHandlers();
   const runtime = await getDesktopRuntime();
   attachEventBusForwarder(runtime.eventBus);
+  attachSessionWorktreeSync(runtime.eventBus);
 }
 
 app.whenReady().then(async () => {

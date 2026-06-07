@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
+import type { AgentStepCommittedPayload } from "../../../shared/agent-event-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
   ipcAppUiGet,
@@ -85,20 +86,30 @@ export function ConversationPanel({
     setStreamingText("");
   }, []);
 
-  const onStepOrFinish = useCallback(() => {
+  const onStepCommitted = useCallback(
+    (payload: AgentStepCommittedPayload) => {
+      setStreamingText("");
+      void reloadMessages();
+      if (payload.phase === "tool_results") {
+        refreshWorkspaceTrees();
+      }
+    },
+    [reloadMessages, refreshWorkspaceTrees],
+  );
+
+  const onRunFinished = useCallback(() => {
+    setRunning(false);
     setStreamingText("");
     void reloadMessages();
-  }, [reloadMessages]);
+    refreshWorkspaceTrees();
+  }, [reloadMessages, refreshWorkspaceTrees]);
 
   useAgentStream({
     sessionId,
     onTextDelta,
     onThinkingDelta: () => undefined,
-    onStepCommitted: onStepOrFinish,
-    onRunFinished: () => {
-      setRunning(false);
-      onStepOrFinish();
-    },
+    onStepCommitted,
+    onRunFinished,
   });
 
   useEffect(() => {

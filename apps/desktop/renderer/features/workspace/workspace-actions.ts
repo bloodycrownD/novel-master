@@ -1,9 +1,14 @@
-import type { VfsScopeRequest } from "../../../shared/ipc-types";
+import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core";
+import type {
+  VfsScopeRequest,
+  WorktreeSetDirRuleRequest,
+} from "../../../shared/ipc-types";
 import {
   ipcVfsDelete,
   ipcVfsMkdir,
   ipcVfsRename,
   ipcVfsWrite,
+  ipcWorktreeGetDirRule,
   ipcWorktreeSetDirRule,
   ipcWorktreeSetFileRule,
   vfsScope,
@@ -114,6 +119,57 @@ export async function deleteWorkspaceEntry(
     path: target.row.path,
     recursive: true,
   });
+  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
+}
+
+export function defaultDirRuleRequest(
+  logicalPath: string,
+  scope: VfsScopeRequest,
+): WorktreeSetDirRuleRequest {
+  return {
+    ...scope,
+    logicalPath,
+    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    ruleEnabled: true,
+  };
+}
+
+export async function loadDirRuleForm(
+  target: WorkspaceContextTarget,
+  projectId: string | undefined,
+  sessionId: string | undefined,
+): Promise<WorktreeSetDirRuleRequest | null> {
+  if (target.kind !== "row" || target.row.kind !== "dir") {
+    return null;
+  }
+  const req = scopeRequestFromTarget(target, projectId, sessionId);
+  const result = await ipcWorktreeGetDirRule({
+    ...req,
+    logicalPath: target.row.path,
+  });
+  if (result.ok && result.data) {
+    return {
+      ...req,
+      logicalPath: target.row.path,
+      ruleEnabled: result.data.ruleEnabled,
+      sortField: result.data.sortField,
+      sortOrder: result.data.sortOrder,
+      headCount: result.data.headCount,
+      tailCount: result.data.tailCount,
+      fillPolicy: result.data.fillPolicy,
+    };
+  }
+  return defaultDirRuleRequest(target.row.path, req);
+}
+
+export async function saveDirRule(
+  input: WorktreeSetDirRuleRequest,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const result = await ipcWorktreeSetDirRule(input);
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 

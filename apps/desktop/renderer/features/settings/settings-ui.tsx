@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Switch } from "../../components/ui/Switch";
+import { BatchCheckbox } from "../../components/batch/BatchCheckbox";
 
 export function SettingsPanel({ children }: { children: ReactNode }) {
   return <div className="settings-panel">{children}</div>;
@@ -103,23 +104,49 @@ export function SettingsListItem({
   meta,
   onClick,
   onMenu,
+  batchMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   title: string;
   meta?: string;
   onClick?: () => void;
   onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  batchMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
+  const handleClick = () => {
+    if (batchMode) {
+      onToggleSelect?.();
+      return;
+    }
+    onClick?.();
+  };
+
   const itemButton = (
-    <button type="button" className="settings-list-item" onClick={onClick}>
+    <button
+      type="button"
+      className={`settings-list-item${selected ? " is-selected" : ""}`}
+      onClick={handleClick}
+    >
+      {batchMode ? (
+        <BatchCheckbox
+          checked={selected}
+          onToggle={() => onToggleSelect?.()}
+        />
+      ) : null}
       <span className="settings-list-item__label">{title}</span>
       {meta ? <span className="settings-list-item__meta">{meta}</span> : null}
-      <span className="settings-list-item__chevron" aria-hidden="true">
-        ›
-      </span>
+      {!batchMode ? (
+        <span className="settings-list-item__chevron" aria-hidden="true">
+          ›
+        </span>
+      ) : null}
     </button>
   );
 
-  if (!onMenu) {
+  if (!onMenu || batchMode) {
     return itemButton;
   }
 
