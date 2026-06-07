@@ -5,7 +5,7 @@
  * KKV purges/moves, and provider seeding inside a single transaction.
  *
  * **Column migrations** (legacy DBs): `chat_message.hidden`, `vfs_entry.entry_kind`,
- * `session_execute_batch.message_id`, regex depth rename, `llm_saved_model.settings_json`,
+ * `vfs_entry.head_version`, `session_execute_batch.message_id`, regex depth rename, `llm_saved_model.settings_json`,
  * `llm_provider.default_model_id` drop, `agent_definition` legacy column drop.
  *
  * **KKV migrations**: purge `nm-model-sampling` + `global-config`; move Client UI
@@ -18,6 +18,8 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { VFS_SCHEMA_STATEMENTS } from "./vfs/vfs-schema.js";
+import { VFS_REVISION_SCHEMA_STATEMENTS } from "./vfs/vfs-revision-schema.js";
+import { MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS } from "./message-checkpoint/message-checkpoint-schema.js";
 import { KKV_SCHEMA_STATEMENTS } from "./kkv/kkv-schema.js";
 import { CHAT_SCHEMA_STATEMENTS } from "./chat/chat-schema.js";
 import { SESSION_FS_SCHEMA_STATEMENTS } from "./session-fs/session-fs-schema.js";
@@ -31,6 +33,8 @@ import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
 import { migrateVfsEntryKind } from "./vfs/migrate-vfs-entry-kind.js";
+import { migrateVfsHeadVersion } from "./vfs/migrate-vfs-head-version.js";
+import { migrateVfsRevisionBaseline } from "./vfs/migrate-vfs-revision.js";
 import { migrateWorktreeFillPolicy } from "./worktree/migrate-worktree-fill-policy.js";
 import { migrateClientUiBehaviorPrefsToPreferences } from "./preferences/migrate-client-ui-behavior-prefs.js";
 import { migratePurgeGlobalConfigKkv } from "./preferences/migrate-purge-global-config-kkv.js";
@@ -43,6 +47,8 @@ import {
 /** All module DDL statements in dependency-safe execution order. */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
   ...VFS_SCHEMA_STATEMENTS,
+  ...VFS_REVISION_SCHEMA_STATEMENTS,
+  ...MESSAGE_CHECKPOINT_SCHEMA_STATEMENTS,
   ...KKV_SCHEMA_STATEMENTS,
   ...CHAT_SCHEMA_STATEMENTS,
   ...SESSION_FS_SCHEMA_STATEMENTS,
@@ -108,6 +114,8 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migrateAddBatchMessageId(tx);
     await migrateChatMessageHidden(tx);
     await migrateVfsEntryKind(tx);
+    await migrateVfsHeadVersion(tx);
+    await migrateVfsRevisionBaseline(tx);
     await migrateWorktreeFillPolicy(tx);
     await migrateDropProviderDefaultModelId(tx);
     await migrateDropAgentDefinitionLegacyColumns(tx);

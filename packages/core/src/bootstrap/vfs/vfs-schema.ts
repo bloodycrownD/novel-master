@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS vfs_entry (
   path TEXT PRIMARY KEY,
   content TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 1,
+  head_version INTEGER NOT NULL DEFAULT 1,
   mtime_ms INTEGER NOT NULL,
   storage_kind TEXT NOT NULL DEFAULT 'inline',
   external_uri TEXT,

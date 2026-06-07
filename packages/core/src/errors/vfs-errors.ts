@@ -48,6 +48,16 @@ export function isVfsError(
   error: unknown,
   code?: VfsErrorCode,
 ): error is VfsError {
+  if (matchesVfsError(error, code)) {
+    return true;
+  }
+  if (typeof error === "object" && error !== null && "cause" in error) {
+    return matchesVfsError((error as { cause: unknown }).cause, code);
+  }
+  return false;
+}
+
+function matchesVfsError(error: unknown, code?: VfsErrorCode): error is VfsError {
   if (typeof error !== "object" || error === null) {
     return false;
   }

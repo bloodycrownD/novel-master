@@ -34,10 +34,12 @@ function rowToEntry(row: Row): VfsEntry {
   const kindRaw = row.entry_kind;
   const entryKind: VfsEntryKind =
     kindRaw === "directory" ? "directory" : "file";
+  const headVersion =
+    row.head_version == null ? Number(row.version) : Number(row.head_version);
   return {
     path: String(row.path),
     content: String(row.content),
-    version: Number(row.version),
+    version: headVersion,
     mtimeMs: Number(row.mtime_ms),
     storageKind: String(row.storage_kind) as VfsStorageKind,
     externalUri: row.external_uri == null ? null : String(row.external_uri),
@@ -119,7 +121,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT path, content, version, mtime_ms, storage_kind, external_uri, entry_kind
+      `SELECT path, content, version, head_version, mtime_ms, storage_kind, external_uri, entry_kind
        FROM vfs_entry WHERE path = #{path}`,
       { path: normalized },
     );
@@ -135,8 +137,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind, entry_kind)
-       VALUES (#{path}, #{content}, 1, #{mtimeMs}, 'inline', 'file')`,
+      `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
+       VALUES (#{path}, #{content}, 1, 1, #{mtimeMs}, 'inline', 'file')`,
       { path: normalized, content, mtimeMs },
     );
     return { version: 1 };
@@ -148,8 +150,8 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO vfs_entry (path, content, version, mtime_ms, storage_kind, entry_kind)
-       VALUES (#{path}, '', 1, #{mtimeMs}, 'inline', 'directory')`,
+      `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
+       VALUES (#{path}, '', 1, 1, #{mtimeMs}, 'inline', 'directory')`,
       { path: normalized, mtimeMs },
     );
   }
@@ -168,15 +170,18 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.conn,
         this.parser,
         `UPDATE vfs_entry
-         SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
-         WHERE path = #{path} AND version = #{expectedVersion} AND entry_kind = 'file'`,
+         SET content = #{content},
+             version = head_version + 1,
+             head_version = head_version + 1,
+             mtime_ms = #{mtimeMs}
+         WHERE path = #{path} AND head_version = #{expectedVersion} AND entry_kind = 'file'`,
         { content, mtimeMs, path: normalized, expectedVersion },
       );
       if (result.changes === 0) {
-        const rows = await queryTemplate<{ version: number }>(
+        const rows = await queryTemplate<{ head_version: number }>(
           this.conn,
           this.parser,
-          `SELECT version FROM vfs_entry WHERE path = #{path}`,
+          `SELECT head_version FROM vfs_entry WHERE path = #{path}`,
           { path: normalized },
         );
         if (rows.length === 0) {
@@ -185,7 +190,7 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         throw vfsConflict(
           normalized,
           expectedVersion,
-          Number(rows[0]!.version),
+          Number(rows[0]!.head_version),
         );
       }
     } else {
@@ -193,7 +198,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
         this.conn,
         this.parser,
         `UPDATE vfs_entry
-         SET content = #{content}, version = version + 1, mtime_ms = #{mtimeMs}
+         SET content = #{content},
+             version = head_version + 1,
+             head_version = head_version + 1,
+             mtime_ms = #{mtimeMs}
          WHERE path = #{path} AND entry_kind = 'file'`,
         { content, mtimeMs, path: normalized },
       );
@@ -202,13 +210,13 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
       }
     }
 
-    const rows = await queryTemplate<{ version: number }>(
+    const rows = await queryTemplate<{ head_version: number }>(
       this.conn,
       this.parser,
-      `SELECT version FROM vfs_entry WHERE path = #{path}`,
+      `SELECT head_version FROM vfs_entry WHERE path = #{path}`,
       { path: normalized },
     );
-    return { version: Number(rows[0]!.version) };
+    return { version: Number(rows[0]!.head_version) };
   }
 
   async delete(path: string, options: VfsDeleteOptions): Promise<void> {

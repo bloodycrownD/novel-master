@@ -7,14 +7,16 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { DefaultVfsService } from "./impl/vfs.service.js";
+import { RevisionAwareVfsService } from "./impl/revision-aware-vfs.service.js";
 import type { VfsService } from "./vfs.port.js";
 
 /**
- * Creates a {@link VfsService} backed by SQLite vfs_entry storage.
+ * Creates a revision-aware {@link VfsService} backed by SQLite storage.
  *
  * @param conn - Open TDBC connection after {@link bootstrapNovelMaster}
  */
 export function createVfsService(conn: TdbcConnection): VfsService {
-  const repo = new SqliteVfsEntryRepository(conn);
-  return new DefaultVfsService(repo);
+  const entryRepo = new SqliteVfsEntryRepository(conn);
+  const inner = new DefaultVfsService(entryRepo);
+  return new RevisionAwareVfsService(conn, inner);
 }
