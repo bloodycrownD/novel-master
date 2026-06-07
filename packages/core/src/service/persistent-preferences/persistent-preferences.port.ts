@@ -5,7 +5,7 @@
  */
 
 /**
- * v1 frozen preferences; extend only via PRD + interface changes.
+ * v1 frozen preferences; v2 extends via explicit typed methods (no raw UI writes).
  */
 export interface PersistentPreferences {
   /**
@@ -14,6 +14,28 @@ export interface PersistentPreferences {
   getSessionFsVersionCheck(): Promise<boolean>;
   setSessionFsVersionCheck(enabled: boolean): Promise<void>;
   resetSessionFsVersionCheck(): Promise<void>;
+
+  /**
+   * LLM chat SSE streaming (default `true` when unset).
+   */
+  getLlmStreamEnabled(): Promise<boolean>;
+  setLlmStreamEnabled(enabled: boolean): Promise<void>;
+  resetLlmStreamEnabled(): Promise<void>;
+
+  /**
+   * Show full tool call parameters in chat UI (default `false` when unset).
+   */
+  getShowFullToolParams(): Promise<boolean>;
+  setShowFullToolParams(enabled: boolean): Promise<void>;
+  resetShowFullToolParams(): Promise<void>;
+
+  /**
+   * SessionFs checkpoint FIFO retention count (default `100` when unset).
+   * @throws {PreferencesError} `INVALID_VALUE` when stored or set value is not an integer in 1..9999
+   */
+  getCheckpointRetention(): Promise<number>;
+  setCheckpointRetention(count: number): Promise<void>;
+  resetCheckpointRetention(): Promise<void>;
 
   /** All entries in `nm-preferences`, sorted by key (for `nm preferences list`). */
   list(): Promise<ReadonlyArray<{ key: string; value: string }>>;
