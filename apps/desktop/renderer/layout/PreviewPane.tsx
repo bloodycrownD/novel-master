@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import Markdown from "react-markdown";
-import {
-  ipcSessionFsExecute,
-  ipcVfsRead,
-  ipcVfsWrite,
-  vfsScope,
-} from "../ipc/client";
+import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
 
 export function PreviewPane() {
@@ -59,34 +54,17 @@ export function PreviewPane() {
     }
     setSaving(true);
     try {
-      if (
-        previewFile.workspaceScope === "chat" &&
-        projectId &&
-        sessionId
-      ) {
-        await ipcSessionFsExecute({
+      await ipcVfsWrite({
+        ...vfsScope(
+          previewFile.workspaceScope,
           projectId,
           sessionId,
-          actor: "user",
-          actions: [
-            { function: "write", path: previewFile.path, content },
-          ],
-          expectedVersion: version,
-          versionCheck: version != null,
-        });
-      } else {
-        await ipcVfsWrite({
-          ...vfsScope(
-            previewFile.workspaceScope,
-            projectId,
-            sessionId,
-          ),
-          path: previewFile.path,
-          content,
-          expectedVersion: version,
-          versionCheck: version != null,
-        });
-      }
+        ),
+        path: previewFile.path,
+        content,
+        expectedVersion: version,
+        versionCheck: version != null,
+      });
       setSavedContent(content);
       await loadFile();
       refreshWorkspaceTrees();

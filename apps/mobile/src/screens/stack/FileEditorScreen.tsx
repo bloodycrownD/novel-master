@@ -1,5 +1,5 @@
 /**
- * Full-screen file editor: read VFS, save via sessionFs (session) or vfs.write.
+ * Full-screen file editor: read VFS, save via scoped vfs.write (no checkpoint).
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {
@@ -117,30 +117,16 @@ export function FileEditorScreen() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      if (scopeKind === 'session') {
-        if (!projectId || !sessionId) {
-          throw new Error('缺少 projectId 或 sessionId');
-        }
-        await runtime.sessionFs.execute(
-          sessionId,
-          projectId,
-          [{function: 'write', path, content}],
-          'user',
-          version != null ? {expectedVersion: version} : {versionCheck: false},
-        );
+      const vfs = resolveVfs();
+      if (version == null) {
+        await vfs.write(path, content, {versionCheck: false});
       } else {
-        const vfs = resolveVfs();
-        if (version == null) {
-          await vfs.write(path, content, {versionCheck: false});
-        } else {
-          await vfs.write(path, content, {
-            expectedVersion: version,
-            versionCheck: true,
-          });
-        }
+        await vfs.write(path, content, {
+          expectedVersion: version,
+          versionCheck: true,
+        });
       }
       setSavedContent(content);
-      const vfs = resolveVfs();
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);
       setMtimeMs(refreshed.mtimeMs);
