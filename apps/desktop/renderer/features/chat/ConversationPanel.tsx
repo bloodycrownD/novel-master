@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
@@ -31,6 +31,7 @@ interface ConversationPanelProps {
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   messageBatch: ReturnType<typeof useBatchSelection>;
+  settingsOpen: boolean;
 }
 
 export function ConversationPanel({
@@ -38,6 +39,7 @@ export function ConversationPanel({
   sessionId,
   onOpenSessionActions,
   messageBatch,
+  settingsOpen,
 }: ConversationPanelProps) {
   const { refreshWorkspaceTrees, openSession, projectName } = useShellNav();
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
@@ -79,15 +81,36 @@ export function ConversationPanel({
       .catch(() => undefined);
   }, []);
 
-  useEffect(() => {
-    ipcPreferencesGetShowFullToolParams()
-      .then((res) => {
-        if (res.ok) {
-          setShowFullToolParams(res.data);
-        }
-      })
-      .catch(() => undefined);
+  const refreshShowFullToolParams = useCallback(async () => {
+    try {
+      const res = await ipcPreferencesGetShowFullToolParams();
+      if (res.ok) {
+        setShowFullToolParams(res.data);
+      }
+    } catch {
+      // ignore
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshShowFullToolParams();
+  }, [refreshShowFullToolParams]);
+
+  useEffect(() => {
+    const onFocus = () => {
+      void refreshShowFullToolParams();
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshShowFullToolParams]);
+
+  const prevSettingsOpen = useRef(settingsOpen);
+  useEffect(() => {
+    if (prevSettingsOpen.current && !settingsOpen) {
+      void refreshShowFullToolParams();
+    }
+    prevSettingsOpen.current = settingsOpen;
+  }, [settingsOpen, refreshShowFullToolParams]);
 
   const onTextDelta = useCallback((delta: string) => {
     setStreamingText((prev) => prev + delta);

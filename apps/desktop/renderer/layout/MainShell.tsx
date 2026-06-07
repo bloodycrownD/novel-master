@@ -13,6 +13,7 @@ interface MainShellProps {
   ) => void;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   messageBatch: ReturnType<typeof useBatchSelection>;
+  settingsOpen: boolean;
 }
 
 export function MainShell({
@@ -21,6 +22,7 @@ export function MainShell({
   onBlankWorkspaceContextMenu,
   onOpenSessionActions,
   messageBatch,
+  settingsOpen,
 }: MainShellProps) {
   return (
     <div className="workspace" ref={workspaceRef}>
@@ -54,6 +56,7 @@ export function MainShell({
       <ChatRail
         onOpenSessionActions={onOpenSessionActions}
         messageBatch={messageBatch}
+        settingsOpen={settingsOpen}
       />
     </div>
   );

@@ -220,6 +220,7 @@ function DesktopOverlays() {
             onBlankWorkspaceContextMenu={openBlankWorkspaceContextMenu}
             onOpenSessionActions={openSessionActions}
             messageBatch={messageBatch}
+            settingsOpen={settingsOpen}
           />
         </div>
         <SettingsOverlay

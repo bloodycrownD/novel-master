@@ -430,11 +430,8 @@ export function ChatTabScreen() {
     }
   }, [chatSubview, sessionId, reloadMessages, refreshChatMeta]);
 
-  useEffect(() => {
-    runtime.preferences
-      .getShowFullToolParams()
-      .then(setShowFullToolParams)
-      .catch(() => undefined);
+  const refreshShowFullToolParamsPref = useCallback(async () => {
+    setShowFullToolParams(await runtime.preferences.getShowFullToolParams());
   }, [runtime]);
 
   const refreshChatRichTextPref = useCallback(async () => {
@@ -450,9 +447,14 @@ export function ChatTabScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      refreshShowFullToolParamsPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshChatTranscriptEngine().catch(() => undefined);
-    }, [refreshChatRichTextPref, refreshChatTranscriptEngine]),
+    }, [
+      refreshShowFullToolParamsPref,
+      refreshChatRichTextPref,
+      refreshChatTranscriptEngine,
+    ]),
   );
 
   const backFromConversation = useCallback(
