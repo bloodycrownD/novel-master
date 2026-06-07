@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { Tooltip } from "./Tooltip";
 
 type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   label: string;
@@ -21,8 +22,15 @@ export function IconButton({
     .filter(Boolean)
     .join(" ");
   return (
-    <button type="button" className={merged} aria-label={label} title={label} {...rest}>
-      {children}
-    </button>
+    <Tooltip content={label}>
+      <button
+        type="button"
+        className={merged}
+        aria-label={label}
+        {...rest}
+      >
+        {children}
+      </button>
+    </Tooltip>
   );
 }

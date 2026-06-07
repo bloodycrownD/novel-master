@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
+import { Button } from "../components/ui/Button";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
+import { shouldRenderMarkdownPreview } from "./preview-utils";
 
 export function PreviewPane() {
   const { previewFile, projectId, sessionId, refreshWorkspaceTrees } =
@@ -46,7 +50,14 @@ export function PreviewPane() {
   }, [loadFile]);
 
   const isDirty = content !== savedContent;
-  const isMarkdown = previewFile?.name.endsWith(".md") ?? false;
+  const isMarkdown =
+    previewFile != null
+      ? shouldRenderMarkdownPreview(previewFile.path, content)
+      : false;
+  const lineCount = useMemo(
+    () => (content.length === 0 ? 0 : content.split("\n").length),
+    [content],
+  );
 
   const save = async () => {
     if (!previewFile || !isDirty) {
@@ -81,33 +92,23 @@ export function PreviewPane() {
           {previewFile?.name ?? "—"}
         </span>
         <div className="column-header__actions">
-          <div className="preview-mode-toggle" role="group" aria-label="预览模式">
-            <button
-              type="button"
-              className={`preview-mode-btn${mode === "read" ? " is-active" : ""}`}
-              id="preview-mode-read"
-              onClick={() => setMode("read")}
-            >
-              预览
-            </button>
-            <button
-              type="button"
-              className={`preview-mode-btn${mode === "edit" ? " is-active" : ""}`}
-              id="preview-mode-edit"
-              onClick={() => setMode("edit")}
-            >
-              编辑
-            </button>
-          </div>
+          <SegmentedControl
+            aria-label="预览模式"
+            value={mode}
+            options={[
+              { value: "read", label: "预览" },
+              { value: "edit", label: "编辑" },
+            ]}
+            onChange={setMode}
+          />
           {previewFile && mode === "edit" ? (
-            <button
-              type="button"
-              className="preview-mode-btn"
+            <Button
+              variant="primary"
               disabled={!isDirty || saving}
               onClick={() => void save()}
             >
               {saving ? "保存中…" : "保存"}
-            </button>
+            </Button>
           ) : null}
         </div>
       </header>
@@ -131,14 +132,29 @@ export function PreviewPane() {
             )}
           </div>
         ) : (
-          <textarea
-            className="preview-editor"
-            id="preview-editor"
-            spellCheck={false}
-            aria-label="文件编辑"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-          />
+          <div className="preview-editor-shell">
+            <CodeEditor
+              id="preview-editor"
+              aria-label="文件编辑"
+              value={content}
+              languagePath={previewFile.path}
+              onChange={setContent}
+              onSave={() => void save()}
+            />
+            <div className="preview-editor-status">
+              <span>{lineCount} 行</span>
+              <div className="preview-editor-status__right">
+                <span className="preview-editor-status__hint">Ctrl+S 保存</span>
+                <span
+                  className={
+                    isDirty ? "preview-editor-status__dirty" : undefined
+                  }
+                >
+                  {isDirty ? "未保存" : "已保存"}
+                </span>
+              </div>
+            </div>
+          </div>
         )}
       </section>
     </>

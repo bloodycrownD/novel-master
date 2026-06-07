@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { Button } from "../../components/ui/Button";
+import { TextArea } from "../../components/ui/TextArea";
 
 type MessageEditModalProps = {
   open: boolean;
@@ -56,25 +58,24 @@ export function MessageEditModal({
         <h3 id="message-edit-title" className="text-prompt-modal__title">
           {title}
         </h3>
-        <textarea
-          className="text-prompt-modal__textarea"
+        <TextArea
+          code
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoFocus
-          rows={6}
+          rows={8}
         />
         <div className="text-prompt-modal__actions">
-          <button type="button" className="text-prompt-modal__btn" onClick={onClose}>
+          <Button variant="secondary" disabled={saving} onClick={onClose}>
             取消
-          </button>
-          <button
-            type="button"
-            className="text-prompt-modal__btn text-prompt-modal__btn--primary"
+          </Button>
+          <Button
+            variant="primary"
             disabled={!canSubmit}
             onClick={() => void handleConfirm()}
           >
             {saving ? "保存中…" : "保存"}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

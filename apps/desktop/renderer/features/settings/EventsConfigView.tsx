@@ -19,6 +19,7 @@ import {
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
 import {
   ipcEventsExportYaml,
   ipcEventsGetConfig,
@@ -30,7 +31,6 @@ import {
   SettingsField,
   SettingsFormSection,
   SettingsPanel,
-  SettingsStatus,
 } from "./settings-ui";
 
 function ActionBlockEditor({
@@ -273,7 +273,6 @@ export function EventsConfigView() {
   const [saving, setSaving] = useState(false);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
-  const [status, setStatus] = useState<string | undefined>();
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
 
@@ -287,7 +286,7 @@ export function EventsConfigView() {
       } else {
         setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
         setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
-        setStatus(res.error.message);
+        toastSettingsError(res.error.message);
       }
     } finally {
       setLoading(false);
@@ -348,8 +347,7 @@ export function EventsConfigView() {
   const save = async () => {
     const err = validateEventConfigBlocks(blocks);
     if (err != null) {
-      showToast(err);
-      setStatus(err);
+      toastSettingsError(err);
       return;
     }
     const config: EventsConfig = eventBlocksToConfig(blocks, schemaVersion);
@@ -357,11 +355,9 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsSetConfig({ config });
       if (res.ok) {
-        setStatus("已保存");
-        showToast("已保存事件配置");
+        toastSettingsSuccess("已保存事件配置");
       } else {
-        setStatus(res.error.message);
-        showToast(res.error.message);
+        toastSettingsError(res.error.message);
       }
     } finally {
       setSaving(false);
@@ -435,7 +431,6 @@ export function EventsConfigView() {
           ))}
         </div>
       </SettingsFormSection>
-      <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"

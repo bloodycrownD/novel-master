@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { Tooltip } from "../../components/ui/Tooltip";
 import {
   ipcAgentAbort,
   ipcAgentRun,
-  ipcAgentResolveCurrent,
   ipcPreferencesGetLlmStream,
+  ipcPromptAgentMeta,
 } from "../../ipc/client";
+import { useShellNav } from "../../providers/ShellNavProvider";
 
 interface ChatComposerProps {
   projectId: string;
@@ -23,20 +25,23 @@ export function ChatComposer({
   onStreamReset,
   onMessagesChanged,
 }: ChatComposerProps) {
+  const { agentConfigRevision } = useShellNav();
   const [text, setText] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [hasModel, setHasModel] = useState(false);
 
   const checkModel = useCallback(async () => {
-    const result = await ipcAgentResolveCurrent();
+    const result = await ipcPromptAgentMeta();
     if (result.ok) {
-      setHasModel(result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—");
+      setHasModel(
+        result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—",
+      );
     }
   }, []);
 
   useEffect(() => {
     void checkModel();
-  }, [checkModel, sessionId]);
+  }, [checkModel, sessionId, agentConfigRevision]);
 
   const send = async () => {
     if (running) {
@@ -51,7 +56,7 @@ export function ChatComposer({
       return;
     }
 
-    const modelCheck = await ipcAgentResolveCurrent();
+    const modelCheck = await ipcPromptAgentMeta();
     if (
       modelCheck.ok &&
       (modelCheck.data.modelLabel === "未选择模型" ||
@@ -88,38 +93,49 @@ export function ChatComposer({
     <>
       {error ? <p className="chat-composer__error">{error}</p> : null}
       <div className="chat-composer" id="chat-composer">
-        <button
-          type="button"
-          className="chat-composer__more"
-          data-action="open-session-actions"
-          aria-label="更多选项"
-          aria-haspopup="menu"
-        >
-          ⋯
-        </button>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          disabled={!hasModel && !running}
-          placeholder={
-            hasModel ? "输入消息…" : "请先配置模型（设置 → Provider）"
-          }
-          aria-label="消息输入"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send();
+        <div className="chat-composer__box">
+          <textarea
+            className="chat-composer__input"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            disabled={!hasModel && !running}
+            placeholder={
+              hasModel ? "输入消息…" : "请先配置模型（设置 → Provider）"
             }
-          }}
-        />
-        <button
-          type="button"
-          className="chat-composer__send"
-          disabled={!hasModel && !running}
-          onClick={() => void send()}
-        >
-          {running ? "停止" : "发送"}
-        </button>
+            aria-label="消息输入"
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send();
+              }
+            }}
+          />
+          <div className="chat-composer__toolbar">
+            <Tooltip content="更多选项">
+              <button
+                type="button"
+                className="chat-composer__more"
+                data-action="open-session-actions"
+                aria-label="更多选项"
+                aria-haspopup="menu"
+              >
+                ⋯
+              </button>
+            </Tooltip>
+            <Tooltip content={running ? "停止" : "发送"}>
+              <button
+                type="button"
+                className="chat-composer__send"
+                disabled={!hasModel && !running}
+                aria-label={running ? "停止" : "发送"}
+                onClick={() => void send()}
+              >
+                {running ? "■" : "↑"}
+              </button>
+            </Tooltip>
+          </div>
+        </div>
       </div>
     </>
   );

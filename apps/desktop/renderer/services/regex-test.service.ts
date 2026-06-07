@@ -141,3 +141,12 @@ export function parseOptionalDepthInput(text: string): number | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
+
+/** Omit null depth fields before IPC — Zod expects undefined, not null. */
+export function regexRuleForIpc(fields: RegexRuleDraftFields) {
+  return {
+    ...fields,
+    startDepth: fields.startDepth ?? undefined,
+    endDepth: fields.endDepth ?? undefined,
+  };
+}

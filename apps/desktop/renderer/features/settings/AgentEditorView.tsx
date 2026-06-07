@@ -18,6 +18,7 @@ import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Switch } from "../../components/ui/Switch";
 import { showToast } from "../../components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
 import {
   ipcAgentRegistryGet,
   ipcAgentRegistryUpsert,
@@ -32,7 +33,6 @@ import {
   SettingsFormSection,
   SettingsPanel,
   SettingsSection,
-  SettingsStatus,
 } from "./settings-ui";
 
 type Nav = {
@@ -55,7 +55,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     Array<{ vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | undefined>();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
@@ -97,7 +96,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         ipcProvidersList(),
       ]);
       if (!agentRes.ok) {
-        setStatus(agentRes.error.message);
+        toastSettingsError(agentRes.error.message);
         return;
       }
       const def = agentRes.data as AgentDefinition;
@@ -201,11 +200,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
-        setStatus("已保存");
-        showToast("已保存 Agent 配置");
+        toastSettingsSuccess("已保存 Agent 配置");
       } else {
-        setStatus(saveRes.error.message);
-        showToast(saveRes.error.message);
+        toastSettingsError(saveRes.error.message);
       }
     } finally {
       setSaving(false);
@@ -452,7 +449,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
         </SettingsSection>
       </SettingsFormSection>
-      <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"

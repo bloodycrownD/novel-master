@@ -27,7 +27,7 @@ const novelMasterDesktop: NovelMasterDesktopBridge = {
   version: "0.0.0",
   platform: process.platform,
   customTitleBar: process.platform === "win32",
-  inWindowMenuBar: process.platform === "win32" || process.platform === "linux",
+  inWindowMenuBar: false,
   invoke(channel, payload) {
     return ipcRenderer.invoke(channel, payload);
   },

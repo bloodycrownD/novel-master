@@ -5,6 +5,8 @@ import {
   ipcAgentSetCurrent,
   ipcAppUiGet,
   ipcAppUiSet,
+  ipcCompactionConditionsGet,
+  ipcCompactionConditionsSet,
   ipcModelListPicker,
   ipcModelSetCurrent,
   ipcPreferencesGetLlmStream,
@@ -14,8 +16,13 @@ import {
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "../../ipc/client";
+import { Button } from "../../components/ui/Button";
+import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
+import { useShellNav } from "../../providers/ShellNavProvider";
 import { PickerModal } from "../../components/ui/PickerModal";
 import {
+  SettingsField,
+  SettingsFormSection,
   SettingsPanel,
   SettingsRow,
   SettingsRows,
@@ -26,12 +33,16 @@ import {
 const KEY_CHAT_RICH_TEXT = "chatRichText";
 
 export function WorkspaceSettingsView() {
+  const { notifyAgentConfigChanged } = useShellNav();
   const [modelLabel, setModelLabel] = useState("—");
   const [agentLabel, setAgentLabel] = useState("—");
   const [regexLabel, setRegexLabel] = useState("不启用");
   const [llmStream, setLlmStream] = useState(true);
   const [chatRichText, setChatRichText] = useState(false);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
+  const [compactionEnabled, setCompactionEnabled] = useState(false);
+  const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
+  const [compactionVisibleFloor, setCompactionVisibleFloor] = useState("20");
   const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
   const [modelRows, setModelRows] = useState<Array<{ id: string; label: string }>>([]);
   const [agentRows, setAgentRows] = useState<Array<{ id: string; label: string }>>([]);
@@ -41,7 +52,7 @@ export function WorkspaceSettingsView() {
   const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes] =
+    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes, compactionRes] =
       await Promise.all([
         ipcAgentResolveCurrent(),
         ipcModelListPicker(),
@@ -49,6 +60,7 @@ export function WorkspaceSettingsView() {
         ipcPreferencesGetLlmStream(),
         ipcAppUiGet(KEY_CHAT_RICH_TEXT),
         ipcPreferencesGetSessionFsVersionCheck(),
+        ipcCompactionConditionsGet(),
       ]);
     if (agentRes.ok) {
       setAgentLabel(agentRes.data.agentName);
@@ -90,6 +102,19 @@ export function WorkspaceSettingsView() {
     if (vfsRes.ok) {
       setSessionFsVersionCheck(vfsRes.data);
     }
+    if (compactionRes.ok && compactionRes.data) {
+      setCompactionEnabled(compactionRes.data.enabled);
+      setCompactionTokenRatio(
+        compactionRes.data.tokenRatio != null
+          ? String(compactionRes.data.tokenRatio)
+          : "",
+      );
+      setCompactionVisibleFloor(
+        compactionRes.data.visibleFloor != null
+          ? String(compactionRes.data.visibleFloor)
+          : "",
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -117,6 +142,26 @@ export function WorkspaceSettingsView() {
       }
     }
     setPicker(kind);
+  };
+
+  const saveCompaction = async (nextEnabled = compactionEnabled) => {
+    const res = await ipcCompactionConditionsSet({
+      conditions: {
+        schemaVersion: 3,
+        enabled: nextEnabled,
+        ...(compactionTokenRatio.trim()
+          ? { tokenRatio: Number(compactionTokenRatio) }
+          : {}),
+        ...(compactionVisibleFloor.trim()
+          ? { visibleFloor: Number(compactionVisibleFloor) }
+          : {}),
+      },
+    });
+    if (res.ok) {
+      toastSettingsSuccess("已保存");
+    } else {
+      toastSettingsError(res.error.message);
+    }
   };
 
   return (
@@ -173,6 +218,49 @@ export function WorkspaceSettingsView() {
         </SettingsRows>
       </SettingsSection>
 
+      <SettingsFormSection
+        title="压缩条件"
+        desc="达到阈值时触发会话压缩。"
+      >
+        <SettingsSwitchRow
+          label="启用自动压缩"
+          checked={compactionEnabled}
+          onChange={(next) => {
+            setCompactionEnabled(next);
+            if (!next) {
+              void saveCompaction(false);
+            }
+          }}
+        />
+        {compactionEnabled ? (
+          <div className="settings-field-grid settings-field-grid--with-action">
+            <SettingsField label="Token 比例">
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max="1"
+                value={compactionTokenRatio}
+                onChange={(e) => setCompactionTokenRatio(e.target.value)}
+              />
+            </SettingsField>
+            <SettingsField label="可见条数阈值">
+              <input
+                type="number"
+                min="0"
+                value={compactionVisibleFloor}
+                onChange={(e) => setCompactionVisibleFloor(e.target.value)}
+              />
+            </SettingsField>
+            <div className="settings-field-grid__action">
+              <Button variant="primary" onClick={() => void saveCompaction()}>
+                保存
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </SettingsFormSection>
+
       <PickerModal
         open={picker === "model"}
         title="选择模型"
@@ -184,6 +272,7 @@ export function WorkspaceSettingsView() {
           if (!id) return;
           await ipcModelSetCurrent({ applicationModelId: id });
           await refresh();
+          notifyAgentConfigChanged();
         }}
       />
       <PickerModal
@@ -197,6 +286,7 @@ export function WorkspaceSettingsView() {
           if (!id) return;
           await ipcAgentSetCurrent({ agentId: id });
           await refresh();
+          notifyAgentConfigChanged();
         }}
       />
       <PickerModal

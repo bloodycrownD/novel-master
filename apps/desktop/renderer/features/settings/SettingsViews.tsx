@@ -1,13 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AgentDefinition } from "@novel-master/core";
-import { parseApplicationModelId } from "@novel-master/config-forms/agent";
 export { AgentEditorView } from "./AgentEditorView";
 export { EventsConfigView } from "./EventsConfigView";
+export { ModelSamplingView } from "./ModelSamplingView";
+import { AddModelModal } from "./AddModelModal";
+import { FetchModelsModal } from "./FetchModelsModal";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { ContextMenu } from "../../components/ui/ContextMenu";
+import { ManageHeader } from "../../components/batch/ManageHeader";
 import { TextPromptModal } from "../../components/ui/TextPromptModal";
 import { showToast } from "../../components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
+import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useNovelMaster } from "../../providers/NovelMasterProvider";
 import {
   ipcAgentRegistryCreateBlank,
@@ -21,20 +26,13 @@ import {
   ipcAgentYamlImport,
   ipcBackupExport,
   ipcBackupImport,
-  ipcCompactionConditionsGet,
-  ipcCompactionConditionsSet,
   ipcEventsExportYaml,
   ipcEventsGetConfig,
   ipcEventsImportYaml,
   ipcEventsSetConfig,
   ipcProviderModelsDeleteSaved,
-  ipcProviderModelsFetch,
-  ipcProviderModelsGetSaved,
-  ipcProviderModelsResetContextWindow,
   ipcProviderModelsSavedList,
   ipcProviderModelsSave,
-  ipcProviderModelsSuggestList,
-  ipcProviderModelsUpdateSettings,
   ipcProvidersCreate,
   ipcProvidersDelete,
   ipcProvidersEdit,
@@ -47,6 +45,7 @@ import {
   ipcRegexGetRule,
   ipcRegexListGroups,
   ipcRegexListRules,
+  ipcRegexUpdateGroup,
   ipcRegexUpdateRule,
   rebootstrap,
 } from "../../ipc/client";
@@ -60,37 +59,38 @@ import {
   SettingsListSection,
   SettingsPanel,
   SettingsSection,
-  SettingsStatus,
   SettingsSwitchRow,
 } from "./settings-ui";
 import { deriveRegexGroupId } from "../../utils/regex-group-id";
 import {
   parseOptionalDepthInput,
   previewRegexRule,
+  regexRuleForIpc,
   validateRegexRuleDraft,
   type RegexRuleDraftFields,
 } from "../../services/regex-test.service";
 
 type Nav = {
   push: (viewId: string) => void;
+  pop: () => void;
   navState: SettingsNavState;
 };
 
 export function DataManagementView() {
   const { retry } = useNovelMaster();
   const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | undefined>();
   const [confirmImport, setConfirmImport] = useState(false);
 
   const runExport = async () => {
     setBusy(true);
-    setStatus(undefined);
     try {
       const res = await ipcBackupExport();
       if (res.ok) {
-        setStatus(res.data === "saved" ? "已导出数据库" : "已取消");
+        toastSettingsSuccess(
+          res.data === "saved" ? "已导出数据库" : "已取消",
+        );
       } else {
-        setStatus(res.error.message);
+        toastSettingsError(res.error.message);
       }
     } finally {
       setBusy(false);
@@ -100,19 +100,18 @@ export function DataManagementView() {
   const runImport = async () => {
     setConfirmImport(false);
     setBusy(true);
-    setStatus(undefined);
     try {
       const res = await ipcBackupImport();
       if (res.ok) {
         if (res.data === "imported") {
           await rebootstrap();
           retry();
-          setStatus("已导入并重新加载");
+          toastSettingsSuccess("已导入并重新加载");
         } else {
-          setStatus("已取消");
+          toastSettingsSuccess("已取消");
         }
       } else {
-        setStatus(res.error.message);
+        toastSettingsError(res.error.message);
       }
     } finally {
       setBusy(false);
@@ -125,9 +124,9 @@ export function DataManagementView() {
         title="导出"
         desc="将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。"
         action={
-          <button type="button" className="btn-primary" disabled={busy} onClick={() => void runExport()}>
+          <Button variant="primary" disabled={busy} onClick={() => void runExport()}>
             导出数据库
-          </button>
+          </Button>
         }
       />
       <SettingsActionSection
@@ -139,7 +138,6 @@ export function DataManagementView() {
           </Button>
         }
       />
-      <SettingsStatus message={status} />
       <ConfirmModal
         open={confirmImport}
         title="确认导入"
@@ -154,6 +152,7 @@ export function DataManagementView() {
 }
 
 export function AgentsSettingsView({ nav }: { nav: Nav }) {
+  const batch = useBatchSelection();
   const [rows, setRows] = useState<Array<{ agentId: string; name: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [agentMenu, setAgentMenu] = useState<{
@@ -165,10 +164,11 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     agentId: string;
     initialName: string;
   } | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
-    agentId: string;
-    name: string;
-  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    | { kind: "single"; agentId: string; name: string }
+    | { kind: "batch"; count: number }
+    | null
+  >(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -230,8 +230,45 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         showToast("至少保留一个 Agent");
         return;
       }
-      setDeleteConfirm({ agentId: row.agentId, name: row.name });
+      setDeleteConfirm({ kind: "single", agentId: row.agentId, name: row.name });
+      return;
     }
+    if (action === "edit") {
+      nav.navState.editingAgentId = row.agentId;
+      nav.push("agentEditor");
+    }
+  };
+
+  const confirmDeleteAgents = async (agentIds: readonly string[]) => {
+    if (rows.length - agentIds.length < 1) {
+      showToast("至少保留一个 Agent");
+      return;
+    }
+    const currentRes = await ipcAgentResolveCurrent();
+    for (const agentId of agentIds) {
+      const res = await ipcAgentRegistryDelete({ agentId });
+      if (!res.ok) {
+        toastSettingsError(res.error.message);
+        return;
+      }
+    }
+    if (
+      currentRes.ok &&
+      currentRes.data.agentId &&
+      agentIds.includes(currentRes.data.agentId)
+    ) {
+      const remaining = rows
+        .map((r) => r.agentId)
+        .filter((id) => !agentIds.includes(id));
+      if (remaining.length > 0) {
+        await ipcAgentSetCurrent({ agentId: remaining[0]! });
+      }
+    }
+    batch.exit();
+    toastSettingsSuccess(
+      agentIds.length > 1 ? `已删除 ${agentIds.length} 个 Agent` : "已删除 Agent",
+    );
+    await reload();
   };
 
   const confirmDeleteAgent = async () => {
@@ -240,17 +277,11 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     if (!target) {
       return;
     }
-    const currentRes = await ipcAgentResolveCurrent();
-    await ipcAgentRegistryDelete({ agentId: target.agentId });
-    if (currentRes.ok && currentRes.data.agentId === target.agentId) {
-      const remaining = rows
-        .map((r) => r.agentId)
-        .filter((id) => id !== target.agentId);
-      if (remaining.length > 0) {
-        await ipcAgentSetCurrent({ agentId: remaining[0]! });
-      }
+    if (target.kind === "batch") {
+      await confirmDeleteAgents([...batch.selectedIds]);
+      return;
     }
-    await reload();
+    await confirmDeleteAgents([target.agentId]);
   };
 
   const handleRename = async (name: string) => {
@@ -275,9 +306,25 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     <SettingsPanel>
       <SettingsListSection
         header={
-          <button type="button" className="btn-primary" onClick={() => void createAgent()}>
-            新建 Agent
-          </button>
+          <ManageHeader
+            title="Agent"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            onDelete={() => {
+              if (batch.selectedCount === 0) {
+                return;
+              }
+              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
+            }}
+            hint="选择要删除的 Agent"
+            normalActions={
+              <button type="button" className="list-manage-header__btn list-manage-header__btn--primary" onClick={() => void createAgent()}>
+                新建 Agent
+              </button>
+            }
+          />
         }
       >
         {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
@@ -289,6 +336,9 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             key={row.agentId}
             title={row.name}
             meta={row.agentId}
+            batchMode={batch.active}
+            selected={batch.isSelected(row.agentId)}
+            onToggleSelect={() => batch.toggle(row.agentId)}
             onClick={() => {
               nav.navState.editingAgentId = row.agentId;
               nav.push("agentEditor");
@@ -309,6 +359,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         x={agentMenu?.x ?? 0}
         y={agentMenu?.y ?? 0}
         items={[
+          { label: "编辑", action: "edit" },
           { label: "重命名", action: "rename" },
           { label: "复制", action: "duplicate" },
           { label: "删除", action: "delete", danger: true },
@@ -326,7 +377,11 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       <ConfirmModal
         open={deleteConfirm != null}
         title="删除 Agent"
-        message={`删除 Agent「${deleteConfirm?.name ?? ""}」？`}
+        message={
+          deleteConfirm?.kind === "batch"
+            ? `确定删除选中的 ${deleteConfirm.count} 个 Agent？`
+            : `删除 Agent「${deleteConfirm?.kind === "single" ? deleteConfirm.name : ""}」？`
+        }
         danger
         onConfirm={() => void confirmDeleteAgent()}
         onCancel={() => setDeleteConfirm(null)}
@@ -336,13 +391,24 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
 }
 
 export function ProvidersView({ nav }: { nav: Nav }) {
+  const batch = useBatchSelection();
   const [rows, setRows] = useState<
     Array<{ id: string; displayName: string | null; savedCount: number; apiKeyStatus: string }>
   >([]);
-  const [deleteConfirm, setDeleteConfirm] = useState<{
+  const [providerMenu, setProviderMenu] = useState<{
     providerId: string;
-    label: string;
+    x: number;
+    y: number;
   } | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<{
+    providerId: string;
+    initialName: string;
+  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    | { kind: "single"; providerId: string; label: string }
+    | { kind: "batch"; count: number }
+    | null
+  >(null);
 
   const reload = useCallback(async () => {
     const res = await ipcProvidersList();
@@ -353,20 +419,101 @@ export function ProvidersView({ nav }: { nav: Nav }) {
     reload().catch(() => undefined);
   }, [reload]);
 
+  const deleteProviders = async (providerIds: readonly string[]) => {
+    for (const providerId of providerIds) {
+      const res = await ipcProvidersDelete({ providerId });
+      if (!res.ok) {
+        toastSettingsError(res.error.message);
+        return;
+      }
+    }
+    batch.exit();
+    toastSettingsSuccess(
+      providerIds.length > 1
+        ? `已删除 ${providerIds.length} 个服务商`
+        : "已删除服务商",
+    );
+    await reload();
+  };
+
+  const handleProviderMenuSelect = (action: string) => {
+    const menu = providerMenu;
+    setProviderMenu(null);
+    if (!menu) {
+      return;
+    }
+    const row = rows.find((r) => r.id === menu.providerId);
+    if (!row) {
+      return;
+    }
+    if (action === "rename") {
+      setRenamePrompt({
+        providerId: row.id,
+        initialName: row.displayName?.trim() || row.id,
+      });
+      return;
+    }
+    if (action === "edit") {
+      nav.navState.editingProviderId = row.id;
+      nav.push("providerEdit");
+      return;
+    }
+    if (action === "delete") {
+      setDeleteConfirm({
+        kind: "single",
+        providerId: row.id,
+        label: row.displayName?.trim() || row.id,
+      });
+    }
+  };
+
+  const handleProviderRename = async (name: string) => {
+    const prompt = renamePrompt;
+    setRenamePrompt(null);
+    if (!prompt) {
+      return;
+    }
+    const res = await ipcProvidersEdit({
+      providerId: prompt.providerId,
+      displayName: name.trim() || null,
+    });
+    if (!res.ok) {
+      showToast(res.error.message);
+      return;
+    }
+    await reload();
+  };
+
   return (
     <SettingsPanel>
       <SettingsListSection
         header={
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => {
-              nav.navState.editingProviderId = undefined;
-              nav.push("providerCreate");
+          <ManageHeader
+            title="服务商"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            onDelete={() => {
+              if (batch.selectedCount === 0) {
+                return;
+              }
+              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
             }}
-          >
-            新建服务商
-          </button>
+            hint="选择要删除的服务商"
+            normalActions={
+              <button
+                type="button"
+                className="list-manage-header__btn list-manage-header__btn--primary"
+                onClick={() => {
+                  nav.navState.editingProviderId = undefined;
+                  nav.push("providerCreate");
+                }}
+              >
+                新建服务商
+              </button>
+            }
+          />
         }
       >
         {rows.length === 0 ? (
@@ -377,30 +524,63 @@ export function ProvidersView({ nav }: { nav: Nav }) {
             key={p.id}
             title={p.displayName?.trim() || p.id}
             meta={`${p.savedCount} 个模型 · apiKey: ${p.apiKeyStatus}`}
+            batchMode={batch.active}
+            selected={batch.isSelected(p.id)}
+            onToggleSelect={() => batch.toggle(p.id)}
             onClick={() => {
               nav.navState.editingProviderId = p.id;
               nav.push("providerDetail");
             }}
-            onMenu={() => {
-              setDeleteConfirm({
+            onMenu={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setProviderMenu({
                 providerId: p.id,
-                label: p.displayName ?? p.id,
+                x: Math.max(8, rect.left),
+                y: Math.max(8, rect.bottom + 4),
               });
             }}
           />
         ))}
       </SettingsListSection>
+      <ContextMenu
+        open={providerMenu != null}
+        x={providerMenu?.x ?? 0}
+        y={providerMenu?.y ?? 0}
+        items={[
+          { label: "编辑", action: "edit" },
+          { label: "重命名", action: "rename" },
+          { label: "删除", action: "delete", danger: true },
+        ]}
+        onSelect={(action) => handleProviderMenuSelect(action)}
+        onClose={() => setProviderMenu(null)}
+      />
+      <TextPromptModal
+        open={renamePrompt != null}
+        title="重命名服务商"
+        initialValue={renamePrompt?.initialName ?? ""}
+        onClose={() => setRenamePrompt(null)}
+        onConfirm={handleProviderRename}
+      />
       <ConfirmModal
         open={deleteConfirm != null}
         title="删除服务商"
-        message={`删除服务商「${deleteConfirm?.label ?? ""}」？`}
+        message={
+          deleteConfirm?.kind === "batch"
+            ? `确定删除选中的 ${deleteConfirm.count} 个服务商？`
+            : `删除服务商「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
+        }
         danger
         onConfirm={() => {
           const target = deleteConfirm;
           setDeleteConfirm(null);
-          if (target) {
-            void ipcProvidersDelete({ providerId: target.providerId }).then(() => reload());
+          if (!target) {
+            return;
           }
+          if (target.kind === "batch") {
+            void deleteProviders([...batch.selectedIds]);
+            return;
+          }
+          void deleteProviders([target.providerId]);
         }}
         onCancel={() => setDeleteConfirm(null)}
       />
@@ -424,7 +604,6 @@ export function ProviderFormView({
   const [headersJson, setHeadersJson] = useState("");
   const [isBuiltin, setIsBuiltin] = useState(false);
   const [apiKeyStatus, setApiKeyStatus] = useState("not set");
-  const [status, setStatus] = useState<string | undefined>();
 
   useEffect(() => {
     if (mode !== "edit" || !providerId) return;
@@ -456,7 +635,7 @@ export function ProviderFormView({
           headers: headersJson.trim() ? JSON.parse(headersJson) : undefined,
         });
         if (!res.ok) {
-          setStatus(res.error.message);
+          toastSettingsError(res.error.message);
           return;
         }
         nav.navState.editingProviderId = id.trim();
@@ -469,10 +648,14 @@ export function ProviderFormView({
         if (headersJson.trim()) patch.headers = JSON.parse(headersJson);
         if (!isBuiltin) patch.protocol = protocol;
         const res = await ipcProvidersEdit({ providerId, ...patch });
-        setStatus(res.ok ? "已保存" : res.error.message);
+        if (res.ok) {
+          toastSettingsSuccess("已保存");
+        } else {
+          toastSettingsError(res.error.message);
+        }
       }
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e));
+      toastSettingsError(e instanceof Error ? e.message : String(e));
     }
   };
 
@@ -482,9 +665,9 @@ export function ProviderFormView({
         title={mode === "create" ? "新建服务商" : "编辑服务商"}
         desc={mode === "edit" ? `apiKey: ${apiKeyStatus}` : "API Key 将通过 SKSP 安全存储"}
         footer={
-          <button type="button" className="btn-primary" onClick={() => void submit()}>
+          <Button variant="primary" onClick={() => void submit()}>
             {mode === "create" ? "创建" : "保存"}
-          </button>
+          </Button>
         }
       >
         {mode === "create" ? (
@@ -516,17 +699,26 @@ export function ProviderFormView({
           <textarea rows={4} value={headersJson} onChange={(e) => setHeadersJson(e.target.value)} />
         </SettingsField>
       </SettingsFormSection>
-      <SettingsStatus message={status} />
     </SettingsPanel>
   );
 }
 
 export function ProviderDetailView({ nav }: { nav: Nav }) {
+  const batch = useBatchSelection();
   const providerId = nav.navState.editingProviderId;
   const [models, setModels] = useState<Array<{ vendorModelId: string; displayName: string; applicationModelId: string }>>([]);
-  const [suggestions, setSuggestions] = useState<Array<{ vendorModelId: string; displayName: string }>>([]);
-  const [fetching, setFetching] = useState(false);
-  const [status, setStatus] = useState<string | undefined>();
+  const [modelMenu, setModelMenu] = useState<{
+    vendorModelId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<
+    | { kind: "single"; vendorModelId: string; label: string }
+    | { kind: "batch"; count: number }
+    | null
+  >(null);
+  const [fetchModalOpen, setFetchModalOpen] = useState(false);
+  const [addModelOpen, setAddModelOpen] = useState(false);
 
   const reload = useCallback(async () => {
     if (!providerId) return;
@@ -540,33 +732,102 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
 
   if (!providerId) return <p className="settings-hint">缺少 providerId</p>;
 
-  const fetchModels = async () => {
-    setFetching(true);
-    try {
-      const res = await ipcProviderModelsFetch({ providerId });
+  const deleteModels = async (vendorModelIds: readonly string[]) => {
+    for (const vendorModelId of vendorModelIds) {
+      const res = await ipcProviderModelsDeleteSaved({ providerId, vendorModelId });
       if (!res.ok) {
-        setStatus(res.error.message);
+        toastSettingsError(res.error.message);
         return;
       }
-      const sug = await ipcProviderModelsSuggestList({ providerId });
-      if (sug.ok) setSuggestions(sug.data.map((m) => ({ vendorModelId: m.vendorModelId, displayName: m.displayName })));
-    } finally {
-      setFetching(false);
     }
+    batch.exit();
+    toastSettingsSuccess(
+      vendorModelIds.length > 1
+        ? `已删除 ${vendorModelIds.length} 个模型`
+        : "已删除模型",
+    );
+    await reload();
+  };
+
+  const openModelEditor = (vendorModelId: string, applicationModelId: string) => {
+    nav.navState.editingVendorModelId = vendorModelId;
+    nav.navState.editingApplicationModelId = applicationModelId;
+    nav.push("modelSampling");
+  };
+
+  const handleModelMenuSelect = (action: string) => {
+    const menu = modelMenu;
+    setModelMenu(null);
+    if (!menu) {
+      return;
+    }
+    const model = models.find((m) => m.vendorModelId === menu.vendorModelId);
+    if (!model) {
+      return;
+    }
+    if (action === "edit") {
+      openModelEditor(model.vendorModelId, model.applicationModelId);
+      return;
+    }
+    if (action === "delete") {
+      setDeleteConfirm({
+        kind: "single",
+        vendorModelId: model.vendorModelId,
+        label: model.displayName || model.vendorModelId,
+      });
+    }
+  };
+
+  const handleAddModel = async (vendorModelId: string, displayName?: string) => {
+    const res = await ipcProviderModelsSave({
+      providerId,
+      vendorModelId,
+      displayName,
+    });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    showToast("已添加模型");
+    await reload();
   };
 
   return (
     <SettingsPanel>
       <SettingsListSection
         header={
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-            <button type="button" className="btn-primary" disabled={fetching} onClick={() => void fetchModels()}>
-              {fetching ? "拉取中…" : "拉取模型"}
-            </button>
-            <Button variant="secondary" onClick={() => nav.push("providerEdit")}>
-              编辑服务商
-            </Button>
-          </div>
+          <ManageHeader
+            title="已保存模型"
+            batchMode={batch.active}
+            selectedCount={batch.selectedCount}
+            onEnterBatch={batch.enter}
+            onCancelBatch={batch.exit}
+            onDelete={() => {
+              if (batch.selectedCount === 0) {
+                return;
+              }
+              setDeleteConfirm({ kind: "batch", count: batch.selectedCount });
+            }}
+            hint="选择要删除的模型"
+            normalActions={
+              <>
+                <button
+                  type="button"
+                  className="list-manage-header__btn"
+                  onClick={() => setFetchModalOpen(true)}
+                >
+                  拉取模型
+                </button>
+                <button
+                  type="button"
+                  className="list-manage-header__btn list-manage-header__btn--primary"
+                  onClick={() => setAddModelOpen(true)}
+                >
+                  添加
+                </button>
+              </>
+            }
+          />
         }
       >
         {models.map((m) => (
@@ -574,184 +835,71 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             key={m.vendorModelId}
             title={m.displayName || m.vendorModelId}
             meta={m.applicationModelId}
-            onClick={() => {
-              nav.navState.editingVendorModelId = m.vendorModelId;
-              nav.navState.editingApplicationModelId = m.applicationModelId;
-              nav.push("modelSampling");
-            }}
-            onMenu={() => {
-              void ipcProviderModelsDeleteSaved({ providerId, vendorModelId: m.vendorModelId }).then(() => reload());
+            batchMode={batch.active}
+            selected={batch.isSelected(m.vendorModelId)}
+            onToggleSelect={() => batch.toggle(m.vendorModelId)}
+            onClick={() => openModelEditor(m.vendorModelId, m.applicationModelId)}
+            onMenu={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setModelMenu({
+                vendorModelId: m.vendorModelId,
+                x: Math.max(8, rect.left),
+                y: Math.max(8, rect.bottom + 4),
+              });
             }}
           />
         ))}
       </SettingsListSection>
-      {suggestions.length > 0 ? (
-        <SettingsListSection header={<span className="settings-hint">建议模型（点击保存）</span>}>
-          {suggestions.map((s) => (
-            <SettingsListItem
-              key={s.vendorModelId}
-              title={s.displayName || s.vendorModelId}
-              onClick={() =>
-                void ipcProviderModelsSave({ providerId, vendorModelId: s.vendorModelId, displayName: s.displayName }).then(
-                  () => reload(),
-                )
-              }
-            />
-          ))}
-        </SettingsListSection>
-      ) : null}
-      <SettingsStatus message={status} />
-    </SettingsPanel>
-  );
-}
-
-export function ModelSamplingView({ nav }: { nav: Nav }) {
-  const applicationModelId = nav.navState.editingApplicationModelId;
-  const [contextWindow, setContextWindow] = useState("");
-  const [temperature, setTemperature] = useState("");
-  const [status, setStatus] = useState<string | undefined>();
-
-  useEffect(() => {
-    if (!applicationModelId) return;
-    ipcProviderModelsGetSaved({ applicationModelId }).then((res) => {
-      if (!res.ok || !res.data) return;
-      const saved = res.data as {
-        settings: {
-          contextWindowTokens: number;
-          sampling?: { enabled: boolean; params?: { protocol: string; openai?: { temperature?: number } } };
-        };
-      };
-      setContextWindow(String(saved.settings.contextWindowTokens));
-      const temp = saved.settings.sampling?.params?.openai?.temperature;
-      setTemperature(temp != null ? String(temp) : "");
-    });
-  }, [applicationModelId]);
-
-  if (!applicationModelId) return <p className="settings-hint">缺少模型</p>;
-
-  const save = async () => {
-    const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
-    const cw = Number(contextWindow);
-    if (!Number.isInteger(cw) || cw <= 0) {
-      setStatus("上下文上限须为正整数");
-      return;
-    }
-    const temp = temperature.trim() ? Number(temperature) : undefined;
-    const sampling =
-      temp == null
-        ? { enabled: false as const }
-        : {
-            enabled: true as const,
-            params: { protocol: "openai" as const, openai: { temperature: temp } },
-          };
-    const res = await ipcProviderModelsUpdateSettings({
-      providerId,
-      vendorModelId,
-      contextWindowTokens: cw,
-      tokenCounterMode: "auto",
-      sampling,
-    });
-    setStatus(res.ok ? "已保存" : res.error.message);
-  };
-
-  return (
-    <SettingsPanel>
-      <SettingsFormSection
-        title="采样配置"
-        desc={applicationModelId}
-        footer={
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="btn-primary" onClick={() => void save()}>
-              保存
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
-                void ipcProviderModelsResetContextWindow({ providerId, vendorModelId }).then((r) => {
-                  if (r.ok && r.data) {
-                    const saved = r.data as { settings: { contextWindowTokens: number } };
-                    setContextWindow(String(saved.settings.contextWindowTokens));
-                    setTemperature("");
-                    setStatus("已恢复默认");
-                  }
-                });
-              }}
-            >
-              恢复默认
-            </button>
-          </div>
+      <FetchModelsModal
+        open={fetchModalOpen}
+        providerId={providerId}
+        savedVendorIds={models.map((m) => m.vendorModelId)}
+        onClose={() => setFetchModalOpen(false)}
+        onSaved={async () => {
+          showToast("已添加模型");
+          await reload();
+        }}
+        onError={(message) => toastSettingsError(message)}
+      />
+      <AddModelModal
+        open={addModelOpen}
+        onClose={() => setAddModelOpen(false)}
+        onConfirm={handleAddModel}
+      />
+      <ContextMenu
+        open={modelMenu != null}
+        x={modelMenu?.x ?? 0}
+        y={modelMenu?.y ?? 0}
+        items={[
+          { label: "编辑", action: "edit" },
+          { label: "删除", action: "delete", danger: true },
+        ]}
+        onSelect={(action) => handleModelMenuSelect(action)}
+        onClose={() => setModelMenu(null)}
+      />
+      <ConfirmModal
+        open={deleteConfirm != null}
+        title="删除模型"
+        message={
+          deleteConfirm?.kind === "batch"
+            ? `确定删除选中的 ${deleteConfirm.count} 个模型？`
+            : `删除模型「${deleteConfirm?.kind === "single" ? deleteConfirm.label : ""}」？`
         }
-      >
-        <SettingsField label="上下文 Token 上限">
-          <input type="number" value={contextWindow} onChange={(e) => setContextWindow(e.target.value)} />
-        </SettingsField>
-        <SettingsField label="温度 (OpenAI)">
-          <input type="number" step="0.1" min="0" max="2" value={temperature} onChange={(e) => setTemperature(e.target.value)} />
-        </SettingsField>
-      </SettingsFormSection>
-      <SettingsStatus message={status} />
-    </SettingsPanel>
-  );
-}
-
-export function CompactionConditionsView() {
-  const [enabled, setEnabled] = useState(false);
-  const [tokenRatio, setTokenRatio] = useState("0.8");
-  const [visibleFloor, setVisibleFloor] = useState("20");
-  const [status, setStatus] = useState<string | undefined>();
-
-  useEffect(() => {
-    ipcCompactionConditionsGet().then((res) => {
-      if (!res.ok || !res.data) return;
-      setEnabled(res.data.enabled);
-      setTokenRatio(res.data.tokenRatio != null ? String(res.data.tokenRatio) : "");
-      setVisibleFloor(res.data.visibleFloor != null ? String(res.data.visibleFloor) : "");
-    });
-  }, []);
-
-  const save = async () => {
-    const res = await ipcCompactionConditionsSet({
-      conditions: {
-        schemaVersion: 3,
-        enabled,
-        ...(tokenRatio.trim() ? { tokenRatio: Number(tokenRatio) } : {}),
-        ...(visibleFloor.trim() ? { visibleFloor: Number(visibleFloor) } : {}),
-      },
-    });
-    setStatus(res.ok ? "已保存" : res.error.message);
-  };
-
-  return (
-    <SettingsPanel>
-      <SettingsFormSection
-        title="压缩条件"
-        desc="达到阈值时触发会话压缩。"
-        footer={
-          <>
-            <SettingsStatus message={status} inline />
-            <Button variant="primary" onClick={() => void save()}>
-              保存
-            </Button>
-          </>
-        }
-      >
-        <SettingsSwitchRow
-          label="启用自动压缩"
-          checked={enabled}
-          onChange={setEnabled}
-        />
-        {enabled ? (
-          <div className="settings-field-grid">
-            <SettingsField label="Token 比例">
-              <input type="number" step="0.01" min="0.01" max="1" value={tokenRatio} onChange={(e) => setTokenRatio(e.target.value)} />
-            </SettingsField>
-            <SettingsField label="可见条数阈值">
-              <input type="number" min="0" value={visibleFloor} onChange={(e) => setVisibleFloor(e.target.value)} />
-            </SettingsField>
-          </div>
-        ) : null}
-      </SettingsFormSection>
+        danger
+        onConfirm={() => {
+          const target = deleteConfirm;
+          setDeleteConfirm(null);
+          if (!target) {
+            return;
+          }
+          if (target.kind === "batch") {
+            void deleteModels([...batch.selectedIds]);
+            return;
+          }
+          void deleteModels([target.vendorModelId]);
+        }}
+        onCancel={() => setDeleteConfirm(null)}
+      />
     </SettingsPanel>
   );
 }
@@ -759,38 +907,99 @@ export function CompactionConditionsView() {
 export function RegexGroupsView({ nav }: { nav: Nav }) {
   const [rows, setRows] = useState<Array<{ groupId: string; displayName: string | null; ruleCount: number }>>([]);
   const [createPromptOpen, setCreatePromptOpen] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [groupMenu, setGroupMenu] = useState<{
+    groupId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<{
+    groupId: string;
+    initialName: string;
+  } | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    groupId: string;
+    label: string;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     const res = await ipcRegexListGroups();
-    if (res.ok) setRows([...res.data]);
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    setRows([...res.data]);
   }, []);
 
   useEffect(() => {
-    reload().catch(() => undefined);
+    void reload();
   }, [reload]);
 
   const createGroup = async (displayName: string) => {
     const taken = new Set(rows.map((r) => r.groupId));
     const groupId = deriveRegexGroupId(displayName, taken);
     const res = await ipcRegexCreateGroup({ groupId, displayName });
-    if (res.ok) {
-      showToast("已添加正则组");
-      await reload();
-    } else {
-      showToast(res.error.message);
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      throw new Error(res.error.message);
     }
+    toastSettingsSuccess("已添加正则组");
+    await reload();
+  };
+
+  const handleGroupMenuSelect = (action: string) => {
+    const menu = groupMenu;
+    setGroupMenu(null);
+    if (!menu) {
+      return;
+    }
+    const row = rows.find((r) => r.groupId === menu.groupId);
+    if (!row) {
+      return;
+    }
+    if (action === "rename") {
+      setRenamePrompt({
+        groupId: row.groupId,
+        initialName: row.displayName?.trim() || row.groupId,
+      });
+      return;
+    }
+    if (action === "delete") {
+      setDeleteConfirm({
+        groupId: row.groupId,
+        label: row.displayName?.trim() || row.groupId,
+      });
+    }
+  };
+
+  const handleGroupRename = async (name: string) => {
+    const prompt = renamePrompt;
+    setRenamePrompt(null);
+    if (!prompt) {
+      return;
+    }
+    const res = await ipcRegexUpdateGroup({
+      groupId: prompt.groupId,
+      displayName: name.trim() || null,
+    });
+    if (!res.ok) {
+      showToast(res.error.message);
+      return;
+    }
+    showToast("已重命名");
+    await reload();
   };
 
   return (
     <SettingsPanel>
       <SettingsListSection
         header={
-          <div className="settings-toolbar settings-toolbar--end">
-            <button type="button" className="btn-primary" onClick={() => setCreatePromptOpen(true)}>
-              新建组
-            </button>
-          </div>
+          <button
+            type="button"
+            className="list-manage-header__btn list-manage-header__btn--primary"
+            onClick={() => setCreatePromptOpen(true)}
+          >
+            新建组
+          </button>
         }
       >
         {rows.length === 0 ? (
@@ -805,12 +1014,36 @@ export function RegexGroupsView({ nav }: { nav: Nav }) {
               nav.navState.editingRegexGroupId = g.groupId;
               nav.push("regexRules");
             }}
-            onMenu={() => {
-              setDeleteConfirm(g.groupId);
+            onMenu={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setGroupMenu({
+                groupId: g.groupId,
+                x: Math.max(8, rect.left),
+                y: Math.max(8, rect.bottom + 4),
+              });
             }}
           />
         ))}
       </SettingsListSection>
+      <ContextMenu
+        open={groupMenu != null}
+        x={groupMenu?.x ?? 0}
+        y={groupMenu?.y ?? 0}
+        items={[
+          { label: "重命名", action: "rename" },
+          { label: "删除", action: "delete", danger: true },
+        ]}
+        onSelect={(action) => handleGroupMenuSelect(action)}
+        onClose={() => setGroupMenu(null)}
+      />
+      <TextPromptModal
+        open={renamePrompt != null}
+        title="重命名正则组"
+        label="组名称"
+        initialValue={renamePrompt?.initialName ?? ""}
+        onClose={() => setRenamePrompt(null)}
+        onConfirm={handleGroupRename}
+      />
       <TextPromptModal
         open={createPromptOpen}
         title="新建正则组"
@@ -823,18 +1056,23 @@ export function RegexGroupsView({ nav }: { nav: Nav }) {
       <ConfirmModal
         open={deleteConfirm != null}
         title="删除正则组"
-        message={`删除正则组「${
-          rows.find((r) => r.groupId === deleteConfirm)?.displayName?.trim() ||
-          deleteConfirm ||
-          ""
-        }」？`}
+        message={`删除正则组「${deleteConfirm?.label ?? ""}」？`}
         danger
         onConfirm={() => {
-          const groupId = deleteConfirm;
+          const target = deleteConfirm;
           setDeleteConfirm(null);
-          if (groupId) {
-            void ipcRegexDeleteGroup({ groupId }).then(() => reload());
+          if (!target) {
+            return;
           }
+          void (async () => {
+            const res = await ipcRegexDeleteGroup({ groupId: target.groupId });
+            if (!res.ok) {
+              toastSettingsError(res.error.message);
+              return;
+            }
+            toastSettingsSuccess("已删除正则组");
+            await reload();
+          })();
         }}
         onCancel={() => setDeleteConfirm(null)}
       />
@@ -849,11 +1087,15 @@ export function RegexRulesView({ nav }: { nav: Nav }) {
   const reload = useCallback(async () => {
     if (!groupId) return;
     const res = await ipcRegexListRules({ groupId });
-    if (res.ok) setRules(res.data.map((r) => ({ ruleId: r.ruleId, name: r.name })));
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    setRules(res.data.map((r) => ({ ruleId: r.ruleId, name: r.name })));
   }, [groupId]);
 
   useEffect(() => {
-    reload().catch(() => undefined);
+    void reload();
   }, [reload]);
 
   if (!groupId) return <p className="settings-hint">缺少 groupId</p>;
@@ -864,7 +1106,7 @@ export function RegexRulesView({ nav }: { nav: Nav }) {
         header={
           <button
             type="button"
-            className="btn-primary"
+            className="list-manage-header__btn list-manage-header__btn--primary"
             onClick={() => {
               nav.navState.editingRegexRuleId = undefined;
               nav.push("regexRuleEditor");
@@ -874,6 +1116,9 @@ export function RegexRulesView({ nav }: { nav: Nav }) {
           </button>
         }
       >
+        {rules.length === 0 ? (
+          <SettingsListEmpty>暂无规则，点击上方按钮创建。</SettingsListEmpty>
+        ) : null}
         {rules.map((r) => (
           <SettingsListItem
             key={r.ruleId}
@@ -883,7 +1128,15 @@ export function RegexRulesView({ nav }: { nav: Nav }) {
               nav.push("regexRuleEditor");
             }}
             onMenu={() => {
-              void ipcRegexDeleteRule({ groupId, ruleId: r.ruleId }).then(() => reload());
+              void (async () => {
+                const res = await ipcRegexDeleteRule({ groupId, ruleId: r.ruleId });
+                if (!res.ok) {
+                  toastSettingsError(res.error.message);
+                  return;
+                }
+                toastSettingsSuccess("已删除规则");
+                await reload();
+              })();
             }}
           />
         ))}
@@ -913,7 +1166,6 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   const [displayOn, setDisplayOn] = useState(false);
   const [testText, setTestText] = useState("mysecret@email.com");
   const [preview, setPreview] = useState("");
-  const [status, setStatus] = useState<string | undefined>();
 
   useEffect(() => {
     if (!groupId || !ruleId) return;
@@ -957,22 +1209,27 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   };
 
   const save = async () => {
-    const fields = fieldsForSave();
-    const valid = validateRegexRuleDraft(fields);
+    const fields = regexRuleForIpc(fieldsForSave());
+    const valid = validateRegexRuleDraft(fieldsForSave());
     if (!valid.ok) {
-      setStatus(valid.message);
+      toastSettingsError(valid.message);
       return;
     }
     if (ruleId) {
       const res = await ipcRegexUpdateRule({ groupId, ruleId, patch: fields });
-      setStatus(res.ok ? "已保存" : res.error.message);
+      if (res.ok) {
+        toastSettingsSuccess("已保存");
+      } else {
+        toastSettingsError(res.error.message);
+      }
     } else {
       const res = await ipcRegexCreateRule({ groupId, rule: fields });
       if (res.ok) {
+        toastSettingsSuccess("已创建");
         nav.navState.editingRegexRuleId = res.data.ruleId;
-        setStatus("已创建");
+        nav.pop();
       } else {
-        setStatus(res.error.message);
+        toastSettingsError(res.error.message);
       }
     }
   };
@@ -1087,7 +1344,6 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
           {preview ? <pre className="settings-preview-box">{preview}</pre> : null}
         </SettingsSection>
       </SettingsFormSection>
-      <SettingsStatus message={status} />
     </SettingsPanel>
   );
 }
