@@ -32,4 +32,23 @@ export interface VfsRevisionRepository {
 
   /** Appends a new revision row; never updates existing rows. */
   append(input: VfsRevisionAppendInput): Promise<void>;
+
+  /**
+   * Lists all `(path, version)` revision keys under a physical prefix.
+   *
+   * @remarks Used by revision GC to enumerate candidates for deletion.
+   */
+  listKeysUnderPrefix(
+    physicalPrefix: string,
+  ): Promise<ReadonlyArray<{ path: string; version: number }>>;
+
+  /**
+   * Deletes revision rows under `physicalPrefix` whose `path:version` key is not in `reachable`.
+   *
+   * @returns Count of deleted rows.
+   */
+  deleteExceptReachable(
+    physicalPrefix: string,
+    reachable: ReadonlySet<string>,
+  ): Promise<number>;
 }

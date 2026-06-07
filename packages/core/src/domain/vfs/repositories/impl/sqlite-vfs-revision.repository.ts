@@ -93,4 +93,46 @@ export class SqliteVfsRevisionRepository implements VfsRevisionRepository {
       },
     );
   }
+
+  async listKeysUnderPrefix(
+    physicalPrefix: string,
+  ): Promise<ReadonlyArray<{ path: string; version: number }>> {
+    const base = normalizePath(physicalPrefix);
+    const escaped = base.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+    const childPattern = base === "/" ? "/%" : `${escaped}/%`;
+    const rows = await queryTemplate<{ path: string; version: number }>(
+      this.conn,
+      this.parser,
+      `SELECT path, version FROM vfs_revision
+       WHERE path = #{path} OR path LIKE #{childPattern} ESCAPE '\\'
+       ORDER BY path, version`,
+      { path: base, childPattern },
+    );
+    return rows.map((row) => ({
+      path: String(row.path),
+      version: Number(row.version),
+    }));
+  }
+
+  async deleteExceptReachable(
+    physicalPrefix: string,
+    reachable: ReadonlySet<string>,
+  ): Promise<number> {
+    const candidates = await this.listKeysUnderPrefix(physicalPrefix);
+    let deleted = 0;
+    for (const { path, version } of candidates) {
+      const key = `${path}:${version}`;
+      if (reachable.has(key)) {
+        continue;
+      }
+      await executeTemplate(
+        this.conn,
+        this.parser,
+        `DELETE FROM vfs_revision WHERE path = #{path} AND version = #{version}`,
+        { path, version },
+      );
+      deleted++;
+    }
+    return deleted;
+  }
 }

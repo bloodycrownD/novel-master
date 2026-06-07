@@ -54,6 +54,11 @@ export interface VfsEntryRepository {
     ReadonlyArray<{ path: string; mtimeMs: number }>
   >;
 
+  /** Lists live file heads under a physical prefix (for checkpoint capture / GC). */
+  listFileHeadsUnderPrefix(physicalPrefix: string): Promise<
+    ReadonlyArray<{ path: string; headVersion: number }>
+  >;
+
   scanContents(pathPrefix?: string): Promise<
     ReadonlyArray<{
       path: string;
