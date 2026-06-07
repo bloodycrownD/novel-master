@@ -8,6 +8,8 @@
  * v1 frozen workspace pointers: current project, session, provider, and model.
  *
  * @remarks Missing keys are represented as `undefined`; not read from legacy `global-config`.
+ * Mobile/desktop apps treat {@link PersistentState.getCurrentModelId} as the product authority
+ * for LLM selection and do **not** call {@link PersistentState.setCurrentProviderId}.
  */
 export interface PersistentState {
   getCurrentProjectId(): Promise<string | undefined>;
@@ -18,7 +20,9 @@ export interface PersistentState {
   setCurrentSessionId(id: string): Promise<void>;
   resetCurrentSessionId(): Promise<void>;
 
+  /** CLI-scoped workspace pointer (`nm provider use`); apps may read/reset but do not set. */
   getCurrentProviderId(): Promise<string | undefined>;
+  /** CLI-scoped: `nm provider use` only; mobile/desktop must not call. */
   setCurrentProviderId(id: string): Promise<void>;
   resetCurrentProviderId(): Promise<void>;
 
