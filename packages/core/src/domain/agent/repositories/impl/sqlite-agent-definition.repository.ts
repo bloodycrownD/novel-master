@@ -57,14 +57,13 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
     const wire = encode(def, agentDefinitionSchema);
     const promptsJson = JSON.stringify(wire);
 
-    // Legacy columns `model` / `runtime_json` are not written; `prompts_json` is canonical.
     await executeTemplate(
       this.conn,
       this.parser,
       `INSERT INTO agent_definition (
-        agent_id, model, runtime_json, prompts_json, created_at_ms, updated_at_ms
+        agent_id, prompts_json, created_at_ms, updated_at_ms
       ) VALUES (
-        #{agentId}, NULL, NULL, #{promptsJson}, #{now}, #{now}
+        #{agentId}, #{promptsJson}, #{now}, #{now}
       )
       ON CONFLICT(agent_id) DO UPDATE SET
         prompts_json = excluded.prompts_json,

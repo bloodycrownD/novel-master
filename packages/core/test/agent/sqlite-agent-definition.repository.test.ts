@@ -28,11 +28,12 @@ describe("SqliteAgentDefinitionRepository", () => {
     assert.equal(loaded.name, "writer");
     assert.equal(loaded.model, "mock/test");
     assert.deepEqual(encode(loaded, agentDefinitionSchema), encode(def, agentDefinitionSchema));
-    const legacy = await ctx.conn.query(
-      "SELECT model, runtime_json FROM agent_definition WHERE agent_id = 'writer'",
+    const cols = await ctx.conn.query<{ name: string }>(
+      "SELECT name FROM pragma_table_info('agent_definition')",
     );
-    assert.equal(legacy[0]?.model, null);
-    assert.equal(legacy[0]?.runtime_json, null);
+    const colNames = cols.map((c) => c.name);
+    assert.ok(!colNames.includes("model"));
+    assert.ok(!colNames.includes("runtime_json"));
     const ids = await repo.listIds();
     assert.deepEqual(ids, ["writer"]);
     await ctx.conn.close();

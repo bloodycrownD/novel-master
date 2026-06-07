@@ -6,7 +6,7 @@
  *
  * **Column migrations** (legacy DBs): `chat_message.hidden`, `vfs_entry.entry_kind`,
  * `session_execute_batch.message_id`, regex depth rename, `llm_saved_model.settings_json`,
- * `llm_provider.default_model_id` drop.
+ * `llm_provider.default_model_id` drop, `agent_definition` legacy column drop.
  *
  * **KKV migrations**: purge `nm-model-sampling` + `global-config`; move Client UI
  * behavior keys → `nm-preferences` (Preferences v2).
@@ -26,6 +26,7 @@ import { SKSP_SCHEMA_STATEMENTS } from "./sksp/sksp-schema.js";
 import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
+import { migrateDropAgentDefinitionLegacyColumns } from "./agent/migrate-drop-agent-definition-legacy-columns.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
@@ -108,6 +109,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migrateVfsEntryKind(tx);
     await migrateWorktreeFillPolicy(tx);
     await migrateDropProviderDefaultModelId(tx);
+    await migrateDropAgentDefinitionLegacyColumns(tx);
     const kkv = createKkvService(tx);
     await migratePurgeNmModelSamplingKkv(kkv);
     await migratePurgeGlobalConfigKkv(kkv);

@@ -61,6 +61,44 @@ describe("Phase 3 bootstrap migrations", () => {
     await ctx.conn.close();
   });
 
+  it("T1: drops agent_definition legacy model and runtime_json columns", async () => {
+    registerBetterSqlite3Driver();
+    const conn = await open("tdbc:sqlite:file::memory:", {
+      driver: BETTER_SQLITE3_DRIVER_NAME,
+      filename: ":memory:",
+    });
+    await conn.execute(`
+      CREATE TABLE agent_definition (
+        agent_id TEXT PRIMARY KEY,
+        model TEXT,
+        runtime_json TEXT,
+        prompts_json TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    await conn.execute(
+      `INSERT INTO agent_definition (
+        agent_id, model, runtime_json, prompts_json, created_at_ms, updated_at_ms
+      ) VALUES ('legacy', 'old/model', '{"maxSteps":1}', '{}', 1, 1)`,
+    );
+
+    await bootstrapNovelMaster(conn);
+
+    const cols = await conn.query<{ name: string }>(
+      "SELECT name FROM pragma_table_info('agent_definition')",
+    );
+    const names = cols.map((c) => c.name);
+    assert.ok(!names.includes("model"));
+    assert.ok(!names.includes("runtime_json"));
+    const rows = await conn.query<{ agent_id: string; prompts_json: string }>(
+      "SELECT agent_id, prompts_json FROM agent_definition WHERE agent_id = 'legacy'",
+    );
+    assert.equal(rows[0]?.agent_id, "legacy");
+    assert.equal(rows[0]?.prompts_json, "{}");
+    await conn.close();
+  });
+
   it("purges legacy global-config KKV rows", async () => {
     const ctx = await openNovelMasterTestConnection();
     const kkv = createKkvService(ctx.conn);
