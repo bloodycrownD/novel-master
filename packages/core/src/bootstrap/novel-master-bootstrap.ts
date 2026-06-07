@@ -5,7 +5,7 @@
  * KKV purges/moves, and provider seeding inside a single transaction.
  *
  * **Column migrations** (legacy DBs): `chat_message.hidden`, `vfs_entry.entry_kind`,
- * `vfs_entry.head_version`, `session_execute_batch.message_id`, regex depth rename, `llm_saved_model.settings_json`,
+ * `vfs_entry.head_version`, regex depth rename, `llm_saved_model.settings_json`,
  * `llm_provider.default_model_id` drop, `agent_definition` legacy column drop.
  *
  * **KKV migrations**: purge `nm-model-sampling` + `global-config`; move Client UI
@@ -29,6 +29,7 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { migrateDropAgentDefinitionLegacyColumns } from "./agent/migrate-drop-agent-definition-legacy-columns.js";
+import { migrateDropLegacySessionFs } from "./session-fs/migrate-drop-legacy-session-fs.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
@@ -78,18 +79,6 @@ async function migrateDropProviderDefaultModelId(
   }
 }
 
-async function migrateAddBatchMessageId(tx: TdbcConnection): Promise<void> {
-  const rows = await tx.query(
-    "SELECT name FROM pragma_table_info('session_execute_batch')",
-  );
-  const names = rows.map((r) => String(r.name));
-  if (!names.includes("message_id")) {
-    await tx.execute(
-      "ALTER TABLE session_execute_batch ADD COLUMN message_id TEXT",
-    );
-  }
-}
-
 async function migrateRegexRuleDepthColumns(tx: TdbcConnection): Promise<void> {
   const rows = await tx.query(
     "SELECT name FROM pragma_table_info('regex_rule')",
@@ -111,11 +100,11 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
       await tx.execute(sql);
     }
     await migrateRegexRuleDepthColumns(tx);
-    await migrateAddBatchMessageId(tx);
     await migrateChatMessageHidden(tx);
     await migrateVfsEntryKind(tx);
     await migrateVfsHeadVersion(tx);
     await migrateVfsRevisionBaseline(tx);
+    await migrateDropLegacySessionFs(tx);
     await migrateWorktreeFillPolicy(tx);
     await migrateDropProviderDefaultModelId(tx);
     await migrateDropAgentDefinitionLegacyColumns(tx);
