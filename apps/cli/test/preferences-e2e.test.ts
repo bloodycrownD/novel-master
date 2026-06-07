@@ -153,4 +153,80 @@ describe("preferences CLI e2e", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it("T6: v2 chat.llmStream set/get/reset", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-v2-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm([
+        "preferences",
+        "set",
+        "chat.llmStream",
+        "false",
+        "--db",
+        dbPath,
+      ]);
+      const get = runNm([
+        "preferences",
+        "get",
+        "chat.llmStream",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(get.status, 0, get.stderr);
+      assert.equal(get.stdout.trim(), "false");
+
+      runNm(["preferences", "reset", "chat.llmStream", "--db", dbPath]);
+      const afterReset = runNm([
+        "preferences",
+        "get",
+        "chat.llmStream",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(afterReset.stdout.trim(), "true");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("T6: v2 showFullToolParams and checkpointRetention", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-v2-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm([
+        "preferences",
+        "set",
+        "chat.showFullToolParams",
+        "true",
+        "--db",
+        dbPath,
+      ]);
+      runNm([
+        "preferences",
+        "set",
+        "session-fs.checkpointRetention",
+        "500",
+        "--db",
+        dbPath,
+      ]);
+
+      const list = runNm(["preferences", "list", "--db", dbPath]);
+      assert.equal(list.status, 0, list.stderr);
+      assert.match(list.stdout, /chat\.showFullToolParams=true/);
+      assert.match(list.stdout, /session-fs\.checkpointRetention=500/);
+
+      const bad = runNm([
+        "preferences",
+        "set",
+        "session-fs.checkpointRetention",
+        "0",
+        "--db",
+        dbPath,
+      ]);
+      assert.notEqual(bad.status, 0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
