@@ -30,7 +30,6 @@ import {
   SettingsField,
   SettingsFormSection,
   SettingsPanel,
-  SettingsSection,
   SettingsStatus,
 } from "./settings-ui";
 
@@ -61,10 +60,10 @@ function ActionBlockEditor({
   };
 
   return (
-    <div className="config-block-card config-block-card--nested">
+    <div className="config-block-card config-block-card--action">
       <div className="config-block-card__header">
         <span className="config-block-card__badge">{actionTypeLabel(action.type)}</span>
-        <span className="settings-hint">动作 {index + 1}</span>
+        <span className="config-block-card__meta">动作 {index + 1}</span>
         <div className="config-block-card__actions">
           {index > 0 ? (
             <button type="button" className="icon-btn" onClick={() => onMove(-1)} aria-label="上移">
@@ -81,65 +80,71 @@ function ActionBlockEditor({
           </button>
         </div>
       </div>
-      <p className="settings-hint">{actionTypeHint(action.type)}</p>
-      <SettingsField label="依赖（DAG）">
-        <div className="config-dep-chips">
-          {availableDependencies.map((dep) => (
-            <button
-              key={dep}
-              type="button"
-              className={`config-dep-chip${currentDeps.includes(dep) ? " is-active" : ""}`}
-              onClick={() => toggleDep(dep)}
-            >
-              {actionTypeLabel(dep)}
-            </button>
-          ))}
-        </div>
-      </SettingsField>
-      {action.type === "hide-message" ? (
-        <>
-          <SettingsField label="起深度">
-            <input
-              type="number"
-              value={action.params.startDepth ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...action,
-                  params: {
-                    ...action.params,
-                    startDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
-                  },
-                })
-              }
-            />
-          </SettingsField>
-          <SettingsField label="止深度">
-            <input
-              type="number"
-              value={action.params.endDepth ?? ""}
-              onChange={(e) =>
-                onChange({
-                  ...action,
-                  params: {
-                    ...action.params,
-                    endDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
-                  },
-                })
-              }
-            />
-          </SettingsField>
-        </>
-      ) : null}
-      {action.type === "run-agent" ? (
-        <SettingsField label="Agent ID">
-          <input
-            value={"agentId" in action.params ? String(action.params.agentId) : ""}
-            onChange={(e) =>
-              onChange({ ...action, params: { agentId: e.target.value.trim() } })
-            }
-          />
+      <div className="config-block-card__body">
+        <p className="config-block-card__hint">{actionTypeHint(action.type)}</p>
+        <SettingsField label="依赖（DAG）">
+          <div className="config-dep-chips">
+            {availableDependencies.map((dep) => (
+              <button
+                key={dep}
+                type="button"
+                className={`config-dep-chip${currentDeps.includes(dep) ? " is-active" : ""}`}
+                onClick={() => toggleDep(dep)}
+              >
+                {actionTypeLabel(dep)}
+              </button>
+            ))}
+          </div>
         </SettingsField>
-      ) : null}
+        {action.type === "hide-message" ? (
+          <div className="settings-field-grid">
+            <SettingsField label="起深度">
+              <input
+                type="number"
+                className="settings-field__input--compact"
+                placeholder="可选"
+                value={action.params.startDepth ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...action,
+                    params: {
+                      ...action.params,
+                      startDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
+                    },
+                  })
+                }
+              />
+            </SettingsField>
+            <SettingsField label="止深度">
+              <input
+                type="number"
+                className="settings-field__input--compact"
+                placeholder="可选"
+                value={action.params.endDepth ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...action,
+                    params: {
+                      ...action.params,
+                      endDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
+                    },
+                  })
+                }
+              />
+            </SettingsField>
+          </div>
+        ) : null}
+        {action.type === "run-agent" ? (
+          <SettingsField label="Agent ID">
+            <input
+              value={"agentId" in action.params ? String(action.params.agentId) : ""}
+              onChange={(e) =>
+                onChange({ ...action, params: { agentId: e.target.value.trim() } })
+              }
+            />
+          </SettingsField>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -189,8 +194,8 @@ function EventBlockEditor({
     <div className="config-block-card config-block-card--event">
       <div className="config-block-card__header">
         <span className="config-block-card__badge">事件</span>
-        <span className="settings-hint">
-          {index + 1} / {total}
+        <span className="config-block-card__meta">
+          {eventTypeLabel(block.eventType)} · {index + 1}/{total}
         </span>
         <div className="config-block-card__actions">
           {index > 0 ? (
@@ -208,57 +213,56 @@ function EventBlockEditor({
           </button>
         </div>
       </div>
-      <SettingsField label="事件">
-        <strong>{eventTypeLabel(block.eventType)}</strong>
-      </SettingsField>
-      <p className="settings-hint">{eventTypeHint(block.eventType)}</p>
-      <p className="settings-hint">
-        DAG：无依赖动作会并发执行；下游需等待所有依赖成功。任一失败将终止后续调度。
-      </p>
-      <div className="settings-section__actions">
-        <span className="settings-section__title">动作</span>
-        <button
-          type="button"
-          className="settings-link-btn"
-          onClick={() => setAddActionOpen((v) => !v)}
-        >
-          添加
-        </button>
-      </div>
-      {addActionOpen ? (
-        <div className="settings-inline-actions">
-          {ACTION_ADD_OPTIONS.map((opt) => (
-            <Button
-              key={opt.type}
-              variant="secondary"
-              onClick={() => {
-                onAddAction(opt.type);
-                setAddActionOpen(false);
-              }}
-            >
-              {opt.label}
-            </Button>
-          ))}
+      <div className="config-block-card__body">
+        <p className="config-block-card__hint">{eventTypeHint(block.eventType)}</p>
+        <p className="config-block-card__hint config-block-card__hint--subtle">
+          DAG：无依赖动作会并发执行；下游需等待所有依赖成功。任一失败将终止后续调度。
+        </p>
+        <div className="config-block-card__section-head">
+          <span className="config-block-card__section-label">动作</span>
+          <button
+            type="button"
+            className="settings-link-btn"
+            onClick={() => setAddActionOpen((v) => !v)}
+          >
+            添加
+          </button>
         </div>
-      ) : null}
-      <div className="config-block-list">
-        {block.actions.map((action, actionIndex) => {
-          const availableDependencies = [
-            ...new Set(block.actions.map((a) => a.type).filter((t) => t !== action.type)),
-          ] as EventActionType[];
-          return (
-            <ActionBlockEditor
-              key={`${block.id}-${actionIndex}`}
-              action={action}
-              index={actionIndex}
-              total={block.actions.length}
-              availableDependencies={availableDependencies}
-              onChange={(a) => updateAction(actionIndex, a)}
-              onDelete={() => deleteAction(actionIndex)}
-              onMove={(dir) => moveAction(actionIndex, dir)}
-            />
-          );
-        })}
+        {addActionOpen ? (
+          <div className="config-inline-actions">
+            {ACTION_ADD_OPTIONS.map((opt) => (
+              <Button
+                key={opt.type}
+                variant="secondary"
+                onClick={() => {
+                  onAddAction(opt.type);
+                  setAddActionOpen(false);
+                }}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        ) : null}
+        <div className="config-block-list config-block-list--nested">
+          {block.actions.map((action, actionIndex) => {
+            const availableDependencies = [
+              ...new Set(block.actions.map((a) => a.type).filter((t) => t !== action.type)),
+            ] as EventActionType[];
+            return (
+              <ActionBlockEditor
+                key={`${block.id}-${actionIndex}`}
+                action={action}
+                index={actionIndex}
+                total={block.actions.length}
+                availableDependencies={availableDependencies}
+                onChange={(a) => updateAction(actionIndex, a)}
+                onDelete={() => deleteAction(actionIndex)}
+                onMove={(dir) => moveAction(actionIndex, dir)}
+              />
+            );
+          })}
+        </div>
       </div>
     </div>
   );
@@ -373,69 +377,63 @@ export function EventsConfigView() {
       <SettingsFormSection
         title="事件配置"
         desc="按事件编排动作链，支持 DAG；可从 YAML 文件导入/导出。"
-        footer={
-          <div className="settings-form-actions settings-form-actions--solo">
-            <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "保存中…" : "保存"}
+        toolbar={
+          <div className="settings-yaml-links">
+            <Button variant="secondary" onClick={() => setConfirmImport(true)}>
+              导入 YAML
             </Button>
-            <div className="settings-yaml-links">
-              <button
-                type="button"
-                className="settings-link-btn"
-                onClick={() => setConfirmImport(true)}
-              >
-                导入 YAML
-              </button>
-              <button
-                type="button"
-                className="settings-link-btn"
-                onClick={() =>
-                  void ipcEventsExportYaml().then((r) => {
-                    if (r.ok && r.data === "saved") showToast("已导出 YAML");
-                    else if (!r.ok) showToast(r.error.message);
-                  })
-                }
-              >
-                导出 YAML
-              </button>
-            </div>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void ipcEventsExportYaml().then((r) => {
+                  if (r.ok && r.data === "saved") showToast("已导出 YAML");
+                  else if (!r.ok) showToast(r.error.message);
+                })
+              }
+            >
+              导出 YAML
+            </Button>
           </div>
         }
+        footer={
+          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+            {saving ? "保存中…" : "保存"}
+          </Button>
+        }
       >
-        <SettingsSection title="事件">
-          <div className="settings-section__actions">
-            <button
-              type="button"
-              className="settings-link-btn"
-              onClick={() => setAddEventOpen((v) => !v)}
-            >
-              添加事件
-            </button>
-          </div>
-          {addEventOpen ? (
-            <div className="settings-inline-actions">
-              {EVENT_ADD_OPTIONS.map((opt) => (
-                <Button key={opt.eventType} variant="secondary" onClick={() => addEvent(opt.eventType)}>
-                  {opt.label}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-          <div className="config-block-list">
-            {blocks.map((block, index) => (
-              <EventBlockEditor
-                key={block.id}
-                block={block}
-                index={index}
-                total={blocks.length}
-                onChange={(patch) => updateBlock(block.id, patch)}
-                onDelete={() => deleteBlock(block.id)}
-                onMove={(dir) => moveBlock(block.id, dir)}
-                onAddAction={(type) => addAction(block.id, type)}
-              />
+        <div className="config-events-toolbar">
+          <span className="config-events-toolbar__label">事件链</span>
+          <button
+            type="button"
+            className="settings-link-btn"
+            onClick={() => setAddEventOpen((v) => !v)}
+          >
+            添加事件
+          </button>
+        </div>
+        {addEventOpen ? (
+          <div className="config-inline-actions">
+            {EVENT_ADD_OPTIONS.map((opt) => (
+              <Button key={opt.eventType} variant="secondary" onClick={() => addEvent(opt.eventType)}>
+                {opt.label}
+              </Button>
             ))}
           </div>
-        </SettingsSection>
+        ) : null}
+        <div className="config-block-list">
+          {blocks.map((block, index) => (
+            <EventBlockEditor
+              key={block.id}
+              block={block}
+              index={index}
+              total={blocks.length}
+              onChange={(patch) => updateBlock(block.id, patch)}
+              onDelete={() => deleteBlock(block.id)}
+              onMove={(dir) => moveBlock(block.id, dir)}
+              onAddAction={(type) => addAction(block.id, type)}
+            />
+          ))}
+        </div>
       </SettingsFormSection>
       <SettingsStatus message={status} />
       <ConfirmModal

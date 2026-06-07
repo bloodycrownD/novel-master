@@ -5,6 +5,7 @@ import { resolveApplicationModelId } from "@novel-master/core";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
+  PromptChatTokenStatsResponse,
   PromptPreviewSegmentDto,
   PromptScopeRequest,
 } from "../../../../shared/ipc-types.js";
@@ -13,7 +14,7 @@ import {
   resolveCurrentAgentDefinition,
   resolveCurrentAgentId,
 } from "../../services/agent-run.service.js";
-import { loadChatPromptTokenLabelResilient } from "../../services/chat-prompt-tokens.service.js";
+import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
 import { buildRealPromptPreviewSegments } from "../../services/prompt-preview.service.js";
 
 function formatError(err: unknown): { code: string; message: string } {
@@ -45,11 +46,11 @@ export async function handlePromptRealPreview(
 
 export async function handlePromptChatTokenLabel(
   req: PromptScopeRequest,
-): Promise<IpcResult<string>> {
+): Promise<IpcResult<PromptChatTokenStatsResponse>> {
   try {
     const rt = await getDesktopRuntime();
-    const label = await loadChatPromptTokenLabelResilient(rt, req);
-    return { ok: true, data: label };
+    const stats = await loadChatPromptTokenStatsResilient(rt, req);
+    return { ok: true, data: stats };
   } catch (err) {
     return { ok: false, error: formatError(err) };
   }

@@ -125,6 +125,9 @@ export const IPC_CHANNELS = {
 
   BACKUP_EXPORT: "nm:backup/export",
   BACKUP_IMPORT: "nm:backup/import",
+
+  SHELL_MENU_POPUP: "nm:shell/menuPopup",
+  SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -471,6 +474,15 @@ export type PromptAgentMetaResponse = {
   readonly hasDedicatedModel: boolean;
 };
 
+/** Structured chat context usage for workspace footer (prototype token bar). */
+export type PromptChatTokenStatsResponse = {
+  readonly tokenCount: number;
+  readonly contextWindow?: number;
+  readonly pct?: number;
+  readonly estimated: boolean;
+  readonly counterKind: string;
+};
+
 export type CompactionManualRequest = PromptScopeRequest;
 
 export type AgentStreamEventPayload = {
@@ -663,3 +675,11 @@ export type CompactionConditionsSetRequest = {
 
 export type BackupExportResult = "saved" | "cancelled";
 export type BackupImportResult = "imported" | "cancelled";
+
+export type ShellMenuId = "file" | "edit" | "view" | "window" | "help";
+
+export type ShellMenuPopupRequest = {
+  readonly menuId: ShellMenuId;
+  readonly x: number;
+  readonly y: number;
+};

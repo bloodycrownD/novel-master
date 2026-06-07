@@ -29,13 +29,13 @@ export function ExplorerPane({
   return (
     <>
       <header className="column-header" id="explorer-header" aria-label="工作区">
+        <span className="column-header__title" id="workspace-title">
+          {title}
+        </span>
         <WorkspaceHeaderActions
           panelScope={workspaceScope}
           onRefresh={refreshWorkspaceTrees}
         />
-        <span className="column-header__title" id="workspace-title">
-          {title}
-        </span>
       </header>
       <section id="explorer-pane" aria-label="工作区">
         <div className="workspace-trees">
@@ -52,13 +52,24 @@ export function ExplorerPane({
                   className="explorer-tree"
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
+                  onContextMenu={(e) => {
+                    if ((e.target as HTMLElement).closest(".tree-node")) {
+                      return;
+                    }
+                    e.preventDefault();
+                    onBlankContextMenu({
+                      kind: "blank",
+                      panelScope: scope,
+                      x: e.clientX,
+                      y: e.clientY,
+                    });
+                  }}
                 >
                   {visible ? (
                     <WorkspaceTree
                       panelScope={scope}
                       refreshToken={treeRefreshToken}
                       onOpenContextMenu={onOpenContextMenu}
-                      onBlankContextMenu={onBlankContextMenu}
                     />
                   ) : null}
                 </div>

@@ -14,8 +14,7 @@ export type SettingsViewId =
   | "eventsConfig"
   | "regexGroups"
   | "regexRules"
-  | "regexRuleEditor"
-  | "globalTemplate";
+  | "regexRuleEditor";
 
 export const SETTINGS_NAV = [
   {
@@ -35,7 +34,6 @@ export const SETTINGS_NAV = [
       { id: "compactionConditions" as const, label: "压缩条件", icon: "🗜️" },
       { id: "eventsConfig" as const, label: "事件配置", icon: "⚡" },
       { id: "regexGroups" as const, label: "正则过滤", icon: "🛡️" },
-      { id: "globalTemplate" as const, label: "全局模板", icon: "🌐" },
     ],
   },
   {
@@ -52,7 +50,6 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   compactionConditions: "压缩条件",
   eventsConfig: "事件配置",
   regexGroups: "正则过滤",
-  globalTemplate: "全局模板",
 };
 
 export function getSettingsNavHighlightId(viewId: SettingsViewId): SettingsViewId {

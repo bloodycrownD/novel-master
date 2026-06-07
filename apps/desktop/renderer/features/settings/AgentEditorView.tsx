@@ -272,26 +272,28 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <SettingsFormSection
         title="Agent 配置"
         desc={`\u7f16\u8f91 ${agentId}${dirty ? " · 未保存" : ""}`}
-        footer={
-          <div className="settings-form-actions settings-form-actions--solo">
-            <Button variant="primary" disabled={saving} onClick={() => void save()}>
-              {saving ? "保存中…" : "保存"}
+        toolbar={
+          <div className="settings-yaml-links">
+            <Button variant="secondary" onClick={() => setConfirmImport(true)}>
+              导入 YAML
             </Button>
-            <div className="settings-yaml-links">
-              <button type="button" className="settings-link-btn" onClick={() =>setConfirmImport(true)}>
-                导入 YAML</button>
-              <button
-                type="button"
-                className="settings-link-btn"
-                onClick={() =>
-                  void ipcAgentYamlExport({ agentId }).then((r) => {
-                    if (r.ok && r.data === "saved") showToast("已导出 Agent YAML");
-                    else if (!r.ok) showToast(r.error.message);
-                  })
-                }
-              >导出 YAML</button>
-            </div>
+            <Button
+              variant="secondary"
+              onClick={() =>
+                void ipcAgentYamlExport({ agentId }).then((r) => {
+                  if (r.ok && r.data === "saved") showToast("已导出 Agent YAML");
+                  else if (!r.ok) showToast(r.error.message);
+                })
+              }
+            >
+              导出 YAML
+            </Button>
           </div>
+        }
+        footer={
+          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+            {saving ? "保存中…" : "保存"}
+          </Button>
         }
       >
         <SettingsSection title="基本信息">
@@ -367,71 +369,84 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title="Prompt 块">
-          <div className="settings-section__actions">
-            <button type="button" className="settings-link-btn" onClick={() =>setAddBlockMenu((v) => !v)}>
-              添加</button>
+          <div className="config-block-card__section-head">
+            <span className="config-block-card__section-label">块列表</span>
+            <button type="button" className="settings-link-btn" onClick={() => setAddBlockMenu((v) => !v)}>
+              添加
+            </button>
           </div>
           {addBlockMenu ? (
-            <div className="settings-inline-actions">
-              <Button variant="secondary" onClick={() =>addBlock("text")}>
-                文本块</Button>
-              <Button variant="secondary" onClick={() =>addBlock("chat")}>
-                会话块</Button>
+            <div className="config-inline-actions">
+              <Button variant="secondary" onClick={() => addBlock("text")}>
+                文本块
+              </Button>
+              <Button variant="secondary" onClick={() => addBlock("chat")}>
+                会话块
+              </Button>
             </div>
           ) : null}
           <div className="config-block-list">
             {prompts.map((block, index) => (
-              <div key={`prompt-${index}`} className="config-block-card">
+              <div key={`prompt-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
                   <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
-                  <span className="config-block-card__name">{block.name}</span>
+                  <span className="config-block-card__meta">{block.name}</span>
                   <div className="config-block-card__actions">
                     {index > 0 ? (
-                      <button type="button" className="icon-btn" onClick={() =>moveBlock(index, -1)}>
-                        ↑</button>
+                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, -1)} aria-label="上移">
+                        ↑
+                      </button>
                     ) : null}
                     {index < prompts.length - 1 ? (
-                      <button type="button" className="icon-btn" onClick={() =>moveBlock(index, 1)}>
-                        ↓</button>
+                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, 1)} aria-label="下移">
+                        ↓
+                      </button>
                     ) : null}
-                    <button type="button" className="icon-btn" onClick={() =>deleteBlock(index)}>
-                      ×</button>
+                    <button type="button" className="icon-btn" onClick={() => deleteBlock(index)} aria-label="删除">
+                      ×
+                    </button>
                   </div>
                 </div>
-                <SettingsField label="名称">
-                  <input value={block.name} onChange={(e) => updateBlock(index, { name: e.target.value })} />
-                </SettingsField>
-                {block.type === "text" ? (
-                  <>
-                    <SettingsField label="角色">
-                      <select
-                        value={block.role}
-                        onChange={(e) =>
-                          updateBlock(index, {
-                            type: "text",
-                            role: e.target.value as PromptBlockRole,
-                          })
-                        }
-                      >
-                        {ROLE_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </select>
-                    </SettingsField>
-                    <p className="settings-hint">仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。</p>
-                    <SettingsField label="内容">
-                      <textarea
-                        rows={4}
-                        value={block.content}
-                        onChange={(e) => updateBlock(index, { type: "text", content: e.target.value })}
-                      />
-                    </SettingsField>
-                  </>
-                ) : (
-                  <p className="settings-hint">chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。</p>
-                )}
+                <div className="config-block-card__body">
+                  <SettingsField label="名称">
+                    <input value={block.name} onChange={(e) => updateBlock(index, { name: e.target.value })} />
+                  </SettingsField>
+                  {block.type === "text" ? (
+                    <>
+                      <SettingsField label="角色">
+                        <select
+                          value={block.role}
+                          onChange={(e) =>
+                            updateBlock(index, {
+                              type: "text",
+                              role: e.target.value as PromptBlockRole,
+                            })
+                          }
+                        >
+                          {ROLE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </SettingsField>
+                      <p className="config-block-card__hint">
+                        仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
+                      </p>
+                      <SettingsField label="内容">
+                        <textarea
+                          rows={4}
+                          value={block.content}
+                          onChange={(e) => updateBlock(index, { type: "text", content: e.target.value })}
+                        />
+                      </SettingsField>
+                    </>
+                  ) : (
+                    <p className="config-block-card__hint">
+                      chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。
+                    </p>
+                  )}
+                </div>
               </div>
             ))}
           </div>

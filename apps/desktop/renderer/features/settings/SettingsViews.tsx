@@ -50,18 +50,20 @@ import {
   ipcRegexUpdateRule,
   rebootstrap,
 } from "../../ipc/client";
-import { WorkspaceTree } from "../workspace/WorkspaceTree";
 import type { SettingsNavState } from "./settings-nav";
 import {
   SettingsActionSection,
   SettingsField,
   SettingsFormSection,
+  SettingsListEmpty,
   SettingsListItem,
   SettingsListSection,
   SettingsPanel,
+  SettingsSection,
   SettingsStatus,
   SettingsSwitchRow,
 } from "./settings-ui";
+import { deriveRegexGroupId } from "../../utils/regex-group-id";
 import {
   parseOptionalDepthInput,
   previewRegexRule,
@@ -278,7 +280,10 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
           </button>
         }
       >
-        {loading ? <p className="settings-hint">加载中…</p> : null}
+        {loading ? <SettingsListEmpty>加载中…</SettingsListEmpty> : null}
+        {!loading && rows.length === 0 ? (
+          <SettingsListEmpty>暂无 Agent，点击上方按钮创建。</SettingsListEmpty>
+        ) : null}
         {rows.map((row) => (
           <SettingsListItem
             key={row.agentId}
@@ -364,6 +369,9 @@ export function ProvidersView({ nav }: { nav: Nav }) {
           </button>
         }
       >
+        {rows.length === 0 ? (
+          <SettingsListEmpty>暂无服务商，点击上方按钮添加。</SettingsListEmpty>
+        ) : null}
         {rows.map((p) => (
           <SettingsListItem
             key={p.id}
@@ -720,9 +728,12 @@ export function CompactionConditionsView() {
         title="压缩条件"
         desc="达到阈值时触发会话压缩。"
         footer={
-          <button type="button" className="btn-primary" onClick={() => void save()}>
-            保存
-          </button>
+          <>
+            <SettingsStatus message={status} inline />
+            <Button variant="primary" onClick={() => void save()}>
+              保存
+            </Button>
+          </>
         }
       >
         <SettingsSwitchRow
@@ -731,24 +742,23 @@ export function CompactionConditionsView() {
           onChange={setEnabled}
         />
         {enabled ? (
-          <>
+          <div className="settings-field-grid">
             <SettingsField label="Token 比例">
               <input type="number" step="0.01" min="0.01" max="1" value={tokenRatio} onChange={(e) => setTokenRatio(e.target.value)} />
             </SettingsField>
             <SettingsField label="可见条数阈值">
               <input type="number" min="0" value={visibleFloor} onChange={(e) => setVisibleFloor(e.target.value)} />
             </SettingsField>
-          </>
+          </div>
         ) : null}
       </SettingsFormSection>
-      <SettingsStatus message={status} />
     </SettingsPanel>
   );
 }
 
 export function RegexGroupsView({ nav }: { nav: Nav }) {
   const [rows, setRows] = useState<Array<{ groupId: string; displayName: string | null; ruleCount: number }>>([]);
-  const [newId, setNewId] = useState("");
+  const [createPromptOpen, setCreatePromptOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -760,30 +770,37 @@ export function RegexGroupsView({ nav }: { nav: Nav }) {
     reload().catch(() => undefined);
   }, [reload]);
 
-  const createGroup = async () => {
-    const groupId = newId.trim() || `group-${Date.now()}`;
-    await ipcRegexCreateGroup({ groupId });
-    setNewId("");
-    await reload();
+  const createGroup = async (displayName: string) => {
+    const taken = new Set(rows.map((r) => r.groupId));
+    const groupId = deriveRegexGroupId(displayName, taken);
+    const res = await ipcRegexCreateGroup({ groupId, displayName });
+    if (res.ok) {
+      showToast("已添加正则组");
+      await reload();
+    } else {
+      showToast(res.error.message);
+    }
   };
 
   return (
     <SettingsPanel>
       <SettingsListSection
         header={
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <input placeholder="groupId" value={newId} onChange={(e) => setNewId(e.target.value)} />
-            <button type="button" className="btn-primary" onClick={() => void createGroup()}>
+          <div className="settings-toolbar settings-toolbar--end">
+            <button type="button" className="btn-primary" onClick={() => setCreatePromptOpen(true)}>
               新建组
             </button>
           </div>
         }
       >
+        {rows.length === 0 ? (
+          <SettingsListEmpty>暂无正则组，点击上方按钮创建。</SettingsListEmpty>
+        ) : null}
         {rows.map((g) => (
           <SettingsListItem
             key={g.groupId}
             title={g.displayName?.trim() || g.groupId}
-            meta={`${g.ruleCount} 条规则`}
+            meta={`${g.ruleCount} 条规则 · ${g.groupId}`}
             onClick={() => {
               nav.navState.editingRegexGroupId = g.groupId;
               nav.push("regexRules");
@@ -794,10 +811,23 @@ export function RegexGroupsView({ nav }: { nav: Nav }) {
           />
         ))}
       </SettingsListSection>
+      <TextPromptModal
+        open={createPromptOpen}
+        title="新建正则组"
+        label="组名称"
+        placeholder="如 对话清洗"
+        confirmLabel="创建"
+        onClose={() => setCreatePromptOpen(false)}
+        onConfirm={createGroup}
+      />
       <ConfirmModal
         open={deleteConfirm != null}
         title="删除正则组"
-        message={`删除正则组「${deleteConfirm ?? ""}」？`}
+        message={`删除正则组「${
+          rows.find((r) => r.groupId === deleteConfirm)?.displayName?.trim() ||
+          deleteConfirm ||
+          ""
+        }」？`}
         danger
         onConfirm={() => {
           const groupId = deleteConfirm;
@@ -947,86 +977,117 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
     }
   };
 
+  const ruleDesc = draft.name.trim() || (ruleId ? "未命名规则" : "新规则");
+
   return (
     <SettingsPanel>
       <SettingsFormSection
         title="正则规则"
-        desc={ruleId ?? "新规则"}
+        desc={ruleDesc}
         footer={
-          <div style={{ display: "flex", gap: "0.5rem" }}>
-            <button type="button" className="btn-primary" onClick={() => void save()}>
-              保存
-            </button>
-            <button type="button" onClick={runPreview}>
+          <>
+            <Button variant="secondary" onClick={runPreview}>
               测试预览
-            </button>
-          </div>
+            </Button>
+            <Button variant="primary" onClick={() => void save()}>
+              保存
+            </Button>
+          </>
         }
       >
-        <SettingsField label="名称">
-          <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-        </SettingsField>
-        <SettingsField label="模式">
-          <input value={draft.pattern} onChange={(e) => setDraft({ ...draft, pattern: e.target.value })} />
-        </SettingsField>
-        <SettingsField label="Flags">
-          <input value={draft.flags} onChange={(e) => setDraft({ ...draft, flags: e.target.value })} />
-        </SettingsField>
-        <SettingsSwitchRow label="启用" checked={draft.enabled} onChange={(v) => setDraft({ ...draft, enabled: v })} />
-        <SettingsSwitchRow label="作用 user" checked={draft.scopeUser} onChange={(v) => setDraft({ ...draft, scopeUser: v })} />
-        <SettingsSwitchRow label="作用 assistant" checked={draft.scopeAssistant} onChange={(v) => setDraft({ ...draft, scopeAssistant: v })} />
-        <SettingsSwitchRow label="llmReplace" checked={llmOn} onChange={setLlmOn} />
-        {llmOn ? (
-          <SettingsField label="llmReplace">
-            <input value={draft.llmReplace ?? ""} onChange={(e) => setDraft({ ...draft, llmReplace: e.target.value })} />
+        <SettingsSection title="基本信息">
+          <SettingsField label="名称">
+            <input
+              value={draft.name}
+              placeholder="如 隐藏邮箱"
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+            />
           </SettingsField>
-        ) : null}
-        <SettingsSwitchRow label="displayReplace" checked={displayOn} onChange={setDisplayOn} />
-        {displayOn ? (
-          <SettingsField label="displayReplace">
-            <input value={draft.displayReplace ?? ""} onChange={(e) => setDraft({ ...draft, displayReplace: e.target.value })} />
+          <SettingsField label="正则表达式">
+            <input
+              value={draft.pattern}
+              placeholder="如 [a-z]+@[a-z]+\\.[a-z]+"
+              onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
+            />
           </SettingsField>
-        ) : null}
-        <SettingsField label="startDepth">
-          <input
-            value={draft.startDepth ?? ""}
-            onChange={(e) => setDraft({ ...draft, startDepth: parseOptionalDepthInput(e.target.value) })}
-          />
-        </SettingsField>
-        <SettingsField label="endDepth">
-          <input
-            value={draft.endDepth ?? ""}
-            onChange={(e) => setDraft({ ...draft, endDepth: parseOptionalDepthInput(e.target.value) })}
-          />
-        </SettingsField>
-        <SettingsField label="测试文本">
-          <input value={testText} onChange={(e) => setTestText(e.target.value)} />
-        </SettingsField>
-        {preview ? <pre className="settings-hint">{preview}</pre> : null}
+          <SettingsField label="标志">
+            <input
+              value={draft.flags}
+              placeholder="gim"
+              onChange={(e) => setDraft({ ...draft, flags: e.target.value })}
+            />
+          </SettingsField>
+          <p className="settings-hint">常用 gim：全局、忽略大小写、多行。</p>
+          <SettingsSwitchRow label="启用规则" checked={draft.enabled} onChange={(v) => setDraft({ ...draft, enabled: v })} />
+        </SettingsSection>
+
+        <SettingsSection title="深度范围">
+          <p className="settings-hint">自最新消息起计数；0 表示最新一条，留空表示该侧无界。</p>
+          <div className="settings-field-grid">
+            <SettingsField label="起始深度">
+              <input
+                value={draft.startDepth ?? ""}
+                placeholder="0"
+                inputMode="numeric"
+                onChange={(e) => setDraft({ ...draft, startDepth: parseOptionalDepthInput(e.target.value) })}
+              />
+            </SettingsField>
+            <SettingsField label="结束深度">
+              <input
+                value={draft.endDepth ?? ""}
+                placeholder="留空表示无界"
+                inputMode="numeric"
+                onChange={(e) => setDraft({ ...draft, endDepth: parseOptionalDepthInput(e.target.value) })}
+              />
+            </SettingsField>
+          </div>
+        </SettingsSection>
+
+        <SettingsSection title="作用范围">
+          <p className="settings-hint">按消息角色生效，至少选择一项。</p>
+          <SettingsSwitchRow label="用户消息" checked={draft.scopeUser} onChange={(v) => setDraft({ ...draft, scopeUser: v })} />
+          <SettingsSwitchRow label="助手消息" checked={draft.scopeAssistant} onChange={(v) => setDraft({ ...draft, scopeAssistant: v })} />
+        </SettingsSection>
+
+        <SettingsSection title="提示词替换">
+          <SettingsSwitchRow label="改写送入模型的文本" checked={llmOn} onChange={setLlmOn} />
+          {llmOn ? (
+            <SettingsField label="替换为">
+              <input
+                value={draft.llmReplace ?? ""}
+                placeholder="如 [redacted]"
+                onChange={(e) => setDraft({ ...draft, llmReplace: e.target.value })}
+              />
+            </SettingsField>
+          ) : (
+            <p className="settings-hint">关闭时不改写 LLM 通道文本。</p>
+          )}
+        </SettingsSection>
+
+        <SettingsSection title="显示替换">
+          <SettingsSwitchRow label="改写界面展示文本" checked={displayOn} onChange={setDisplayOn} />
+          {displayOn ? (
+            <SettingsField label="替换为">
+              <input
+                value={draft.displayReplace ?? ""}
+                placeholder="如 ***"
+                onChange={(e) => setDraft({ ...draft, displayReplace: e.target.value })}
+              />
+            </SettingsField>
+          ) : (
+            <p className="settings-hint">关闭时不改写界面展示文本。</p>
+          )}
+        </SettingsSection>
+
+        <SettingsSection title="测试预览">
+          <p className="settings-hint">保存前可本地试跑，当前按「显示」通道、深度 0 预览。</p>
+          <SettingsField label="样例文本">
+            <input value={testText} onChange={(e) => setTestText(e.target.value)} />
+          </SettingsField>
+          {preview ? <pre className="settings-preview-box">{preview}</pre> : null}
+        </SettingsSection>
       </SettingsFormSection>
       <SettingsStatus message={status} />
-    </SettingsPanel>
-  );
-}
-
-export function GlobalTemplateView() {
-  const [refreshToken, setRefreshToken] = useState(0);
-  return (
-    <SettingsPanel>
-      <section className="settings-section">
-        <h3 className="settings-section__title">全局模板文件</h3>
-        <p className="settings-section__desc">
-          全应用共享；项目可通过「从上级同步」拉取此处工作区内容。
-        </p>
-      </section>
-      <div id="settings-global-tree" className="settings-embedded-tree">
-        <WorkspaceTree
-          panelScope="global"
-          refreshToken={refreshToken}
-          onOpenContextMenu={() => undefined}
-          onBlankContextMenu={() => undefined}
-        />
-      </div>
     </SettingsPanel>
   );
 }

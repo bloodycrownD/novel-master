@@ -10,27 +10,51 @@ import {
   resolveTokenCounterModeForModel,
   serializePromptLlmInput,
 } from "@novel-master/core";
+import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
-import { formatPromptTokenUsageLabel } from "../utils/format-token-count.js";
+import { formatTokenCount } from "../utils/format-token-count.js";
 import {
   buildSessionPromptInput,
   type SessionPromptScope,
 } from "./session-prompt-input.service.js";
 
-function formatChatTokenLabel(
-  result: { tokenCount: number; estimated: boolean; counterKind: string },
+function buildTokenStats(
+  tokenCount: number,
+  estimated: boolean,
+  counterKind: string,
   contextWindow: number | undefined,
-): string {
-  const base = formatPromptTokenUsageLabel(result.tokenCount, contextWindow, {
-    estimated: result.estimated,
-  });
-  return `${base} · ${result.counterKind}`;
+): PromptChatTokenStatsResponse {
+  const pct =
+    contextWindow != null && contextWindow > 0
+      ? Math.min(999, Math.round((tokenCount / contextWindow) * 100))
+      : undefined;
+  return {
+    tokenCount,
+    contextWindow,
+    pct,
+    estimated,
+    counterKind,
+  };
 }
 
-export async function loadChatPromptTokenLabel(
+export function formatChatTokenStatsLabel(
+  stats: PromptChatTokenStatsResponse,
+): string {
+  const prefix = stats.estimated ? "~" : "";
+  const current = formatTokenCount(stats.tokenCount);
+  if (stats.contextWindow == null || stats.contextWindow <= 0) {
+    return stats.estimated
+      ? `${prefix}${current} tokens (est.) · ${stats.counterKind}`
+      : `${current} tokens · ${stats.counterKind}`;
+  }
+  const pct = stats.pct ?? 0;
+  return `${prefix}${pct}% • ${current}/${formatTokenCount(stats.contextWindow)} · ${stats.counterKind}`;
+}
+
+export async function loadChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<string> {
+): Promise<PromptChatTokenStatsResponse> {
   const { definition, blocks, ctx } = await buildSessionPromptInput(
     runtime,
     scope,
@@ -45,10 +69,7 @@ export async function loadChatPromptTokenLabel(
   if (!applicationModelId) {
     const serialized = serializePromptLlmInput(blocks, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
-    return formatChatTokenLabel(
-      { tokenCount: count, estimated: true, counterKind: "heuristic" },
-      undefined,
-    );
+    return buildTokenStats(count, true, "heuristic", undefined);
   }
 
   const tokenizerOverride = await resolveTokenCounterModeForModel(
@@ -67,13 +88,18 @@ export async function loadChatPromptTokenLabel(
   const contextWindow =
     await runtime.providerModels.getContextWindow(applicationModelId);
 
-  return formatChatTokenLabel(result, contextWindow ?? undefined);
+  return buildTokenStats(
+    result.tokenCount,
+    result.estimated,
+    result.counterKind,
+    contextWindow ?? undefined,
+  );
 }
 
-async function loadChatPromptTokenLabelFallback(
+async function loadChatPromptTokenStatsFallback(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
-): Promise<string> {
+): Promise<PromptChatTokenStatsResponse> {
   const all = await runtime.messages.listBySession(scope.sessionId);
   const visible = all.filter((m) => !m.hidden);
   const serialized = visible
@@ -104,19 +130,25 @@ async function loadChatPromptTokenLabelFallback(
     }
   }
 
-  return formatChatTokenLabel(
-    { tokenCount: count, estimated: true, counterKind: "heuristic" },
-    contextWindow,
-  );
+  return buildTokenStats(count, true, "heuristic", contextWindow);
 }
 
+export async function loadChatPromptTokenStatsResilient(
+  runtime: DesktopNovelMasterRuntime,
+  scope: SessionPromptScope,
+): Promise<PromptChatTokenStatsResponse> {
+  try {
+    return await loadChatPromptTokenStats(runtime, scope);
+  } catch {
+    return loadChatPromptTokenStatsFallback(runtime, scope);
+  }
+}
+
+/** @deprecated Use loadChatPromptTokenStatsResilient — kept for label-only callers. */
 export async function loadChatPromptTokenLabelResilient(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
-  try {
-    return await loadChatPromptTokenLabel(runtime, scope);
-  } catch {
-    return loadChatPromptTokenLabelFallback(runtime, scope);
-  }
+  const stats = await loadChatPromptTokenStatsResilient(runtime, scope);
+  return formatChatTokenStatsLabel(stats);
 }

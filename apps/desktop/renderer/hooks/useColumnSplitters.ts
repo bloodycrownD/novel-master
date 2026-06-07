@@ -12,7 +12,7 @@ import {
   type RefObject,
 } from "react";
 
-const COLUMN_SPLITTER_SIZE = 5;
+const COLUMN_SPLITTER_SIZE = 0;
 const COLUMN_PREVIEW_MIN_WIDTH = 450;
 const COLUMN_EXPLORER_MIN_WIDTH = 300;
 const COLUMN_CHAT_MIN_WIDTH = 350;

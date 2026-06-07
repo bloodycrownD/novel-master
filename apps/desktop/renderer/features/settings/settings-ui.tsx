@@ -67,15 +67,34 @@ export function SettingsSwitchRow({
 export function SettingsListSection({
   header,
   children,
+  empty,
 }: {
   header?: ReactNode;
   children: ReactNode;
+  empty?: ReactNode;
 }) {
   return (
     <section className="settings-section settings-section--list">
-      {header ? <div className="settings-section__actions">{header}</div> : null}
-      <div className="settings-list">{children}</div>
+      {header ? <div className="settings-toolbar">{header}</div> : null}
+      <div className="settings-list">
+        {empty}
+        {children}
+      </div>
     </section>
+  );
+}
+
+export function SettingsToolbar({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={className ? `settings-toolbar ${className}` : "settings-toolbar"}>
+      {children}
+    </div>
   );
 }
 
@@ -125,17 +144,22 @@ export function SettingsListItem({
 export function SettingsFormSection({
   title,
   desc,
+  toolbar,
   children,
   footer,
 }: {
   title: string;
   desc?: string;
+  toolbar?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
 }) {
   return (
     <section className="settings-section settings-section--form">
-      <h3 className="settings-section__title">{title}</h3>
+      <div className="settings-form-header">
+        <h3 className="settings-section__title">{title}</h3>
+        {toolbar ? <div className="settings-form-toolbar">{toolbar}</div> : null}
+      </div>
       {desc ? <p className="settings-section__desc">{desc}</p> : null}
       <div className="settings-fields">{children}</div>
       {footer ? <div className="settings-section__footer">{footer}</div> : null}
@@ -146,12 +170,14 @@ export function SettingsFormSection({
 export function SettingsField({
   label,
   children,
+  narrow,
 }: {
   label: string;
   children: ReactNode;
+  narrow?: boolean;
 }) {
   return (
-    <label className="settings-field">
+    <label className={`settings-field${narrow ? " settings-field--narrow" : ""}`}>
       <span className="settings-field__label">{label}</span>
       {children}
     </label>
@@ -176,14 +202,26 @@ export function SettingsActionSection({
   );
 }
 
-export function SettingsStatus({ message, error }: { message?: string; error?: string }) {
+export function SettingsStatus({
+  message,
+  error,
+  inline,
+}: {
+  message?: string;
+  error?: string;
+  inline?: boolean;
+}) {
   if (!message && !error) return null;
   return (
     <p
-      className="settings-status"
-      style={{ color: error ? "var(--danger, #c00)" : "var(--text-secondary)" }}
+      className={`settings-status${inline ? " settings-status--inline" : ""}`}
+      style={{ color: error ? "var(--danger, #c00)" : undefined }}
     >
       {error ?? message}
     </p>
   );
+}
+
+export function SettingsListEmpty({ children }: { children: ReactNode }) {
+  return <p className="settings-list__empty">{children}</p>;
 }

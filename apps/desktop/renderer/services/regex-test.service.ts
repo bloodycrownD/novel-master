@@ -74,10 +74,10 @@ export function validateRegexRuleDraft(fields: RegexRuleDraftFields): Validation
   const hasLlm = fields.llmReplace != null && fields.llmReplace !== "";
   const hasDisplay = fields.displayReplace != null && fields.displayReplace !== "";
   if (!hasLlm && !hasDisplay) {
-    return { ok: false, message: "至少配置 llmReplace 或 displayReplace 之一" };
+    return { ok: false, message: "至少启用「提示词替换」或「显示替换」之一" };
   }
   if (!fields.scopeUser && !fields.scopeAssistant) {
-    return { ok: false, message: "至少选择 user 或 assistant 作用范围之一" };
+    return { ok: false, message: "至少选择「用户消息」或「助手消息」之一" };
   }
   try {
     validateDepthSlice({

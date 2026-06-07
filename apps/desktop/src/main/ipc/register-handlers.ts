@@ -40,6 +40,10 @@ import {
   handleEventsSetConfig,
 } from "./handlers/events.js";
 import {
+  handleShellMenuPopup,
+  handleShellSetTitleBarTheme,
+} from "./handlers/shell.js";
+import {
   handlePreferencesGetSessionFsVersionCheck,
   handlePreferencesSetSessionFsVersionCheck,
 } from "./handlers/preferences.js";
@@ -395,4 +399,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, () => handleBackupExport());
   ipcMain.handle(IPC_CHANNELS.BACKUP_IMPORT, () => handleBackupImport());
+
+  ipcMain.handle(IPC_CHANNELS.SHELL_MENU_POPUP, (event, req) =>
+    handleShellMenuPopup(event, req),
+  );
+  ipcMain.handle(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, (event, theme) =>
+    handleShellSetTitleBarTheme(event, theme),
+  );
 }

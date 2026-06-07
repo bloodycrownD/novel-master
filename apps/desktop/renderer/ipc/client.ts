@@ -30,6 +30,7 @@ import {
   type ProjectRenameRequest,
   type PromptAgentMetaResponse,
   type PromptPreviewSegmentDto,
+  type PromptChatTokenStatsResponse,
   type PromptScopeRequest,
   type ScopeSetProjectRequest,
   type ScopeSetSessionRequest,
@@ -72,6 +73,10 @@ function bridge() {
     );
   }
   return window.novelMasterDesktop;
+}
+
+export function getDesktopBridge() {
+  return bridge();
 }
 
 export async function getBootstrapStatus(): Promise<BootstrapStatusResponse> {
@@ -373,7 +378,7 @@ export async function ipcPromptRealPreview(
 
 export async function ipcPromptChatTokenLabel(
   req: PromptScopeRequest,
-): Promise<IpcResult<string>> {
+): Promise<IpcResult<PromptChatTokenStatsResponse>> {
   return bridge().invoke(IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL, req);
 }
 
@@ -562,6 +567,18 @@ export async function ipcBackupExport() {
 
 export async function ipcBackupImport() {
   return bridge().invoke(IPC_CHANNELS.BACKUP_IMPORT);
+}
+
+export async function ipcShellMenuPopup(req: {
+  menuId: "file" | "edit" | "view" | "window" | "help";
+  x: number;
+  y: number;
+}) {
+  return bridge().invoke<IpcResult<null>>(IPC_CHANNELS.SHELL_MENU_POPUP, req);
+}
+
+export async function ipcShellSetTitleBarTheme(theme: "light" | "dark") {
+  return bridge().invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme);
 }
 
 export { vfsScope };
