@@ -321,16 +321,23 @@ export function MessageList({
     return list;
   }, [items, streamingText, streamingThinking]);
 
-  const renderBubble = (
-    isUser: boolean,
+  const renderAssistantBubble = (
     body: string,
+    thinking: string,
     selected: boolean,
     hidden: boolean,
     messageId: string,
-    /** Streaming tail always plain Text even when assistant rich text is on. */
-    forcePlainText = false,
+    options?: {
+      defaultExpandedThinking?: boolean;
+      forcePlainText?: boolean;
+    },
   ) => {
-    const colors = chatBubbleColors(tokens, isUser);
+    const trimmedThinking = thinking.trim();
+    const trimmedBody = body.trim();
+    if (!trimmedThinking && !trimmedBody) {
+      return null;
+    }
+    const colors = chatBubbleColors(tokens, false);
     return (
       <View
         style={[
@@ -344,19 +351,66 @@ export function MessageList({
             borderWidth: 2,
           },
         ]}>
-        {forcePlainText ? (
-          <Text style={{color: colors.bodyColor}}>{body}</Text>
-        ) : (
-          <ChatMessageBody
-            body={body}
-            tokens={tokens}
-            isUser={isUser}
+        {trimmedThinking ? (
+          <ThinkingBlockCard
+            text={trimmedThinking}
+            defaultExpanded={options?.defaultExpandedThinking}
+            dimmed={hidden}
             richTextEnabled={chatRichTextEnabled}
             richRenderEpoch={richRenderEpoch}
-            messageId={messageId}
-            bodyColor={colors.bodyColor}
+            contentId={`thinking-${messageId}`}
+            embedded
+            showDividerBelow={!!trimmedBody}
           />
-        )}
+        ) : null}
+        {trimmedBody
+          ? options?.forcePlainText ? (
+              <Text style={{color: colors.bodyColor}}>{trimmedBody}</Text>
+            ) : (
+              <ChatMessageBody
+                body={trimmedBody}
+                tokens={tokens}
+                isUser={false}
+                richTextEnabled={chatRichTextEnabled}
+                richRenderEpoch={richRenderEpoch}
+                messageId={messageId}
+                bodyColor={colors.bodyColor}
+              />
+            )
+          : null}
+      </View>
+    );
+  };
+
+  const renderUserBubble = (
+    body: string,
+    selected: boolean,
+    hidden: boolean,
+    messageId: string,
+  ) => {
+    const colors = chatBubbleColors(tokens, true);
+    return (
+      <View
+        style={[
+          styles.bubble,
+          {
+            backgroundColor: colors.backgroundColor,
+            opacity: hidden ? 0.55 : 1,
+          },
+          batchMode && selected && {
+            borderColor: tokens.primary,
+            borderWidth: 2,
+          },
+        ]}>
+        <ChatMessageBody
+          body={body}
+          tokens={tokens}
+          isUser
+          richTextEnabled={chatRichTextEnabled}
+          richRenderEpoch={richRenderEpoch}
+          messageId={messageId}
+          bodyColor={colors.bodyColor}
+        />
       </View>
     );
   };
@@ -418,18 +472,14 @@ export function MessageList({
         if ('kind' in item && item.kind === 'stream') {
           return (
             <View style={styles.rowAlignAssistant}>
-              {streamingThinking && streamingThinking.length > 0 ? (
-                <ThinkingBlockCard
-                  text={streamingThinking}
-                  defaultExpanded
-                  richTextEnabled={chatRichTextEnabled}
-                  richRenderEpoch={richRenderEpoch}
-                  contentId="stream-thinking"
-                />
-              ) : null}
-              {streamingText && streamingText.length > 0
-                ? renderBubble(false, streamingText, false, false, 'stream', true)
-                : null}
+              {renderAssistantBubble(
+                streamingText ?? '',
+                streamingThinking ?? '',
+                false,
+                false,
+                'stream',
+                {defaultExpandedThinking: true, forcePlainText: true},
+              )}
             </View>
           );
         }
@@ -447,27 +497,16 @@ export function MessageList({
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
-        const content = (
-          <>
-            {!isUser && thinking ? (
-              <ThinkingBlockCard
-                text={thinking}
-                dimmed={hidden}
-                richTextEnabled={chatRichTextEnabled}
-                richRenderEpoch={richRenderEpoch}
-                contentId={`thinking-${row.message.id}`}
-              />
-            ) : null}
-            {body
-              ? renderBubble(
-                  isUser,
-                  body,
-                  selected,
-                  hidden,
-                  row.message.id,
-                )
-              : null}
-          </>
+        const content = isUser ? (
+          renderUserBubble(body, selected, hidden, row.message.id)
+        ) : (
+          renderAssistantBubble(
+            body,
+            thinking,
+            selected,
+            hidden,
+            row.message.id,
+          )
         );
 
         if (batchMode) {

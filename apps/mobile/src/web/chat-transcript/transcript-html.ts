@@ -20,12 +20,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
     .row.user .bubble { background: var(--primary, #007aff); color: #fff; }
     .row.assistant .bubble, .row.stream .bubble { background: var(--surface, #f2f2f7); color: var(--text, #111); }
-    .row.hidden .bubble, .row.hidden .thinking-card { opacity: 0.45; }
-    .thinking-card { max-width: 85%; margin: 2px 0; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); }
+    .row.hidden .bubble { opacity: 0.45; }
+    .bubble .thinking-section { margin: 0; padding: 0; border: none; background: transparent; max-width: none; }
     .thinking-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
     .thinking-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); }
     .thinking-chevron { font-size: 10px; color: var(--text-secondary, #888); }
-    .thinking-body { margin-top: 8px; font-size: 13px; line-height: 1.45; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
+    .thinking-body { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
+    .thinking-body-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
+    .bubble-body { font-size: 15px; line-height: 1.4; color: inherit; white-space: pre-wrap; word-break: break-word; }
     .tool-card { max-width: 92%; width: 100%; margin: 2px 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); }
     .tool-card.tappable { border-color: var(--primary, #007aff); cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

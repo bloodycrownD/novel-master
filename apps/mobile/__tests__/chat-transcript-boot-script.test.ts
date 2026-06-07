@@ -29,9 +29,10 @@ describe('chat-transcript boot script', () => {
 
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {
     const script = buildTranscriptBootScript();
-    expect(script).toContain('streamTextInner');
+    expect(script).toContain('renderStreamBubbleInner');
+    expect(script).toContain('renderAssistantBubbleInner');
     expect(script).toContain('streamThinkingHtml');
-    expect(script).toContain('updateStreamTextBubble');
+    expect(script).toContain('updateStreamBubble');
     expect(script).toContain('p.html');
     expect(script).toContain("state.stream.textHtml = ''");
     expect(script).toContain("state.stream.thinkingHtml = ''");

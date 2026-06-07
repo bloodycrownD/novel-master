@@ -1,5 +1,5 @@
 /**
- * Collapsible model reasoning (thinking block), separate from the reply bubble.
+ * Collapsible model reasoning (thinking block), embedded in assistant bubbles by default.
  */
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
@@ -17,6 +17,10 @@ type Props = {
   richTextEnabled?: boolean;
   richRenderEpoch?: number;
   contentId?: string;
+  /** Inside assistant bubble (no standalone card chrome). */
+  embedded?: boolean;
+  /** Divider below expanded thinking when reply text follows. */
+  showDividerBelow?: boolean;
 };
 
 export function ThinkingBlockCard({
@@ -26,6 +30,8 @@ export function ThinkingBlockCard({
   richTextEnabled = false,
   richRenderEpoch = 0,
   contentId = 'thinking',
+  embedded = true,
+  showDividerBelow = false,
 }: Props) {
   const {tokens} = useTheme();
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -42,12 +48,12 @@ export function ThinkingBlockCard({
   return (
     <View
       style={[
-        styles.card,
-        {
+        embedded ? styles.embedded : styles.card,
+        !embedded && {
           backgroundColor: tokens.bgSecondary,
           borderColor: tokens.borderLight,
-          opacity: dimmed ? 0.55 : 1,
         },
+        {opacity: dimmed ? 0.55 : 1},
       ]}>
       <Pressable
         style={styles.header}
@@ -63,15 +69,37 @@ export function ThinkingBlockCard({
       </Pressable>
       {expanded ? (
         useRich ? (
-          <RichContentBody
-            content={trimmed}
-            tokens={tokens}
-            variant="chat-assistant"
-            fallbackTextColor={tokens.textSecondary}
-            renderKey={`${contentId}:${richRenderEpoch}`}
-          />
+          <View
+            style={
+              showDividerBelow
+                ? {
+                    borderBottomColor: tokens.borderLight,
+                    borderBottomWidth: StyleSheet.hairlineWidth,
+                    marginBottom: 8,
+                    paddingBottom: 8,
+                  }
+                : undefined
+            }>
+            <RichContentBody
+              content={trimmed}
+              tokens={tokens}
+              variant="chat-assistant"
+              fallbackTextColor={tokens.textSecondary}
+              renderKey={`${contentId}:${richRenderEpoch}`}
+            />
+          </View>
         ) : (
-          <Text style={[styles.body, {color: tokens.textSecondary}]}>
+          <Text
+            style={[
+              styles.body,
+              {color: tokens.textSecondary},
+              showDividerBelow && {
+                borderBottomColor: tokens.borderLight,
+                borderBottomWidth: StyleSheet.hairlineWidth,
+                marginBottom: 8,
+                paddingBottom: 8,
+              },
+            ]}>
             {trimmed}
           </Text>
         )
@@ -89,6 +117,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  embedded: {
+    alignSelf: 'stretch',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -97,5 +128,5 @@ const styles = StyleSheet.create({
   },
   title: {fontSize: 12, fontWeight: '600'},
   chevron: {fontSize: 10},
-  body: {fontSize: 13, lineHeight: 19},
+  body: {fontSize: 13, lineHeight: 19, marginTop: 6},
 });

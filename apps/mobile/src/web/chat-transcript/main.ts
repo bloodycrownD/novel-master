@@ -179,13 +179,6 @@ export function buildTranscriptBootScript(): string {
     return '进行中';
   }
 
-  function assistantBubbleInner(row) {
-    if (state.flags.richText && row.textHtml) {
-      return row.textHtml;
-    }
-    return escapeHtml(row.text || '');
-  }
-
   function thinkingBodyInner(text, thinkingHtml) {
     var trimmed = String(text || '').trim();
     if (!trimmed) return '';
@@ -195,20 +188,45 @@ export function buildTranscriptBootScript(): string {
     return escapeHtml(trimmed);
   }
 
-  function renderThinkingCard(text, key, expanded, thinkingHtml) {
+  function renderThinkingSection(text, key, expanded, thinkingHtml, showDividerBelow) {
     var trimmed = String(text || '').trim();
     if (!trimmed) return '';
     var chevron = expanded ? '▼' : '▶';
     var richClass = state.flags.richText && thinkingHtml ? ' rich' : '';
+    var bodyClass = 'thinking-body' + richClass;
+    if (expanded && showDividerBelow) {
+      bodyClass += ' thinking-body-divided';
+    }
     var body = expanded
-      ? '<div class="thinking-body' + richClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
+      ? '<div class="' + bodyClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
       : '';
     return (
-      '<div class="thinking-card" data-thinking-key="' + escapeHtml(key) + '">' +
+      '<div class="thinking-section" data-thinking-key="' + escapeHtml(key) + '">' +
       '<div class="thinking-header" data-action="toggle-thinking" data-thinking-key="' + escapeHtml(key) + '">' +
       '<span class="thinking-title">思考过程</span>' +
       '<span class="thinking-chevron">' + chevron + '</span></div>' + body + '</div>'
     );
+  }
+
+  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml) {
+    var html = '';
+    var hasThinking = !!(thinking && String(thinking).trim());
+    var hasText = !!(text && String(text).trim());
+    if (hasThinking) {
+      html += renderThinkingSection(
+        thinking,
+        thinkingKey,
+        thinkingExpanded,
+        thinkingHtml,
+        hasText
+      );
+    }
+    if (hasText) {
+      var richBubble = state.flags.richText && textHtml ? ' rich' : '';
+      var inner = textHtml || escapeHtml(text || '');
+      html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
+    }
+    return html;
   }
 
   function renderToolRow(row) {
@@ -530,7 +548,6 @@ export function buildTranscriptBootScript(): string {
     var hidden = row.hidden ? ' hidden' : '';
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
-    var richBubble = state.flags.richText && row.role === 'assistant' && row.textHtml ? ' rich' : '';
     var selected = isSelected(row.id);
     var selectedClass = selected ? ' selected' : '';
     var html = '';
@@ -540,25 +557,28 @@ export function buildTranscriptBootScript(): string {
         (selected ? '✓' : '') + '</div><div class="batch-content">';
     }
     html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '">';
-    if (row.thinking) {
-      html += renderThinkingCard(row.thinking, thinkingKey, thinkingExpanded, row.thinkingHtml);
-    }
-    if (row.text) {
-      var inner = role === 'user' ? escapeHtml(row.text) : assistantBubbleInner(row);
-      html += '<div class="bubble' + richBubble + '">' + inner + '</div>';
+    if (role === 'user') {
+      if (row.text) {
+        html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
+      }
+    } else if (row.thinking || row.text) {
+      var richBubble = state.flags.richText && row.textHtml ? ' rich' : '';
+      html += '<div class="bubble' + richBubble + '">' +
+        renderAssistantBubbleInner(
+          row.text,
+          row.textHtml,
+          row.thinking,
+          thinkingKey,
+          thinkingExpanded,
+          row.thinkingHtml
+        ) +
+        '</div>';
     }
     html += '</div>';
     if (state.flags.batchMode) {
       html += '</div></div>';
     }
     return html;
-  }
-
-  function streamTextInner() {
-    if (state.flags.richText && state.stream.textHtml) {
-      return state.stream.textHtml;
-    }
-    return escapeHtml(state.stream.text || '');
   }
 
   function streamThinkingHtml() {
@@ -572,18 +592,29 @@ export function buildTranscriptBootScript(): string {
     return state.flags.richText && state.stream.textHtml ? ' rich' : '';
   }
 
-  function updateStreamTextBubble(tail) {
+  function renderStreamBubbleInner() {
+    return renderAssistantBubbleInner(
+      state.stream.text,
+      state.stream.textHtml,
+      state.stream.thinking,
+      'stream:thinking',
+      true,
+      streamThinkingHtml()
+    );
+  }
+
+  function updateStreamBubble(tail) {
     var bubble = tail.querySelector('.bubble');
-    var useRich = !!(state.flags.richText && state.stream.textHtml);
-    var inner = streamTextInner();
+    var richClass = streamBubbleRichClass();
+    var inner = renderStreamBubbleInner();
+    if (!inner) return;
     if (bubble) {
-      bubble.className = 'bubble assistant' + (useRich ? ' rich' : '');
+      bubble.className = 'bubble assistant' + richClass;
       bubble.innerHTML = inner;
       return;
     }
-    if (!state.stream.text) return;
     var el = document.createElement('div');
-    el.className = 'bubble assistant' + (useRich ? ' rich' : '');
+    el.className = 'bubble assistant' + richClass;
     el.innerHTML = inner;
     tail.appendChild(el);
   }
@@ -619,19 +650,9 @@ export function buildTranscriptBootScript(): string {
         html += renderToolRow(row);
       }
     }
-    if (state.stream.thinking) {
-      html += renderThinkingCard(
-        state.stream.thinking,
-        'stream:thinking',
-        true,
-        streamThinkingHtml()
-      );
-    }
-    if (state.stream.text) {
+    if (state.stream.thinking || state.stream.text) {
       html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
-        streamBubbleRichClass() + '">' + streamTextInner() + '</div></div>';
-    } else if (state.stream.thinking && !state.stream.text) {
-      html += '<div class="row stream" id="stream-tail"></div>';
+        streamBubbleRichClass() + '">' + renderStreamBubbleInner() + '</div></div>';
     }
     html += renderEmptyState();
     list.innerHTML = html;
@@ -722,11 +743,7 @@ export function buildTranscriptBootScript(): string {
     }
     var tail = document.getElementById('stream-tail');
     if (tail) {
-      if (kind === 'text') {
-        updateStreamTextBubble(tail);
-      } else {
-        renderRows();
-      }
+      updateStreamBubble(tail);
     } else {
       renderRows();
     }
