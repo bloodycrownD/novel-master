@@ -1,5 +1,6 @@
 import {
   NEAR_BOTTOM_THRESHOLD_PX,
+  clampScrollTop,
   nearBottom,
   offsetFromBottom,
   scrollTopAfterPrepend,
@@ -29,5 +30,10 @@ describe('chat-transcript scroll (forward DOM)', () => {
   it('scrollTopForOffsetFromBottom restores cached offset (T6)', () => {
     expect(scrollTopForOffsetFromBottom(500, 300, 100)).toBe(100);
     expect(scrollTopForOffsetFromBottom(500, 300, 0)).toBe(200);
+  });
+
+  it('clampScrollTop limits offset after tail shrink (rollback)', () => {
+    expect(clampScrollTop(3000, 1500, 300)).toBe(1200);
+    expect(clampScrollTop(500, 1500, 300)).toBe(500);
   });
 });

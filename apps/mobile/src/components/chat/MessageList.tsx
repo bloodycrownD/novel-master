@@ -376,8 +376,18 @@ export function MessageList({
       onScroll={syncNearBottomFromScroll}
       scrollEventThrottle={16}
       onContentSizeChange={(_w, height) => {
+        const prevHeight = contentHeightRef.current;
+        contentHeightRef.current = height;
         if (pendingScrollRestoreRef.current) {
           applyPendingScrollRestore(height);
+          return;
+        }
+        const shrank = height < prevHeight && prevHeight > 0;
+        if (shrank && !nearBottomRef.current) {
+          const maxOffset = Math.max(0, height - viewportHeightRef.current);
+          const clamped = Math.min(scrollOffsetRef.current, maxOffset);
+          scrollOffsetRef.current = clamped;
+          listRef.current?.scrollToOffset({offset: clamped, animated: false});
           return;
         }
         scheduleScrollToEnd();

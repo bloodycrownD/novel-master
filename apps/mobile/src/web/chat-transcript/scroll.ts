@@ -48,3 +48,15 @@ export function scrollTopAfterPrepend(
 ): number {
   return previousScrollTop + (nextScrollHeight - previousScrollHeight);
 }
+
+/**
+ * After tail removal (rollback/delete): keep reading position without overshooting max scroll.
+ */
+export function clampScrollTop(
+  previousScrollTop: number,
+  scrollHeight: number,
+  clientHeight: number,
+): number {
+  const maxScroll = Math.max(0, scrollHeight - clientHeight);
+  return Math.min(previousScrollTop, maxScroll);
+}

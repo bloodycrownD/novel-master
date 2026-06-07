@@ -178,6 +178,30 @@ describe('MessageList scroll restore', () => {
     );
   });
 
+  it('T5: content shrink clamps offset instead of scrollToEnd when not near bottom', () => {
+    const messages = [sampleMessage('m1'), sampleMessage('m2')];
+    let renderer: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(
+        React.createElement(MessageList, {
+          messages,
+          initialScroll: {offsetY: 800, nearBottom: false},
+        }),
+      );
+    });
+    flushScrollEffects();
+    mockScrollToEnd.mockClear();
+    mockScrollToOffset.mockClear();
+    triggerContentSizeChange(renderer!, 800);
+    mockScrollToEnd.mockClear();
+    mockScrollToOffset.mockClear();
+    triggerContentSizeChange(renderer!, 300);
+    expect(mockScrollToEnd).not.toHaveBeenCalled();
+    expect(mockScrollToOffset).toHaveBeenCalledWith(
+      expect.objectContaining({offset: 300, animated: false}),
+    );
+  });
+
   it('T4: cached near-bottom restore scrolls to end once', () => {
     const messages = [sampleMessage('m1')];
     let renderer: TestRenderer.ReactTestRenderer;

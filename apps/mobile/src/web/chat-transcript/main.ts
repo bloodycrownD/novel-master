@@ -72,6 +72,12 @@ export function buildTranscriptBootScript(): string {
     state.nearBottom = true;
   }
 
+  /** Tail shrink (rollback): prevScrollTop may exceed new max — clamp to avoid bubble jump. */
+  function clampScrollTop(el, prevScrollTop) {
+    var maxScroll = Math.max(0, el.scrollHeight - el.clientHeight);
+    el.scrollTop = Math.min(prevScrollTop, maxScroll);
+  }
+
   function scheduleStickIfNearBottom() {
     if (!state.nearBottom) return;
     if (state.scrollRaf != null) return;
@@ -671,7 +677,7 @@ export function buildTranscriptBootScript(): string {
       if (wasNearBottom) {
         stickToBottom(scroller);
       } else {
-        scroller.scrollTop = prevScrollTop;
+        clampScrollTop(scroller, prevScrollTop);
       }
     }
     state.nearBottom = isNearBottom(scroller);
