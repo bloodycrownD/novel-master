@@ -7,13 +7,20 @@ import {
   ipcAppUiSet,
   ipcModelListPicker,
   ipcModelSetCurrent,
+  ipcPreferencesGetCheckpointRetention,
+  ipcPreferencesGetLlmStream,
   ipcPreferencesGetSessionFsVersionCheck,
+  ipcPreferencesGetShowFullToolParams,
+  ipcPreferencesSetCheckpointRetention,
+  ipcPreferencesSetLlmStream,
   ipcPreferencesSetSessionFsVersionCheck,
+  ipcPreferencesSetShowFullToolParams,
   ipcRegexListPicker,
   ipcRegexSetCurrent,
 } from "../../ipc/client";
 import { PickerModal } from "../../components/ui/PickerModal";
 import {
+  SettingsField,
   SettingsPanel,
   SettingsRow,
   SettingsRows,
@@ -21,7 +28,6 @@ import {
   SettingsSwitchRow,
 } from "./settings-ui";
 
-const KEY_LLM_STREAM = "llmStream";
 const KEY_CHAT_RICH_TEXT = "chatRichText";
 
 export function WorkspaceSettingsView() {
@@ -29,6 +35,8 @@ export function WorkspaceSettingsView() {
   const [agentLabel, setAgentLabel] = useState("—");
   const [regexLabel, setRegexLabel] = useState("不启用");
   const [llmStream, setLlmStream] = useState(true);
+  const [showFullToolParams, setShowFullToolParams] = useState(false);
+  const [checkpointRetention, setCheckpointRetention] = useState("100");
   const [chatRichText, setChatRichText] = useState(false);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
   const [picker, setPicker] = useState<"model" | "agent" | "regex" | null>(null);
@@ -40,15 +48,25 @@ export function WorkspaceSettingsView() {
   const [currentRegexId, setCurrentRegexId] = useState<string | undefined>();
 
   const refresh = useCallback(async () => {
-    const [agentRes, modelRes, regexRes, streamRes, richRes, vfsRes] =
-      await Promise.all([
-        ipcAgentResolveCurrent(),
-        ipcModelListPicker(),
-        ipcRegexListPicker(),
-        ipcAppUiGet(KEY_LLM_STREAM),
-        ipcAppUiGet(KEY_CHAT_RICH_TEXT),
-        ipcPreferencesGetSessionFsVersionCheck(),
-      ]);
+    const [
+      agentRes,
+      modelRes,
+      regexRes,
+      streamRes,
+      showParamsRes,
+      retentionRes,
+      richRes,
+      vfsRes,
+    ] = await Promise.all([
+      ipcAgentResolveCurrent(),
+      ipcModelListPicker(),
+      ipcRegexListPicker(),
+      ipcPreferencesGetLlmStream(),
+      ipcPreferencesGetShowFullToolParams(),
+      ipcPreferencesGetCheckpointRetention(),
+      ipcAppUiGet(KEY_CHAT_RICH_TEXT),
+      ipcPreferencesGetSessionFsVersionCheck(),
+    ]);
     if (agentRes.ok) {
       setAgentLabel(agentRes.data.agentName);
       setCurrentAgentId(agentRes.data.agentId);
@@ -81,7 +99,13 @@ export function WorkspaceSettingsView() {
       }
     }
     if (streamRes.ok) {
-      setLlmStream(streamRes.data !== "false");
+      setLlmStream(streamRes.data);
+    }
+    if (showParamsRes.ok) {
+      setShowFullToolParams(showParamsRes.data);
+    }
+    if (retentionRes.ok) {
+      setCheckpointRetention(String(retentionRes.data));
     }
     if (richRes.ok) {
       setChatRichText(richRes.data === "true");
@@ -150,7 +174,15 @@ export function WorkspaceSettingsView() {
             checked={llmStream}
             onChange={async (next) => {
               setLlmStream(next);
-              await ipcAppUiSet(KEY_LLM_STREAM, next ? "true" : "false");
+              await ipcPreferencesSetLlmStream(next);
+            }}
+          />
+          <SettingsSwitchRow
+            label="完整工具参数"
+            checked={showFullToolParams}
+            onChange={async (next) => {
+              setShowFullToolParams(next);
+              await ipcPreferencesSetShowFullToolParams(next);
             }}
           />
           <SettingsSwitchRow
@@ -170,6 +202,23 @@ export function WorkspaceSettingsView() {
             }}
           />
         </SettingsRows>
+        <SettingsField label="检查点保留条数（1–9999）">
+          <input
+            type="number"
+            min={1}
+            max={9999}
+            value={checkpointRetention}
+            onChange={(e) => setCheckpointRetention(e.target.value)}
+            onBlur={async () => {
+              const count = Number.parseInt(checkpointRetention, 10);
+              if (!Number.isInteger(count) || count < 1 || count > 9999) {
+                await refresh();
+                return;
+              }
+              await ipcPreferencesSetCheckpointRetention(count);
+            }}
+          />
+        </SettingsField>
       </SettingsSection>
 
       <PickerModal

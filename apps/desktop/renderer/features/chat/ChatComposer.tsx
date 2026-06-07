@@ -3,17 +3,8 @@ import {
   ipcAgentAbort,
   ipcAgentRun,
   ipcAgentResolveCurrent,
-  ipcAppUiGet,
+  ipcPreferencesGetLlmStream,
 } from "../../ipc/client";
-
-const LLM_STREAM_KEY = "llmStream";
-
-async function readLlmStreamEnabled(): Promise<boolean> {
-  const result = await ipcAppUiGet(LLM_STREAM_KEY);
-  const raw = result.ok ? result.data : undefined;
-  const value = raw ?? "true";
-  return value !== "false";
-}
 
 interface ChatComposerProps {
   projectId: string;
@@ -75,7 +66,8 @@ export function ChatComposer({
     onRunningChange(true);
     setText("");
 
-    const stream = await readLlmStreamEnabled();
+    const streamResult = await ipcPreferencesGetLlmStream();
+    const stream = streamResult.ok ? streamResult.data : true;
     const result = await ipcAgentRun({
       projectId,
       sessionId,

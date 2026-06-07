@@ -44,8 +44,14 @@ import {
   handleShellSetTitleBarTheme,
 } from "./handlers/shell.js";
 import {
+  handlePreferencesGetCheckpointRetention,
+  handlePreferencesGetLlmStream,
   handlePreferencesGetSessionFsVersionCheck,
+  handlePreferencesGetShowFullToolParams,
+  handlePreferencesSetCheckpointRetention,
+  handlePreferencesSetLlmStream,
   handlePreferencesSetSessionFsVersionCheck,
+  handlePreferencesSetShowFullToolParams,
 } from "./handlers/preferences.js";
 import {
   handleProviderModelsDeleteSaved,
@@ -283,6 +289,28 @@ export function registerIpcHandlers(): void {
     IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
     (_event, enabled: boolean) =>
       handlePreferencesSetSessionFsVersionCheck(enabled),
+  );
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM, () =>
+    handlePreferencesGetLlmStream(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
+    (_event, enabled: boolean) => handlePreferencesSetLlmStream(enabled),
+  );
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_GET_SHOW_FULL_TOOL_PARAMS, () =>
+    handlePreferencesGetShowFullToolParams(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.PREFERENCES_SET_SHOW_FULL_TOOL_PARAMS,
+    (_event, enabled: boolean) =>
+      handlePreferencesSetShowFullToolParams(enabled),
+  );
+  ipcMain.handle(IPC_CHANNELS.PREFERENCES_GET_CHECKPOINT_RETENTION, () =>
+    handlePreferencesGetCheckpointRetention(),
+  );
+  ipcMain.handle(
+    IPC_CHANNELS.PREFERENCES_SET_CHECKPOINT_RETENTION,
+    (_event, count: number) => handlePreferencesSetCheckpointRetention(count),
   );
 
   ipcMain.handle(IPC_CHANNELS.PROVIDERS_LIST, () => handleProvidersList());

@@ -8,12 +8,10 @@ import { KkvError, type KkvService } from "@novel-master/core";
 export const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
 
 export const DESKTOP_UI_KEY_THEME = "theme";
-export const DESKTOP_UI_KEY_LLM_STREAM = "llmStream";
 export const DESKTOP_UI_KEY_CHAT_RICH_TEXT = "chatRichText";
 
 export const DESKTOP_UI_DEFAULTS: Record<string, string> = {
   [DESKTOP_UI_KEY_THEME]: "light",
-  [DESKTOP_UI_KEY_LLM_STREAM]: "true",
   [DESKTOP_UI_KEY_CHAT_RICH_TEXT]: "false",
 };
 
