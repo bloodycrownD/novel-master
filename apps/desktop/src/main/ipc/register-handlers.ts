@@ -113,7 +113,6 @@ import {
 } from "./handlers/scope.js";
 import {
   handleSessionFsExecute,
-  handleSessionFsListBatches,
   handleSessionFsRollback,
 } from "./handlers/session-fs.js";
 import {
@@ -219,9 +218,6 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.SESSION_FS_EXECUTE, (_event, req) =>
     handleSessionFsExecute(req),
-  );
-  ipcMain.handle(IPC_CHANNELS.SESSION_FS_LIST_BATCHES, (_event, req) =>
-    handleSessionFsListBatches(req),
   );
   ipcMain.handle(IPC_CHANNELS.SESSION_FS_ROLLBACK, (_event, req) =>
     handleSessionFsRollback(req),

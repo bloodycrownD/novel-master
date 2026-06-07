@@ -39,7 +39,6 @@ import {
   type SessionDeleteRequest,
   type SessionDto,
   type SessionFsExecuteRequest,
-  type SessionFsListBatchesRequest,
   type SessionFsRollbackRequest,
   type SessionListByProjectRequest,
   type SessionPullTemplateRequest,

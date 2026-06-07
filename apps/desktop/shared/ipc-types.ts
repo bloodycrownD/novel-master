@@ -41,7 +41,6 @@ export const IPC_CHANNELS = {
   WORKTREE_GET_DIR_RULE: "nm:worktree/getDirRule",
 
   SESSION_FS_EXECUTE: "nm:sessionFs/execute",
-  SESSION_FS_LIST_BATCHES: "nm:sessionFs/listBatches",
   SESSION_FS_ROLLBACK: "nm:sessionFs/rollback",
 
   PROJECTS_PULL_TEMPLATE: "nm:projects/pullTemplate",
@@ -340,10 +339,6 @@ export type SessionFsExecuteRequest = {
   readonly actor: "user" | "assistant" | "system";
   readonly expectedVersion?: number;
   readonly versionCheck?: boolean;
-};
-
-export type SessionFsListBatchesRequest = {
-  readonly sessionId: string;
 };
 
 export type SessionFsRollbackRequest = {

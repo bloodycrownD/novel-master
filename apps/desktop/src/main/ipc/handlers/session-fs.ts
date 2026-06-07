@@ -1,12 +1,11 @@
 /**
- * SessionFs IPC handlers — execute batches, list, rollback to message.
+ * SessionFs IPC handlers — execute batches, rollback to message.
  *
  * @module ipc/handlers/session-fs
  */
 import type {
   IpcResult,
   SessionFsExecuteRequest,
-  SessionFsListBatchesRequest,
   SessionFsRollbackRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -37,28 +36,6 @@ export async function handleSessionFsExecute(
     );
     rt.macroCache.clear(req.projectId, req.sessionId);
     return { ok: true, data: { batchId: result.batchId } };
-  } catch (err) {
-    return { ok: false, error: formatError(err) };
-  }
-}
-
-export async function handleSessionFsListBatches(
-  req: SessionFsListBatchesRequest,
-): Promise<
-  IpcResult<
-    ReadonlyArray<{
-      id: string;
-      sessionId: string;
-      createdAtMs: number;
-      createdBy: string;
-      messageId: string | null;
-    }>
-  >
-> {
-  try {
-    const rt = await getDesktopRuntime();
-    const batches = await rt.sessionFs.listBatches(req.sessionId);
-    return { ok: true, data: batches };
   } catch (err) {
     return { ok: false, error: formatError(err) };
   }
