@@ -21,14 +21,11 @@ import {
   exportDatabaseBackup,
   importDatabaseBackup,
 } from '../../services/db-backup.service';
+import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
-import {
-  readLlmStreamEnabled,
-  writeLlmStreamEnabled,
-} from '../../storage/llm-stream-pref';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
 import type {RootStackParamList} from '../../navigation/types';
@@ -72,6 +69,9 @@ export function ProfileTabScreen() {
   const [agentLabel, setAgentLabel] = useState('—');
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
   const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
+  const [showFullToolParams, setShowFullToolParams] = useState(false);
+  const [checkpointRetention, setCheckpointRetention] = useState('100');
+  const [retentionPromptOpen, setRetentionPromptOpen] = useState(false);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
@@ -122,11 +122,17 @@ export function ProfileTabScreen() {
   }, [runtime]);
 
   const refreshStreamPref = useCallback(async () => {
-    if (appUi == null) {
-      return;
-    }
-    setLlmStreamEnabled(await readLlmStreamEnabled(appUi));
-  }, [appUi]);
+    setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
+  }, [runtime]);
+
+  const refreshShowFullToolParamsPref = useCallback(async () => {
+    setShowFullToolParams(await runtime.preferences.getShowFullToolParams());
+  }, [runtime]);
+
+  const refreshCheckpointRetentionPref = useCallback(async () => {
+    const count = await runtime.preferences.getCheckpointRetention();
+    setCheckpointRetention(String(count));
+  }, [runtime]);
 
   const refreshChatRichTextPref = useCallback(async () => {
     if (appUi == null) {
@@ -141,12 +147,16 @@ export function ProfileTabScreen() {
       refreshAgentLabel().catch(() => setAgentLabel('—'));
       refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
       refreshStreamPref().catch(() => undefined);
+      refreshShowFullToolParamsPref().catch(() => undefined);
+      refreshCheckpointRetentionPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
     }, [
       refreshModelLabel,
       refreshAgentLabel,
       refreshRegexGroupLabel,
       refreshStreamPref,
+      refreshShowFullToolParamsPref,
+      refreshCheckpointRetentionPref,
       refreshChatRichTextPref,
     ]),
   );
@@ -199,10 +209,34 @@ export function ProfileTabScreen() {
           tokens={tokens}
           onValueChange={enabled => {
             setLlmStreamEnabled(enabled);
-            if (appUi) {
-              writeLlmStreamEnabled(appUi, enabled).catch(() => undefined);
-            }
+            runtime.preferences
+              .setLlmStreamEnabled(enabled)
+              .catch(() => undefined);
           }}
+        />
+        <ProfileSwitchItem
+          icon="🔧"
+          label="完整工具参数"
+          subtitle={
+            showFullToolParams
+              ? '工具卡显示完整 JSON 参数'
+              : '工具卡显示摘要'
+          }
+          value={showFullToolParams}
+          tokens={tokens}
+          onValueChange={enabled => {
+            setShowFullToolParams(enabled);
+            runtime.preferences
+              .setShowFullToolParams(enabled)
+              .catch(() => undefined);
+          }}
+        />
+        <ProfileMenuItem
+          icon="📦"
+          label="检查点保留条数"
+          value={checkpointRetention}
+          tokens={tokens}
+          onPress={() => setRetentionPromptOpen(true)}
         />
         <ProfileSwitchItem
           icon="📝"
@@ -297,6 +331,19 @@ export function ProfileTabScreen() {
         visible={regexGroupPickerVisible}
         onClose={() => setRegexGroupPickerVisible(false)}
         onSelected={() => refreshRegexGroupLabel().catch(() => undefined)}
+      />
+      <TextPromptModal
+        visible={retentionPromptOpen}
+        title="检查点保留条数"
+        label="保留最近 N 条 SessionFs 检查点（1–9999）"
+        initialValue={checkpointRetention}
+        onClose={() => setRetentionPromptOpen(false)}
+        onConfirm={async value => {
+          const count = Number.parseInt(value, 10);
+          await runtime.preferences.setCheckpointRetention(count);
+          setCheckpointRetention(String(count));
+          showToast('已保存');
+        }}
       />
     </View>
   );

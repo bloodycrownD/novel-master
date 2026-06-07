@@ -18,8 +18,6 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
 import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';
 import {useRuntime} from '../../hooks/useRuntime';
-import {useNovelMaster} from '../../runtime/novel-master-context';
-import {readLlmStreamEnabled} from '../../storage/llm-stream-pref';
 import {
   readChatComposerDraft,
   writeChatComposerDraft,
@@ -53,7 +51,6 @@ export function ChatComposer({
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
-  const {appUi} = useNovelMaster();
   const {sessionId} = scope;
   const [text, setText] = useState(() => readChatComposerDraft(sessionId));
   const [error, setError] = useState<string | undefined>();
@@ -152,8 +149,7 @@ export function ChatComposer({
     }
     setRunAbortController(controller);
     try {
-      const stream =
-        appUi != null ? await readLlmStreamEnabled(appUi) : true;
+      const stream = await runtime.preferences.getLlmStreamEnabled();
       await runAgentTurn(runtime, scope, content, {
         stream,
         allowResumeWithoutInput,
@@ -195,7 +191,6 @@ export function ChatComposer({
     onRunningChange,
     onStreamReset,
     onMessagesChanged,
-    appUi,
   ]);
 
   // Input should remain editable whenever the user can type (model selected and not running).

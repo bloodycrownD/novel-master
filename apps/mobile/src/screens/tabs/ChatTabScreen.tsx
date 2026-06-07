@@ -94,7 +94,6 @@ import {
   readChatTranscriptEngine,
   type ChatTranscriptEngine,
 } from '../../storage/chat-transcript-engine';
-import {APP_UI_KEY_SHOW_FULL_TOOL_PARAMS} from '../../storage/app-ui-keys';
 import {setMobileAgentActive} from '../../runtime/agent-activity';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -432,14 +431,11 @@ export function ChatTabScreen() {
   }, [chatSubview, sessionId, reloadMessages, refreshChatMeta]);
 
   useEffect(() => {
-    if (!appUi) {
-      return;
-    }
-    appUi
-      .get(APP_UI_KEY_SHOW_FULL_TOOL_PARAMS)
-      .then(v => setShowFullToolParams(v === 'true'))
+    runtime.preferences
+      .getShowFullToolParams()
+      .then(setShowFullToolParams)
       .catch(() => undefined);
-  }, [appUi]);
+  }, [runtime]);
 
   const refreshChatRichTextPref = useCallback(async () => {
     if (appUi == null) {

@@ -18,20 +18,20 @@ jest.mock('@novel-master/core', () => ({
 
 (global as any).__DEV__ = false;
 
+jest.mock('../src/runtime/novel-master-context', () => ({
+  useNovelMaster: () => ({appUi: null}),
+}));
+
+const mockGetLlmStreamEnabled = jest.fn(async () => true);
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
       subscribe: () => ({unsubscribe: () => undefined}),
     },
+    preferences: {
+      getLlmStreamEnabled: mockGetLlmStreamEnabled,
+    },
   }),
-}));
-
-jest.mock('../src/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: null}),
-}));
-
-jest.mock('../src/storage/llm-stream-pref', () => ({
-  readLlmStreamEnabled: async () => true,
 }));
 
 const mockRunAgentTurn = jest.fn(async (_runtime, _scope, _content, options) => {
