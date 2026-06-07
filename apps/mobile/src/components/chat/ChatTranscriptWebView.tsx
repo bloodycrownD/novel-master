@@ -167,7 +167,6 @@ export function ChatTranscriptWebView({
   const sendInit = useCallback(() => {
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
-      showFullToolParams: flags?.showFullToolParams ?? false,
       batchMode: flags?.batchMode ?? false,
       menuDisabled: agentRunning,
     };
@@ -178,7 +177,6 @@ export function ChatTranscriptWebView({
     });
   }, [
     flags?.richText,
-    flags?.showFullToolParams,
     flags?.batchMode,
     postToWeb,
     tokens,
@@ -318,7 +316,6 @@ export function ChatTranscriptWebView({
     }
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
-      showFullToolParams: flags?.showFullToolParams ?? false,
       batchMode: flags?.batchMode ?? false,
       menuDisabled: agentRunning,
     };
@@ -326,7 +323,6 @@ export function ChatTranscriptWebView({
     if (
       prev != null &&
       prev.richText === resolvedFlags.richText &&
-      prev.showFullToolParams === resolvedFlags.showFullToolParams &&
       prev.batchMode === resolvedFlags.batchMode &&
       prev.menuDisabled === resolvedFlags.menuDisabled
     ) {
@@ -341,7 +337,6 @@ export function ChatTranscriptWebView({
   }, [
     webReady,
     flags?.richText,
-    flags?.showFullToolParams,
     flags?.batchMode,
     agentRunning,
     postToWeb,

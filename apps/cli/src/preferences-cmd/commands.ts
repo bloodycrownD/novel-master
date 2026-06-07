@@ -7,8 +7,6 @@
 import type { PersistentPreferences } from "@novel-master/core";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
   PREF_KEY_SESSION_FS_VERSION_CHECK,
 } from "@novel-master/core";
 import { PreferencesError } from "@novel-master/core";
@@ -17,8 +15,6 @@ import { parseCliArgs } from "../vfs/parse-args.js";
 const KNOWN_KEYS = [
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
 ] as const;
 
 type KnownKey = (typeof KNOWN_KEYS)[number];
@@ -46,16 +42,6 @@ function parseBooleanArg(raw: string, key: string): boolean {
   return raw === "true";
 }
 
-function parseRetentionArg(raw: string): number {
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || String(n) !== raw.trim()) {
-    throw new Error(
-      `Usage: nm preferences set ${PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION} <integer 1..9999>`,
-    );
-  }
-  return n;
-}
-
 async function getValue(
   preferences: PersistentPreferences,
   key: KnownKey,
@@ -68,14 +54,6 @@ async function getValue(
     case PREF_KEY_CHAT_LLM_STREAM: {
       const enabled = await preferences.getLlmStreamEnabled();
       return enabled ? "true" : "false";
-    }
-    case PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS: {
-      const enabled = await preferences.getShowFullToolParams();
-      return enabled ? "true" : "false";
-    }
-    case PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION: {
-      const count = await preferences.getCheckpointRetention();
-      return String(count);
     }
   }
 }
@@ -92,12 +70,6 @@ async function setValue(
         return;
       case PREF_KEY_CHAT_LLM_STREAM:
         await preferences.setLlmStreamEnabled(parseBooleanArg(raw, key));
-        return;
-      case PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS:
-        await preferences.setShowFullToolParams(parseBooleanArg(raw, key));
-        return;
-      case PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION:
-        await preferences.setCheckpointRetention(parseRetentionArg(raw));
         return;
     }
   } catch (error) {
@@ -118,12 +90,6 @@ async function resetValue(
       return;
     case PREF_KEY_CHAT_LLM_STREAM:
       await preferences.resetLlmStreamEnabled();
-      return;
-    case PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS:
-      await preferences.resetShowFullToolParams();
-      return;
-    case PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION:
-      await preferences.resetCheckpointRetention();
       return;
   }
 }

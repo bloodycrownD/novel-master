@@ -15,7 +15,6 @@ interface MessageListProps {
   batchMode?: boolean;
   selectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
-  showFullToolParams?: boolean;
   onToggleSelect?: (messageId: string) => void;
   onOpenMessageMenu?: (
     message: ChatMessageDto,
@@ -46,7 +45,6 @@ export function MessageList({
   batchMode = false,
   selectedIds,
   chatRichText = false,
-  showFullToolParams = false,
   onToggleSelect,
   onOpenMessageMenu,
 }: MessageListProps) {
@@ -70,11 +68,7 @@ export function MessageList({
       {listItems.map((item) => {
         if (item.kind === "tool") {
           return (
-            <ToolCallCard
-              key={`tool-${item.tool.toolUseId}`}
-              tool={item.tool}
-              showFullParams={showFullToolParams}
-            />
+            <ToolCallCard key={`tool-${item.tool.toolUseId}`} tool={item.tool} />
           );
         }
 

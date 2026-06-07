@@ -155,7 +155,6 @@ export function ChatTabScreen() {
       }),
     [],
   );
-  const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [chatTranscriptEngine, setChatTranscriptEngine] =
     useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
@@ -184,10 +183,9 @@ export function ChatTabScreen() {
   const transcriptFlags = useMemo(
     () => ({
       richText: chatRichTextEnabled,
-      showFullToolParams,
       batchMode: messageBatch.active,
     }),
-    [chatRichTextEnabled, showFullToolParams, messageBatch.active],
+    [chatRichTextEnabled, messageBatch.active],
   );
   const legacyCachedScroll = chatScrollKey
     ? getScrollSnapshot(chatScrollKey)
@@ -430,10 +428,6 @@ export function ChatTabScreen() {
     }
   }, [chatSubview, sessionId, reloadMessages, refreshChatMeta]);
 
-  const refreshShowFullToolParamsPref = useCallback(async () => {
-    setShowFullToolParams(await runtime.preferences.getShowFullToolParams());
-  }, [runtime]);
-
   const refreshChatRichTextPref = useCallback(async () => {
     if (appUi == null) {
       return;
@@ -447,14 +441,9 @@ export function ChatTabScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      refreshShowFullToolParamsPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
       refreshChatTranscriptEngine().catch(() => undefined);
-    }, [
-      refreshShowFullToolParamsPref,
-      refreshChatRichTextPref,
-      refreshChatTranscriptEngine,
-    ]),
+    }, [refreshChatRichTextPref, refreshChatTranscriptEngine]),
   );
 
   const backFromConversation = useCallback(
@@ -1223,7 +1212,6 @@ export function ChatTabScreen() {
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
-                showFullToolParams={showFullToolParams}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
                 initialScroll={cachedChatScroll ?? null}

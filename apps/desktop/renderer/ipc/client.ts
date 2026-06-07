@@ -418,36 +418,6 @@ export async function ipcPreferencesSetLlmStream(
   return bridge().invoke(IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM, enabled);
 }
 
-export async function ipcPreferencesGetShowFullToolParams(): Promise<
-  IpcResult<boolean>
-> {
-  return bridge().invoke(IPC_CHANNELS.PREFERENCES_GET_SHOW_FULL_TOOL_PARAMS);
-}
-
-export async function ipcPreferencesSetShowFullToolParams(
-  enabled: boolean,
-): Promise<IpcResult<void>> {
-  return bridge().invoke(
-    IPC_CHANNELS.PREFERENCES_SET_SHOW_FULL_TOOL_PARAMS,
-    enabled,
-  );
-}
-
-export async function ipcPreferencesGetCheckpointRetention(): Promise<
-  IpcResult<number>
-> {
-  return bridge().invoke(IPC_CHANNELS.PREFERENCES_GET_CHECKPOINT_RETENTION);
-}
-
-export async function ipcPreferencesSetCheckpointRetention(
-  count: number,
-): Promise<IpcResult<void>> {
-  return bridge().invoke(
-    IPC_CHANNELS.PREFERENCES_SET_CHECKPOINT_RETENTION,
-    count,
-  );
-}
-
 export async function ipcProvidersList() {
   return bridge().invoke(IPC_CHANNELS.PROVIDERS_LIST);
 }

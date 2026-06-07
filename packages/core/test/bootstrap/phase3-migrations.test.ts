@@ -109,4 +109,20 @@ describe("Phase 3 bootstrap migrations", () => {
     assert.deepEqual(keys, []);
     await ctx.conn.close();
   });
+
+  it("purges retired preference keys on bootstrap", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const kkv = createKkvService(ctx.conn);
+    await kkv.set("nm-preferences", "chat.showFullToolParams", "true");
+    await kkv.set("nm-preferences", "session-fs.checkpointRetention", "250");
+    await kkv.set("nm-mobile-ui", "checkpointRetention", "99");
+    await bootstrapNovelMaster(ctx.conn);
+
+    const prefKeys = await kkv.listKeys("nm-preferences");
+    assert.ok(!prefKeys.includes("chat.showFullToolParams"));
+    assert.ok(!prefKeys.includes("session-fs.checkpointRetention"));
+    const mobileUiKeys = await kkv.listKeys("nm-mobile-ui");
+    assert.ok(!mobileUiKeys.includes("checkpointRetention"));
+    await ctx.conn.close();
+  });
 });

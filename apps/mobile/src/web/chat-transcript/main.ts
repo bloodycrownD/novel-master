@@ -39,7 +39,7 @@ export function buildTranscriptBootScript(): string {
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '' },
-    flags: { richText: false, showFullToolParams: false, batchMode: false, menuDisabled: false },
+    flags: { richText: false, batchMode: false, menuDisabled: false },
     selectedIds: [],
     menu: null,
     menuOverlayHandler: null,
@@ -208,9 +208,7 @@ export function buildTranscriptBootScript(): string {
   function renderToolRow(row) {
     var filePath = vfsToolFilePath(row.name, row.input || {});
     var canOpen = filePath != null;
-    var summary = state.flags.showFullToolParams
-      ? escapeHtml(JSON.stringify(row.input || {}, null, 2))
-      : escapeHtml(toolCallSummary(row));
+    var summary = escapeHtml(toolCallSummary(row));
     var statusClass = row.status === 'success' || row.status === 'error' ? row.status : 'pending';
     var html =
       '<div class="row tool">' +
@@ -598,7 +596,6 @@ export function buildTranscriptBootScript(): string {
   function flagsEqual(a, b) {
     return (
       a.richText === b.richText &&
-      a.showFullToolParams === b.showFullToolParams &&
       a.batchMode === b.batchMode &&
       a.menuDisabled === b.menuDisabled
     );
@@ -787,7 +784,6 @@ export function buildTranscriptBootScript(): string {
         if (p.flags) {
           state.flags = {
             richText: !!p.flags.richText,
-            showFullToolParams: !!p.flags.showFullToolParams,
             batchMode: !!p.flags.batchMode,
             menuDisabled: !!p.flags.menuDisabled,
           };
@@ -810,7 +806,6 @@ export function buildTranscriptBootScript(): string {
         if (p.flags) {
           var nextFlags = {
             richText: !!p.flags.richText,
-            showFullToolParams: !!p.flags.showFullToolParams,
             batchMode: !!p.flags.batchMode,
             menuDisabled: !!p.flags.menuDisabled,
           };

@@ -190,41 +190,17 @@ describe("preferences CLI e2e", () => {
     }
   });
 
-  it("T6: v2 showFullToolParams and checkpointRetention", async () => {
+  it("T6: rejects retired preference keys", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-v2-"));
     const dbPath = join(dir, "novel.db");
     try {
-      runNm([
-        "preferences",
-        "set",
+      for (const key of [
         "chat.showFullToolParams",
-        "true",
-        "--db",
-        dbPath,
-      ]);
-      runNm([
-        "preferences",
-        "set",
         "session-fs.checkpointRetention",
-        "500",
-        "--db",
-        dbPath,
-      ]);
-
-      const list = runNm(["preferences", "list", "--db", dbPath]);
-      assert.equal(list.status, 0, list.stderr);
-      assert.match(list.stdout, /chat\.showFullToolParams=true/);
-      assert.match(list.stdout, /session-fs\.checkpointRetention=500/);
-
-      const bad = runNm([
-        "preferences",
-        "set",
-        "session-fs.checkpointRetention",
-        "0",
-        "--db",
-        dbPath,
-      ]);
-      assert.notEqual(bad.status, 0);
+      ]) {
+        const rejected = runNm(["preferences", "set", key, "true", "--db", dbPath]);
+        assert.notEqual(rejected.status, 0);
+      }
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

@@ -76,14 +76,6 @@ export const IPC_CHANNELS = {
     "nm:preferences/setSessionFsVersionCheck",
   PREFERENCES_GET_LLM_STREAM: "nm:preferences/getLlmStream",
   PREFERENCES_SET_LLM_STREAM: "nm:preferences/setLlmStream",
-  PREFERENCES_GET_SHOW_FULL_TOOL_PARAMS:
-    "nm:preferences/getShowFullToolParams",
-  PREFERENCES_SET_SHOW_FULL_TOOL_PARAMS:
-    "nm:preferences/setShowFullToolParams",
-  PREFERENCES_GET_CHECKPOINT_RETENTION:
-    "nm:preferences/getCheckpointRetention",
-  PREFERENCES_SET_CHECKPOINT_RETENTION:
-    "nm:preferences/setCheckpointRetention",
 
   PROVIDERS_LIST: "nm:providers/list",
   PROVIDERS_GET: "nm:providers/get",

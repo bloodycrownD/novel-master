@@ -34,6 +34,7 @@ import { migrateVfsEntryKind } from "./vfs/migrate-vfs-entry-kind.js";
 import { migrateWorktreeFillPolicy } from "./worktree/migrate-worktree-fill-policy.js";
 import { migrateClientUiBehaviorPrefsToPreferences } from "./preferences/migrate-client-ui-behavior-prefs.js";
 import { migratePurgeGlobalConfigKkv } from "./preferences/migrate-purge-global-config-kkv.js";
+import { migratePurgeRemovedPreferenceKeys } from "./preferences/migrate-purge-removed-preference-keys.js";
 import {
   migrateAddSavedModelSettingsJson,
   migrateDropLlmModelSuggestionTable,
@@ -116,6 +117,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migrateDropLlmModelSuggestionTable(tx);
     await migrateAddSavedModelSettingsJson(tx);
     await migrateClientUiBehaviorPrefsToPreferences(kkv);
+    await migratePurgeRemovedPreferenceKeys(kkv);
     await seedBuiltinProviders(tx);
   });
 }

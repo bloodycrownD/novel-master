@@ -30,7 +30,6 @@ type Props = {
   messages: readonly ChatMessage[];
   streamingText?: string;
   streamingThinking?: string;
-  showFullToolParams?: boolean;
   /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
@@ -110,7 +109,6 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
-  showFullToolParams,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
   batchMode = false,
@@ -428,11 +426,7 @@ export function MessageList({
         const row = item as ChatListItem;
         if (row.kind === 'tool') {
           return (
-            <ToolCallCard
-              tool={row.tool}
-              showFullParams={showFullToolParams}
-              onOpenFile={onOpenToolFile}
-            />
+            <ToolCallCard tool={row.tool} onOpenFile={onOpenToolFile} />
           );
         }
         const isUser = row.message.role === 'user';

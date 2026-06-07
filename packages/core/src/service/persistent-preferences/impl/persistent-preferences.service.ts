@@ -10,49 +10,10 @@ import { formatBoolean, parseBoolean } from "@/infra/kkv-value-codec.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentPreferences } from "../persistent-preferences.port.js";
 import {
-  DEFAULT_CHECKPOINT_RETENTION,
-  MAX_CHECKPOINT_RETENTION,
-  MIN_CHECKPOINT_RETENTION,
   PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREFERENCES_MODULE,
 } from "./preference-keys.js";
-
-function parseCheckpointRetention(
-  key: string,
-  raw: string,
-): number {
-  const n = Number.parseInt(raw, 10);
-  if (
-    !Number.isFinite(n) ||
-    String(n) !== raw.trim() ||
-    n < MIN_CHECKPOINT_RETENTION ||
-    n > MAX_CHECKPOINT_RETENTION
-  ) {
-    throw preferencesInvalidValue(
-      key,
-      `positive integer ${MIN_CHECKPOINT_RETENTION}..${MAX_CHECKPOINT_RETENTION}`,
-      raw,
-    );
-  }
-  return n;
-}
-
-function assertCheckpointRetentionInput(count: number): void {
-  if (
-    !Number.isInteger(count) ||
-    count < MIN_CHECKPOINT_RETENTION ||
-    count > MAX_CHECKPOINT_RETENTION
-  ) {
-    throw preferencesInvalidValue(
-      PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
-      `positive integer ${MIN_CHECKPOINT_RETENTION}..${MAX_CHECKPOINT_RETENTION}`,
-      String(count),
-    );
-  }
-}
 
 export class DefaultPersistentPreferences implements PersistentPreferences {
   constructor(private readonly kkv: KkvService) {}
@@ -90,46 +51,6 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
 
   async resetLlmStreamEnabled(): Promise<void> {
     await this.deletePref(PREF_KEY_CHAT_LLM_STREAM);
-  }
-
-  async getShowFullToolParams(): Promise<boolean> {
-    return this.getBooleanPref(PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS, false);
-  }
-
-  async setShowFullToolParams(enabled: boolean): Promise<void> {
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-      formatBoolean(enabled),
-    );
-  }
-
-  async resetShowFullToolParams(): Promise<void> {
-    await this.deletePref(PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS);
-  }
-
-  async getCheckpointRetention(): Promise<number> {
-    const raw = await this.getRaw(PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION);
-    if (raw === undefined) {
-      return DEFAULT_CHECKPOINT_RETENTION;
-    }
-    return parseCheckpointRetention(
-      PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
-      raw,
-    );
-  }
-
-  async setCheckpointRetention(count: number): Promise<void> {
-    assertCheckpointRetentionInput(count);
-    await this.kkv.set(
-      PREFERENCES_MODULE,
-      PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
-      String(count),
-    );
-  }
-
-  async resetCheckpointRetention(): Promise<void> {
-    await this.deletePref(PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION);
   }
 
   async list(): Promise<ReadonlyArray<{ key: string; value: string }>> {

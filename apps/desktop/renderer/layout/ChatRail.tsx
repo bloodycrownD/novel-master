@@ -627,7 +627,6 @@ export function ChatRail({
               sessionId={sessionId}
               onOpenSessionActions={onOpenSessionActions}
               messageBatch={messageBatch}
-              settingsOpen={settingsOpen}
             />
           ) : (
             <p className="preview-empty">请选择会话</p>

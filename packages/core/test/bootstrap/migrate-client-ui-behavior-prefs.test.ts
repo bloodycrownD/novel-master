@@ -5,8 +5,6 @@ import type { KkvService } from "@novel-master/core/kkv";
 import {
   migrateClientUiBehaviorPrefsToPreferences,
   PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
   PREFERENCES_MODULE,
 } from "@novel-master/core";
 
@@ -60,8 +58,6 @@ describe("migrateClientUiBehaviorPrefsToPreferences", () => {
   it("C4: old-only → new has value + old deleted", async () => {
     const kkv = createMemoryKkv();
     await kkv.set("nm-mobile-ui", "llmStream", "false");
-    await kkv.set("nm-mobile-ui", "showFullToolParams", "true");
-    await kkv.set("nm-mobile-ui", "checkpointRetention", "250");
 
     await migrateClientUiBehaviorPrefsToPreferences(kkv);
 
@@ -69,27 +65,7 @@ describe("migrateClientUiBehaviorPrefsToPreferences", () => {
       await tryGet(kkv, PREFERENCES_MODULE, PREF_KEY_CHAT_LLM_STREAM),
       "false",
     );
-    assert.equal(
-      await tryGet(kkv, PREFERENCES_MODULE, PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS),
-      "true",
-    );
-    assert.equal(
-      await tryGet(
-        kkv,
-        PREFERENCES_MODULE,
-        PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
-      ),
-      "250",
-    );
     assert.equal(await tryGet(kkv, "nm-mobile-ui", "llmStream"), undefined);
-    assert.equal(
-      await tryGet(kkv, "nm-mobile-ui", "showFullToolParams"),
-      undefined,
-    );
-    assert.equal(
-      await tryGet(kkv, "nm-mobile-ui", "checkpointRetention"),
-      undefined,
-    );
   });
 
   it("C5: new already exists → old deleted, new unchanged", async () => {

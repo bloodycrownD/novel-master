@@ -20,21 +20,20 @@ v2 在 v1 基础上将跨端**行为配置**上收到 `nm-preferences`，由 `Pe
 | --- | --- | --- | --- |
 | `session-fs.versionCheck` | boolean | `true` | v1 已有 |
 | `chat.llmStream` | boolean | `true` | `nm-mobile-ui` / `nm-desktop-ui` → `llmStream` |
-| `chat.showFullToolParams` | boolean | `false` | `nm-mobile-ui` → `showFullToolParams` |
-| `session-fs.checkpointRetention` | int string | `"100"` | `nm-mobile-ui` → `checkpointRetention` |
 
-**端口**：`PersistentPreferences` v2 方法（`getLlmStreamEnabled`、`getShowFullToolParams`、`getCheckpointRetention` 等）；UI **禁止**裸写 `setPreference` 写上述 key（CLI `nm preferences` 除外）。
+**已移除（2026-06-07）**：`chat.showFullToolParams`、`session-fs.checkpointRetention` — 无产品价值；bootstrap `migratePurgeRemovedPreferenceKeys` 删除 DB 中残留。
 
-**Bootstrap**：`migrateClientUiBehaviorPrefsToPreferences` — new 不存在时 copy、始终删 old Client UI key；`migratePurgeGlobalConfigKkv` 删除遗留 `global-config` 行。
+**端口**：`PersistentPreferences` v2 方法（`getLlmStreamEnabled`、`getSessionFsVersionCheck` 等）；UI **禁止**裸写 `setPreference` 写上述 key（CLI `nm preferences` 除外）。
+
+**Bootstrap**：`migrateClientUiBehaviorPrefsToPreferences`（仅 `llmStream`）；`migratePurgeRemovedPreferenceKeys`；`migratePurgeGlobalConfigKkv`。
 
 **KKV 导出收敛**：主入口 `@novel-master/core` **不再**导出 `createKkvService` / `KkvService`；App Client UI 经 `@novel-master/core/kkv` 子路径获取工厂（仅 runtime / `AppUiPreferences` 使用）。
 
 | 客户端 | wiring 状态（2026-06-07） |
 | --- | --- |
-| **CLI** | ✅ `nm preferences` 支持全部 v2 key |
-| **Mobile** | ✅ Profile 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` 开关 |
-| **Desktop** | ✅ WorkspaceSettings 读写 v2；Chat 读 `showFullToolParams` / `llmStream`；✅ `session-fs.versionCheck` |
-| **checkpointRetention** | ✅ Profile/Workspace 偏好读写；Core SessionFs FIFO 后续消费 |
+| **CLI** | ✅ `nm preferences` 支持 `session-fs.versionCheck`、`chat.llmStream` |
+| **Mobile** | ✅ Profile 读写 `llmStream` / `session-fs.versionCheck` |
+| **Desktop** | ✅ WorkspaceSettings 读写 `llmStream` / `session-fs.versionCheck` |
 
 **指针契约（不变）**：`currentProviderId` **CLI 专用**；mobile/desktop **不**调用 `setCurrentProviderId`；app 以 `currentModelId` 为 LLM 权威。
 

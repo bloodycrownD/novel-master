@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
   ipcAppUiGet,
-  ipcPreferencesGetShowFullToolParams,
   ipcCompactionManual,
   ipcMessagesDelete,
   ipcMessagesEdit,
@@ -31,7 +30,6 @@ interface ConversationPanelProps {
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   messageBatch: ReturnType<typeof useBatchSelection>;
-  settingsOpen: boolean;
 }
 
 export function ConversationPanel({
@@ -39,7 +37,6 @@ export function ConversationPanel({
   sessionId,
   onOpenSessionActions,
   messageBatch,
-  settingsOpen,
 }: ConversationPanelProps) {
   const { refreshWorkspaceTrees, openSession, projectName } = useShellNav();
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
@@ -47,7 +44,6 @@ export function ConversationPanel({
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatRichText, setChatRichText] = useState(false);
-  const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
     x: number;
@@ -80,37 +76,6 @@ export function ConversationPanel({
       .then((res) => setChatRichText(res.value === "true"))
       .catch(() => undefined);
   }, []);
-
-  const refreshShowFullToolParams = useCallback(async () => {
-    try {
-      const res = await ipcPreferencesGetShowFullToolParams();
-      if (res.ok) {
-        setShowFullToolParams(res.data);
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshShowFullToolParams();
-  }, [refreshShowFullToolParams]);
-
-  useEffect(() => {
-    const onFocus = () => {
-      void refreshShowFullToolParams();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [refreshShowFullToolParams]);
-
-  const prevSettingsOpen = useRef(settingsOpen);
-  useEffect(() => {
-    if (prevSettingsOpen.current && !settingsOpen) {
-      void refreshShowFullToolParams();
-    }
-    prevSettingsOpen.current = settingsOpen;
-  }, [settingsOpen, refreshShowFullToolParams]);
 
   const onTextDelta = useCallback((delta: string) => {
     setStreamingText((prev) => prev + delta);
@@ -385,7 +350,6 @@ export function ConversationPanel({
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
             chatRichText={chatRichText}
-            showFullToolParams={showFullToolParams}
             onToggleSelect={messageBatch.toggle}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
           />

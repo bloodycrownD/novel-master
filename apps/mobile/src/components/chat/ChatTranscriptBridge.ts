@@ -48,7 +48,6 @@ export type TranscriptTheme = {
 
 export type TranscriptFlags = {
   readonly richText: boolean;
-  readonly showFullToolParams: boolean;
   readonly batchMode: boolean;
   /** When true, long-press menu is suppressed (e.g. agent running). */
   readonly menuDisabled?: boolean;

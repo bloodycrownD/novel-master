@@ -7,8 +7,6 @@
 import { isKkvError } from "@/errors/kkv-errors.js";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
-  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
   PREFERENCES_MODULE,
 } from "@/service/persistent-preferences/impl/preference-keys.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
@@ -29,29 +27,9 @@ export const CLIENT_UI_BEHAVIOR_PREF_MIGRATIONS: readonly ClientUiPrefMigration[
       toKey: PREF_KEY_CHAT_LLM_STREAM,
     },
     {
-      fromModule: "nm-mobile-ui",
-      fromKey: "showFullToolParams",
-      toKey: PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-    },
-    {
-      fromModule: "nm-mobile-ui",
-      fromKey: "checkpointRetention",
-      toKey: PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
-    },
-    {
       fromModule: "nm-desktop-ui",
       fromKey: "llmStream",
       toKey: PREF_KEY_CHAT_LLM_STREAM,
-    },
-    {
-      fromModule: "nm-desktop-ui",
-      fromKey: "showFullToolParams",
-      toKey: PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
-    },
-    {
-      fromModule: "nm-desktop-ui",
-      fromKey: "checkpointRetention",
-      toKey: PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
     },
   ];
 

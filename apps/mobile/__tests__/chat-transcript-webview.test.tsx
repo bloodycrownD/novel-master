@@ -162,7 +162,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+          flags={{richText: true,  batchMode: false}}
         />,
       );
     });
@@ -181,7 +181,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText="**bold**"
           streamingThinking=""
-          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+          flags={{richText: true,  batchMode: false}}
         />,
       );
     });
@@ -213,7 +213,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+          flags={{richText: true,  batchMode: false}}
         />,
       );
     });
@@ -232,7 +232,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking="*reason*"
-          flags={{richText: true, showFullToolParams: false, batchMode: false}}
+          flags={{richText: true,  batchMode: false}}
         />,
       );
     });
@@ -261,7 +261,6 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           flags={{
             richText: false,
-            showFullToolParams: false,
             batchMode: false,
           }}
           onOpenMessageMenu={() => {
@@ -304,7 +303,6 @@ describe('ChatTranscriptWebView', () => {
     const messages = [sampleMessage('m1', 1)];
     const baseFlags = {
       richText: false,
-      showFullToolParams: false,
       batchMode: false,
     };
     let tree: TestRenderer.ReactTestRenderer;
