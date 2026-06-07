@@ -12,5 +12,5 @@ export const DEFAULT_WORKTREE_DIR_RULE = {
   sortOrder: "asc" as const satisfies SortOrder,
   headCount: 0,
   tailCount: 1000,
-  fillPolicy: "full" as const satisfies FillPolicy,
+  fillPolicy: "hidden" as const satisfies FillPolicy,
 } as const;

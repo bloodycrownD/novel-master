@@ -3,7 +3,8 @@ import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../src/storage/chat-rich-text-pref';
-import {KkvError, type KkvService} from '@novel-master/core';
+import {KkvError} from '@novel-master/core';
+import type {KkvService} from '@novel-master/core/kkv';
 import {APP_UI_KKV_MODULE} from '../src/storage/app-ui-keys';
 
 function createMemoryKkv(): KkvService {

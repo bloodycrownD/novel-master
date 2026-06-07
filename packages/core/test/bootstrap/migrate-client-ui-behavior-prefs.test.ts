@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { KkvError, type KkvService } from "@novel-master/core";
+import { KkvError } from "@novel-master/core";
+import type { KkvService } from "@novel-master/core/kkv";
 import {
   migrateClientUiBehaviorPrefsToPreferences,
   PREF_KEY_CHAT_LLM_STREAM,

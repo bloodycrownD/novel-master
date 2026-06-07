@@ -14,7 +14,7 @@ export const WORKTREE_SCHEMA_STATEMENTS: readonly string[] = [
     sort_order TEXT NOT NULL DEFAULT 'asc',
     head_count INTEGER NOT NULL DEFAULT 0,
     tail_count INTEGER NOT NULL DEFAULT 1000,
-    fill_policy TEXT NOT NULL DEFAULT 'full',
+    fill_policy TEXT NOT NULL DEFAULT 'hidden',
     PRIMARY KEY (scope_key, logical_path)
   )`,
   `CREATE TABLE IF NOT EXISTS worktree_file_rule (

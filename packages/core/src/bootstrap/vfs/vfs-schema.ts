@@ -8,7 +8,7 @@
  * Creates vfs_entry table if missing.
  *
  * @remarks `CREATE IF NOT EXISTS` does not add columns to an existing table.
- * Pre-release DBs without `entry_kind` must be deleted and re-bootstrapped.
+ * Legacy DBs missing `entry_kind` are upgraded via {@link migrateVfsEntryKind}.
  */
 export const VFS_ENTRY_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_entry (

@@ -4,7 +4,8 @@
  * @module storage/app-ui-prefs
  */
 
-import {KkvError, type KkvService} from '@novel-master/core';
+import {KkvError} from '@novel-master/core';
+import type {KkvService} from '@novel-master/core/kkv';
 import {
   APP_UI_DEFAULTS,
   APP_UI_KKV_MODULE,

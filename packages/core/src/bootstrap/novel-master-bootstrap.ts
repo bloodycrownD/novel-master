@@ -1,6 +1,18 @@
 /**
  * Aggregated schema bootstrap for Novel Master SQLite databases.
  *
+ * Runs idempotent DDL (`CREATE IF NOT EXISTS`), pragma-guarded column migrations,
+ * KKV purges/moves, and provider seeding inside a single transaction.
+ *
+ * **Column migrations** (legacy DBs): `chat_message.hidden`, `vfs_entry.entry_kind`,
+ * `session_execute_batch.message_id`, regex depth rename, `llm_saved_model.settings_json`,
+ * `llm_provider.default_model_id` drop.
+ *
+ * **KKV migrations**: purge `nm-model-sampling` + `global-config`; move Client UI
+ * behavior keys → `nm-preferences` (Preferences v2).
+ *
+ * **Data backfills**: `worktree_dir_rule.fill_policy` `full` → `hidden`.
+ *
  * @module bootstrap/novel-master-bootstrap
  */
 
@@ -17,7 +29,10 @@ import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
+import { migrateVfsEntryKind } from "./vfs/migrate-vfs-entry-kind.js";
+import { migrateWorktreeFillPolicy } from "./worktree/migrate-worktree-fill-policy.js";
 import { migrateClientUiBehaviorPrefsToPreferences } from "./preferences/migrate-client-ui-behavior-prefs.js";
+import { migratePurgeGlobalConfigKkv } from "./preferences/migrate-purge-global-config-kkv.js";
 import {
   migrateAddSavedModelSettingsJson,
   migrateDropLlmModelSuggestionTable,
@@ -37,7 +52,7 @@ export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
 ];
 
 /**
- * Ensures VFS, KKV, chat, session-fs, and worktree tables exist. Safe to call multiple times.
+ * Ensures all entity tables exist and applies inline migrations. Safe to call multiple times.
  *
  * @param conn - Open TDBC connection
  */
@@ -90,9 +105,12 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migrateRegexRuleDepthColumns(tx);
     await migrateAddBatchMessageId(tx);
     await migrateChatMessageHidden(tx);
+    await migrateVfsEntryKind(tx);
+    await migrateWorktreeFillPolicy(tx);
     await migrateDropProviderDefaultModelId(tx);
     const kkv = createKkvService(tx);
     await migratePurgeNmModelSamplingKkv(kkv);
+    await migratePurgeGlobalConfigKkv(kkv);
     await migrateDropLlmModelSuggestionTable(tx);
     await migrateAddSavedModelSettingsJson(tx);
     await migrateClientUiBehaviorPrefsToPreferences(kkv);

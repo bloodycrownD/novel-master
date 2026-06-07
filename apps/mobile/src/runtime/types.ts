@@ -10,7 +10,6 @@ import type {
   CompactionConditionsStore,
   EventOrchestrator,
   EventsConfigStore,
-  KkvService,
   MessageService,
   ModelRequestService,
   PersistentPreferences,
@@ -30,12 +29,14 @@ import type {
   VfsService,
   WorktreeService,
 } from '@novel-master/core';
+import type {KkvService} from '@novel-master/core/kkv';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {
   readonly conn: TdbcConnection;
   readonly state: PersistentState;
   readonly preferences: PersistentPreferences;
+  /** Internal KKV handle for `AppUiPreferences` only — prefer `preferences` / `state`. */
   readonly kkv: KkvService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;

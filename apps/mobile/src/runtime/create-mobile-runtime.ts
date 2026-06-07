@@ -12,7 +12,6 @@ import {
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
-  createKkvService,
   createMessageService,
   createPersistentPreferences,
   createPersistentState,
@@ -27,6 +26,7 @@ import {
   SimpleEventBus,
   type VfsScope,
 } from '@novel-master/core';
+import {createKkvService} from '@novel-master/core/kkv';
 import {createCompositeSecretStore} from '@novel-master/core/sksp';
 import {createAndroidSecretStore} from '@novel-master/sksp-android';
 import {getMobileConnection} from '../db/connection';

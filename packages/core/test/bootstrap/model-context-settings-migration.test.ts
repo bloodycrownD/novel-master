@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   bootstrapNovelMaster,
-  createKkvService,
   createProviderServices,
 } from "@novel-master/core";
+import { createKkvService } from "@novel-master/core/kkv";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,

@@ -25,6 +25,10 @@
     "./front-matter": {
       "types": "./dist/domain/worktree/logic/front-matter.d.ts",
       "import": "./dist/domain/worktree/logic/front-matter.js"
+    },
+    "./kkv": {
+      "types": "./dist/service/kkv/index.d.ts",
+      "import": "./dist/service/kkv/index.js"
     }
   },
   "scripts": {
