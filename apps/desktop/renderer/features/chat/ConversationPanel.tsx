@@ -3,6 +3,7 @@ import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
   ipcAppUiGet,
+  ipcPreferencesGetShowFullToolParams,
   ipcCompactionManual,
   ipcMessagesDelete,
   ipcMessagesEdit,
@@ -44,6 +45,7 @@ export function ConversationPanel({
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [chatRichText, setChatRichText] = useState(false);
+  const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
     x: number;
@@ -74,6 +76,16 @@ export function ConversationPanel({
   useEffect(() => {
     ipcAppUiGet("chatRichText")
       .then((res) => setChatRichText(res.value === "true"))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    ipcPreferencesGetShowFullToolParams()
+      .then((res) => {
+        if (res.ok) {
+          setShowFullToolParams(res.data);
+        }
+      })
       .catch(() => undefined);
   }, []);
 
@@ -350,6 +362,7 @@ export function ConversationPanel({
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
             chatRichText={chatRichText}
+            showFullToolParams={showFullToolParams}
             onToggleSelect={messageBatch.toggle}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
           />

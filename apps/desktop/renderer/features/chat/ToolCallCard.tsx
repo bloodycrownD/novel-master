@@ -3,6 +3,8 @@ import { toolCallSummary } from "./message-blocks";
 
 type ToolCallCardProps = {
   tool: ToolCallView;
+  /** When true, show full JSON input instead of summary. */
+  showFullParams?: boolean;
 };
 
 function statusLabel(status: ToolCallView["status"]): string {
@@ -16,8 +18,11 @@ function statusLabel(status: ToolCallView["status"]): string {
   }
 }
 
-export function ToolCallCard({ tool }: ToolCallCardProps) {
+export function ToolCallCard({ tool, showFullParams }: ToolCallCardProps) {
   const summary = toolCallSummary(tool);
+  const detail = showFullParams
+    ? JSON.stringify(tool.input, null, 2)
+    : summary;
 
   return (
     <div
@@ -30,7 +35,7 @@ export function ToolCallCard({ tool }: ToolCallCardProps) {
           {statusLabel(tool.status)}
         </span>
       </div>
-      {summary ? <p className="tool-call-card__summary">{summary}</p> : null}
+      {detail ? <p className="tool-call-card__summary">{detail}</p> : null}
     </div>
   );
 }
