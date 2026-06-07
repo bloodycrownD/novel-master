@@ -38,7 +38,6 @@ import {
   type SessionCreateRequest,
   type SessionDeleteRequest,
   type SessionDto,
-  type SessionFsExecuteRequest,
   type SessionFsRollbackRequest,
   type SessionListByProjectRequest,
   type SessionPullTemplateRequest,
@@ -259,12 +258,6 @@ export async function ipcVfsZipImport(
   req: VfsZipRequest,
 ): Promise<IpcResult<VfsZipImportResult>> {
   return bridge().invoke(IPC_CHANNELS.VFS_ZIP_IMPORT, req);
-}
-
-export async function ipcSessionFsExecute(
-  req: SessionFsExecuteRequest,
-): Promise<IpcResult<{ batchId: string }>> {
-  return bridge().invoke(IPC_CHANNELS.SESSION_FS_EXECUTE, req);
 }
 
 export async function ipcProjectsPullTemplate(

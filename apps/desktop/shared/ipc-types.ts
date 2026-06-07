@@ -40,9 +40,6 @@ export const IPC_CHANNELS = {
   WORKTREE_SET_FILE_RULE: "nm:worktree/setFileRule",
   WORKTREE_GET_DIR_RULE: "nm:worktree/getDirRule",
 
-  SESSION_FS_EXECUTE: "nm:sessionFs/execute",
-  SESSION_FS_ROLLBACK: "nm:sessionFs/rollback",
-
   PROJECTS_PULL_TEMPLATE: "nm:projects/pullTemplate",
   SESSIONS_PULL_TEMPLATE: "nm:sessions/pullTemplate",
 
@@ -318,19 +315,6 @@ export type WorktreeSetFileRuleRequest = VfsScopeRequest & {
 
 export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
-};
-
-export type SessionFsExecuteRequest = {
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly actions: ReadonlyArray<
-    | { readonly function: "read"; readonly path: string }
-    | { readonly function: "write"; readonly path: string; readonly content: string }
-    | { readonly function: "delete"; readonly path: string }
-  >;
-  readonly actor: "user" | "assistant" | "system";
-  readonly expectedVersion?: number;
-  readonly versionCheck?: boolean;
 };
 
 export type SessionFsRollbackRequest = {

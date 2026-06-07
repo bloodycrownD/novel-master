@@ -108,10 +108,6 @@ import {
   handleScopeSetSession,
 } from "./handlers/scope.js";
 import {
-  handleSessionFsExecute,
-  handleSessionFsRollback,
-} from "./handlers/session-fs.js";
-import {
   handleSessionsCreate,
   handleSessionsDelete,
   handleSessionsListByProject,
@@ -210,13 +206,6 @@ export function registerIpcHandlers(): void {
   );
   ipcMain.handle(IPC_CHANNELS.WORKTREE_GET_DIR_RULE, (_event, req) =>
     handleWorktreeGetDirRule(req),
-  );
-
-  ipcMain.handle(IPC_CHANNELS.SESSION_FS_EXECUTE, (_event, req) =>
-    handleSessionFsExecute(req),
-  );
-  ipcMain.handle(IPC_CHANNELS.SESSION_FS_ROLLBACK, (_event, req) =>
-    handleSessionFsRollback(req),
   );
 
   ipcMain.handle(IPC_CHANNELS.MESSAGES_LIST, (_event, req) =>
