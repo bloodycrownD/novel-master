@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { textBlocks } from "@novel-master/core";
+import { isSessionFsError, textBlocks } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("MessageRollbackService (revision model)", () => {
@@ -152,6 +152,7 @@ describe("MessageRollbackService (revision model)", () => {
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id),
       (error: unknown) => {
+        assert.ok(isSessionFsError(error, "ROLLBACK_NO_CHECKPOINT"));
         assert.equal(
           error instanceof Error ? error.message : String(error),
           "该消息无回滚点",
@@ -159,6 +160,33 @@ describe("MessageRollbackService (revision model)", () => {
         return true;
       },
     );
+
+    await ctx.conn.close();
+  });
+
+  it("assistant anchor before first checkpoint uses empty tree when session has later checkpoints", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "hello" }],
+    });
+    await ctx.messages.append(session.id, "user", textBlocks("more"));
+
+    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "write" }],
+    });
+    await svfs.write("/created.md", "new file", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+
+    await assert.rejects(() => svfs.read("/created.md"));
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]!.id, assistant1.id);
 
     await ctx.conn.close();
   });

@@ -36,6 +36,7 @@ describe("MessageService.delete checkpoint GC", () => {
 
     await ctx.messages.delete(assistant.id);
 
+    assert.equal((await svfs.read("/gc-delete.md")).content, "v2");
     assert.equal(await checkpoints.hasCheckpoint(session.id, assistant.id), false);
     const keys = await revisions.listKeysUnderPrefix(prefix);
     assert.ok(keys.some((k) => k.path === physical && k.version === v2));
