@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isSessionFsError, textBlocks } from "@novel-master/core";
+import { textBlocks } from "@novel-master/core";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("MessageRollbackService (revision model)", () => {
@@ -138,7 +138,7 @@ describe("MessageRollbackService (revision model)", () => {
     await ctx.conn.close();
   });
 
-  it("rejects rollback to pre-checkpoint assistant anchor", async () => {
+  it("truncates tail on assistant anchor when session has no checkpoints", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");
     const session = await ctx.sessions.create(project.id);
@@ -148,18 +148,11 @@ describe("MessageRollbackService (revision model)", () => {
     });
     await ctx.messages.append(session.id, "user", textBlocks("tail"));
 
-    await assert.rejects(
-      () =>
-        ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id),
-      (error: unknown) => {
-        assert.ok(isSessionFsError(error, "ROLLBACK_NO_CHECKPOINT"));
-        assert.equal(
-          error instanceof Error ? error.message : String(error),
-          "该消息无回滚点",
-        );
-        return true;
-      },
-    );
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant.id);
+
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]!.id, assistant.id);
 
     await ctx.conn.close();
   });

@@ -236,10 +236,10 @@ async rollbackToMessage(sessionId, projectId, anchorMessageId): Promise<void> {
 
 - 若 anchor message **有** checkpoint 行：target tree = 该 message 的 checkpoint 树。
 - 若 anchor **无** checkpoint 且存在 **seq ≤ anchor** 的最近 checkpoint：target tree = 该前序 checkpoint 树（R9）。
-- 若 anchor **无** checkpoint 且会话 **从未** 写入 v2 checkpoint：对 **assistant** anchor **拒绝回滚**（`ROLLBACK_NO_CHECKPOINT` /「该消息无回滚点」）；**user** anchor 仍允许纯消息截断（R3）。
+- 若 anchor **无** checkpoint 且会话 **从未** 写入 v2 checkpoint：target = **空树**；**仍执行** tail 消息删除与 tail path reconcile（R3 纯文本场景工作区不变）。
 - 若 anchor **无** checkpoint、会话已有其它 checkpoint、但 seq 之前无 checkpoint：target = **空树**（R2）。
 
-**升级边界（定案）**：升级前 legacy 消息无 `message_checkpoint` 行；回滚至此类 **assistant** 消息时失败并提示「该消息无回滚点」。升级后新产生的 checkpoint 正常可用。
+**回滚复合语义（定案）**：回滚 = **消息截断**（`deleteAfterSeq`）+ **工作区恢复**（有 checkpoint 树时）。无 checkpoint 不阻止回滚；assistant / user anchor 均允许。
 
 #### Restore path
 

@@ -125,9 +125,10 @@
 - **Given** 一轮 5 个只读 tool，**When** 并行执行，**Then** 全部成功且不写 checkpoint（若无 mutating）。
 - **Given** 一轮 2 个 tool 并行写同一路径，**When** 完成后 capture，**Then** checkpoint 中该 path 为 **最终** version（last-write-wins）。
 
-### 升级边界（无回滚点迁移）
+### 回滚复合语义（消息 + 工作区）
 
-- **Given** 自 v2 升级前的会话含历史 Agent message（会话内无 v2 `message_checkpoint`），**When** 用户尝试回滚到升级前某条 **assistant** message，**Then** 操作失败并提示「该消息无回滚点」（升级后新产生的 checkpoint 正常可用；回滚至 **user** 消息且 tail 无 checkpoint 时仍允许纯消息截断）。
+- **Given** 会话从未产生 checkpoint（纯聊天 / 只读 tool），**When** 回滚到任意 anchor message（含 assistant），**Then** **tail 消息全部删除**；工作区无 checkpoint 可恢复时 **保持现状**（仅 reconcile tail 曾改动的 path，若无则不变）。
+- **Given** 自 v2 升级前的会话（无历史 `message_checkpoint`），**When** 回滚到升级前 message，**Then** 同上：允许消息截断；文件恢复仅依赖升级后新产生的 checkpoint。
 
 ### 跨端与 guard
 

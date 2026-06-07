@@ -19,7 +19,6 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import {
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
-  sessionFsRollbackNoCheckpoint,
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
@@ -59,24 +58,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const tail = allMessages.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
-    const hasDirectCheckpoint = await this.deps.checkpoints.hasCheckpoint(
-      sessionId,
-      anchorMessageId,
-    );
-    const priorCheckpointMessageId =
-      await this.deps.checkpoints.findCheckpointMessageIdAtOrBefore(
-        sessionId,
-        anchor.seq,
-      );
-
-    if (!hasDirectCheckpoint && priorCheckpointMessageId === null) {
-      const sessionHasCheckpoints =
-        await this.deps.checkpoints.hasAnyCheckpointForSession(sessionId);
-      if (!sessionHasCheckpoints && anchor.role === "assistant") {
-        throw sessionFsRollbackNoCheckpoint(anchorMessageId, sessionId);
-      }
-    }
-
+    // Rollback is composite: always truncate tail messages; restore workspace when a
+    // checkpoint tree exists (direct, prior, or empty baseline when none).
     const targetTree = await resolveRollbackTargetTree(
       this.deps.checkpoints,
       sessionId,

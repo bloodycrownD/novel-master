@@ -99,10 +99,10 @@ export function sessionFsRestoreRevisionMissing(
 }
 
 /**
- * Raised when rollback is requested but the session has no v2 checkpoint for the anchor.
+ * Reserved error code for rollback-without-checkpoint scenarios.
  *
- * @remarks Typical after upgrading from pre-checkpoint storage: legacy messages have no
- *          `message_checkpoint` rows, so workspace restore is unavailable.
+ * @remarks Rollback no longer throws this: message truncation always proceeds; workspace
+ *          restore uses prior/empty tree when no checkpoint exists.
  */
 export function sessionFsRollbackNoCheckpoint(
   messageId: string,
