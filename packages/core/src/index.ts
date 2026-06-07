@@ -135,6 +135,21 @@ export { createPersistentState } from "./service/persistent-state/create-persist
 export type { PersistentState } from "./service/persistent-state/persistent-state.port.js";
 export { createPersistentPreferences } from "./service/persistent-preferences/create-persistent-preferences.js";
 export type { PersistentPreferences } from "./service/persistent-preferences/persistent-preferences.port.js";
+export {
+  PREFERENCES_MODULE,
+  PREF_KEY_SESSION_FS_VERSION_CHECK,
+  PREF_KEY_CHAT_LLM_STREAM,
+  PREF_KEY_CHAT_SHOW_FULL_TOOL_PARAMS,
+  PREF_KEY_SESSION_FS_CHECKPOINT_RETENTION,
+  DEFAULT_CHECKPOINT_RETENTION,
+  MIN_CHECKPOINT_RETENTION,
+  MAX_CHECKPOINT_RETENTION,
+} from "./service/persistent-preferences/impl/preference-keys.js";
+export {
+  migrateClientUiBehaviorPrefsToPreferences,
+  CLIENT_UI_BEHAVIOR_PREF_MIGRATIONS,
+} from "./bootstrap/preferences/migrate-client-ui-behavior-prefs.js";
+export type { ClientUiPrefMigration } from "./bootstrap/preferences/migrate-client-ui-behavior-prefs.js";
 
 /**
  * Chat: projects, sessions, messages.

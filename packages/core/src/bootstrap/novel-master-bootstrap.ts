@@ -17,6 +17,7 @@ import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
+import { migrateClientUiBehaviorPrefsToPreferences } from "./preferences/migrate-client-ui-behavior-prefs.js";
 import {
   migrateAddSavedModelSettingsJson,
   migrateDropLlmModelSuggestionTable,
@@ -94,6 +95,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     await migratePurgeNmModelSamplingKkv(kkv);
     await migrateDropLlmModelSuggestionTable(tx);
     await migrateAddSavedModelSettingsJson(tx);
+    await migrateClientUiBehaviorPrefsToPreferences(kkv);
     await seedBuiltinProviders(tx);
   });
 }
