@@ -361,7 +361,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               />
             </SettingsField>
           ) : (
-            <p className="settings-hint">未配置时使用全部已注册工具（vfs.read、vfs.write 等）。</p>
+            <p className="settings-hint">
+              未配置时使用全部 10 个已注册 vfs.* 工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
+            </p>
           )}
         </SettingsSection>
 

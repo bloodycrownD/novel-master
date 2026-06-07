@@ -452,7 +452,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </FormField>
           ) : (
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              未配置时使用全部已注册工具（vfs.read、vfs.write 等）。
+              未配置时使用全部 10 个已注册 vfs.* 工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
             </Text>
           )}
         </FormSectionCard>
