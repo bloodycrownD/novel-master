@@ -21,7 +21,11 @@ import { formatToolOutputForLlm } from "@/domain/tool/logic/format-tool-output.j
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
+import {
+  isMutatingVfsToolName,
+  type VfsToolContext,
+} from "@/domain/tool/builtin/vfs-tools.js";
+import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
 import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
@@ -53,6 +57,8 @@ export interface DefaultAgentRunnerDeps {
   readonly toolCtx: VfsToolContext;
   readonly eventBus: SimpleEventBus;
   readonly macroCache: SessionMacroCache;
+  /** When set, captures checkpoint after mutating tools settle for the step. */
+  readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
   /** Runs hide-message / refresh-macros before prompt build on condition trigger (not bus.publish). */
   readonly eventOrchestrator?: EventOrchestrator;
@@ -226,11 +232,6 @@ export class DefaultAgentRunner implements AgentRunner {
             raw: result.raw as Record<string, unknown>,
           });
           assistantAppendCount += 1;
-          // Fresh bag each LLM step so mutating tools share one batch per assistant message.
-          this.deps.toolCtx.executeRound = {
-            messageId: assistantMessage.id,
-            batchId: null,
-          };
           if (publishRunLifecycle) {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
@@ -280,29 +281,46 @@ export class DefaultAgentRunner implements AgentRunner {
           crossRoundWindow: doomLoopCrossRoundWindow,
         });
 
-        const toolResults: ToolResultBlock[] = [];
-        for (const tu of toolUses) {
-          if (signal?.aborted) {
-            stopReason = "cancelled";
-            break;
-          }
-          let content: string;
-          try {
-            const out = await this.toolRunner.call(
-              tu.name,
-              tu.input,
-              this.deps.toolCtx,
-            );
-            content = formatToolOutputForLlm(out);
-          } catch (e: unknown) {
-            const msg = e instanceof Error ? e.message : String(e);
-            content = `Error: ${msg}`;
-          }
-          toolResults.push({
-            type: "tool_result",
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
+        const hadMutatingTools = toolUses.some((tu) =>
+          isMutatingVfsToolName(tu.name),
+        );
+        const parallelOutcomes = await this.toolRunner.runParallel(
+          toolUses.map((tu) => ({ name: tu.name, input: tu.input })),
+          this.deps.toolCtx,
+        );
+        const toolResults: ToolResultBlock[] = toolUses.map((tu, i) => {
+          const outcome = parallelOutcomes[i]!;
+          const content = outcome.ok
+            ? formatToolOutputForLlm(outcome.output)
+            : `Error: ${
+                outcome.error instanceof Error
+                  ? outcome.error.message
+                  : String(outcome.error)
+              }`;
+          return {
+            type: "tool_result" as const,
             toolUseId: tu.id,
             content,
-          });
+          };
+        });
+
+        // WHY: checkpoint records final tree after all tools settle (fork-join), not per action.
+        if (
+          persistMessages &&
+          hadMutatingTools &&
+          assistantMessage != null &&
+          this.deps.messageCheckpoint != null
+        ) {
+          await this.deps.messageCheckpoint.capture(
+            sessionId,
+            projectId,
+            assistantMessage.id,
+          );
         }
 
         if (signal?.aborted) {

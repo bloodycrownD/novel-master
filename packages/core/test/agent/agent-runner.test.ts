@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
+  ChatAgentSession,
   createAgentRunner,
   createSessionMacroCache,
   EVENT_AGENT_STEP_COMMITTED,
@@ -18,7 +19,8 @@ import {
 } from "@novel-master/core";
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
 import type { VfsService, VfsToolContext } from "@novel-master/core";
-import type { SessionFsService } from "../../src/service/session-fs/session-fs.port.js";
+import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 function minimalDefinition(): AgentDefinition {
   return {
@@ -79,39 +81,9 @@ function mockVfs(): VfsService {
   } as unknown as VfsService;
 }
 
-function mockSessionFs(vfs: VfsService): SessionFsService {
-  return {
-    async execute(_sessionId, _projectId, actions, _actor, options) {
-      const results: Array<
-        | { function: "read"; path: string; content: string }
-        | { function: "write"; path: string; version: number }
-        | { function: "delete"; path: string }
-      > = [];
-      for (const action of actions) {
-        if (action.function === "write") {
-          const r = await vfs.write(action.path, action.content, {
-            versionCheck: options?.versionCheck ?? true,
-          });
-          results.push({ function: "write", path: action.path, version: r.version });
-        }
-      }
-      return { batchId: "mock-batch", results };
-    },
-    async listBatches() {
-      return [];
-    },
-    async rollbackBatch() {},
-    async listSnapshots() {
-      return [];
-    },
-    async rollbackSnapshot() {},
-  };
-}
-
 function mockToolCtx(vfs: VfsService): VfsToolContext {
   return {
     vfs,
-    sessionFs: mockSessionFs(vfs),
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
   };
@@ -445,6 +417,152 @@ describe("AgentRunner", () => {
       (e: unknown) =>
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
     );
+  });
+
+  it("captures checkpoint once after parallel mutating tools", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "w1",
+            name: "vfs.write",
+            input: { path: "/a.md", content: "A" },
+          },
+          {
+            type: "tool_use",
+            id: "w2",
+            name: "vfs.write",
+            input: { path: "/b.md", content: "B" },
+          },
+          {
+            type: "tool_use",
+            id: "r1",
+            name: "vfs.read",
+            input: { path: "/a.md" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+        },
+        messageCheckpoint: ctx.messageCheckpoint,
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+      (m) => m.role === "assistant",
+    );
+    assert.equal(assistantMsgs.length, 2);
+    const firstAssistant = assistantMsgs[0]!;
+
+    const repo = new SqliteMessageCheckpointRepository(ctx.conn);
+    assert.equal(
+      await repo.hasCheckpoint(session.id, firstAssistant.id),
+      true,
+    );
+    const tree = await repo.loadFileTree(session.id, firstAssistant.id);
+    assert.ok(tree);
+    assert.equal(tree.size, 2);
+    assert.equal(
+      (await repo.listFilePointersForSession(session.id)).length,
+      2,
+    );
+
+    await ctx.conn.close();
+  });
+
+  it("does not capture checkpoint for read-only tool round", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/seed.md", "seed");
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("list"));
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "l1",
+            name: "vfs.list",
+            input: { dir: "/" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "ok",
+        blocks: [{ type: "text", text: "ok" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+        },
+        messageCheckpoint: ctx.messageCheckpoint,
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const repo = new SqliteMessageCheckpointRepository(ctx.conn);
+    assert.equal((await repo.listFilePointersForSession(session.id)).length, 0);
+    await ctx.conn.close();
   });
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {
