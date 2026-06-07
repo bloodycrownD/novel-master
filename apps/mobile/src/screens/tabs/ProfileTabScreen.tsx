@@ -72,6 +72,7 @@ export function ProfileTabScreen() {
   const [showFullToolParams, setShowFullToolParams] = useState(false);
   const [checkpointRetention, setCheckpointRetention] = useState('100');
   const [retentionPromptOpen, setRetentionPromptOpen] = useState(false);
+  const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
@@ -134,6 +135,12 @@ export function ProfileTabScreen() {
     setCheckpointRetention(String(count));
   }, [runtime]);
 
+  const refreshSessionFsVersionCheckPref = useCallback(async () => {
+    setSessionFsVersionCheck(
+      await runtime.preferences.getSessionFsVersionCheck(),
+    );
+  }, [runtime]);
+
   const refreshChatRichTextPref = useCallback(async () => {
     if (appUi == null) {
       return;
@@ -149,6 +156,7 @@ export function ProfileTabScreen() {
       refreshStreamPref().catch(() => undefined);
       refreshShowFullToolParamsPref().catch(() => undefined);
       refreshCheckpointRetentionPref().catch(() => undefined);
+      refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
     }, [
       refreshModelLabel,
@@ -157,6 +165,7 @@ export function ProfileTabScreen() {
       refreshStreamPref,
       refreshShowFullToolParamsPref,
       refreshCheckpointRetentionPref,
+      refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
     ]),
   );
@@ -237,6 +246,23 @@ export function ProfileTabScreen() {
           value={checkpointRetention}
           tokens={tokens}
           onPress={() => setRetentionPromptOpen(true)}
+        />
+        <ProfileSwitchItem
+          icon="🛡️"
+          label="Session FS 版本校验"
+          subtitle={
+            sessionFsVersionCheck
+              ? '写入时校验 VFS 版本号（推荐）'
+              : '写入时跳过版本冲突检查'
+          }
+          value={sessionFsVersionCheck}
+          tokens={tokens}
+          onValueChange={enabled => {
+            setSessionFsVersionCheck(enabled);
+            runtime.preferences
+              .setSessionFsVersionCheck(enabled)
+              .catch(() => undefined);
+          }}
         />
         <ProfileSwitchItem
           icon="📝"
