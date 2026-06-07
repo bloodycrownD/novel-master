@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ipcAppUiGet, ipcAppUiSet } from "../ipc/client";
+import { ipcAppUiGet, ipcAppUiSet, ipcShellSetTitleBarTheme, getDesktopBridge } from "../ipc/client";
 
 export type ThemeMode = "light" | "dark";
 
@@ -50,6 +50,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", mode);
+    try {
+      if (getDesktopBridge().customTitleBar) {
+        void ipcShellSetTitleBarTheme(mode).catch(() => undefined);
+      }
+    } catch {
+      // Browser preview — no preload bridge.
+    }
   }, [mode]);
 
   const setMode = useCallback(async (next: ThemeMode) => {

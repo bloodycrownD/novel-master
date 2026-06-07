@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types";
 import { PickerModal } from "../../components/ui/PickerModal";
 import { showToast } from "../../components/ui/show-toast";
 import {
@@ -9,16 +10,30 @@ import {
   ipcPromptAgentMeta,
   ipcPromptChatTokenLabel,
 } from "../../ipc/client";
+import { formatTokenCount } from "../../utils/format-token-count";
 
 interface WorkspaceFooterProps {
   projectId: string;
   sessionId: string;
 }
 
+function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
+  const prefix = stats.estimated ? "~" : "";
+  const current = formatTokenCount(stats.tokenCount);
+  if (stats.contextWindow == null || stats.contextWindow <= 0) {
+    return stats.estimated
+      ? `${prefix}${current} tokens (est.)`
+      : `${current} tokens`;
+  }
+  return `${prefix}${formatTokenCount(stats.tokenCount)} / ${formatTokenCount(stats.contextWindow)}`;
+}
+
 export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) {
   const [agentName, setAgentName] = useState("—");
   const [modelLabel, setModelLabel] = useState("—");
-  const [tokenLabel, setTokenLabel] = useState("");
+  const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
+    null,
+  );
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentRows, setAgentRows] = useState<Array<{ agentId: string; label: string }>>([]);
@@ -34,7 +49,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
       setModelLabel(meta.data.modelLabel);
     }
     if (tokens.ok) {
-      setTokenLabel(tokens.data);
+      setTokenStats(tokens.data);
     }
   }, [projectId, sessionId]);
 
@@ -61,6 +76,13 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     setModelRows(result.data.rows);
     setModelPickerOpen(true);
   };
+
+  const barPct =
+    tokenStats?.pct != null
+      ? Math.min(100, Math.max(0, tokenStats.pct))
+      : tokenStats != null
+        ? Math.min(100, Math.max(2, (tokenStats.tokenCount > 0 ? 8 : 0)))
+        : 0;
 
   return (
     <div id="conversation-meta" className="workspace-footer-card">
@@ -96,13 +118,41 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
           </span>
         </button>
       </div>
-      {tokenLabel ? (
+      {tokenStats ? (
         <div className="workspace-token-stats">
           <div className="workspace-token-stats__head">
             <span className="workspace-token-stats__title">上下文占用</span>
+            {tokenStats.pct != null ? (
+              <span className="workspace-token-stats__pct">
+                {tokenStats.estimated ? "~" : ""}
+                {tokenStats.pct}%
+              </span>
+            ) : null}
+          </div>
+          <div
+            className="workspace-token-bar"
+            role="progressbar"
+            aria-valuenow={tokenStats.pct ?? undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={
+              tokenStats.pct != null
+                ? `上下文占用约 ${tokenStats.pct}%`
+                : "上下文占用（估算）"
+            }
+          >
+            <div
+              className="workspace-token-bar__fill"
+              style={{ width: `${barPct}%` }}
+            />
           </div>
           <div className="workspace-token-stats__foot">
-            <span className="workspace-token-stats__count">{tokenLabel}</span>
+            <span className="workspace-token-stats__count">
+              {tokenCountLabel(tokenStats)}
+            </span>
+            <span className="workspace-token-stats__tokenizer" title="分词器">
+              {tokenStats.counterKind}
+            </span>
           </div>
         </div>
       ) : null}

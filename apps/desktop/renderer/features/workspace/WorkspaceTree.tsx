@@ -19,7 +19,8 @@ interface WorkspaceTreeProps {
   panelScope: WorkspacePanelScope;
   refreshToken: number;
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
-  onBlankContextMenu: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
+  /** Blank-area menu is handled on `.explorer-tree` in ExplorerPane. */
+  onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
 
 function scopeRequest(
@@ -34,7 +35,6 @@ export function WorkspaceTree({
   panelScope,
   refreshToken,
   onOpenContextMenu,
-  onBlankContextMenu,
 }: WorkspaceTreeProps) {
   const { projectId, sessionId, previewFile, selectPreviewFile } = useShellNav();
   const [rows, setRows] = useState<WorktreeListRowDto[]>([]);
@@ -68,25 +68,15 @@ export function WorkspaceTree({
   }, [reload, refreshToken]);
 
   if (loading) {
-    return <p className="tree-empty">加载中…</p>;
+    return (
+      <div className="explorer-tree__body explorer-tree__body--fill">
+        <p className="tree-empty">加载中…</p>
+      </div>
+    );
   }
 
   return (
-    <div
-      className="explorer-tree__body"
-      onContextMenu={(e) => {
-        if ((e.target as HTMLElement).closest(".tree-node")) {
-          return;
-        }
-        e.preventDefault();
-        onBlankContextMenu({
-          kind: "blank",
-          panelScope,
-          x: e.clientX,
-          y: e.clientY,
-        });
-      }}
-    >
+    <div className="explorer-tree__body explorer-tree__body--fill">
       {rows.length === 0 ? (
         <p className="tree-empty">空目录</p>
       ) : (

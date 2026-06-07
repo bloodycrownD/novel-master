@@ -12,6 +12,11 @@ import {
 } from "./ipc/forward-event-bus.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
+import {
+  configureWindowChrome,
+  installApplicationMenu,
+  titleBarOverlayOptions,
+} from "./shell-menu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DEV_SERVER_URL = "http://localhost:5173";
@@ -44,11 +49,19 @@ function resolveIconPath(): string | undefined {
 
 function createMainWindow(): BrowserWindow {
   const iconPath = resolveIconPath();
+  const useTitleBarOverlay = process.platform === "win32";
   const window = new BrowserWindow({
-    title: "Novel Master",
+    title: "",
     width: 1280,
     height: 800,
     show: false,
+    autoHideMenuBar: true,
+    ...(useTitleBarOverlay
+      ? {
+          titleBarStyle: "hidden" as const,
+          titleBarOverlay: titleBarOverlayOptions("light"),
+        }
+      : {}),
     ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
     webPreferences: {
       preload: resolvePreloadPath(),
@@ -58,12 +71,35 @@ function createMainWindow(): BrowserWindow {
     },
   });
 
+  configureWindowChrome(window);
+
   window.webContents.on("preload-error", (_event, preloadPath, err) => {
     console.error("[desktop] preload failed:", preloadPath, err);
   });
 
+  window.webContents.on("did-fail-load", (_event, code, desc, url) => {
+    console.error("[desktop] renderer load failed:", code, desc, url);
+    if (!window.isDestroyed() && !window.isVisible()) {
+      window.show();
+    }
+  });
+
+  const showFallback = setTimeout(() => {
+    if (!window.isDestroyed() && !window.isVisible()) {
+      console.warn("[desktop] ready-to-show timeout — showing window anyway");
+      window.show();
+    }
+  }, 8000);
+
   window.once("ready-to-show", () => {
-    window.show();
+    clearTimeout(showFallback);
+    if (!window.isDestroyed()) {
+      window.show();
+    }
+  });
+
+  window.once("show", () => {
+    clearTimeout(showFallback);
   });
 
   setEventBusForwardTarget(() => {
@@ -87,14 +123,21 @@ async function bootstrapMainServices(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  await bootstrapMainServices();
+  installApplicationMenu();
   createMainWindow();
+  try {
+    await bootstrapMainServices();
+  } catch (error) {
+    console.error("[desktop] bootstrap failed:", error);
+  }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
+}).catch((error) => {
+  console.error("[desktop] startup failed:", error);
 });
 
 app.on("window-all-closed", () => {

@@ -13,7 +13,6 @@ import {
   CompactionConditionsView,
   DataManagementView,
   EventsConfigView,
-  GlobalTemplateView,
   ModelSamplingView,
   ProviderDetailView,
   ProviderFormView,
@@ -114,8 +113,6 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
         return <RegexRulesView nav={nav} />;
       case "regexRuleEditor":
         return <RegexRuleEditorView nav={nav} />;
-      case "globalTemplate":
-        return <GlobalTemplateView />;
       default:
         return null;
     }
