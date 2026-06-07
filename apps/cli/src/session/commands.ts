@@ -150,28 +150,6 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
   const group = positional[0];
   const rest = positional.slice(1);
 
-  if (group === "records") {
-    const sub = rest[0];
-    if (sub === "list") {
-      const batches = await deps.sessionFs.listBatches(sessionId);
-      for (const b of batches) {
-        console.log(`${b.id}\t${b.createdBy}\t${b.createdAtMs}`);
-      }
-      return;
-    }
-    if (sub === "rollback") {
-      const batchId = flags.get("batch");
-      if (typeof batchId !== "string") {
-        throw new Error(
-          "Usage: nm session vfs records rollback [--project <id>] [--session <id>] --batch <id>",
-        );
-      }
-      await deps.sessionFs.rollbackBatch(sessionId, projectId, batchId);
-      return;
-    }
-    throw new Error("Usage: nm session vfs records <list|rollback> ...");
-  }
-
   if (group === "snapshot") {
     const sub = rest[0];
     const file = flags.get("file");
@@ -234,7 +212,7 @@ async function runSessionVfs(deps: SessionDeps, args: readonly string[]): Promis
 
   if (group == null || !(group in SESSION_VFS_COMMANDS)) {
     throw new Error(
-      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...> | records ... | snapshot ...",
+      "Usage: nm session vfs <list|read|write|export-zip|import-zip|...> | snapshot ...",
     );
   }
 

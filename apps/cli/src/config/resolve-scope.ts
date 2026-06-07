@@ -50,7 +50,7 @@ export class CliScopeResolver {
     );
   }
 
-  /** Resolves both project and session scope (session vfs, records, snapshot). */
+  /** Resolves both project and session scope (session vfs, snapshot). */
   async resolveProjectSession(flags: ReadonlyMap<string, string | true>): Promise<{
     projectId: string;
     sessionId: string;
