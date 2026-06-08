@@ -25,7 +25,7 @@ describe("buildPromptLlmInput tool pairing", () => {
             {
               type: "tool_use",
               id: "call_1",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/a" },
             },
           ],

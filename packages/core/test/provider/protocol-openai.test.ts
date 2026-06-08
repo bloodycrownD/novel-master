@@ -56,7 +56,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
       system: "You are helpful",
       tools: [
         {
-          name: "vfs.read",
+          name: "read",
           description: "read file",
           inputSchema: { type: "object", properties: { path: { type: "string" } } },
         },
@@ -99,7 +99,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
         userContent: "hello",
         tools: [
           {
-            name: "vfs.write",
+            name: "write",
             description: "write file",
             inputSchema: { type: "object", properties: { path: { type: "string" } } },
           },
@@ -209,7 +209,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
               {
                 index: 0,
                 id: "call_1",
-                function: { name: "vfs.read", arguments: '{"path":' },
+                function: { name: "read", arguments: '{"path":' },
               },
             ],
           },
@@ -251,7 +251,7 @@ describe("OpenAiProtocolAdapter HTTP", () => {
       vendorModelId: "gpt-4o",
       userContent: "read file",
       stream: true,
-      tools: [{ name: "vfs.read", description: "read", inputSchema: {} }],
+      tools: [{ name: "read", description: "read", inputSchema: {} }],
       onStream: (ev) => {
         if (ev.type === "tool-use") {
           toolUses.push({ id: ev.id, name: ev.name, input: ev.input });
@@ -263,11 +263,11 @@ describe("OpenAiProtocolAdapter HTTP", () => {
     });
 
     assert.equal(toolUses.length, 1);
-    assert.equal(toolUses[0]!.name, "vfs.read");
+    assert.equal(toolUses[0]!.name, "read");
     assert.equal(toolUses[0]!.input.path, "/tmp/x");
     const toolBlock = result.blocks.find((b) => b.type === "tool_use");
     assert.ok(toolBlock && toolBlock.type === "tool_use");
-    assert.equal(toolBlock.name, "vfs.read");
+    assert.equal(toolBlock.name, "read");
     assert.equal((toolBlock as { input: Record<string, unknown> }).input.path, "/tmp/x");
     assert.ok(done);
   });

@@ -34,23 +34,27 @@ function redactHeaders(
     return {};
   }
   const out: Record<string, string> = {};
+  const redact = (key: string, value: string): string => {
+    const lower = key.toLowerCase();
+    if (lower === "authorization" || lower === "x-api-key") {
+      return "***";
+    }
+    return value;
+  };
   if (headers instanceof Headers) {
     headers.forEach((value, key) => {
-      out[key] =
-        key.toLowerCase() === "authorization" ? "Bearer ***" : value;
+      out[key] = redact(key, value);
     });
     return out;
   }
   if (Array.isArray(headers)) {
     for (const [key, value] of headers) {
-      out[key] =
-        key.toLowerCase() === "authorization" ? "Bearer ***" : value;
+      out[key] = redact(key, value);
     }
     return out;
   }
   for (const [key, value] of Object.entries(headers)) {
-    out[key] =
-      key.toLowerCase() === "authorization" ? "Bearer ***" : String(value);
+    out[key] = redact(key, String(value));
   }
   return out;
 }

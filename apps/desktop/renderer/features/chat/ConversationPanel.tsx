@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
-import type { AgentStepCommittedPayload } from "../../../shared/agent-event-types";
+import type {
+  AgentRunFailedPayload,
+  AgentStepCommittedPayload,
+} from "../../../shared/agent-event-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
 import {
   ipcAppUiGet,
@@ -104,12 +107,23 @@ export function ConversationPanel({
     refreshWorkspaceTrees();
   }, [reloadMessages, refreshWorkspaceTrees]);
 
+  const onRunFailed = useCallback(
+    (payload: AgentRunFailedPayload) => {
+      setRunning(false);
+      setStreamingText("");
+      showToast(payload.error);
+      void reloadMessages();
+    },
+    [reloadMessages],
+  );
+
   useAgentStream({
     sessionId,
     onTextDelta,
     onThinkingDelta: () => undefined,
     onStepCommitted,
     onRunFinished,
+    onRunFailed,
   });
 
   useEffect(() => {

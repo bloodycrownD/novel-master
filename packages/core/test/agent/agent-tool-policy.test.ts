@@ -38,14 +38,14 @@ describe("agent tool policy", () => {
   it("T2: allow list restricts LLM tools", () => {
     const def: AgentDefinition = {
       ...BASE_DEF,
-      tools: { allow: ["vfs.read", "vfs.grep"] },
+      tools: { allow: ["read", "grep"] },
     };
     const base = new ToolRegistry();
     registerVfsTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
-    assert.deepEqual(filtered.list().sort(), ["vfs.grep", "vfs.read"]);
+    assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
     assert.equal(toolsFromRegistry(filtered).length, 2);
-    assert.equal(filtered.get("vfs.write"), undefined);
+    assert.equal(filtered.get("write"), undefined);
   });
 
   it("T3: empty allow yields no tools", () => {
@@ -63,13 +63,13 @@ describe("agent tool policy", () => {
   it("T4: deny list removes named tools", () => {
     const def: AgentDefinition = {
       ...BASE_DEF,
-      tools: { deny: ["vfs.write"] },
+      tools: { deny: ["write"] },
     };
     const base = new ToolRegistry();
     registerVfsTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
-    assert.ok(!filtered.list().includes("vfs.write"));
-    assert.ok(filtered.list().includes("vfs.read"));
+    assert.ok(!filtered.list().includes("write"));
+    assert.ok(filtered.list().includes("read"));
     assert.equal(filtered.list().length, vfsRegistryNames().length - 1);
   });
 
@@ -77,12 +77,23 @@ describe("agent tool policy", () => {
     assert.throws(
       () =>
         validateAgentToolPolicy(
-          { allow: ["vfs.read"], deny: ["vfs.write"] },
+          { allow: ["read"], deny: ["write"] },
           registryNames,
         ),
       (e: unknown) =>
         e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
     );
+  });
+
+  it("accepts legacy vfs.* names in allow list", () => {
+    const def: AgentDefinition = {
+      ...BASE_DEF,
+      tools: { allow: ["vfs.read", "vfs.grep"] },
+    };
+    const base = new ToolRegistry();
+    registerVfsTools(base);
+    const filtered = resolveAgentToolRegistry(base, def);
+    assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
   });
 
   it("T6: unknown tool name fails validation", () => {
@@ -117,7 +128,7 @@ describe("agent tool policy", () => {
   it("A10: allow read-only rejects vfs.move with NOT_FOUND", async () => {
     const def: AgentDefinition = {
       ...BASE_DEF,
-      tools: { allow: ["vfs.read", "vfs.grep"] },
+      tools: { allow: ["read", "grep"] },
     };
     const base = new ToolRegistry();
     registerVfsTools(base);
@@ -125,7 +136,7 @@ describe("agent tool policy", () => {
     const runner = new ToolRunner(filtered);
 
     await assert.rejects(
-      () => runner.call("vfs.move", { from: "/a", to: "/b" }, {}),
+      () => runner.call("move", { from: "/a", to: "/b" }, {}),
       (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
     );
   });

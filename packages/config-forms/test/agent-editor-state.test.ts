@@ -9,22 +9,22 @@ import {
 } from "../src/agent/agent-editor-state.js";
 
 test("buildToolsPolicy returns undefined for default mode", () => {
-  assert.equal(buildToolsPolicy("default", "vfs.read"), undefined);
+  assert.equal(buildToolsPolicy("default", "read"), undefined);
 });
 
 test("buildToolsPolicy parses allow/deny lists", () => {
   assert.deepEqual(buildToolsPolicy("allow", "vfs.read, vfs.grep"), {
-    allow: ["vfs.read", "vfs.grep"],
+    allow: ["read", "grep"],
   });
-  assert.deepEqual(buildToolsPolicy("deny", "vfs.write"), {
-    deny: ["vfs.write"],
+  assert.deepEqual(buildToolsPolicy("deny", "write"), {
+    deny: ["write"],
   });
 });
 
 test("toolsFromDefinition round-trips policy modes", () => {
   assert.deepEqual(
-    toolsFromDefinition({ name: "a", prompts: [], tools: { allow: ["vfs.read"] } }),
-    { mode: "allow", listText: "vfs.read" },
+    toolsFromDefinition({ name: "a", prompts: [], tools: { allow: ["read"] } }),
+    { mode: "allow", listText: "read" },
   );
   assert.deepEqual(toolsFromDefinition({ name: "a", prompts: [] }), {
     mode: "default",

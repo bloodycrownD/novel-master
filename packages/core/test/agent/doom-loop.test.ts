@@ -14,7 +14,7 @@ describe("doom-loop", () => {
     const blocks = Array.from({ length: DOOM_LOOP_THRESHOLD }, (_, i) => ({
       type: "tool_use" as const,
       id: `id${i}`,
-      name: "vfs.read",
+      name: "read",
       input,
     }));
     assert.throws(
@@ -27,8 +27,8 @@ describe("doom-loop", () => {
     const input = { path: "/x" };
     assert.doesNotThrow(() =>
       assertNoDoomLoopInBlocks([
-        { type: "tool_use", id: "1", name: "vfs.read", input },
-        { type: "tool_use", id: "2", name: "vfs.read", input },
+        { type: "tool_use", id: "1", name: "read", input },
+        { type: "tool_use", id: "2", name: "read", input },
       ]),
     );
   });
@@ -36,19 +36,19 @@ describe("doom-loop", () => {
   it("allows three tool_use with different inputs", () => {
     assert.doesNotThrow(() =>
       assertNoDoomLoopInBlocks([
-        { type: "tool_use", id: "1", name: "vfs.read", input: { path: "/a" } },
-        { type: "tool_use", id: "2", name: "vfs.read", input: { path: "/b" } },
-        { type: "tool_use", id: "3", name: "vfs.read", input: { path: "/c" } },
+        { type: "tool_use", id: "1", name: "read", input: { path: "/a" } },
+        { type: "tool_use", id: "2", name: "read", input: { path: "/b" } },
+        { type: "tool_use", id: "3", name: "read", input: { path: "/c" } },
       ]),
     );
   });
 
   it(`throws DOOM_LOOP on cross-round A-B-A-B in last ${CROSS_ROUND_WINDOW}`, () => {
     const calls = [
-      { type: "tool_use" as const, id: "1", name: "vfs.read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "2", name: "vfs.list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "3", name: "vfs.read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "4", name: "vfs.list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "1", name: "read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "2", name: "list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "3", name: "read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "4", name: "list", input: { dir: "/" } },
     ];
     assert.throws(
       () => assertNoCrossRoundDoomLoop(calls),
@@ -59,10 +59,10 @@ describe("doom-loop", () => {
   it("allows non-alternating cross-round history", () => {
     assert.doesNotThrow(() =>
       assertNoCrossRoundDoomLoop([
-        { type: "tool_use", id: "1", name: "vfs.read", input: { path: "/a" } },
-        { type: "tool_use", id: "2", name: "vfs.list", input: { dir: "/" } },
-        { type: "tool_use", id: "3", name: "vfs.write", input: { path: "/a", content: "x" } },
-        { type: "tool_use", id: "4", name: "vfs.list", input: { dir: "/" } },
+        { type: "tool_use", id: "1", name: "read", input: { path: "/a" } },
+        { type: "tool_use", id: "2", name: "list", input: { dir: "/" } },
+        { type: "tool_use", id: "3", name: "write", input: { path: "/a", content: "x" } },
+        { type: "tool_use", id: "4", name: "list", input: { dir: "/" } },
       ]),
     );
   });
@@ -70,8 +70,8 @@ describe("doom-loop", () => {
   it("uses configured threshold for identical tool_use checks", () => {
     const input = { path: "/x" };
     const blocks = [
-      { type: "tool_use" as const, id: "1", name: "vfs.read", input },
-      { type: "tool_use" as const, id: "2", name: "vfs.read", input },
+      { type: "tool_use" as const, id: "1", name: "read", input },
+      { type: "tool_use" as const, id: "2", name: "read", input },
     ];
     assert.throws(
       () => assertNoDoomLoopInBlocks(blocks, { threshold: 2 }),
@@ -81,12 +81,12 @@ describe("doom-loop", () => {
 
   it("uses configured cross-round window", () => {
     const calls = [
-      { type: "tool_use" as const, id: "1", name: "vfs.read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "2", name: "vfs.list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "3", name: "vfs.read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "4", name: "vfs.list", input: { dir: "/" } },
-      { type: "tool_use" as const, id: "5", name: "vfs.read", input: { path: "/a" } },
-      { type: "tool_use" as const, id: "6", name: "vfs.list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "1", name: "read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "2", name: "list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "3", name: "read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "4", name: "list", input: { dir: "/" } },
+      { type: "tool_use" as const, id: "5", name: "read", input: { path: "/a" } },
+      { type: "tool_use" as const, id: "6", name: "list", input: { dir: "/" } },
     ];
     assert.throws(
       () => assertNoCrossRoundDoomLoop(calls, { crossRoundWindow: 6 }),

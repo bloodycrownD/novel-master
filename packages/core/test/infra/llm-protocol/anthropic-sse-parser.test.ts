@@ -23,7 +23,7 @@ describe("anthropic-sse-parser", () => {
         "",
         'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"think"}}',
         "",
-        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"vfs.read"}}',
+        'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"read"}}',
         "",
         'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"path\\":\\"/a\\"}"}}',
         "",

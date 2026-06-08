@@ -81,7 +81,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 {
                   type: "tool_use",
                   id: "t1",
-                  name: "vfs.list",
+                  name: "list",
                   input: { dir: "/" },
                 },
               ],
@@ -95,7 +95,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
                 {
                   type: "tool_use",
                   id: "t2",
-                  name: "vfs.list",
+                  name: "list",
                   input: { dir: "/" },
                 },
               ],
@@ -113,7 +113,7 @@ export function createAgentMockModelRequests(): ModelRequestService {
               {
                 type: "tool_use",
                 id: "w1",
-                name: "vfs.write",
+                name: "write",
                 input: { path: "/agent-out.txt", content: "vfs tool ok" },
               },
             ],
@@ -130,9 +130,9 @@ export function createAgentMockModelRequests(): ModelRequestService {
           return {
             assistantText: "",
             blocks: [
-              { type: "tool_use", id: "a", name: "vfs.read", input },
-              { type: "tool_use", id: "b", name: "vfs.read", input },
-              { type: "tool_use", id: "c", name: "vfs.read", input },
+              { type: "tool_use", id: "a", name: "read", input },
+              { type: "tool_use", id: "b", name: "read", input },
+              { type: "tool_use", id: "c", name: "read", input },
             ],
             raw: { mock: true },
           };

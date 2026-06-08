@@ -44,7 +44,7 @@ describe("ChatAgentSession", () => {
         {
           type: "tool_use",
           id: "tu1",
-          name: "vfs.read",
+          name: "read",
           input: { path: "/a.txt" },
         },
       ],

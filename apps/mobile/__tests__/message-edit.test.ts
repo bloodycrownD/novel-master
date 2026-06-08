@@ -35,7 +35,7 @@ describe('message-edit', () => {
       editableTextFromMessage(
         msg('assistant', [
           {type: 'text', text: 'x'},
-          {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
+          {type: 'tool_use', id: 't1', name: 'read', input: {}},
         ]),
       ),
     ).toBeNull();

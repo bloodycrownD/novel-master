@@ -27,17 +27,45 @@ import {
   finishAnthropicSse,
   finishAnthropicSsePartial,
 } from "../logic/anthropic-sse-parser.js";
+import {
+  anthropicToolsNeedWireEncoding,
+  createAnthropicToolNameWire,
+  type AnthropicToolNameWire,
+} from "../logic/anthropic-tool-names.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
 import { parseAnthropicUsage } from "../logic/usage-parser.js";
 
-function anthropicTools(tools: readonly LlmToolDefinition[]): unknown[] {
+function anthropicTools(
+  tools: readonly LlmToolDefinition[],
+  toolNames?: AnthropicToolNameWire,
+): unknown[] {
   return tools.map((t) => ({
-    name: t.name,
+    name: toolNames?.toWire(t.name) ?? t.name,
     description: t.description,
     input_schema: t.inputSchema,
   }));
+}
+
+function resolveAnthropicToolNameWire(
+  req: LlmChatRequest,
+): AnthropicToolNameWire | undefined {
+  const names = new Set<string>();
+  for (const tool of req.tools ?? []) {
+    names.add(tool.name);
+  }
+  for (const message of req.history ?? []) {
+    for (const block of message.content.blocks) {
+      if (block.type === "tool_use") {
+        names.add(block.name);
+      }
+    }
+  }
+  if (names.size === 0 || !anthropicToolsNeedWireEncoding([...names])) {
+    return undefined;
+  }
+  return createAnthropicToolNameWire([...names]);
 }
 
 export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
@@ -73,29 +101,36 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     return this.chatNonStream(req);
   }
 
-  private buildMessages(req: LlmChatRequest) {
+  private buildMessages(req: LlmChatRequest, toolNames?: AnthropicToolNameWire) {
     return req.history != null && req.history.length > 0
-      ? chatMessagesToAnthropic(req.history)
+      ? chatMessagesToAnthropic(req.history, toolNames)
       : [
           {
             role: "user",
-            content: blocksToAnthropicContent(textBlocks(req.userContent).blocks),
+            content: blocksToAnthropicContent(
+              textBlocks(req.userContent).blocks,
+              toolNames,
+            ),
           },
         ];
   }
 
-  private buildBody(req: LlmChatRequest, stream: boolean): Record<string, unknown> {
+  private buildBody(
+    req: LlmChatRequest,
+    stream: boolean,
+    toolNames?: AnthropicToolNameWire,
+  ): Record<string, unknown> {
     const body: Record<string, unknown> = {
       model: req.vendorModelId,
       max_tokens: 4096,
-      messages: this.buildMessages(req),
+      messages: this.buildMessages(req, toolNames),
       stream,
     };
     if (req.system != null && req.system !== "") {
       body.system = req.system;
     }
     if (req.tools != null && req.tools.length > 0) {
-      body.tools = anthropicTools(req.tools);
+      body.tools = anthropicTools(req.tools, toolNames);
     }
     if (req.sampling?.protocol === "anthropic") {
       const s = req.sampling.anthropic;
@@ -108,6 +143,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
   }
 
   private async chatNonStream(req: LlmChatRequest): Promise<LlmChatResult> {
+    const toolNames = resolveAnthropicToolNameWire(req);
     const url = joinUrl(req.baseUrl, "/v1/messages");
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",
@@ -117,17 +153,18 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
         "Content-Type": "application/json",
         ...req.extraHeaders,
       },
-      body: JSON.stringify(this.buildBody(req, false)),
+      body: JSON.stringify(this.buildBody(req, false, toolNames)),
       signal: req.signal,
     });
     const record = raw as { content?: unknown[] };
-    const blocks = anthropicContentToBlocks(record.content ?? []);
+    const blocks = anthropicContentToBlocks(record.content ?? [], toolNames);
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseAnthropicUsage(raw);
     return { assistantText, blocks, raw, usage };
   }
 
   private async chatStream(req: LlmChatRequest): Promise<LlmChatResult> {
+    const toolNames = resolveAnthropicToolNameWire(req);
     const url = joinUrl(req.baseUrl, "/v1/messages");
     const state = createAnthropicSseParserState();
 
@@ -142,7 +179,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
             "Content-Type": "application/json",
             ...req.extraHeaders,
           },
-          body: JSON.stringify(this.buildBody(req, true)),
+          body: JSON.stringify(this.buildBody(req, true, toolNames)),
           signal: req.signal,
         },
         (chunk) => feedAnthropicSseChunk(state, chunk, req.onStream),
@@ -157,8 +194,8 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
 
     const aborted = req.signal?.aborted === true;
     const { blocks, streamRaw } = aborted
-      ? finishAnthropicSsePartial(state, req.onStream)
-      : finishAnthropicSse(state, req.onStream);
+      ? finishAnthropicSsePartial(state, req.onStream, toolNames)
+      : finishAnthropicSse(state, req.onStream, toolNames);
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseAnthropicUsage(streamRaw);
     const result: LlmChatResult = {

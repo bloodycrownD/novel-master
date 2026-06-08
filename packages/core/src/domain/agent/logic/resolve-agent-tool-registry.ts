@@ -4,6 +4,7 @@
  * @module domain/agent/logic/resolve-agent-tool-registry
  */
 
+import { normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { AgentDefinition } from "../model/agent-definition.js";
 
@@ -16,10 +17,10 @@ function allowedToolNames(
     return allNames;
   }
   if (policy.allow != null) {
-    return policy.allow;
+    return policy.allow.map(normalizeAgentToolPolicyName);
   }
   if (policy.deny != null && policy.deny.length > 0) {
-    const denied = new Set(policy.deny);
+    const denied = new Set(policy.deny.map(normalizeAgentToolPolicyName));
     return allNames.filter((name) => !denied.has(name));
   }
   return allNames;

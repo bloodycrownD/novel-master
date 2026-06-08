@@ -31,7 +31,7 @@ export function buildTranscriptBootScript(): string {
   var SCROLL_TOP_LOAD_OLDER = 24;
   var SCHEMA_V = 2;
   var BRIDGE_V = 1;
-  var VFS_FILE_TOOLS = { 'vfs.read': 1, 'vfs.write': 1, 'vfs.replace': 1 };
+  var VFS_FILE_TOOLS = { read: 1, write: 1, replace: 1 };
   var state = {
     ready: false,
     nearBottom: true,
@@ -142,6 +142,7 @@ export function buildTranscriptBootScript(): string {
   ${DECODE_LITERAL_HTML_ENTITIES_BOOT}
 
   function vfsToolFilePath(name, input) {
+    if (name.indexOf('vfs.') === 0) name = name.slice(4);
     if (!VFS_FILE_TOOLS[name]) return null;
     var path = input && input.path;
     if (typeof path === 'string' && path.charAt(0) === '/') return path;
@@ -149,10 +150,8 @@ export function buildTranscriptBootScript(): string {
   }
 
   function summarizeToolInput(name, input) {
-    if (name.indexOf('vfs.') === 0) {
-      var path = input && input.path;
-      if (typeof path === 'string') return path;
-    }
+    var path = input && (input.path || input.dir || input.from);
+    if (typeof path === 'string') return path;
     var keys = input ? Object.keys(input) : [];
     if (keys.length === 0) return '';
     try {

@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import {
-  isMutatingVfsToolName,
-  MUTATING_VFS_TOOL_NAMES,
+  isMutatingFileToolName,
+  MUTATING_FILE_TOOL_NAMES,
   registerVfsTools,
   type VfsToolContext,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
@@ -21,10 +21,9 @@ function toolCtx(
   return { vfs, projectId, sessionId };
 }
 
-
 novelMasterTestFixture();
 
-describe("Builtin vfs.* tools (integration)", () => {
+describe("Builtin file tools (integration)", () => {
   it("write/replace/read flow via revision-aware vfs", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
@@ -37,21 +36,21 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     const written = await runner.call<{ version: number }>(
-      "vfs.write",
+      "write",
       { path: "/t.txt", content: "hello world" },
       baseCtx,
     );
     assert.equal(written.version, 1);
 
     const replaced = await runner.call<{ version: number; replacements: number }>(
-      "vfs.replace",
+      "replace",
       { path: "/t.txt", oldString: "world", newString: "there" },
       baseCtx,
     );
     assert.equal(replaced.replacements, 1);
 
     const read = await runner.call<{ content: string; version: number }>(
-      "vfs.read",
+      "read",
       { path: "/t.txt" },
       baseCtx,
     );
@@ -70,9 +69,9 @@ describe("Builtin vfs.* tools (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("vfs.write", { path: "/t.txt", content: "v1" }, baseCtx);
+    await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx);
     const second = await runner.call<{ version: number }>(
-      "vfs.write",
+      "write",
       {
         path: "/t.txt",
         content: "v2",
@@ -85,7 +84,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     await assert.rejects(
       () =>
         runner.call(
-          "vfs.write",
+          "write",
           {
             path: "/t.txt",
             content: "stale",
@@ -97,7 +96,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     );
 
     const unchecked = await runner.call<{ version: number }>(
-      "vfs.write",
+      "write",
       { path: "/t.txt", content: "v3", options: { versionCheck: false } },
       baseCtx,
     );
@@ -118,17 +117,17 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     const listed = await runner.call<Array<{ path: string; kind: string }>>(
-      "vfs.list",
+      "list",
       { dir: "/docs" },
       baseCtx,
     );
     const paths = listed.map((e) => e.path).sort();
     assert.deepEqual(paths, ["/docs/a.md", "/docs/b.txt"].sort());
 
-    const md = await runner.call<string[]>("vfs.glob", { pattern: "**/*.md" }, baseCtx);
+    const md = await runner.call<string[]>("glob", { pattern: "**/*.md" }, baseCtx);
     assert.deepEqual(md, ["/docs/a.md"]);
 
-    const hits = await runner.call<any[]>("vfs.grep", { pattern: "#" }, baseCtx);
+    const hits = await runner.call<any[]>("grep", { pattern: "#" }, baseCtx);
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.path, "/docs/a.md");
     assert.equal(hits[0]!.line, 1);
@@ -145,9 +144,9 @@ describe("Builtin vfs.* tools (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("vfs.mkdir", { path: "/agent-dir" }, baseCtx);
+    await runner.call("mkdir", { path: "/agent-dir" }, baseCtx);
     const listed = await runner.call<Array<{ path: string; kind: string }>>(
-      "vfs.list",
+      "list",
       { dir: "/" },
       baseCtx,
     );
@@ -161,16 +160,16 @@ describe("Builtin vfs.* tools (integration)", () => {
     registerVfsTools(registry);
     assert.equal(registry.list().length, 10);
     assert.deepEqual(registry.list().sort(), [
-      "vfs.copy",
-      "vfs.delete",
-      "vfs.glob",
-      "vfs.grep",
-      "vfs.list",
-      "vfs.mkdir",
-      "vfs.move",
-      "vfs.read",
-      "vfs.replace",
-      "vfs.write",
+      "copy",
+      "delete",
+      "glob",
+      "grep",
+      "list",
+      "mkdir",
+      "move",
+      "read",
+      "replace",
+      "write",
     ]);
   });
 
@@ -187,13 +186,13 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     const result = await runner.call<{ ok: true }>(
-      "vfs.delete",
+      "delete",
       { path: "/a.txt" },
       baseCtx,
     );
     assert.deepEqual(result, { ok: true });
     await assert.rejects(
-      () => runner.call("vfs.read", { path: "/a.txt" }, baseCtx),
+      () => runner.call("read", { path: "/a.txt" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
   });
@@ -212,7 +211,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await assert.rejects(
-      () => runner.call("vfs.delete", { path: "/dir" }, baseCtx),
+      () => runner.call("delete", { path: "/dir" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
     assert.equal((await vfs.read("/dir/a.txt")).content, "stay");
@@ -232,7 +231,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call(
-      "vfs.delete",
+      "delete",
       { path: "/dir", options: { recursive: true } },
       baseCtx,
     );
@@ -255,7 +254,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call(
-      "vfs.move",
+      "move",
       { from: "/old.md", to: "/new.md" },
       baseCtx,
     );
@@ -281,7 +280,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
-    await runner.call("vfs.move", { from: "/src", to: "/dst" }, baseCtx);
+    await runner.call("move", { from: "/src", to: "/dst" }, baseCtx);
     assert.equal((await vfs.read("/dst/a.md")).content, "a");
     assert.equal((await vfs.read("/dst/sub/b.md")).content, "b");
     await assert.rejects(
@@ -303,7 +302,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call(
-      "vfs.copy",
+      "copy",
       { from: "/src/x.md", to: "/dst/x.md" },
       baseCtx,
     );
@@ -325,7 +324,7 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await runner.call(
-      "vfs.copy",
+      "copy",
       { from: "/src", to: "/dst", options: { recursive: true } },
       baseCtx,
     );
@@ -347,25 +346,25 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await assert.rejects(
-      () => runner.call("vfs.copy", { from: "/src", to: "/dst" }, baseCtx),
+      () => runner.call("copy", { from: "/src", to: "/dst" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
   });
 
   it("mutating vfs tool names include write/replace/delete/mkdir/move/copy only", () => {
-    assert.deepEqual([...MUTATING_VFS_TOOL_NAMES].sort(), [
-      "vfs.copy",
-      "vfs.delete",
-      "vfs.mkdir",
-      "vfs.move",
-      "vfs.replace",
-      "vfs.write",
+    assert.deepEqual([...MUTATING_FILE_TOOL_NAMES].sort(), [
+      "copy",
+      "delete",
+      "mkdir",
+      "move",
+      "replace",
+      "write",
     ]);
-    assert.equal(isMutatingVfsToolName("vfs.read"), false);
-    assert.equal(isMutatingVfsToolName("vfs.list"), false);
-    assert.equal(isMutatingVfsToolName("vfs.glob"), false);
-    assert.equal(isMutatingVfsToolName("vfs.grep"), false);
-    assert.equal(isMutatingVfsToolName("vfs.move"), true);
+    assert.equal(isMutatingFileToolName("read"), false);
+    assert.equal(isMutatingFileToolName("list"), false);
+    assert.equal(isMutatingFileToolName("glob"), false);
+    assert.equal(isMutatingFileToolName("grep"), false);
+    assert.equal(isMutatingFileToolName("move"), true);
   });
 
   it("wraps VfsError as FAILED and preserves cause", async () => {
@@ -380,11 +379,11 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await assert.rejects(
-      () => runner.call("vfs.read", { path: "/missing.txt" }, baseCtx),
+      () => runner.call("read", { path: "/missing.txt" }, baseCtx),
       (e: unknown) => {
         assert.ok(e instanceof ToolError);
         assert.equal(e.code, "FAILED");
-        assert.equal(e.toolName, "vfs.read");
+        assert.equal(e.toolName, "read");
         assert.ok(isVfsError(e.cause, "NOT_FOUND"));
         return true;
       },
@@ -403,11 +402,11 @@ describe("Builtin vfs.* tools (integration)", () => {
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
     await assert.rejects(
-      () => runner.call("vfs.delete", { path: "/missing.txt" }, baseCtx),
+      () => runner.call("delete", { path: "/missing.txt" }, baseCtx),
       (e: unknown) => {
         assert.ok(e instanceof ToolError);
         assert.equal(e.code, "FAILED");
-        assert.equal(e.toolName, "vfs.delete");
+        assert.equal(e.toolName, "delete");
         assert.ok(isVfsError(e.cause, "NOT_FOUND"));
         return true;
       },

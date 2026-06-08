@@ -23,7 +23,7 @@ describe("buildStreamPartialBlocks", () => {
     const blocks = buildStreamPartialBlocks({
       text: "hi",
       thinking: "",
-      toolUses: [{ id: "1", name: "vfs.read", input: { path: "/a" } }],
+      toolUses: [{ id: "1", name: "read", input: { path: "/a" } }],
     });
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]?.type, "text");

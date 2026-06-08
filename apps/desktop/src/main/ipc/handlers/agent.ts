@@ -29,6 +29,7 @@ import {
   isDesktopAgentActive,
   setDesktopAgentActive,
 } from "../../runtime/agent-activity.js";
+import { desktopLogError } from "../../log/desktop-log.js";
 
 function formatError(err: unknown): { code: string; message: string } {
   if (err instanceof AgentRunError) {
@@ -206,9 +207,14 @@ export async function handleAgentRun(
       },
     )
       .catch((err) => {
-        if (process.env.NODE_ENV !== "production") {
-          console.error("[agent/run] failed", err);
-        }
+        desktopLogError("agent/run IPC background task failed", {
+          sessionId: req.sessionId,
+          projectId: req.projectId,
+          err:
+            err instanceof Error
+              ? { name: err.name, message: err.message, stack: err.stack }
+              : String(err),
+        });
       })
       .finally(() => {
         activeRuns.delete(req.sessionId);

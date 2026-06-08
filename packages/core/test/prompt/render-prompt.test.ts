@@ -188,7 +188,7 @@ describe("formatPromptLlmInputForCli", () => {
             {
               type: "tool_use",
               id: "tool-1",
-              name: "vfs.write",
+              name: "write",
               input: { path: "/love_message.txt", content: "hi" },
             },
           ],

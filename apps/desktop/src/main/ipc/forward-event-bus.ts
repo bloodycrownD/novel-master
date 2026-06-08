@@ -4,6 +4,7 @@
  */
 import type { WebContents } from "electron";
 import {
+  EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STEP_COMMITTED,
@@ -11,7 +12,9 @@ import {
   EVENT_AGENT_STREAM_THINKING_DELTA,
   type SimpleEventBus,
 } from "@novel-master/core";
+import type { AgentRunFailedPayload } from "../../../shared/agent-event-types.js";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
+import { desktopLogError } from "../log/desktop-log.js";
 
 let getTargetWebContents: (() => WebContents | undefined) | undefined;
 const subscriptions: Array<{ unsubscribe: () => void }> = [];
@@ -22,6 +25,7 @@ const FORWARDED_EVENTS = [
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_FAILED,
 ] as const;
 
 /** Registers how to resolve the renderer webContents for event forwarding. */
@@ -32,6 +36,14 @@ export function setEventBusForwardTarget(
 }
 
 function forwardEvent(type: string, payload: unknown): void {
+  if (type === EVENT_AGENT_RUN_FAILED) {
+    const failed = payload as AgentRunFailedPayload;
+    desktopLogError("agent run failed (forwarding to renderer)", {
+      sessionId: failed.sessionId,
+      projectId: failed.projectId,
+      error: failed.error,
+    });
+  }
   const envelope: AgentStreamEventPayload = { type, payload };
   getTargetWebContents?.()?.send(IPC_CHANNELS.AGENT_STREAM, envelope);
 }

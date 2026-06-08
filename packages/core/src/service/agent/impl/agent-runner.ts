@@ -22,7 +22,7 @@ import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/age
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import {
-  isMutatingVfsToolName,
+  isMutatingFileToolName,
   type VfsToolContext,
 } from "@/domain/tool/builtin/vfs-tools.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -287,7 +287,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const hadMutatingTools = toolUses.some((tu) =>
-          isMutatingVfsToolName(tu.name),
+          isMutatingFileToolName(tu.name),
         );
         const parallelOutcomes = await this.toolRunner.runParallel(
           toolUses.map((tu) => ({ name: tu.name, input: tu.input })),

@@ -92,7 +92,7 @@ describe("openai-sse-parser", () => {
               {
                 index: 0,
                 id: "call_1",
-                function: { name: "vfs.read", arguments: '{"path":' },
+                function: { name: "read", arguments: '{"path":' },
               },
             ],
           },
@@ -123,7 +123,7 @@ describe("openai-sse-parser", () => {
     });
 
     assert.equal(toolUses.length, 1);
-    assert.equal(toolUses[0]!.name, "vfs.read");
+    assert.equal(toolUses[0]!.name, "read");
     assert.equal(toolUses[0]!.input.path, "/tmp/x");
     const toolBlock = blocks.find((b) => b.type === "tool_use");
     assert.ok(toolBlock && toolBlock.type === "tool_use");

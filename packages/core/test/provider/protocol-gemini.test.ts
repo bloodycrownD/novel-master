@@ -66,7 +66,7 @@ describe("GeminiProtocolAdapter HTTP", () => {
               content: {
                 parts: [
                   {
-                    functionCall: { name: "vfs.read", args: { path: "/a" } },
+                    functionCall: { name: "read", args: { path: "/a" } },
                   },
                 ],
               },
@@ -85,7 +85,7 @@ describe("GeminiProtocolAdapter HTTP", () => {
       userContent: "hi",
       tools: [
         {
-          name: "vfs.read",
+          name: "read",
           description: "read",
           inputSchema: { type: "object", properties: { path: { type: "string" } } },
         },

@@ -36,7 +36,7 @@ describe('buildMessageActionItems', () => {
   it('omits edit when message has tool_use blocks', () => {
     const actions = buildMessageActionItems(
       msg(false, [
-        {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
+        {type: 'tool_use', id: 't1', name: 'read', input: {}},
       ]),
     ).map(i => i.action);
     expect(actions).toEqual(['hide', 'copy', 'fork', 'rollback', 'delete']);

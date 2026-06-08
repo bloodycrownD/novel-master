@@ -164,7 +164,7 @@ describe("AgentRunner", () => {
             {
               type: "tool_use",
               id: "tu1",
-              name: "vfs.list",
+              name: "list",
               input: { dir: "/" },
             },
           ],
@@ -210,7 +210,7 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "tu1",
-            name: "vfs.write",
+            name: "write",
             input: { path: "/out.txt", content: "done" },
           },
         ],
@@ -257,7 +257,7 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "t1",
-            name: "vfs.list",
+            name: "list",
             input: { dir: "/" },
           },
         ],
@@ -269,7 +269,7 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "t2",
-            name: "vfs.list",
+            name: "list",
             input: { dir: "/" },
           },
         ],
@@ -352,7 +352,7 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "tu1",
-            name: "vfs.list",
+            name: "list",
             input: { dir: "/" },
           },
         ],
@@ -391,9 +391,9 @@ describe("AgentRunner", () => {
       {
         assistantText: "",
         blocks: [
-          { type: "tool_use", id: "a", name: "vfs.read", input: sameInput },
-          { type: "tool_use", id: "b", name: "vfs.read", input: sameInput },
-          { type: "tool_use", id: "c", name: "vfs.read", input: sameInput },
+          { type: "tool_use", id: "a", name: "read", input: sameInput },
+          { type: "tool_use", id: "b", name: "read", input: sameInput },
+          { type: "tool_use", id: "c", name: "read", input: sameInput },
         ],
         raw: {},
       },
@@ -437,19 +437,19 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "w1",
-            name: "vfs.write",
+            name: "write",
             input: { path: "/a.md", content: "A" },
           },
           {
             type: "tool_use",
             id: "w2",
-            name: "vfs.write",
+            name: "write",
             input: { path: "/b.md", content: "B" },
           },
           {
             type: "tool_use",
             id: "r1",
-            name: "vfs.read",
+            name: "read",
             input: { path: "/a.md" },
           },
         ],
@@ -523,7 +523,7 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "l1",
-            name: "vfs.list",
+            name: "list",
             input: { dir: "/" },
           },
         ],
@@ -571,22 +571,22 @@ describe("AgentRunner", () => {
     const model = createMockModel([
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "a1", name: "vfs.read", input: { path: "/x" } }],
+        blocks: [{ type: "tool_use", id: "a1", name: "read", input: { path: "/x" } }],
         raw: {},
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b1", name: "vfs.list", input: { dir: "/" } }],
+        blocks: [{ type: "tool_use", id: "b1", name: "list", input: { dir: "/" } }],
         raw: {},
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "a2", name: "vfs.read", input: { path: "/x" } }],
+        blocks: [{ type: "tool_use", id: "a2", name: "read", input: { path: "/x" } }],
         raw: {},
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b2", name: "vfs.list", input: { dir: "/" } }],
+        blocks: [{ type: "tool_use", id: "b2", name: "list", input: { dir: "/" } }],
         raw: {},
       },
     ]);

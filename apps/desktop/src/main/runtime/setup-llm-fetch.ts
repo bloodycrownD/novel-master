@@ -1,7 +1,11 @@
 /**
- * Dev-only LLM fetch logging (must run before first chat request in main).
+ * LLM fetch wiring for main process (must run before first chat request).
+ *
+ * Unpackaged dev enables {@link createLoggingFetch} automatically; production uses
+ * default adapters unless `NM_DEBUG_LLM_FETCH=1`.
  */
 import { configureLlmFetch, createLoggingFetch } from "@novel-master/core";
+import { desktopLog, isDesktopLlmDebug } from "../log/desktop-log.js";
 
 let configured = false;
 
@@ -10,8 +14,16 @@ export function ensureLlmFetchConfigured(): void {
   if (configured) {
     return;
   }
-  if (process.env.NODE_ENV !== "production") {
+  const debugLlm =
+    process.env.NM_DEBUG_LLM_FETCH === "1" || isDesktopLlmDebug();
+  if (debugLlm) {
+    (globalThis as { __NM_DEBUG_LLM_FETCH__?: boolean }).__NM_DEBUG_LLM_FETCH__ =
+      true;
     configureLlmFetch(createLoggingFetch(globalThis.fetch));
+    desktopLog("LLM fetch debug enabled", {
+      nmDebugLlmFetch: process.env.NM_DEBUG_LLM_FETCH === "1",
+      nmDebugDesktop: process.env.NM_DEBUG_DESKTOP === "1",
+    });
   }
   configured = true;
 }

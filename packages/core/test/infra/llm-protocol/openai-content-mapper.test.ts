@@ -9,7 +9,7 @@ import {
 } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
 
 describe("openai-content-mapper", () => {
-  it("O1: text + tool_use â†?assistant message with tool_calls", () => {
+  it("O1: text + tool_use ï¿½?assistant message with tool_calls", () => {
     const messages: ChatMessage[] = [
       {
         id: "a1",
@@ -22,7 +22,7 @@ describe("openai-content-mapper", () => {
             {
               type: "tool_use",
               id: "call_abc",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/tmp/a.txt" },
             },
           ],
@@ -46,13 +46,13 @@ describe("openai-content-mapper", () => {
     assert.equal(toolCalls.length, 1);
     assert.equal(toolCalls[0]!.id, "call_abc");
     assert.equal(toolCalls[0]!.type, "function");
-    assert.equal(toolCalls[0]!.function.name, "vfs.read");
+    assert.equal(toolCalls[0]!.function.name, "read");
     assert.deepEqual(JSON.parse(toolCalls[0]!.function.arguments), {
       path: "/tmp/a.txt",
     });
   });
 
-  it("O2: OpenAI tool_calls response â†?tool_use blocks", () => {
+  it("O2: OpenAI tool_calls response ï¿½?tool_use blocks", () => {
     const blocks = openAiChoiceToBlocks({
       role: "assistant",
       content: null,
@@ -61,7 +61,7 @@ describe("openai-content-mapper", () => {
           id: "call_xyz",
           type: "function",
           function: {
-            name: "vfs.write",
+            name: "write",
             arguments: '{"path":"/out.txt","content":"hi"}',
           },
         },
@@ -74,11 +74,11 @@ describe("openai-content-mapper", () => {
       return;
     }
     assert.equal(blocks[0].id, "call_xyz");
-    assert.equal(blocks[0].name, "vfs.write");
+    assert.equal(blocks[0].name, "write");
     assert.deepEqual(blocks[0].input, { path: "/out.txt", content: "hi" });
   });
 
-  it("O3: tool_result â†?role tool messages with tool_call_id", () => {
+  it("O3: tool_result ï¿½?role tool messages with tool_call_id", () => {
     const messages: ChatMessage[] = [
       {
         id: "u1",
@@ -108,7 +108,7 @@ describe("openai-content-mapper", () => {
     assert.equal(out[0]!.content, "file contents here");
   });
 
-  it("O6: image url block â†?vision image_url part", () => {
+  it("O6: image url block ï¿½?vision image_url part", () => {
     const content = blocksToOpenAiMessageContent([
       { type: "text", text: "describe this" },
       {
