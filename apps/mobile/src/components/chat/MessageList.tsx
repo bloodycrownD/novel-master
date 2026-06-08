@@ -340,10 +340,13 @@ export function MessageList({
       return null;
     }
     const colors = chatBubbleColors(tokens, false);
+    const bubbleFillWidth =
+      !trimmedBody && (trimmedThinking.length > 0 || tools.length > 0);
     return (
       <View
         style={[
           styles.bubble,
+          bubbleFillWidth && styles.bubbleFillWidth,
           {
             backgroundColor: colors.backgroundColor,
             opacity: hidden ? 0.55 : 1,
@@ -622,6 +625,10 @@ const styles = StyleSheet.create({
     padding: 12,
     borderRadius: 12,
     flexShrink: 1,
+  },
+  /** Thinking/tools-only assistant bubbles — avoid shrink-to-header width. */
+  bubbleFillWidth: {
+    width: '85%',
   },
 });
 
