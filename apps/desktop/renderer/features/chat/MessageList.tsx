@@ -31,7 +31,7 @@ function MessageBody({
 }) {
   if (richText) {
     return (
-      <div className="chat-message__markdown preview-markdown">
+      <div className="chat-message__markdown">
         <Markdown>{text}</Markdown>
       </div>
     );
@@ -131,7 +131,7 @@ export function MessageList({
           <div className="chat-message__body">
             <span className="chat-message__role">助手</span>
             {chatRichText ? (
-              <div className="chat-message__markdown preview-markdown">
+              <div className="chat-message__markdown">
                 <Markdown>{streamingText}</Markdown>
               </div>
             ) : (

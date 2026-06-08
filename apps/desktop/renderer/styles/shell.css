@@ -4125,7 +4125,141 @@ html[data-theme="dark"] .chat-message {
 .chat-message__markdown {
   margin: 0;
   font-size: inherit;
-  line-height: 1.5;
+  line-height: 1.55;
+  color: inherit;
+  word-break: break-word;
+}
+
+.chat-message__markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-message__markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-message__markdown h1,
+.chat-message__markdown h2,
+.chat-message__markdown h3,
+.chat-message__markdown h4,
+.chat-message__markdown h5,
+.chat-message__markdown h6 {
+  margin: 0.85em 0 0.35em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.chat-message__markdown h1 {
+  font-size: 1.35em;
+}
+
+.chat-message__markdown h2 {
+  font-size: 1.2em;
+}
+
+.chat-message__markdown h3 {
+  font-size: 1.1em;
+}
+
+.chat-message__markdown p {
+  margin: 0.5em 0;
+}
+
+.chat-message__markdown ul,
+.chat-message__markdown ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+.chat-message__markdown li + li {
+  margin-top: 0.2em;
+}
+
+.chat-message__markdown blockquote {
+  margin: 0.5em 0;
+  padding: 0.15em 0 0.15em 0.85em;
+  border-left: 3px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.chat-message__markdown code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.88em;
+  background: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+
+.chat-message__markdown pre {
+  margin: 0.5em 0;
+  padding: 10px;
+  overflow: auto;
+  background: var(--background);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+
+.chat-message__markdown pre code {
+  border: none;
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.chat-message__markdown a {
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.chat-message__markdown a:hover {
+  text-decoration: underline;
+}
+
+.chat-message__markdown table {
+  width: 100%;
+  margin: 0.5em 0;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.chat-message__markdown th,
+.chat-message__markdown td {
+  border: 1px solid var(--border-light);
+  padding: 4px 8px;
+  text-align: left;
+}
+
+.chat-message__markdown th {
+  background: var(--background);
+  font-weight: 600;
+}
+
+.chat-message__markdown hr {
+  margin: 0.75em 0;
+  border: none;
+  border-top: 1px solid var(--border-light);
+}
+
+.chat-message--user .chat-message__markdown code {
+  background: var(--surface);
+  border-color: var(--accent-user-border);
+}
+
+.chat-message--user .chat-message__markdown pre {
+  background: var(--surface);
+  border-color: var(--accent-user-border);
+}
+
+.chat-message--user .chat-message__markdown a {
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.chat-message--user .chat-message__markdown blockquote {
+  border-left-color: var(--accent-user-border);
 }
 
 .chat-message__thinking {
