@@ -10,15 +10,19 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
   const nestedList = selectors
     .map(s => `${s} ul ul, ${s} ol ol, ${s} ul ol, ${s} ol ul`)
     .join(', ');
+  const liAdjacent = selectors.map(s => `${s} li + li`).join(', ');
+  const liParagraph = selectors.map(s => `${s} li > p`).join(', ');
   return `
     ${group} { white-space: normal; overflow-wrap: anywhere; }
     ${child('p')} { margin: 0.35em 0; }
     ${child('p')}:first-child { margin-top: 0; }
     ${child('p')}:last-child { margin-bottom: 0; }
     /* Global reset strips list padding; indent so outside markers stay inside the content area. */
-    ${child('ol')}, ${child('ul')} { margin: 0.35em 0; padding-left: 1.35em; }
-    ${nestedList} { margin: 0.15em 0; padding-left: 1.1em; }
+    ${child('ol')}, ${child('ul')} { margin: 0.35em 0; padding-left: 1.5em; list-style-position: outside; }
+    ${nestedList} { margin-top: 0.2em; margin-bottom: 0; padding-left: 1.25em; }
     ${child('li')} { margin: 0.15em 0; }
+    ${liAdjacent} { margin-top: 0.25em; }
+    ${liParagraph} { margin: 0; }
     ${child('strong')}, ${child('b')} { font-weight: 600; }
     ${child('hr')} {
       border: none;
@@ -42,6 +46,7 @@ export function buildRichContentCssRules(selectors: readonly string[]): string {
 /** Chat transcript bubble + thinking body rich rules. */
 export const CHAT_TRANSCRIPT_RICH_CSS = buildRichContentCssRules([
   '.bubble.rich',
+  '.bubble-body.rich',
   '.thinking-body.rich',
 ]);
 

@@ -6,8 +6,11 @@ import {
 
 describe('rich-content-styles', () => {
   it('includes list padding for shared rich rules', () => {
-    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('padding-left: 1.35em');
-    expect(RICH_DOCUMENT_RICH_CSS).toContain('padding-left: 1.35em');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('.bubble-body.rich');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('padding-left: 1.5em');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('list-style-position: outside');
+    expect(RICH_DOCUMENT_RICH_CSS).toContain('padding-left: 1.5em');
+    expect(RICH_DOCUMENT_RICH_CSS).toContain('list-style-position: outside');
   });
 
   it('differentiates heading sizes and nested list spacing', () => {
