@@ -28,7 +28,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .thinking-body { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
     .thinking-body-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
     .bubble-body { font-size: 15px; line-height: 1.4; color: inherit; white-space: pre-wrap; word-break: break-word; }
+    .bubble .tool-group-section { margin: 0; padding: 0; border: none; background: transparent; max-width: none; }
+    .tool-group-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+    .tool-group-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); }
+    .tool-group-chevron { font-size: 10px; color: var(--text-secondary, #888); }
+    .tool-group-items { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+    .tool-group-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
     .tool-card { max-width: 92%; width: 100%; margin: 2px 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); }
+    .tool-group-item { margin: 0; }
     .tool-card.tappable { border-color: var(--primary, #007aff); cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .tool-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
