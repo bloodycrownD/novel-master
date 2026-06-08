@@ -38,7 +38,7 @@
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
     "test": "tsx --experimental-test-module-mocks --tsconfig tsconfig.test.json --test test/**/*.test.ts !test/**/performance.test.ts",
     "test:fast": "tsx --experimental-test-module-mocks --tsconfig tsconfig.test.json --test",
-    "test:msg": "npm run test:fast -- test/message-checkpoint/*.test.ts",
+    "test:msg": "npm run test:fast -- test/message-checkpoint/!(performance).test.ts",
     "test:vfs": "npm run test:fast -- test/vfs/*.test.ts",
     "test:perf": "npm run test:fast -- test/message-checkpoint/performance.test.ts"
   },
