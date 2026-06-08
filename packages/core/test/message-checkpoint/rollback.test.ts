@@ -111,6 +111,36 @@ describe("MessageRollbackService (revision model)", () => {
     await ctx.conn.close();
   });
 
+  it("R10: rollback nested file when parent directory still exists", async () => {
+    const ctx = await openNovelMasterTestConnection();
+    const project = await ctx.projects.create("P");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "nested" }],
+    });
+    await svfs.write("/dir/file.md", "v1", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("more"));
+    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "update" }],
+    });
+    await svfs.write("/dir/file.md", "v2", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+
+    assert.equal((await svfs.read("/dir/file.md")).content, "v1");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[1]!.id, assistant1.id);
+
+    await ctx.conn.close();
+  });
+
   it("R9: anchor without checkpoint uses prior checkpoint tree", async () => {
     const ctx = await openNovelMasterTestConnection();
     const project = await ctx.projects.create("P");

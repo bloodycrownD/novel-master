@@ -4,7 +4,12 @@
  * @module domain/vfs/logic/vfs-move
  */
 
-import { VfsError, vfsNotFound } from "@/errors/vfs-errors.js";
+import {
+  VfsError,
+  isVfsError,
+  vfsNotADirectory,
+  vfsNotFound,
+} from "@/errors/vfs-errors.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
 
 /** Strip trailing slash except for root `/`. */
@@ -31,6 +36,39 @@ export function remapPathUnderDir(
     return path;
   }
   return `${normalizedNew}${path.slice(normalizedOld.length)}`;
+}
+
+/**
+ * mkdir that treats an existing directory as success; fails when path is a file.
+ *
+ * @remarks
+ * On ALREADY_EXISTS, probes with read: file content → NOT_A_DIRECTORY;
+ * IS_DIRECTORY → idempotent success.
+ */
+export async function mkdirIgnoreExistingDirectory(
+  vfs: VfsService,
+  path: string,
+): Promise<void> {
+  try {
+    await vfs.mkdir(path);
+    return;
+  } catch (error) {
+    if (!(error instanceof VfsError && error.code === "ALREADY_EXISTS")) {
+      throw error;
+    }
+  }
+  try {
+    await vfs.read(path);
+    throw vfsNotADirectory(path);
+  } catch (readError) {
+    if (isVfsError(readError, "IS_DIRECTORY")) {
+      return;
+    }
+    if (isVfsError(readError, "NOT_A_DIRECTORY")) {
+      throw readError;
+    }
+    throw readError;
+  }
 }
 
 /** mkdir that treats ALREADY_EXISTS as success (idempotent directory chain). */

@@ -114,6 +114,7 @@ export {
   remapPathUnderDir,
   normalizeDirPath,
   mkdirIgnoreExists,
+  mkdirIgnoreExistingDirectory,
 } from "./domain/vfs/logic/vfs-move.js";
 export { copyVfsPath } from "./domain/vfs/logic/vfs-copy.js";
 export type { CopyVfsPathOptions } from "./domain/vfs/logic/vfs-copy.js";

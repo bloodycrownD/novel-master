@@ -4,6 +4,7 @@
  * @module domain/message-checkpoint/logic/restore-path
  */
 
+import { mkdirIgnoreExistingDirectory } from "@/domain/vfs/logic/vfs-move.js";
 import { parentDir } from "@/domain/vfs/logic/parent-dir.js";
 import {
   toPhysicalPath,
@@ -30,7 +31,7 @@ export async function ensureDirectoryChain(
     current = parentDir(current);
   }
   for (const dir of dirs) {
-    await vfs.mkdir(dir);
+    await mkdirIgnoreExistingDirectory(vfs, dir);
   }
 }
 
