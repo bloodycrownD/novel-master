@@ -10,6 +10,15 @@ describe('rich-content-styles', () => {
     expect(RICH_DOCUMENT_RICH_CSS).toContain('padding-left: 1.35em');
   });
 
+  it('differentiates heading sizes and nested list spacing', () => {
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('font-size: 1.15em');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('font-size: 1.08em');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('.bubble.rich ul ul');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('font-weight: 600');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain('border-top: 1px solid');
+    expect(CHAT_TRANSCRIPT_RICH_CSS).toContain(':first-child { margin-top: 0; }');
+  });
+
   it('builds compound selectors for multiple roots', () => {
     const css = buildRichContentCssRules(['.a.rich', '.b.rich']);
     expect(css).toContain('.a.rich p, .b.rich p');

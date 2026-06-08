@@ -18,6 +18,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .row.user { align-items: flex-end; }
     .row.assistant, .row.stream { align-items: flex-start; }
     .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
+    .row.assistant .bubble.bubble--fill-width { width: 85%; box-sizing: border-box; }
     .row.user .bubble { background: var(--primary, #007aff); color: #fff; }
     .row.assistant .bubble, .row.stream .bubble { background: var(--surface, #f2f2f7); color: var(--text, #111); }
     .row.hidden .bubble { opacity: 0.45; }
@@ -35,12 +36,14 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-group-items { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
     .tool-group-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
     .tool-card { max-width: 92%; width: 100%; margin: 2px 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); }
-    .tool-group-item { margin: 0; }
+    .tool-group-item.tool-card { max-width: none; width: 100%; margin: 0; }
     .tool-card.tappable { border-color: var(--primary, #007aff); cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .tool-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tool-status { font-size: 12px; font-weight: 500; }
-    .tool-status.pending { color: var(--text-secondary, #888); }
+    .tool-status.pending { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary, #888); }
+    .tool-status-spinner { flex-shrink: 0; width: 12px; height: 12px; border: 2px solid var(--text-secondary, #888); border-top-color: var(--primary, #007aff); border-radius: 50%; animation: tool-status-spin 0.8s linear infinite; opacity: 0.85; }
+    @keyframes tool-status-spin { to { transform: rotate(360deg); } }
     .tool-status.success { color: var(--primary, #007aff); }
     .tool-status.error { color: #ff3b30; }
     .tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }

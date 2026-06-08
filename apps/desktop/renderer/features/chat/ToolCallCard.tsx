@@ -15,6 +15,8 @@ function statusLabel(status: ToolCallView["status"]): string {
       return "成功";
     case "error":
       return "失败";
+    case "pending":
+      return "执行中…";
     default:
       return "进行中";
   }
@@ -38,6 +40,9 @@ export function ToolCallCard({
       <div className="tool-call-card__header">
         <span className="tool-call-card__name">{tool.name}</span>
         <span className={`tool-call-card__status tool-call-card__status--${tool.status}`}>
+          {tool.status === "pending" ? (
+            <span className="tool-call-card__spinner" aria-hidden="true" />
+          ) : null}
           {statusLabel(tool.status)}
         </span>
       </div>

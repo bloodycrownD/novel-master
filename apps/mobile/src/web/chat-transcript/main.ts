@@ -177,7 +177,15 @@ export function buildTranscriptBootScript(): string {
   function toolStatusLabel(status) {
     if (status === 'success') return '成功';
     if (status === 'error') return '失败';
-    return '进行中';
+    return '执行中';
+  }
+
+  function hasPendingTools(tools) {
+    if (!tools || tools.length === 0) return false;
+    for (var pi = 0; pi < tools.length; pi++) {
+      if (tools[pi].status !== 'success' && tools[pi].status !== 'error') return true;
+    }
+    return false;
   }
 
   function thinkingBodyInner(text, thinkingHtml) {
@@ -214,13 +222,16 @@ export function buildTranscriptBootScript(): string {
     var canOpen = filePath != null;
     var summary = escapeHtml(toolCallSummary(tool));
     var statusClass = tool.status === 'success' || tool.status === 'error' ? tool.status : 'pending';
+    var statusInner = statusClass === 'pending'
+      ? '<span class="tool-status-spinner" aria-hidden="true"></span> ' + toolStatusLabel(tool.status)
+      : toolStatusLabel(tool.status);
     var html =
       '<div class="tool-group-item tool-card' + (canOpen ? ' tappable' : '') + '"' +
       (canOpen ? ' data-action="open-tool-file" data-path="' + escapeHtml(filePath) + '"' : '') +
       '>' +
       '<div class="tool-header">' +
       '<span class="tool-name">' + escapeHtml(tool.name || '') + '</span>' +
-      '<span class="tool-status ' + statusClass + '">' + toolStatusLabel(tool.status) + '</span>' +
+      '<span class="tool-status ' + statusClass + '">' + statusInner + '</span>' +
       '</div>';
     if (summary) {
       html += '<div class="tool-summary">' + summary + '</div>';
@@ -234,14 +245,17 @@ export function buildTranscriptBootScript(): string {
 
   function renderToolGroupSection(tools, key, expanded, showDividerBelow) {
     if (!tools || tools.length === 0) return '';
-    var chevron = expanded ? '▼' : '▶';
-    var divided = expanded && showDividerBelow ? ' tool-group-divided' : '';
+    var pending = hasPendingTools(tools);
+    var isExpanded = expanded || pending;
+    var chevron = isExpanded ? '▼' : '▶';
+    var divided = isExpanded && showDividerBelow ? ' tool-group-divided' : '';
+    var titleSuffix = pending ? ' · 执行中' : '';
     var html =
       '<div class="tool-group-section' + divided + '" data-tool-group-key="' + escapeHtml(key) + '">' +
       '<div class="tool-group-header" data-action="toggle-tool-group" data-tool-group-key="' + escapeHtml(key) + '">' +
-      '<span class="tool-group-title">工具调用 (' + tools.length + ')</span>' +
+      '<span class="tool-group-title">工具调用 (' + tools.length + ')' + titleSuffix + '</span>' +
       '<span class="tool-group-chevron">' + chevron + '</span></div>';
-    if (expanded) {
+    if (isExpanded) {
       html += '<div class="tool-group-items">';
       for (var ti = 0; ti < tools.length; ti++) {
         html += renderToolGroupItem(tools[ti]);
@@ -587,9 +601,10 @@ export function buildTranscriptBootScript(): string {
       }
     } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
       var toolGroupKey = 'msg:' + row.id;
-      var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+      var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey] || hasPendingTools(row.tools);
       var richBubble = state.flags.richText && row.textHtml ? ' rich' : '';
-      html += '<div class="bubble' + richBubble + '">' +
+      var fillWidth = !row.text ? ' bubble--fill-width' : '';
+      html += '<div class="bubble' + richBubble + fillWidth + '">' +
         renderAssistantBubbleInner(
           row.text,
           row.textHtml,
