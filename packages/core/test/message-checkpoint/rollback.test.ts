@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("MessageRollbackService (revision model)", () => {
   it("R1: rollback to assistant anchor restores earlier file content", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -35,13 +38,11 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
-
-    await ctx.conn.close();
   });
 
   it("R2: user anchor removes file created by later assistant", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -62,13 +63,11 @@ describe("MessageRollbackService (revision model)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, user1.id);
-
-    await ctx.conn.close();
   });
 
   it("R3: text-only tail truncates messages without vfs changes", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/keep.md", "stable", { versionCheck: false });
@@ -84,13 +83,11 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal((await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
-
-    await ctx.conn.close();
   });
 
   it("R4: restore creates parent directories for nested paths", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -107,13 +104,11 @@ describe("MessageRollbackService (revision model)", () => {
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
 
     assert.equal((await svfs.read("/deep/nested/file.md")).content, "content");
-
-    await ctx.conn.close();
   });
 
   it("R10: rollback nested file when parent directory still exists", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -137,13 +132,11 @@ describe("MessageRollbackService (revision model)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, assistant1.id);
-
-    await ctx.conn.close();
   });
 
   it("R9: anchor without checkpoint uses prior checkpoint tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -164,13 +157,11 @@ describe("MessageRollbackService (revision model)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 2);
     assert.equal(messages[1]!.id, textOnly.id);
-
-    await ctx.conn.close();
   });
 
   it("truncates tail on assistant anchor when session has no checkpoints", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
     const assistant = await ctx.messages.append(session.id, "assistant", {
@@ -183,13 +174,11 @@ describe("MessageRollbackService (revision model)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, assistant.id);
-
-    await ctx.conn.close();
   });
 
   it("assistant anchor before first checkpoint uses empty tree when session has later checkpoints", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -210,7 +199,5 @@ describe("MessageRollbackService (revision model)", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, assistant1.id);
-
-    await ctx.conn.close();
   });
 });

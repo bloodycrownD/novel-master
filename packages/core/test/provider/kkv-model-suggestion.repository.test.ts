@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 import { KkvModelSuggestionRepository } from "../../src/domain/provider/repositories/impl/kkv-model-suggestion.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("KkvModelSuggestionRepository", () => {
   it("fetch upserts to KKV and provider delete clears key", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     const repo = new KkvModelSuggestionRepository(kkv);
 
@@ -39,7 +42,5 @@ describe("KkvModelSuggestionRepository", () => {
     await repo.deleteByProvider("openai");
     const keys = await kkv.listKeys("nm-model-suggestions");
     assert.ok(!keys.includes("openai"));
-
-    await ctx.conn.close();
   });
 });

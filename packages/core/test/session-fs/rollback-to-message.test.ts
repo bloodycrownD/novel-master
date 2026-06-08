@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("rollbackToMessage", () => {
   it("assistant anchor keeps that round write and rolls back later checkpoints", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -36,13 +39,11 @@ describe("rollbackToMessage", () => {
     assert.equal(messages.length, 2);
     assert.equal(messages[0]!.id, user1.id);
     assert.equal(messages[1]!.id, assistant1.id);
-
-    await ctx.conn.close();
   });
 
   it("user anchor removes later assistant write and truncates messages", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
@@ -63,13 +64,11 @@ describe("rollbackToMessage", () => {
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, user1.id);
-
-    await ctx.conn.close();
   });
 
   it("text-only tail truncates messages without vfs changes", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/keep.md", "stable", { versionCheck: false });
@@ -85,13 +84,11 @@ describe("rollbackToMessage", () => {
     assert.equal((await svfs.read("/keep.md")).content, "stable");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
-
-    await ctx.conn.close();
   });
 
   it("deleteAfterSeq removes only higher seq", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
     await ctx.messages.append(session.id, "user", textBlocks("2"));
@@ -103,7 +100,5 @@ describe("rollbackToMessage", () => {
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
-
-    await ctx.conn.close();
   });
 });

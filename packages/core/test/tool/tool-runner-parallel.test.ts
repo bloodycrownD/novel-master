@@ -8,12 +8,14 @@ import {
   registerVfsTools,
   type VfsToolContext,
 } from "../../src/domain/tool/builtin/vfs-tools.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 describe("ToolRunner.runParallel", () => {
   it("R6: parallel writes to three paths yield one checkpoint tree with three entries", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const assistant = await ctx.messages.append(session.id, "assistant", {
@@ -49,13 +51,11 @@ describe("ToolRunner.runParallel", () => {
     assert.equal(tree.has("/a.md"), true);
     assert.equal(tree.has("/b.md"), true);
     assert.equal(tree.has("/c.md"), true);
-
-    await ctx.conn.close();
   });
 
   it("R7: parallel same-path writes last-write-wins in checkpoint", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const assistant = await ctx.messages.append(session.id, "assistant", {
@@ -98,13 +98,11 @@ describe("ToolRunner.runParallel", () => {
     const tree = await repo.loadFileTree(session.id, assistant.id);
     assert.ok(tree);
     assert.equal(tree.get("/race.md"), live.version);
-
-    await ctx.conn.close();
   });
 
   it("runs read-only tools in parallel without error", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/x.md", "x");
@@ -136,7 +134,6 @@ describe("ToolRunner.runParallel", () => {
       (await checkpoints.listFilePointersForSession(session.id)).length,
       0,
     );
-    await ctx.conn.close();
   });
 
   it("respects concurrency limit", async () => {

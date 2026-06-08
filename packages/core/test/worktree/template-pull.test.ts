@@ -6,12 +6,15 @@ import {
   textBlocks,
 } from "@novel-master/core";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("template pull", () => {
   it("session create copies worktree with path mapping", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await ctx.projectVfs(project.id).write("/a.md", "A");
     const pwt = createWorktreeService(ctx.conn, {
       kind: "project",
@@ -39,19 +42,19 @@ describe("template pull", () => {
     const dirRoot = rows.find((r) => r.kind === "dir" && r.path === "/");
     assert.ok(dirRoot);
     assert.equal(dirRoot.ruleState, "规则·开");
-    await ctx.conn.close();
   });
 
   it("project pull does not change existing session vfs or messages", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await ctx.projectVfs(project.id).write("/base.md", "BASE");
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/only-in-session.md", "session-only");
     await ctx.messages.append(session.id, "user", textBlocks("keep me"));
 
-    await ctx.globalVfs().write("/g.md", "G");
+    const globalFile = `/pull-${testIsolationSuffix()}.md`;
+    await ctx.globalVfs().write(globalFile, "G");
     await createTemplatePullService(ctx.conn).projectTemplatePull(project.id);
 
     const sessionPaths = (await svfs.list("/", { recursive: true }))
@@ -60,20 +63,21 @@ describe("template pull", () => {
     assert.deepEqual(sessionPaths.sort(), ["/base.md", "/only-in-session.md"]);
     assert.equal((await svfs.read("/only-in-session.md")).content, "session-only");
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
-    await ctx.conn.close();
   });
 
   it("project pull replaces vfs orphans and worktree from global", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const tag = testIsolationSuffix();
+    const globalFile = `/g-${tag}.md`;
     const gvfs = ctx.globalVfs();
-    await gvfs.write("/g.md", "G");
+    await gvfs.write(globalFile, "G");
     const gwt = createWorktreeService(ctx.conn, { kind: "global" });
     await gwt.setFileRule({
-      logicalPath: "/g.md",
+      logicalPath: globalFile,
       inclusionMode: "hide",
     });
 
-    const project = await ctx.projects.create("P");
+    const project = await ctx.projects.create(`P-${tag}`);
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/p.md", "P");
     const pull = createTemplatePullService(ctx.conn);
@@ -82,20 +86,20 @@ describe("template pull", () => {
     const paths = (await pvfs.list("/", { recursive: true }))
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
-    assert.deepEqual(paths, ["/g.md"]);
+    assert.ok(paths.includes(globalFile));
+    assert.ok(!paths.includes("/p.md"));
     const pwt = createWorktreeService(ctx.conn, {
       kind: "project",
       projectId: project.id,
     });
     const rule = await pwt.buildListRows();
-    const gRow = rule.find((r) => r.path === "/g.md");
+    const gRow = rule.find((r) => r.path === globalFile);
     assert.equal(gRow?.inclusionMode, "隐藏");
-    await ctx.conn.close();
   });
 
   it("session pull clears message checkpoints but keeps messages", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await ctx.projectVfs(project.id).write("/x.md", "X");
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
@@ -129,6 +133,5 @@ describe("template pull", () => {
       (await checkpointRepo.listFilePointersForSession(session.id)).length,
       0,
     );
-    await ctx.conn.close();
   });
 });

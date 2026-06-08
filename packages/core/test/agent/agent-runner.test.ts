@@ -20,7 +20,7 @@ import {
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
 import type { VfsService, VfsToolContext } from "@novel-master/core";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function minimalDefinition(): AgentDefinition {
   return {
@@ -105,6 +105,9 @@ function createMockModel(
     }),
   };
 }
+
+
+novelMasterTestFixture();
 
 describe("AgentRunner", () => {
   it("returns stopReason=cancelled when aborted before run", async () => {
@@ -420,8 +423,8 @@ describe("AgentRunner", () => {
   });
 
   it("captures checkpoint once after parallel mutating tools", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const chatSession = new ChatAgentSession(ctx.messages, session.id);
@@ -502,13 +505,11 @@ describe("AgentRunner", () => {
       (await repo.listFilePointersForSession(session.id)).length,
       2,
     );
-
-    await ctx.conn.close();
   });
 
   it("does not capture checkpoint for read-only tool round", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/seed.md", "seed");
@@ -562,7 +563,6 @@ describe("AgentRunner", () => {
 
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
     assert.equal((await repo.listFilePointersForSession(session.id)).length, 0);
-    await ctx.conn.close();
   });
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {

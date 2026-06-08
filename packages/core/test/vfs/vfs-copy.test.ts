@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isVfsError } from "@novel-master/core";
 import { copyVfsPath } from "../../src/domain/vfs/logic/vfs-copy.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("copyVfsPath", () => {
   it("copies a file without deleting the source", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -16,11 +19,10 @@ describe("copyVfsPath", () => {
 
     assert.equal((await vfs.read("/a.txt")).content, "hello");
     assert.equal((await vfs.read("/b.txt")).content, "hello");
-    await ctx.conn.close();
   });
 
   it("copies a directory tree when recursive is true", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -32,11 +34,10 @@ describe("copyVfsPath", () => {
 
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     assert.equal((await vfs.read("/dst/x.md")).content, "x");
-    await ctx.conn.close();
   });
 
   it("fails to copy a directory without recursive", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -53,6 +54,5 @@ describe("copyVfsPath", () => {
       () => vfs.read("/dst/x.md"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 });

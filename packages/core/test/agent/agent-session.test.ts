@@ -5,7 +5,9 @@ import {
   InMemoryAgentSession,
   textBlocks,
 } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 describe("InMemoryAgentSession", () => {
   it("append/list preserves order", async () => {
@@ -33,8 +35,8 @@ describe("InMemoryAgentSession", () => {
 
 describe("ChatAgentSession", () => {
   it("append is visible via MessageService", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const chatSession = await ctx.sessions.create(project.id);
     const agentSession = new ChatAgentSession(ctx.messages, chatSession.id);
     await agentSession.append("assistant", {
@@ -52,6 +54,5 @@ describe("ChatAgentSession", () => {
       .flatMap((m) => m.content.blocks)
       .find((b) => b.type === "tool_use");
     assert.ok(toolUse);
-    await ctx.conn.close();
   });
 });

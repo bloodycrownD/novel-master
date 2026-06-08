@@ -7,7 +7,7 @@ import {
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
 import { createModelRetryPolicyService } from "../../src/service/provider/create-model-retry-policy-service.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
@@ -27,6 +27,9 @@ function memorySecretStore(): SecretStore {
   };
 }
 
+
+novelMasterTestFixture();
+
 describe("ModelRequestService saved model sampling", () => {
   it("merges enabled settings.sampling when options.sampling omitted", async () => {
     clearProtocolAdapters();
@@ -42,7 +45,7 @@ describe("ModelRequestService saved model sampling", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
@@ -60,7 +63,6 @@ describe("ModelRequestService saved model sampling", () => {
       });
       assert.equal(capturedBody?.temperature, 0.25);
     } finally {
-      await ctx.conn.close();
       clearProtocolAdapters();
     }
   });
@@ -79,7 +81,7 @@ describe("ModelRequestService saved model sampling", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
@@ -90,7 +92,6 @@ describe("ModelRequestService saved model sampling", () => {
       });
       assert.equal(capturedBody?.temperature, undefined);
     } finally {
-      await ctx.conn.close();
       clearProtocolAdapters();
     }
   });
@@ -115,7 +116,7 @@ describe("ModelRequestService saved model sampling", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     try {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
@@ -135,7 +136,6 @@ describe("ModelRequestService saved model sampling", () => {
       assert.equal(out.assistantText, "ok");
       assert.equal(callCount, 2);
     } finally {
-      await ctx.conn.close();
       clearProtocolAdapters();
     }
   });

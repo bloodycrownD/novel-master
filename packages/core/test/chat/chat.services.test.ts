@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import type { MessageContent, TdbcConnection } from "@novel-master/core";
 import { textBlocks } from "@novel-master/core";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function firstTextBlock(content: MessageContent): string {
   const block = content.blocks[0];
@@ -19,10 +19,13 @@ async function assertNoSessionFsData(
   assert.equal((await checkpoints.listFilePointersForSession(sessionId)).length, 0);
 }
 
+
+novelMasterTestFixture();
+
 describe("Chat services", () => {
   it("session create copies project template to session vfs", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     await pvfs.write("/sub/b.md", "B");
@@ -34,12 +37,11 @@ describe("Chat services", () => {
       .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md", "/sub/b.md"]);
     assert.equal((await svfs.read("/a.md")).content, "A");
-    await ctx.conn.close();
   });
 
   it("project template changes after session create do not affect session vfs", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/a.md", "A");
     const session = await ctx.sessions.create(project.id);
@@ -53,64 +55,58 @@ describe("Chat services", () => {
       .filter((e) => e.kind === "file")
       .map((e) => e.path);
     assert.deepEqual(paths.sort(), ["/a.md"]);
-    await ctx.conn.close();
   });
 
   it("empty template yields empty session vfs", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("Empty");
     const session = await ctx.sessions.create(project.id);
     const paths = await ctx.sessionVfs(project.id, session.id).list("/");
     assert.deepEqual(paths, []);
-    await ctx.conn.close();
   });
 
   it("project rename updates name and updatedAtMs", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("Old Name");
     const renamed = await ctx.projects.rename(project.id, "New Name");
     assert.equal(renamed.name, "New Name");
     assert.ok(renamed.updatedAtMs >= project.updatedAtMs);
     const loaded = await ctx.projects.get(project.id);
     assert.equal(loaded.name, "New Name");
-    await ctx.conn.close();
   });
 
   it("project rename rejects empty name", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await assert.rejects(
       () => ctx.projects.rename(project.id, "   "),
       (err: unknown) =>
         err instanceof Error && err.message.includes("must not be empty"),
     );
-    await ctx.conn.close();
   });
 
   it("project create rejects empty name", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     await assert.rejects(
       () => ctx.projects.create("  "),
       (err: unknown) =>
         err instanceof Error && err.message.includes("must not be empty"),
     );
-    await ctx.conn.close();
   });
 
   it("message delete removes row", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const m = await ctx.messages.append(session.id, "user", textBlocks("hi"));
     await ctx.messages.delete(m.id);
     const list = await ctx.messages.listBySession(session.id);
     assert.equal(list.length, 0);
-    await ctx.conn.close();
   });
 
   it("message updateContent replaces text", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const m = await ctx.messages.append(session.id, "user", textBlocks("hi"));
     const updated = await ctx.messages.updateContent(
@@ -120,12 +116,11 @@ describe("Chat services", () => {
     assert.equal(firstTextBlock(updated.content), "edited");
     const loaded = await ctx.messages.get(m.id);
     assert.equal(firstTextBlock(loaded.content), "edited");
-    await ctx.conn.close();
   });
 
   it("message append preserves seq order", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     await ctx.messages.append(session.id, "user", textBlocks("hi"));
     await ctx.messages.append(session.id, "assistant", textBlocks("hey"));
@@ -133,12 +128,11 @@ describe("Chat services", () => {
     assert.equal(list.length, 2);
     assert.equal(list[0]!.seq, 1);
     assert.equal(list[1]!.seq, 2);
-    await ctx.conn.close();
   });
 
   it("message tail/page ordering stays consistent with full list", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     for (let i = 1; i <= 8; i += 1) {
       await ctx.messages.append(session.id, "user", textBlocks(`m${i}`));
@@ -163,12 +157,11 @@ describe("Chat services", () => {
     });
     const rebuilt = [...oldest, ...older, ...tail].map(m => m.id);
     assert.deepEqual(rebuilt, all.map(m => m.id));
-    await ctx.conn.close();
   });
 
   it("message fork copies vfs and messages up to id", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "edited");
@@ -187,12 +180,11 @@ describe("Chat services", () => {
       "edited",
     );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 3);
-    await ctx.conn.close();
   });
 
   it("message fork titles session as sourceName_ckpt_n", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "新会话1");
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
 
@@ -201,12 +193,11 @@ describe("Chat services", () => {
 
     const second = await ctx.messages.fork(session.id, m1.id);
     assert.equal(second.title, "新会话1_ckpt_2");
-    await ctx.conn.close();
   });
 
   it("message fork then append on forked session does not affect source", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
     const m2 = await ctx.messages.append(session.id, "user", textBlocks("2"));
@@ -225,12 +216,11 @@ describe("Chat services", () => {
     assert.equal(firstTextBlock(forkedMsgs[1]!.content), "2");
     assert.equal(firstTextBlock(forkedMsgs[2]!.content), "fork-only");
     assert.notEqual(forkedMsgs[0]!.id, m1.id);
-    await ctx.conn.close();
   });
 
   it("session copy duplicates vfs and messages", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "body");
@@ -248,12 +238,11 @@ describe("Chat services", () => {
 
     await svfs.write("/note.md", "mutated", { versionCheck: false });
     assert.equal((await copyVfs.read("/note.md")).content, "body");
-    await ctx.conn.close();
   });
 
   it("session delete purges message checkpoints in transaction", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
     const assistant = await ctx.messages.append(
@@ -274,12 +263,11 @@ describe("Chat services", () => {
 
     await ctx.sessions.delete(session.id);
     await assertNoSessionFsData(ctx.conn, session.id);
-    await ctx.conn.close();
   });
 
   it("project delete purges message checkpoints for all sessions", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const s1 = await ctx.sessions.create(project.id);
     const s2 = await ctx.sessions.create(project.id);
     for (const session of [s1, s2]) {
@@ -297,23 +285,21 @@ describe("Chat services", () => {
     await ctx.projects.delete(project.id);
     await assertNoSessionFsData(ctx.conn, s1.id);
     await assertNoSessionFsData(ctx.conn, s2.id);
-    await ctx.conn.close();
   });
 
   it("session rename updates title", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id, "旧名");
     const renamed = await ctx.sessions.rename(session.id, "新名");
     assert.equal(renamed.title, "新名");
     const loaded = await ctx.sessions.get(session.id);
     assert.equal(loaded.title, "新名");
-    await ctx.conn.close();
   });
 
   it("project copy copies template only", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await ctx.projectVfs(project.id).write("/foo.md", "FOO");
     await ctx.sessions.create(project.id);
 
@@ -323,6 +309,5 @@ describe("Chat services", () => {
       "FOO",
     );
     assert.equal((await ctx.sessions.listByProject(copy.id)).length, 0);
-    await ctx.conn.close();
   });
 });

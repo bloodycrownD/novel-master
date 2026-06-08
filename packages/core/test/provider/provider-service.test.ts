@@ -8,8 +8,7 @@ import {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
   return {
@@ -28,9 +27,12 @@ function memorySecretStore(): SecretStore {
   };
 }
 
+
+novelMasterTestFixture();
+
 describe("ProviderService", () => {
   it("rejects create with built-in id", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await assert.rejects(
       () =>
@@ -41,31 +43,28 @@ describe("ProviderService", () => {
         }),
       (e) => e instanceof ProviderError && e.code === "BUILTIN_PROVIDER",
     );
-    await ctx.conn.close();
   });
 
   it("rejects edit protocol on built-in", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await assert.rejects(
       () => bundle.providers.edit("openai", { protocol: "gemini" }),
       (e) => e instanceof ProviderError && e.code === "BUILTIN_PROVIDER",
     );
-    await ctx.conn.close();
   });
 
   it("model request fails when not saved", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await assert.rejects(
       () => bundle.modelRequests.request("openai/gpt-4o", "hi"),
       (e) => e instanceof ProviderError && e.code === "MODEL_NOT_SAVED",
     );
-    await ctx.conn.close();
   });
 
   it("delete custom provider removes secret ref", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await bundle.providers.create({
@@ -77,7 +76,6 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has("provider/tmpgw/apiKey"), true);
     await bundle.providers.delete("tmpgw");
     assert.equal(await secrets.has("provider/tmpgw/apiKey"), false);
-    await ctx.conn.close();
   });
 
   it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
@@ -92,7 +90,7 @@ describe("ProviderService", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const kkv = createKkvService(ctx.conn);
     const bundle = createProviderServices(ctx.conn, secrets);
@@ -111,8 +109,6 @@ describe("ProviderService", () => {
     await bundle.providers.delete("custom");
     const keysAfter = await kkv.listKeys("nm-model-suggestions");
     assert.ok(!keysAfter.includes("custom"));
-
-    await ctx.conn.close();
     clearProtocolAdapters();
   });
 });

@@ -6,11 +6,13 @@ import {
   decode,
   agentDefinitionSchema,
 } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 describe("AgentRegistryService", () => {
   it("upsert preserves display name separate from agentId", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     const def = decode(
       {
@@ -23,11 +25,10 @@ describe("AgentRegistryService", () => {
     await registry.upsert("writer", def);
     const loaded = await registry.get("writer");
     assert.equal(loaded.name, "写作助手");
-    await ctx.conn.close();
   });
 
   it("AG4: delete removes existing agent", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
     await registry.upsert(
       "summarizer",
@@ -46,6 +47,5 @@ describe("AgentRegistryService", () => {
       (e: unknown) =>
         e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
     );
-    await ctx.conn.close();
   });
 });

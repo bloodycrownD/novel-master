@@ -1,12 +1,18 @@
+import { createVfsService } from "@novel-master/core";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { migrateVfsRevisionBaseline } from "@/bootstrap/vfs/migrate-vfs-revision.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { openVfsTestConnection } from "./helpers.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("RevisionAwareVfsService (integration)", () => {
   it("write produces v1 then v2 revisions", async () => {
-    const { conn, vfs } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     const first = await vfs.write("/rev.txt", "one");
@@ -24,12 +30,12 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.ok(rev2);
     assert.equal(rev2.content, "two");
     assert.equal(rev2.status, "active");
-
-    await conn.close();
   });
 
   it("read returns live head content", async () => {
-    const { conn, vfs } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
 
     await vfs.write("/head.txt", "first");
     await vfs.write("/head.txt", "second", { expectedVersion: 1 });
@@ -37,12 +43,12 @@ describe("RevisionAwareVfsService (integration)", () => {
     const read = await vfs.read("/head.txt");
     assert.equal(read.content, "second");
     assert.equal(read.version, 2);
-
-    await conn.close();
   });
 
   it("old revision remains readable after head advances", async () => {
-    const { conn, vfs } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     await vfs.write("/history.txt", "v1");
@@ -55,12 +61,11 @@ describe("RevisionAwareVfsService (integration)", () => {
 
     const head = await vfs.read("/history.txt");
     assert.equal(head.content, "v2");
-
-    await conn.close();
   });
 
   it("seeds baseline revision for pre-existing vfs_entry on bootstrap", async () => {
-    const { conn } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     await conn.execute(
@@ -72,12 +77,12 @@ describe("RevisionAwareVfsService (integration)", () => {
     const baseline = await revisions.findByPathAndVersion("/legacy.txt", 3);
     assert.ok(baseline);
     assert.equal(baseline.content, "legacy");
-
-    await conn.close();
   });
 
   it("delete appends deleted revision at head+1 and removes entry", async () => {
-    const { conn, vfs } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     const written = await vfs.write("/del.txt", "content");
@@ -91,12 +96,12 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.equal(deleted.status, "deleted");
     assert.equal(deleted.content, null);
     await assert.rejects(() => vfs.read("/del.txt"));
-
-    await conn.close();
   });
 
   it("re-create after delete allocates max revision version + 1", async () => {
-    const { conn, vfs } = await openVfsTestConnection();
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
     const revisions = new SqliteVfsRevisionRepository(conn);
 
     await vfs.write("/again.txt", "v1");
@@ -113,7 +118,5 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.equal(rev.content, "restored");
     assert.equal(rev.status, "active");
     assert.equal((await vfs.read("/again.txt")).content, "restored");
-
-    await conn.close();
   });
 });

@@ -6,9 +6,10 @@ import {
   VfsZipError,
 } from "@novel-master/core";
 import type { VfsService } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
   const entries = await vfs.list(dir, { recursive: true });
@@ -18,10 +19,13 @@ async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
     .sort();
 }
 
+
+novelMasterTestFixture();
+
 describe("VfsZipIoService", () => {
   it("Z1: session export includes logical paths in ZIP", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "A");
@@ -37,11 +41,10 @@ describe("VfsZipIoService", () => {
     assert.ok("a.md" in entries);
     assert.ok("dir/b.md" in entries);
     assert.equal(new TextDecoder().decode(entries["a.md"]!), "A");
-    await ctx.conn.close();
   });
 
   it("Z2: global export has no projects/ prefix", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     await ctx.globalVfs().write("/x.md", "X");
     const zipSvc = createVfsZipIoService(ctx.conn);
     const bytes = await zipSvc.export({ kind: "global" });
@@ -49,12 +52,11 @@ describe("VfsZipIoService", () => {
     assert.ok(names.includes("x.md"));
     assert.ok(!names.some((n) => n.startsWith("template/")));
     assert.ok(!names.some((n) => n.startsWith("projects/")));
-    await ctx.conn.close();
   });
 
   it("Z3: import replaces domain file tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/old.md", "old");
@@ -69,7 +71,6 @@ describe("VfsZipIoService", () => {
     await assert.rejects(() => vfs.read("/old.md"));
     const read = await vfs.read("/new.md");
     assert.equal(read.content, "new");
-    await ctx.conn.close();
   });
 
   it("markdown front matter passes UTF-8 zip validation", () => {
@@ -79,8 +80,8 @@ describe("VfsZipIoService", () => {
   });
 
   it("Z4: invalid UTF-8 rejects import without changing domain", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/keep.md", "keep");
@@ -102,12 +103,11 @@ describe("VfsZipIoService", () => {
 
     const still = await vfs.read("/keep.md");
     assert.equal(still.content, "keep");
-    await ctx.conn.close();
   });
 
   it("Z5: transaction failure rolls back domain", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/before.md", "before");
@@ -134,12 +134,11 @@ describe("VfsZipIoService", () => {
     const read = await vfs.read("/before.md");
     assert.equal(read.content, "before");
     await assert.rejects(() => vfs.read("/new.md"));
-    await ctx.conn.close();
   });
 
   it("Z6: import without confirmed does not change domain", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/stay.md", "stay");
@@ -158,11 +157,10 @@ describe("VfsZipIoService", () => {
     );
     const read = await vfs.read("/stay.md");
     assert.equal(read.content, "stay");
-    await ctx.conn.close();
   });
 
   it("export/import preserves explicit empty directory", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-empty-dir");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -196,11 +194,10 @@ describe("VfsZipIoService", () => {
       "empty directory /test should exist after import",
     );
     assert.equal((await vfs.read("/note.md")).content, "x");
-    await ctx.conn.close();
   });
 
   it("session export bytes round-trip import with UTF-8 text", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-rt");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -219,11 +216,10 @@ describe("VfsZipIoService", () => {
     assert.deepEqual(await listFilePaths(vfs), ["/ddd/love_message.txt", "/note.md"]);
     assert.equal((await vfs.read("/ddd/love_message.txt")).content, "你好\nline2");
     assert.equal((await vfs.read("/note.md")).content, "ascii");
-    await ctx.conn.close();
   });
 
   it("Z7: same ZIP bytes yield identical file paths in two session scopes", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-z7");
     const sessionA = await ctx.sessions.create(project.id);
     const sessionB = await ctx.sessions.create(project.id);
@@ -251,11 +247,10 @@ describe("VfsZipIoService", () => {
     const pathsB = await listFilePaths(ctx.sessionVfs(project.id, sessionB.id));
     assert.deepEqual(pathsA, pathsB);
     assert.deepEqual(pathsA, ["/alpha.md", "/dir/beta.md"]);
-    await ctx.conn.close();
   });
 
   it("phase A invalid UTF-8 does not reach deleteVfsPrefix", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-val");
     const session = await ctx.sessions.create(project.id);
     let deleteReached = false;
@@ -280,11 +275,10 @@ describe("VfsZipIoService", () => {
         e instanceof VfsZipError && e.code === "INVALID_UTF8",
     );
     assert.equal(deleteReached, false);
-    await ctx.conn.close();
   });
 
   it("phase A parent-segment path does not reach deleteVfsPrefix", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-path");
     const session = await ctx.sessions.create(project.id);
     let deleteReached = false;
@@ -309,11 +303,10 @@ describe("VfsZipIoService", () => {
         e instanceof VfsZipError && e.code === "INVALID_PATH",
     );
     assert.equal(deleteReached, false);
-    await ctx.conn.close();
   });
 
   it("project scope export round-trips template tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P2");
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/t.md", "T");
@@ -330,11 +323,10 @@ describe("VfsZipIoService", () => {
     );
     const read = await pvfs.read("/t.md");
     assert.equal(read.content, "T2");
-    await ctx.conn.close();
   });
 
   it("skips __MACOSX and .DS_Store junk entries on import", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const zip = buildVfsZip(
       new Map([
         ["readme.md", "ok"],
@@ -346,11 +338,10 @@ describe("VfsZipIoService", () => {
     await zipSvc.import({ kind: "global" }, zip, { confirmed: true });
     const paths = await listFilePaths(ctx.globalVfs());
     assert.deepEqual(paths, ["/readme.md"]);
-    await ctx.conn.close();
   });
 
   it("session ZIP imports into project template scope", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-zip-cross");
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
@@ -373,11 +364,10 @@ describe("VfsZipIoService", () => {
     const pvfs = ctx.projectVfs(project.id);
     const read = await pvfs.read("/ddd/love_message.txt");
     assert.equal(read.content, content);
-    await ctx.conn.close();
   });
 
   it("Z-buildZip-1: custom builder receives gather output once", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-buildZip");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -401,11 +391,10 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
     assert.equal(callCount, 1);
-    await ctx.conn.close();
   });
 
   it("Z-buildZip-2: custom builder return value is export result", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-buildZip2");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -421,11 +410,10 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
     assert.deepEqual(bytes, magic);
-    await ctx.conn.close();
   });
 
   it("Z-buildZip-3: without buildZip, session export paths match Z1", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("P-buildZip3");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -442,6 +430,5 @@ describe("VfsZipIoService", () => {
     assert.ok("a.md" in entries);
     assert.ok("dir/b.md" in entries);
     assert.equal(new TextDecoder().decode(entries["a.md"]!), "A");
-    await ctx.conn.close();
   });
 });

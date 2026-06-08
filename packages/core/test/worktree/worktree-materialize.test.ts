@@ -4,10 +4,11 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
 import { DefaultWorktreeService } from "@/service/worktree/impl/worktree.service.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function createSpyingWorktreeService(
   conn: import("@novel-master/core").TdbcConnection,
+  projectId: string,
 ) {
   const baseRepo = new SqliteVfsEntryRepository(conn);
   const calls = {
@@ -43,7 +44,7 @@ function createSpyingWorktreeService(
   };
 
   const wt = new DefaultWorktreeService({
-    scope: { kind: "global" },
+    scope: { kind: "project", projectId },
     vfs,
     worktree: new SqliteWorktreeRepository(conn),
   });
@@ -51,15 +52,19 @@ function createSpyingWorktreeService(
   return { wt, calls, vfs: baseRepo };
 }
 
+
+novelMasterTestFixture();
+
 describe("worktree materialize", () => {
   it("buildListRows and materialize list path never call scanContents", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const gvfs = ctx.globalVfs();
-    await gvfs.write("/hidden/a.md", "A");
-    await gvfs.write("/hidden/b.md", "B");
-    await gvfs.write("/visible/c.md", "C");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/hidden/a.md", "A");
+    await pvfs.write("/hidden/b.md", "B");
+    await pvfs.write("/visible/c.md", "C");
 
-    const { wt, calls } = createSpyingWorktreeService(ctx.conn);
+    const { wt, calls } = createSpyingWorktreeService(ctx.conn, project.id);
     await wt.setFileRule({
       logicalPath: "/visible/c.md",
       inclusionMode: "show",
@@ -78,17 +83,16 @@ describe("worktree materialize", () => {
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
     assert.equal(calls.listFileMetaUnderPrefix, 2);
-
-    await ctx.conn.close();
   });
 
   it("filename fill display never calls findByPath", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const gvfs = ctx.globalVfs();
-    await gvfs.write("/fn/a.md", "BODY-A");
-    await gvfs.write("/fn/b.md", "BODY-B");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/fn/a.md", "BODY-A");
+    await pvfs.write("/fn/b.md", "BODY-B");
 
-    const { wt, calls } = createSpyingWorktreeService(ctx.conn);
+    const { wt, calls } = createSpyingWorktreeService(ctx.conn, project.id);
     await wt.setDirRule({
       logicalPath: "/fn",
       ruleEnabled: true,
@@ -103,20 +107,19 @@ describe("worktree materialize", () => {
     assert.match(materialized.worktreeDisplay, /a\.md/);
     assert.match(materialized.worktreeDisplay, /b\.md/);
     assert.doesNotMatch(materialized.worktreeDisplay, /BODY-A/);
-
-    await ctx.conn.close();
   });
 
   it("lazy findByPath only for visible full/header files", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const gvfs = ctx.globalVfs();
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
     for (let i = 0; i < 10; i += 1) {
-      await gvfs.write(`/batch/f${i}.md`, `body-${i}`);
+      await pvfs.write(`/batch/f${i}.md`, `body-${i}`);
     }
-    await gvfs.write("/batch/show-a.md", "FULL-A");
-    await gvfs.write("/batch/show-b.md", "FULL-B");
+    await pvfs.write("/batch/show-a.md", "FULL-A");
+    await pvfs.write("/batch/show-b.md", "FULL-B");
 
-    const { wt, calls } = createSpyingWorktreeService(ctx.conn);
+    const { wt, calls } = createSpyingWorktreeService(ctx.conn, project.id);
     await wt.setFileRule({
       logicalPath: "/batch/show-a.md",
       inclusionMode: "show",
@@ -141,17 +144,16 @@ describe("worktree materialize", () => {
     );
     assert.match(materialized.worktreeDisplay, /show-a\.md/);
     assert.match(materialized.worktreeDisplay, /show-b\.md/);
-
-    await ctx.conn.close();
   });
 
   it("materialize listRows match buildListRows order", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const gvfs = ctx.globalVfs();
-    await gvfs.write("/parent/a.md", "A");
-    await gvfs.write("/parent/sub/b.md", "B");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/parent/a.md", "A");
+    await pvfs.write("/parent/sub/b.md", "B");
 
-    const wt = createSpyingWorktreeService(ctx.conn).wt;
+    const wt = createSpyingWorktreeService(ctx.conn, project.id).wt;
     await wt.setFileRule({
       logicalPath: "/parent/a.md",
       inclusionMode: "show",
@@ -169,13 +171,11 @@ describe("worktree materialize", () => {
       rows.map((r) => r.path),
       materialized.listRows.map((r) => r.path),
     );
-
-    await ctx.conn.close();
   });
 
   it("session macro cache refresh stores listRows from materialize", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
@@ -201,7 +201,5 @@ describe("worktree materialize", () => {
       snapshot.listRows.map((r) => r.path),
       materialized.listRows.map((r) => r.path),
     );
-
-    await ctx.conn.close();
   });
 });

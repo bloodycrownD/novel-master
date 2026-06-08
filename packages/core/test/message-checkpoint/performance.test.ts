@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core";
 import type { VfsService } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 const FILE_COUNT = 1000;
 const SAMPLE_RUNS = 8;
@@ -39,10 +39,13 @@ async function seedFiles(
   }
 }
 
+
+novelMasterTestFixture();
+
 describe("message checkpoint performance", { timeout: 180_000 }, () => {
   it("P1: capture 1000 files P95 within threshold", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("Perf");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`Perf-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await seedFiles(svfs, FILE_COUNT);
@@ -63,12 +66,10 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       p95 < CAPTURE_P95_MS * CI_SLACK,
       `capture P95 ${p95.toFixed(1)}ms exceeds ${CAPTURE_P95_MS * CI_SLACK}ms`,
     );
-
-    await ctx.conn.close();
   });
 
   it("P2: rollback diff 1000 files P95 within threshold", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const durations: number[] = [];
 
     for (let run = 0; run < SAMPLE_RUNS; run++) {
@@ -119,7 +120,5 @@ describe("message checkpoint performance", { timeout: 180_000 }, () => {
       p95 < ROLLBACK_P95_MS * CI_SLACK,
       `rollback P95 ${p95.toFixed(1)}ms exceeds ${ROLLBACK_P95_MS * CI_SLACK}ms`,
     );
-
-    await ctx.conn.close();
   });
 });

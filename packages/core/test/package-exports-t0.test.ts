@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService, KkvError } from "@novel-master/core/kkv";
-import { openNovelMasterTestConnection } from "./helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "./helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("T0 package exports (@novel-master/core entry)", () => {
   it("does not export createKkvService from main entry", () => {
@@ -16,10 +19,9 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     assert.equal(typeof createKkvService, "function");
     assert.equal(KkvError.name, "KkvError");
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const kkv = createKkvService(ctx.conn);
     await kkv.set("t0-smoke", "key", "value");
     assert.equal(await kkv.get("t0-smoke", "key"), "value");
-    await ctx.conn.close();
   });
 });

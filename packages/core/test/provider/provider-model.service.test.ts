@@ -8,8 +8,7 @@ import {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
   return {
@@ -28,6 +27,9 @@ function memorySecretStore(): SecretStore {
   };
 }
 
+
+novelMasterTestFixture();
+
 describe("ProviderModelService fetch", () => {
   it("populates suggestions from listModels response", async () => {
     clearProtocolAdapters();
@@ -41,7 +43,7 @@ describe("ProviderModelService fetch", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await secrets.set("provider/openai/apiKey", "sk-test");
@@ -54,8 +56,6 @@ describe("ProviderModelService fetch", () => {
     );
     const saved = await bundle.providerModels.savedList("openai");
     assert.equal(saved.length, 0);
-
-    await ctx.conn.close();
     clearProtocolAdapters();
   });
 
@@ -71,7 +71,7 @@ describe("ProviderModelService fetch", () => {
     });
     getProtocolAdapter("openai", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await bundle.providers.create({
@@ -90,34 +90,30 @@ describe("ProviderModelService fetch", () => {
       formatApplicationModelId(saved[0]!.providerId, saved[0]!.vendorModelId),
       "zhipu/glm-4-flash",
     );
-
-    await ctx.conn.close();
     clearProtocolAdapters();
   });
 });
 
 describe("ProviderModelService settings", () => {
   it("save claude-3-5 gets contextWindowTokens 200_000", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create(
       "openai",
       "claude-3-5-sonnet",
     );
     assert.equal(saved.settings.contextWindowTokens, 200_000);
-    await ctx.conn.close();
   });
 
   it("save unknown model gets contextWindowTokens 128_000", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "unknown-model");
     assert.equal(saved.settings.contextWindowTokens, 128_000);
-    await ctx.conn.close();
   });
 
   it("updateSettings rejects non-positive contextWindowTokens", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await bundle.providerModels.create("openai", "manual-model");
     await assert.rejects(
@@ -127,19 +123,17 @@ describe("ProviderModelService settings", () => {
         }),
       (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
     );
-    await ctx.conn.close();
   });
 
   it("new saved model defaults tokenCounterMode to auto", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "gpt-4o");
     assert.equal(saved.settings.tokenCounterMode, "auto");
-    await ctx.conn.close();
   });
 
   it("updateSettings persists tokenCounterMode round-trip", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await bundle.providerModels.create("openai", "gpt-4o");
     const updated = await bundle.providerModels.updateSettings(
@@ -153,21 +147,19 @@ describe("ProviderModelService settings", () => {
       await bundle.providerModels.getTokenCounterMode(appId),
       "gemma",
     );
-    await ctx.conn.close();
   });
 
   it("getTokenCounterMode returns auto for unsaved model", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     assert.equal(
       await bundle.providerModels.getTokenCounterMode("openai/unknown"),
       "auto",
     );
-    await ctx.conn.close();
   });
 
   it("updateSettings rejects invalid tokenCounterMode", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await bundle.providerModels.create("openai", "gpt-4o");
     await assert.rejects(
@@ -177,13 +169,12 @@ describe("ProviderModelService settings", () => {
         }),
       (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
     );
-    await ctx.conn.close();
   });
 });
 
 describe("ProviderModelService editSaved", () => {
   it("preserves displayName when omitted", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await bundle.providerModels.create("openai", "manual-model");
     await bundle.providerModels.editSaved("openai", "manual-model", "Label A");
@@ -192,6 +183,5 @@ describe("ProviderModelService editSaved", () => {
       "manual-model",
     );
     assert.equal(after.displayName, "Label A");
-    await ctx.conn.close();
   });
 });

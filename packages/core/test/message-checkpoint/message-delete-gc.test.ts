@@ -6,12 +6,14 @@ import {
   scopePhysicalPrefix,
   toPhysicalPath,
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 describe("MessageService.delete checkpoint GC", () => {
   it("removes message checkpoint and GCs tail-only revisions", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
@@ -44,7 +46,5 @@ describe("MessageService.delete checkpoint GC", () => {
       keys.some((k) => k.path === physical && k.version === v1),
       false,
     );
-
-    await ctx.conn.close();
   });
 });

@@ -7,8 +7,7 @@ import {
   clearProtocolAdapters,
   getProtocolAdapter,
 } from "../../src/infra/llm-protocol/logic/registry.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
-
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 function memorySecretStore(): SecretStore {
   const map = new Map<string, string>();
   return {
@@ -26,6 +25,9 @@ function memorySecretStore(): SecretStore {
     },
   };
 }
+
+
+novelMasterTestFixture();
 
 describe("ModelRequestService tool_use session round-trip", () => {
   it("persists tool_use block after request with history", async () => {
@@ -49,13 +51,13 @@ describe("ModelRequestService tool_use session round-trip", () => {
     });
     getProtocolAdapter("anthropic", fetchFn as typeof fetch);
 
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await secrets.set("provider/anthropic/apiKey", "sk-ant-test");
     await bundle.providerModels.create("anthropic", "claude-3-5-sonnet");
 
-    const project = await ctx.projects.create("P");
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     await ctx.messages.append(session.id, "user", textBlocks("find foo"));
 
@@ -81,8 +83,6 @@ describe("ModelRequestService tool_use session round-trip", () => {
         (b) => b.type === "text" && b.text === "",
       ),
     );
-
-    await ctx.conn.close();
     clearProtocolAdapters();
   });
 });

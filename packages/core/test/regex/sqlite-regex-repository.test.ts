@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { SqliteRegexGroupRepository } from "@/domain/regex/repositories/impl/sqlite-regex-group.repository.js";
 import { SqliteRegexRuleRepository } from "@/domain/regex/repositories/impl/sqlite-regex-rule.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("SqliteRegex repositories", () => {
   it("R-SQL2: listByGroupOrdered follows sort_order", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const groups = new SqliteRegexGroupRepository(ctx.conn);
     const rules = new SqliteRegexRuleRepository(ctx.conn);
     const now = Date.now();
@@ -55,11 +58,10 @@ describe("SqliteRegex repositories", () => {
       ordered.map((r) => r.ruleId),
       ["r1", "r2"],
     );
-    await ctx.conn.close();
   });
 
   it("R-SQL1: deleting group cascades rules", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const groups = new SqliteRegexGroupRepository(ctx.conn);
     const rules = new SqliteRegexRuleRepository(ctx.conn);
     const now = Date.now();
@@ -89,11 +91,10 @@ describe("SqliteRegex repositories", () => {
     await groups.delete("g-del");
     const left = await rules.listByGroupOrdered("g-del");
     assert.equal(left.length, 0);
-    await ctx.conn.close();
   });
 
   it("nextSortOrder appends after max", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const groups = new SqliteRegexGroupRepository(ctx.conn);
     const rules = new SqliteRegexRuleRepository(ctx.conn);
     const now = Date.now();
@@ -121,6 +122,5 @@ describe("SqliteRegex repositories", () => {
       updatedAtMs: now,
     });
     assert.equal(await rules.nextSortOrder("g-sort"), 6);
-    await ctx.conn.close();
   });
 });

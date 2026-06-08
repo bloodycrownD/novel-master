@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createWorktreeService } from "@novel-master/core";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("worktree getDirRule", () => {
   it("returns undefined when no rule exists and persisted fields when set", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const wt = createWorktreeService(ctx.conn, { kind: "global" });
     const path = "/my-dir";
 
@@ -29,7 +32,5 @@ describe("worktree getDirRule", () => {
     assert.equal(rule.tailCount, 3);
     assert.equal(rule.fillPolicy, "header");
     assert.equal(rule.ruleEnabled, true);
-
-    await ctx.conn.close();
   });
 });

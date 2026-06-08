@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
 import {
@@ -11,6 +10,8 @@ import {
 } from "../../src/domain/tool/builtin/vfs-tools.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import { isVfsError } from "@novel-master/core";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
 
 function toolCtx(
   vfs: VfsToolContext["vfs"],
@@ -20,9 +21,12 @@ function toolCtx(
   return { vfs, projectId, sessionId };
 }
 
+
+novelMasterTestFixture();
+
 describe("Builtin vfs.* tools (integration)", () => {
   it("write/replace/read flow via revision-aware vfs", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -53,12 +57,10 @@ describe("Builtin vfs.* tools (integration)", () => {
     );
     assert.equal(read.content, "hello there");
     assert.equal(read.version, 2);
-
-    await ctx.conn.close();
   });
 
   it("vfs.write respects versionCheck and expectedVersion options", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -100,11 +102,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       baseCtx,
     );
     assert.equal(unchecked.version, 3);
-    await ctx.conn.close();
   });
 
   it("list/glob/grep flow", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -131,11 +132,10 @@ describe("Builtin vfs.* tools (integration)", () => {
     assert.equal(hits.length, 1);
     assert.equal(hits[0]!.path, "/docs/a.md");
     assert.equal(hits[0]!.line, 1);
-    await ctx.conn.close();
   });
 
   it("vfs.mkdir creates directory visible in list", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -154,7 +154,6 @@ describe("Builtin vfs.* tools (integration)", () => {
     assert.ok(
       listed.some((e) => e.path === "/agent-dir" && e.kind === "directory"),
     );
-    await ctx.conn.close();
   });
 
   it("registers exactly 10 vfs tools", () => {
@@ -176,7 +175,7 @@ describe("Builtin vfs.* tools (integration)", () => {
   });
 
   it("vfs.delete removes a file (non-recursive default)", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -197,11 +196,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       () => runner.call("vfs.read", { path: "/a.txt" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
-    await ctx.conn.close();
   });
 
   it("vfs.delete non-recursive fails on non-empty directory", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -218,11 +216,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
     assert.equal((await vfs.read("/dir/a.txt")).content, "stay");
-    await ctx.conn.close();
   });
 
   it("vfs.delete recursive removes directory tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -243,11 +240,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       () => vfs.read("/dir/a.txt"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 
   it("vfs.move migrates file content", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -268,11 +264,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       () => vfs.read("/old.md"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 
   it("vfs.move migrates directory tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -293,11 +288,10 @@ describe("Builtin vfs.* tools (integration)", () => {
       () => vfs.read("/src/a.md"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 
   it("vfs.copy duplicates file and keeps source", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -315,11 +309,10 @@ describe("Builtin vfs.* tools (integration)", () => {
     );
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     assert.equal((await vfs.read("/dst/x.md")).content, "x");
-    await ctx.conn.close();
   });
 
   it("vfs.copy recursive duplicates directory tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -338,11 +331,10 @@ describe("Builtin vfs.* tools (integration)", () => {
     );
     assert.equal((await vfs.read("/src/x.md")).content, "x");
     assert.equal((await vfs.read("/dst/x.md")).content, "x");
-    await ctx.conn.close();
   });
 
   it("vfs.copy without recursive fails on directory", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -358,7 +350,6 @@ describe("Builtin vfs.* tools (integration)", () => {
       () => runner.call("vfs.copy", { from: "/src", to: "/dst" }, baseCtx),
       (e: unknown) => e instanceof ToolError && e.code === "FAILED",
     );
-    await ctx.conn.close();
   });
 
   it("mutating vfs tool names include write/replace/delete/mkdir/move/copy only", () => {
@@ -378,7 +369,7 @@ describe("Builtin vfs.* tools (integration)", () => {
   });
 
   it("wraps VfsError as FAILED and preserves cause", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -398,11 +389,10 @@ describe("Builtin vfs.* tools (integration)", () => {
         return true;
       },
     );
-    await ctx.conn.close();
   });
 
   it("vfs.delete on missing path wraps VfsError NOT_FOUND as FAILED", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -422,6 +412,5 @@ describe("Builtin vfs.* tools (integration)", () => {
         return true;
       },
     );
-    await ctx.conn.close();
   });
 });

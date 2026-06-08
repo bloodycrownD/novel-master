@@ -7,12 +7,15 @@ import {
 } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
 import { revisionReachableKey } from "../../src/domain/message-checkpoint/logic/revision-gc.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("revision GC", () => {
   it("R8: rollback deletes tail-only revisions while keeping anchor references", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
@@ -59,13 +62,11 @@ describe("revision GC", () => {
     const head = (await svfs.read("/gc.md")).version;
     assert.notEqual(head, v2);
     assert.equal(revisionReachableKey(physical, v1).includes(physical), true);
-
-    await ctx.conn.close();
   });
 
   it("sweep drops intermediate revisions not referenced by checkpoint or live head", async () => {
-    const ctx = await openNovelMasterTestConnection();
-    const project = await ctx.projects.create("P");
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const revisions = new SqliteVfsRevisionRepository(ctx.conn);
@@ -99,7 +100,5 @@ describe("revision GC", () => {
       .map((k) => k.version);
     assert.ok(versions.includes(v2));
     assert.equal(versions.includes(v1), false);
-
-    await ctx.conn.close();
   });
 });

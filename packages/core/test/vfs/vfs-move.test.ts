@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isVfsError } from "@novel-master/core";
 import { moveVfsPath, remapPathUnderDir } from "../../src/domain/vfs/logic/vfs-move.js";
-import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
+import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+
+
+novelMasterTestFixture();
 
 describe("moveVfsPath", () => {
   it("moves a file and preserves content", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -20,11 +23,10 @@ describe("moveVfsPath", () => {
       () => vfs.read("/old.md"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 
   it("moves a directory tree", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -42,11 +44,10 @@ describe("moveVfsPath", () => {
       () => vfs.read("/src/a.md"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 
   it("fails with NOT_FOUND for missing path", async () => {
-    const ctx = await openNovelMasterTestConnection();
+    const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create("p");
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
@@ -55,7 +56,6 @@ describe("moveVfsPath", () => {
       () => moveVfsPath(vfs, "/missing", "/elsewhere"),
       (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    await ctx.conn.close();
   });
 });
 
