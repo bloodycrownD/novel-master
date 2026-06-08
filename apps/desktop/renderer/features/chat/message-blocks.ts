@@ -83,11 +83,9 @@ function summarizeToolInput(
   name: string,
   input: Record<string, unknown>,
 ): string {
-  if (name.startsWith("vfs.")) {
-    const path = input.path;
-    if (typeof path === "string") {
-      return path;
-    }
+  const path = input.path ?? input.dir ?? input.from;
+  if (typeof path === "string") {
+    return path;
   }
   const keys = Object.keys(input);
   if (keys.length === 0) {

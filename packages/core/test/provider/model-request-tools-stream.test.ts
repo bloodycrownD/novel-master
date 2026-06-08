@@ -27,7 +27,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
       system: "You are helpful",
       tools: [
         {
-          name: "vfs.read",
+          name: "read",
           description: "read",
           inputSchema: { type: "object", properties: { path: { type: "string" } } },
         },
@@ -93,7 +93,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
                     id: "call_1",
                     type: "function",
                     function: {
-                      name: "vfs.read",
+                      name: "read",
                       arguments: '{"path":"/a"}',
                     },
                   },
@@ -115,7 +115,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
       system: "sys",
       tools: [
         {
-          name: "vfs.read",
+          name: "read",
           description: "read",
           inputSchema: { type: "object" },
         },
@@ -213,7 +213,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
       apiKey: "k",
       vendorModelId: "gemini",
       userContent: "hi",
-      tools: [{ name: "vfs.read", description: "read", inputSchema: { type: "object" } }],
+      tools: [{ name: "read", description: "read", inputSchema: { type: "object" } }],
     });
 
     const parsed = JSON.parse(calls[0]!.body) as {

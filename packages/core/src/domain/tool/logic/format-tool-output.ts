@@ -4,7 +4,7 @@
  * @module domain/tool/logic/format-tool-output
  */
 
-/** Compact tool success text for the model (e.g. vfs.write → `ok`). */
+/** Compact tool success text for the model (e.g. write → `ok`). */
 export function formatToolOutputForLlm(out: unknown): string {
   if (typeof out === "string") {
     return out;

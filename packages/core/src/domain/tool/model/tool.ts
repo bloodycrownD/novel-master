@@ -15,7 +15,7 @@ import type { z } from "zod";
  * higher-level dispatchers.
  */
 export interface Tool<Input, Output, Ctx = unknown> {
-  /** Globally unique tool name (e.g. `vfs.read`). */
+  /** Globally unique tool name (e.g. `read`). */
   readonly name: string;
 
   /** Human readable description for logs/UX. */

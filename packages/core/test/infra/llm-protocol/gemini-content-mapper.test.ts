@@ -22,7 +22,7 @@ describe("gemini-content-mapper", () => {
             {
               type: "tool_use",
               id: "call_1",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/a" },
             },
           ],
@@ -50,7 +50,7 @@ describe("gemini-content-mapper", () => {
     assert.ok(toolResultTurn);
     const fr = toolResultTurn!.parts.find((p) => p.functionResponse != null)
       ?.functionResponse as { name: string };
-    assert.equal(fr.name, "vfs.read");
+    assert.equal(fr.name, "read");
   });
 
   it("outbound tool_result uses function name on functionResponse.name", () => {
@@ -62,7 +62,7 @@ describe("gemini-content-mapper", () => {
             {
               type: "tool_use",
               id: "call_1",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/a" },
             },
           ],
@@ -89,7 +89,7 @@ describe("gemini-content-mapper", () => {
     assert.ok(toolResultTurn);
     const fr = toolResultTurn!.parts.find((p) => p.functionResponse != null)
       ?.functionResponse as { name: string };
-    assert.equal(fr.name, "vfs.read");
+    assert.equal(fr.name, "read");
   });
 
   it("inbound functionResponse.name resolves to NM toolUseId", () => {
@@ -97,12 +97,12 @@ describe("gemini-content-mapper", () => {
       [
         {
           functionResponse: {
-            name: "vfs.read",
+            name: "read",
             response: { output: "file body" },
           },
         },
       ],
-      { toolUseIdByFunctionName: new Map([["vfs.read", "call_1"]]) },
+      { toolUseIdByFunctionName: new Map([["read", "call_1"]]) },
     );
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "tool_result");
@@ -114,13 +114,13 @@ describe("gemini-content-mapper", () => {
   it("round-trips functionCall to tool_use", () => {
     const blocks = geminiPartsToBlocks([
       {
-        functionCall: { name: "vfs.read", args: { path: "/b" } },
+        functionCall: { name: "read", args: { path: "/b" } },
       },
     ]);
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "tool_use");
     if (blocks[0]?.type === "tool_use") {
-      assert.equal(blocks[0].name, "vfs.read");
+      assert.equal(blocks[0].name, "read");
     }
   });
 
@@ -133,7 +133,7 @@ describe("gemini-content-mapper", () => {
             {
               type: "tool_use",
               id: "call_1",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/a" },
             },
           ],
@@ -164,7 +164,7 @@ describe("gemini-content-mapper", () => {
     assert.ok(toolResultTurn);
     const fr = toolResultTurn!.parts.find((p) => p.functionResponse != null)
       ?.functionResponse as { name: string; id: string };
-    assert.equal(fr.name, "vfs.read");
+    assert.equal(fr.name, "read");
     assert.equal(fr.id, "call_1");
   });
 
@@ -177,7 +177,7 @@ describe("gemini-content-mapper", () => {
             {
               type: "tool_use",
               id: "call_1",
-              name: "vfs.read",
+              name: "read",
               input: { path: "/a" },
             },
           ],
@@ -274,7 +274,7 @@ describe("gemini-content-mapper", () => {
 
   it("toolsToGeminiFunctionDeclarations wraps schemas", () => {
     const tools = toolsToGeminiFunctionDeclarations([
-      { name: "vfs.read", description: "read", inputSchema: { type: "object" } },
+      { name: "read", description: "read", inputSchema: { type: "object" } },
     ]);
     assert.equal(tools.length, 1);
     const decls = (tools[0] as { functionDeclarations: unknown[] }).functionDeclarations;

@@ -31,9 +31,9 @@ describe("ToolRunner.runParallel", () => {
 
     const outcomes = await runner.runParallel(
       [
-        { name: "vfs.write", input: { path: "/a.md", content: "A" } },
-        { name: "vfs.write", input: { path: "/b.md", content: "B" } },
-        { name: "vfs.write", input: { path: "/c.md", content: "C" } },
+        { name: "write", input: { path: "/a.md", content: "A" } },
+        { name: "write", input: { path: "/b.md", content: "B" } },
+        { name: "write", input: { path: "/c.md", content: "C" } },
       ],
       toolContext,
     );
@@ -84,8 +84,8 @@ describe("ToolRunner.runParallel", () => {
 
     await runner.runParallel(
       [
-        { name: "vfs.write", input: { path: "/race.md", content: "first" } },
-        { name: "vfs.write", input: { path: "/race.md", content: "second" } },
+        { name: "write", input: { path: "/race.md", content: "first" } },
+        { name: "write", input: { path: "/race.md", content: "second" } },
       ],
       toolContext,
     );
@@ -121,9 +121,9 @@ describe("ToolRunner.runParallel", () => {
 
     const outcomes = await runner.runParallel(
       [
-        { name: "vfs.read", input: { path: "/x.md" } },
-        { name: "vfs.read", input: { path: "/y.md" } },
-        { name: "vfs.list", input: { dir: "/" } },
+        { name: "read", input: { path: "/x.md" } },
+        { name: "read", input: { path: "/y.md" } },
+        { name: "list", input: { dir: "/" } },
       ],
       toolContext,
       { concurrency: 2 },

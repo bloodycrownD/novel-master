@@ -133,9 +133,17 @@ export type {
 export {
   createVfsTools,
   registerVfsTools,
-  isMutatingVfsToolName,
+  FILE_TOOL_NAMES,
+  FILE_OPEN_TOOL_NAMES,
+  MUTATING_FILE_TOOL_NAMES,
+  isMutatingFileToolName,
+  normalizeAgentToolPolicyName,
+  /** @deprecated Use {@link MUTATING_FILE_TOOL_NAMES} */
   MUTATING_VFS_TOOL_NAMES,
+  /** @deprecated Use {@link isMutatingFileToolName} */
+  isMutatingVfsToolName,
 } from "./domain/tool/builtin/vfs-tools.js";
+export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
 export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
 
 /**

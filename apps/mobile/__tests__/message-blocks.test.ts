@@ -30,7 +30,7 @@ describe('message-blocks', () => {
   it('pairs tool_result with tool_use id', () => {
     const messages = [
       msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       ], 1),
       msg('u1', 'user', [
         {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
@@ -38,7 +38,7 @@ describe('message-blocks', () => {
     ];
     const map = buildToolResultByUseId(messages);
     const view = toolCallViewFromUse(
-      {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
+      {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       map,
     );
     expect(view.status).toBe('success');
@@ -48,7 +48,7 @@ describe('message-blocks', () => {
   it('marks pending tool_use without result', () => {
     const messages = [
       msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {}},
+        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
       ], 1),
     ];
     const items = buildChatListItems(messages);
@@ -64,7 +64,7 @@ describe('message-blocks', () => {
       msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg('a1', 'assistant', [
         {type: 'text', text: 'hello'},
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/x'}},
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
       ], 2),
     ];
     const items = buildChatListItems(messages);
@@ -87,7 +87,7 @@ describe('message-blocks', () => {
   it('pairs tool_result on hidden user messages for tool card status', () => {
     const messages = [
       msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       ], 1),
       msg(
         'u1',
@@ -110,7 +110,7 @@ describe('message-blocks', () => {
     expect(
       vfsToolFilePath({
         toolUseId: 't1',
-        name: 'vfs.replace',
+        name: 'replace',
         input: {path: '/续写/a.md'},
         status: 'success',
       }),
@@ -118,7 +118,7 @@ describe('message-blocks', () => {
     expect(
       vfsToolFilePath({
         toolUseId: 't2',
-        name: 'vfs.list',
+        name: 'list',
         input: {path: '/'},
         status: 'success',
       }),

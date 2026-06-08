@@ -4,6 +4,7 @@
  * @module domain/agent/logic/validate-agent-tool-policy
  */
 
+import { normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
 
@@ -12,11 +13,12 @@ function assertKnownNames(
   registryNames: ReadonlySet<string>,
   listLabel: string,
 ): void {
-  for (const name of names) {
+  for (const raw of names) {
+    const name = normalizeAgentToolPolicyName(raw);
     if (!registryNames.has(name)) {
       throw new AgentConfigError(
         "INVALID_TOOL_POLICY",
-        `${listLabel} references unknown tool: ${name}`,
+        `${listLabel} references unknown tool: ${raw}`,
       );
     }
   }

@@ -8,6 +8,7 @@
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -122,6 +123,7 @@ export function feedAnthropicSseChunk(
 function toolUsesToBlocks(
   toolUses: readonly ToolUseAccumulator[],
   onStream?: (event: LlmStreamEvent) => void,
+  toolNames?: AnthropicToolNameWire,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const tu of toolUses) {
@@ -131,16 +133,17 @@ function toolUsesToBlocks(
     } catch {
       input = {};
     }
+    const name = toolNames?.fromWire(tu.name) ?? tu.name;
     blocks.push({
       type: "tool_use",
       id: tu.id,
-      name: tu.name,
+      name,
       input,
     });
     onStream?.({
       type: "tool-use",
       id: tu.id,
-      name: tu.name,
+      name,
       input,
     });
   }
@@ -151,6 +154,7 @@ function toolUsesToBlocks(
 export function finishAnthropicSse(
   state: AnthropicSseParserState,
   onStream?: (event: LlmStreamEvent) => void,
+  toolNames?: AnthropicToolNameWire,
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -168,7 +172,7 @@ export function finishAnthropicSse(
   if (thinking !== "") {
     blocks.push({ type: "thinking", text: thinking });
   }
-  blocks.push(...toolUsesToBlocks(state.toolUses, onStream));
+  blocks.push(...toolUsesToBlocks(state.toolUses, onStream, toolNames));
 
   return { blocks, streamRaw: state.streamRaw };
 }
@@ -177,6 +181,7 @@ export function finishAnthropicSse(
 export function finishAnthropicSsePartial(
   state: AnthropicSseParserState,
   onStream?: (event: LlmStreamEvent) => void,
+  toolNames?: AnthropicToolNameWire,
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
@@ -185,7 +190,7 @@ export function finishAnthropicSsePartial(
     feedAnthropicSseChunk(state, "\n", onStream);
   }
 
-  const toolBlocks = toolUsesToBlocks(state.toolUses, onStream);
+  const toolBlocks = toolUsesToBlocks(state.toolUses, onStream, toolNames);
   const toolUses = toolBlocks
     .filter((b): b is Extract<ContentBlock, { type: "tool_use" }> => b.type === "tool_use")
     .map((b) => ({ id: b.id, name: b.name, input: b.input }));

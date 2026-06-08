@@ -67,7 +67,7 @@ describe('buildTranscriptRows', () => {
       msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg('a1', 'assistant', [
         {type: 'text', text: 'hello'},
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/x'}},
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
       ], 2),
       msg('u2', 'user', [
         {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
@@ -80,7 +80,7 @@ describe('buildTranscriptRows', () => {
     expect(tool).toMatchObject({
       kind: 'tool',
       toolUseId: 'tu1',
-      name: 'vfs.read',
+      name: 'read',
       status: 'success',
       input: {path: '/x'},
       resultContent: 'ok',
@@ -92,7 +92,7 @@ describe('buildTranscriptRows', () => {
       msg(
         'a1',
         'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {}}],
+        [{type: 'tool_use', id: 'tu1', name: 'list', input: {}}],
         1,
         true,
       ),

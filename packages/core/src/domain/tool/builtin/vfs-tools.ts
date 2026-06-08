@@ -1,5 +1,5 @@
 /**
- * Builtin VFS tools (`vfs.*`) backed by {@link VfsService}.
+ * Builtin workspace file tools backed by {@link VfsService}.
  *
  * @module domain/tool/builtin/vfs-tools
  */
@@ -19,7 +19,7 @@ import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { ToolRegistry } from "../logic/tool-registry.js";
 
 /**
- * Context for builtin VFS tools: session-scoped, revision-aware {@link VfsService}.
+ * Context for builtin file tools: session-scoped, revision-aware {@link VfsService}.
  *
  * @remarks Mutating tools write directly to VFS; checkpoint capture runs at Agent step boundary.
  */
@@ -29,32 +29,66 @@ export type VfsToolContext = {
   readonly sessionId: string;
 };
 
-/** Builtin tool names that mutate session file content (checkpoint-eligible). */
-export const MUTATING_VFS_TOOL_NAMES = new Set([
-  "vfs.write",
-  "vfs.replace",
-  "vfs.delete",
-  "vfs.mkdir",
-  "vfs.move",
-  "vfs.copy",
+/** Registered builtin file tool names (insertion order). */
+export const FILE_TOOL_NAMES = [
+  "read",
+  "write",
+  "replace",
+  "delete",
+  "list",
+  "mkdir",
+  "glob",
+  "grep",
+  "move",
+  "copy",
+] as const;
+
+export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
+
+/** Tools that mutate session file content (checkpoint-eligible). */
+export const MUTATING_FILE_TOOL_NAMES = new Set<FileToolName>([
+  "write",
+  "replace",
+  "delete",
+  "mkdir",
+  "move",
+  "copy",
 ]);
 
-/** Returns whether a tool name performs VFS mutations for checkpoint purposes. */
-export function isMutatingVfsToolName(name: string): boolean {
-  return MUTATING_VFS_TOOL_NAMES.has(name);
+/** @deprecated Use {@link MUTATING_FILE_TOOL_NAMES}. */
+export const MUTATING_VFS_TOOL_NAMES = MUTATING_FILE_TOOL_NAMES;
+
+/** Returns whether a tool name performs file mutations for checkpoint purposes. */
+export function isMutatingFileToolName(name: string): boolean {
+  return MUTATING_FILE_TOOL_NAMES.has(name as FileToolName);
+}
+
+/** @deprecated Use {@link isMutatingFileToolName}. */
+export const isMutatingVfsToolName = isMutatingFileToolName;
+
+/** Tools whose results can open a file in the workspace preview. */
+export const FILE_OPEN_TOOL_NAMES = new Set<FileToolName>([
+  "read",
+  "write",
+  "replace",
+]);
+
+/** Maps legacy agent policy `vfs.read` → `read`. */
+export function normalizeAgentToolPolicyName(name: string): string {
+  return name.startsWith("vfs.") ? name.slice(4) : name;
 }
 
 /**
- * Creates the builtin VFS tools.
+ * Creates the builtin workspace file tools.
  *
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
- * (e.g. session-scoped VFS). Mutations append revisions via the revision-aware wrapper.
+ * (global / project / session scope). Mutations append revisions via the revision-aware wrapper.
  */
 export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
   const read: Tool<{ path: string }, VfsReadResult, VfsToolContext> = {
-    name: "vfs.read",
-    description: "Read a file by path",
+    name: "read",
+    description: "读取工作区文件内容",
     inputSchema: z.object({ path: z.string().min(1) }),
     outputSchema: z.object({
       path: z.string(),
@@ -72,8 +106,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     { version: number },
     VfsToolContext
   > = {
-    name: "vfs.write",
-    description: "Write file content (with optional version check)",
+    name: "write",
+    description: "写入或覆盖工作区文件（可选版本校验）",
     inputSchema: z.object({
       path: z.string().min(1),
       content: z.string(),
@@ -106,8 +140,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     { version: number; replacements: number },
     VfsToolContext
   > = {
-    name: "vfs.replace",
-    description: "Replace string in file content",
+    name: "replace",
+    description: "在工作区文件内查找并替换文本",
     inputSchema: z.object({
       path: z.string().min(1),
       oldString: z.string(),
@@ -133,9 +167,9 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     { ok: true },
     VfsToolContext
   > = {
-    name: "vfs.delete",
+    name: "delete",
     description:
-      "Delete a file or empty directory; set recursive to remove a directory tree",
+      "删除工作区中的文件或空目录；recursive 为 true 时可删除目录树",
     inputSchema: z.object({
       path: z.string().min(1),
       options: z.object({ recursive: z.boolean().optional() }).optional(),
@@ -154,8 +188,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     VfsListEntry[],
     VfsToolContext
   > = {
-    name: "vfs.list",
-    description: "List VFS entries under a directory",
+    name: "list",
+    description: "列出工作区目录下的文件与子目录",
     inputSchema: z.object({
       dir: z.string().min(1),
       options: z
@@ -177,8 +211,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
   };
 
   const mkdir: Tool<{ path: string }, { ok: true }, VfsToolContext> = {
-    name: "vfs.mkdir",
-    description: "Create an empty directory at path (parent must exist)",
+    name: "mkdir",
+    description: "在工作区创建空目录（父目录须已存在）",
     inputSchema: z.object({ path: z.string().min(1) }),
     outputSchema: z.object({ ok: z.literal(true) }),
     async run(input, ctx) {
@@ -192,8 +226,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     string[],
     VfsToolContext
   > = {
-    name: "vfs.glob",
-    description: "Find matching paths using glob patterns",
+    name: "glob",
+    description: "按 glob 模式在工作区中查找路径",
     inputSchema: z.object({
       pattern: z.string().min(1),
       options: z.object({ cwd: z.string().optional() }).optional(),
@@ -209,8 +243,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     VfsGrepMatch[],
     VfsToolContext
   > = {
-    name: "vfs.grep",
-    description: "Search for a pattern in files",
+    name: "grep",
+    description: "在工作区文件中搜索文本或正则",
     inputSchema: z.object({
       pattern: z.string().min(1),
       options: z.object({ pathPrefix: z.string().optional() }).optional(),
@@ -233,8 +267,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     { ok: true },
     VfsToolContext
   > = {
-    name: "vfs.move",
-    description: "Move or rename a file or directory",
+    name: "move",
+    description: "移动或重命名工作区中的文件/目录",
     inputSchema: z.object({
       from: z.string().min(1),
       to: z.string().min(1),
@@ -255,8 +289,8 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     { ok: true },
     VfsToolContext
   > = {
-    name: "vfs.copy",
-    description: "Copy a file; directory copy requires options.recursive true",
+    name: "copy",
+    description: "复制工作区文件；目录复制需设置 options.recursive 为 true",
     inputSchema: z.object({
       from: z.string().min(1),
       to: z.string().min(1),
@@ -273,7 +307,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
 }
 
 /**
- * Registers builtin VFS tools into a registry.
+ * Registers builtin file tools into a registry.
  *
  * @throws ToolError CONFLICT when a builtin name is already registered
  */

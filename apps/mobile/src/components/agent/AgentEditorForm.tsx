@@ -441,18 +441,18 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             <FormField
               label={toolsMode === 'allow' ? '白名单工具名' : '黑名单工具名'}
               tokens={tokens}
-              hint="逗号分隔，如 vfs.read, vfs.grep">
+              hint="逗号分隔，如 read, grep">
               <FormTextInput
                 tokens={tokens}
                 value={toolsList}
                 onChangeText={setToolsList}
-                placeholder="vfs.read, vfs.grep"
+                placeholder="read, grep"
                 multiline
               />
             </FormField>
           ) : (
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              未配置时使用全部 10 个已注册 vfs.* 工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
+              未配置时使用全部 10 个文件工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
             </Text>
           )}
         </FormSectionCard>

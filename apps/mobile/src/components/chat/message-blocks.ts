@@ -88,11 +88,9 @@ export function toolCallViewFromUse(
 }
 
 function summarizeToolInput(name: string, input: Record<string, unknown>): string {
-  if (name.startsWith('vfs.')) {
-    const path = input.path;
-    if (typeof path === 'string') {
-      return path;
-    }
+  const path = input.path ?? input.dir ?? input.from;
+  if (typeof path === 'string') {
+    return path;
   }
   const keys = Object.keys(input);
   if (keys.length === 0) {
@@ -106,16 +104,14 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
   }
 }
 
-/** VFS tools whose `input.path` points at a file we can open in session workspace. */
-const VFS_FILE_OPEN_TOOL_NAMES = new Set([
-  'vfs.read',
-  'vfs.write',
-  'vfs.replace',
-]);
+/** File tools whose `input.path` points at a file we can open in session workspace. */
+const FILE_OPEN_TOOL_NAMES = new Set(['read', 'write', 'replace']);
 
 /** Logical file path for workspace preview, or undefined if not openable. */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
-  if (!VFS_FILE_OPEN_TOOL_NAMES.has(tool.name)) {
+  const name =
+    tool.name.startsWith('vfs.') ? tool.name.slice(4) : tool.name;
+  if (!FILE_OPEN_TOOL_NAMES.has(name)) {
     return undefined;
   }
   const path = tool.input.path;

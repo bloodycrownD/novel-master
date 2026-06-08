@@ -30,7 +30,7 @@ describe('formatError (T4)', () => {
 
   it('formats ToolError with cause', () => {
     const err = new ToolError('FAILED', 'Tool failed: vfs.read', {
-      toolName: 'vfs.read',
+      toolName: 'read',
       cause: new Error('Path missing'),
     });
     expect(formatError(err)).toBe('Tool failed: vfs.read\nPath missing');

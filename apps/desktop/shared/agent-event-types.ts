@@ -3,6 +3,7 @@
  */
 
 export const EVENT_AGENT_RUN_FINISHED = "agent.run.finished" as const;
+export const EVENT_AGENT_RUN_FAILED = "agent.run.failed" as const;
 export const EVENT_AGENT_STREAM_TEXT_DELTA = "agent.stream.text-delta" as const;
 export const EVENT_AGENT_STREAM_THINKING_DELTA =
   "agent.stream.thinking-delta" as const;
@@ -12,6 +13,12 @@ export interface AgentRunFinishedPayload {
   readonly sessionId: string;
   readonly projectId: string;
   readonly stopReason: string;
+}
+
+export interface AgentRunFailedPayload {
+  readonly sessionId: string;
+  readonly projectId: string;
+  readonly error: string;
 }
 
 export interface AgentStreamTextDeltaPayload {

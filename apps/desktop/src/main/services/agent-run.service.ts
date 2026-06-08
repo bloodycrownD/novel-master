@@ -7,6 +7,7 @@ import {
   AgentConfigError,
   ChatAgentSession,
   createAgentRunner,
+  parseApplicationModelId,
   registerVfsTools,
   resolveAgentToolRegistry,
   resolveApplicationModelId,
@@ -16,6 +17,12 @@ import {
   type AgentDefinition,
   type AgentRunResult,
 } from "@novel-master/core";
+import {
+  desktopLog,
+  desktopLogError,
+  desktopLogWarn,
+  isDesktopLlmDebug,
+} from "../log/desktop-log.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
 export interface AgentRunScope {
@@ -110,6 +117,33 @@ export async function runAgentTurn(
   const { applicationModelId, workspaceModelId } =
     await resolveDesktopApplicationModelId(runtime, definition);
 
+  if (isDesktopLlmDebug()) {
+    const { providerId, vendorModelId } =
+      parseApplicationModelId(applicationModelId);
+    try {
+      const provider = await runtime.providers.get(providerId);
+      desktopLog("agent-run start", {
+        sessionId: scope.sessionId,
+        projectId: scope.projectId,
+        providerId,
+        protocol: provider.protocol,
+        baseUrl: provider.baseUrl,
+        vendorModelId,
+        applicationModelId,
+        stream,
+      });
+    } catch (lookupError) {
+      desktopLogWarn("agent-run provider lookup failed", {
+        providerId,
+        applicationModelId,
+        err:
+          lookupError instanceof Error
+            ? lookupError.message
+            : String(lookupError),
+      });
+    }
+  }
+
   if (trimmed !== "") {
     stage = "append-user-message";
     await runtime.messages.append(scope.sessionId, "user", textBlocks(trimmed));
@@ -169,22 +203,22 @@ export async function runAgentTurn(
       signal: options?.signal,
     });
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      const err =
-        error instanceof Error
-          ? {
-              name: error.name,
-              message: error.message,
-              stack: error.stack,
-            }
-          : { name: typeof error, message: String(error) };
-      console.error("[novel-master/agent-run] failed", {
-        stage,
-        sessionId: scope.sessionId,
-        projectId: scope.projectId,
-        err,
-      });
-    }
+    const err =
+      error instanceof Error
+        ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          }
+        : { name: typeof error, message: String(error) };
+    desktopLogError("agent-run failed", {
+      stage,
+      sessionId: scope.sessionId,
+      projectId: scope.projectId,
+      applicationModelId,
+      stream,
+      err,
+    });
     throw error;
   }
 }

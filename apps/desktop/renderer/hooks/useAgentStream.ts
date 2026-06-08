@@ -3,10 +3,12 @@
  */
 import { useEffect } from "react";
 import {
+  EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  type AgentRunFailedPayload,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
@@ -20,6 +22,7 @@ export interface UseAgentStreamOptions {
   readonly onThinkingDelta: (delta: string) => void;
   readonly onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   readonly onRunFinished?: (payload: AgentRunFinishedPayload) => void;
+  readonly onRunFailed?: (payload: AgentRunFailedPayload) => void;
 }
 
 export function useAgentStream({
@@ -28,6 +31,7 @@ export function useAgentStream({
   onThinkingDelta,
   onStepCommitted,
   onRunFinished,
+  onRunFailed,
 }: UseAgentStreamOptions): void {
   useEffect(() => {
     if (sessionId == null) {
@@ -61,6 +65,13 @@ export function useAgentStream({
         if (p.sessionId === sessionId) {
           onRunFinished?.(p);
         }
+        return;
+      }
+      if (type === EVENT_AGENT_RUN_FAILED) {
+        const p = payload as AgentRunFailedPayload;
+        if (p.sessionId === sessionId) {
+          onRunFailed?.(p);
+        }
       }
     });
   }, [
@@ -69,5 +80,6 @@ export function useAgentStream({
     onThinkingDelta,
     onStepCommitted,
     onRunFinished,
+    onRunFailed,
   ]);
 }

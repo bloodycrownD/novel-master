@@ -357,12 +357,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 rows={3}
                 value={toolsList}
                 onChange={(e) => setToolsList(e.target.value)}
-                placeholder="vfs.read, vfs.grep"
+                placeholder="read, grep"
               />
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部 10 个已注册 vfs.* 工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
+              未配置时使用全部 10 个文件工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
             </p>
           )}
         </SettingsSection>

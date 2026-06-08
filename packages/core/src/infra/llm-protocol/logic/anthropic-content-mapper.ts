@@ -6,6 +6,7 @@
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 
 type AnthropicContentItem = Record<string, unknown>;
 
@@ -13,9 +14,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** NM blocks ‚Ü?Anthropic message `content` array. */
+/** NM blocks ù?Anthropic message `content` array. */
 export function blocksToAnthropicContent(
   blocks: readonly ContentBlock[],
+  toolNames?: AnthropicToolNameWire,
 ): AnthropicContentItem[] {
   return blocks.map((block) => {
     switch (block.type) {
@@ -40,7 +42,7 @@ export function blocksToAnthropicContent(
         return {
           type: "tool_use",
           id: block.id,
-          name: block.name,
+          name: toolNames?.toWire(block.name) ?? block.name,
           input: block.input,
         };
       case "tool_result":
@@ -57,9 +59,10 @@ export function blocksToAnthropicContent(
   });
 }
 
-/** Anthropic API `content[]` ‚Ü?NM blocks (unknown types are skipped). */
+/** Anthropic API `content[]` ù?NM blocks (unknown types are skipped). */
 export function anthropicContentToBlocks(
   content: readonly unknown[],
+  toolNames?: AnthropicToolNameWire,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   for (const item of content) {
@@ -109,7 +112,7 @@ export function anthropicContentToBlocks(
           blocks.push({
             type: "tool_use",
             id: item.id,
-            name: item.name,
+            name: toolNames?.fromWire(item.name) ?? item.name,
             input: item.input,
           });
         }
@@ -140,9 +143,10 @@ export function anthropicContentToBlocks(
   return blocks;
 }
 
-/** Session history ‚Ü?Anthropic `messages[]` (tool_result ‚Ü?user role). */
+/** Session history ù?Anthropic `messages[]` (tool_result ù?user role). */
 export function chatMessagesToAnthropic(
   messages: readonly ChatMessage[],
+  toolNames?: AnthropicToolNameWire,
 ): Array<{ role: string; content: AnthropicContentItem[] }> {
   const out: Array<{ role: string; content: AnthropicContentItem[] }> = [];
 
@@ -153,13 +157,13 @@ export function chatMessagesToAnthropic(
     if (toolResults.length > 0) {
       out.push({
         role: "user",
-        content: blocksToAnthropicContent(toolResults),
+        content: blocksToAnthropicContent(toolResults, toolNames),
       });
     }
     if (other.length > 0) {
       out.push({
         role: msg.role === "assistant" ? "assistant" : "user",
-        content: blocksToAnthropicContent(other),
+        content: blocksToAnthropicContent(other, toolNames),
       });
     }
   }
