@@ -1,7 +1,7 @@
 import Markdown from "react-markdown";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallGroupCard } from "./ToolCallGroupCard";
 
 const ROLE_LABELS: Record<string, string> = {
   user: "用户",
@@ -66,12 +66,6 @@ export function MessageList({
   return (
     <>
       {listItems.map((item) => {
-        if (item.kind === "tool") {
-          return (
-            <ToolCallCard key={`tool-${item.tool.toolUseId}`} tool={item.tool} />
-          );
-        }
-
         const msg = item.message;
         const selected = selectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
@@ -121,6 +115,9 @@ export function MessageList({
                   <summary>思考过程</summary>
                   <p>{item.thinkingParts.join("\n")}</p>
                 </details>
+              ) : null}
+              {item.tools.length > 0 ? (
+                <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
               ) : null}
               {text ? (
                 <MessageBody text={text} richText={chatRichText} />

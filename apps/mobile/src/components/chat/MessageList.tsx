@@ -24,7 +24,8 @@ import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
 import {buildChatListItems, type ChatListItem} from './message-blocks';
 import {ThinkingBlockCard} from './ThinkingBlockCard';
-import {ToolCallCard} from './ToolCallCard';
+import {ToolCallGroupCard} from './ToolCallGroupCard';
+import type {ToolCallView} from './message-blocks';
 
 type Props = {
   messages: readonly ChatMessage[];
@@ -324,6 +325,7 @@ export function MessageList({
   const renderAssistantBubble = (
     body: string,
     thinking: string,
+    tools: readonly ToolCallView[],
     selected: boolean,
     hidden: boolean,
     messageId: string,
@@ -334,7 +336,7 @@ export function MessageList({
   ) => {
     const trimmedThinking = thinking.trim();
     const trimmedBody = body.trim();
-    if (!trimmedThinking && !trimmedBody) {
+    if (!trimmedThinking && !trimmedBody && tools.length === 0) {
       return null;
     }
     const colors = chatBubbleColors(tokens, false);
@@ -360,7 +362,16 @@ export function MessageList({
             richRenderEpoch={richRenderEpoch}
             contentId={`thinking-${messageId}`}
             embedded
+            showDividerBelow={tools.length > 0 || !!trimmedBody}
+          />
+        ) : null}
+        {tools.length > 0 ? (
+          <ToolCallGroupCard
+            tools={tools}
+            dimmed={hidden}
+            onOpenFile={onOpenToolFile}
             showDividerBelow={!!trimmedBody}
+            embedded
           />
         ) : null}
         {trimmedBody
@@ -456,9 +467,6 @@ export function MessageList({
           return 'stream';
         }
         const row = item as ChatListItem;
-        if (row.kind === 'tool') {
-          return `tool-${row.tool.toolUseId}`;
-        }
         return `msg-${row.message.id}`;
       }}
       ListEmptyComponent={
@@ -475,6 +483,7 @@ export function MessageList({
               {renderAssistantBubble(
                 streamingText ?? '',
                 streamingThinking ?? '',
+                [],
                 false,
                 false,
                 'stream',
@@ -484,16 +493,11 @@ export function MessageList({
           );
         }
         const row = item as ChatListItem;
-        if (row.kind === 'tool') {
-          return (
-            <ToolCallCard tool={row.tool} onOpenFile={onOpenToolFile} />
-          );
-        }
         const isUser = row.message.role === 'user';
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
-        if (!body && !thinking) {
+        if (!body && !thinking && row.tools.length === 0) {
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
@@ -503,6 +507,7 @@ export function MessageList({
           renderAssistantBubble(
             body,
             thinking,
+            row.tools,
             selected,
             hidden,
             row.message.id,

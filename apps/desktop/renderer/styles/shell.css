@@ -4138,3 +4138,29 @@ html[data-theme="dark"] .chat-message {
   cursor: pointer;
   font-weight: 500;
 }
+
+.chat-message__tool-group {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-message__tool-group--dimmed {
+  opacity: 0.55;
+}
+
+.chat-message__tool-group summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-message__tool-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.tool-call-card--group-item {
+  margin: 0;
+}

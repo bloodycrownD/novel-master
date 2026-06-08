@@ -5,6 +5,8 @@ type ToolCallCardProps = {
   tool: ToolCallView;
   /** When true, show full JSON input instead of summary. */
   showFullParams?: boolean;
+  /** Inline row inside ToolCallGroupCard. */
+  groupItem?: boolean;
 };
 
 function statusLabel(status: ToolCallView["status"]): string {
@@ -18,7 +20,11 @@ function statusLabel(status: ToolCallView["status"]): string {
   }
 }
 
-export function ToolCallCard({ tool, showFullParams }: ToolCallCardProps) {
+export function ToolCallCard({
+  tool,
+  showFullParams,
+  groupItem = false,
+}: ToolCallCardProps) {
   const summary = toolCallSummary(tool);
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
@@ -26,7 +32,7 @@ export function ToolCallCard({ tool, showFullParams }: ToolCallCardProps) {
 
   return (
     <div
-      className={`tool-call-card tool-call-card--${tool.status}`}
+      className={`tool-call-card tool-call-card--${tool.status}${groupItem ? " tool-call-card--group-item" : ""}`}
       data-tool-use-id={tool.toolUseId}
     >
       <div className="tool-call-card__header">
