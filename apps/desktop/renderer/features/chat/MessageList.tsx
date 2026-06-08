@@ -1,4 +1,5 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
 import { ToolCallGroupCard } from "./ToolCallGroupCard";
@@ -25,14 +26,16 @@ interface MessageListProps {
 function MessageBody({
   text,
   richText,
+  alwaysRichText = false,
 }: {
   text: string;
   richText: boolean;
+  alwaysRichText?: boolean;
 }) {
-  if (richText) {
+  if (richText || alwaysRichText) {
     return (
       <div className="chat-message__markdown">
-        <Markdown>{text}</Markdown>
+        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
       </div>
     );
   }
@@ -120,7 +123,11 @@ export function MessageList({
                 <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
               ) : null}
               {text ? (
-                <MessageBody text={text} richText={chatRichText} />
+                <MessageBody
+                  text={text}
+                  richText={chatRichText}
+                  alwaysRichText={msg.role === "assistant"}
+                />
               ) : null}
             </div>
           </div>
@@ -130,13 +137,9 @@ export function MessageList({
         <div className="chat-message chat-message--assistant chat-message--streaming">
           <div className="chat-message__body">
             <span className="chat-message__role">助手</span>
-            {chatRichText ? (
-              <div className="chat-message__markdown">
-                <Markdown>{streamingText}</Markdown>
-              </div>
-            ) : (
-              <p>{streamingText}</p>
-            )}
+            <div className="chat-message__markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+            </div>
           </div>
         </div>
       ) : null}

@@ -46,7 +46,7 @@ export function ConversationPanel({
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [chatRichText, setChatRichText] = useState(false);
+  const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
     x: number;
@@ -76,7 +76,11 @@ export function ConversationPanel({
 
   useEffect(() => {
     ipcAppUiGet("chatRichText")
-      .then((res) => setChatRichText(res.value === "true"))
+      .then((res) =>
+        setChatRichText(
+          res.ok && res.data != null ? res.data !== "false" : true,
+        ),
+      )
       .catch(() => undefined);
   }, []);
 
