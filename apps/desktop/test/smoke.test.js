@@ -40,6 +40,10 @@ test("preload exposes novelMasterDesktop IPC bridge API", () => {
   );
   const preloadBundle = readFileSync(preloadCjs, "utf8");
   assert.match(preloadBundle, /contextBridge\.exposeInMainWorld\("novelMasterDesktop"/);
+  assert.match(
+    preloadBundle,
+    /customTitleBar:\s*process\.platform === "win32" \|\| process\.platform === "darwin"/,
+  );
   assert.doesNotMatch(
     preloadBundle,
     /^\s*import\s+/m,
