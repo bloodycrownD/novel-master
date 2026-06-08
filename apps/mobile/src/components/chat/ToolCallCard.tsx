@@ -2,7 +2,7 @@
  * Tool invocation card with status from paired tool_result.
  */
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 import {
   toolCallSummary,
@@ -13,6 +13,8 @@ import {
 type Props = {
   tool: ToolCallView;
   showFullParams?: boolean;
+  /** Inline row inside ToolCallGroupCard (no outer list margins). */
+  groupItem?: boolean;
   /** When set and tool has a VFS file path, the card is tappable. */
   onOpenFile?: (path: string) => void;
 };
@@ -23,6 +25,8 @@ function statusLabel(status: ToolCallView['status']): string {
       return '成功';
     case 'error':
       return '失败';
+    case 'pending':
+      return '执行中…';
     default:
       return '进行中';
   }
@@ -42,7 +46,12 @@ function statusColor(
   }
 }
 
-export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
+export function ToolCallCard({
+  tool,
+  showFullParams,
+  groupItem = false,
+  onOpenFile,
+}: Props) {
   const {tokens} = useTheme();
   const filePath = vfsToolFilePath(tool);
   const canOpen = filePath != null && onOpenFile != null;
@@ -57,13 +66,22 @@ export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
         <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
           {tool.name}
         </Text>
-        <Text
-          style={[
-            styles.status,
-            {color: statusColor(tool.status, tokens)},
-          ]}>
-          {statusLabel(tool.status)}
-        </Text>
+        <View style={styles.statusRow}>
+          {tool.status === 'pending' ? (
+            <ActivityIndicator
+              size="small"
+              color={statusColor(tool.status, tokens)}
+              style={styles.statusSpinner}
+            />
+          ) : null}
+          <Text
+            style={[
+              styles.status,
+              {color: statusColor(tool.status, tokens)},
+            ]}>
+            {statusLabel(tool.status)}
+          </Text>
+        </View>
       </View>
       {detail ? (
         <Text style={[styles.summary, {color: tokens.textSecondary}]}>
@@ -85,7 +103,7 @@ export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
         accessibilityLabel={`打开文件 ${filePath}`}
         onPress={() => onOpenFile(filePath)}
         style={({pressed}) => [
-          styles.card,
+          groupItem ? styles.groupItem : styles.card,
           {
             backgroundColor: tokens.surface,
             borderColor: canOpen ? tokens.primary : tokens.border,
@@ -100,7 +118,7 @@ export function ToolCallCard({tool, showFullParams, onOpenFile}: Props) {
   return (
     <View
       style={[
-        styles.card,
+        groupItem ? styles.groupItem : styles.card,
         {backgroundColor: tokens.surface, borderColor: tokens.border},
       ]}>
       {card}
@@ -116,6 +134,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
   },
+  groupItem: {
+    alignSelf: 'stretch',
+    width: '100%',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -123,6 +148,8 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: {flex: 1, fontWeight: '600', fontSize: 14},
+  statusRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
+  statusSpinner: {transform: [{scale: 0.75}]},
   status: {fontSize: 12, fontWeight: '500'},
   summary: {marginTop: 6, fontSize: 13},
   openHint: {marginTop: 8, fontSize: 12, fontWeight: '500'},

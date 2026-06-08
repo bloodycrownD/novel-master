@@ -27,9 +27,15 @@ import {ChatComposer} from '../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
 import {ChatStreamMetricsBar} from '../../components/chat/ChatStreamMetricsBar';
 import {
+  applyTextEditToMessage,
   buildMessageActionItems,
   editableTextFromMessage,
 } from '../../components/chat/message-edit';
+import {messageHasToolUse} from '../../components/chat/message-blocks';
+import {
+  deleteToolTurn,
+  hideToolTurn,
+} from '../../components/chat/tool-turn-actions';
 import {
   MessageActionMenu,
   type MessageMenuAnchor,
@@ -788,34 +794,70 @@ export function ChatTabScreen() {
   const deleteSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
     for (const id of ids) {
-      await runtime.messages.delete(id);
+      const target = chatMessages.find(m => m.id === id);
+      if (target != null && messageHasToolUse(target)) {
+        await deleteToolTurn(runtime, chatMessages, id);
+      } else {
+        await runtime.messages.delete(id);
+      }
     }
     exitMessageBatch();
     setStreamingText('');
     setStreamingThinking('');
     await reloadMessages(true);
     void refreshChatTokenLabel();
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
+  }, [
+    runtime,
+    messageBatch,
+    chatMessages,
+    exitMessageBatch,
+    reloadMessages,
+    refreshChatTokenLabel,
+  ]);
 
   const hideSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
     for (const id of ids) {
-      await runtime.messages.hide(id);
+      const target = chatMessages.find(m => m.id === id);
+      if (target != null && messageHasToolUse(target)) {
+        await hideToolTurn(runtime, chatMessages, id, true);
+      } else {
+        await runtime.messages.hide(id);
+      }
     }
     exitMessageBatch();
     await reloadMessages(true);
     void refreshChatTokenLabel();
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
+  }, [
+    runtime,
+    messageBatch,
+    chatMessages,
+    exitMessageBatch,
+    reloadMessages,
+    refreshChatTokenLabel,
+  ]);
 
   const unhideSelectedMessages = useCallback(async () => {
     const ids = [...messageBatch.selectedIds];
     for (const id of ids) {
-      await runtime.messages.show(id);
+      const target = chatMessages.find(m => m.id === id);
+      if (target != null && messageHasToolUse(target)) {
+        await hideToolTurn(runtime, chatMessages, id, false);
+      } else {
+        await runtime.messages.show(id);
+      }
     }
     exitMessageBatch();
     await reloadMessages(true);
     void refreshChatTokenLabel();
-  }, [runtime, messageBatch, exitMessageBatch, reloadMessages, refreshChatTokenLabel]);
+  }, [
+    runtime,
+    messageBatch,
+    chatMessages,
+    exitMessageBatch,
+    reloadMessages,
+    refreshChatTokenLabel,
+  ]);
 
   const confirmMessageBatchDelete = useCallback(() => {
     const count = messageBatch.selectedCount;
@@ -875,27 +917,37 @@ export function ChatTabScreen() {
   const handleHideMessage = useCallback(
     async (messageId: string) => {
       try {
-        await runtime.messages.hide(messageId);
+        const target = chatMessages.find(m => m.id === messageId);
+        if (target != null && messageHasToolUse(target)) {
+          await hideToolTurn(runtime, chatMessages, messageId, true);
+        } else {
+          await runtime.messages.hide(messageId);
+        }
         await reloadMessages(true);
         void refreshChatTokenLabel();
       } catch (error) {
         showToast(toastMessage('隐藏失败', error));
       }
     },
-    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
+    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleShowMessage = useCallback(
     async (messageId: string) => {
       try {
-        await runtime.messages.show(messageId);
+        const target = chatMessages.find(m => m.id === messageId);
+        if (target != null && messageHasToolUse(target)) {
+          await hideToolTurn(runtime, chatMessages, messageId, false);
+        } else {
+          await runtime.messages.show(messageId);
+        }
         await reloadMessages(true);
         void refreshChatTokenLabel();
       } catch (error) {
         showToast(toastMessage('取消隐藏失败', error));
       }
     },
-    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
+    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleCompactSession = useCallback(() => {
@@ -948,7 +1000,12 @@ export function ChatTabScreen() {
   const handleDeleteMessage = useCallback(
     async (messageId: string) => {
       try {
-        await runtime.messages.delete(messageId);
+        const target = chatMessages.find(m => m.id === messageId);
+        if (target != null && messageHasToolUse(target)) {
+          await deleteToolTurn(runtime, chatMessages, messageId);
+        } else {
+          await runtime.messages.delete(messageId);
+        }
         setStreamingText('');
         setStreamingThinking('');
         await reloadMessages(true);
@@ -957,7 +1014,7 @@ export function ChatTabScreen() {
         showToast(toastMessage('删除失败', error));
       }
     },
-    [runtime, reloadMessages, refreshChatTokenLabel, showToast],
+    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
   );
 
   const handleMessageMenuAction = useCallback(
@@ -965,7 +1022,7 @@ export function ChatTabScreen() {
       if (action === 'edit') {
         const initial = editableTextFromMessage(target);
         if (initial == null) {
-          showToast(toastMessage('无法编辑', '该消息包含工具调用，暂不支持编辑'));
+          showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
         setMessageEditPrompt({
@@ -1017,14 +1074,22 @@ export function ChatTabScreen() {
         showToast(toastMessage('无法保存', '消息内容不能为空'));
         return;
       }
+      const original = chatMessages.find(m => m.id === messageId);
+      if (original == null) {
+        showToast(toastMessage('保存失败', '消息不存在'));
+        return;
+      }
       try {
-        await runtime.messages.updateContent(messageId, textBlocks(trimmed));
+        await runtime.messages.updateContent(
+          messageId,
+          applyTextEditToMessage(original, trimmed),
+        );
         await reloadMessages(true);
       } catch (error) {
         showToast(toastMessage('保存失败', error));
       }
     },
-    [runtime, reloadMessages, showToast],
+    [runtime, chatMessages, reloadMessages, showToast],
   );
 
   const confirmBatchDelete = useCallback(() => {

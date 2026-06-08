@@ -25,6 +25,8 @@ import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from "./message-edit";
+import { messageHasToolUse } from "./message-blocks";
+import { deleteToolTurn, hideToolTurn } from "./tool-turn-actions";
 import { MessageEditModal } from "./MessageEditModal";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
@@ -47,7 +49,7 @@ export function ConversationPanel({
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
-  const [chatRichText, setChatRichText] = useState(false);
+  const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
     x: number;
@@ -77,7 +79,11 @@ export function ConversationPanel({
 
   useEffect(() => {
     ipcAppUiGet("chatRichText")
-      .then((res) => setChatRichText(res.value === "true"))
+      .then((res) =>
+        setChatRichText(
+          res.ok && res.data != null ? res.data !== "false" : true,
+        ),
+      )
       .catch(() => undefined);
   }, []);
 
@@ -145,7 +151,12 @@ export function ConversationPanel({
 
   const runBatchDelete = async () => {
     for (const id of messageBatch.selectedIds) {
-      await ipcMessagesDelete({ messageId: id });
+      const target = messages.find((m) => m.id === id);
+      if (target != null && messageHasToolUse(target)) {
+        await deleteToolTurn(messages, id);
+      } else {
+        await ipcMessagesDelete({ messageId: id });
+      }
     }
     messageBatch.exit();
     await reloadMessages();
@@ -157,7 +168,12 @@ export function ConversationPanel({
       return;
     }
     for (const id of ids) {
-      await ipcMessagesHide({ messageId: id });
+      const target = messages.find((m) => m.id === id);
+      if (target != null && messageHasToolUse(target)) {
+        await hideToolTurn(messages, id, true);
+      } else {
+        await ipcMessagesHide({ messageId: id });
+      }
     }
     messageBatch.exit();
     await reloadMessages();
@@ -237,19 +253,27 @@ export function ConversationPanel({
       if (action === "edit") {
         const initial = editableTextFromMessage(message);
         if (initial == null) {
-          showToast("该消息包含工具调用，暂不支持编辑");
+          showToast("该消息没有可编辑的文本");
           return;
         }
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }
       if (action === "hide") {
-        await ipcMessagesHide({ messageId: message.id });
+        if (messageHasToolUse(message)) {
+          await hideToolTurn(messages, message.id, true);
+        } else {
+          await ipcMessagesHide({ messageId: message.id });
+        }
         await reloadMessages();
         return;
       }
       if (action === "unhide") {
-        await ipcMessagesShow({ messageId: message.id });
+        if (messageHasToolUse(message)) {
+          await hideToolTurn(messages, message.id, false);
+        } else {
+          await ipcMessagesShow({ messageId: message.id });
+        }
         await reloadMessages();
         return;
       }
@@ -286,6 +310,7 @@ export function ConversationPanel({
     [
       running,
       sessionId,
+      messages,
       reloadMessages,
       copyMessage,
       rollbackToMessage,
@@ -309,11 +334,16 @@ export function ConversationPanel({
 
   const deleteSingleMessage = useCallback(
     async (messageId: string) => {
-      await ipcMessagesDelete({ messageId });
+      const target = messages.find((m) => m.id === messageId);
+      if (target != null && messageHasToolUse(target)) {
+        await deleteToolTurn(messages, messageId);
+      } else {
+        await ipcMessagesDelete({ messageId });
+      }
       setStreamingText("");
       await reloadMessages();
     },
-    [reloadMessages],
+    [messages, reloadMessages],
   );
 
   const handleConfirm = useCallback(async () => {

@@ -1,7 +1,7 @@
 /**
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
-import { messageBodyText, textBlocks } from "@novel-master/core";
+import { messageBodyText, textBlocks, type MessageContent } from "@novel-master/core";
 import type { ContentBlock } from "@novel-master/core";
 import type {
   ChatMessageDto,
@@ -97,15 +97,37 @@ export async function handleMessagesAppend(
   }
 }
 
+/** Merges edited text at first text-block slot; preserves thinking / tool_use order. */
+function applyTextEditToMessageContent(
+  content: MessageContent,
+  newText: string,
+): MessageContent {
+  const blocks = content.blocks ?? [];
+  const result: ContentBlock[] = [];
+  let textReplaced = false;
+
+  for (const block of blocks) {
+    if (block.type === "text") {
+      if (!textReplaced) {
+        result.push({ type: "text", text: newText });
+        textReplaced = true;
+      }
+    } else {
+      result.push(block);
+    }
+  }
+
+  return { blocks: result };
+}
+
 export async function handleMessagesEdit(
   req: MessagesEditRequest,
 ): Promise<IpcResult<ChatMessageDto>> {
   try {
     const rt = await getDesktopRuntime();
-    const msg = await rt.messages.updateContent(
-      req.messageId,
-      textBlocks(req.text),
-    );
+    const existing = await rt.messages.get(req.messageId);
+    const merged = applyTextEditToMessageContent(existing.content, req.text);
+    const msg = await rt.messages.updateContent(req.messageId, merged);
     return { ok: true, data: toDto(msg) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

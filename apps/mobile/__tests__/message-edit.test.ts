@@ -1,5 +1,8 @@
 import type {ChatMessage} from '@novel-master/core';
-import {editableTextFromMessage} from '../src/components/chat/message-edit';
+import {
+  applyTextEditToMessage,
+  editableTextFromMessage,
+} from '../src/components/chat/message-edit';
 
 function msg(
   role: string,
@@ -30,14 +33,39 @@ describe('message-edit', () => {
     ).toBe('reply');
   });
 
-  it('returns null for tool_use messages', () => {
+  it('allows editing text when tool_use blocks are present', () => {
     expect(
       editableTextFromMessage(
         msg('assistant', [
-          {type: 'text', text: 'x'},
-          {type: 'tool_use', id: 't1', name: 'read', input: {}},
+          {type: 'text', text: 'before tools'},
+          {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
+        ]),
+      ),
+    ).toBe('before tools');
+  });
+
+  it('returns null for pure tool_use assistant messages', () => {
+    expect(
+      editableTextFromMessage(
+        msg('assistant', [
+          {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
         ]),
       ),
     ).toBeNull();
+  });
+
+  it('applyTextEditToMessage preserves tool_use and thinking block order', () => {
+    const original = msg('assistant', [
+      {type: 'thinking', text: 'hmm'},
+      {type: 'text', text: 'old'},
+      {type: 'tool_use', id: 't1', name: 'vfs.read', input: {path: '/a'}},
+      {type: 'text', text: 'tail'},
+    ]);
+    const merged = applyTextEditToMessage(original, 'new body');
+    expect(merged.blocks).toEqual([
+      {type: 'thinking', text: 'hmm'},
+      {type: 'text', text: 'new body'},
+      {type: 'tool_use', id: 't1', name: 'vfs.read', input: {path: '/a'}},
+    ]);
   });
 });

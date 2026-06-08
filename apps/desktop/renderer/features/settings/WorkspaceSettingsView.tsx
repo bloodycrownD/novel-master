@@ -38,7 +38,7 @@ export function WorkspaceSettingsView() {
   const [agentLabel, setAgentLabel] = useState("—");
   const [regexLabel, setRegexLabel] = useState("不启用");
   const [llmStream, setLlmStream] = useState(true);
-  const [chatRichText, setChatRichText] = useState(false);
+  const [chatRichText, setChatRichText] = useState(true);
   const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(false);
   const [compactionEnabled, setCompactionEnabled] = useState(false);
   const [compactionTokenRatio, setCompactionTokenRatio] = useState("0.8");
@@ -97,7 +97,9 @@ export function WorkspaceSettingsView() {
       setLlmStream(streamRes.data);
     }
     if (richRes.ok) {
-      setChatRichText(richRes.data === "true");
+      setChatRichText(
+        richRes.data != null ? richRes.data !== "false" : true,
+      );
     }
     if (vfsRes.ok) {
       setSessionFsVersionCheck(vfsRes.data);

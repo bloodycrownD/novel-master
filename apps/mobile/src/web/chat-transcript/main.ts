@@ -45,6 +45,7 @@ export function buildTranscriptBootScript(): string {
     menuOverlayHandler: null,
     menuNativeTextBlockHandler: null,
     thinkingExpanded: {},
+    toolGroupExpanded: {},
     scrollRaf: null,
     loadOlderArmed: true,
     longPressTimer: null,
@@ -178,6 +179,14 @@ export function buildTranscriptBootScript(): string {
     return '进行中';
   }
 
+  function hasPendingTools(tools) {
+    if (!tools || tools.length === 0) return false;
+    for (var pi = 0; pi < tools.length; pi++) {
+      if (tools[pi].status !== 'success' && tools[pi].status !== 'error') return true;
+    }
+    return false;
+  }
+
   function thinkingBodyInner(text, thinkingHtml) {
     var trimmed = String(text || '').trim();
     if (!trimmed) return '';
@@ -207,40 +216,21 @@ export function buildTranscriptBootScript(): string {
     );
   }
 
-  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml) {
-    var html = '';
-    var hasThinking = !!(thinking && String(thinking).trim());
-    var hasText = !!(text && String(text).trim());
-    if (hasThinking) {
-      html += renderThinkingSection(
-        thinking,
-        thinkingKey,
-        thinkingExpanded,
-        thinkingHtml,
-        hasText
-      );
-    }
-    if (hasText) {
-      var richBubble = state.flags.richText && textHtml ? ' rich' : '';
-      var inner = textHtml || escapeHtml(text || '');
-      html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
-    }
-    return html;
-  }
-
-  function renderToolRow(row) {
-    var filePath = vfsToolFilePath(row.name, row.input || {});
+  function renderToolGroupItem(tool) {
+    var filePath = vfsToolFilePath(tool.name, tool.input || {});
     var canOpen = filePath != null;
-    var summary = escapeHtml(toolCallSummary(row));
-    var statusClass = row.status === 'success' || row.status === 'error' ? row.status : 'pending';
+    var summary = escapeHtml(toolCallSummary(tool));
+    var statusClass = tool.status === 'success' || tool.status === 'error' ? tool.status : 'pending';
+    var statusInner = statusClass === 'pending'
+      ? '<span class="tool-status-spinner" aria-hidden="true"></span> ' + toolStatusLabel(tool.status)
+      : toolStatusLabel(tool.status);
     var html =
-      '<div class="row tool">' +
-      '<div class="tool-card' + (canOpen ? ' tappable' : '') + '"' +
+      '<div class="tool-group-item tool-card' + (canOpen ? ' tappable' : '') + '"' +
       (canOpen ? ' data-action="open-tool-file" data-path="' + escapeHtml(filePath) + '"' : '') +
       '>' +
       '<div class="tool-header">' +
-      '<span class="tool-name">' + escapeHtml(row.name || '') + '</span>' +
-      '<span class="tool-status ' + statusClass + '">' + toolStatusLabel(row.status) + '</span>' +
+      '<span class="tool-name">' + escapeHtml(tool.name || '') + '</span>' +
+      '<span class="tool-status ' + statusClass + '">' + statusInner + '</span>' +
       '</div>';
     if (summary) {
       html += '<div class="tool-summary">' + summary + '</div>';
@@ -248,7 +238,55 @@ export function buildTranscriptBootScript(): string {
     if (canOpen) {
       html += '<div class="tool-open-hint">点击查看 · 聊天工作区</div>';
     }
-    html += '</div></div>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderToolGroupSection(tools, key, expanded, showDividerBelow) {
+    if (!tools || tools.length === 0) return '';
+    var pending = hasPendingTools(tools);
+    var isExpanded = expanded || pending;
+    var chevron = isExpanded ? '▼' : '▶';
+    var divided = isExpanded && showDividerBelow ? ' tool-group-divided' : '';
+    var titleSuffix = pending ? ' · 执行中' : '';
+    var html =
+      '<div class="tool-group-section' + divided + '" data-tool-group-key="' + escapeHtml(key) + '">' +
+      '<div class="tool-group-header" data-action="toggle-tool-group" data-tool-group-key="' + escapeHtml(key) + '">' +
+      '<span class="tool-group-title">工具调用 (' + tools.length + ')' + titleSuffix + '</span>' +
+      '<span class="tool-group-chevron">' + chevron + '</span></div>';
+    if (isExpanded) {
+      html += '<div class="tool-group-items">';
+      for (var ti = 0; ti < tools.length; ti++) {
+        html += renderToolGroupItem(tools[ti]);
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml, tools, toolGroupKey, toolGroupExpanded) {
+    var html = '';
+    var hasThinking = !!(thinking && String(thinking).trim());
+    var hasTools = !!(tools && tools.length > 0);
+    var hasText = !!(text && String(text).trim());
+    if (hasThinking) {
+      html += renderThinkingSection(
+        thinking,
+        thinkingKey,
+        thinkingExpanded,
+        thinkingHtml,
+        hasTools || hasText
+      );
+    }
+    if (hasTools) {
+      html += renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, hasText);
+    }
+    if (hasText) {
+      var richBubble = state.flags.richText && textHtml ? ' rich' : '';
+      var inner = textHtml || escapeHtml(text || '');
+      html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
+    }
     return html;
   }
 
@@ -560,16 +598,20 @@ export function buildTranscriptBootScript(): string {
       if (row.text) {
         html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
       }
-    } else if (row.thinking || row.text) {
-      var richBubble = state.flags.richText && row.textHtml ? ' rich' : '';
-      html += '<div class="bubble' + richBubble + '">' +
+    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
+      var toolGroupKey = 'msg:' + row.id;
+      var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey] || hasPendingTools(row.tools);
+      html += '<div class="bubble' + assistantBubbleExtraClasses(row.textHtml, row.tools, row.text, row.thinking) + '">' +
         renderAssistantBubbleInner(
           row.text,
           row.textHtml,
           row.thinking,
           thinkingKey,
           thinkingExpanded,
-          row.thinkingHtml
+          row.thinkingHtml,
+          row.tools,
+          toolGroupKey,
+          toolGroupExpanded
         ) +
         '</div>';
     }
@@ -587,8 +629,17 @@ export function buildTranscriptBootScript(): string {
     return null;
   }
 
-  function streamBubbleRichClass() {
-    return state.flags.richText && state.stream.textHtml ? ' rich' : '';
+  function assistantBubbleExtraClasses(textHtml, tools, text, thinking) {
+    var extra = '';
+    var hasText = !!(text && String(text).trim());
+    var hasThinking = !!(thinking && String(thinking).trim());
+    var hasTools = !!(tools && tools.length > 0);
+    if (state.flags.richText && textHtml) {
+      extra += ' rich bubble--wide';
+    } else if (!hasText && (hasThinking || hasTools)) {
+      extra += ' bubble--fill-width';
+    }
+    return extra;
   }
 
   function renderStreamBubbleInner() {
@@ -604,16 +655,21 @@ export function buildTranscriptBootScript(): string {
 
   function updateStreamBubble(tail) {
     var bubble = tail.querySelector('.bubble');
-    var richClass = streamBubbleRichClass();
+    var bubbleClass = 'bubble assistant' + assistantBubbleExtraClasses(
+      state.stream.textHtml,
+      null,
+      state.stream.text,
+      state.stream.thinking
+    );
     var inner = renderStreamBubbleInner();
     if (!inner) return;
     if (bubble) {
-      bubble.className = 'bubble assistant' + richClass;
+      bubble.className = bubbleClass;
       bubble.innerHTML = inner;
       return;
     }
     var el = document.createElement('div');
-    el.className = 'bubble assistant' + richClass;
+    el.className = bubbleClass;
     el.innerHTML = inner;
     tail.appendChild(el);
   }
@@ -645,13 +701,16 @@ export function buildTranscriptBootScript(): string {
       var row = state.rows[i];
       if (row.kind === 'message') {
         html += renderMessageRow(row);
-      } else if (row.kind === 'tool') {
-        html += renderToolRow(row);
       }
     }
     if (state.stream.thinking || state.stream.text) {
       html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
-        streamBubbleRichClass() + '">' + renderStreamBubbleInner() + '</div></div>';
+        assistantBubbleExtraClasses(
+          state.stream.textHtml,
+          null,
+          state.stream.text,
+          state.stream.thinking
+        ) + '">' + renderStreamBubbleInner() + '</div></div>';
     }
     html += renderEmptyState();
     list.innerHTML = html;
@@ -777,6 +836,14 @@ export function buildTranscriptBootScript(): string {
       var key = actionEl.getAttribute('data-thinking-key');
       if (key) {
         state.thinkingExpanded[key] = !state.thinkingExpanded[key];
+        renderRows();
+      }
+      return;
+    }
+    if (action === 'toggle-tool-group') {
+      var tgKey = actionEl.getAttribute('data-tool-group-key');
+      if (tgKey) {
+        state.toolGroupExpanded[tgKey] = !state.toolGroupExpanded[tgKey];
         renderRows();
       }
       return;

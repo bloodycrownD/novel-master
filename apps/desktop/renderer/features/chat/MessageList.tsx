@@ -1,7 +1,8 @@
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
-import { ToolCallCard } from "./ToolCallCard";
+import { ToolCallGroupCard } from "./ToolCallGroupCard";
 
 const ROLE_LABELS: Record<string, string> = {
   user: "用户",
@@ -25,14 +26,16 @@ interface MessageListProps {
 function MessageBody({
   text,
   richText,
+  alwaysRichText = false,
 }: {
   text: string;
   richText: boolean;
+  alwaysRichText?: boolean;
 }) {
-  if (richText) {
+  if (richText || alwaysRichText) {
     return (
-      <div className="chat-message__markdown preview-markdown">
-        <Markdown>{text}</Markdown>
+      <div className="chat-message__markdown">
+        <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
       </div>
     );
   }
@@ -66,12 +69,6 @@ export function MessageList({
   return (
     <>
       {listItems.map((item) => {
-        if (item.kind === "tool") {
-          return (
-            <ToolCallCard key={`tool-${item.tool.toolUseId}`} tool={item.tool} />
-          );
-        }
-
         const msg = item.message;
         const selected = selectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
@@ -122,8 +119,15 @@ export function MessageList({
                   <p>{item.thinkingParts.join("\n")}</p>
                 </details>
               ) : null}
+              {item.tools.length > 0 ? (
+                <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
+              ) : null}
               {text ? (
-                <MessageBody text={text} richText={chatRichText} />
+                <MessageBody
+                  text={text}
+                  richText={chatRichText}
+                  alwaysRichText={msg.role === "assistant"}
+                />
               ) : null}
             </div>
           </div>
@@ -133,13 +137,9 @@ export function MessageList({
         <div className="chat-message chat-message--assistant chat-message--streaming">
           <div className="chat-message__body">
             <span className="chat-message__role">助手</span>
-            {chatRichText ? (
-              <div className="chat-message__markdown preview-markdown">
-                <Markdown>{streamingText}</Markdown>
-              </div>
-            ) : (
-              <p>{streamingText}</p>
-            )}
+            <div className="chat-message__markdown">
+              <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
+            </div>
           </div>
         </div>
       ) : null}

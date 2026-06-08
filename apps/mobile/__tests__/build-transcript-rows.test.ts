@@ -62,7 +62,7 @@ describe('buildTranscriptRows', () => {
     });
   });
 
-  it('includes tool rows in same order as buildChatListItems', () => {
+  it('embeds tools on message rows (no kind:tool)', () => {
     const messages = [
       msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
       msg('a1', 'assistant', [
@@ -73,21 +73,25 @@ describe('buildTranscriptRows', () => {
         {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
       ], 3),
     ];
-    const listKinds = buildChatListItems(messages).map(i => i.kind);
     const rows = buildTranscriptRows(messages);
-    expect(rows.map(r => r.kind)).toEqual(listKinds);
-    const tool = rows.find(r => r.kind === 'tool');
-    expect(tool).toMatchObject({
-      kind: 'tool',
-      toolUseId: 'tu1',
-      name: 'read',
-      status: 'success',
-      input: {path: '/x'},
-      resultContent: 'ok',
+    expect(rows.every(r => r.kind !== 'tool')).toBe(true);
+    const assistant = rows.find(r => r.kind === 'message' && r.id === 'a1');
+    expect(assistant).toMatchObject({
+      kind: 'message',
+      id: 'a1',
+      tools: [
+        expect.objectContaining({
+          toolUseId: 'tu1',
+          name: 'read',
+          status: 'success',
+          input: {path: '/x'},
+          resultContent: 'ok',
+        }),
+      ],
     });
   });
 
-  it('omits tool cards for hidden assistant messages', () => {
+  it('includes embedded tools on hidden assistant rows', () => {
     const messages = [
       msg(
         'a1',
@@ -98,7 +102,12 @@ describe('buildTranscriptRows', () => {
       ),
     ];
     const rows = buildTranscriptRows(messages);
-    expect(rows.every(r => r.kind !== 'tool')).toBe(true);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'message',
+      hidden: true,
+      tools: [expect.objectContaining({toolUseId: 'tu1'})],
+    });
   });
 
   it('maps hidden flag on message rows', () => {
@@ -109,4 +118,3 @@ describe('buildTranscriptRows', () => {
     expect(row).toMatchObject({kind: 'message', hidden: true});
   });
 });
-

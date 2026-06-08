@@ -27,6 +27,13 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('touchH');
   });
 
+  it('widens thinking/tools-only assistant bubbles', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain('bubble--fill-width');
+    expect(script).toContain('hasThinking');
+    expect(script).toContain('hasTools');
+  });
+
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {
     const script = buildTranscriptBootScript();
     expect(script).toContain('renderStreamBubbleInner');

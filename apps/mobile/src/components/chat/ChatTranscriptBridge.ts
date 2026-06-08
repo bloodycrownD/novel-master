@@ -10,6 +10,14 @@ export type BridgeEnvelope<T extends string, P> = {
   readonly payload: P;
 };
 
+export type TranscriptToolView = {
+  readonly toolUseId: string;
+  readonly name: string;
+  readonly input: Record<string, unknown>;
+  readonly status: string;
+  readonly resultContent?: string;
+};
+
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
 export type TranscriptRow =
   | {
@@ -19,17 +27,11 @@ export type TranscriptRow =
       readonly hidden: boolean;
       readonly text: string;
       readonly thinking: string;
+      /** Embedded tool group for assistant messages with tool_use. */
+      readonly tools?: readonly TranscriptToolView[];
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
       readonly textHtml?: string;
       readonly thinkingHtml?: string;
-    }
-  | {
-      readonly kind: 'tool';
-      readonly toolUseId: string;
-      readonly name: string;
-      readonly input: Record<string, unknown>;
-      readonly status: string;
-      readonly resultContent?: string;
     }
   | {
       readonly kind: 'stream';
