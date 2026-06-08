@@ -161,7 +161,7 @@ describe("VfsZipIoService", () => {
 
   it("export/import preserves explicit empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-empty-dir");
+    const project = await ctx.projects.create(`P-empty-dir-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
@@ -198,7 +198,7 @@ describe("VfsZipIoService", () => {
 
   it("session export bytes round-trip import with UTF-8 text", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-rt");
+    const project = await ctx.projects.create(`P-rt-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const scope = {
@@ -220,7 +220,7 @@ describe("VfsZipIoService", () => {
 
   it("Z7: same ZIP bytes yield identical file paths in two session scopes", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-z7");
+    const project = await ctx.projects.create(`P-z7-${testIsolationSuffix()}`);
     const sessionA = await ctx.sessions.create(project.id);
     const sessionB = await ctx.sessions.create(project.id);
     const zipBytes = buildVfsZip(
@@ -251,7 +251,7 @@ describe("VfsZipIoService", () => {
 
   it("phase A invalid UTF-8 does not reach deleteVfsPrefix", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-val");
+    const project = await ctx.projects.create(`P-val-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     let deleteReached = false;
     const zipSvc = createVfsZipIoService(ctx.conn, {
@@ -279,7 +279,7 @@ describe("VfsZipIoService", () => {
 
   it("phase A parent-segment path does not reach deleteVfsPrefix", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-path");
+    const project = await ctx.projects.create(`P-path-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     let deleteReached = false;
     const zipSvc = createVfsZipIoService(ctx.conn, {
@@ -307,7 +307,7 @@ describe("VfsZipIoService", () => {
 
   it("project scope export round-trips template tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P2");
+    const project = await ctx.projects.create(`P2-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
     await pvfs.write("/t.md", "T");
 
@@ -342,7 +342,7 @@ describe("VfsZipIoService", () => {
 
   it("session ZIP imports into project template scope", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-zip-cross");
+    const project = await ctx.projects.create(`P-zip-cross-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     const content = "你好";
@@ -368,7 +368,7 @@ describe("VfsZipIoService", () => {
 
   it("Z-buildZip-1: custom builder receives gather output once", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-buildZip");
+    const project = await ctx.projects.create(`P-buildZip-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "A");
@@ -395,7 +395,7 @@ describe("VfsZipIoService", () => {
 
   it("Z-buildZip-2: custom builder return value is export result", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-buildZip2");
+    const project = await ctx.projects.create(`P-buildZip2-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/x.md", "x");
@@ -414,7 +414,7 @@ describe("VfsZipIoService", () => {
 
   it("Z-buildZip-3: without buildZip, session export paths match Z1", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("P-buildZip3");
+    const project = await ctx.projects.create(`P-buildZip3-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.md", "A");
