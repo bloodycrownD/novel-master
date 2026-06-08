@@ -304,3 +304,21 @@ describe("MessageRollbackService", () => {
 | M1 vfs + session-fs | 1 天 |
 | M2 其余 | 1–2 天 |
 | **合计** | 2.5–4 天（可分 PR）
+
+---
+
+## 迁移耗时记录
+
+测量环境：Windows 10，`packages/core` 目录，wall-clock 秒（命令启动到结束）。
+
+| 命令 | 基线 (5739804, pre-fixture) | 迁移后 (feature/core-test-fixture-cleanup HEAD) | 降幅 |
+|------|----------------------------|------------------------------------------------|------|
+| `test:msg` | 2.1 s¹ | 2.2 s | −5%² |
+| `npm test`（排除 performance） | 162.2 s³ | 165.9 s⁴ | −2%² |
+
+¹ 基线无 `test:msg` script；等价命令：`tsx ... --test "test/message-checkpoint/!(performance).test.ts"`  
+² 负值表示迁移后略慢；受机器负载与并行调度影响，两次 post 全量分别为 172.7 s / 165.9 s  
+³ 基线等价 glob：`test/**/!(performance).test.ts`（与迁移后 `npm test` 排除 perf 一致）  
+⁴ 迁移后 `npm test` 第二次运行（第一次 172.7 s）
+
+**A3 验收（≥40% 全量降幅）**：当前测量未达标。bootstrap 共享已落地，但全量 wall-clock 仍与基线同量级；后续可排查 perf 外瓶颈（compiled test、并发度、I/O）或复测稳定环境。
