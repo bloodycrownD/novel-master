@@ -12,6 +12,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.join(__dirname, "..");
 const repoRoot = path.join(desktopRoot, "..", "..");
 
+// @electron/rebuild must run as Node; IDE shells may set ELECTRON_RUN_AS_NODE=1.
+delete process.env.ELECTRON_RUN_AS_NODE;
+
 const pkg = JSON.parse(
   readFileSync(path.join(desktopRoot, "package.json"), "utf8"),
 );

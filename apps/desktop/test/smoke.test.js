@@ -16,6 +16,16 @@ test("desktop package declares electron entrypoint", () => {
   assert.equal(pkg.name, "@novel-master/desktop");
 });
 
+test("electron start scripts use start-electron launcher", () => {
+  const pkg = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  const startScript = path.join(desktopRoot, "scripts", "start-electron.mjs");
+  assert.ok(existsSync(startScript), "scripts/start-electron.mjs must exist");
+  assert.match(pkg.scripts.start, /start-electron\.mjs/);
+  assert.match(pkg.scripts["dev:electron"], /start-electron\.mjs/);
+  assert.doesNotMatch(pkg.scripts.start, /\belectron\s+\.\s*$/);
+  assert.doesNotMatch(pkg.scripts["dev:electron"], /\belectron\s+\.\s*$/);
+});
+
 test("desktop scaffold includes vite and electron-builder config", () => {
   assert.ok(existsSync(path.join(desktopRoot, "vite.config.ts")));
   assert.ok(existsSync(path.join(desktopRoot, "electron-builder.yml")));

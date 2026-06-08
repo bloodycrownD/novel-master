@@ -180,6 +180,10 @@ html[data-theme="dark"] .app-chrome--custom-titlebar {
   -webkit-app-region: drag;
 }
 
+html[data-platform="darwin"] .app-chrome__leading {
+  padding-left: 70px;
+}
+
 .app-chrome__app-icon {
   flex-shrink: 0;
   width: 20px;

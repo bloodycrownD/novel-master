@@ -8,7 +8,7 @@ import type { IpcChannel } from "../../shared/ipc-types.js";
 export interface NovelMasterDesktopBridge {
   readonly version: string;
   readonly platform: NodeJS.Platform;
-  /** Windows titleBarOverlay — in-window menubar + drag region. */
+  /** Windows overlay / macOS hiddenInset — in-window drag region. */
   readonly customTitleBar: boolean;
   readonly inWindowMenuBar: boolean;
   invoke<T = unknown>(channel: IpcChannel, payload?: unknown): Promise<T>;
@@ -26,7 +26,8 @@ const ipcListenerByCallback = new WeakMap<
 const novelMasterDesktop: NovelMasterDesktopBridge = {
   version: "0.0.0",
   platform: process.platform,
-  customTitleBar: process.platform === "win32",
+  customTitleBar:
+    process.platform === "win32" || process.platform === "darwin",
   inWindowMenuBar: false,
   invoke(channel, payload) {
     return ipcRenderer.invoke(channel, payload);

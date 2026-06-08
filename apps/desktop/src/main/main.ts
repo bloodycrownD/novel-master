@@ -50,19 +50,23 @@ function resolveIconPath(): string | undefined {
 
 function createMainWindow(): BrowserWindow {
   const iconPath = resolveIconPath();
-  const useTitleBarOverlay = process.platform === "win32";
   const window = new BrowserWindow({
     title: "",
     width: 1280,
     height: 800,
     show: false,
     autoHideMenuBar: true,
-    ...(useTitleBarOverlay
+    ...(process.platform === "darwin"
       ? {
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: titleBarOverlayOptions("light"),
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 12, y: 12 },
         }
-      : {}),
+      : process.platform === "win32"
+        ? {
+            titleBarStyle: "hidden" as const,
+            titleBarOverlay: titleBarOverlayOptions("light"),
+          }
+        : {}),
     ...(iconPath ? { icon: nativeImage.createFromPath(iconPath) } : {}),
     webPreferences: {
       preload: resolvePreloadPath(),
