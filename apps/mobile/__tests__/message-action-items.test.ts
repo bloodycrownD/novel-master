@@ -33,7 +33,17 @@ describe('buildMessageActionItems', () => {
     expect(actions).toEqual(['edit', 'unhide', 'copy', 'fork', 'rollback', 'delete']);
   });
 
-  it('omits edit when message has tool_use blocks', () => {
+  it('includes edit for assistant messages with text and tool_use', () => {
+    const actions = buildMessageActionItems(
+      msg(false, [
+        {type: 'text', text: 'reply'},
+        {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
+      ]),
+    ).map(i => i.action);
+    expect(actions[0]).toBe('edit');
+  });
+
+  it('omits edit when message has only tool_use blocks', () => {
     const actions = buildMessageActionItems(
       msg(false, [
         {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},

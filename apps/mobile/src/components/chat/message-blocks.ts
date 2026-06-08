@@ -26,18 +26,53 @@ export interface MessageListItem {
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
-  readonly toolUses: readonly ToolUseBlock[];
+  /** Resolved tool_use views when assistant message contains tool calls. */
+  readonly tools: readonly ToolCallView[];
 }
 
-export interface ToolCallListItem {
-  readonly kind: 'tool';
-  readonly tool: ToolCallView;
-}
-
-export type ChatListItem = MessageListItem | ToolCallListItem;
+export type ChatListItem = MessageListItem;
 
 function blocksForMessage(message: ChatMessage): readonly ContentBlock[] {
   return message.content.blocks ?? [];
+}
+
+/** tool_use ids from an assistant message (block order preserved). */
+export function toolUseIdsFromMessage(message: ChatMessage): string[] {
+  return blocksForMessage(message)
+    .filter((b): b is ToolUseBlock => b.type === 'tool_use')
+    .map(b => b.id);
+}
+
+export function messageHasToolUse(message: ChatMessage): boolean {
+  return toolUseIdsFromMessage(message).length > 0;
+}
+
+/**
+ * First user message after assistant whose tool_result ids cover all assistant tool_use ids.
+ */
+export function resolveToolResultsMessageId(
+  messages: readonly ChatMessage[],
+  assistantMessage: ChatMessage,
+): string | undefined {
+  const required = new Set(toolUseIdsFromMessage(assistantMessage));
+  if (required.size === 0) {
+    return undefined;
+  }
+  for (const message of messages) {
+    if (message.seq <= assistantMessage.seq || message.role !== 'user') {
+      continue;
+    }
+    const resultIds = new Set<string>();
+    for (const block of blocksForMessage(message)) {
+      if (block.type === 'tool_result') {
+        resultIds.add(block.toolUseId);
+      }
+    }
+    if ([...required].every(id => resultIds.has(id))) {
+      return message.id;
+    }
+  }
+  return undefined;
 }
 
 /** Maps tool_use id → tool_result block from user messages in session order. */
@@ -137,7 +172,7 @@ export function toolCallSummary(tool: ToolCallView): string {
   return '';
 }
 
-/** Flattens session messages into bubbles and standalone tool cards (hidden rows stay visible). */
+/** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 export function buildChatListItems(
   messages: readonly ChatMessage[],
 ): ChatListItem[] {
@@ -149,6 +184,7 @@ export function buildChatListItems(
     const textParts: string[] = [];
     const thinkingParts: string[] = [];
     const toolUses: ToolUseBlock[] = [];
+    let hasToolResult = false;
 
     for (const block of blocks) {
       switch (block.type) {
@@ -166,29 +202,30 @@ export function buildChatListItems(
           toolUses.push(block);
           break;
         case 'tool_result':
+          hasToolResult = true;
           break;
         default:
           break;
       }
     }
 
-    if (textParts.length > 0 || thinkingParts.length > 0) {
+    // tool_results-only user rows are paired with assistant; never shown as bubbles.
+    if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
+      continue;
+    }
+
+    if (
+      textParts.length > 0 ||
+      thinkingParts.length > 0 ||
+      toolUses.length > 0
+    ) {
       items.push({
         kind: 'message',
         message,
         textParts,
         thinkingParts,
-        toolUses: [],
+        tools: toolUses.map(use => toolCallViewFromUse(use, results)),
       });
-    }
-
-    if (!message.hidden) {
-      for (const use of toolUses) {
-        items.push({
-          kind: 'tool',
-          tool: toolCallViewFromUse(use, results),
-        });
-      }
     }
   }
 
@@ -209,25 +246,24 @@ export function buildTranscriptRows(
   const rows: TranscriptRow[] = [];
 
   for (const item of items) {
-    if (item.kind === 'message') {
-      rows.push({
-        kind: 'message',
-        id: item.message.id,
-        role: item.message.role === 'user' ? 'user' : 'assistant',
-        hidden: item.message.hidden,
-        text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
-        thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-      });
-    } else if (item.kind === 'tool') {
-      rows.push({
-        kind: 'tool',
-        toolUseId: item.tool.toolUseId,
-        name: item.tool.name,
-        input: item.tool.input,
-        status: item.tool.status,
-        resultContent: item.tool.resultContent,
-      });
-    }
+    rows.push({
+      kind: 'message',
+      id: item.message.id,
+      role: item.message.role === 'user' ? 'user' : 'assistant',
+      hidden: item.message.hidden,
+      text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
+      thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
+      tools:
+        item.tools.length > 0
+          ? item.tools.map(t => ({
+              toolUseId: t.toolUseId,
+              name: t.name,
+              input: t.input,
+              status: t.status,
+              resultContent: t.resultContent,
+            }))
+          : undefined,
+    });
   }
 
   if (stream != null && (stream.text.length > 0 || stream.thinking.length > 0)) {

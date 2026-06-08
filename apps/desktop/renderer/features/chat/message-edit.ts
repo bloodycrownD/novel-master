@@ -13,17 +13,33 @@ export function editableTextFromMessage(
   message: ChatMessageDto,
 ): string | null {
   const blocks = message.contentBlocks ?? [];
-  if (blocks.length === 0) {
-    return null;
-  }
-  if (!blocks.every((b) => b.type === "text" || b.type === "thinking")) {
-    return null;
-  }
   const parts = blocks
     .filter((b): b is Extract<ContentBlockDto, { type: "text" }> => b.type === "text")
     .map((b) => b.text.trim())
     .filter(Boolean);
   return parts.length > 0 ? parts.join("\n\n") : null;
+}
+
+/** Merges edited text at first text-block position; preserves thinking / tool_use order. */
+export function applyTextEditToContentBlocks(
+  blocks: readonly ContentBlockDto[],
+  newText: string,
+): ContentBlockDto[] {
+  const result: ContentBlockDto[] = [];
+  let textReplaced = false;
+
+  for (const block of blocks) {
+    if (block.type === "text") {
+      if (!textReplaced) {
+        result.push({ type: "text", text: newText });
+        textReplaced = true;
+      }
+    } else {
+      result.push(block);
+    }
+  }
+
+  return result;
 }
 
 export function buildMessageActionItems(

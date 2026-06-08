@@ -18,17 +18,48 @@ export interface MessageListItem {
   readonly message: ChatMessageDto;
   readonly textParts: readonly string[];
   readonly thinkingParts: readonly string[];
+  readonly tools: readonly ToolCallView[];
 }
 
-export interface ToolCallListItem {
-  readonly kind: "tool";
-  readonly tool: ToolCallView;
-}
-
-export type ChatListItem = MessageListItem | ToolCallListItem;
+export type ChatListItem = MessageListItem;
 
 function blocksForMessage(message: ChatMessageDto): readonly ContentBlockDto[] {
   return message.contentBlocks ?? [];
+}
+
+export function toolUseIdsFromMessage(message: ChatMessageDto): string[] {
+  return blocksForMessage(message)
+    .filter((b): b is Extract<ContentBlockDto, { type: "tool_use" }> => b.type === "tool_use")
+    .map((b) => b.id);
+}
+
+export function messageHasToolUse(message: ChatMessageDto): boolean {
+  return toolUseIdsFromMessage(message).length > 0;
+}
+
+export function resolveToolResultsMessageId(
+  messages: readonly ChatMessageDto[],
+  assistantMessage: ChatMessageDto,
+): string | undefined {
+  const required = new Set(toolUseIdsFromMessage(assistantMessage));
+  if (required.size === 0) {
+    return undefined;
+  }
+  for (const message of messages) {
+    if (message.seq <= assistantMessage.seq || message.role !== "user") {
+      continue;
+    }
+    const resultIds = new Set<string>();
+    for (const block of blocksForMessage(message)) {
+      if (block.type === "tool_result") {
+        resultIds.add(block.toolUseId);
+      }
+    }
+    if ([...required].every((id) => resultIds.has(id))) {
+      return message.id;
+    }
+  }
+  return undefined;
 }
 
 export function buildToolResultByUseId(
@@ -124,6 +155,7 @@ export function buildChatListItems(
     const textParts: string[] = [];
     const thinkingParts: string[] = [];
     const toolUses: Extract<ContentBlockDto, { type: "tool_use" }>[] = [];
+    let hasToolResult = false;
 
     for (const block of blocks) {
       switch (block.type) {
@@ -141,28 +173,29 @@ export function buildChatListItems(
           toolUses.push(block);
           break;
         case "tool_result":
+          hasToolResult = true;
           break;
         default:
           break;
       }
     }
 
-    if (textParts.length > 0 || thinkingParts.length > 0) {
+    if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
+      continue;
+    }
+
+    if (
+      textParts.length > 0 ||
+      thinkingParts.length > 0 ||
+      toolUses.length > 0
+    ) {
       items.push({
         kind: "message",
         message,
         textParts,
         thinkingParts,
+        tools: toolUses.map((use) => toolCallViewFromUse(use, results)),
       });
-    }
-
-    if (!message.hidden) {
-      for (const use of toolUses) {
-        items.push({
-          kind: "tool",
-          tool: toolCallViewFromUse(use, results),
-        });
-      }
     }
   }
 
