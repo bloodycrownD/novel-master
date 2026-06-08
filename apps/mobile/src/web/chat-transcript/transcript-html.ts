@@ -16,7 +16,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     #rows { display: flex; flex-direction: column; min-height: 100%; justify-content: flex-end; padding: 8px 12px 12px; gap: 8px; }
     .row { display: flex; width: 100%; flex-direction: column; }
     .row.user { align-items: flex-end; }
-    .row.assistant, .row.stream, .row.tool { align-items: flex-start; }
+    .row.assistant, .row.stream { align-items: flex-start; }
     .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
     .row.user .bubble { background: var(--primary, #007aff); color: #fff; }
     .row.assistant .bubble, .row.stream .bubble { background: var(--surface, #f2f2f7); color: var(--text, #111); }
