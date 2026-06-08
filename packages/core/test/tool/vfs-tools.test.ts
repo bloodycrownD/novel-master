@@ -26,7 +26,7 @@ novelMasterTestFixture();
 describe("Builtin file tools (integration)", () => {
   it("write/replace/read flow via revision-aware vfs", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -60,7 +60,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.write respects versionCheck and expectedVersion options", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -105,7 +105,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("list/glob/grep flow", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/docs/a.md", "# A");
@@ -135,7 +135,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.mkdir creates directory visible in list", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -175,7 +175,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.delete removes a file (non-recursive default)", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/a.txt", "gone");
@@ -199,7 +199,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.delete non-recursive fails on non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/dir");
@@ -219,7 +219,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.delete recursive removes directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/dir");
@@ -243,7 +243,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.move migrates file content", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/old.md", "body");
@@ -267,7 +267,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.move migrates directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/src");
@@ -291,7 +291,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.copy duplicates file and keeps source", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.write("/src/x.md", "x");
@@ -312,7 +312,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.copy recursive duplicates directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/src");
@@ -334,7 +334,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.copy without recursive fails on directory", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/src");
@@ -369,7 +369,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("wraps VfsError as FAILED and preserves cause", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -392,7 +392,7 @@ describe("Builtin file tools (integration)", () => {
 
   it("vfs.delete on missing path wraps VfsError NOT_FOUND as FAILED", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 

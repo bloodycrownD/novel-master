@@ -1,3 +1,10 @@
+/**
+ * Shared in-memory DB fixture for integration tests.
+ *
+ * One connection per test file: declare module-scoped `sharedCtx`, call
+ * `novelMasterTestFixture()` once at the top of the file, then use
+ * `getNovelMasterTestContext()` inside each `it`.
+ */
 import { after, before } from "node:test";
 import {
   openNovelMasterTestConnection,
@@ -17,6 +24,11 @@ export function novelMasterTestFixture(): void {
   });
 }
 
+/**
+ * Returns the module-scoped test context opened by {@link novelMasterTestFixture}.
+ *
+ * @throws {Error} When `novelMasterTestFixture()` was not called in this file.
+ */
 export function getNovelMasterTestContext(): NovelMasterTestContext {
   if (sharedCtx == null) {
     throw new Error("Call novelMasterTestFixture() in this file first");

@@ -10,7 +10,7 @@ novelMasterTestFixture();
 describe("moveVfsPath", () => {
   it("moves a file and preserves content", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -27,7 +27,7 @@ describe("moveVfsPath", () => {
 
   it("moves a directory tree", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -48,7 +48,7 @@ describe("moveVfsPath", () => {
 
   it("fails with NOT_FOUND for missing path", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 

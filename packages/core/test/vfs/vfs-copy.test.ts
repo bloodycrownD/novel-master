@@ -10,7 +10,7 @@ novelMasterTestFixture();
 describe("copyVfsPath", () => {
   it("copies a file without deleting the source", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -23,7 +23,7 @@ describe("copyVfsPath", () => {
 
   it("copies a directory tree when recursive is true", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
@@ -38,7 +38,7 @@ describe("copyVfsPath", () => {
 
   it("fails to copy a directory without recursive", async () => {
     const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create("p");
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
 
