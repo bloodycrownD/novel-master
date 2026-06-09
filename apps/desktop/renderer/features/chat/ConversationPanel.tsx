@@ -49,6 +49,10 @@ export function ConversationPanel({
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [streamingThinking, setStreamingThinking] = useState("");
+  const [streamingTools, setStreamingTools] = useState<
+    import("./message-blocks").ToolCallView[]
+  >([]);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -91,15 +95,38 @@ export function ConversationPanel({
     setStreamingText((prev) => prev + delta);
   }, []);
 
+  const onThinkingDelta = useCallback((delta: string) => {
+    setStreamingThinking((prev) => prev + delta);
+  }, []);
+
+  const onToolUse = useCallback(
+    (payload: { id: string; name: string; input: Record<string, unknown> }) => {
+      setStreamingTools((prev) => [
+        ...prev,
+        {
+          toolUseId: payload.id,
+          name: payload.name,
+          input: payload.input,
+          status: "pending",
+        },
+      ]);
+    },
+    [],
+  );
+
   const onStreamReset = useCallback(() => {
     setStreamingText("");
+    setStreamingThinking("");
+    setStreamingTools([]);
   }, []);
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       setStreamingText("");
+      setStreamingThinking("");
       void reloadMessages();
       if (payload.phase === "tool_results") {
+        setStreamingTools([]);
         refreshWorkspaceTrees();
       }
     },
@@ -109,6 +136,8 @@ export function ConversationPanel({
   const onRunFinished = useCallback(() => {
     setRunning(false);
     setStreamingText("");
+    setStreamingThinking("");
+    setStreamingTools([]);
     void reloadMessages();
     refreshWorkspaceTrees();
   }, [reloadMessages, refreshWorkspaceTrees]);
@@ -117,6 +146,8 @@ export function ConversationPanel({
     (payload: AgentRunFailedPayload) => {
       setRunning(false);
       setStreamingText("");
+      setStreamingThinking("");
+      setStreamingTools([]);
       showToast(payload.error);
       void reloadMessages();
     },
@@ -126,7 +157,8 @@ export function ConversationPanel({
   useAgentStream({
     sessionId,
     onTextDelta,
-    onThinkingDelta: () => undefined,
+    onThinkingDelta,
+    onToolUse,
     onStepCommitted,
     onRunFinished,
     onRunFailed,
@@ -402,6 +434,8 @@ export function ConversationPanel({
           <MessageList
             messages={messages}
             streamingText={running ? streamingText : undefined}
+            streamingThinking={running ? streamingThinking : undefined}
+            streamingTools={running ? streamingTools : undefined}
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
             chatRichText={chatRichText}

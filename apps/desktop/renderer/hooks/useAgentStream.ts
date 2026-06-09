@@ -8,11 +8,13 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   type AgentRunFailedPayload,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUsePayload,
 } from "../../shared/agent-event-types.js";
 import { onAgentStream } from "../ipc/client";
 
@@ -20,6 +22,7 @@ export interface UseAgentStreamOptions {
   readonly sessionId: string | undefined;
   readonly onTextDelta: (delta: string) => void;
   readonly onThinkingDelta: (delta: string) => void;
+  readonly onToolUse?: (payload: AgentStreamToolUsePayload) => void;
   readonly onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   readonly onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   readonly onRunFailed?: (payload: AgentRunFailedPayload) => void;
@@ -29,6 +32,7 @@ export function useAgentStream({
   sessionId,
   onTextDelta,
   onThinkingDelta,
+  onToolUse,
   onStepCommitted,
   onRunFinished,
   onRunFailed,
@@ -50,6 +54,13 @@ export function useAgentStream({
         const p = payload as AgentStreamThinkingDeltaPayload;
         if (p.sessionId === sessionId) {
           onThinkingDelta(p.text);
+        }
+        return;
+      }
+      if (type === EVENT_AGENT_STREAM_TOOL_USE) {
+        const p = payload as AgentStreamToolUsePayload;
+        if (p.sessionId === sessionId) {
+          onToolUse?.(p);
         }
         return;
       }
@@ -78,6 +89,7 @@ export function useAgentStream({
     sessionId,
     onTextDelta,
     onThinkingDelta,
+    onToolUse,
     onStepCommitted,
     onRunFinished,
     onRunFailed,

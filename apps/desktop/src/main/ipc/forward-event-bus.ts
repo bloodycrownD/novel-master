@@ -10,6 +10,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   type SimpleEventBus,
 } from "@novel-master/core";
 import type { AgentRunFailedPayload } from "../../../shared/agent-event-types.js";
@@ -22,6 +23,7 @@ const subscriptions: Array<{ unsubscribe: () => void }> = [];
 const FORWARDED_EVENTS = [
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_RUN_FINISHED,
