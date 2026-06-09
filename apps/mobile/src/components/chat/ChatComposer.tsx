@@ -131,9 +131,7 @@ export function ChatComposer({
     }
     if (running) {
       runAbortController?.abort();
-      // WHY: keep stream overlay until run teardown persists partial output + reload.
-      setRunAbortController(null);
-      onRunningChange(false);
+      // WHY: keep `running` true until `finally` — abort must not race with teardown.
       return;
     }
     const content = text.trim();

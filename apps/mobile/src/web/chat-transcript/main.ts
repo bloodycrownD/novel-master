@@ -741,12 +741,11 @@ export function buildTranscriptBootScript(): string {
     if (sessionChanged) {
       closeContextMenu(false);
     }
-    renderRows();
-    if (!scroller) return;
-
-    if (intent === 'stick') {
-      stickToBottom(scroller);
-    } else if (intent === 'restore' && payload.restoreScroll) {
+    var scrollAfterRender = function () {
+      if (!scroller) return;
+      if (intent === 'stick') {
+        stickToBottom(scroller);
+      } else if (intent === 'restore' && payload.restoreScroll) {
       var rs = payload.restoreScroll;
       if (rs.nearBottom) {
         stickToBottom(scroller);
@@ -756,19 +755,74 @@ export function buildTranscriptBootScript(): string {
           scroller.scrollHeight - scroller.clientHeight - rs.offsetY
         );
       }
-    } else if (intent === 'preserve') {
+      } else if (intent === 'preserve') {
+        if (wasNearBottom) {
+          stickToBottom(scroller);
+        } else {
+          // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
+          scroller.scrollTop = Math.max(
+            0,
+            scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+          );
+        }
+      }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
+    };
+    requestAnimationFrame(function () {
+      renderRows();
+      scrollAfterRender();
+    });
+  }
+
+  /**
+   * appendTailRows: append persisted rows at end without full renderRows.
+   * Preserves stream tail and scroll anchor when not near bottom.
+   */
+  function applyAppendTailRows(payload) {
+    var newRows = (payload.rows || []).slice();
+    if (newRows.length === 0) {
+      return;
+    }
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
+    state.rows = state.rows.concat(newRows);
+    var html = '';
+    for (var i = 0; i < newRows.length; i++) {
+      var row = newRows[i];
+      if (row.kind === 'message') {
+        html += renderMessageRow(row);
+      }
+    }
+    var list = document.getElementById('rows');
+    if (!list) {
+      return;
+    }
+    var streamTail = document.getElementById('stream-tail');
+    if (streamTail) {
+      streamTail.insertAdjacentHTML('beforebegin', html);
+    } else {
+      var empty = list.querySelector('.empty-state');
+      if (empty) {
+        empty.insertAdjacentHTML('beforebegin', html);
+        empty.remove();
+      } else {
+        list.insertAdjacentHTML('beforeend', html);
+      }
+    }
+    if (scroller) {
       if (wasNearBottom) {
         stickToBottom(scroller);
       } else {
-        // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
         scroller.scrollTop = Math.max(
           0,
           scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
         );
       }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
     }
-    state.nearBottom = isNearBottom(scroller);
-    emitScrollSnapshot();
   }
 
   /**
@@ -791,6 +845,34 @@ export function buildTranscriptBootScript(): string {
     emitScrollSnapshot();
   }
 
+  function appendStreamDeltaIncremental(tail, kind, delta, html) {
+    if (html || !delta) {
+      return false;
+    }
+    var bubble = tail.querySelector('.bubble');
+    if (!bubble) {
+      return false;
+    }
+    if (kind === 'thinking') {
+      var section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
+      var body = section ? section.querySelector('.thinking-body') : null;
+      if (!body) {
+        return false;
+      }
+      body.insertAdjacentHTML('beforeend', escapeHtml(delta));
+      return true;
+    }
+    if (kind === 'text') {
+      var textBody = bubble.querySelector('.bubble-body');
+      if (!textBody) {
+        return false;
+      }
+      textBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
+      return true;
+    }
+    return false;
+  }
+
   function appendStreamDelta(kind, delta, html) {
     if (kind === 'text') {
       state.stream.text += delta;
@@ -808,10 +890,14 @@ export function buildTranscriptBootScript(): string {
       }
     }
     var tail = document.getElementById('stream-tail');
-    if (tail) {
-      updateStreamBubble(tail);
-    } else {
+    if (!tail) {
       renderRows();
+      scheduleStickIfNearBottom();
+      return;
+    }
+    var incremental = appendStreamDeltaIncremental(tail, kind, delta, html);
+    if (!incremental) {
+      updateStreamBubble(tail);
     }
     scheduleStickIfNearBottom();
   }
@@ -891,6 +977,9 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'prependPage':
         applyPrependPage(p);
+        break;
+      case 'appendTailRows':
+        applyAppendTailRows(p);
         break;
       case 'streamDelta':
         appendStreamDelta(p.kind, p.delta || '', p.html || '');

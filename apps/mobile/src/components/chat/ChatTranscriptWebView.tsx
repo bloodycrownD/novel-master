@@ -1,7 +1,14 @@
 /**
  * RN WebView wrapper for chat transcript — postMessage both directions via bridge envelopes.
  */
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import {StyleSheet, View} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import type {ChatMessage} from '@novel-master/core';
@@ -17,8 +24,7 @@ import {
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
-import {prepareStreamTailHtml} from './prepare-stream-tail-html';
-import {buildTranscriptRows} from './message-blocks';
+import {buildTranscriptRows, messageIsToolResultsOnly} from './message-blocks';
 import {
   CHAT_TRANSCRIPT_BASE_URL,
   CHAT_TRANSCRIPT_HTML,
@@ -27,6 +33,11 @@ import {
   emitChatTranscriptTelemetry,
 } from '../../services/chat-transcript-telemetry';
 import {useTheme} from '../../theme/ThemeProvider';
+
+export type ChatTranscriptWebViewHandle = {
+  pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
+  resetStream: () => void;
+};
 
 export type ChatTranscriptWebViewProps = {
   readonly sessionKey: string;
@@ -116,27 +127,33 @@ function emitScrollRestoreTelemetry(
   }
 }
 
-export function ChatTranscriptWebView({
-  sessionKey,
-  messages,
-  streamingText = '',
-  streamingThinking = '',
-  hasMore = false,
-  flags,
-  initialScroll = null,
-  defaultScrollToBottom = true,
-  agentRunning = false,
-  selectedMessageIds,
-  menuCloseSignal = 0,
-  onScrollSnapshot,
-  onReady,
-  onLoadOlder,
-  onOpenToolFile,
-  onOpenMessageMenu,
-  onMessageMenuAction,
-  onWebMenuOpenChange,
-  onToggleMessageSelect,
-}: ChatTranscriptWebViewProps) {
+export const ChatTranscriptWebView = forwardRef<
+  ChatTranscriptWebViewHandle,
+  ChatTranscriptWebViewProps
+>(function ChatTranscriptWebView(
+  {
+    sessionKey,
+    messages,
+    streamingText = '',
+    streamingThinking = '',
+    hasMore = false,
+    flags,
+    initialScroll = null,
+    defaultScrollToBottom = true,
+    agentRunning = false,
+    selectedMessageIds,
+    menuCloseSignal = 0,
+    onScrollSnapshot,
+    onReady,
+    onLoadOlder,
+    onOpenToolFile,
+    onOpenMessageMenu,
+    onMessageMenuAction,
+    onWebMenuOpenChange,
+    onToggleMessageSelect,
+  },
+  ref,
+) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
@@ -151,6 +168,16 @@ export function ChatTranscriptWebView({
   const initialScrollRef = useRef(initialScroll);
   const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
   const needsOpenSnapshotRef = useRef(true);
+  const snapshotDeferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingSnapshotRef = useRef<{
+    intent: TranscriptScrollIntent;
+    restoreScroll?: TranscriptRestoreScroll;
+  } | null>(null);
+  const streamRafRef = useRef<number | null>(null);
+  const pendingStreamDeltasRef = useRef({text: '', thinking: ''});
+  const streamActiveRef = useRef(false);
 
   useEffect(() => {
     initialScrollRef.current = initialScroll;
@@ -163,6 +190,48 @@ export function ChatTranscriptWebView({
   const postToWeb = useCallback((message: HostToTranscriptMessage) => {
     webRef.current?.postMessage(encodeHostToTranscript(message));
   }, []);
+
+  const flushPendingStreamDeltas = useCallback(() => {
+    if (streamRafRef.current != null) {
+      return;
+    }
+    streamRafRef.current = requestAnimationFrame(() => {
+      streamRafRef.current = null;
+      const batch = pendingStreamDeltasRef.current;
+      pendingStreamDeltasRef.current = {text: '', thinking: ''};
+      if (batch.text.length > 0) {
+        postToWeb({
+          v: 1,
+          type: 'streamDelta',
+          payload: {kind: 'text', delta: batch.text},
+        });
+      }
+      if (batch.thinking.length > 0) {
+        postToWeb({
+          v: 1,
+          type: 'streamDelta',
+          payload: {kind: 'thinking', delta: batch.thinking},
+        });
+      }
+    });
+  }, [postToWeb]);
+
+  const queueStreamDelta = useCallback(
+    (kind: 'text' | 'thinking', delta: string) => {
+      if (!webReady || delta.length === 0) {
+        return;
+      }
+      streamActiveRef.current = true;
+      const pending = pendingStreamDeltasRef.current;
+      if (kind === 'text') {
+        pending.text += delta;
+      } else {
+        pending.thinking += delta;
+      }
+      flushPendingStreamDeltas();
+    },
+    [webReady, flushPendingStreamDeltas],
+  );
 
   const sendInit = useCallback(() => {
     const resolvedFlags: TranscriptFlags = {
@@ -184,7 +253,7 @@ export function ChatTranscriptWebView({
   ]);
 
   // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
-  const sendSessionSnapshot = useCallback(
+  const sendSessionSnapshotNow = useCallback(
     (
       scrollIntent: TranscriptScrollIntent,
       restoreScroll?: TranscriptRestoreScroll,
@@ -209,6 +278,92 @@ export function ChatTranscriptWebView({
       });
     },
     [messages, hasMore, postToWeb, sessionKey, flags?.richText, agentRunning],
+  );
+
+  const flushPendingSnapshot = useCallback(() => {
+    if (snapshotDeferTimerRef.current != null) {
+      clearTimeout(snapshotDeferTimerRef.current);
+      snapshotDeferTimerRef.current = null;
+    }
+    const pending = pendingSnapshotRef.current;
+    pendingSnapshotRef.current = null;
+    if (pending != null) {
+      sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
+    }
+  }, [sendSessionSnapshotNow]);
+
+  const sendSessionSnapshot = useCallback(
+    (
+      intent: TranscriptScrollIntent,
+      restoreScroll?: TranscriptRestoreScroll,
+    ) => {
+      if (!agentRunning) {
+        sendSessionSnapshotNow(intent, restoreScroll);
+        return;
+      }
+      pendingSnapshotRef.current = {intent, restoreScroll};
+      if (streamActiveRef.current) {
+        return;
+      }
+      if (snapshotDeferTimerRef.current != null) {
+        return;
+      }
+      snapshotDeferTimerRef.current = setTimeout(() => {
+        snapshotDeferTimerRef.current = null;
+        if (streamActiveRef.current) {
+          return;
+        }
+        const pending = pendingSnapshotRef.current;
+        pendingSnapshotRef.current = null;
+        if (pending != null) {
+          sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
+        }
+      }, 0);
+    },
+    [agentRunning, sendSessionSnapshotNow],
+  );
+
+  const sendAppendTailRows = useCallback(
+    (tailMessages: readonly ChatMessage[]) => {
+      if (tailMessages.length === 0) {
+        return;
+      }
+      const richText = flags?.richText ?? false;
+      const rows = enrichTranscriptRows(
+        buildTranscriptRows(tailMessages, undefined, {agentRunning}),
+        richText,
+      );
+      postToWeb({
+        v: 1,
+        type: 'appendTailRows',
+        payload: {rows},
+      });
+    },
+    [postToWeb, flags?.richText, agentRunning],
+  );
+
+  const resetStreamTail = useCallback(() => {
+    if (streamRafRef.current != null) {
+      cancelAnimationFrame(streamRafRef.current);
+      streamRafRef.current = null;
+    }
+    pendingStreamDeltasRef.current = {text: '', thinking: ''};
+    prevStreamTextRef.current = '';
+    prevStreamThinkingRef.current = '';
+    streamActiveRef.current = false;
+    if (webReady) {
+      postToWeb({v: 1, type: 'streamReset', payload: {}});
+    }
+    flushPendingSnapshot();
+  }, [webReady, postToWeb, flushPendingSnapshot]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      pushStreamDelta: queueStreamDelta,
+      resetStream: resetStreamTail,
+    }),
+    [queueStreamDelta, resetStreamTail],
   );
 
   const sendPrependPage = useCallback(
@@ -291,6 +446,7 @@ export function ChatTranscriptWebView({
       }
       if (message.type === 'toggleMessageSelect') {
         onToggleMessageSelect?.(message.payload.messageId);
+        return;
       }
     },
     [
@@ -442,14 +598,32 @@ export function ChatTranscriptWebView({
         offsetYBefore: lastScrollRef.current.offsetY,
       });
       sendPrependPage(prependedCount);
+    } else if (agentRunning && grew) {
+      const added = messages.slice(prevCount);
+      // WHY: appendTailRows leaves prior assistant rows stuck at toolPhase=executing.
+      const toolResultsCommitted = added.some(messageIsToolResultsOnly);
+      if (toolResultsCommitted) {
+        sendSessionSnapshot('preserve');
+      } else {
+        sendAppendTailRows(added);
+      }
     } else {
       sendSessionSnapshot('preserve');
     }
 
     prevFirstMessageIdRef.current = firstId;
     prevMessageCountRef.current = messages.length;
-  }, [webReady, sessionKey, messages, sendSessionSnapshot, sendPrependPage]);
+  }, [
+    webReady,
+    sessionKey,
+    messages,
+    agentRunning,
+    sendSessionSnapshot,
+    sendPrependPage,
+    sendAppendTailRows,
+  ]);
 
+  // Legacy MessageList path: stream via props. WebView path uses imperative ref (no parent re-render).
   useEffect(() => {
     if (!webReady) {
       return;
@@ -460,39 +634,26 @@ export function ChatTranscriptWebView({
       streamingText.length < prevText.length ||
       streamingThinking.length < prevThinking.length
     ) {
-      postToWeb({v: 1, type: 'streamReset', payload: {}});
-      prevStreamTextRef.current = '';
-      prevStreamThinkingRef.current = '';
+      resetStreamTail();
       return;
     }
-    const richText = flags?.richText ?? false;
     const textDelta = streamingText.slice(prevText.length);
     const thinkingDelta = streamingThinking.slice(prevThinking.length);
-    if (textDelta.length > 0) {
-      postToWeb({
-        v: 1,
-        type: 'streamDelta',
-        payload: {
-          kind: 'text',
-          delta: textDelta,
-          html: prepareStreamTailHtml(streamingText, richText),
-        },
-      });
-    }
-    if (thinkingDelta.length > 0) {
-      postToWeb({
-        v: 1,
-        type: 'streamDelta',
-        payload: {
-          kind: 'thinking',
-          delta: thinkingDelta,
-          html: prepareStreamTailHtml(streamingThinking, richText),
-        },
-      });
-    }
     prevStreamTextRef.current = streamingText;
     prevStreamThinkingRef.current = streamingThinking;
-  }, [webReady, streamingText, streamingThinking, flags?.richText, postToWeb]);
+    if (textDelta.length > 0) {
+      queueStreamDelta('text', textDelta);
+    }
+    if (thinkingDelta.length > 0) {
+      queueStreamDelta('thinking', thinkingDelta);
+    }
+  }, [
+    webReady,
+    streamingText,
+    streamingThinking,
+    queueStreamDelta,
+    resetStreamTail,
+  ]);
 
   return (
     <View style={styles.fill}>
@@ -510,7 +671,7 @@ export function ChatTranscriptWebView({
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fill: {flex: 1, minHeight: 0},

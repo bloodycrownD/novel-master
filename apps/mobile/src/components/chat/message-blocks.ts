@@ -51,6 +51,18 @@ export function toolUseIdsFromMessage(message: ChatMessage): string[] {
     .map(b => b.id);
 }
 
+/** User row that only carries tool_result blocks (never shown as its own bubble). */
+export function messageIsToolResultsOnly(message: ChatMessage): boolean {
+  if (message.role !== 'user') {
+    return false;
+  }
+  const blocks = message.content?.blocks;
+  if (blocks == null || blocks.length === 0) {
+    return false;
+  }
+  return blocks.every(block => block.type === 'tool_result');
+}
+
 export function messageHasToolUse(message: ChatMessage): boolean {
   return toolUseIdsFromMessage(message).length > 0;
 }

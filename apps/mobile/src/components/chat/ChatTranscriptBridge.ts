@@ -91,6 +91,7 @@ export type HostToTranscriptMessage =
       'prependPage',
       {rows: readonly TranscriptRow[]; prependedCount: number}
     >
+  | BridgeEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
   | BridgeEnvelope<
       'streamDelta',
       {

@@ -5,6 +5,8 @@ const mobileRoot = path.resolve(process.cwd());
 const e2eRoot = path.join(mobileRoot, 'e2e');
 /** Project-local Appium extensions — must match ensure-appium-driver.mjs */
 const appiumHome = path.join(mobileRoot, '.appium');
+// @wdio/appium-service only forwards process.env to the Appium child (ignores service `env`).
+process.env.APPIUM_HOME = appiumHome;
 const debugApk = path.join(
   mobileRoot,
   'android/app/build/outputs/apk/debug/app-debug.apk',
@@ -60,9 +62,6 @@ export const sharedConfig = {
       {
         args: {
           relaxedSecurity: true,
-        },
-        env: {
-          APPIUM_HOME: appiumHome,
         },
       },
     ],

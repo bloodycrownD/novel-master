@@ -123,11 +123,9 @@ export async function runAgentTurn(
       textBlocks(trimmed),
     );
     // WHY: user send is a rollback anchor for manual VFS edits made before the message.
-    await runtime.messageCheckpoint.capture(
-      scope.sessionId,
-      scope.projectId,
-      userMessage.id,
-    );
+    void runtime.messageCheckpoint
+      .capture(scope.sessionId, scope.projectId, userMessage.id)
+      .catch(() => undefined);
     await options?.onUserMessageAppended?.();
   }
 

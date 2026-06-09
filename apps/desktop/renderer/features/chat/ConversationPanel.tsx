@@ -75,6 +75,9 @@ export function ConversationPanel({
     }
   }, [sessionId]);
 
+  const canResumeWithoutInput =
+    messages.length > 0 && messages[messages.length - 1]?.role === "user";
+
   useEffect(() => {
     void reloadMessages();
   }, [reloadMessages]);
@@ -486,6 +489,7 @@ export function ConversationPanel({
             projectId={projectId}
             sessionId={sessionId}
             running={running}
+            canResumeWithoutInput={canResumeWithoutInput}
             onRunningChange={setRunning}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}

@@ -1,7 +1,7 @@
 /**
  * Chat tab: session list / template sub-tabs, conversation workspace (M1 skeleton).
  */
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   Alert,
   FlatList,
@@ -41,7 +41,10 @@ import {
   type MessageMenuAnchor,
 } from '../../components/chat/MessageActionMenu';
 import {MessageList} from '../../components/chat/MessageList';
-import {ChatTranscriptWebView} from '../../components/chat/ChatTranscriptWebView';
+import {
+  ChatTranscriptWebView,
+  type ChatTranscriptWebViewHandle,
+} from '../../components/chat/ChatTranscriptWebView';
 import type {ChatTranscriptScrollSnapshot} from '../../components/chat/ChatTranscriptBridge';
 import {
   getScrollSnapshot,
@@ -106,7 +109,6 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {createStreamBuffer} from '../../services/stream-buffer.service';
 import {rollbackToMessage} from '../../services/message-rollback.service';
 import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
-
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 type SessionListPanel = 'sessions' | 'template';
 type ChatSubview = 'sessions' | 'conversation';
@@ -153,11 +155,29 @@ export function ChatTabScreen() {
     useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
+  const streamMetricsRef = useRef({noteTextDelta, noteThinkingDelta});
+  streamMetricsRef.current = {noteTextDelta, noteThinkingDelta};
+  const pendingBusStreamRef = useRef({text: '', thinking: ''});
+  const busStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
+  const useWebviewTranscriptRef = useRef(false);
   const streamBuffer = useMemo(
     () =>
       createStreamBuffer({
-        onTextFlush: delta => setStreamingText(prev => prev + delta),
-        onThinkingFlush: delta => setStreamingThinking(prev => prev + delta),
+        onTextFlush: delta => {
+          if (useWebviewTranscriptRef.current) {
+            return;
+          }
+          streamMetricsRef.current.noteTextDelta(delta);
+          setStreamingText(prev => prev + delta);
+        },
+        onThinkingFlush: delta => {
+          if (useWebviewTranscriptRef.current) {
+            return;
+          }
+          streamMetricsRef.current.noteThinkingDelta(delta);
+          setStreamingThinking(prev => prev + delta);
+        },
       }),
     [],
   );
@@ -186,6 +206,7 @@ export function ChatTabScreen() {
       ? scrollCacheKey(projectId, sessionId)
       : null;
   const useWebviewTranscript = chatTranscriptEngine === 'webview';
+  useWebviewTranscriptRef.current = useWebviewTranscript;
   const transcriptFlags = useMemo(
     () => ({
       richText: chatRichTextEnabled,
@@ -317,67 +338,129 @@ export function ChatTabScreen() {
     [projectId, sessionId],
   );
 
+  const reloadInFlightRef = useRef<Promise<void> | null>(null);
+
   const reloadMessages = useCallback(
     async (force = false) => {
-      if (sessionId == null || projectId == null) {
-        setChatMessages([]);
-        setHasMoreMessages(false);
-        return;
+      if (force && reloadInFlightRef.current != null) {
+        return reloadInFlightRef.current;
       }
-      const cacheKey = sessionViewCacheKey(projectId, sessionId);
-      if (!force) {
-        const cached = getSessionViewCache(cacheKey);
-        if (cached != null) {
-          setChatMessages([...cached.messages]);
-          setHasMoreMessages(cached.hasMoreMessages);
+      const run = async () => {
+        if (sessionId == null || projectId == null) {
+          setChatMessages([]);
+          setHasMoreMessages(false);
           return;
         }
-      }
-      const list = await loadSessionMessagesTailForDisplay(
-        runtime,
-        sessionId,
-        CHAT_PAGE_SIZE,
-      );
-      let hasMore = false;
-      const oldestSeq = list[0]?.seq;
-      if (oldestSeq != null) {
-        const older = await runtime.messages.listBySessionPage(sessionId, {
-          limit: 1,
-          beforeSeq: oldestSeq,
+        const cacheKey = sessionViewCacheKey(projectId, sessionId);
+        if (!force) {
+          const cached = getSessionViewCache(cacheKey);
+          if (cached != null) {
+            setChatMessages([...cached.messages]);
+            setHasMoreMessages(cached.hasMoreMessages);
+            return;
+          }
+        }
+        const list = await loadSessionMessagesTailForDisplay(
+          runtime,
+          sessionId,
+          CHAT_PAGE_SIZE,
+        );
+        let hasMore = false;
+        const oldestSeq = list[0]?.seq;
+        if (oldestSeq != null) {
+          const older = await runtime.messages.listBySessionPage(sessionId, {
+            limit: 1,
+            beforeSeq: oldestSeq,
+          });
+          hasMore = older.length > 0;
+        }
+        setChatMessages(list);
+        setHasMoreMessages(hasMore);
+        setSessionViewCache(cacheKey, {
+          messages: list,
+          hasMoreMessages: hasMore,
         });
-        hasMore = older.length > 0;
+      };
+      if (!force) {
+        await run();
+        return;
       }
-      setChatMessages(list);
-      setHasMoreMessages(hasMore);
-      setSessionViewCache(cacheKey, {
-        messages: list,
-        hasMoreMessages: hasMore,
-      });
+      const task = run();
+      reloadInFlightRef.current = task;
+      try {
+        await task;
+      } finally {
+        if (reloadInFlightRef.current === task) {
+          reloadInFlightRef.current = null;
+        }
+      }
     },
     [runtime, sessionId, projectId],
   );
 
+  const flushBusStreamToBuffer = useCallback(() => {
+    busStreamTimerRef.current = null;
+    const pending = pendingBusStreamRef.current;
+    if (pending.text.length === 0 && pending.thinking.length === 0) {
+      return;
+    }
+    pendingBusStreamRef.current = {text: '', thinking: ''};
+    if (useWebviewTranscriptRef.current) {
+      if (pending.text.length > 0) {
+        transcriptWebRef.current?.pushStreamDelta('text', pending.text);
+        streamMetricsRef.current.noteTextDelta(pending.text);
+      }
+      if (pending.thinking.length > 0) {
+        transcriptWebRef.current?.pushStreamDelta('thinking', pending.thinking);
+        streamMetricsRef.current.noteThinkingDelta(pending.thinking);
+      }
+      return;
+    }
+    if (pending.text.length > 0) {
+      streamBuffer.push('text', pending.text);
+    }
+    if (pending.thinking.length > 0) {
+      streamBuffer.push('thinking', pending.thinking);
+    }
+  }, [streamBuffer]);
+
+  const scheduleBusStreamFlush = useCallback(() => {
+    if (busStreamTimerRef.current != null) {
+      return;
+    }
+    busStreamTimerRef.current = setTimeout(flushBusStreamToBuffer, 32);
+  }, [flushBusStreamToBuffer]);
+
   const handleStreamText = useCallback(
     (delta: string) => {
-      noteTextDelta(delta);
-      streamBuffer.push('text', delta);
+      pendingBusStreamRef.current.text += delta;
+      scheduleBusStreamFlush();
     },
-    [streamBuffer, noteTextDelta],
+    [scheduleBusStreamFlush],
   );
 
   const handleStreamThinking = useCallback(
     (delta: string) => {
-      noteThinkingDelta(delta);
-      streamBuffer.push('thinking', delta);
+      pendingBusStreamRef.current.thinking += delta;
+      scheduleBusStreamFlush();
     },
-    [streamBuffer, noteThinkingDelta],
+    [scheduleBusStreamFlush],
   );
 
   const handleStreamReset = useCallback(() => {
+    if (busStreamTimerRef.current != null) {
+      clearTimeout(busStreamTimerRef.current);
+      busStreamTimerRef.current = null;
+    }
+    pendingBusStreamRef.current = {text: '', thinking: ''};
     // Discard buffered deltas only — flushing would re-apply text that is already persisted.
     streamBuffer.reset();
-    setStreamingText('');
-    setStreamingThinking('');
+    if (useWebviewTranscriptRef.current) {
+      transcriptWebRef.current?.resetStream();
+    } else {
+      setStreamingText('');
+      setStreamingThinking('');
+    }
   }, [streamBuffer]);
 
   const handleMessagesChanged = useCallback(async () => {
@@ -1239,11 +1322,10 @@ export function ChatTabScreen() {
               ) : null}
               {useWebviewTranscript ? (
                 <ChatTranscriptWebView
+                  ref={transcriptWebRef}
                   key={chatScrollKey ?? 'no-session-scroll'}
                   sessionKey={chatScrollKey ?? 'no-session'}
                   messages={chatMessages}
-                  streamingText={streamingText}
-                  streamingThinking={streamingThinking}
                   hasMore={hasMoreMessages}
                   agentRunning={agentRunning}
                   flags={transcriptFlags}

@@ -13,6 +13,7 @@ extraResources:
     filter:
       - "**/*"
 npmRebuild: false
+afterPack: scripts/after-pack.mjs
 win:
   target:
     - nsis

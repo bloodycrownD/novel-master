@@ -12,6 +12,8 @@ interface ChatComposerProps {
   projectId: string;
   sessionId: string;
   running: boolean;
+  /** Last persisted message is user — allow empty send to resume agent. */
+  canResumeWithoutInput: boolean;
   onRunningChange: (running: boolean) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
@@ -21,6 +23,7 @@ export function ChatComposer({
   projectId,
   sessionId,
   running,
+  canResumeWithoutInput,
   onRunningChange,
   onStreamReset,
   onMessagesChanged,
@@ -52,7 +55,8 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    if (!content) {
+    const allowResumeWithoutInput = !content && canResumeWithoutInput;
+    if (!content && !allowResumeWithoutInput) {
       return;
     }
 
@@ -69,7 +73,9 @@ export function ChatComposer({
     setError(undefined);
     onStreamReset();
     onRunningChange(true);
-    setText("");
+    if (content) {
+      setText("");
+    }
 
     const streamResult = await ipcPreferencesGetLlmStream();
     const stream = streamResult.ok ? streamResult.data : true;
@@ -78,6 +84,7 @@ export function ChatComposer({
       sessionId,
       userContent: content,
       stream,
+      allowResumeWithoutInput,
     });
 
     if (!result.ok) {
@@ -88,6 +95,9 @@ export function ChatComposer({
 
     await onMessagesChanged();
   };
+
+  const sendDisabled =
+    !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
 
   return (
     <>
@@ -105,7 +115,7 @@ export function ChatComposer({
             aria-label="消息输入"
             rows={1}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey && !sendDisabled) {
                 e.preventDefault();
                 void send();
               }
@@ -127,7 +137,7 @@ export function ChatComposer({
               <button
                 type="button"
                 className="chat-composer__send"
-                disabled={!hasModel && !running}
+                disabled={sendDisabled}
                 aria-label={running ? "停止" : "发送"}
                 onClick={() => void send()}
               >

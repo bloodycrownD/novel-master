@@ -258,11 +258,9 @@ export class DefaultAgentRunner implements AgentRunner {
             assistantMessage != null &&
             this.deps.messageCheckpoint != null
           ) {
-            await this.deps.messageCheckpoint.capture(
-              sessionId,
-              projectId,
-              assistantMessage.id,
-            );
+            void this.deps.messageCheckpoint
+              .capture(sessionId, projectId, assistantMessage.id)
+              .catch(() => undefined);
           }
           finished = true;
           stopReason = "completed";
@@ -321,11 +319,9 @@ export class DefaultAgentRunner implements AgentRunner {
           assistantMessage != null &&
           this.deps.messageCheckpoint != null
         ) {
-          await this.deps.messageCheckpoint.capture(
-            sessionId,
-            projectId,
-            assistantMessage.id,
-          );
+          void this.deps.messageCheckpoint
+            .capture(sessionId, projectId, assistantMessage.id)
+            .catch(() => undefined);
         }
 
         if (signal?.aborted) {
@@ -439,9 +435,13 @@ function wrapStreamForBus(
       }
     };
   }
+
   return (ev: LlmStreamEvent) => {
     if (ev.type === "text-delta") {
-      bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, { sessionId, text: ev.text });
+      bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId,
+        text: ev.text,
+      });
     } else if (ev.type === "thinking-delta") {
       bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId,

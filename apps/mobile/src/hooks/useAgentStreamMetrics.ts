@@ -85,31 +85,20 @@ export function useAgentStreamMetrics(running: boolean): {
     return undefined;
   }, [running]);
 
-  const noteTextDelta = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      accRef.current.textChars += delta.length;
-      if (running) {
-        setTick(t => t + 1);
-      }
-    },
-    [running],
-  );
+  const noteTextDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    accRef.current.textChars += delta.length;
+    // WHY: metrics bar refreshes via 250ms interval — per-delta setTick re-rendered ChatTabScreen on every SSE token.
+  }, []);
 
-  const noteThinkingDelta = useCallback(
-    (delta: string) => {
-      if (delta.length === 0) {
-        return;
-      }
-      accRef.current.thinkingChars += delta.length;
-      if (running) {
-        setTick(t => t + 1);
-      }
-    },
-    [running],
-  );
+  const noteThinkingDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    accRef.current.thinkingChars += delta.length;
+  }, []);
 
   void tick;
 

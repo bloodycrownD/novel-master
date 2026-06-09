@@ -162,7 +162,71 @@ function postSseViaXhr(
       reject(error);
     };
 
+    const MAX_SSE_EMIT_BYTES = 4096;
+    const SSE_STALL_MS = 90_000;
+    let pendingText = "";
+    let drainTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastProgressAt = Date.now();
+    let stallTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+      if (Date.now() - lastProgressAt < SSE_STALL_MS) {
+        return;
+      }
+      clearDrainTimer();
+      pendingText = "";
+      xhr.abort();
+    }, 5000);
+
+    const clearStallTimer = (): void => {
+      if (stallTimer != null) {
+        clearInterval(stallTimer);
+        stallTimer = null;
+      }
+    };
+
+    const clearDrainTimer = (): void => {
+      if (drainTimer != null) {
+        clearTimeout(drainTimer);
+        drainTimer = null;
+      }
+    };
+
+    const emitPendingChunk = (): boolean => {
+      if (pendingText.length === 0) {
+        return false;
+      }
+      const take = Math.min(pendingText.length, MAX_SSE_EMIT_BYTES);
+      const chunk = pendingText.slice(0, take);
+      pendingText = pendingText.slice(take);
+      onChunk(chunk);
+      return pendingText.length > 0;
+    };
+
+    const scheduleDrain = (): void => {
+      if (drainTimer != null || pendingText.length === 0) {
+        return;
+      }
+      drainTimer = setTimeout(() => {
+        drainTimer = null;
+        if (emitPendingChunk()) {
+          scheduleDrain();
+        }
+      }, 0);
+    };
+
+    const drainAllPending = (onDone: () => void): void => {
+      clearDrainTimer();
+      const step = (): void => {
+        if (emitPendingChunk()) {
+          setTimeout(step, 0);
+          return;
+        }
+        onDone();
+      };
+      step();
+    };
+
     const deliverNewText = (): void => {
+      lastProgressAt = Date.now();
       const text = xhr.responseText;
       if (text.length <= processedLength) {
         return;
@@ -173,7 +237,8 @@ function postSseViaXhr(
         firstChunkLogged = true;
         logSse(logTag, "xhr first chunk", { bytes: chunk.length });
       }
-      onChunk(chunk);
+      pendingText += chunk;
+      scheduleDrain();
     };
 
     xhr.open(init.method ?? "POST", url);
@@ -197,32 +262,41 @@ function postSseViaXhr(
     };
 
     xhr.onload = () => {
+      clearStallTimer();
       deliverNewText();
-      const status = xhr.status;
-      const contentType = xhr.getResponseHeader("Content-Type");
-      logSse(logTag, "xhr complete", { status, contentType });
+      drainAllPending(() => {
+        const status = xhr.status;
+        const contentType = xhr.getResponseHeader("Content-Type");
+        logSse(logTag, "xhr complete", { status, contentType });
 
-      if (status < 200 || status >= 300) {
-        const body = xhr.responseText;
-        const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
-        rejectOnce(
-          new ProviderError(
-            "HTTP_ERROR",
-            `HTTP ${status}: ${snippet}`,
-            { providerId },
-          ),
-        );
-        return;
-      }
+        if (status < 200 || status >= 300) {
+          const body = xhr.responseText;
+          const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
+          rejectOnce(
+            new ProviderError(
+              "HTTP_ERROR",
+              `HTTP ${status}: ${snippet}`,
+              { providerId },
+            ),
+          );
+          return;
+        }
 
-      resolveOnce({ status, contentType });
+        resolveOnce({ status, contentType });
+      });
     };
 
     xhr.onerror = () => {
+      clearStallTimer();
+      clearDrainTimer();
+      pendingText = "";
       rejectOnce(new ProviderError("HTTP_ERROR", "XHR network error", { providerId }));
     };
 
     xhr.onabort = () => {
+      clearStallTimer();
+      clearDrainTimer();
+      pendingText = "";
       rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
     };
 
