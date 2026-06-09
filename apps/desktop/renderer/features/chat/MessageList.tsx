@@ -10,13 +10,11 @@ const ROLE_LABELS: Record<string, string> = {
   system: "系统",
 };
 
-import type { ToolCallView } from "./message-blocks";
-
 interface MessageListProps {
   messages: readonly ChatMessageDto[];
   streamingText?: string;
   streamingThinking?: string;
-  streamingTools?: readonly ToolCallView[];
+  agentRunning?: boolean;
   batchMode?: boolean;
   selectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
@@ -50,17 +48,14 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
-  streamingTools = [],
+  agentRunning = false,
   batchMode = false,
   selectedIds,
   chatRichText = false,
   onToggleSelect,
   onOpenMessageMenu,
 }: MessageListProps) {
-  const hasStreaming =
-    !!streamingText ||
-    !!streamingThinking ||
-    streamingTools.length > 0;
+  const hasStreaming = !!streamingText || !!streamingThinking;
 
   if (messages.length === 0 && !hasStreaming) {
     return <p className="chat-messages__empty">暂无消息</p>;
@@ -75,7 +70,7 @@ export function MessageList({
     onOpenMessageMenu?.(message, { x: event.clientX, y: event.clientY });
   };
 
-  const listItems = buildChatListItems(messages);
+  const listItems = buildChatListItems(messages, { agentRunning });
 
   return (
     <>
@@ -137,6 +132,9 @@ export function MessageList({
                   alwaysRichText={msg.role === "assistant"}
                 />
               ) : null}
+              {item.toolPhase === "executing" ? (
+                <p className="chat-message__tool-phase">正在执行工具调用…</p>
+              ) : null}
               {item.tools.length > 0 ? (
                 <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
               ) : null}
@@ -158,9 +156,6 @@ export function MessageList({
               <div className="chat-message__markdown">
                 <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
               </div>
-            ) : null}
-            {streamingTools.length > 0 ? (
-              <ToolCallGroupCard tools={streamingTools} />
             ) : null}
           </div>
         </div>

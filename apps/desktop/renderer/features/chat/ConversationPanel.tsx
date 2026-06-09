@@ -51,9 +51,6 @@ export function ConversationPanel({
   const [running, setRunning] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [streamingThinking, setStreamingThinking] = useState("");
-  const [streamingTools, setStreamingTools] = useState<
-    import("./message-blocks").ToolCallView[]
-  >([]);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -100,49 +97,25 @@ export function ConversationPanel({
     setStreamingThinking((prev) => prev + delta);
   }, []);
 
-  const onToolUse = useCallback(
-    (payload: { id: string; name: string; input: Record<string, unknown> }) => {
-      setStreamingTools((prev) => [
-        ...prev,
-        {
-          toolUseId: payload.id,
-          name: payload.name,
-          input: payload.input,
-          status: "pending",
-        },
-      ]);
-    },
-    [],
-  );
-
   const onStreamReset = useCallback(() => {
     setStreamingText("");
     setStreamingThinking("");
-    setStreamingTools([]);
-  }, []);
-
-  const onStreamToolsClear = useCallback(() => {
-    setStreamingTools([]);
   }, []);
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      // WHY: assistant commit persists tool_use — drop streaming tail so pending tools
-      // render only from the reloaded message row until tool_results arrives.
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
       if (payload.phase === "tool_results") {
-        onStreamToolsClear();
         refreshWorkspaceTrees();
       }
     },
-    [reloadMessages, refreshWorkspaceTrees, onStreamReset, onStreamToolsClear],
+    [reloadMessages, refreshWorkspaceTrees, onStreamReset],
   );
 
   const onRunFinished = useCallback(() => {
     setRunning(false);
     setStreamingText("");
     setStreamingThinking("");
-    setStreamingTools([]);
     void reloadMessages();
     refreshWorkspaceTrees();
   }, [reloadMessages, refreshWorkspaceTrees]);
@@ -152,7 +125,6 @@ export function ConversationPanel({
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
-      setStreamingTools([]);
       showToast(payload.error);
       void reloadMessages();
     },
@@ -163,7 +135,6 @@ export function ConversationPanel({
     sessionId,
     onTextDelta,
     onThinkingDelta,
-    onToolUse,
     onStepCommitted,
     onRunFinished,
     onRunFailed,
@@ -440,7 +411,7 @@ export function ConversationPanel({
             messages={messages}
             streamingText={running ? streamingText : undefined}
             streamingThinking={running ? streamingThinking : undefined}
-            streamingTools={running ? streamingTools : undefined}
+            agentRunning={running}
             batchMode={messageBatch.active}
             selectedIds={messageBatch.selectedIds}
             chatRichText={chatRichText}

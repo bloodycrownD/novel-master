@@ -4331,6 +4331,13 @@ html[data-theme="dark"] .chat-message {
   margin-top: 6px;
 }
 
+.chat-message__tool-phase {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
 .tool-call-card--group-item {
   margin: 0;
 }

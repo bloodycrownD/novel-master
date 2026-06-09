@@ -1,7 +1,5 @@
 /**
  * Reload persisted messages then clear ephemeral stream overlay.
- * Mirrors mobile flush-run-ui so assistant step commit drops streaming tools
- * once tool_use blocks are persisted (avoids duplicate pending tool rows).
  */
 
 export async function flushRunUi(
