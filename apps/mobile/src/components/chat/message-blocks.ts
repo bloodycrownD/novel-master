@@ -10,7 +10,7 @@ import type {
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 
-export type ToolCallStatus = 'pending' | 'success' | 'error';
+export type ToolCallStatus = 'success' | 'error';
 
 export interface ToolCallView {
   readonly toolUseId: string;
@@ -20,17 +20,25 @@ export interface ToolCallView {
   readonly resultContent?: string;
 }
 
+export type ToolPhase = 'executing';
+
 export interface MessageListItem {
   readonly kind: 'message';
   readonly message: ChatMessage;
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
-  /** Resolved tool_use views when assistant message contains tool calls. */
+  /** Resolved tool_use views when turn tool_results are complete. */
   readonly tools: readonly ToolCallView[];
+  /** Turn-level tool execution phase (no per-tool cards yet). */
+  readonly toolPhase?: ToolPhase;
 }
 
 export type ChatListItem = MessageListItem;
+
+export interface BuildChatListItemsOptions {
+  readonly agentRunning?: boolean;
+}
 
 function blocksForMessage(message: ChatMessage): readonly ContentBlock[] {
   return message.content.blocks ?? [];
@@ -91,12 +99,51 @@ export function buildToolResultByUseId(
   return map;
 }
 
-function toolStatusFromResult(
-  result: ToolResultBlock | undefined,
-): ToolCallStatus {
-  if (result == null) {
-    return 'pending';
+/** True when every tool_use on the assistant has a paired tool_result. */
+export function turnToolResultsComplete(
+  assistant: ChatMessage,
+  messages: readonly ChatMessage[],
+): boolean {
+  const required = toolUseIdsFromMessage(assistant);
+  if (required.length === 0) {
+    return true;
   }
+  const results = buildToolResultByUseId(messages);
+  return required.every(id => results.has(id));
+}
+
+function lastIncompleteToolAssistant(
+  messages: readonly ChatMessage[],
+): ChatMessage | undefined {
+  let last: ChatMessage | undefined;
+  for (const message of messages) {
+    if (
+      message.role === 'assistant' &&
+      messageHasToolUse(message) &&
+      !turnToolResultsComplete(message, messages)
+    ) {
+      last = message;
+    }
+  }
+  return last;
+}
+
+/** Current turn tool execution: agent running + last assistant with incomplete results. */
+export function isTurnToolExecuting(
+  assistant: ChatMessage,
+  messages: readonly ChatMessage[],
+  agentRunning: boolean,
+): boolean {
+  if (!agentRunning || !messageHasToolUse(assistant)) {
+    return false;
+  }
+  if (turnToolResultsComplete(assistant, messages)) {
+    return false;
+  }
+  return lastIncompleteToolAssistant(messages)?.id === assistant.id;
+}
+
+function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
   const lower = result.content.toLowerCase();
   if (
     lower.includes('error') ||
@@ -112,13 +159,13 @@ export function toolCallViewFromUse(
   use: ToolUseBlock,
   results: Map<string, ToolResultBlock>,
 ): ToolCallView {
-  const result = results.get(use.id);
+  const result = results.get(use.id)!;
   return {
     toolUseId: use.id,
     name: use.name,
     input: use.input,
     status: toolStatusFromResult(result),
-    resultContent: result?.content,
+    resultContent: result.content,
   };
 }
 
@@ -171,7 +218,9 @@ export function toolCallSummary(tool: ToolCallView): string {
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
 export function buildChatListItems(
   messages: readonly ChatMessage[],
+  options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
+  const agentRunning = options.agentRunning ?? false;
   const results = buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
 
@@ -210,17 +259,25 @@ export function buildChatListItems(
       continue;
     }
 
+    const hasToolUse = toolUses.length > 0;
+    const complete = !hasToolUse || turnToolResultsComplete(message, messages);
+    const executing = isTurnToolExecuting(message, messages, agentRunning);
+    const tools = complete
+      ? toolUses.map(use => toolCallViewFromUse(use, results))
+      : [];
+
     if (
       textParts.length > 0 ||
       thinkingParts.length > 0 ||
-      toolUses.length > 0
+      hasToolUse
     ) {
       items.push({
         kind: 'message',
         message,
         textParts,
         thinkingParts,
-        tools: toolUses.map(use => toolCallViewFromUse(use, results)),
+        tools,
+        ...(executing ? {toolPhase: 'executing' as const} : {}),
       });
     }
   }
@@ -231,15 +288,15 @@ export function buildChatListItems(
 export type TranscriptStreamState = {
   readonly text: string;
   readonly thinking: string;
-  readonly tools?: readonly ToolCallView[];
 };
 
 /** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
 export function buildTranscriptRows(
   messages: readonly ChatMessage[],
   stream?: TranscriptStreamState,
+  options: BuildChatListItemsOptions = {},
 ): TranscriptRow[] {
-  const items = buildChatListItems(messages);
+  const items = buildChatListItems(messages, options);
   const rows: TranscriptRow[] = [];
 
   for (const item of items) {
@@ -250,33 +307,10 @@ export function buildTranscriptRows(
       hidden: item.message.hidden,
       text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
       thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-      tools:
-        item.tools.length > 0
-          ? item.tools.map(t => ({
-              toolUseId: t.toolUseId,
-              name: t.name,
-              input: t.input,
-              status: t.status,
-              resultContent: t.resultContent,
-            }))
-          : undefined,
-    });
-  }
-
-  const streamTools = stream?.tools ?? [];
-  if (
-    stream != null &&
-    (stream.text.length > 0 ||
-      stream.thinking.length > 0 ||
-      streamTools.length > 0)
-  ) {
-    rows.push({
-      kind: 'stream',
-      text: stream.text,
-      thinking: stream.thinking,
-      ...(streamTools.length > 0
+      ...(item.toolPhase != null ? {toolPhase: item.toolPhase} : {}),
+      ...(item.tools.length > 0
         ? {
-            tools: streamTools.map(t => ({
+            tools: item.tools.map(t => ({
               toolUseId: t.toolUseId,
               name: t.name,
               input: t.input,
@@ -285,6 +319,17 @@ export function buildTranscriptRows(
             })),
           }
         : {}),
+    });
+  }
+
+  if (
+    stream != null &&
+    (stream.text.length > 0 || stream.thinking.length > 0)
+  ) {
+    rows.push({
+      kind: 'stream',
+      text: stream.text,
+      thinking: stream.thinking,
     });
   }
 

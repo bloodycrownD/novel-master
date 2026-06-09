@@ -40,11 +40,9 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .tool-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .tool-status { font-size: 12px; font-weight: 500; }
-    .tool-status.pending { display: inline-flex; align-items: center; gap: 4px; color: var(--text-secondary, #888); }
-    .tool-status-spinner { flex-shrink: 0; width: 12px; height: 12px; border: 2px solid var(--text-secondary, #888); border-top-color: var(--primary, #007aff); border-radius: 50%; animation: tool-status-spin 0.8s linear infinite; opacity: 0.85; }
-    @keyframes tool-status-spin { to { transform: rotate(360deg); } }
     .tool-status.success { color: var(--primary, #007aff); }
     .tool-status.error { color: #ff3b30; }
+    .tool-phase-bar { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary, #888); }
     .tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
     .tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
     .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }

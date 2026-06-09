@@ -33,7 +33,6 @@ export type ChatTranscriptWebViewProps = {
   readonly messages: readonly ChatMessage[];
   readonly streamingText?: string;
   readonly streamingThinking?: string;
-  readonly streamingTools?: readonly import('./message-blocks').ToolCallView[];
   readonly hasMore?: boolean;
   readonly flags?: Partial<TranscriptFlags>;
   readonly initialScroll?: ChatTranscriptScrollSnapshot | null;
@@ -122,7 +121,6 @@ export function ChatTranscriptWebView({
   messages,
   streamingText = '',
   streamingThinking = '',
-  streamingTools = [],
   hasMore = false,
   flags,
   initialScroll = null,
@@ -144,7 +142,6 @@ export function ChatTranscriptWebView({
   const [webReady, setWebReady] = useState(false);
   const prevStreamTextRef = useRef('');
   const prevStreamThinkingRef = useRef('');
-  const prevStreamingToolsRef = useRef('');
   const sessionKeyRef = useRef(sessionKey);
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
@@ -193,7 +190,10 @@ export function ChatTranscriptWebView({
       restoreScroll?: TranscriptRestoreScroll,
     ) => {
       const richText = flags?.richText ?? false;
-      const rows = enrichTranscriptRows(buildTranscriptRows(messages), richText);
+      const rows = enrichTranscriptRows(
+        buildTranscriptRows(messages, undefined, {agentRunning}),
+        richText,
+      );
       postToWeb({
         v: 1,
         type: 'sessionSnapshot',
@@ -208,7 +208,7 @@ export function ChatTranscriptWebView({
         },
       });
     },
-    [messages, hasMore, postToWeb, sessionKey, flags?.richText],
+    [messages, hasMore, postToWeb, sessionKey, flags?.richText, agentRunning],
   );
 
   const sendPrependPage = useCallback(
@@ -220,14 +220,14 @@ export function ChatTranscriptWebView({
         type: 'prependPage',
         payload: {
           rows: enrichTranscriptRows(
-            buildTranscriptRows(olderMessages),
+            buildTranscriptRows(olderMessages, undefined, {agentRunning}),
             richText,
           ),
           prependedCount,
         },
       });
     },
-    [messages, postToWeb, flags?.richText],
+    [messages, postToWeb, flags?.richText, agentRunning],
   );
 
   const handleMessage = useCallback(
@@ -398,7 +398,6 @@ export function ChatTranscriptWebView({
       sessionKeyRef.current = sessionKey;
       prevStreamTextRef.current = '';
       prevStreamThinkingRef.current = '';
-      prevStreamingToolsRef.current = '';
       prevFirstMessageIdRef.current = undefined;
       prevMessageCountRef.current = 0;
       needsOpenSnapshotRef.current = true;
@@ -494,30 +493,6 @@ export function ChatTranscriptWebView({
     prevStreamTextRef.current = streamingText;
     prevStreamThinkingRef.current = streamingThinking;
   }, [webReady, streamingText, streamingThinking, flags?.richText, postToWeb]);
-
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    const serialized = JSON.stringify(streamingTools);
-    if (serialized === prevStreamingToolsRef.current) {
-      return;
-    }
-    prevStreamingToolsRef.current = serialized;
-    postToWeb({
-      v: 1,
-      type: 'streamTools',
-      payload: {
-        tools: streamingTools.map(t => ({
-          toolUseId: t.toolUseId,
-          name: t.name,
-          input: t.input,
-          status: t.status,
-          resultContent: t.resultContent,
-        })),
-      },
-    });
-  }, [webReady, streamingTools, postToWeb]);
 
   return (
     <View style={styles.fill}>

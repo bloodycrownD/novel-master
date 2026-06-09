@@ -2,10 +2,12 @@ import type {ChatMessage} from '@novel-master/core';
 import {
   buildChatListItems,
   buildToolResultByUseId,
+  isTurnToolExecuting,
   messageHasToolUse,
   resolveToolResultsMessageId,
   toolCallViewFromUse,
   toolUseIdsFromMessage,
+  turnToolResultsComplete,
   vfsToolFilePath,
 } from '../src/components/chat/message-blocks';
 
@@ -48,28 +50,102 @@ describe('message-blocks', () => {
     expect(view.resultContent).toBe('ok');
   });
 
-  it('marks pending tool_use without result', () => {
+  it('orphan tool_use without result and !agentRunning → no tools, no phase', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
       ], 1),
     ];
-    const items = buildChatListItems(messages);
+    const items = buildChatListItems(messages, {agentRunning: false});
     expect(items).toHaveLength(1);
-    expect(items[0]?.kind).toBe('message');
     if (items[0]?.kind === 'message') {
-      expect(items[0].tools).toHaveLength(1);
-      expect(items[0].tools[0]?.status).toBe('pending');
+      expect(items[0].tools).toHaveLength(0);
+      expect(items[0].toolPhase).toBeUndefined();
     }
   });
 
-  it('merges 3 tool_use into one assistant message item', () => {
+  it('tool executing → tools empty + phase when agentRunning', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
+      ], 1),
+    ];
+    const items = buildChatListItems(messages, {agentRunning: true});
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools).toHaveLength(0);
+      expect(items[0].toolPhase).toBe('executing');
+    }
+  });
+
+  it('tool complete → terminal tool cards', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
+      ], 1),
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 2),
+    ];
+    const items = buildChatListItems(messages, {agentRunning: true});
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools).toHaveLength(1);
+      expect(items[0].tools[0]?.status).toBe('success');
+      expect(items[0].toolPhase).toBeUndefined();
+    }
+  });
+
+  it('only last incomplete turn shows executing phase', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+      ], 1),
+      msg('a2', 'assistant', [
+        {type: 'tool_use', id: 'tu2', name: 'list', input: {}},
+      ], 2),
+    ];
+    const items = buildChatListItems(messages, {agentRunning: true});
+    const byId = new Map(
+      items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
+    );
+    expect(byId.get('a1')?.toolPhase).toBeUndefined();
+    expect(byId.get('a2')?.toolPhase).toBe('executing');
+  });
+
+  it('turnToolResultsComplete detects paired results', () => {
+    const assistant = msg('a1', 'assistant', [
+      {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+    ], 1);
+    const incomplete = [assistant];
+    const complete = [
+      assistant,
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 2),
+    ];
+    expect(turnToolResultsComplete(assistant, incomplete)).toBe(false);
+    expect(turnToolResultsComplete(assistant, complete)).toBe(true);
+  });
+
+  it('isTurnToolExecuting requires agentRunning', () => {
+    const assistant = msg('a1', 'assistant', [
+      {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+    ], 1);
+    expect(isTurnToolExecuting(assistant, [assistant], false)).toBe(false);
+    expect(isTurnToolExecuting(assistant, [assistant], true)).toBe(true);
+  });
+
+  it('merges 3 tool_use into one assistant message item when complete', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
         {type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {}},
         {type: 'tool_use', id: 'tu3', name: 'vfs.write', input: {path: '/b'}},
       ], 1),
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'a'},
+        {type: 'tool_result', toolUseId: 'tu2', content: 'b'},
+        {type: 'tool_result', toolUseId: 'tu3', content: 'c'},
+      ], 2),
     ];
     const items = buildChatListItems(messages);
     expect(items).toHaveLength(1);
@@ -85,6 +161,9 @@ describe('message-blocks', () => {
         {type: 'text', text: 'hello'},
         {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
       ], 2),
+      msg('u2', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 3),
     ];
     const items = buildChatListItems(messages);
     expect(items.map(i => i.kind)).toEqual(['message', 'message']);
@@ -127,7 +206,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('keeps hidden assistant tool turns as message rows with embedded tools', () => {
+  it('hidden assistant with incomplete tools shows no cards when agent stopped', () => {
     const messages = [
       msg(
         'a1',
@@ -141,7 +220,8 @@ describe('message-blocks', () => {
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].message.hidden).toBe(true);
-      expect(items[0].tools).toHaveLength(1);
+      expect(items[0].tools).toHaveLength(0);
+      expect(items[0].toolPhase).toBeUndefined();
     }
   });
 
@@ -196,6 +276,9 @@ describe('message-blocks', () => {
         {type: 'text', text: 'reply'},
         {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
       ], 1),
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 2),
     ];
     const item = buildChatListItems(messages)[0];
     expect(item?.kind).toBe('message');

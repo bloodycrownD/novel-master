@@ -2,7 +2,7 @@
  * Tool invocation card with status from paired tool_result.
  */
 import React from 'react';
-import {ActivityIndicator, Pressable, StyleSheet, Text, View} from 'react-native';
+import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 import {
   toolCallSummary,
@@ -25,25 +25,16 @@ function statusLabel(status: ToolCallView['status']): string {
       return '成功';
     case 'error':
       return '失败';
-    case 'pending':
-      return '执行中…';
     default:
-      return '进行中';
+      return '';
   }
 }
 
 function statusColor(
   status: ToolCallView['status'],
-  tokens: {primary: string; danger: string; textSecondary: string},
+  tokens: {primary: string; danger: string},
 ): string {
-  switch (status) {
-    case 'success':
-      return tokens.primary;
-    case 'error':
-      return tokens.danger;
-    default:
-      return tokens.textSecondary;
-  }
+  return status === 'error' ? tokens.danger : tokens.primary;
 }
 
 export function ToolCallCard({
@@ -66,22 +57,13 @@ export function ToolCallCard({
         <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
           {tool.name}
         </Text>
-        <View style={styles.statusRow}>
-          {tool.status === 'pending' ? (
-            <ActivityIndicator
-              size="small"
-              color={statusColor(tool.status, tokens)}
-              style={styles.statusSpinner}
-            />
-          ) : null}
-          <Text
-            style={[
-              styles.status,
-              {color: statusColor(tool.status, tokens)},
-            ]}>
-            {statusLabel(tool.status)}
-          </Text>
-        </View>
+        <Text
+          style={[
+            styles.status,
+            {color: statusColor(tool.status, tokens)},
+          ]}>
+          {statusLabel(tool.status)}
+        </Text>
       </View>
       {detail ? (
         <Text style={[styles.summary, {color: tokens.textSecondary}]}>
@@ -148,8 +130,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   name: {flex: 1, fontWeight: '600', fontSize: 14},
-  statusRow: {flexDirection: 'row', alignItems: 'center', gap: 4},
-  statusSpinner: {transform: [{scale: 0.75}]},
   status: {fontSize: 12, fontWeight: '500'},
   summary: {marginTop: 6, fontSize: 13},
   openHint: {marginTop: 8, fontSize: 12, fontWeight: '500'},

@@ -27,6 +27,8 @@ export type TranscriptRow =
       readonly hidden: boolean;
       readonly text: string;
       readonly thinking: string;
+      /** Turn-level tool execution phase (no per-tool cards yet). */
+      readonly toolPhase?: 'executing';
       /** Embedded tool group for assistant messages with tool_use. */
       readonly tools?: readonly TranscriptToolView[];
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
@@ -37,7 +39,6 @@ export type TranscriptRow =
       readonly kind: 'stream';
       readonly text: string;
       readonly thinking: string;
-      readonly tools?: readonly TranscriptToolView[];
     };
 
 export type TranscriptTheme = {
@@ -59,7 +60,6 @@ export type TranscriptFlags = {
 export type TranscriptStreamState = {
   readonly text: string;
   readonly thinking: string;
-  readonly tools?: readonly TranscriptToolView[];
 };
 
 export type TranscriptScrollIntent = 'stick' | 'restore' | 'preserve';
@@ -94,18 +94,11 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<
       'streamDelta',
       {
-        kind: 'text' | 'thinking' | 'tool-use';
+        kind: 'text' | 'thinking';
         delta?: string;
         /** Full accumulated tail HTML when flags.richText (same limits as persisted rows). */
         html?: string;
-        id?: string;
-        name?: string;
-        input?: Record<string, unknown>;
       }
-    >
-  | BridgeEnvelope<
-      'streamTools',
-      {tools: readonly TranscriptToolView[]}
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>

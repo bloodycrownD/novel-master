@@ -22,16 +22,16 @@ import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import type {ChatListScrollSnapshot} from '../../services/chat-list-scroll-cache';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
-import {buildChatListItems, type ChatListItem} from './message-blocks';
+import {buildChatListItems, type ChatListItem, type ToolPhase} from './message-blocks';
 import {ThinkingBlockCard} from './ThinkingBlockCard';
 import {ToolCallGroupCard} from './ToolCallGroupCard';
-import type {ToolCallView} from './message-blocks';
+import {ToolTurnPhaseBar} from './ToolTurnPhaseBar';
 
 type Props = {
   messages: readonly ChatMessage[];
   streamingText?: string;
   streamingThinking?: string;
-  streamingTools?: readonly ToolCallView[];
+  agentRunning?: boolean;
   /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
@@ -111,7 +111,7 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
-  streamingTools = [],
+  agentRunning = false,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
   batchMode = false,
@@ -149,7 +149,10 @@ export function MessageList({
       ? {x: 0, y: initialScroll.offsetY}
       : undefined,
   );
-  const items = useMemo(() => buildChatListItems(messages), [messages]);
+  const items = useMemo(
+    () => buildChatListItems(messages, {agentRunning}),
+    [messages, agentRunning],
+  );
 
   const currentScrollSnapshot = useCallback(
     (): ChatListScrollSnapshot => ({
@@ -295,11 +298,11 @@ export function MessageList({
   ]);
 
   useEffect(() => {
-    if (!streamingText && !streamingThinking && streamingTools.length === 0) {
+    if (!streamingText && !streamingThinking) {
       return;
     }
     scheduleScrollToEnd();
-  }, [streamingText, streamingThinking, streamingTools.length, scheduleScrollToEnd]);
+  }, [streamingText, streamingThinking, scheduleScrollToEnd]);
 
   useEffect(() => {
     return () => {
@@ -317,18 +320,18 @@ export function MessageList({
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
     if (
       (streamingText && streamingText.length > 0) ||
-      (streamingThinking && streamingThinking.length > 0) ||
-      streamingTools.length > 0
+      (streamingThinking && streamingThinking.length > 0)
     ) {
       list.push({kind: 'stream'});
     }
     return list;
-  }, [items, streamingText, streamingThinking, streamingTools]);
+  }, [items, streamingText, streamingThinking]);
 
   const renderAssistantBubble = (
     body: string,
     thinking: string,
-    tools: readonly ToolCallView[],
+    tools: readonly import('./message-blocks').ToolCallView[],
+    toolPhase: ToolPhase | undefined,
     selected: boolean,
     hidden: boolean,
     messageId: string,
@@ -339,12 +342,13 @@ export function MessageList({
   ) => {
     const trimmedThinking = thinking.trim();
     const trimmedBody = body.trim();
-    if (!trimmedThinking && !trimmedBody && tools.length === 0) {
+    if (!trimmedThinking && !trimmedBody && tools.length === 0 && !toolPhase) {
       return null;
     }
     const colors = chatBubbleColors(tokens, false);
     const bubbleFillWidth =
-      !trimmedBody && (trimmedThinking.length > 0 || tools.length > 0);
+      !trimmedBody &&
+      (trimmedThinking.length > 0 || tools.length > 0 || toolPhase != null);
     return (
       <View
         style={[
@@ -368,7 +372,7 @@ export function MessageList({
             richRenderEpoch={richRenderEpoch}
             contentId={`thinking-${messageId}`}
             embedded
-            showDividerBelow={!!trimmedBody || tools.length > 0}
+            showDividerBelow={!!trimmedBody || tools.length > 0 || toolPhase != null}
           />
         ) : null}
         {trimmedBody
@@ -386,6 +390,7 @@ export function MessageList({
               />
             )
           : null}
+        {toolPhase === 'executing' ? <ToolTurnPhaseBar embedded /> : null}
         {tools.length > 0 ? (
           <ToolCallGroupCard
             tools={tools}
@@ -475,7 +480,7 @@ export function MessageList({
         return `msg-${row.message.id}`;
       }}
       ListEmptyComponent={
-        !streamingText && !streamingThinking && streamingTools.length === 0 ? (
+        !streamingText && !streamingThinking ? (
           <Text style={[styles.empty, {color: tokens.textSecondary}]}>
             暂无消息，发送一条开始对话
           </Text>
@@ -488,7 +493,8 @@ export function MessageList({
               {renderAssistantBubble(
                 streamingText ?? '',
                 streamingThinking ?? '',
-                streamingTools,
+                [],
+                undefined,
                 false,
                 false,
                 'stream',
@@ -502,7 +508,7 @@ export function MessageList({
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
-        if (!body && !thinking && row.tools.length === 0) {
+        if (!body && !thinking && row.tools.length === 0 && !row.toolPhase) {
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
@@ -513,6 +519,7 @@ export function MessageList({
             body,
             thinking,
             row.tools,
+            row.toolPhase,
             selected,
             hidden,
             row.message.id,

@@ -25,8 +25,7 @@ export function ToolCallGroupCard({
   showDividerBelow = false,
 }: Props) {
   const {tokens} = useTheme();
-  const hasPending = tools.some(tool => tool.status === 'pending');
-  const [expanded, setExpanded] = useState(defaultExpanded || hasPending);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   if (tools.length === 0) {
     return null;
@@ -56,7 +55,6 @@ export function ToolCallGroupCard({
         accessibilityState={{expanded}}>
         <Text style={[styles.title, {color: tokens.textSecondary}]}>
           工具调用 ({tools.length})
-          {hasPending ? ' · 执行中' : ''}
         </Text>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
           {expanded ? '▼' : '▶'}

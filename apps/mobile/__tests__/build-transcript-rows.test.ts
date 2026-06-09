@@ -35,7 +35,7 @@ describe('buildTranscriptRows', () => {
     expect(rowKinds).toEqual(listKinds);
   });
 
-  it('appends stream tail row when streaming', () => {
+  it('appends stream tail row when streaming (text/thinking only)', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
     const rows = buildTranscriptRows(messages, {text: 'partial', thinking: ''});
     expect(rows[rows.length - 1]).toEqual({
@@ -45,26 +45,34 @@ describe('buildTranscriptRows', () => {
     });
   });
 
-  it('appends stream tail with pending tools', () => {
+  it('stream tail never includes tools', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
     const rows = buildTranscriptRows(messages, {
       text: 'partial',
       thinking: 'hmm',
-      tools: [
-        {
-          toolUseId: 'tu1',
-          name: 'read',
-          input: {path: '/a'},
-          status: 'pending',
-        },
-      ],
     });
-    expect(rows[rows.length - 1]).toMatchObject({
+    const tail = rows[rows.length - 1];
+    expect(tail).toMatchObject({
       kind: 'stream',
       text: 'partial',
       thinking: 'hmm',
-      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
     });
+    expect(tail).not.toHaveProperty('tools');
+  });
+
+  it('maps toolPhase on message rows when executing', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+      ], 1),
+    ];
+    const row = buildTranscriptRows(messages, undefined, {agentRunning: true})[0];
+    expect(row).toMatchObject({
+      kind: 'message',
+      id: 'a1',
+      toolPhase: 'executing',
+    });
+    expect(row).not.toHaveProperty('tools');
   });
 
   it('maps message fields for Web rows', () => {
@@ -113,7 +121,7 @@ describe('buildTranscriptRows', () => {
     });
   });
 
-  it('includes embedded tools on hidden assistant rows', () => {
+  it('includes embedded tools on hidden assistant rows when complete', () => {
     const messages = [
       msg(
         'a1',
@@ -122,6 +130,9 @@ describe('buildTranscriptRows', () => {
         1,
         true,
       ),
+      msg('u1', 'user', [
+        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
+      ], 2),
     ];
     const rows = buildTranscriptRows(messages);
     expect(rows).toHaveLength(1);
