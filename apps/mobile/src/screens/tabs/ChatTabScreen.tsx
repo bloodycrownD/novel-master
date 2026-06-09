@@ -1212,8 +1212,8 @@ export function ChatTabScreen() {
           value={conversationPanel}
           onChange={setConversationPanel}
           options={[
-            {value: 'chat', label: '聊天'},
-            {value: 'workspace', label: '聊天工作区'},
+            {value: 'chat', label: '聊天', testID: 'tab-chat'},
+            {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
           ]}
         />
         {projectId != null && sessionId != null ? (

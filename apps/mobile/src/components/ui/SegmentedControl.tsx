@@ -8,6 +8,7 @@ import type {ThemeTokens} from '../../theme/tokens';
 export type SegmentOption<T extends string> = {
   value: T;
   label: string;
+  testID?: string;
 };
 
 type Props<T extends string> = {
@@ -37,6 +38,7 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             key={option.value}
+            testID={option.testID}
             onPress={() => onChange(option.value)}
             style={[
               styles.segment,

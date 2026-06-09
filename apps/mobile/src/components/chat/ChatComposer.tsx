@@ -213,6 +213,7 @@ export function ChatComposer({
       ) : null}
       <View style={styles.row}>
         <TextInput
+          testID="chat-composer-input"
           style={[
             styles.input,
             {

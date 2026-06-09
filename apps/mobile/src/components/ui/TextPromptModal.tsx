@@ -70,6 +70,7 @@ export function TextPromptModal({
             </Text>
           ) : null}
           <TextInput
+            testID="text-prompt-input"
             style={[
               styles.input,
               {
@@ -92,6 +93,7 @@ export function TextPromptModal({
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
+              testID="text-prompt-submit"
               onPress={() => handleConfirm().catch(() => undefined)}
               style={styles.btn}
               disabled={!canSubmit}>

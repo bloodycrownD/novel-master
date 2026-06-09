@@ -572,6 +572,7 @@ export function VfsFileManager({
             <ZipImportIcon color={tokens.primary} />
           </Pressable>
           <Pressable
+            testID="vfs-more-action"
             accessibilityLabel="更多操作"
             onPress={() => setMoreOpen(true)}
             style={styles.iconBtn}>
@@ -608,7 +609,9 @@ export function VfsFileManager({
           renderItem={({item}) => {
             const selected = batch.isSelected(item.path);
             return (
-            <View style={[styles.row, {borderBottomColor: tokens.border}]}>
+            <View
+              testID={`vfs-row-${item.name}`}
+              style={[styles.row, {borderBottomColor: tokens.border}]}>
               {batch.active ? (
                 <View style={styles.batchCheckCol}>
                   <BatchCheckbox
@@ -662,6 +665,7 @@ export function VfsFileManager({
               </Pressable>
               {batch.active ? null : (
               <Pressable
+                testID={`vfs-row-menu-${item.name}`}
                 onPress={() => setMenuPath(item.path)}
                 style={styles.menuBtn}
                 hitSlop={8}>
@@ -712,6 +716,7 @@ export function VfsFileManager({
               {prompt?.title}
             </Text>
             <TextInput
+              testID="vfs-prompt-input"
               style={[
                 styles.promptInput,
                 {borderColor: tokens.border, color: tokens.text},
@@ -727,6 +732,7 @@ export function VfsFileManager({
                 <Text style={{color: tokens.textSecondary}}>取消</Text>
               </Pressable>
               <Pressable
+                testID="vfs-prompt-submit"
                 onPress={() => {
                   const current = prompt;
                   if (!current) {

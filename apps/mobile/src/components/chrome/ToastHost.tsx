@@ -58,6 +58,7 @@ export function ToastHost({children}: {children: ReactNode}) {
       {children}
       {message != null ? (
         <View
+          testID="toast-message"
           pointerEvents="none"
           style={[
             styles.toast,
