@@ -6,7 +6,10 @@ Black-box regression tests for chat rollback, VFS rename conflicts, and transcri
 
 - Node **22+** (see repo `.nvmrc`)
 - Android SDK (`ANDROID_HOME`) and a running emulator or USB device
-- Debug APK: `cd apps/mobile/android && ./gradlew assembleDebug`
+- Debug APK (optional if app already installed via `npm run mobile:android`):
+  ```bash
+  npm run mobile:e2e:build-apk
+  ```
 - Appium 2 with UiAutomator2 driver:
 
 ```bash

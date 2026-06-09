@@ -32,6 +32,9 @@ apps/desktop/build/
 .DS_Store
 Thumbs.db
 
+# Appium drivers installed for mobile E2E (npm run mobile:e2e:prepare)
+apps/mobile/.appium/
+
 # Local VFS SQLite DB and mirror dirs (dev/test)
 .novel-master/
 tmp/
