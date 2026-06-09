@@ -45,6 +45,28 @@ describe('buildTranscriptRows', () => {
     });
   });
 
+  it('appends stream tail with pending tools', () => {
+    const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
+    const rows = buildTranscriptRows(messages, {
+      text: 'partial',
+      thinking: 'hmm',
+      tools: [
+        {
+          toolUseId: 'tu1',
+          name: 'read',
+          input: {path: '/a'},
+          status: 'pending',
+        },
+      ],
+    });
+    expect(rows[rows.length - 1]).toMatchObject({
+      kind: 'stream',
+      text: 'partial',
+      thinking: 'hmm',
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+    });
+  });
+
   it('maps message fields for Web rows', () => {
     const messages = [
       msg('a1', 'assistant', [

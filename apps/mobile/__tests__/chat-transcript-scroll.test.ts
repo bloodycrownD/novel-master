@@ -36,4 +36,20 @@ describe('chat-transcript scroll (forward DOM)', () => {
     expect(clampScrollTop(3000, 1500, 300)).toBe(1200);
     expect(clampScrollTop(500, 1500, 300)).toBe(500);
   });
+
+  it('preserve after tail shrink restores offset-from-bottom (rollback)', () => {
+    const prevOffsetFromBottom = offsetFromBottom(3000, 4500, 300);
+    const nextScrollHeight = 1500;
+    const restored = scrollTopForOffsetFromBottom(
+      nextScrollHeight,
+      300,
+      prevOffsetFromBottom,
+    );
+    expect(restored).toBe(
+      Math.max(0, nextScrollHeight - 300 - prevOffsetFromBottom),
+    );
+    expect(offsetFromBottom(restored, nextScrollHeight, 300)).toBe(
+      prevOffsetFromBottom,
+    );
+  });
 });

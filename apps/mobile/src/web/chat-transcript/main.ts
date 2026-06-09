@@ -38,7 +38,7 @@ export function buildTranscriptBootScript(): string {
     sessionKey: '',
     rows: [],
     hasMore: false,
-    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '' },
+    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', tools: [] },
     flags: { richText: false, batchMode: false, menuDisabled: false },
     selectedIds: [],
     menu: null,
@@ -276,16 +276,16 @@ export function buildTranscriptBootScript(): string {
         thinkingKey,
         thinkingExpanded,
         thinkingHtml,
-        hasTools || hasText
+        hasText || hasTools
       );
-    }
-    if (hasTools) {
-      html += renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, hasText);
     }
     if (hasText) {
       var richBubble = state.flags.richText && textHtml ? ' rich' : '';
       var inner = textHtml || escapeHtml(text || '');
       html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
+    }
+    if (hasTools) {
+      html += renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false);
     }
     return html;
   }
@@ -649,7 +649,10 @@ export function buildTranscriptBootScript(): string {
       state.stream.thinking,
       'stream:thinking',
       true,
-      streamThinkingHtml()
+      streamThinkingHtml(),
+      state.stream.tools,
+      'stream:tools',
+      hasPendingTools(state.stream.tools)
     );
   }
 
@@ -657,7 +660,7 @@ export function buildTranscriptBootScript(): string {
     var bubble = tail.querySelector('.bubble');
     var bubbleClass = 'bubble assistant' + assistantBubbleExtraClasses(
       state.stream.textHtml,
-      null,
+      state.stream.tools,
       state.stream.text,
       state.stream.thinking
     );
@@ -680,7 +683,11 @@ export function buildTranscriptBootScript(): string {
   }
 
   function renderEmptyState() {
-    var hasStream = !!(state.stream.text || state.stream.thinking);
+    var hasStream = !!(
+      state.stream.text ||
+      state.stream.thinking ||
+      (state.stream.tools && state.stream.tools.length > 0)
+    );
     if (state.rows.length > 0 || hasStream) return '';
     return '<div class="empty-state">暂无消息</div>';
   }
@@ -703,11 +710,15 @@ export function buildTranscriptBootScript(): string {
         html += renderMessageRow(row);
       }
     }
-    if (state.stream.thinking || state.stream.text) {
+    if (
+      state.stream.thinking ||
+      state.stream.text ||
+      (state.stream.tools && state.stream.tools.length > 0)
+    ) {
       html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
         assistantBubbleExtraClasses(
           state.stream.textHtml,
-          null,
+          state.stream.tools,
           state.stream.text,
           state.stream.thinking
         ) + '">' + renderStreamBubbleInner() + '</div></div>';
@@ -724,7 +735,7 @@ export function buildTranscriptBootScript(): string {
     var intent = payload.scrollIntent || 'stick';
     var scroller = document.getElementById('scroller');
     var wasNearBottom = state.nearBottom;
-    var prevScrollTop = scroller ? scroller.scrollTop : 0;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
     var sessionChanged = payload.sessionKey && payload.sessionKey !== state.sessionKey;
 
     state.sessionKey = payload.sessionKey || state.sessionKey;
@@ -732,7 +743,7 @@ export function buildTranscriptBootScript(): string {
     state.hasMore = !!payload.hasMore;
     state.loadOlderArmed = true;
     if (intent !== 'preserve' || sessionChanged) {
-      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
+      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', tools: [] };
     }
     if (sessionChanged) {
       closeContextMenu(false);
@@ -756,7 +767,11 @@ export function buildTranscriptBootScript(): string {
       if (wasNearBottom) {
         stickToBottom(scroller);
       } else {
-        clampScrollTop(scroller, prevScrollTop);
+        // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+        );
       }
     }
     state.nearBottom = isNearBottom(scroller);
@@ -781,6 +796,36 @@ export function buildTranscriptBootScript(): string {
       state.nearBottom = isNearBottom(scroller);
     }
     emitScrollSnapshot();
+  }
+
+  function appendStreamToolUse(tool) {
+    if (!tool || !tool.id || !tool.name) return;
+    var tools = state.stream.tools ? state.stream.tools.slice() : [];
+    tools.push({
+      toolUseId: tool.id,
+      name: tool.name,
+      input: tool.input || {},
+      status: 'pending',
+    });
+    state.stream.tools = tools;
+    var tail = document.getElementById('stream-tail');
+    if (tail) {
+      updateStreamBubble(tail);
+    } else {
+      renderRows();
+    }
+    scheduleStickIfNearBottom();
+  }
+
+  function applyStreamTools(tools) {
+    state.stream.tools = (tools || []).slice();
+    var tail = document.getElementById('stream-tail');
+    if (tail) {
+      updateStreamBubble(tail);
+    } else {
+      renderRows();
+    }
+    scheduleStickIfNearBottom();
   }
 
   function appendStreamDelta(kind, delta, html) {
@@ -885,10 +930,17 @@ export function buildTranscriptBootScript(): string {
         applyPrependPage(p);
         break;
       case 'streamDelta':
-        appendStreamDelta(p.kind, p.delta || '', p.html || '');
+        if (p.kind === 'tool-use') {
+          appendStreamToolUse(p);
+        } else {
+          appendStreamDelta(p.kind, p.delta || '', p.html || '');
+        }
+        break;
+      case 'streamTools':
+        applyStreamTools(p.tools || []);
         break;
       case 'streamReset':
-        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
+        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', tools: [] };
         renderRows();
         break;
       case 'flagsUpdate':

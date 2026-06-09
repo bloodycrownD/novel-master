@@ -9,10 +9,12 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUsePayload,
 } from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
@@ -31,6 +33,8 @@ type Props = {
   onRunningChange: (running: boolean) => void;
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
+  onStreamToolUse?: (payload: AgentStreamToolUsePayload) => void;
+  onStreamToolsClear?: () => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
   onNeedModel: () => void;
@@ -44,6 +48,8 @@ export function ChatComposer({
   onRunningChange,
   onStreamText,
   onStreamThinking,
+  onStreamToolUse,
+  onStreamToolsClear,
   onStreamReset,
   onMessagesChanged,
   onNeedModel,
@@ -61,12 +67,16 @@ export function ChatComposer({
   const streamHandlersRef = useRef({
     onStreamText,
     onStreamThinking,
+    onStreamToolUse,
+    onStreamToolsClear,
     onMessagesChanged,
     onStreamReset,
   });
   streamHandlersRef.current = {
     onStreamText,
     onStreamThinking,
+    onStreamToolUse,
+    onStreamToolsClear,
     onMessagesChanged,
     onStreamReset,
   };
@@ -94,13 +104,27 @@ export function ChatComposer({
         }
       },
     );
+    const subToolUse = bus.subscribe(
+      EVENT_AGENT_STREAM_TOOL_USE,
+      (payload: AgentStreamToolUsePayload) => {
+        if (payload.sessionId === sid) {
+          streamHandlersRef.current.onStreamToolUse?.(payload);
+        }
+      },
+    );
     const subStep = bus.subscribe(
       EVENT_AGENT_STEP_COMMITTED,
       (payload: AgentStepCommittedPayload) => {
         if (payload.sessionId === sid) {
-          const {onMessagesChanged: reload, onStreamReset: reset} =
-            streamHandlersRef.current;
+          const {
+            onMessagesChanged: reload,
+            onStreamReset: reset,
+            onStreamToolsClear: clearTools,
+          } = streamHandlersRef.current;
           flushAgentStepUi(payload.phase, reload, reset).catch(() => undefined);
+          if (payload.phase === 'tool_results') {
+            clearTools?.();
+          }
         }
       },
     );
@@ -117,6 +141,7 @@ export function ChatComposer({
     return () => {
       subText.unsubscribe();
       subThinking.unsubscribe();
+      subToolUse.unsubscribe();
       subStep.unsubscribe();
       subFinished.unsubscribe();
     };

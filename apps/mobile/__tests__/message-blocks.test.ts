@@ -189,6 +189,23 @@ describe('message-blocks', () => {
     expect(resolveToolResultsMessageId(messages, messages[0]!)).toBe('u2');
   });
 
+  it('buildChatListItems keeps thinking, text, then tools block order', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'thinking', text: 'hmm'},
+        {type: 'text', text: 'reply'},
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
+      ], 1),
+    ];
+    const item = buildChatListItems(messages)[0];
+    expect(item?.kind).toBe('message');
+    if (item?.kind === 'message') {
+      expect(item.thinkingParts).toEqual(['hmm']);
+      expect(item.textParts).toEqual(['reply']);
+      expect(item.tools).toHaveLength(1);
+    }
+  });
+
   it('vfsToolFilePath returns path for vfs read/write/replace only', () => {
     expect(
       vfsToolFilePath({

@@ -153,6 +153,9 @@ export function ChatTabScreen() {
     useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
+  const [streamingTools, setStreamingTools] = useState<
+    import('../../components/chat/message-blocks').ToolCallView[]
+  >([]);
   const streamBuffer = useMemo(
     () =>
       createStreamBuffer({
@@ -373,11 +376,31 @@ export function ChatTabScreen() {
     [streamBuffer, noteThinkingDelta],
   );
 
+  const handleStreamToolUse = useCallback(
+    (payload: {id: string; name: string; input: Record<string, unknown>}) => {
+      setStreamingTools(prev => [
+        ...prev,
+        {
+          toolUseId: payload.id,
+          name: payload.name,
+          input: payload.input,
+          status: 'pending',
+        },
+      ]);
+    },
+    [],
+  );
+
+  const handleStreamToolsClear = useCallback(() => {
+    setStreamingTools([]);
+  }, []);
+
   const handleStreamReset = useCallback(() => {
     // Discard buffered deltas only — flushing would re-apply text that is already persisted.
     streamBuffer.reset();
     setStreamingText('');
     setStreamingThinking('');
+    setStreamingTools([]);
   }, [streamBuffer]);
 
   const handleMessagesChanged = useCallback(async () => {
@@ -715,6 +738,7 @@ export function ChatTabScreen() {
         setConversationPanel('chat');
         setStreamingText('');
         setStreamingThinking('');
+        setStreamingTools([]);
         bumpVfsRefresh();
         showToast(`已 Fork：${forked.title ?? forked.id}`);
       } catch (error) {
@@ -755,6 +779,7 @@ export function ChatTabScreen() {
                   await rollbackToMessage(runtime, {projectId, sessionId}, messageId);
                   setStreamingText('');
                   setStreamingThinking('');
+                  setStreamingTools([]);
                   await reloadMessages(true);
                   bumpVfsRefresh();
                   showToast('回滚成功');
@@ -804,6 +829,7 @@ export function ChatTabScreen() {
     exitMessageBatch();
     setStreamingText('');
     setStreamingThinking('');
+    setStreamingTools([]);
     await reloadMessages(true);
     void refreshChatTokenLabel();
   }, [
@@ -1008,6 +1034,7 @@ export function ChatTabScreen() {
         }
         setStreamingText('');
         setStreamingThinking('');
+        setStreamingTools([]);
         await reloadMessages(true);
         void refreshChatTokenLabel();
       } catch (error) {
@@ -1244,6 +1271,7 @@ export function ChatTabScreen() {
                   messages={chatMessages}
                   streamingText={streamingText}
                   streamingThinking={streamingThinking}
+                  streamingTools={streamingTools}
                   hasMore={hasMoreMessages}
                   agentRunning={agentRunning}
                   flags={transcriptFlags}
@@ -1277,6 +1305,7 @@ export function ChatTabScreen() {
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
+                streamingTools={streamingTools}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
                 initialScroll={cachedChatScroll ?? null}
@@ -1318,6 +1347,8 @@ export function ChatTabScreen() {
                 }}
                 onStreamText={handleStreamText}
                 onStreamThinking={handleStreamThinking}
+                onStreamToolUse={handleStreamToolUse}
+                onStreamToolsClear={handleStreamToolsClear}
                 onStreamReset={handleStreamReset}
                 onMessagesChanged={handleMessagesChanged}
                 onNeedModel={() => setModelPickerOpen(true)}

@@ -117,7 +117,17 @@ export async function runAgentTurn(
 
   if (trimmed !== '') {
     stage = 'append-user-message';
-    await runtime.messages.append(scope.sessionId, 'user', textBlocks(trimmed));
+    const userMessage = await runtime.messages.append(
+      scope.sessionId,
+      'user',
+      textBlocks(trimmed),
+    );
+    // WHY: user send is a rollback anchor for manual VFS edits made before the message.
+    await runtime.messageCheckpoint.capture(
+      scope.sessionId,
+      scope.projectId,
+      userMessage.id,
+    );
     await options?.onUserMessageAppended?.();
   }
 

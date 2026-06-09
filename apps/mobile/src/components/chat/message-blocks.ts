@@ -231,6 +231,7 @@ export function buildChatListItems(
 export type TranscriptStreamState = {
   readonly text: string;
   readonly thinking: string;
+  readonly tools?: readonly ToolCallView[];
 };
 
 /** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
@@ -262,11 +263,28 @@ export function buildTranscriptRows(
     });
   }
 
-  if (stream != null && (stream.text.length > 0 || stream.thinking.length > 0)) {
+  const streamTools = stream?.tools ?? [];
+  if (
+    stream != null &&
+    (stream.text.length > 0 ||
+      stream.thinking.length > 0 ||
+      streamTools.length > 0)
+  ) {
     rows.push({
       kind: 'stream',
       text: stream.text,
       thinking: stream.thinking,
+      ...(streamTools.length > 0
+        ? {
+            tools: streamTools.map(t => ({
+              toolUseId: t.toolUseId,
+              name: t.name,
+              input: t.input,
+              status: t.status,
+              resultContent: t.resultContent,
+            })),
+          }
+        : {}),
     });
   }
 

@@ -36,6 +36,7 @@ import {
   type MappedVfsRow,
 } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
+import {isVfsError} from '@novel-master/core';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -359,16 +360,28 @@ export function VfsFileManager({
             const parent = parentLogicalPath(menuPath) ?? root;
             const newPath =
               parent === '/' ? `/${trimmed}` : `${parent}/${trimmed}`;
-            if (menuRow.kind === 'file') {
-              await renameVfsFile(vfs, menuPath, newPath);
-            } else {
-              await renameVfsDirectory(vfs, menuPath, newPath);
-              await migrateWorktreeDirRename(worktree, menuPath, newPath);
-              if (
-                currentPath === menuPath ||
-                currentPath.startsWith(`${menuPath}/`)
-              ) {
-                setCurrentPath(remapPathUnderDir(currentPath, menuPath, newPath));
+            try {
+              if (menuRow.kind === 'file') {
+                await renameVfsFile(vfs, menuPath, newPath);
+              } else {
+                await renameVfsDirectory(vfs, menuPath, newPath);
+                await migrateWorktreeDirRename(worktree, menuPath, newPath);
+                if (
+                  currentPath === menuPath ||
+                  currentPath.startsWith(`${menuPath}/`)
+                ) {
+                  setCurrentPath(
+                    remapPathUnderDir(currentPath, menuPath, newPath),
+                  );
+                }
+              }
+              await reloadAfterMutation();
+            } catch (err) {
+              // WHY: Core rejects duplicate names; surface friendly copy on mobile.
+              if (isVfsError(err, 'ALREADY_EXISTS')) {
+                showToast('名称不能重复');
+              } else {
+                showToast(toastMessage('重命名失败', err));
               }
             }
           },

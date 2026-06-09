@@ -31,6 +31,7 @@ type Props = {
   messages: readonly ChatMessage[];
   streamingText?: string;
   streamingThinking?: string;
+  streamingTools?: readonly ToolCallView[];
   /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
@@ -110,6 +111,7 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
+  streamingTools = [],
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
   batchMode = false,
@@ -293,11 +295,11 @@ export function MessageList({
   ]);
 
   useEffect(() => {
-    if (!streamingText && !streamingThinking) {
+    if (!streamingText && !streamingThinking && streamingTools.length === 0) {
       return;
     }
     scheduleScrollToEnd();
-  }, [streamingText, streamingThinking, scheduleScrollToEnd]);
+  }, [streamingText, streamingThinking, streamingTools.length, scheduleScrollToEnd]);
 
   useEffect(() => {
     return () => {
@@ -315,12 +317,13 @@ export function MessageList({
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
     if (
       (streamingText && streamingText.length > 0) ||
-      (streamingThinking && streamingThinking.length > 0)
+      (streamingThinking && streamingThinking.length > 0) ||
+      streamingTools.length > 0
     ) {
       list.push({kind: 'stream'});
     }
     return list;
-  }, [items, streamingText, streamingThinking]);
+  }, [items, streamingText, streamingThinking, streamingTools]);
 
   const renderAssistantBubble = (
     body: string,
@@ -365,16 +368,7 @@ export function MessageList({
             richRenderEpoch={richRenderEpoch}
             contentId={`thinking-${messageId}`}
             embedded
-            showDividerBelow={tools.length > 0 || !!trimmedBody}
-          />
-        ) : null}
-        {tools.length > 0 ? (
-          <ToolCallGroupCard
-            tools={tools}
-            dimmed={hidden}
-            onOpenFile={onOpenToolFile}
-            showDividerBelow={!!trimmedBody}
-            embedded
+            showDividerBelow={!!trimmedBody || tools.length > 0}
           />
         ) : null}
         {trimmedBody
@@ -392,6 +386,14 @@ export function MessageList({
               />
             )
           : null}
+        {tools.length > 0 ? (
+          <ToolCallGroupCard
+            tools={tools}
+            dimmed={hidden}
+            onOpenFile={onOpenToolFile}
+            embedded
+          />
+        ) : null}
       </View>
     );
   };
@@ -473,7 +475,7 @@ export function MessageList({
         return `msg-${row.message.id}`;
       }}
       ListEmptyComponent={
-        !streamingText ? (
+        !streamingText && !streamingThinking && streamingTools.length === 0 ? (
           <Text style={[styles.empty, {color: tokens.textSecondary}]}>
             暂无消息，发送一条开始对话
           </Text>
@@ -486,7 +488,7 @@ export function MessageList({
               {renderAssistantBubble(
                 streamingText ?? '',
                 streamingThinking ?? '',
-                [],
+                streamingTools,
                 false,
                 false,
                 'stream',
