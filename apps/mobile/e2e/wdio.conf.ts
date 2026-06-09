@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import 'expect-webdriverio';
 import {sharedConfig} from './wdio.shared.conf';
 
 const e2eRoot = path.resolve(process.cwd(), 'e2e');

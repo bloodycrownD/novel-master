@@ -1,14 +1,20 @@
 import path from 'node:path';
 
 const mobileRoot = path.resolve(process.cwd());
+const e2eRoot = path.join(mobileRoot, 'e2e');
 const debugApk = path.join(
   mobileRoot,
   'android/app/build/outputs/apk/debug/app-debug.apk',
 );
 
+/** Forward slashes — WDIO glob on Windows needs this for default specs discovery. */
+const specGlob = path.join(e2eRoot, 'specs', '**', '*.e2e.ts').replace(/\\/g, '/');
+
 export const sharedConfig = {
   runner: 'local' as const,
-  specs: ['./e2e/specs/**/*.e2e.ts'],
+  specs: [specGlob],
+  /** Relative to wdio.conf.ts (same e2e/ directory). */
+  setupFilesAfterEnv: ['./setup.ts'],
   exclude: [],
   maxInstances: 1,
   logLevel: 'info' as const,

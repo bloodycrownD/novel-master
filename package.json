@@ -18,6 +18,10 @@
     "mobile:start": "npm run start -w @novel-master/mobile",
     "mobile:android": "npm run android -w @novel-master/mobile",
     "mobile:log": "npm run log-android -w @novel-master/mobile",
+    "mobile:e2e": "npm run e2e -w @novel-master/mobile --",
+    "mobile:e2e:fixture": "npm run e2e:fixture -w @novel-master/mobile",
+    "mobile:e2e:smoke": "npm run e2e -w @novel-master/mobile -- --spec e2e/specs/smoke.launch.e2e.ts",
+    "mobile:e2e:prepare": "npm run e2e:prepare -w @novel-master/mobile",
     "desktop:dev": "npm run dev -w @novel-master/desktop",
     "desktop:build": "npm run build -w @novel-master/desktop",
     "desktop:dist": "npm run dist -w @novel-master/desktop"
