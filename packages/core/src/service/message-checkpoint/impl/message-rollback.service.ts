@@ -4,6 +4,7 @@
  * @module service/message-checkpoint/impl/message-rollback.service
  */
 
+import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
 import { restorePathToRevision } from "@/domain/message-checkpoint/logic/restore-path.js";
 import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
@@ -46,15 +47,18 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     projectId: string,
     anchorMessageId: string,
   ): Promise<void> {
-    const anchor = await this.deps.messages.findById(anchorMessageId);
-    if (anchor == null) {
+    const clicked = await this.deps.messages.findById(anchorMessageId);
+    if (clicked == null) {
       throw sessionFsRollbackMessageNotFound(anchorMessageId);
     }
-    if (anchor.sessionId !== sessionId) {
+    if (clicked.sessionId !== sessionId) {
       throw sessionFsRollbackMessageSessionMismatch(anchorMessageId, sessionId);
     }
 
     const allMessages = await this.deps.messages.listBySession(sessionId);
+    // Turn boundary: assistant tool bubble → effective anchor at paired tool_result.
+    const anchor =
+      resolveRollbackAnchorMessage(allMessages, anchorMessageId) ?? clicked;
     const tail = allMessages.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
@@ -63,7 +67,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const targetTree = await resolveRollbackTargetTree(
       this.deps.checkpoints,
       sessionId,
-      anchorMessageId,
+      anchor.id,
       anchor.seq,
     );
 

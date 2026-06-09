@@ -225,4 +225,44 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages.length, 1);
     assert.equal(messages[0]!.id, assistant1.id);
   });
+
+  it("tool turn: rollback on assistant anchor keeps assistant and tool_result", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("read file"));
+    const assistant1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [
+        { type: "text", text: "reading" },
+        { type: "tool_use", id: "tu1", name: "read", input: { path: "/a.md" } },
+      ],
+    });
+    await svfs.write("/a.md", "v1", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant1.id);
+    await ctx.messages.append(session.id, "user", {
+      blocks: [{ type: "tool_result", toolUseId: "tu1", content: "ok" }],
+    });
+
+    await ctx.messages.append(session.id, "user", textBlocks("more"));
+    const assistant2 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "later" }],
+    });
+    await svfs.write("/a.md", "v2", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, assistant2.id);
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id);
+
+    assert.equal((await svfs.read("/a.md")).content, "v1");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 3);
+    assert.equal(messages[0]!.role, "user");
+    assert.equal(messages[1]!.id, assistant1.id);
+    assert.equal(messages[2]!.role, "user");
+    assert.equal(
+      messages[2]!.content.blocks?.some((b) => b.type === "tool_result"),
+      true,
+    );
+  });
 });
