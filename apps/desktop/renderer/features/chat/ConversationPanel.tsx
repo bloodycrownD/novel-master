@@ -28,6 +28,7 @@ import {
 import { messageHasToolUse } from "./message-blocks";
 import { deleteToolTurn, hideToolTurn } from "./tool-turn-actions";
 import { MessageEditModal } from "./MessageEditModal";
+import { flushAgentStepUi } from "./flush-run-ui";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
 
@@ -120,17 +121,21 @@ export function ConversationPanel({
     setStreamingTools([]);
   }, []);
 
+  const onStreamToolsClear = useCallback(() => {
+    setStreamingTools([]);
+  }, []);
+
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      setStreamingText("");
-      setStreamingThinking("");
-      void reloadMessages();
+      // WHY: assistant commit persists tool_use — drop streaming tail so pending tools
+      // render only from the reloaded message row until tool_results arrives.
+      void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
       if (payload.phase === "tool_results") {
-        setStreamingTools([]);
+        onStreamToolsClear();
         refreshWorkspaceTrees();
       }
     },
-    [reloadMessages, refreshWorkspaceTrees],
+    [reloadMessages, refreshWorkspaceTrees, onStreamReset, onStreamToolsClear],
   );
 
   const onRunFinished = useCallback(() => {
