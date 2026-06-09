@@ -177,9 +177,20 @@ Spec: `.apm/kb/docs/Iterations/mobile-webview-chat-transcript/spec.md`
 
 ## Tests
 
+Jest covers unit/component/integration tests. **Appium E2E** (device black-box) lives in `e2e/` and is **not** run by `npm test`.
+
 ```bash
 npm test -w @novel-master/mobile
 ```
+
+### E2E vs Jest
+
+| Layer | Command | Scope |
+|-------|---------|-------|
+| Jest | `npm test` | RN components, scroll math, VFS mocks |
+| Appium E2E | `npm run e2e` | Tabs, WebView transcript, Toast, Alert, real scroll |
+
+See [`e2e/README.md`](./e2e/README.md) for emulator setup and debug APK build.
 
 ## GitHub Release
 
