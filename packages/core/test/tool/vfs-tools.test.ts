@@ -58,6 +58,27 @@ describe("Builtin file tools (integration)", () => {
     assert.equal(read.version, 2);
   });
 
+  it("write without options overwrites an existing file", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<VfsToolContext>();
+    registerVfsTools(registry);
+    const runner = new ToolRunner(registry);
+    const baseCtx = toolCtx(vfs, project.id, session.id);
+
+    await runner.call("write", { path: "/t.txt", content: "v1" }, baseCtx);
+    await runner.call("write", { path: "/t.txt", content: "v2" }, baseCtx);
+    const read = await runner.call<{ content: string }>(
+      "read",
+      { path: "/t.txt" },
+      baseCtx,
+    );
+    assert.equal(read.content, "v2");
+  });
+
   it("vfs.write respects versionCheck and expectedVersion options", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);

@@ -120,7 +120,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     }),
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
-      const versionCheck = input.options?.versionCheck ?? true;
+      const versionCheck = input.options?.versionCheck ?? false;
       return await ctx.vfs.write(input.path, input.content, {
         versionCheck,
         ...(input.options?.expectedVersion != null

@@ -7,6 +7,7 @@
 import {
   VfsError,
   isVfsError,
+  vfsAlreadyExists,
   vfsNotADirectory,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
@@ -86,6 +87,56 @@ export async function mkdirIgnoreExists(
   }
 }
 
+/**
+ * Rejects move/rename when the normalized target path is already occupied.
+ *
+ * @remarks Self-rename (from === to) is a no-op. Does not mutate VFS on conflict.
+ */
+export async function assertMoveTargetAvailable(
+  vfs: VfsService,
+  from: string,
+  to: string,
+): Promise<void> {
+  const normalizedFrom = normalizeDirPath(from);
+  const normalizedTo = normalizeDirPath(to);
+  if (normalizedFrom === normalizedTo) {
+    return;
+  }
+
+  try {
+    await vfs.read(to);
+    throw vfsAlreadyExists(to);
+  } catch (error) {
+    if (isVfsError(error, "ALREADY_EXISTS")) {
+      throw error;
+    }
+    if (isVfsError(error, "IS_DIRECTORY")) {
+      throw vfsAlreadyExists(to);
+    }
+    if (!isVfsError(error, "NOT_FOUND")) {
+      throw error;
+    }
+  }
+
+  try {
+    const entries = await vfs.list(normalizedTo, { recursive: false });
+    const hasDirRow = entries.some(
+      (e) => e.kind === "directory" && normalizeDirPath(e.path) === normalizedTo,
+    );
+    if (entries.length > 0 || hasDirRow) {
+      throw vfsAlreadyExists(to);
+    }
+  } catch (error) {
+    if (isVfsError(error, "ALREADY_EXISTS")) {
+      throw error;
+    }
+    if (isVfsError(error, "NOT_FOUND")) {
+      return;
+    }
+    throw error;
+  }
+}
+
 async function moveVfsFile(
   vfs: VfsService,
   from: string,
@@ -141,6 +192,9 @@ export async function moveVfsPath(
   from: string,
   to: string,
 ): Promise<void> {
+  // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
+  await assertMoveTargetAvailable(vfs, from, to);
+
   let isFile = false;
   try {
     await vfs.read(from);

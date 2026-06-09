@@ -40,7 +40,32 @@ describe("MessageRollbackService (revision model)", () => {
     assert.equal(messages[1]!.id, assistant1.id);
   });
 
-  it("R2: user anchor removes file created by later assistant", async () => {
+  it("R2: user anchor restores manual vfs state at send time", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await svfs.write("/anchor.md", "at-send", { versionCheck: false });
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("anchor"));
+    await ctx.messageCheckpoint.capture(session.id, project.id, user1.id);
+
+    await svfs.write("/anchor.md", "after-send", { versionCheck: false });
+    await svfs.write("/later.md", "new file", { versionCheck: false });
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "later" }],
+    });
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
+
+    assert.equal((await svfs.read("/anchor.md")).content, "at-send");
+    await assert.rejects(() => svfs.read("/later.md"));
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]!.id, user1.id);
+  });
+
+  it("R2b: user anchor without checkpoint removes file created by later assistant", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

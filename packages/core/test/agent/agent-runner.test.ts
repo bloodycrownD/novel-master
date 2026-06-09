@@ -507,7 +507,7 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("does not capture checkpoint for read-only tool round", async () => {
+  it("captures checkpoint after read-only tool round when session has files", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -561,8 +561,88 @@ describe("AgentRunner", () => {
       workspaceModelId: RUN_MODEL_ID,
     });
 
+    const assistantMsgs = (await ctx.messages.listBySession(session.id)).filter(
+      (m) => m.role === "assistant",
+    );
+    const firstAssistant = assistantMsgs[0]!;
+
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
-    assert.equal((await repo.listFilePointersForSession(session.id)).length, 0);
+    assert.equal(
+      await repo.hasCheckpoint(session.id, firstAssistant.id),
+      true,
+    );
+    const tree = await repo.loadFileTree(session.id, firstAssistant.id);
+    assert.ok(tree);
+    assert.equal(tree.size, 1);
+    assert.equal(tree.get("/seed.md"), (await vfs.read("/seed.md")).version);
+  });
+
+  it("tool_result content includes VfsError path from formatToolErrorForLlm", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("read"));
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "r1",
+            name: "read",
+            input: { path: "/missing.txt" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerVfsTools(registry);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+        },
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const messages = await ctx.messages.listBySession(session.id);
+    const toolResultMsg = messages.find(
+      (m) =>
+        m.role === "user" &&
+        m.content.blocks?.some((b) => b.type === "tool_result"),
+    );
+    assert.ok(toolResultMsg);
+    const resultBlock = toolResultMsg.content.blocks?.find(
+      (b) => b.type === "tool_result",
+    );
+    assert.ok(resultBlock && resultBlock.type === "tool_result");
+    assert.ok(resultBlock.content.includes("Error:"));
+    assert.ok(resultBlock.content.includes("/missing.txt"));
+    assert.notEqual(resultBlock.content, "Error: Tool failed: read");
   });
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {

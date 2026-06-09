@@ -17,14 +17,14 @@ import {
   CROSS_ROUND_WINDOW,
   DOOM_LOOP_THRESHOLD,
 } from "@/domain/agent/logic/doom-loop.js";
-import { formatToolOutputForLlm } from "@/domain/tool/logic/format-tool-output.js";
+import {
+  formatToolErrorForLlm,
+  formatToolOutputForLlm,
+} from "@/domain/tool/logic/format-tool-output.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import {
-  isMutatingFileToolName,
-  type VfsToolContext,
-} from "@/domain/tool/builtin/vfs-tools.js";
+import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
@@ -45,6 +45,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
   EVENT_SESSION_COMPACTION_REQUESTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
 } from "@/domain/events/model/event-types.js";
@@ -251,6 +252,18 @@ export class DefaultAgentRunner implements AgentRunner {
         );
 
         if (toolUses.length === 0) {
+          // WHY: pure-text assistant turns are rollback anchors too.
+          if (
+            persistMessages &&
+            assistantMessage != null &&
+            this.deps.messageCheckpoint != null
+          ) {
+            await this.deps.messageCheckpoint.capture(
+              sessionId,
+              projectId,
+              assistantMessage.id,
+            );
+          }
           finished = true;
           stopReason = "completed";
           rounds.push({
@@ -286,9 +299,6 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        const hadMutatingTools = toolUses.some((tu) =>
-          isMutatingFileToolName(tu.name),
-        );
         const parallelOutcomes = await this.toolRunner.runParallel(
           toolUses.map((tu) => ({ name: tu.name, input: tu.input })),
           this.deps.toolCtx,
@@ -297,11 +307,7 @@ export class DefaultAgentRunner implements AgentRunner {
           const outcome = parallelOutcomes[i]!;
           const content = outcome.ok
             ? formatToolOutputForLlm(outcome.output)
-            : `Error: ${
-                outcome.error instanceof Error
-                  ? outcome.error.message
-                  : String(outcome.error)
-              }`;
+            : formatToolErrorForLlm(outcome.error);
           return {
             type: "tool_result" as const,
             toolUseId: tu.id,
@@ -312,7 +318,6 @@ export class DefaultAgentRunner implements AgentRunner {
         // WHY: checkpoint records final tree after all tools settle (fork-join), not per action.
         if (
           persistMessages &&
-          hadMutatingTools &&
           assistantMessage != null &&
           this.deps.messageCheckpoint != null
         ) {
@@ -424,6 +429,13 @@ function wrapStreamForBus(
           sessionId,
           text: ev.text,
         });
+      } else if (ev.type === "tool-use") {
+        bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
+          sessionId,
+          id: ev.id,
+          name: ev.name,
+          input: ev.input,
+        });
       }
     };
   }
@@ -434,6 +446,13 @@ function wrapStreamForBus(
       bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId,
         text: ev.text,
+      });
+    } else if (ev.type === "tool-use") {
+      bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
+        sessionId,
+        id: ev.id,
+        name: ev.name,
+        input: ev.input,
       });
     }
     userOnStream(ev);

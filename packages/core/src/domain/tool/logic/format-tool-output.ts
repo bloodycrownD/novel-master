@@ -4,6 +4,10 @@
  * @module domain/tool/logic/format-tool-output
  */
 
+import { ToolError } from "@/errors/tool-errors.js";
+import { VfsError } from "@/errors/vfs-errors.js";
+import type { ZodIssue } from "zod";
+
 /** Compact tool success text for the model (e.g. write → `ok`). */
 export function formatToolOutputForLlm(out: unknown): string {
   if (typeof out === "string") {
@@ -28,6 +32,45 @@ export function formatToolOutputForLlm(out: unknown): string {
     }
   }
   return JSON.stringify(out, null, 2);
+}
+
+/**
+ * Formats tool execution failures for LLM `tool_result` content.
+ *
+ * @remarks Unwraps {@link ToolError} `cause` (e.g. {@link VfsError}) so the model sees actionable detail.
+ */
+export function formatToolErrorForLlm(error: unknown): string {
+  let message: string;
+  if (error instanceof ToolError) {
+    if (
+      error.code === "INVALID_ARGUMENT" &&
+      error.details != null &&
+      "issues" in error.details
+    ) {
+      const issues = error.details.issues as readonly ZodIssue[];
+      const summary = issues.map((i) => i.message).join("; ");
+      message = summary.length > 0 ? summary : error.message;
+    } else if (error.cause != null) {
+      message = formatToolErrorCause(error.cause);
+    } else {
+      message = error.message;
+    }
+  } else if (error instanceof Error) {
+    message = error.message;
+  } else {
+    message = String(error);
+  }
+  return `Error: ${message}`;
+}
+
+function formatToolErrorCause(cause: unknown): string {
+  if (cause instanceof VfsError) {
+    return cause.message;
+  }
+  if (cause instanceof Error) {
+    return cause.message;
+  }
+  return String(cause);
 }
 
 /** Prettify stored tool_result bodies (legacy rows may still be JSON). */

@@ -46,6 +46,51 @@ describe("moveVfsPath", () => {
     );
   });
 
+  it("fails when target file already exists and keeps source", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    await vfs.write("/a.md", "original-a");
+    await vfs.write("/b.md", "original-b");
+
+    await assert.rejects(
+      () => moveVfsPath(vfs, "/b.md", "/a.md"),
+      (e: unknown) => isVfsError(e, "ALREADY_EXISTS"),
+    );
+    assert.equal((await vfs.read("/a.md")).content, "original-a");
+    assert.equal((await vfs.read("/b.md")).content, "original-b");
+  });
+
+  it("fails when target directory already exists", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    await vfs.mkdir("/dirA");
+    await vfs.write("/other.md", "stay");
+
+    await assert.rejects(
+      () => moveVfsPath(vfs, "/other.md", "/dirA"),
+      (e: unknown) => isVfsError(e, "ALREADY_EXISTS"),
+    );
+    assert.equal((await vfs.read("/other.md")).content, "stay");
+    await vfs.list("/dirA");
+  });
+
+  it("no-ops when from and to normalize to the same path", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    await vfs.write("/same.md", "content");
+    await moveVfsPath(vfs, "/same.md", "/same.md");
+    assert.equal((await vfs.read("/same.md")).content, "content");
+  });
+
   it("fails with NOT_FOUND for missing path", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);

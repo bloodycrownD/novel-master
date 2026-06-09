@@ -11,6 +11,8 @@ export const EVENT_AGENT_RUN_FAILED = "agent.run.failed" as const;
 export const EVENT_AGENT_STREAM_TEXT_DELTA = "agent.stream.text-delta" as const;
 export const EVENT_AGENT_STREAM_THINKING_DELTA =
   "agent.stream.thinking-delta" as const;
+/** Streamed tool_use block before tool_result is persisted. */
+export const EVENT_AGENT_STREAM_TOOL_USE = "agent.stream.tool-use" as const;
 /** One agent loop step persisted (assistant turn or tool_result user turn). */
 export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 export const EVENT_SESSION_MESSAGE_RECEIVED = "session.message.received" as const;
@@ -23,6 +25,7 @@ export type NovelMasterEventType =
   | typeof EVENT_AGENT_RUN_FAILED
   | typeof EVENT_AGENT_STREAM_TEXT_DELTA
   | typeof EVENT_AGENT_STREAM_THINKING_DELTA
+  | typeof EVENT_AGENT_STREAM_TOOL_USE
   | typeof EVENT_AGENT_STEP_COMMITTED
   | typeof EVENT_SESSION_MESSAGE_RECEIVED
   | typeof EVENT_SESSION_COMPACTION_REQUESTED;
@@ -54,6 +57,13 @@ export interface AgentStreamThinkingDeltaPayload {
   readonly text: string;
 }
 
+export interface AgentStreamToolUsePayload {
+  readonly sessionId: string;
+  readonly id: string;
+  readonly name: string;
+  readonly input: Record<string, unknown>;
+}
+
 export type AgentStepCommittedPhase = "assistant" | "tool_results";
 
 export interface AgentStepCommittedPayload {
@@ -81,6 +91,7 @@ export type NovelMasterEventPayload =
   | AgentRunFailedPayload
   | AgentStreamTextDeltaPayload
   | AgentStreamThinkingDeltaPayload
+  | AgentStreamToolUsePayload
   | AgentStepCommittedPayload
   | SessionMessageReceivedPayload
   | SessionCompactionRequestedPayload;
