@@ -4,6 +4,7 @@
  * @module service/message-checkpoint/impl/message-rollback.service
  */
 
+import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
 import { restorePathToRevision } from "@/domain/message-checkpoint/logic/restore-path.js";
@@ -64,6 +65,10 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
 
     // Rollback is composite: always truncate tail messages; restore workspace when a
     // checkpoint tree exists (direct, prior, or empty baseline when none).
+    const directTargetTree = await this.deps.checkpoints.loadFileTree(
+      sessionId,
+      anchor.id,
+    );
     const targetTree = await resolveRollbackTargetTree(
       this.deps.checkpoints,
       sessionId,
@@ -78,11 +83,25 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     );
     const tailLogicalPaths = tailPointers.map((p) => p.logicalPath);
 
-    // Boundary: reconcile tail-touched paths and target tree only — pre-anchor manual files stay put (R3).
+    // Boundary: reconcile tail-touched paths and target tree; when anchor has a direct
+    // checkpoint snapshot, also drop files created after that snapshot (R2).
+    // Pre-anchor manual files stay put when anchor has no direct checkpoint (R3).
     const pathsToReconcile = new Set<string>([
       ...tailLogicalPaths,
       ...targetTree.keys(),
     ]);
+    if (directTargetTree != null) {
+      const currentFiles = await listSessionFileHeads(
+        this.deps.entries,
+        projectId,
+        sessionId,
+      );
+      for (const { logicalPath } of currentFiles) {
+        if (!targetTree.has(logicalPath)) {
+          pathsToReconcile.add(logicalPath);
+        }
+      }
+    }
 
     await this.deps.conn.transaction(async (tx) => {
       const vfs = this.scopedVfs(projectId, sessionId, tx);
