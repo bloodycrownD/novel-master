@@ -14,7 +14,41 @@ npm install -g appium
 appium driver install uiautomator2
 ```
 
-## Run
+## Manual emulator run checklist
+
+Use this checklist for local smoke / regression (C1 — not runnable in headless agent env):
+
+1. **Start emulator** — Android Studio AVD or `emulator -avd <name>`; confirm `adb devices` lists it.
+2. **Build debug APK** (once per native/testID change):
+   ```bash
+   cd apps/mobile/android
+   ./gradlew assembleDebug
+   ```
+3. **Install / verify package** — WDIO installs via `appium:app`; or `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`.
+4. **Cold-start app once** — creates SQLite at `/data/data/com.novelmaster/files/default/novel_master_vfs`.
+5. **Inject fixture** (required for E4 + turn rollback):
+   ```powershell
+   # from apps/mobile on Windows
+   .\e2e\scripts\inject-tool-turn-fixture.ps1
+   ```
+   See [`e2e/scripts/README.md`](scripts/README.md) for macOS/Linux and manual adb steps.
+6. **Run type-check**:
+   ```bash
+   cd apps/mobile
+   npm run e2e:tsc
+   ```
+7. **Run suite or single spec** (Appium starts via WDIO):
+   ```bash
+   npm run e2e
+   npm run e2e -- --spec e2e/specs/smoke.launch.e2e.ts
+   npm run e2e -- --spec e2e/specs/chat.rollback.e2e.ts
+   npm run e2e -- --spec e2e/specs/chat.tool-phase-and-order.e2e.ts
+   ```
+8. **On failure** — inspect `e2e/artifacts/screenshots/` and `e2e/artifacts/page-source/`; logs include NATIVE vs WEBVIEW context.
+
+Optional: `E2E_ALLOW_FIXTURE_SKIP=1` skips fixture-dependent cases when adb inject is unavailable.
+
+## Run (quick reference)
 
 From `apps/mobile`:
 
@@ -29,11 +63,20 @@ Type-check E2E TypeScript only:
 npm run e2e:tsc
 ```
 
-## Fixture sessions (E4 tool phase)
+## Fixture sessions (E4 + turn rollback)
 
-Most specs **UI-seed** project/session state. `chat.tool-phase-and-order.e2e.ts` expects a preloaded session with thinking → body → tool blocks. Set `E2E_FIXTURE_SESSION_TITLE` to match an injected session title, or skip on fresh installs (see spec comments).
+Most specs **UI-seed** project/session state. Tool-turn specs need the adb/sqlite bootstrap:
 
-Optional future path: `e2e/scripts/` adb bootstrap — not required for smoke / VFS / rollback flows.
+| Spec | Needs fixture |
+|------|----------------|
+| `smoke.launch.e2e.ts` | No |
+| `vfs.rename-conflict.e2e.ts` | No (UI seed) |
+| `chat.rollback.e2e.ts` | Turn case only — see `e2e/scripts/` |
+| `chat.tool-phase-and-order.e2e.ts` | Yes |
+
+Set `E2E_FIXTURE_SESSION_TITLE` to match an injected session title. Default: `E2E Tool Turn Fixture`.
+
+Bootstrap docs: [`e2e/scripts/README.md`](scripts/README.md)
 
 ## Failure artifacts
 

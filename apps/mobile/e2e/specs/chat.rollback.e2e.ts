@@ -1,4 +1,14 @@
 import {
+  E2E_FIXTURE_ASSISTANT_MESSAGE_ID,
+  E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID,
+  E2E_FIXTURE_TAIL_USER_MESSAGE_ID,
+} from '../fixtures/session-ids';
+import {
+  allowFixtureSkip,
+  isFixtureSessionAvailable,
+  openFixtureSession,
+} from '../helpers/fixture-session';
+import {
   assertAnchorStableAfterRollback,
   sampleScrollAnchor,
 } from '../helpers/scroll-anchor';
@@ -9,6 +19,7 @@ import {vfsPage} from '../pageobjects/vfs.page';
 
 describe('E2 chat rollback', () => {
   let anchorMessageId: string;
+  let messageCountBeforeRollback: number;
 
   before(async () => {
     await appPage.launchFresh('E2E Rollback');
@@ -17,8 +28,9 @@ describe('E2 chat rollback', () => {
     await chatTranscriptPage.sendComposerMessage('tail-three');
 
     const ids = await chatTranscriptPage.getMessageIds();
-    expect(ids.length).toBeGreaterThanOrEqual(3);
+    expect(ids.length).toBe(3);
     anchorMessageId = ids[0]!;
+    messageCountBeforeRollback = ids.length;
     await chatTranscriptPage.scrollTranscriptUp(500);
   });
 
@@ -34,9 +46,53 @@ describe('E2 chat rollback', () => {
     expect(toast).toContain('回滚成功');
 
     const idsAfter = await chatTranscriptPage.getMessageIds();
-    expect(idsAfter.length).toBeLessThan(3);
-    expect(idsAfter).toContain(anchorMessageId);
+    expect(idsAfter.length).toBe(1);
+    expect(idsAfter.length).toBe(messageCountBeforeRollback - 2);
+    expect(idsAfter[0]).toBe(anchorMessageId);
 
     await assertAnchorStableAfterRollback(before, anchorMessageId);
+  });
+
+  it('keeps tool_result turn when rolling back on assistant with tool_use', async function () {
+    if (!(await isFixtureSessionAvailable())) {
+      if (allowFixtureSkip()) {
+        this.skip();
+        return;
+      }
+      throw new Error(
+        '[e2e] Turn rollback fixture missing. Inject via e2e/scripts/README.md.',
+      );
+    }
+
+    await openFixtureSession();
+    await chatTranscriptPage.openWebView();
+
+    const assistantId = E2E_FIXTURE_ASSISTANT_MESSAGE_ID;
+    const tailUserId = E2E_FIXTURE_TAIL_USER_MESSAGE_ID;
+    const tailAssistantId = E2E_FIXTURE_TAIL_ASSISTANT_MESSAGE_ID;
+
+    await chatTranscriptPage.waitForMessage(assistantId);
+    const idsBefore = await chatTranscriptPage.getMessageIds();
+    expect(idsBefore.length).toBeGreaterThanOrEqual(4);
+    expect(idsBefore).toContain(assistantId);
+    expect(idsBefore).toContain(tailUserId);
+    expect(idsBefore).toContain(tailAssistantId);
+
+    await chatTranscriptPage.longPressMessage(assistantId);
+    await chatTranscriptPage.tapMenuAction('rollback');
+    await alertPage.acceptRollback();
+
+    const toast = await vfsPage.readToastMessage();
+    expect(toast).toContain('回滚成功');
+
+    const idsAfter = await chatTranscriptPage.getMessageIds();
+    expect(idsAfter.length).toBe(2);
+    expect(idsAfter[0]).toBe(idsBefore[0]);
+    expect(idsAfter[1]).toBe(assistantId);
+    expect(idsAfter).not.toContain(tailUserId);
+    expect(idsAfter).not.toContain(tailAssistantId);
+
+    await chatTranscriptPage.assertMessageHasToolGroup(assistantId);
+    await chatTranscriptPage.expectMessageMissing(tailAssistantId);
   });
 });

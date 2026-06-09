@@ -1,4 +1,5 @@
 import {switchToNative, switchToWebView} from '../helpers/context';
+import {withRetry} from '../helpers/retry';
 
 /** WebView chat transcript: messages, context menu, rollback. */
 export class ChatTranscriptPage {
@@ -39,27 +40,34 @@ export class ChatTranscriptPage {
   }
 
   async longPressMessage(messageId: string): Promise<void> {
-    await this.openWebView();
-    const row = await $(`.row.message[data-id="${messageId}"]`);
-    await row.waitForExist({timeout: 15000});
-    const location = await row.getLocation();
-    const size = await row.getSize();
-    const x = Math.round(location.x + size.width / 2);
-    const y = Math.round(location.y + size.height / 2);
-    await browser.performActions([
-      {
-        type: 'pointer',
-        id: 'finger1',
-        parameters: {pointerType: 'touch'},
-        actions: [
-          {type: 'pointerMove', duration: 0, x, y},
-          {type: 'pointerDown', button: 0},
-          {type: 'pause', duration: 900},
-          {type: 'pointerUp', button: 0},
-        ],
+    await withRetry(
+      async () => {
+        await this.openWebView();
+        const row = await $(`.row.message[data-id="${messageId}"]`);
+        await row.waitForExist({timeout: 15000});
+        const location = await row.getLocation();
+        const size = await row.getSize();
+        const x = Math.round(location.x + size.width / 2);
+        const y = Math.round(location.y + size.height / 2);
+        await browser.performActions([
+          {
+            type: 'pointer',
+            id: 'finger1',
+            parameters: {pointerType: 'touch'},
+            actions: [
+              {type: 'pointerMove', duration: 0, x, y},
+              {type: 'pointerDown', button: 0},
+              {type: 'pause', duration: 900},
+              {type: 'pointerUp', button: 0},
+            ],
+          },
+        ]);
+        await browser.releaseActions();
+        const menuProbe = await $('[data-menu-action="rollback"]');
+        await menuProbe.waitForExist({timeout: 2500});
       },
-    ]);
-    await browser.releaseActions();
+      {attempts: 3, delayMs: 700, label: `longPressMessage(${messageId})`},
+    );
   }
 
   async tapMenuAction(action: 'rollback' | 'edit' | 'delete'): Promise<void> {
@@ -79,7 +87,7 @@ export class ChatTranscriptPage {
     await browser.pause(1200);
   }
 
-  /** DOM order inside one assistant bubble: thinking → body → tools. */
+  /** DOM sibling order inside one assistant bubble: thinking → body → tools. */
   async assertAssistantBlockOrder(messageId: string): Promise<void> {
     await this.openWebView();
     const order = await browser.execute((id: string) => {
@@ -87,24 +95,48 @@ export class ChatTranscriptPage {
         '.row.message.assistant[data-id="' + id + '"]',
       );
       if (row == null) {
-        return [];
+        return [] as string[];
+      }
+      const bubble = row.querySelector('.bubble');
+      if (bubble == null) {
+        return [] as string[];
       }
       const tags: string[] = [];
-      if (row.querySelector('.thinking-section')) {
-        tags.push('thinking');
-      }
-      const body = row.querySelector('.message-body');
-      if (body != null && body.textContent?.trim()) {
-        tags.push('body');
-      }
-      if (row.querySelector('.tool-group-section')) {
-        tags.push('tools');
+      for (const child of Array.from(bubble.children)) {
+        if (child.classList.contains('thinking-section')) {
+          tags.push('thinking');
+        } else if (child.classList.contains('bubble-body')) {
+          tags.push('body');
+        } else if (child.classList.contains('tool-phase-bar')) {
+          tags.push('phase');
+        } else if (child.classList.contains('tool-group-section')) {
+          tags.push('tools');
+        }
       }
       return tags;
     }, messageId);
+
+    expect(order.length).toBeGreaterThanOrEqual(3);
     expect(order.indexOf('thinking')).toBeGreaterThanOrEqual(0);
     expect(order.indexOf('body')).toBeGreaterThan(order.indexOf('thinking'));
     expect(order.indexOf('tools')).toBeGreaterThan(order.indexOf('body'));
+  }
+
+  async assertMessageHasToolGroup(messageId: string): Promise<void> {
+    await this.openWebView();
+    const hasTools = await browser.execute((id: string) => {
+      const row = document.querySelector(
+        '.row.message.assistant[data-id="' + id + '"]',
+      );
+      return row?.querySelector('.tool-group-section') != null;
+    }, messageId);
+    expect(hasTools).toBe(true);
+  }
+
+  async expectMessageMissing(messageId: string): Promise<void> {
+    await this.openWebView();
+    const row = await $(`.row.message[data-id="${messageId}"]`);
+    expect(await row.isExisting()).toBe(false);
   }
 
   async expectToolPhaseBarVisible(visible: boolean): Promise<void> {
