@@ -467,6 +467,13 @@ export { ChatAgentSession } from "./service/agent/impl/chat-agent-session.js";
 export type { AgentRunner, AgentRunOptions } from "./service/agent/agent.port.js";
 export { createAgentRunner } from "./service/agent/create-agent-runner.js";
 export type { CreateAgentRunnerDeps } from "./service/agent/create-agent-runner.js";
+export {
+  resolveCurrentAgentId,
+  resolveCurrentAgentDefinition,
+  resolveApplicationModelIdForRun,
+  AgentRunResolveError,
+} from "./service/agent/logic/agent-run-shared.js";
+export type { AgentRunRuntimePort } from "./service/agent/logic/agent-run-shared.js";
 export { estimateTokens } from "./domain/compaction-conditions/logic/token-estimate.js";
 export {
   createDefaultTokenCounterRegistry,

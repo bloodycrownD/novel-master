@@ -4,13 +4,15 @@
  * @module services/agent-run
  */
 import {
-  AgentConfigError,
+  AgentRunResolveError,
   ChatAgentSession,
   createAgentRunner,
   parseApplicationModelId,
   registerVfsTools,
   resolveAgentToolRegistry,
-  resolveApplicationModelId,
+  resolveApplicationModelIdForRun,
+  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
+  resolveCurrentAgentId as resolveCoreAgentId,
   textBlocks,
   ToolRegistry,
   validateAgentDefinition,
@@ -37,52 +39,34 @@ export class AgentRunError extends Error {
   }
 }
 
+function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
+  return fn().catch((error) => {
+    if (error instanceof AgentRunResolveError) {
+      throw new AgentRunError(error.message);
+    }
+    throw error;
+  });
+}
+
 export async function resolveCurrentAgentId(
   runtime: DesktopNovelMasterRuntime,
 ): Promise<string | undefined> {
-  const fromState = await runtime.state.getCurrentAgentId();
-  if (fromState != null && fromState !== "") {
-    return fromState;
-  }
-  const ids = await runtime.agentRegistry.listAgentIds();
-  return ids[0];
+  return resolveCoreAgentId(runtime);
 }
 
 export async function resolveCurrentAgentDefinition(
   runtime: DesktopNovelMasterRuntime,
 ): Promise<{ agentId: string; definition: AgentDefinition }> {
-  const agentId = await resolveCurrentAgentId(runtime);
-  if (agentId == null || agentId === "") {
-    throw new AgentRunError(
-      "未配置 Agent。请先在「agent管理」中导入或创建 Agent。",
-    );
-  }
-  try {
-    const definition = await runtime.agentRegistry.get(agentId);
-    return { agentId, definition };
-  } catch (error) {
-    if (error instanceof AgentConfigError && error.code === "AGENT_NOT_FOUND") {
-      throw new AgentRunError(`Agent 不存在：${agentId}`);
-    }
-    throw error;
-  }
+  return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
 export async function resolveDesktopApplicationModelId(
   runtime: DesktopNovelMasterRuntime,
   definition: AgentDefinition,
 ): Promise<{ applicationModelId: string; workspaceModelId: string }> {
-  const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const resolved = resolveApplicationModelId({
-    agentModelId: definition.model,
-    workspaceModelId: workspaceModelId || undefined,
-  });
-  if (resolved == null || resolved === "") {
-    throw new AgentRunError(
-      "未选择模型。请先选择工作区模型，或为 Agent 设置专属模型。",
-    );
-  }
-  return { applicationModelId: resolved, workspaceModelId };
+  return mapResolveError(() =>
+    resolveApplicationModelIdForRun(runtime, definition),
+  );
 }
 
 export async function runAgentTurn(
