@@ -2,118 +2,46 @@
  * Chat tab: session list / template sub-tabs, conversation workspace (M1 skeleton).
  */
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {
-  Alert,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
+import {Alert, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import {
-  EVENT_SESSION_COMPACTION_REQUESTED,
-  textBlocks,
-  type ChatMessage,
-  type ChatProject,
-  type ChatSession,
-} from '@novel-master/core';
+import type {ChatMessage} from '@novel-master/core';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {useToast} from '../../components/chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {ChatComposer} from '../../components/chat/ChatComposer';
-import {ChatMetaBar} from '../../components/chat/ChatMetaBar';
-import {ChatStreamMetricsBar} from '../../components/chat/ChatStreamMetricsBar';
 import {
-  applyTextEditToMessage,
   buildMessageActionItems,
-  editableTextFromMessage,
 } from '../../components/chat/message-edit';
-import {messageHasToolUse} from '../../components/chat/message-blocks';
-import {
-  deleteToolTurn,
-  hideToolTurn,
-} from '../../components/chat/tool-turn-actions';
-import {
-  MessageActionMenu,
-  type MessageMenuAnchor,
-} from '../../components/chat/MessageActionMenu';
-import {MessageList} from '../../components/chat/MessageList';
-import {
-  ChatTranscriptWebView,
-  type ChatTranscriptWebViewHandle,
-} from '../../components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptScrollSnapshot} from '../../components/chat/ChatTranscriptBridge';
-import {
-  getScrollSnapshot,
-  scrollCacheKey,
-  setScrollSnapshot,
-  type ChatListScrollSnapshot,
-} from '../../services/chat-list-scroll-cache';
-import {
-  getTranscriptScrollSnapshot,
-  normalizeScrollSnapshot,
-  setTranscriptScrollSnapshot,
-} from '../../services/chat-transcript-scroll-cache';
-import {emitChatTranscriptTelemetry} from '../../services/chat-transcript-telemetry';
-import {
-  clearSessionViewCache,
-  getSessionViewCache,
-  sessionViewCacheKey,
-  setSessionViewCache,
-} from '../../services/chat-session-view-cache';
-import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
+import type {MessageMenuAnchor} from '../../components/chat/MessageActionMenu';
+import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
 import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
-import {SessionActionsDrawer} from '../../components/chrome/SessionActionsDrawer';
-import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
-import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
-import {VfsFileManager} from '../../components/vfs/VfsFileManager';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
-import {MessageBatchHeader} from '../../components/batch/MessageBatchHeader';
-import {ManageHeader} from '../../components/batch/ManageHeader';
-import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {PrimaryButton} from '../../components/ui/PrototypeButtons';
-import {useAgentStreamMetrics} from '../../hooks/useAgentStreamMetrics';
 import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
-import {formatRelativeTimeMs} from '../../utils/format-relative-time';
-import {nextDefaultSessionTitle} from '../../utils/session-default-title';
-import {MessageEditModal} from '../../components/chat/MessageEditModal';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
-import {
-  loadChatAgentMeta,
-  type ChatAgentMeta,
-} from '../../services/chat-agent-meta';
-import {loadChatPromptTokenLabelResilient} from '../../services/chat-prompt-tokens.service';
-import {
-  loadSessionMessagesPageForDisplay,
-  loadSessionMessagesTailForDisplay,
-} from '../../services/regex-apply-channel';
-import {prependOlderMessages} from '../../services/message-paging';
 import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
 import {
   defaultChatTranscriptEngine,
   readChatTranscriptEngine,
   type ChatTranscriptEngine,
 } from '../../storage/chat-transcript-engine';
-import {setMobileAgentActive} from '../../runtime/agent-activity';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {useTheme} from '../../theme/ThemeProvider';
-import {createStreamBuffer} from '../../services/stream-buffer.service';
-import {rollbackToMessage} from '../../services/message-rollback.service';
-import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
+import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
+import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
+import {
+  useChatTabMessageActions,
+  useChatTabMessages,
+} from './chat-tab/useChatTabMessages';
+import {useChatTabScope} from './chat-tab/useChatTabScope';
+import {
+  useChatTabScrollCache,
+  useChatTabStream,
+} from './chat-tab/useChatTabStream';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
-type SessionListPanel = 'sessions' | 'template';
-type ChatSubview = 'sessions' | 'conversation';
-type ConversationPanel = 'chat' | 'workspace';
-const CHAT_PAGE_SIZE = 40;
 
 export function ChatTabScreen() {
   const {tokens} = useTheme();
@@ -124,71 +52,41 @@ export function ChatTabScreen() {
   const {setChat} = useHeaderContext();
   const navigation = useNavigation<Nav>();
 
-  const [projects, setProjects] = useState<ChatProject[]>([]);
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentProject, setCurrentProjectMeta] = useState<ChatProject | undefined>();
-  const [sessionListPanel, setSessionListPanel] =
-    useState<SessionListPanel>('sessions');
-  const [chatSubview, setChatSubview] = useState<ChatSubview>('sessions');
-  const [conversationPanel, setConversationPanel] =
-    useState<ConversationPanel>('chat');
-  const [projectDrawerOpen, setProjectDrawerOpen] = useState(false);
-  const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
   const sessionBatch = useBatchSelection();
   const messageBatch = useBatchSelection();
   const {appUi, richRenderEpoch} = useNovelMaster();
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false);
-  const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
-  const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
-    agentId: undefined,
-    agentName: '—',
-    modelLabel: '—',
-    tokenLabel: '',
-    hasDedicatedModel: false,
+
+  const scope = useChatTabScope({
+    runtime,
+    projectId,
+    sessionId,
+    setCurrentProject,
+    setCurrentSession,
+    refreshScope,
+    showToast,
+    navigation,
   });
-  const [hasWorkspaceModel, setHasWorkspaceModel] = useState(false);
+
+  const messages = useChatTabMessages({
+    runtime,
+    projectId,
+    sessionId,
+    chatSubview: scope.chatSubview,
+  });
+
+  const {refreshChatMeta} = scope;
+  useEffect(() => {
+    if (scope.chatSubview === 'conversation' && sessionId != null) {
+      refreshChatMeta().catch(() => undefined);
+    }
+  }, [scope.chatSubview, sessionId, refreshChatMeta]);
+
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
-  const [agentRunning, setAgentRunning] = useState(false);
-  const {metrics: streamMetrics, noteTextDelta, noteThinkingDelta} =
-    useAgentStreamMetrics(agentRunning);
-  const [streamingText, setStreamingText] = useState('');
-  const [streamingThinking, setStreamingThinking] = useState('');
-  const streamMetricsRef = useRef({noteTextDelta, noteThinkingDelta});
-  streamMetricsRef.current = {noteTextDelta, noteThinkingDelta};
-  const pendingBusStreamRef = useRef({text: '', thinking: ''});
-  const busStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
-  const useWebviewTranscriptRef = useRef(false);
-  const streamBuffer = useMemo(
-    () =>
-      createStreamBuffer({
-        onTextFlush: delta => {
-          if (useWebviewTranscriptRef.current) {
-            return;
-          }
-          streamMetricsRef.current.noteTextDelta(delta);
-          setStreamingText(prev => prev + delta);
-        },
-        onThinkingFlush: delta => {
-          if (useWebviewTranscriptRef.current) {
-            return;
-          }
-          streamMetricsRef.current.noteThinkingDelta(delta);
-          setStreamingThinking(prev => prev + delta);
-        },
-      }),
-    [],
-  );
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [chatTranscriptEngine, setChatTranscriptEngine] =
     useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
-  const [vfsRefreshKey, setVfsRefreshKey] = useState(0);
-  const [menuSessionId, setMenuSessionId] = useState<string | undefined>();
-  const [sessionRenamePrompt, setSessionRenamePrompt] = useState<
-    {sessionId: string; initialTitle: string} | undefined
-  >();
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
   >();
@@ -201,12 +99,35 @@ export function ChatTabScreen() {
     {messageId: string; initialText: string} | undefined
   >();
 
-  const chatScrollKey =
-    projectId != null && sessionId != null
-      ? scrollCacheKey(projectId, sessionId)
-      : null;
   const useWebviewTranscript = chatTranscriptEngine === 'webview';
-  useWebviewTranscriptRef.current = useWebviewTranscript;
+  const stream = useChatTabStream({
+    useWebviewTranscript,
+    transcriptWebRef,
+  });
+  const scroll = useChatTabScrollCache({
+    projectId,
+    sessionId,
+    useWebviewTranscript,
+  });
+
+  const messageActions = useChatTabMessageActions({
+    runtime,
+    projectId,
+    sessionId,
+    messages,
+    messageBatch,
+    agentRunning: stream.agentRunning,
+    resetStreamingDisplay: stream.resetStreamingDisplay,
+    showToast,
+    refreshChatTokenLabel: scope.refreshChatTokenLabel,
+    bumpVfsRefresh: scope.bumpVfsRefresh,
+    reloadLists: scope.reloadLists,
+    setCurrentSession,
+    setChatSubview: scope.setChatSubview,
+    setConversationPanel: scope.setConversationPanel,
+    setMessageEditPrompt,
+  });
+
   const transcriptFlags = useMemo(
     () => ({
       richText: chatRichTextEnabled,
@@ -214,308 +135,121 @@ export function ChatTabScreen() {
     }),
     [chatRichTextEnabled, messageBatch.active],
   );
-  const legacyCachedScroll = chatScrollKey
-    ? getScrollSnapshot(chatScrollKey)
-    : undefined;
-  const transcriptCachedScroll = chatScrollKey
-    ? getTranscriptScrollSnapshot(chatScrollKey)
-    : undefined;
-  const rawCachedScroll = transcriptCachedScroll ?? legacyCachedScroll;
-  const {snapshot: restoredTranscriptScroll, discardedLegacy} =
-    normalizeScrollSnapshot(rawCachedScroll);
+
+  const closeMessageMenu = useCallback(() => {
+    setMessageMenuTarget(undefined);
+    setMessageMenuAnchor(undefined);
+    setWebMenuOpen(false);
+    setWebMenuCloseSignal(signal => signal + 1);
+  }, []);
+
+  const dismissAllOverlays = useCallback(() => {
+    scope.setProjectDrawerOpen(false);
+    scope.setSessionDrawerOpen(false);
+    setModelPickerOpen(false);
+    setAgentPickerOpen(false);
+    closeMessageMenu();
+    setMessageEditPrompt(undefined);
+    scope.setSessionRenamePrompt(undefined);
+    scope.setMenuSessionId(undefined);
+  }, [closeMessageMenu, scope]);
+
+  useDismissOverlaysOnBlur(dismissAllOverlays);
+
+  useAndroidChatBackHandler(
+    {
+      chatSubview: scope.chatSubview,
+      conversationPanel: scope.conversationPanel,
+      sessionListPanel: scope.sessionListPanel,
+      sessionDrawerOpen: scope.sessionDrawerOpen,
+      messageMenuOpen: messageMenuTarget != null || webMenuOpen,
+      messageBatchActive: messageBatch.active,
+      messageEditOpen: messageEditPrompt != null,
+      modelPickerOpen,
+      agentPickerOpen,
+      sessionRenameOpen: scope.sessionRenamePrompt != null,
+      projectDrawerOpen: scope.projectDrawerOpen,
+      sessionBatchActive: sessionBatch.active,
+    },
+    {
+      backFromConversation: scope.backFromConversation,
+      showChatPanel: () => scope.setConversationPanel('chat'),
+      closeSessionDrawer: () => scope.setSessionDrawerOpen(false),
+      closeMessageMenu,
+      exitMessageBatch: messageActions.exitMessageBatch,
+      closeMessageEdit: () => setMessageEditPrompt(undefined),
+      closeModelPicker: () => setModelPickerOpen(false),
+      closeAgentPicker: () => setAgentPickerOpen(false),
+      closeSessionRename: () => scope.setSessionRenamePrompt(undefined),
+      closeProjectDrawer: () => scope.setProjectDrawerOpen(false),
+      exitSessionBatch: sessionBatch.exit,
+      showSessionsPanel: () => scope.setSessionListPanel('sessions'),
+    },
+  );
 
   useEffect(() => {
-    if (!useWebviewTranscript || !discardedLegacy || rawCachedScroll == null) {
-      return;
-    }
-    const seenVersion =
-      'schemaVersion' in rawCachedScroll &&
-      typeof rawCachedScroll.schemaVersion === 'number'
-        ? rawCachedScroll.schemaVersion
-        : undefined;
-    emitChatTranscriptTelemetry({
-      name: 'legacy_cache_discarded',
-      reason: 'wrong_version',
-      ...(seenVersion != null ? {seenVersion} : {}),
+    setChat({
+      chatSubview: scope.chatSubview,
+      sessionListPanel: scope.sessionListPanel,
+      sessionTitle: scope.currentSession?.title ?? scope.currentSession?.id,
+      agentName:
+        scope.chatSubview === 'conversation' ? scope.agentMeta.agentName : undefined,
+      modelLabel:
+        scope.chatSubview === 'conversation' ? scope.agentMeta.modelLabel : undefined,
+      onBackFromConversation: scope.backFromConversation,
+      onOpenDrawer: () => {
+        if (scope.chatSubview === 'conversation') {
+          scope.setSessionDrawerOpen(true);
+        } else {
+          scope.setProjectDrawerOpen(true);
+        }
+      },
     });
-  }, [useWebviewTranscript, discardedLegacy, chatScrollKey, rawCachedScroll]);
-  const cachedChatScroll = useWebviewTranscript
-    ? restoredTranscriptScroll
-    : legacyCachedScroll;
-  const defaultChatScrollToBottom =
-    chatScrollKey != null && cachedChatScroll == null;
-
-  const handleChatScrollSnapshot = useCallback(
-    (snap: ChatListScrollSnapshot | ChatTranscriptScrollSnapshot) => {
-      if (chatScrollKey == null) {
-        return;
-      }
-      if (useWebviewTranscript && 'schemaVersion' in snap) {
-        setTranscriptScrollSnapshot(chatScrollKey, snap);
-        return;
-      }
-      if (!useWebviewTranscript && !('schemaVersion' in snap)) {
-        setScrollSnapshot(chatScrollKey, snap);
-      }
-    },
-    [chatScrollKey, useWebviewTranscript],
-  );
-
-  const reloadLists = useCallback(async () => {
-    const plist = await runtime.projects.list();
-    setProjects(plist);
-    const pid = projectId ?? plist[0]?.id;
-    if (pid) {
-      try {
-        setCurrentProjectMeta(await runtime.projects.get(pid));
-      } catch {
-        setCurrentProjectMeta(undefined);
-      }
-      setSessions(await runtime.sessions.listByProject(pid));
-    } else {
-      setCurrentProjectMeta(undefined);
-      setSessions([]);
-    }
-  }, [runtime, projectId]);
-
-  useEffect(() => {
-    reloadLists().catch(() => undefined);
-  }, [reloadLists]);
-
-  const currentSession = sessions.find(s => s.id === sessionId);
-  const canResumeWithoutInput =
-    chatMessages.length > 0 && chatMessages[chatMessages.length - 1]?.role === 'user';
-
-  const refreshChatTokenLabel = useCallback(async () => {
-    if (projectId == null || sessionId == null) {
-      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
-      return;
-    }
-    setAgentMeta(prev => ({...prev, tokenLabel: '…'}));
-    try {
-      const tokenLabel = await loadChatPromptTokenLabelResilient(runtime, {
-        projectId,
-        sessionId,
-      });
-      setAgentMeta(prev => ({...prev, tokenLabel}));
-    } catch {
-      setAgentMeta(prev => ({...prev, tokenLabel: ''}));
-    }
-  }, [runtime, projectId, sessionId]);
-
-  const refreshChatMeta = useCallback(async () => {
-    const modelId = await runtime.state.getCurrentModelId();
-    setHasWorkspaceModel(modelId != null && modelId !== '');
-    try {
-      const meta = await loadChatAgentMeta(runtime);
-      setAgentMeta(prev => ({
-        ...prev,
-        ...meta,
-        tokenLabel: prev?.tokenLabel ?? '…',
-      }));
-      void refreshChatTokenLabel();
-    } catch {
-      setAgentMeta({
-        agentId: undefined,
-        agentName: '—',
-        modelLabel: '—',
-        tokenLabel: '',
-        hasDedicatedModel: false,
-      });
-    }
-  }, [runtime, refreshChatTokenLabel]);
-
-  const persistSessionViewCache = useCallback(
-    (messages: readonly ChatMessage[], hasMore: boolean) => {
-      if (projectId == null || sessionId == null) {
-        return;
-      }
-      setSessionViewCache(sessionViewCacheKey(projectId, sessionId), {
-        messages,
-        hasMoreMessages: hasMore,
-      });
-    },
-    [projectId, sessionId],
-  );
-
-  const reloadInFlightRef = useRef<Promise<void> | null>(null);
-
-  const reloadMessages = useCallback(
-    async (force = false) => {
-      if (force && reloadInFlightRef.current != null) {
-        return reloadInFlightRef.current;
-      }
-      const run = async () => {
-        if (sessionId == null || projectId == null) {
-          setChatMessages([]);
-          setHasMoreMessages(false);
-          return;
-        }
-        const cacheKey = sessionViewCacheKey(projectId, sessionId);
-        if (!force) {
-          const cached = getSessionViewCache(cacheKey);
-          if (cached != null) {
-            setChatMessages([...cached.messages]);
-            setHasMoreMessages(cached.hasMoreMessages);
-            return;
-          }
-        }
-        const list = await loadSessionMessagesTailForDisplay(
-          runtime,
-          sessionId,
-          CHAT_PAGE_SIZE,
-        );
-        let hasMore = false;
-        const oldestSeq = list[0]?.seq;
-        if (oldestSeq != null) {
-          const older = await runtime.messages.listBySessionPage(sessionId, {
-            limit: 1,
-            beforeSeq: oldestSeq,
-          });
-          hasMore = older.length > 0;
-        }
-        setChatMessages(list);
-        setHasMoreMessages(hasMore);
-        setSessionViewCache(cacheKey, {
-          messages: list,
-          hasMoreMessages: hasMore,
-        });
-      };
-      if (!force) {
-        await run();
-        return;
-      }
-      const task = run();
-      reloadInFlightRef.current = task;
-      try {
-        await task;
-      } finally {
-        if (reloadInFlightRef.current === task) {
-          reloadInFlightRef.current = null;
-        }
-      }
-    },
-    [runtime, sessionId, projectId],
-  );
-
-  const flushBusStreamToBuffer = useCallback(() => {
-    busStreamTimerRef.current = null;
-    const pending = pendingBusStreamRef.current;
-    if (pending.text.length === 0 && pending.thinking.length === 0) {
-      return;
-    }
-    pendingBusStreamRef.current = {text: '', thinking: ''};
-    if (useWebviewTranscriptRef.current) {
-      if (pending.text.length > 0) {
-        transcriptWebRef.current?.pushStreamDelta('text', pending.text);
-        streamMetricsRef.current.noteTextDelta(pending.text);
-      }
-      if (pending.thinking.length > 0) {
-        transcriptWebRef.current?.pushStreamDelta('thinking', pending.thinking);
-        streamMetricsRef.current.noteThinkingDelta(pending.thinking);
-      }
-      return;
-    }
-    if (pending.text.length > 0) {
-      streamBuffer.push('text', pending.text);
-    }
-    if (pending.thinking.length > 0) {
-      streamBuffer.push('thinking', pending.thinking);
-    }
-  }, [streamBuffer]);
-
-  const scheduleBusStreamFlush = useCallback(() => {
-    if (busStreamTimerRef.current != null) {
-      return;
-    }
-    busStreamTimerRef.current = setTimeout(flushBusStreamToBuffer, 32);
-  }, [flushBusStreamToBuffer]);
-
-  const handleStreamText = useCallback(
-    (delta: string) => {
-      pendingBusStreamRef.current.text += delta;
-      scheduleBusStreamFlush();
-    },
-    [scheduleBusStreamFlush],
-  );
-
-  const handleStreamThinking = useCallback(
-    (delta: string) => {
-      pendingBusStreamRef.current.thinking += delta;
-      scheduleBusStreamFlush();
-    },
-    [scheduleBusStreamFlush],
-  );
-
-  const handleStreamReset = useCallback(() => {
-    if (busStreamTimerRef.current != null) {
-      clearTimeout(busStreamTimerRef.current);
-      busStreamTimerRef.current = null;
-    }
-    pendingBusStreamRef.current = {text: '', thinking: ''};
-    // Discard buffered deltas only — flushing would re-apply text that is already persisted.
-    streamBuffer.reset();
-    if (useWebviewTranscriptRef.current) {
-      transcriptWebRef.current?.resetStream();
-    } else {
-      setStreamingText('');
-      setStreamingThinking('');
-    }
-  }, [streamBuffer]);
-
-  const handleMessagesChanged = useCallback(async () => {
-    await reloadMessages(true);
-    void refreshChatTokenLabel();
-  }, [reloadMessages, refreshChatTokenLabel]);
-
-  const loadOlderMessages = useCallback(async () => {
-    if (sessionId == null || loadingMoreMessages || chatMessages.length === 0) {
-      return;
-    }
-    setLoadingMoreMessages(true);
-    try {
-      const beforeSeq = chatMessages[0]?.seq;
-      if (beforeSeq == null) {
-        return;
-      }
-      const older = await loadSessionMessagesPageForDisplay(runtime, sessionId, {
-        limit: CHAT_PAGE_SIZE,
-        beforeSeq,
-      });
-      if (older.length === 0) {
-        setHasMoreMessages(false);
-        return;
-      }
-      const hasMore = older.length === CHAT_PAGE_SIZE;
-      setChatMessages(prev => {
-        const next = prependOlderMessages(prev, older);
-        persistSessionViewCache(next, hasMore);
-        return next;
-      });
-      setHasMoreMessages(hasMore);
-    } finally {
-      setLoadingMoreMessages(false);
-    }
   }, [
-    runtime,
-    sessionId,
-    loadingMoreMessages,
-    chatMessages,
-    persistSessionViewCache,
+    scope.chatSubview,
+    scope.sessionListPanel,
+    scope.currentSession,
+    scope.agentMeta,
+    setChat,
+    scope.backFromConversation,
+    scope.setSessionDrawerOpen,
+    scope.setProjectDrawerOpen,
   ]);
 
-  useEffect(() => {
-    return () => {
-      streamBuffer.dispose();
-    };
-  }, [streamBuffer]);
+  const openConversation = useCallback(
+    async (sid: string) => {
+      if (projectId == null) {
+        return;
+      }
+      await setCurrentSession(sid);
+      messages.hydrateFromSessionCache(projectId, sid);
+      scope.setChatSubview('conversation');
+      scope.setConversationPanel('chat');
+    },
+    [projectId, setCurrentSession, messages, scope],
+  );
 
-  useEffect(() => {
-    if (chatSubview === 'conversation' && sessionId != null) {
-      reloadMessages().catch(() => undefined);
-      refreshChatMeta().catch(() => undefined);
+  const confirmBatchDelete = useCallback(() => {
+    const count = sessionBatch.selectedCount;
+    if (count === 0) {
+      return;
     }
-  }, [chatSubview, sessionId, reloadMessages, refreshChatMeta]);
+    Alert.alert(
+      '确认删除',
+      `确定删除选中的 ${count} 个会话？`,
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () =>
+            scope
+              .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
+              .catch(() => undefined),
+        },
+      ],
+    );
+  }, [sessionBatch, scope]);
 
   const refreshChatRichTextPref = useCallback(async () => {
     if (appUi == null) {
@@ -535,747 +269,20 @@ export function ChatTabScreen() {
     }, [refreshChatRichTextPref, refreshChatTranscriptEngine]),
   );
 
-  const backFromConversation = useCallback(
-    () => setChatSubview('sessions'),
-    [],
-  );
-
-  const closeMessageMenu = useCallback(() => {
-    setMessageMenuTarget(undefined);
-    setMessageMenuAnchor(undefined);
-    setWebMenuOpen(false);
-    setWebMenuCloseSignal(signal => signal + 1);
-  }, []);
-
-  const dismissAllOverlays = useCallback(() => {
-    setProjectDrawerOpen(false);
-    setSessionDrawerOpen(false);
-    setModelPickerOpen(false);
-    setAgentPickerOpen(false);
-    closeMessageMenu();
-    setMessageEditPrompt(undefined);
-    setSessionRenamePrompt(undefined);
-    setMenuSessionId(undefined);
-  }, [closeMessageMenu]);
-
-  useDismissOverlaysOnBlur(dismissAllOverlays);
-
-  useAndroidChatBackHandler(
-    {
-      chatSubview,
-      conversationPanel,
-      sessionListPanel,
-      sessionDrawerOpen,
-      messageMenuOpen: messageMenuTarget != null || webMenuOpen,
-      messageBatchActive: messageBatch.active,
-      messageEditOpen: messageEditPrompt != null,
-      modelPickerOpen,
-      agentPickerOpen,
-      sessionRenameOpen: sessionRenamePrompt != null,
-      projectDrawerOpen,
-      sessionBatchActive: sessionBatch.active,
-    },
-    {
-      backFromConversation,
-      showChatPanel: () => setConversationPanel('chat'),
-      closeSessionDrawer: () => setSessionDrawerOpen(false),
-      closeMessageMenu,
-      exitMessageBatch: messageBatch.exit,
-      closeMessageEdit: () => setMessageEditPrompt(undefined),
-      closeModelPicker: () => setModelPickerOpen(false),
-      closeAgentPicker: () => setAgentPickerOpen(false),
-      closeSessionRename: () => setSessionRenamePrompt(undefined),
-      closeProjectDrawer: () => setProjectDrawerOpen(false),
-      exitSessionBatch: sessionBatch.exit,
-      showSessionsPanel: () => setSessionListPanel('sessions'),
-    },
-  );
-
-  useEffect(() => {
-    setChat({
-      chatSubview,
-      sessionListPanel,
-      sessionTitle: currentSession?.title ?? currentSession?.id,
-      agentName: chatSubview === 'conversation' ? agentMeta.agentName : undefined,
-      modelLabel:
-        chatSubview === 'conversation' ? agentMeta.modelLabel : undefined,
-      onBackFromConversation: backFromConversation,
-      onOpenDrawer: () => {
-        if (chatSubview === 'conversation') {
-          setSessionDrawerOpen(true);
-        } else {
-          setProjectDrawerOpen(true);
-        }
-      },
-    });
-  }, [
-    chatSubview,
-    sessionListPanel,
-    currentSession,
-    agentMeta,
-    setChat,
-    backFromConversation,
-  ]);
-
-  const openConversation = useCallback(
-    async (sid: string) => {
-      if (projectId == null) {
-        return;
-      }
-      await setCurrentSession(sid);
-      const cached = getSessionViewCache(
-        sessionViewCacheKey(projectId, sid),
-      );
-      if (cached != null) {
-        setChatMessages([...cached.messages]);
-        setHasMoreMessages(cached.hasMoreMessages);
-      } else {
-        setChatMessages([]);
-        setHasMoreMessages(false);
-      }
-      setChatSubview('conversation');
-      setConversationPanel('chat');
-    },
-    [projectId, setCurrentSession],
-  );
-
-  const handleCreateProject = useCallback(
-    async (name: string) => {
-      try {
-        const created = await runtime.projects.create(name);
-        await setCurrentProject(created.id);
-        await refreshScope();
-        await reloadLists();
-      } catch (error) {
-        showToast(toastMessage('创建失败', error));
-      }
-    },
-    [runtime, setCurrentProject, refreshScope, reloadLists, showToast],
-  );
-
-  const handleRenameProject = useCallback(
-    async (projectId: string, name: string) => {
-      try {
-        await runtime.projects.rename(projectId, name);
-        await reloadLists();
-      } catch (error) {
-        showToast(toastMessage('重命名失败', error));
-      }
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  const handleCreateSession = useCallback(async () => {
-    if (projectId == null) {
-      return;
-    }
-    try {
-      const list = await runtime.sessions.listByProject(projectId);
-      const title = nextDefaultSessionTitle(list.map(s => s.title));
-      await runtime.sessions.create(projectId, title);
-      await reloadLists();
-    } catch (error) {
-      showToast(toastMessage('创建失败', error));
-    }
-  }, [runtime, projectId, reloadLists, showToast]);
-
-  const handleRenameSession = useCallback(
-    async (targetSessionId: string, title: string) => {
-      try {
-        await runtime.sessions.rename(targetSessionId, title);
-        await reloadLists();
-      } catch (error) {
-        showToast(toastMessage('重命名失败', error));
-      }
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  const openSessionRenamePrompt = useCallback(
-    (targetSessionId: string) => {
-      const session = sessions.find(s => s.id === targetSessionId);
-      setSessionRenamePrompt({
-        sessionId: targetSessionId,
-        initialTitle: session?.title ?? '',
-      });
-    },
-    [sessions],
-  );
-
-  const deleteSelectedSessions = useCallback(async () => {
-    const ids = [...sessionBatch.selectedIds];
-    for (const id of ids) {
-      await runtime.sessions.delete(id);
-      if (projectId != null) {
-        clearSessionViewCache(sessionViewCacheKey(projectId, id));
-      }
-    }
-    const deletedCurrent = sessionId != null && ids.includes(sessionId);
-    sessionBatch.exit();
-    if (deletedCurrent) {
-      setChatSubview('sessions');
-    }
-    await refreshScope();
-    await reloadLists();
-  }, [runtime, sessionBatch, sessionId, projectId, refreshScope, reloadLists]);
-
-  const handleCopySession = useCallback(
-    async (sourceSessionId: string) => {
-      try {
-        const copy = await runtime.sessions.copy(sourceSessionId);
-        await reloadLists();
-        showToast(`已复制会话：${copy.title ?? copy.id}`);
-      } catch (error) {
-        showToast(toastMessage('复制失败', error));
-      }
-    },
-    [runtime, reloadLists, showToast],
-  );
-
-  const handleDeleteSession = useCallback(
-    async (targetSessionId: string) => {
-      try {
-        await runtime.sessions.delete(targetSessionId);
-        if (projectId != null) {
-          clearSessionViewCache(
-            sessionViewCacheKey(projectId, targetSessionId),
-          );
-        }
-        if (sessionId === targetSessionId) {
-          setChatSubview('sessions');
-        }
-        await refreshScope();
-        await reloadLists();
-        showToast('已删除会话');
-      } catch (error) {
-        showToast(toastMessage('删除失败', error));
-      }
-    },
-    [runtime, projectId, sessionId, refreshScope, reloadLists, showToast],
-  );
-
-  const confirmDeleteSession = useCallback(
-    (targetSessionId: string) => {
-      const session = sessions.find(s => s.id === targetSessionId);
-      const label = session?.title?.trim() || '该会话';
-      Alert.alert(
-        '确认删除',
-        `确定删除会话「${label}」？消息与文件将一并删除，且无法恢复。`,
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '删除',
-            style: 'destructive',
-            onPress: () => handleDeleteSession(targetSessionId).catch(() => undefined),
-          },
-        ],
-      );
-    },
-    [sessions, handleDeleteSession],
-  );
-
-  const bumpVfsRefresh = useCallback(() => {
-    if (projectId != null && sessionId != null) {
-      invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
-    }
-    setVfsRefreshKey(key => key + 1);
-  }, [runtime, projectId, sessionId]);
-
-  const handleForkFromMessage = useCallback(
-    async (messageId: string) => {
-      if (sessionId == null) {
-        return;
-      }
-      if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法 Fork'));
-        return;
-      }
-      try {
-        const forked = await runtime.messages.fork(sessionId, messageId);
-        await reloadLists();
-        await setCurrentSession(forked.id);
-        setChatSubview('conversation');
-        setConversationPanel('chat');
-        setStreamingText('');
-        setStreamingThinking('');
-        bumpVfsRefresh();
-        showToast(`已 Fork：${forked.title ?? forked.id}`);
-      } catch (error) {
-        showToast(toastMessage('Fork 失败', error));
-      }
-    },
-    [
-      sessionId,
-      agentRunning,
-      runtime,
-      reloadLists,
-      setCurrentSession,
-      bumpVfsRefresh,
-      showToast,
-    ],
-  );
-
-  const handleRollbackFromMessage = useCallback(
-    (messageId: string) => {
-      if (sessionId == null || projectId == null) {
-        return;
-      }
-      if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法回滚'));
-        return;
-      }
-      Alert.alert(
-        '回滚到此消息',
-        '将删除此消息之后的对话，并撤销相关文件修改。是否继续？',
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '回滚',
-            style: 'destructive',
-            onPress: () => {
-              void (async () => {
-                try {
-                  await rollbackToMessage(runtime, {projectId, sessionId}, messageId);
-                  setStreamingText('');
-                  setStreamingThinking('');
-                  await reloadMessages(true);
-                  bumpVfsRefresh();
-                  showToast('回滚成功');
-                } catch (error) {
-                  showToast(toastMessage('回滚失败', error));
-                }
-              })();
-            },
-          },
-        ],
-      );
-    },
-    [
-      sessionId,
-      projectId,
-      agentRunning,
-      runtime,
-      reloadMessages,
-      bumpVfsRefresh,
-      showToast,
-    ],
-  );
-
-  const exitMessageBatch = useCallback(() => {
-    messageBatch.exit();
-  }, [messageBatch]);
-
-  const enterMessageBatch = useCallback(() => {
-    if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法批量操作消息'));
-      return;
-    }
-    messageBatch.exit();
-    messageBatch.enter();
-  }, [agentRunning, messageBatch, showToast]);
-
-  const deleteSelectedMessages = useCallback(async () => {
-    const ids = [...messageBatch.selectedIds];
-    for (const id of ids) {
-      const target = chatMessages.find(m => m.id === id);
-      if (target != null && messageHasToolUse(target)) {
-        await deleteToolTurn(runtime, chatMessages, id);
-      } else {
-        await runtime.messages.delete(id);
-      }
-    }
-    exitMessageBatch();
-    setStreamingText('');
-    setStreamingThinking('');
-    await reloadMessages(true);
-    void refreshChatTokenLabel();
-  }, [
-    runtime,
-    messageBatch,
-    chatMessages,
-    exitMessageBatch,
-    reloadMessages,
-    refreshChatTokenLabel,
-  ]);
-
-  const hideSelectedMessages = useCallback(async () => {
-    const ids = [...messageBatch.selectedIds];
-    for (const id of ids) {
-      const target = chatMessages.find(m => m.id === id);
-      if (target != null && messageHasToolUse(target)) {
-        await hideToolTurn(runtime, chatMessages, id, true);
-      } else {
-        await runtime.messages.hide(id);
-      }
-    }
-    exitMessageBatch();
-    await reloadMessages(true);
-    void refreshChatTokenLabel();
-  }, [
-    runtime,
-    messageBatch,
-    chatMessages,
-    exitMessageBatch,
-    reloadMessages,
-    refreshChatTokenLabel,
-  ]);
-
-  const unhideSelectedMessages = useCallback(async () => {
-    const ids = [...messageBatch.selectedIds];
-    for (const id of ids) {
-      const target = chatMessages.find(m => m.id === id);
-      if (target != null && messageHasToolUse(target)) {
-        await hideToolTurn(runtime, chatMessages, id, false);
-      } else {
-        await runtime.messages.show(id);
-      }
-    }
-    exitMessageBatch();
-    await reloadMessages(true);
-    void refreshChatTokenLabel();
-  }, [
-    runtime,
-    messageBatch,
-    chatMessages,
-    exitMessageBatch,
-    reloadMessages,
-    refreshChatTokenLabel,
-  ]);
-
-  const confirmMessageBatchDelete = useCallback(() => {
-    const count = messageBatch.selectedCount;
-    if (count === 0) {
-      return;
-    }
-    Alert.alert(
-      '确认删除',
-      `确定删除选中的 ${count} 条消息？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => deleteSelectedMessages().catch(() => undefined),
-        },
-      ],
-    );
-  }, [messageBatch.selectedCount, deleteSelectedMessages]);
-
-  const confirmBatchHideMessages = useCallback(() => {
-    const count = messageBatch.selectedCount;
-    if (count === 0) {
-      return;
-    }
-    Alert.alert(
-      '确认隐藏',
-      `确定隐藏选中的 ${count} 条消息？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '隐藏',
-          onPress: () => hideSelectedMessages().catch(() => undefined),
-        },
-      ],
-    );
-  }, [messageBatch.selectedCount, hideSelectedMessages]);
-
-  const confirmBatchUnhideMessages = useCallback(() => {
-    const count = messageBatch.selectedCount;
-    if (count === 0) {
-      return;
-    }
-    Alert.alert(
-      '确认恢复',
-      `确定恢复选中的 ${count} 条消息？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '恢复',
-          onPress: () => unhideSelectedMessages().catch(() => undefined),
-        },
-      ],
-    );
-  }, [messageBatch.selectedCount, unhideSelectedMessages]);
-
-  const handleHideMessage = useCallback(
-    async (messageId: string) => {
-      try {
-        const target = chatMessages.find(m => m.id === messageId);
-        if (target != null && messageHasToolUse(target)) {
-          await hideToolTurn(runtime, chatMessages, messageId, true);
-        } else {
-          await runtime.messages.hide(messageId);
-        }
-        await reloadMessages(true);
-        void refreshChatTokenLabel();
-      } catch (error) {
-        showToast(toastMessage('隐藏失败', error));
-      }
-    },
-    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
-  );
-
-  const handleShowMessage = useCallback(
-    async (messageId: string) => {
-      try {
-        const target = chatMessages.find(m => m.id === messageId);
-        if (target != null && messageHasToolUse(target)) {
-          await hideToolTurn(runtime, chatMessages, messageId, false);
-        } else {
-          await runtime.messages.show(messageId);
-        }
-        await reloadMessages(true);
-        void refreshChatTokenLabel();
-      } catch (error) {
-        showToast(toastMessage('取消隐藏失败', error));
-      }
-    },
-    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
-  );
-
-  const handleCompactSession = useCallback(() => {
-    if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法压缩'));
-      return;
-    }
-    if (projectId == null || sessionId == null) {
-      return;
-    }
-    Alert.alert(
-      '压缩上下文',
-      '将按照事件配置压缩上下文。是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '压缩',
-          onPress: () => {
-            void (async () => {
-              try {
-                const result = await runtime.eventOrchestrator.emit(
-                  EVENT_SESSION_COMPACTION_REQUESTED,
-                  {sessionId, projectId, trigger: 'manual'},
-                );
-                await reloadMessages(true);
-                void refreshChatTokenLabel();
-                if (!result.ok) {
-                  showToast(toastMessage('压缩部分失败', result.failures[0]?.error));
-                } else {
-                  showToast('已压缩');
-                }
-              } catch (error) {
-                showToast(toastMessage('压缩失败', error));
-              }
-            })();
-          },
-        },
-      ],
-    );
-  }, [
-    agentRunning,
-    projectId,
-    sessionId,
-    runtime.eventOrchestrator,
-    reloadMessages,
-    refreshChatTokenLabel,
-    showToast,
-  ]);
-
-  const handleDeleteMessage = useCallback(
-    async (messageId: string) => {
-      try {
-        const target = chatMessages.find(m => m.id === messageId);
-        if (target != null && messageHasToolUse(target)) {
-          await deleteToolTurn(runtime, chatMessages, messageId);
-        } else {
-          await runtime.messages.delete(messageId);
-        }
-        setStreamingText('');
-        setStreamingThinking('');
-        await reloadMessages(true);
-        void refreshChatTokenLabel();
-      } catch (error) {
-        showToast(toastMessage('删除失败', error));
-      }
-    },
-    [runtime, chatMessages, reloadMessages, refreshChatTokenLabel, showToast],
-  );
-
-  const handleMessageMenuAction = useCallback(
-    (target: ChatMessage, action: string) => {
-      if (action === 'edit') {
-        const initial = editableTextFromMessage(target);
-        if (initial == null) {
-          showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
-          return;
-        }
-        setMessageEditPrompt({
-          messageId: target.id,
-          initialText: initial,
-        });
-      } else if (action === 'hide') {
-        handleHideMessage(target.id).catch(() => undefined);
-      } else if (action === 'unhide') {
-        handleShowMessage(target.id).catch(() => undefined);
-      } else if (action === 'copy') {
-        const text = editableTextFromMessage(target);
-        if (text == null) {
-          showToast(toastMessage('无法复制', '该消息没有可复制的文本'));
-          return;
-        }
-        Clipboard.setString(text);
-        showToast('已复制');
-      } else if (action === 'fork') {
-        handleForkFromMessage(target.id).catch(() => undefined);
-      } else if (action === 'rollback') {
-        handleRollbackFromMessage(target.id);
-      } else if (action === 'delete') {
-        Alert.alert('删除消息', '确定删除这条消息？', [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '删除',
-            style: 'destructive',
-            onPress: () =>
-              handleDeleteMessage(target.id).catch(() => undefined),
-          },
-        ]);
-      }
-    },
-    [
-      handleDeleteMessage,
-      handleForkFromMessage,
-      handleHideMessage,
-      handleRollbackFromMessage,
-      handleShowMessage,
-      showToast,
-    ],
-  );
-
-  const handleSaveMessageEdit = useCallback(
-    async (messageId: string, text: string) => {
-      const trimmed = text.trim();
-      if (trimmed === '') {
-        showToast(toastMessage('无法保存', '消息内容不能为空'));
-        return;
-      }
-      const original = chatMessages.find(m => m.id === messageId);
-      if (original == null) {
-        showToast(toastMessage('保存失败', '消息不存在'));
-        return;
-      }
-      try {
-        await runtime.messages.updateContent(
-          messageId,
-          applyTextEditToMessage(original, trimmed),
-        );
-        await reloadMessages(true);
-      } catch (error) {
-        showToast(toastMessage('保存失败', error));
-      }
-    },
-    [runtime, chatMessages, reloadMessages, showToast],
-  );
-
-  const confirmBatchDelete = useCallback(() => {
-    const count = sessionBatch.selectedCount;
-    if (count === 0) {
-      return;
-    }
-    Alert.alert(
-      '确认删除',
-      `确定删除选中的 ${count} 个会话？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => deleteSelectedSessions(),
-        },
-      ],
-    );
-  }, [sessionBatch.selectedCount, deleteSelectedSessions]);
-
-  const handleDeleteProjects = useCallback(
-    async (ids: string[]) => {
-      for (const id of ids) {
-        await runtime.projects.delete(id);
-      }
-      await refreshScope();
-      await reloadLists();
-    },
-    [runtime, refreshScope, reloadLists],
-  );
-
-  const openFileEditor = useCallback(
-    (
-      path: string,
-      scopeKind: 'project' | 'session',
-    ) => {
-      if (projectId == null) {
-        return;
-      }
-      if (scopeKind === 'session') {
-        if (sessionId == null) {
-          return;
-        }
-        navigation.navigate('FileEditor', {
-          path,
-          scopeKind: 'session',
-          projectId,
-          sessionId,
-          onSessionVfsSaved: bumpVfsRefresh,
-        });
-      } else {
-        navigation.navigate('FileEditor', {
-          path,
-          scopeKind: 'project',
-          projectId,
-        });
-      }
-    },
-    [navigation, projectId, sessionId, bumpVfsRefresh],
-  );
-
-  const openSessionFilePreview = useCallback(
-    (path: string) => {
-      setConversationPanel('workspace');
-      openFileEditor(path, 'session');
-    },
-    [openFileEditor],
-  );
-
-  const sessionVfs =
-    projectId != null && sessionId != null
-      ? runtime.sessionVfs(projectId, sessionId)
-      : null;
-  const sessionWorktree =
-    projectId != null && sessionId != null
-      ? runtime.worktree({
-          kind: 'session',
-          projectId,
-          sessionId,
-        })
-      : null;
-  const projectVfs =
-    projectId != null ? runtime.projectVfs(projectId) : null;
-  const projectWorktree =
-    projectId != null
-      ? runtime.worktree({kind: 'project', projectId})
-      : null;
-
   const sessionRenameModal = (
     <TextPromptModal
-      visible={sessionRenamePrompt != null}
+      visible={scope.sessionRenamePrompt != null}
       title="重命名会话"
       label="会话名称"
       placeholder="输入会话名称"
-      initialValue={sessionRenamePrompt?.initialTitle ?? ''}
+      initialValue={scope.sessionRenamePrompt?.initialTitle ?? ''}
       confirmLabel="保存"
-      onClose={() => setSessionRenamePrompt(undefined)}
+      onClose={() => scope.setSessionRenamePrompt(undefined)}
       onConfirm={async value => {
-        const prompt = sessionRenamePrompt;
-        setSessionRenamePrompt(undefined);
+        const prompt = scope.sessionRenamePrompt;
+        scope.setSessionRenamePrompt(undefined);
         if (prompt) {
-          await handleRenameSession(prompt.sessionId, value);
+          await scope.handleRenameSession(prompt.sessionId, value);
         }
       }}
     />
@@ -1284,434 +291,164 @@ export function ChatTabScreen() {
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
-      <View
-        style={[
-          styles.subviewFill,
-          chatSubview !== 'conversation' && styles.panelHidden,
-        ]}
-        pointerEvents={chatSubview === 'conversation' ? 'auto' : 'none'}>
-        <SegmentedControl
-          tokens={tokens}
-          value={conversationPanel}
-          onChange={setConversationPanel}
-          options={[
-            {value: 'chat', label: '聊天', testID: 'tab-chat'},
-            {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
-          ]}
-        />
-        {projectId != null && sessionId != null ? (
-          <>
-            <View
-              style={[
-                styles.chatPanel,
-                conversationPanel !== 'chat' && styles.panelHidden,
-              ]}
-              pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
-              <ChatMetaBar meta={agentMeta} />
-              {streamMetrics != null ? (
-                <ChatStreamMetricsBar metrics={streamMetrics} />
-              ) : null}
-              {messageBatch.active ? (
-                <MessageBatchHeader
-                  selectedCount={messageBatch.selectedCount}
-                  onCancel={exitMessageBatch}
-                  onDelete={confirmMessageBatchDelete}
-                  onHide={confirmBatchHideMessages}
-                  onRestore={confirmBatchUnhideMessages}
-                />
-              ) : null}
-              {useWebviewTranscript ? (
-                <ChatTranscriptWebView
-                  ref={transcriptWebRef}
-                  key={chatScrollKey ?? 'no-session-scroll'}
-                  sessionKey={chatScrollKey ?? 'no-session'}
-                  messages={chatMessages}
-                  hasMore={hasMoreMessages}
-                  agentRunning={agentRunning}
-                  flags={transcriptFlags}
-                  selectedMessageIds={messageBatch.selectedIds}
-                  menuCloseSignal={webMenuCloseSignal}
-                  initialScroll={restoredTranscriptScroll ?? null}
-                  defaultScrollToBottom={defaultChatScrollToBottom}
-                  onScrollSnapshot={handleChatScrollSnapshot}
-                  onLoadOlder={() => loadOlderMessages().catch(() => undefined)}
-                  onOpenToolFile={openSessionFilePreview}
-                  onWebMenuOpenChange={open => {
-                    setWebMenuOpen(open);
-                    if (!open) {
-                      setMessageMenuTarget(undefined);
-                      setMessageMenuAnchor(undefined);
-                    }
-                  }}
-                  onMessageMenuAction={(messageId, action) => {
-                    const target = chatMessages.find(m => m.id === messageId);
-                    if (target == null) {
-                      return;
-                    }
-                    handleMessageMenuAction(target, action);
-                  }}
-                  onToggleMessageSelect={messageBatch.toggle}
-                />
-              ) : (
-              /* legacy-rn engine fallback — see chat-transcript-engine.ts + README */
-              <MessageList
-                key={chatScrollKey ?? 'no-session-scroll'}
-                messages={chatMessages}
-                streamingText={streamingText}
-                streamingThinking={streamingThinking}
-                agentRunning={agentRunning}
-                chatRichTextEnabled={chatRichTextEnabled}
-                richRenderEpoch={richRenderEpoch}
-                initialScroll={cachedChatScroll ?? null}
-                defaultScrollToBottom={defaultChatScrollToBottom}
-                onScrollSnapshot={handleChatScrollSnapshot}
-                batchMode={messageBatch.active}
-                selectedMessageIds={messageBatch.selectedIds}
-                onToggleMessageSelect={messageBatch.toggle}
-                onMessageLongPress={(msg, anchor) => {
-                  if (agentRunning) {
-                    return;
-                  }
-                  setMessageMenuTarget(msg);
-                  setMessageMenuAnchor(anchor);
-                }}
-                onOpenToolFile={openSessionFilePreview}
-                listHeaderComponent={
-                  hasMoreMessages ? (
-                    <Pressable
-                      style={styles.loadMoreBtn}
-                      onPress={() =>
-                        loadOlderMessages().catch(() => undefined)
-                      }>
-                      <Text style={{color: tokens.primary}}>
-                        {loadingMoreMessages ? '加载中…' : '加载更早消息'}
-                      </Text>
-                    </Pressable>
-                  ) : null
-                }
-              />
-              )}
-              <ChatComposer
-                scope={{projectId, sessionId}}
-                hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
-                running={agentRunning}
-                onRunningChange={running => {
-                  setAgentRunning(running);
-                  setMobileAgentActive(running);
-                }}
-                onStreamText={handleStreamText}
-                onStreamThinking={handleStreamThinking}
-                onStreamReset={handleStreamReset}
-                onMessagesChanged={handleMessagesChanged}
-                onNeedModel={() => setModelPickerOpen(true)}
-                canResumeWithoutInput={canResumeWithoutInput}
-              />
-            </View>
-            {sessionVfs && sessionWorktree ? (
-              <View
-                style={[
-                  styles.flexFill,
-                  conversationPanel !== 'workspace' && styles.panelHidden,
-                ]}
-                pointerEvents={
-                  conversationPanel === 'workspace' ? 'auto' : 'none'
-                }>
-                <VfsFileManager
-                  key={`session-vfs-${vfsRefreshKey}`}
-                  scope={{
-                    kind: 'session',
-                    projectId: projectId!,
-                    sessionId,
-                  }}
-                  vfs={sessionVfs}
-                  worktree={sessionWorktree}
-                  rootPath="/"
-                  pullFromParent={{
-                    scope: {kind: 'session', sessionId},
-                    onPulled: bumpVfsRefresh,
-                  }}
-                  onOpenFile={path => openFileEditor(path, 'session')}
-                />
-              </View>
-            ) : conversationPanel === 'workspace' ? (
-              <View style={styles.placeholder}>
-                <Text style={{color: tokens.textSecondary}}>
-                  聊天工作区不可用
-                </Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <View style={styles.placeholder}>
-            <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
-          </View>
-        )}
-        <SessionActionsDrawer
-          visible={sessionDrawerOpen}
-          onClose={() => setSessionDrawerOpen(false)}
-          onRename={() => {
-            if (sessionId != null) {
-              setSessionDrawerOpen(false);
-              openSessionRenamePrompt(sessionId);
-            }
-          }}
-          onCompact={() => {
-            setSessionDrawerOpen(false);
-            handleCompactSession();
-          }}
-          onRealPrompt={() => navigation.navigate('RealPrompt')}
-          onBatchMessages={() => {
-            setSessionDrawerOpen(false);
-            enterMessageBatch();
-          }}
-        />
-        <MessageActionMenu
-          visible={!useWebviewTranscript && messageMenuTarget != null}
-          anchor={messageMenuAnchor}
-          items={
-            messageMenuTarget != null
-              ? buildMessageActionItems(messageMenuTarget)
-              : []
-          }
-          onClose={closeMessageMenu}
-          onSelect={action => {
-            const target = messageMenuTarget;
-            closeMessageMenu();
-            if (target == null) {
-              return;
-            }
-            handleMessageMenuAction(target, action);
-          }}
-        />
-        <MessageEditModal
-          visible={messageEditPrompt != null}
-          title="编辑消息"
-          label="内容"
-          placeholder="输入消息内容"
-          initialValue={messageEditPrompt?.initialText ?? ''}
-          confirmLabel="保存"
-          onClose={() => setMessageEditPrompt(undefined)}
-          onConfirm={async value => {
-            const prompt = messageEditPrompt;
-            setMessageEditPrompt(undefined);
-            if (prompt) {
-              await handleSaveMessageEdit(prompt.messageId, value);
-            }
-          }}
-        />
-        <ModelPickerModal
-          visible={modelPickerOpen}
-          onClose={() => setModelPickerOpen(false)}
-          onSelected={() => refreshChatMeta().catch(() => undefined)}
-        />
-        <AgentPickerModal
-          visible={agentPickerOpen}
-          onClose={() => setAgentPickerOpen(false)}
-          onSelected={() => refreshChatMeta().catch(() => undefined)}
-        />
-      </View>
-      <View
-        style={[
-          styles.subviewFill,
-          chatSubview !== 'sessions' && styles.panelHidden,
-        ]}
-        pointerEvents={chatSubview === 'sessions' ? 'auto' : 'none'}>
-      {currentProject ? (
-        <Pressable
-          style={[
-            styles.projectBanner,
-            {
-              backgroundColor: tokens.surfaceElevated,
-              borderBottomColor: tokens.borderLight,
-            },
-          ]}
-          onPress={() => setProjectDrawerOpen(true)}>
-          <Text style={[styles.bannerLabel, {color: tokens.textSecondary}]}>
-            当前项目
-          </Text>
-          <Text style={[styles.bannerName, {color: tokens.primary}]}>
-            {currentProject.name}
-          </Text>
-        </Pressable>
-      ) : null}
-      <SegmentedControl
+      <ChatConversationPanel
         tokens={tokens}
-        value={sessionListPanel}
-        onChange={setSessionListPanel}
-        options={[
-          {value: 'sessions', label: '会话'},
-          {value: 'template', label: '项目工作区'},
-        ]}
+        visible={scope.chatSubview === 'conversation'}
+        conversationPanel={scope.conversationPanel}
+        onConversationPanelChange={scope.setConversationPanel}
+        projectId={projectId}
+        sessionId={sessionId}
+        agentMeta={scope.agentMeta}
+        streamMetrics={stream.streamMetrics}
+        messageBatchActive={messageBatch.active}
+        messageBatchSelectedCount={messageBatch.selectedCount}
+        messageBatchSelectedIds={messageBatch.selectedIds}
+        onExitMessageBatch={messageActions.exitMessageBatch}
+        onConfirmMessageBatchDelete={messageActions.confirmMessageBatchDelete}
+        onConfirmBatchHideMessages={messageActions.confirmBatchHideMessages}
+        onConfirmBatchUnhideMessages={messageActions.confirmBatchUnhideMessages}
+        useWebviewTranscript={useWebviewTranscript}
+        transcriptWebRef={transcriptWebRef}
+        chatScrollKey={scroll.chatScrollKey}
+        chatMessages={messages.chatMessages}
+        hasMoreMessages={messages.hasMoreMessages}
+        agentRunning={stream.agentRunning}
+        transcriptFlags={transcriptFlags}
+        webMenuCloseSignal={webMenuCloseSignal}
+        restoredTranscriptScroll={scroll.restoredTranscriptScroll}
+        defaultChatScrollToBottom={scroll.defaultChatScrollToBottom}
+        cachedChatScroll={scroll.cachedChatScroll}
+        streamingText={stream.streamingText}
+        streamingThinking={stream.streamingThinking}
+        chatRichTextEnabled={chatRichTextEnabled}
+        richRenderEpoch={richRenderEpoch}
+        loadingMoreMessages={messages.loadingMoreMessages}
+        hasWorkspaceModel={scope.hasWorkspaceModel}
+        canResumeWithoutInput={messages.canResumeWithoutInput}
+        vfsRefreshKey={scope.vfsRefreshKey}
+        sessionVfs={scope.sessionVfs}
+        sessionWorktree={scope.sessionWorktree}
+        sessionDrawerOpen={scope.sessionDrawerOpen}
+        onCloseSessionDrawer={() => scope.setSessionDrawerOpen(false)}
+        onOpenSessionRename={() => {
+          if (sessionId != null) {
+            scope.setSessionDrawerOpen(false);
+            scope.openSessionRenamePrompt(sessionId);
+          }
+        }}
+        onCompactSession={() => {
+          scope.setSessionDrawerOpen(false);
+          messageActions.handleCompactSession();
+        }}
+        onNavigateRealPrompt={() => navigation.navigate('RealPrompt')}
+        onEnterMessageBatch={() => {
+          scope.setSessionDrawerOpen(false);
+          messageActions.enterMessageBatch();
+        }}
+        modelPickerOpen={modelPickerOpen}
+        agentPickerOpen={agentPickerOpen}
+        onCloseModelPicker={() => setModelPickerOpen(false)}
+        onCloseAgentPicker={() => setAgentPickerOpen(false)}
+        onRefreshChatMeta={() => scope.refreshChatMeta().catch(() => undefined)}
+        messageMenuTarget={messageMenuTarget}
+        messageMenuAnchor={messageMenuAnchor}
+        messageMenuItems={
+          messageMenuTarget != null
+            ? buildMessageActionItems(messageMenuTarget)
+            : []
+        }
+        useWebviewMessageMenu={!useWebviewTranscript}
+        onCloseMessageMenu={closeMessageMenu}
+        onMessageMenuSelect={action => {
+          const target = messageMenuTarget;
+          closeMessageMenu();
+          if (target == null) {
+            return;
+          }
+          messageActions.handleMessageMenuAction(target, action);
+        }}
+        messageEditPrompt={messageEditPrompt}
+        onCloseMessageEdit={() => setMessageEditPrompt(undefined)}
+        onSaveMessageEdit={messageActions.handleSaveMessageEdit}
+        onChatScrollSnapshot={scroll.handleChatScrollSnapshot}
+        onLoadOlderMessages={() => messages.loadOlderMessages().catch(() => undefined)}
+        onOpenSessionFilePreview={scope.openSessionFilePreview}
+        onWebMenuOpenChange={open => {
+          setWebMenuOpen(open);
+          if (!open) {
+            setMessageMenuTarget(undefined);
+            setMessageMenuAnchor(undefined);
+          }
+        }}
+        onWebMessageMenuAction={(messageId, action) => {
+          const target = messages.chatMessages.find(m => m.id === messageId);
+          if (target == null) {
+            return;
+          }
+          messageActions.handleMessageMenuAction(target, action);
+        }}
+        onToggleMessageSelect={messageBatch.toggle}
+        onMessageLongPress={(msg, anchor) => {
+          if (stream.agentRunning) {
+            return;
+          }
+          setMessageMenuTarget(msg);
+          setMessageMenuAnchor(anchor);
+        }}
+        onAgentRunningChange={stream.setAgentRunning}
+        onStreamText={stream.handleStreamText}
+        onStreamThinking={stream.handleStreamThinking}
+        onStreamReset={stream.handleStreamReset}
+        onMessagesChanged={() =>
+          messages.handleMessagesChanged(scope.refreshChatTokenLabel).catch(() => undefined)
+        }
+        onNeedModel={() => setModelPickerOpen(true)}
+        bumpVfsRefresh={scope.bumpVfsRefresh}
+        onOpenFileEditor={scope.openFileEditor}
       />
-      {sessionListPanel === 'template' ? (
-        projectVfs && projectWorktree && projectId != null ? (
-          <View style={styles.flexFill}>
-            <VfsFileManager
-              key={`project-template-${vfsRefreshKey}`}
-              scope={{kind: 'project', projectId}}
-              vfs={projectVfs}
-              worktree={projectWorktree}
-              rootPath="/"
-              pullFromParent={{
-                scope: {kind: 'project', projectId},
-                onPulled: bumpVfsRefresh,
-              }}
-              onOpenFile={path => openFileEditor(path, 'project')}
-            />
-          </View>
-        ) : (
-          <View style={styles.placeholder}>
-            <Text style={{color: tokens.textSecondary}}>请先选择项目</Text>
-          </View>
-        )
-      ) : (
-        <>
-          <ManageHeader
-            title="会话"
-            batchMode={sessionBatch.active}
-            selectedCount={sessionBatch.selectedCount}
-            onEnterBatch={sessionBatch.enter}
-            onCancelBatch={sessionBatch.exit}
-            onDelete={confirmBatchDelete}
-            hint="选择要删除的会话"
-            normalActions={
-              <PrimaryButton
-                label="新建会话"
-                tokens={tokens}
-                onPress={() => handleCreateSession().catch(() => undefined)}
-              />
-            }
-          />
-          <FlatList
-            style={styles.sessionList}
-            contentContainerStyle={styles.sessionListContent}
-            data={sessions}
-            keyExtractor={item => item.id}
-            ListEmptyComponent={
-              <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-                暂无会话
-              </Text>
-            }
-            renderItem={({item}) => {
-              const isCurrent = item.id === sessionId;
-              return (
-                <Pressable
-                  style={[
-                    styles.sessionCard,
-                    {
-                      backgroundColor: tokens.surfaceElevated,
-                      borderColor: tokens.borderLight,
-                    },
-                    sessionBatch.isSelected(item.id) && {
-                      borderColor: tokens.primary,
-                      borderWidth: 2,
-                    },
-                  ]}
-                  onPress={() => {
-                    if (sessionBatch.active) {
-                      sessionBatch.toggle(item.id);
-                    } else {
-                      openConversation(item.id);
-                    }
-                  }}
-                  onLongPress={() => {
-                    sessionBatch.enter();
-                    sessionBatch.toggle(item.id);
-                  }}>
-                  {sessionBatch.active ? (
-                    <BatchCheckbox
-                      checked={sessionBatch.isSelected(item.id)}
-                      onToggle={() => sessionBatch.toggle(item.id)}
-                    />
-                  ) : null}
-                  <View style={styles.sessionInfo}>
-                    <Text
-                      style={[styles.sessionTitle, {color: tokens.text}]}
-                      numberOfLines={1}>
-                      {item.title ?? item.id}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.sessionMeta,
-                        {color: tokens.textSecondary},
-                      ]}>
-                      {formatRelativeTimeMs(item.updatedAtMs)}
-                      {isCurrent ? ' · 活跃中' : ''}
-                    </Text>
-                  </View>
-                  {isCurrent && !sessionBatch.active ? (
-                    <View
-                      style={[
-                        styles.currentBadge,
-                        {backgroundColor: tokens.primary},
-                      ]}>
-                      <Text style={styles.currentBadgeText}>当前</Text>
-                    </View>
-                  ) : null}
-                  {!sessionBatch.active ? (
-                    <>
-                      <Pressable
-                        hitSlop={8}
-                        onPress={e => {
-                          e.stopPropagation?.();
-                          setMenuSessionId(item.id);
-                        }}>
-                        <Text
-                          style={[
-                            styles.menuDots,
-                            {color: tokens.textSecondary},
-                          ]}>
-                          ⋮
-                        </Text>
-                      </Pressable>
-                      <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
-                        ›
-                      </Text>
-                    </>
-                  ) : null}
-                </Pressable>
-              );
-            }}
-          />
-          <BottomSheetMenu
-            visible={menuSessionId != null}
-            items={[
-              {label: '重命名', action: 'rename'},
-              {label: '复制', action: 'copy'},
-              {label: '删除', action: 'delete', danger: true},
-            ]}
-            onClose={() => setMenuSessionId(undefined)}
-            onSelect={action => {
-              const sid = menuSessionId;
-              setMenuSessionId(undefined);
-              if (sid == null) {
-                return;
-              }
-              if (action === 'rename') {
-                openSessionRenamePrompt(sid);
-              } else if (action === 'copy') {
-                handleCopySession(sid).catch(() => undefined);
-              } else if (action === 'delete') {
-                confirmDeleteSession(sid);
-              }
-            }}
-          />
-        </>
-      )}
-      </View>
+      <ChatSessionListPanel
+        tokens={tokens}
+        visible={scope.chatSubview === 'sessions'}
+        currentProject={scope.currentProject}
+        sessionListPanel={scope.sessionListPanel}
+        onSessionListPanelChange={scope.setSessionListPanel}
+        onOpenProjectDrawer={() => scope.setProjectDrawerOpen(true)}
+        projectId={projectId}
+        sessionId={sessionId}
+        sessions={scope.sessions}
+        vfsRefreshKey={scope.vfsRefreshKey}
+        projectVfs={scope.projectVfs}
+        projectWorktree={scope.projectWorktree}
+        sessionBatchActive={sessionBatch.active}
+        sessionBatchSelectedCount={sessionBatch.selectedCount}
+        onEnterSessionBatch={sessionBatch.enter}
+        onExitSessionBatch={sessionBatch.exit}
+        onConfirmBatchDelete={confirmBatchDelete}
+        onCreateSession={() => scope.handleCreateSession().catch(() => undefined)}
+        onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
+        onToggleSessionSelect={sessionBatch.toggle}
+        isSessionSelected={sessionBatch.isSelected}
+        menuSessionId={scope.menuSessionId}
+        onMenuSessionIdChange={scope.setMenuSessionId}
+        onOpenSessionRename={scope.openSessionRenamePrompt}
+        onCopySession={sid => scope.handleCopySession(sid).catch(() => undefined)}
+        onConfirmDeleteSession={scope.confirmDeleteSession}
+        bumpVfsRefresh={scope.bumpVfsRefresh}
+        onOpenFileEditor={scope.openFileEditor}
+      />
       {sessionRenameModal}
       <ProjectDrawer
-        visible={projectDrawerOpen}
-        projects={projects}
+        visible={scope.projectDrawerOpen}
+        projects={scope.projects}
         currentProjectId={projectId}
-        onClose={() => setProjectDrawerOpen(false)}
+        onClose={() => scope.setProjectDrawerOpen(false)}
         onSelect={async id => {
           await setCurrentProject(id);
-          await reloadLists();
+          await scope.reloadLists();
         }}
-        onCreateProject={handleCreateProject}
-        onRenameProject={handleRenameProject}
-        onDeleteSelected={handleDeleteProjects}
+        onCreateProject={scope.handleCreateProject}
+        onRenameProject={scope.handleRenameProject}
+        onDeleteSelected={scope.handleDeleteProjects}
       />
     </View>
   );
@@ -1719,55 +456,4 @@ export function ChatTabScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
-  projectBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  bannerLabel: {fontSize: 12},
-  bannerName: {fontSize: 15, fontWeight: '600'},
-  sessionList: {flex: 1},
-  sessionListContent: {paddingBottom: 16},
-  flexFill: {flex: 1},
-  sessionCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 5,
-    marginBottom: 12,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 8,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 1},
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  sessionInfo: {flex: 1, minWidth: 0},
-  sessionTitle: {fontSize: 16, fontWeight: '600', marginBottom: 4},
-  sessionMeta: {fontSize: 13},
-  currentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 4,
-  },
-  currentBadgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
-  menuDots: {fontSize: 18, paddingHorizontal: 4},
-  chevron: {fontSize: 22, fontWeight: '300'},
-  empty: {textAlign: 'center', marginTop: 32},
-  placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
-  chatPanel: {flex: 1},
-  subviewFill: {flex: 1, minHeight: 0},
-  panelHidden: {display: 'none'},
-  loadMoreBtn: {
-    alignSelf: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 4,
-  },
 });
