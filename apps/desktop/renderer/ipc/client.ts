@@ -9,6 +9,9 @@ import {
   type AgentRunRequest,
   type AgentSetCurrentRequest,
   type AgentStreamEventPayload,
+  type AppCheckForUpdatesResponse,
+  type AppGetInfoResponse,
+  type AppOpenExternalRequest,
   type AppUiGetResponse,
   type BootstrapStatusResponse,
   type ChatMessageDto,
@@ -581,6 +584,23 @@ export async function ipcShellMenuPopup(req: {
 
 export async function ipcShellSetTitleBarTheme(theme: "light" | "dark") {
   return bridge().invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme);
+}
+
+export async function ipcAppOpenExternal(
+  url: string,
+): Promise<IpcResult<void>> {
+  const req: AppOpenExternalRequest = { url };
+  return bridge().invoke<IpcResult<void>>(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, req);
+}
+
+export async function ipcAppGetInfo(): Promise<AppGetInfoResponse> {
+  return bridge().invoke<AppGetInfoResponse>(IPC_CHANNELS.APP_GET_INFO);
+}
+
+export async function ipcAppCheckForUpdates(): Promise<AppCheckForUpdatesResponse> {
+  return bridge().invoke<AppCheckForUpdatesResponse>(
+    IPC_CHANNELS.APP_CHECK_FOR_UPDATES,
+  );
 }
 
 export { vfsScope };

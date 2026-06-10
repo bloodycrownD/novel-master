@@ -11,9 +11,18 @@ export const DESKTOP_UI_KKV_MODULE = "nm-desktop-ui";
 export const DESKTOP_UI_KEY_THEME = "theme";
 export const DESKTOP_UI_KEY_CHAT_RICH_TEXT = "chatRichText";
 
+/** Update-check preferences (Client UI layer — not nm-preferences). */
+export const DESKTOP_UI_KEY_UPDATES_AUTO_CHECK = "updates.autoCheck";
+export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_AT = "updates.lastCheckAt";
+export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_STATUS = "updates.lastCheckStatus";
+export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
+  "updates.lastCheckRemoteVersion";
+export const DESKTOP_UI_KEY_UPDATES_DISMISSED_VERSION = "updates.dismissedVersion";
+
 export const DESKTOP_UI_DEFAULTS: Record<string, string> = {
   [DESKTOP_UI_KEY_THEME]: "light",
   [DESKTOP_UI_KEY_CHAT_RICH_TEXT]: "false",
+  [DESKTOP_UI_KEY_UPDATES_AUTO_CHECK]: "true",
 };
 
 export interface DesktopAppUiPreferences {

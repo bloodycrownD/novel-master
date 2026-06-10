@@ -40,6 +40,11 @@ import {
   handleEventsSetConfig,
 } from "./handlers/events.js";
 import {
+  handleAppCheckForUpdates,
+  handleAppGetInfo,
+  handleAppOpenExternal,
+} from "./handlers/app-info.js";
+import {
   handleShellMenuPopup,
   handleShellSetTitleBarTheme,
 } from "./handlers/shell.js";
@@ -399,5 +404,13 @@ export function registerIpcHandlers(): void {
   );
   ipcMain.handle(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, (event, theme) =>
     handleShellSetTitleBarTheme(event, theme),
+  );
+  ipcMain.handle(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, (_event, req) =>
+    handleAppOpenExternal(req),
+  );
+
+  ipcMain.handle(IPC_CHANNELS.APP_GET_INFO, () => handleAppGetInfo());
+  ipcMain.handle(IPC_CHANNELS.APP_CHECK_FOR_UPDATES, () =>
+    handleAppCheckForUpdates(),
   );
 }

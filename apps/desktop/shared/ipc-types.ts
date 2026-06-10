@@ -126,6 +126,10 @@ export const IPC_CHANNELS = {
 
   SHELL_MENU_POPUP: "nm:shell/menuPopup",
   SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
+  SHELL_OPEN_EXTERNAL: "nm:shell/openExternal",
+
+  APP_GET_INFO: "nm:app/getInfo",
+  APP_CHECK_FOR_UPDATES: "nm:app/checkForUpdates",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -228,6 +232,31 @@ export type AppUiSetRequest = {
 };
 
 export type AppUiGetResponse = IpcResult<string | undefined>;
+
+export type AppGetInfoData = {
+  readonly version: string;
+  readonly platform: NodeJS.Platform;
+  readonly name: string;
+};
+
+export type AppGetInfoResponse = IpcResult<AppGetInfoData>;
+
+export type UpdateCheckStatus = "up-to-date" | "update-available";
+
+export type UpdateCheckData = {
+  readonly localVersion: string;
+  readonly remoteVersion: string;
+  readonly tagName: string;
+  readonly releaseUrl: string;
+  readonly releaseNotesExcerpt: string;
+  readonly status: UpdateCheckStatus;
+};
+
+export type AppCheckForUpdatesResponse = IpcResult<UpdateCheckData>;
+
+export type AppOpenExternalRequest = {
+  readonly url: string;
+};
 
 /** Workspace panel scope for VFS IPC (maps chat nav → VFS domain). */
 export type WorkspacePanelScope = "global" | "session" | "chat";
