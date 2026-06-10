@@ -33,6 +33,7 @@ import {
   emitChatTranscriptTelemetry,
 } from '../../services/chat-transcript-telemetry';
 import {useTheme} from '../../theme/ThemeProvider';
+import {prepareStreamTailHtml} from './prepare-stream-tail-html';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
@@ -163,6 +164,7 @@ export const ChatTranscriptWebView = forwardRef<
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
   const prevRichTextRef = useRef(flags?.richText ?? false);
+  const prevMessagesRef = useRef(messages);
   const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
   const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
   const initialScrollRef = useRef(initialScroll);
@@ -177,7 +179,14 @@ export const ChatTranscriptWebView = forwardRef<
   } | null>(null);
   const streamRafRef = useRef<number | null>(null);
   const pendingStreamDeltasRef = useRef({text: '', thinking: ''});
+  const streamTextAccumRef = useRef('');
+  const streamThinkingAccumRef = useRef('');
+  const richTextRef = useRef(flags?.richText ?? false);
   const streamActiveRef = useRef(false);
+
+  useEffect(() => {
+    richTextRef.current = flags?.richText ?? false;
+  }, [flags?.richText]);
 
   useEffect(() => {
     initialScrollRef.current = initialScroll;
@@ -199,18 +208,34 @@ export const ChatTranscriptWebView = forwardRef<
       streamRafRef.current = null;
       const batch = pendingStreamDeltasRef.current;
       pendingStreamDeltasRef.current = {text: '', thinking: ''};
+      const richText = richTextRef.current;
       if (batch.text.length > 0) {
+        streamTextAccumRef.current += batch.text;
+        const html = prepareStreamTailHtml(streamTextAccumRef.current, richText);
         postToWeb({
           v: 1,
           type: 'streamDelta',
-          payload: {kind: 'text', delta: batch.text},
+          payload: {
+            kind: 'text',
+            delta: batch.text,
+            ...(html != null ? {html} : {}),
+          },
         });
       }
       if (batch.thinking.length > 0) {
+        streamThinkingAccumRef.current += batch.thinking;
+        const html = prepareStreamTailHtml(
+          streamThinkingAccumRef.current,
+          richText,
+        );
         postToWeb({
           v: 1,
           type: 'streamDelta',
-          payload: {kind: 'thinking', delta: batch.thinking},
+          payload: {
+            kind: 'thinking',
+            delta: batch.thinking,
+            ...(html != null ? {html} : {}),
+          },
         });
       }
     });
@@ -348,6 +373,8 @@ export const ChatTranscriptWebView = forwardRef<
       streamRafRef.current = null;
     }
     pendingStreamDeltasRef.current = {text: '', thinking: ''};
+    streamTextAccumRef.current = '';
+    streamThinkingAccumRef.current = '';
     prevStreamTextRef.current = '';
     prevStreamThinkingRef.current = '';
     streamActiveRef.current = false;
@@ -576,8 +603,14 @@ export const ChatTranscriptWebView = forwardRef<
       });
       prevFirstMessageIdRef.current = messages[0]?.id;
       prevMessageCountRef.current = messages.length;
+      prevMessagesRef.current = messages;
       return;
     }
+
+    if (prevMessagesRef.current === messages) {
+      return;
+    }
+    prevMessagesRef.current = messages;
 
     const firstId = messages[0]?.id;
     const prevFirstId = prevFirstMessageIdRef.current;

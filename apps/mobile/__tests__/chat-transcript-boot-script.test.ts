@@ -44,4 +44,10 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain("state.stream.textHtml = ''");
     expect(script).toContain("state.stream.thinkingHtml = ''");
   });
+
+  it('updates stream tail incrementally when streamDelta.html is present', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain('body.innerHTML = html');
+    expect(script).toContain('appendStreamDeltaIncremental');
+  });
 });

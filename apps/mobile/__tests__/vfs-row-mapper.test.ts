@@ -4,6 +4,8 @@ import {
   mapVfsFilePath,
   mapVfsListEntry,
   mapWorktreeRow,
+  patchDirRuleRow,
+  remapDirectChildRows,
   type MappedVfsRow,
 } from '../src/components/vfs/vfs-row-mapper';
 import type {WorktreeListRow} from '@novel-master/core';
@@ -46,6 +48,45 @@ describe('vfs-row-mapper', () => {
     expect(mapped.subtitle).toBe('3个文件');
     expect(mapped.badge).toEqual({label: '开启', tone: 'in'});
     expect(mapped.ruleEnabled).toBe(true);
+  });
+
+  it('remaps direct child file rows after inclusion change', () => {
+    const fileInShared: WorktreeListRow = {
+      kind: 'file',
+      path: '/shared/readme.md',
+      ruleState: '',
+      inclusionMode: '跟随',
+      displayState: '全内容',
+    };
+    const siblingAuto: WorktreeListRow = {
+      kind: 'file',
+      path: '/shared/other.md',
+      ruleState: '',
+      inclusionMode: '跟随',
+      displayState: '文件名',
+    };
+    const visible: MappedVfsRow[] = [
+      mapWorktreeRow(fileInShared),
+      mapWorktreeRow(siblingAuto),
+      mapWorktreeRow(fileRowAuto),
+    ];
+    const updatedMeta: WorktreeListRow[] = [
+      {...fileInShared, inclusionMode: '展示', displayState: '全内容'},
+      {...siblingAuto, displayState: '全内容'},
+    ];
+    const remapped = remapDirectChildRows(visible, '/shared', updatedMeta);
+    expect(remapped[0].badge).toEqual({label: '展示', tone: 'in'});
+    expect(remapped[0].subtitle).toBe('展示·全内容');
+    expect(remapped[1].subtitle).toBe('跟随·全内容');
+    expect(remapped[2]).toBe(visible[2]);
+  });
+
+  it('patches directory rule badge without remapping the whole row', () => {
+    const mapped = mapWorktreeRow(dirRow, 2);
+    const patched = patchDirRuleRow(mapped, false);
+    expect(patched.subtitle).toBe('2个文件');
+    expect(patched.badge).toEqual({label: '关闭', tone: 'muted'});
+    expect(patched.ruleEnabled).toBe(false);
   });
 
   it('maps directory rule off badge without count subtitle when zero files', () => {

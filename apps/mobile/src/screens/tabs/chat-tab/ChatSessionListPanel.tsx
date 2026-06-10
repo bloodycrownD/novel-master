@@ -1,7 +1,7 @@
 /**
  * Chat tab sessions subview: project banner, session list, template workspace.
  */
-import React from 'react';
+import React, {useMemo} from 'react';
 import {
   FlatList,
   Pressable,
@@ -9,7 +9,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {ChatProject, ChatSession, VfsService, WorktreeService} from '@novel-master/core';
+import type {
+  ChatProject,
+  ChatSession,
+  VfsScope,
+  VfsService,
+  WorktreeService,
+} from '@novel-master/core';
 import {BottomSheetMenu} from '../../../components/sheet/BottomSheetMenu';
 import {ManageHeader} from '../../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../../components/batch/BatchCheckbox';
@@ -81,6 +87,23 @@ function ChatSessionListPanelInner({
   bumpVfsRefresh,
   onOpenFileEditor,
 }: ChatSessionListPanelProps) {
+  const projectVfsScope = useMemo((): VfsScope | null => {
+    if (projectId == null) {
+      return null;
+    }
+    return {kind: 'project', projectId};
+  }, [projectId]);
+
+  const projectPullFromParent = useMemo(() => {
+    if (projectId == null) {
+      return undefined;
+    }
+    return {
+      scope: {kind: 'project' as const, projectId},
+      onPulled: bumpVfsRefresh,
+    };
+  }, [projectId, bumpVfsRefresh]);
+
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -117,14 +140,11 @@ function ChatSessionListPanelInner({
           <View style={styles.flexFill}>
             <VfsFileManager
               key={`project-template-${vfsRefreshKey}`}
-              scope={{kind: 'project', projectId}}
+              scope={projectVfsScope!}
               vfs={projectVfs}
               worktree={projectWorktree}
               rootPath="/"
-              pullFromParent={{
-                scope: {kind: 'project', projectId},
-                onPulled: bumpVfsRefresh,
-              }}
+              pullFromParent={projectPullFromParent}
               onOpenFile={path => onOpenFileEditor(path, 'project')}
             />
           </View>

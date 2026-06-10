@@ -846,7 +846,7 @@ export function buildTranscriptBootScript(): string {
   }
 
   function appendStreamDeltaIncremental(tail, kind, delta, html) {
-    if (html || !delta) {
+    if (!delta && !html) {
       return false;
     }
     var bubble = tail.querySelector('.bubble');
@@ -859,12 +859,40 @@ export function buildTranscriptBootScript(): string {
       if (!body) {
         return false;
       }
+      if (html && state.flags.richText) {
+        body.innerHTML = html;
+        bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
+          state.stream.textHtml,
+          [],
+          state.stream.text,
+          state.stream.thinking,
+          undefined
+        );
+        return true;
+      }
+      if (!delta) {
+        return false;
+      }
       body.insertAdjacentHTML('beforeend', escapeHtml(delta));
       return true;
     }
     if (kind === 'text') {
       var textBody = bubble.querySelector('.bubble-body');
       if (!textBody) {
+        return false;
+      }
+      if (html && state.flags.richText) {
+        textBody.innerHTML = html;
+        bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
+          state.stream.textHtml,
+          [],
+          state.stream.text,
+          state.stream.thinking,
+          undefined
+        );
+        return true;
+      }
+      if (!delta) {
         return false;
       }
       textBody.insertAdjacentHTML('beforeend', escapeHtml(delta));

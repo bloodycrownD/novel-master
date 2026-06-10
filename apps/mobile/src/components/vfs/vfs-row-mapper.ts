@@ -56,6 +56,29 @@ export function countFilesInDir(
   ).length;
 }
 
+/** Directory rule on/off badge for list rows. */
+export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
+  return ruleEnabled
+    ? {label: '开启', tone: 'in'}
+    : {label: '关闭', tone: 'muted'};
+}
+
+/** Patch one directory row after rule enabled toggles (no list reload). */
+export function patchDirRuleRow(
+  row: MappedVfsRow,
+  ruleEnabled: boolean,
+): MappedVfsRow {
+  if (row.kind !== 'dir') {
+    return row;
+  }
+  return {...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled)};
+}
+
+/** Worktree list row label after directory rule enabled toggles. */
+export function dirRuleStateLabel(ruleEnabled: boolean): string {
+  return ruleEnabled ? '规则·开' : '规则·关';
+}
+
 /** Map a worktree row to vfs-fm subtitle + badge. */
 export function mapWorktreeRow(
   row: WorktreeListRow,
@@ -73,9 +96,7 @@ export function mapWorktreeRow(
       name,
       kind: 'dir',
       subtitle,
-      badge: ruleEnabled
-        ? {label: '开启', tone: 'in'}
-        : {label: '关闭', tone: 'muted'},
+      badge: dirRuleBadge(ruleEnabled),
       ruleEnabled,
     };
   }
@@ -120,6 +141,31 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
     badge: {label: '跟随', tone: 'follow'},
     ruleEnabled: false,
   };
+}
+
+/**
+ * Re-map direct children of `parentPath` from fresh worktree metadata.
+ * Keeps list order stable; updates badges/subtitles after inclusion toggles.
+ */
+export function remapDirectChildRows(
+  rows: readonly MappedVfsRow[],
+  parentPath: string,
+  allRows: readonly WorktreeListRow[],
+): MappedVfsRow[] {
+  const metaByPath = new Map(allRows.map(r => [r.path, r]));
+  return rows.map(row => {
+    if (!isDirectChild(parentPath, row.path)) {
+      return row;
+    }
+    const meta = metaByPath.get(row.path);
+    if (!meta) {
+      return row;
+    }
+    if (meta.kind === 'dir') {
+      return mapWorktreeRow(meta, countFilesInDir(allRows, meta.path));
+    }
+    return mapWorktreeRow(meta);
+  });
 }
 
 /** @deprecated Use {@link mapVfsListEntry}. */

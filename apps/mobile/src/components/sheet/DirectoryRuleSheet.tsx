@@ -19,7 +19,6 @@ import {
   type SortOrder,
 } from '@novel-master/core';
 import {AppModal} from '../ui/AppModal';
-import {FormSwitchRow} from '../form/FormSwitchRow';
 import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -75,7 +74,6 @@ export function DirectoryRuleSheet({
   const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
     DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
   );
-  const [ruleEnabled, setRuleEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -95,12 +93,7 @@ export function DirectoryRuleSheet({
         initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
       ),
     );
-    setRuleEnabled(
-      rootRuleLocked
-        ? true
-        : (initial?.ruleEnabled ?? true),
-    );
-  }, [visible, initial, logicalPath, rootRuleLocked]);
+  }, [visible, initial, logicalPath]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -112,7 +105,9 @@ export function DirectoryRuleSheet({
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
         fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
-        ruleEnabled: rootRuleLocked ? true : ruleEnabled,
+        ruleEnabled: rootRuleLocked
+          ? true
+          : (initial?.ruleEnabled ?? true),
       });
       onClose();
     } finally {
@@ -142,16 +137,6 @@ export function DirectoryRuleSheet({
             style={styles.form}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
-            <FormSwitchRow
-              label="规则启用"
-              tokens={tokens}
-              value={ruleEnabled}
-              onValueChange={setRuleEnabled}
-              disabled={rootRuleLocked}
-              description={
-                rootRuleLocked ? '根目录规则不可关闭' : undefined
-              }
-            />
             <FieldLabel tokens={tokens} text="排序字段" />
             <OptionRow
               options={SORT_FIELDS}

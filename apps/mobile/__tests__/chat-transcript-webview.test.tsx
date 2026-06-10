@@ -84,6 +84,14 @@ function simulateWebReady(
   simulateWebMessage(root, 'ready', {version: 'test'});
 }
 
+async function flushAnimationFrame(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
 describe('ChatTranscriptWebView', () => {
   beforeEach(() => {
     clearMockWebViewPostMessages();
@@ -128,6 +136,7 @@ describe('ChatTranscriptWebView', () => {
         />,
       );
     });
+    await flushAnimationFrame();
 
     const typesAfterStream = messageTypesSince(baseline);
     expect(typesAfterStream).not.toContain('sessionSnapshot');
@@ -145,6 +154,7 @@ describe('ChatTranscriptWebView', () => {
         />,
       );
     });
+    await flushAnimationFrame();
 
     const typesAfterMoreStream = messageTypesSince(baseline2);
     expect(typesAfterMoreStream).not.toContain('sessionSnapshot');
@@ -185,6 +195,7 @@ describe('ChatTranscriptWebView', () => {
         />,
       );
     });
+    await flushAnimationFrame();
 
     const streamMessages = mockWebViewPostMessages
       .slice(baseline)
@@ -236,6 +247,7 @@ describe('ChatTranscriptWebView', () => {
         />,
       );
     });
+    await flushAnimationFrame();
 
     const thinkingDelta = mockWebViewPostMessages
       .slice(baseline)

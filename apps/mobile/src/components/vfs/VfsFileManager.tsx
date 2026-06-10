@@ -1,7 +1,7 @@
 /**
  * VFS file manager (prototype vfs-fm): list, rules, CRUD, open file editor.
  */
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -30,9 +30,12 @@ import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
+  dirRuleStateLabel,
   mapVfsListEntry,
   mapWorktreeRow,
   parentLogicalPath,
+  patchDirRuleRow,
+  remapDirectChildRows,
   type MappedVfsRow,
 } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
@@ -52,6 +55,7 @@ import {
   defaultDirRuleForm,
   dirRuleToForm,
   migrateWorktreeDirRename,
+  toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
 import {toastMessage} from '../../errors/toast-message';
@@ -140,24 +144,58 @@ export function VfsFileManager({
   }, [root]);
 
   const [worktreeRows, setWorktreeRows] = useState<WorktreeListRow[]>([]);
+  const vfsRef = useRef(vfs);
+  const worktreeRef = useRef(worktree);
+  const scopeRef = useRef(scope);
+  const reloadInFlightRef = useRef(false);
+  vfsRef.current = vfs;
+  worktreeRef.current = worktree;
+  scopeRef.current = scope;
+
+  const fetchWorktreeRows = useCallback(async (): Promise<WorktreeListRow[]> => {
+    const scopeNow = scopeRef.current;
+    const worktreeSvc = worktreeRef.current;
+    if (scopeNow.kind === 'session') {
+      const snap = await getOrRefreshSessionWorktreeSnapshot(runtime, {
+        projectId: scopeNow.projectId,
+        sessionId: scopeNow.sessionId,
+      });
+      return [...snap.listRows];
+    }
+    return worktreeSvc.buildListRows();
+  }, [runtime]);
+
+  const applyWorktreeRowsToVisibleList = useCallback(
+    (allRows: WorktreeListRow[]) => {
+      setWorktreeRows(allRows);
+      setRows(prev => remapDirectChildRows(prev, currentPath, allRows));
+    },
+    [currentPath],
+  );
+
+  const refreshVisibleRowsFromWorktree = useCallback(async () => {
+    invalidateSessionSnapshot();
+    const allRows = await fetchWorktreeRows();
+    applyWorktreeRowsToVisibleList(allRows);
+  }, [
+    fetchWorktreeRows,
+    applyWorktreeRowsToVisibleList,
+    invalidateSessionSnapshot,
+  ]);
 
   const reload = useCallback(async () => {
+    if (reloadInFlightRef.current) {
+      return;
+    }
+    reloadInFlightRef.current = true;
+    const vfsSvc = vfsRef.current;
+    const worktreeSvc = worktreeRef.current;
     setLoading(true);
     try {
-      const loadWorktreeRows = async (): Promise<WorktreeListRow[]> => {
-        if (scope.kind === 'session') {
-          const snap = await getOrRefreshSessionWorktreeSnapshot(runtime, {
-            projectId: scope.projectId,
-            sessionId: scope.sessionId,
-          });
-          return [...snap.listRows];
-        }
-        return worktree.buildListRows();
-      };
       const [listEntries, allRows, dirRule] = await Promise.all([
-        vfs.list(currentPath),
-        loadWorktreeRows(),
-        worktree.getDirRule(currentPath),
+        vfsSvc.list(currentPath),
+        fetchWorktreeRows(),
+        worktreeSvc.getDirRule(currentPath),
       ]);
       setWorktreeRows(allRows);
       const metaByPath = new Map<string, WorktreeListRow>();
@@ -207,9 +245,10 @@ export function VfsFileManager({
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
+      reloadInFlightRef.current = false;
       setLoading(false);
     }
-  }, [currentPath, vfs, worktree, scope, runtime]);
+  }, [currentPath, fetchWorktreeRows, showToast]);
 
   const reloadAfterMutation = useCallback(async () => {
     invalidateSessionSnapshot();
@@ -305,6 +344,7 @@ export function VfsFileManager({
   const entityMenuItems: SheetMenuItem[] = menuRow
     ? menuRow.kind === 'dir'
       ? [
+          {label: '状态变更', action: 'toggle-include'},
           {label: '重命名', action: 'rename'},
           {label: '删除', action: 'delete', danger: true},
         ]
@@ -342,10 +382,41 @@ export function VfsFileManager({
         }
         return;
       }
-      if (action === 'toggle-include' && menuRow.kind === 'file' && meta) {
-        await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
-        await reloadAfterMutation();
-        return;
+      if (action === 'toggle-include' && meta) {
+        if (menuRow.kind === 'file') {
+          await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
+          await refreshVisibleRowsFromWorktree();
+          return;
+        }
+        if (menuRow.kind === 'dir') {
+          const nextEnabled = await toggleDirRuleEnabled(
+            worktree,
+            menuPath,
+            menuRow.ruleEnabled,
+          );
+          showToast(nextEnabled ? '目录规则已开启' : '目录规则已关闭');
+          setWorktreeRows(prev =>
+            prev.map(row =>
+              row.path === menuPath && row.kind === 'dir'
+                ? {...row, ruleState: dirRuleStateLabel(nextEnabled)}
+                : row,
+            ),
+          );
+          setRows(prev =>
+            prev.map(row =>
+              row.path === menuPath ? patchDirRuleRow(row, nextEnabled) : row,
+            ),
+          );
+          invalidateSessionSnapshot();
+          // WHY: child file inclusion/display only changes inside the toggled dir.
+          if (
+            currentPath === menuPath ||
+            currentPath.startsWith(`${menuPath}/`)
+          ) {
+            await reload();
+          }
+          return;
+        }
       }
       if (action === 'rename') {
         openPrompt({

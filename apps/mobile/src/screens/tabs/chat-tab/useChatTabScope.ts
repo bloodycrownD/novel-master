@@ -1,7 +1,7 @@
 /**
  * Chat tab local UI scope: projects/sessions lists, subviews, drawers, VFS handles.
  */
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatProject, ChatSession} from '@novel-master/core';
@@ -117,7 +117,8 @@ export function useChatTabScope({
       } catch {
         setCurrentProjectMeta(undefined);
       }
-      setSessions(await runtime.sessions.listByProject(pid));
+      const nextSessions = await runtime.sessions.listByProject(pid);
+      setSessions(nextSessions);
     } else {
       setCurrentProjectMeta(undefined);
       setSessions([]);
@@ -329,24 +330,35 @@ export function useChatTabScope({
     [openFileEditor],
   );
 
-  const sessionVfs =
-    projectId != null && sessionId != null
-      ? runtime.sessionVfs(projectId, sessionId)
-      : null;
-  const sessionWorktree =
-    projectId != null && sessionId != null
-      ? runtime.worktree({
-          kind: 'session',
-          projectId,
-          sessionId,
-        })
-      : null;
-  const projectVfs =
-    projectId != null ? runtime.projectVfs(projectId) : null;
-  const projectWorktree =
-    projectId != null
-      ? runtime.worktree({kind: 'project', projectId})
-      : null;
+  const sessionVfs = useMemo(
+    () =>
+      projectId != null && sessionId != null
+        ? runtime.sessionVfs(projectId, sessionId)
+        : null,
+    [runtime, projectId, sessionId],
+  );
+  const sessionWorktree = useMemo(
+    () =>
+      projectId != null && sessionId != null
+        ? runtime.worktree({
+            kind: 'session',
+            projectId,
+            sessionId,
+          })
+        : null,
+    [runtime, projectId, sessionId],
+  );
+  const projectVfs = useMemo(
+    () => (projectId != null ? runtime.projectVfs(projectId) : null),
+    [runtime, projectId],
+  );
+  const projectWorktree = useMemo(
+    () =>
+      projectId != null
+        ? runtime.worktree({kind: 'project', projectId})
+        : null,
+    [runtime, projectId],
+  );
 
   return {
     agentMeta,

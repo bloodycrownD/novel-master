@@ -32,4 +32,23 @@ describe('useDismissOverlaysOnBlur', () => {
     });
     expect(dismiss).toHaveBeenCalledTimes(1);
   });
+
+  it('does not call dismiss when dismiss callback identity changes', () => {
+    const dismiss1 = jest.fn();
+    const dismiss2 = jest.fn();
+    let renderer: TestRenderer.ReactTestRenderer;
+    act(() => {
+      renderer = TestRenderer.create(<TestHost dismiss={dismiss1} />);
+    });
+    act(() => {
+      renderer!.update(<TestHost dismiss={dismiss2} />);
+    });
+    expect(dismiss1).not.toHaveBeenCalled();
+    expect(dismiss2).not.toHaveBeenCalled();
+    act(() => {
+      focusCleanup?.();
+    });
+    expect(dismiss2).toHaveBeenCalledTimes(1);
+    expect(dismiss1).not.toHaveBeenCalled();
+  });
 });

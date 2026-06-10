@@ -1,9 +1,14 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React from 'react';
+import React, {useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {ChatMessage, VfsService, WorktreeService} from '@novel-master/core';
+import type {
+  ChatMessage,
+  VfsScope,
+  VfsService,
+  WorktreeService,
+} from '@novel-master/core';
 import {AgentPickerModal} from '../../../components/agent/AgentPickerModal';
 import {ChatComposer} from '../../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../../components/chat/ChatMetaBar';
@@ -181,6 +186,13 @@ export function ChatConversationPanel({
   bumpVfsRefresh,
   onOpenFileEditor,
 }: ChatConversationPanelProps) {
+  const sessionVfsScope = useMemo((): VfsScope | null => {
+    if (projectId == null || sessionId == null) {
+      return null;
+    }
+    return {kind: 'session', projectId, sessionId};
+  }, [projectId, sessionId]);
+
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
@@ -293,11 +305,7 @@ export function ChatConversationPanel({
               }>
               <VfsFileManager
                 key={`session-vfs-${vfsRefreshKey}`}
-                scope={{
-                  kind: 'session',
-                  projectId: projectId!,
-                  sessionId,
-                }}
+                scope={sessionVfsScope!}
                 vfs={sessionVfs}
                 worktree={sessionWorktree}
                 rootPath="/"

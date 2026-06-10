@@ -474,6 +474,16 @@ export {
   AgentRunResolveError,
 } from "./service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "./service/agent/logic/agent-run-shared.js";
+export {
+  runAgentTurn,
+  AgentTurnError,
+} from "./service/agent/logic/run-agent-turn.js";
+export type {
+  AgentTurnScope,
+  AgentTurnRuntimePort,
+  RunAgentTurnOptions,
+  RunAgentTurnAfterResolveContext,
+} from "./service/agent/logic/run-agent-turn.js";
 export { estimateTokens } from "./domain/compaction-conditions/logic/token-estimate.js";
 export {
   createDefaultTokenCounterRegistry,

@@ -143,16 +143,29 @@ export function ChatTabScreen() {
     setWebMenuCloseSignal(signal => signal + 1);
   }, []);
 
+  const {
+    setProjectDrawerOpen,
+    setSessionDrawerOpen,
+    setSessionRenamePrompt,
+    setMenuSessionId,
+  } = scope;
+
   const dismissAllOverlays = useCallback(() => {
-    scope.setProjectDrawerOpen(false);
-    scope.setSessionDrawerOpen(false);
+    setProjectDrawerOpen(false);
+    setSessionDrawerOpen(false);
     setModelPickerOpen(false);
     setAgentPickerOpen(false);
     closeMessageMenu();
     setMessageEditPrompt(undefined);
-    scope.setSessionRenamePrompt(undefined);
-    scope.setMenuSessionId(undefined);
-  }, [closeMessageMenu, scope]);
+    setSessionRenamePrompt(undefined);
+    setMenuSessionId(undefined);
+  }, [
+    closeMessageMenu,
+    setProjectDrawerOpen,
+    setSessionDrawerOpen,
+    setSessionRenamePrompt,
+    setMenuSessionId,
+  ]);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
@@ -291,9 +304,10 @@ export function ChatTabScreen() {
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <AppHeader pageKey="chat" />
+      {scope.chatSubview === 'conversation' ? (
       <ChatConversationPanel
         tokens={tokens}
-        visible={scope.chatSubview === 'conversation'}
+        visible
         conversationPanel={scope.conversationPanel}
         onConversationPanelChange={scope.setConversationPanel}
         projectId={projectId}
@@ -406,6 +420,7 @@ export function ChatTabScreen() {
         bumpVfsRefresh={scope.bumpVfsRefresh}
         onOpenFileEditor={scope.openFileEditor}
       />
+      ) : null}
       <ChatSessionListPanel
         tokens={tokens}
         visible={scope.chatSubview === 'sessions'}
