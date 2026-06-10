@@ -268,11 +268,11 @@ queueMicrotask(() => bus.publish(...));
 
 ## 实现检查清单
 
-- [ ] `sse-chunk-emitter.ts` 已实现并单测
-- [ ] `postSseViaXhr` 已删除 v1.0.2 drain/stall
-- [ ] `onload` 同步 flush + resolve
-- [ ] `llm-sse-transport.test.ts` U-04～U-06 通过
-- [ ] issue 文档已更新
-- [ ] Android T-M1～T-M5 通过
-- [ ] Desktop T-D1 通过
-- [ ] PR-2 异步 stream bus 已实现并单测
+- [x] `sse-chunk-emitter.ts` 已实现并单测
+- [x] `postSseViaXhr` 已删除 v1.0.2 drain/stall
+- [x] `onload` 同步 flush + resolve
+- [x] `llm-sse-transport.test.ts` U-04～U-08 通过
+- [x] issue 文档已更新
+- [ ] Android T-M1～T-M5 通过（待设备验收）
+- [ ] Desktop T-D1 通过（待手工回归）
+- [x] PR-2 异步 stream bus 已实现并单测
