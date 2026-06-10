@@ -11,6 +11,7 @@ import {
   vfsNotADirectory,
   vfsNotFound,
 } from "@/errors/vfs-errors.js";
+import type { VfsRestorePort } from "../ports/vfs-restore.port.js";
 import type { VfsService } from "../ports/vfs-service.port.js";
 
 /** Strip trailing slash except for root `/`. */
@@ -47,7 +48,7 @@ export function remapPathUnderDir(
  * IS_DIRECTORY → idempotent success.
  */
 export async function mkdirIgnoreExistingDirectory(
-  vfs: VfsService,
+  vfs: VfsRestorePort,
   path: string,
 ): Promise<void> {
   try {
