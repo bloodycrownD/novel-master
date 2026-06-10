@@ -20,6 +20,7 @@ import {
   RegexRuleEditorView,
   RegexRulesView,
 } from "../features/settings/SettingsViews";
+import { AboutView } from "../features/settings/AboutView";
 import { WorkspaceSettingsView } from "../features/settings/WorkspaceSettingsView";
 
 interface SettingsOverlayProps {
@@ -86,6 +87,8 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
     switch (viewId) {
       case "workspace":
         return <WorkspaceSettingsView />;
+      case "about":
+        return <AboutView />;
       case "dataManagement":
         return <DataManagementView />;
       case "agentsSettings":

@@ -4317,3 +4317,31 @@ html[data-theme="dark"] .chat-message {
 .tool-call-card--group-item {
   margin: 0;
 }
+
+/* About settings view */
+.about-view__header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px 8px;
+  text-align: center;
+}
+
+.about-view__logo {
+  border-radius: 16px;
+  box-shadow: var(--shadow-card-subtle);
+}
+
+.about-view__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.about-view__version {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+}

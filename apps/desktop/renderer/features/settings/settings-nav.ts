@@ -2,6 +2,7 @@
 
 export type SettingsViewId =
   | "workspace"
+  | "about"
   | "dataManagement"
   | "agentsSettings"
   | "agentEditor"
@@ -38,10 +39,15 @@ export const SETTINGS_NAV = [
     label: "数据",
     items: [{ id: "dataManagement" as const, label: "备份与恢复", icon: "💾" }],
   },
+  {
+    label: "应用",
+    items: [{ id: "about" as const, label: "关于", icon: "ℹ️" }],
+  },
 ];
 
 export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   workspace: "常规",
+  about: "关于",
   dataManagement: "备份与恢复",
   agentsSettings: "Agent",
   providers: "服务商与模型",

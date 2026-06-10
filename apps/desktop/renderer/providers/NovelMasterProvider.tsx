@@ -11,6 +11,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { AutoUpdateCheckHost } from "../hooks/useAutoUpdateCheck";
 import {
   getBootstrapStatus,
   rebootstrap,
@@ -140,6 +141,7 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
 
   return (
     <NovelMasterContext.Provider value={value}>
+      <AutoUpdateCheckHost />
       {children}
     </NovelMasterContext.Provider>
   );
