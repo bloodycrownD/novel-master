@@ -60,6 +60,11 @@
 - TypeScript 6，ESM
 - `tsconfig.base.json` 共享编译选项
 
+## `@novel-master/core` 导出与分层
+
+- **子路径 export**（`package.json` `exports`）：`./tdbc`、`./sksp`、`./nmtp`、`./front-matter`、`./kkv` — 宿主按需 import，避免从根 `index.ts` 拉全量桶。
+- **Repository 实现目标目录**：`domain/*/repositories/impl` 中的持久化适配器应逐步迁至 `infra/*/repositories`（本迭代仅文档约定，不全量搬迁）。
+
 ## `@novel-master/core` 路径别名
 
 - `packages/core` 内使用 **`@/*` → `src/*`**（见 `packages/core/tsconfig.json`）。

@@ -255,6 +255,9 @@ export function buildChatListItems(
             thinkingParts.push(block.text);
           }
           break;
+        case 'redacted_thinking':
+          thinkingParts.push('思考（已脱敏）');
+          break;
         case 'tool_use':
           toolUses.push(block);
           break;

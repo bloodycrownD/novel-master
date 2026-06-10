@@ -51,7 +51,7 @@ export type ChatSessionListPanelProps = {
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
 };
 
-export function ChatSessionListPanel({
+function ChatSessionListPanelInner({
   tokens,
   visible,
   currentProject,
@@ -270,6 +270,8 @@ export function ChatSessionListPanel({
     </View>
   );
 }
+
+export const ChatSessionListPanel = React.memo(ChatSessionListPanelInner);
 
 const styles = StyleSheet.create({
   subviewFill: {flex: 1, minHeight: 0},
