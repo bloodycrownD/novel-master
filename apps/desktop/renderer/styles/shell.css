@@ -2629,6 +2629,9 @@ html:not([data-theme="dark"]) #explorer-pane {
   bottom: auto;
   left: 50%;
   transform: translateX(-50%) translateY(-28px);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   padding: 7px 14px;
   border: none;
   border-radius: 999px;
@@ -2642,7 +2645,7 @@ html:not([data-theme="dark"]) #explorer-pane {
     transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   z-index: 1600;
   pointer-events: none;
-  max-width: min(320px, calc(100vw - 32px));
+  max-width: min(360px, calc(100vw - 32px));
   text-align: center;
   white-space: normal;
   word-break: break-word;
@@ -2654,6 +2657,33 @@ html:not([data-theme="dark"]) #explorer-pane {
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   will-change: opacity, transform;
+}
+
+.shell-toast.has-action {
+  pointer-events: auto;
+}
+
+.shell-toast__message {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.shell-toast__action {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  cursor: pointer;
+}
+
+.shell-toast__action:hover {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .shell-toast.is-visible {

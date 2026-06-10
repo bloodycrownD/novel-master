@@ -1,1 +1,1 @@
-export { showToast, subscribeToast } from "./toast-bus";
+export { showToast, subscribeToast, type ToastOptions } from "./toast-bus";

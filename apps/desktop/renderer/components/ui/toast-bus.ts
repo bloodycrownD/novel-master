@@ -1,4 +1,15 @@
-type ToastListener = (message: string) => void;
+export type ToastOptions = {
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+export type ToastState = {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
+type ToastListener = (state: ToastState | null) => void;
 
 const listeners = new Set<ToastListener>();
 let hideTimer: ReturnType<typeof setTimeout> | undefined;
@@ -9,16 +20,26 @@ export function subscribeToast(listener: ToastListener): () => void {
   return () => listeners.delete(listener);
 }
 
-export function showToast(message: string, durationMs = 3200): void {
+function emit(state: ToastState | null): void {
   for (const listener of listeners) {
-    listener(message);
+    listener(state);
   }
+}
+
+export function showToast(
+  message: string,
+  durationMs = 3200,
+  options?: ToastOptions,
+): void {
+  emit({
+    message,
+    actionLabel: options?.actionLabel,
+    onAction: options?.onAction,
+  });
   if (hideTimer) {
     clearTimeout(hideTimer);
   }
   hideTimer = setTimeout(() => {
-    for (const listener of listeners) {
-      listener("");
-    }
+    emit(null);
   }, durationMs);
 }
