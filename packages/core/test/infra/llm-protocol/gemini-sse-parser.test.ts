@@ -71,6 +71,21 @@ describe("gemini-sse-parser", () => {
     }
   });
 
+  it("functionCall thought_signature stays on tool_use, not empty thinking block", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"read","args":{"path":"/a"},"id":"call_1"},"thought_signature":"sig-fc-only"}]}}]}\n',
+    );
+    const { blocks } = finishGeminiSse(state);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]?.type, "tool_use");
+    if (blocks[0]?.type === "tool_use") {
+      assert.equal(blocks[0].name, "read");
+      assert.equal(blocks[0].thinkingSignature, "sig-fc-only");
+    }
+  });
+
   it("T7: abort partial keeps thinking without empty text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(

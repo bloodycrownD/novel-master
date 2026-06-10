@@ -100,17 +100,22 @@ function processGeminiResponseChunk(
     if (!isRecord(part)) {
       continue;
     }
-    const thoughtSignature = readThoughtSignature(part);
-    if (thoughtSignature != null) {
-      state.thinkingSignature = thoughtSignature;
-    }
     if (typeof part.text === "string" && part.text !== "") {
       if (part.thought === true) {
         state.thinkingParts.push(part.text);
         onStream?.({ type: "thinking-delta", text: part.text });
+        const thoughtSignature = readThoughtSignature(part);
+        if (thoughtSignature != null) {
+          state.thinkingSignature = thoughtSignature;
+        }
       } else {
         // Gemini gateways may also embed <thought> / >thought markers in plain text.
         feedInlineThinkingAwareTextDelta(state, part.text, onStream);
+      }
+    } else if (part.thought === true) {
+      const thoughtSignature = readThoughtSignature(part);
+      if (thoughtSignature != null) {
+        state.thinkingSignature = thoughtSignature;
       }
     }
     if (part.functionCall != null) {
