@@ -57,6 +57,20 @@ describe("gemini-sse-parser", () => {
     }
   });
 
+  it("extracts thought_signature from streamed thinking parts", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"text":"plan","thought":true,"thought_signature":"sig-stream"}]}}]}\n',
+    );
+    const { blocks } = finishGeminiSse(state);
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]?.type, "thinking");
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].thinkingSignature, "sig-stream");
+    }
+  });
+
   it("T7: abort partial keeps thinking without empty text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(

@@ -26,6 +26,7 @@ function blockBodyText(block: ContentBlock): string | null {
       return body === "" ? head : `${head}\n\n${body}`;
     }
     case "thinking":
+    case "redacted_thinking":
       // Omitted from LLM prompt body by design.
       return null;
     default:
@@ -65,7 +66,10 @@ export function formatChatMessageForCliPreview(
     (b) => b.type === "tool_result",
   );
   const other = message.content.blocks.filter(
-    (b) => b.type !== "tool_result" && b.type !== "thinking",
+    (b) =>
+      b.type !== "tool_result" &&
+      b.type !== "thinking" &&
+      b.type !== "redacted_thinking",
   );
 
   const segments: Array<{ role: string; body: string }> = [];

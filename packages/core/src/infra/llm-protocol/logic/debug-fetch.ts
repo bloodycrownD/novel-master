@@ -27,6 +27,19 @@ export function isLlmFetchDebugEnabled(): boolean {
   return g.__NM_DEBUG_LLM_FETCH__ === true || g.__DEV__ === true;
 }
 
+/** Redact sensitive query params (e.g. Gemini `?key=`) from logged URLs. */
+export function redactUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    if (u.searchParams.has("key")) {
+      u.searchParams.set("key", "***");
+    }
+    return u.toString();
+  } catch {
+    return url.replace(/([?&]key=)[^&]+/gi, "$1***");
+  }
+}
+
 function redactHeaders(
   headers: RequestInit["headers"],
 ): Record<string, string> {
@@ -118,7 +131,7 @@ export function createLoggingFetch(base: FetchFn = globalThis.fetch): FetchFn {
           : input.url;
     const method = init?.method ?? "GET";
 
-    console.log(LOG_TAG, "→", method, url);
+    console.log(LOG_TAG, "→", method, redactUrl(url));
     console.log(LOG_TAG, "  headers", redactHeaders(init?.headers));
     const bodySummary = summarizeBody(init?.body ?? undefined);
     if (bodySummary !== undefined) {

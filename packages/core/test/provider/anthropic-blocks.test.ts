@@ -32,6 +32,17 @@ describe("anthropic content mapper", () => {
     assert.equal(blocks[1]!.type === "text" && blocks[1].text, "done");
   });
 
+  it("parses thinking without signature (legacy payload)", () => {
+    const blocks = anthropicContentToBlocks([
+      { type: "thinking", thinking: "old" },
+    ]);
+    assert.equal(blocks.length, 1);
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].text, "old");
+      assert.equal(blocks[0].thinkingSignature, undefined);
+    }
+  });
+
   it("blocksToAnthropicContent includes tool_use", () => {
     const api = blocksToAnthropicContent([
       {

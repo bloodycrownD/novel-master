@@ -44,6 +44,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Read Gemini wire thought_signature (snake or camelCase). */
+function readThoughtSignature(part: Record<string, unknown>): string | undefined {
+  const sig = part.thought_signature ?? part.thoughtSignature;
+  return typeof sig === "string" && sig !== "" ? sig : undefined;
+}
+
 function buildToolUseLookup(messages: readonly ChatMessage[]): ToolUseLookup {
   const idToName = new Map<string, string>();
   const idToUse = new Map<string, ToolUseBlock>();
@@ -175,6 +181,7 @@ export function blocksToGeminiParts(
   ctx: ResolveContext = { lookup: buildToolUseLookup([]) },
 ): GeminiPart[] {
   const parts: GeminiPart[] = [];
+  let toolUseSignatureEmitted = false;
   for (const block of blocks) {
     switch (block.type) {
       case "text":
@@ -182,20 +189,34 @@ export function blocksToGeminiParts(
           parts.push({ text: block.text });
         }
         break;
-      case "tool_use":
-        parts.push({
+      case "tool_use": {
+        const part: GeminiPart = {
           functionCall: {
             name: block.name,
             args: block.input,
             id: block.id,
           },
-        });
+        };
+        // Parallel function calls: only the first part carries thought_signature.
+        if (!toolUseSignatureEmitted && block.thinkingSignature != null) {
+          part.thought_signature = block.thinkingSignature;
+          toolUseSignatureEmitted = true;
+        }
+        parts.push(part);
         break;
+      }
       case "tool_result":
         parts.push(toolResultToGeminiPart(block, ctx));
         break;
-      case "thinking":
-        parts.push({ text: block.text, thought: true });
+      case "thinking": {
+        const part: GeminiPart = { text: block.text, thought: true };
+        if (block.thinkingSignature != null) {
+          part.thought_signature = block.thinkingSignature;
+        }
+        parts.push(part);
+        break;
+      }
+      case "redacted_thinking":
         break;
       case "image":
         throw new ProviderError(
@@ -219,13 +240,22 @@ export function geminiPartsToBlocks(
     if (!isRecord(part)) {
       continue;
     }
+    const thoughtSignature = readThoughtSignature(part);
     if (typeof part.text === "string" && part.text !== "") {
       if (part.thought === true) {
-        blocks.push({ type: "thinking", text: part.text });
+        blocks.push({
+          type: "thinking",
+          text: part.text,
+          ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
+        });
       } else {
         const split = splitInlineThinkingFromText(part.text);
         if (split.thinking !== "") {
-          blocks.push({ type: "thinking", text: split.thinking });
+          blocks.push({
+            type: "thinking",
+            text: split.thinking,
+            ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
+          });
         }
         if (split.visible !== "") {
           blocks.push({ type: "text", text: split.visible });
@@ -245,6 +275,7 @@ export function geminiPartsToBlocks(
         id,
         name: functionCall.name,
         input: args,
+        ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
       });
       continue;
     }

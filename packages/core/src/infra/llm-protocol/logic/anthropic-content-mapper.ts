@@ -14,7 +14,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** NM blocks ù?Anthropic message `content` array. */
+/** NM blocks ??Anthropic message `content` array. */
 export function blocksToAnthropicContent(
   blocks: readonly ContentBlock[],
   toolNames?: AnthropicToolNameWire,
@@ -51,15 +51,25 @@ export function blocksToAnthropicContent(
           tool_use_id: block.toolUseId,
           content: block.content,
         };
-      case "thinking":
-        return { type: "thinking", thinking: block.text };
+      case "thinking": {
+        const item: AnthropicContentItem = {
+          type: "thinking",
+          thinking: block.text,
+        };
+        if (block.thinkingSignature != null) {
+          item.signature = block.thinkingSignature;
+        }
+        return item;
+      }
+      case "redacted_thinking":
+        return { type: "redacted_thinking", data: block.data };
       default:
         return { type: "text", text: "" };
     }
   });
 }
 
-/** Anthropic API `content[]` ù?NM blocks (unknown types are skipped). */
+/** Anthropic API `content[]` ??NM blocks (unknown types are skipped). */
 export function anthropicContentToBlocks(
   content: readonly unknown[],
   toolNames?: AnthropicToolNameWire,
@@ -133,7 +143,32 @@ export function anthropicContentToBlocks(
             : typeof item.text === "string"
               ? item.text
               : "";
-        blocks.push({ type: "thinking", text });
+        const signature =
+          typeof item.signature === "string" && item.signature !== ""
+            ? item.signature
+            : undefined;
+        if (text !== "" || signature != null) {
+          blocks.push({
+            type: "thinking",
+            text,
+            ...(signature != null ? { thinkingSignature: signature } : {}),
+          });
+        }
+        break;
+      }
+      case "redacted_thinking": {
+        const data = typeof item.data === "string" ? item.data : "";
+        const signature =
+          typeof item.signature === "string" && item.signature !== ""
+            ? item.signature
+            : undefined;
+        if (data !== "") {
+          blocks.push({
+            type: "redacted_thinking",
+            data,
+            ...(signature != null ? { thinkingSignature: signature } : {}),
+          });
+        }
         break;
       }
       default:
@@ -143,7 +178,7 @@ export function anthropicContentToBlocks(
   return blocks;
 }
 
-/** Session history ù?Anthropic `messages[]` (tool_result ù?user role). */
+/** Session history ??Anthropic `messages[]` (tool_result ??user role). */
 export function chatMessagesToAnthropic(
   messages: readonly ChatMessage[],
   toolNames?: AnthropicToolNameWire,

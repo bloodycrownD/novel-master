@@ -10,7 +10,8 @@ export type ContentBlock =
   | ImageBlock
   | ToolUseBlock
   | ToolResultBlock
-  | ThinkingBlock;
+  | ThinkingBlock
+  | RedactedThinkingBlock;
 
 export interface TextBlock {
   readonly type: "text";
@@ -31,6 +32,8 @@ export interface ToolUseBlock {
   readonly id: string;
   readonly name: string;
   readonly input: Record<string, unknown>;
+  /** Opaque round-trip signature (Gemini thought_signature on functionCall parts). */
+  readonly thinkingSignature?: string;
 }
 
 export interface ToolResultBlock {
@@ -42,6 +45,15 @@ export interface ToolResultBlock {
 export interface ThinkingBlock {
   readonly type: "thinking";
   readonly text: string;
+  /** Opaque round-trip signature (Gemini thought_signature / Anthropic signature). */
+  readonly thinkingSignature?: string;
+}
+
+export interface RedactedThinkingBlock {
+  readonly type: "redacted_thinking";
+  /** Anthropic redacted_thinking.data — opaque, must round-trip verbatim. */
+  readonly data: string;
+  readonly thinkingSignature?: string;
 }
 
 /** Message body: only `{ blocks: ContentBlock[] }` is valid at rest. */

@@ -10,6 +10,7 @@ import type {
   ImageBlock,
   ImageSource,
   MessageContent,
+  RedactedThinkingBlock,
   TextBlock,
   ThinkingBlock,
   ToolResultBlock,
@@ -25,7 +26,12 @@ const BLOCK_TYPES = new Set([
   "tool_use",
   "tool_result",
   "thinking",
+  "redacted_thinking",
 ]);
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -82,7 +88,7 @@ function parseBlock(value: unknown, index: number): ContentBlock {
   const type = value.type;
   if (typeof type !== "string" || !BLOCK_TYPES.has(type)) {
     throw chatInvalidArgument(
-      `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking)`,
+      `blocks[${index}]: unknown or missing type (expected text|image|tool_use|tool_result|thinking|redacted_thinking)`,
     );
   }
 
@@ -102,7 +108,14 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       if (!isRecord(input)) {
         throw chatInvalidArgument(`blocks[${index}] tool_use: input must be an object`);
       }
-      return { type: "tool_use", id, name, input } satisfies ToolUseBlock;
+      const thinkingSignature = optionalString(value.thinkingSignature);
+      return {
+        type: "tool_use",
+        id,
+        name,
+        input,
+        ...(thinkingSignature != null ? { thinkingSignature } : {}),
+      } satisfies ToolUseBlock;
     }
     case "tool_result": {
       const toolUseId = requireString(value, "toolUseId", `blocks[${index}] tool_result`);
@@ -111,8 +124,27 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       return { type: "tool_result", toolUseId, content } satisfies ToolResultBlock;
     }
     case "thinking": {
-      const text = requireString(value, "text", `blocks[${index}] thinking`);
-      return { type: "thinking", text } satisfies ThinkingBlock;
+      const text = typeof value.text === "string" ? value.text : "";
+      const thinkingSignature = optionalString(value.thinkingSignature);
+      if (text === "" && thinkingSignature == null) {
+        throw chatInvalidArgument(
+          `blocks[${index}] thinking: text or thinkingSignature required`,
+        );
+      }
+      return {
+        type: "thinking",
+        text,
+        ...(thinkingSignature != null ? { thinkingSignature } : {}),
+      } satisfies ThinkingBlock;
+    }
+    case "redacted_thinking": {
+      const data = requireString(value, "data", `blocks[${index}] redacted_thinking`);
+      const thinkingSignature = optionalString(value.thinkingSignature);
+      return {
+        type: "redacted_thinking",
+        data,
+        ...(thinkingSignature != null ? { thinkingSignature } : {}),
+      } satisfies RedactedThinkingBlock;
     }
     default:
       throw chatInvalidArgument(`blocks[${index}]: unsupported type`);

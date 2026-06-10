@@ -26,6 +26,8 @@ function formatBlock(block: ContentBlock): string {
       return `[tool_result] ${block.toolUseId}: ${truncate(block.content, 120)}`;
     case "thinking":
       return `[thinking] ${truncate(block.text, 80)}`;
+    case "redacted_thinking":
+      return "[thinking redacted]";
     default:
       return "";
   }

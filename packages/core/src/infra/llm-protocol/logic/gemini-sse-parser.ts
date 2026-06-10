@@ -22,16 +22,23 @@ type FunctionCallAccumulator = {
   name: string;
   argsJson: string;
   id: string;
+  thinkingSignature?: string;
 };
 
 export type GeminiSseParserState = {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
+  thinkingSignature?: string;
   functionCalls: Map<string, FunctionCallAccumulator>;
   streamRaw: unknown;
   inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
 };
+
+function readThoughtSignature(part: Record<string, unknown>): string | undefined {
+  const sig = part.thought_signature ?? part.thoughtSignature;
+  return typeof sig === "string" && sig !== "" ? sig : undefined;
+}
 
 export function createGeminiSseParserState(): GeminiSseParserState {
   return {
@@ -64,6 +71,10 @@ function mergeFunctionCallPart(
   if (isRecord(fc.args)) {
     acc.argsJson = JSON.stringify(fc.args);
   }
+  const sig = readThoughtSignature(part);
+  if (sig != null) {
+    acc.thinkingSignature = sig;
+  }
 }
 
 function processGeminiResponseChunk(
@@ -88,6 +99,10 @@ function processGeminiResponseChunk(
   for (const part of content.parts) {
     if (!isRecord(part)) {
       continue;
+    }
+    const thoughtSignature = readThoughtSignature(part);
+    if (thoughtSignature != null) {
+      state.thinkingSignature = thoughtSignature;
     }
     if (typeof part.text === "string" && part.text !== "") {
       if (part.thought === true) {
@@ -153,22 +168,41 @@ function functionCallsToToolUses(
         input = {};
       }
     }
-    out.push({ id: acc.id, name: acc.name, input });
+    out.push({
+      id: acc.id,
+      name: acc.name,
+      input,
+      ...(acc.thinkingSignature != null ? { thinkingSignature: acc.thinkingSignature } : {}),
+    });
   }
   return out;
 }
 
 function emitToolUsesFromAccumulators(
-  toolUses: readonly { id: string; name: string; input: Record<string, unknown> }[],
+  toolUses: readonly {
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    thinkingSignature?: string;
+  }[],
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
+  let signatureEmitted = false;
   for (const tu of toolUses) {
+    const thinkingSignature =
+      !signatureEmitted && tu.thinkingSignature != null
+        ? tu.thinkingSignature
+        : undefined;
+    if (thinkingSignature != null) {
+      signatureEmitted = true;
+    }
     blocks.push({
       type: "tool_use",
       id: tu.id,
       name: tu.name,
       input: tu.input,
+      ...(thinkingSignature != null ? { thinkingSignature } : {}),
     });
     onStream?.({
       type: "tool-use",
@@ -199,8 +233,14 @@ export function finishGeminiSse(
   );
 
   const blocks: ContentBlock[] = [];
-  if (cleansed.thinking !== "") {
-    blocks.push({ type: "thinking", text: cleansed.thinking });
+  if (cleansed.thinking !== "" || state.thinkingSignature != null) {
+    blocks.push({
+      type: "thinking",
+      text: cleansed.thinking,
+      ...(state.thinkingSignature != null
+        ? { thinkingSignature: state.thinkingSignature }
+        : {}),
+    });
   }
   if (cleansed.visible !== "") {
     blocks.push({ type: "text", text: cleansed.visible });

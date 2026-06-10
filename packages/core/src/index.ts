@@ -191,6 +191,7 @@ export type {
   ToolUseBlock,
   ToolResultBlock,
   ThinkingBlock,
+  RedactedThinkingBlock,
 } from "./domain/chat/model/content-block.js";
 export { textBlocks } from "./domain/chat/content/text-blocks.js";
 export {
