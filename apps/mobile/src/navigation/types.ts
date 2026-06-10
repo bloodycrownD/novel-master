@@ -32,6 +32,7 @@ export type RootStackParamList = {
     /** Called after a successful session-scope save (refreshes workspace list). */
     onSessionVfsSaved?: () => void;
   };
+  About: undefined;
 };
 
 export type ChatHeaderContext = {

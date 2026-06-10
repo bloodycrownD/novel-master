@@ -15,8 +15,17 @@ export const APP_UI_KEY_LAST_RUN_VERSION = 'app.lastRunVersion';
 /** Integer string; bumped when app version changes to remount rich text. */
 export const APP_UI_KEY_RICH_RENDER_EPOCH = 'app.richRenderEpoch';
 
+/** Update-check preferences (Client UI layer — not nm-preferences). */
+export const APP_UI_KEY_UPDATES_AUTO_CHECK = 'updates.autoCheck';
+export const APP_UI_KEY_UPDATES_LAST_CHECK_AT = 'updates.lastCheckAt';
+export const APP_UI_KEY_UPDATES_LAST_CHECK_STATUS = 'updates.lastCheckStatus';
+export const APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
+  'updates.lastCheckRemoteVersion';
+export const APP_UI_KEY_UPDATES_DISMISSED_VERSION = 'updates.dismissedVersion';
+
 /** Default string values when a key is missing. */
 export const APP_UI_DEFAULTS = {
   [APP_UI_KEY_THEME]: 'light',
   [APP_UI_KEY_CHAT_RICH_TEXT]: 'false',
+  [APP_UI_KEY_UPDATES_AUTO_CHECK]: 'true',
 } as const;

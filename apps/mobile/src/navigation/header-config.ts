@@ -30,4 +30,5 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   RegexRules: {title: '正则规则', showBack: true, showNav: false},
   RegexRuleEditor: {title: '规则详情', showBack: true, showNav: false},
   FileEditor: {title: '编辑文件', showBack: true, showNav: false},
+  About: {title: '关于 Novel Master', showBack: true, showNav: false},
 };

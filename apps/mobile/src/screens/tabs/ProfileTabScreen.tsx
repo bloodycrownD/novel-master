@@ -301,6 +301,13 @@ export function ProfileTabScreen() {
             onPress={() => navigateTo(item.route)}
           />
         ))}
+        <ListSectionTitle title="应用" tokens={tokens} />
+        <ProfileMenuItem
+          icon="ℹ️"
+          label="关于 Novel Master"
+          tokens={tokens}
+          onPress={() => navigateTo('About')}
+        />
       </ScrollView>
       <ModelPickerModal
         visible={modelPickerVisible}

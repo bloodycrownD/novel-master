@@ -28,7 +28,9 @@ import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
 import {RegexRuleEditorScreen} from '../screens/stack/RegexRuleEditorScreen';
+import {AboutScreen} from '../screens/stack/AboutScreen';
 import {FileEditorScreen} from '../screens/stack/FileEditorScreen';
+import {useAutoUpdateCheck} from '../hooks/useAutoUpdateCheck';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -110,6 +112,7 @@ function withStackLayout(
 
 export function RootNavigator() {
   const {tokens} = useTheme();
+  useAutoUpdateCheck();
 
   return (
     <NavigationContainer>
@@ -182,6 +185,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="FileEditor"
             component={withStackLayout('FileEditor', FileEditorScreen)}
+          />
+          <Stack.Screen
+            name="About"
+            component={withStackLayout('About', AboutScreen)}
           />
         </Stack.Navigator>
       </HeaderProvider>
