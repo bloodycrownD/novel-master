@@ -44,6 +44,7 @@ export interface DefaultEventOrchestratorDeps {
 
 export class DefaultEventOrchestrator implements EventOrchestrator {
   private busAttached = false;
+  private busSubscriptions: Array<{ unsubscribe: () => void }> = [];
 
   constructor(private readonly deps: DefaultEventOrchestratorDeps) {}
 
@@ -59,13 +60,24 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       }
       await this.emit(eventType, ctx);
     };
-    this.deps.eventBus.subscribe(
-      EVENT_SESSION_COMPACTION_REQUESTED,
-      (p) => void handler(EVENT_SESSION_COMPACTION_REQUESTED, p),
+    this.busSubscriptions.push(
+      this.deps.eventBus.subscribe(
+        EVENT_SESSION_COMPACTION_REQUESTED,
+        (p) => void handler(EVENT_SESSION_COMPACTION_REQUESTED, p),
+      ),
+      this.deps.eventBus.subscribe(EVENT_SESSION_MESSAGE_RECEIVED, (p) =>
+        void handler(EVENT_SESSION_MESSAGE_RECEIVED, p),
+      ),
     );
-    this.deps.eventBus.subscribe(EVENT_SESSION_MESSAGE_RECEIVED, (p) =>
-      void handler(EVENT_SESSION_MESSAGE_RECEIVED, p),
-    );
+  }
+
+  /** Tear down bus listeners (rebootstrap / tests). */
+  detachFromBus(): void {
+    for (const sub of this.busSubscriptions) {
+      sub.unsubscribe();
+    }
+    this.busSubscriptions = [];
+    this.busAttached = false;
   }
 
   async emit(eventType: string, ctx: EventEmitContext): Promise<EventRunResult> {

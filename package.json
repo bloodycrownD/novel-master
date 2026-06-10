@@ -12,6 +12,8 @@
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format:check": "npm run format:check --workspaces --if-present",
     "test:core:fast": "npm run test:fast -w @novel-master/core",
     "clean": "npm run clean --workspaces --if-present",
     "link:cli": "npm run build -w @novel-master/cli && npm link -w @novel-master/cli",

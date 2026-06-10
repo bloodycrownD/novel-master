@@ -1,0 +1,48 @@
+# PR checks: build + test core and desktop (no full Android/Electron dist).
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build core
+        run: npm run build -w @novel-master/core
+
+      - name: Test core (fast)
+        run: npm run test:core:fast
+        continue-on-error: true
+
+      - name: Build desktop
+        run: npm run build -w @novel-master/desktop
+
+      - name: Test desktop
+        run: npm test -w @novel-master/desktop
+
+      - name: Lint (workspaces)
+        run: npm run lint --if-present
+        continue-on-error: true

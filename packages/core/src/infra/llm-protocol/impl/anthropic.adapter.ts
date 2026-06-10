@@ -32,6 +32,7 @@ import {
   createAnthropicToolNameWire,
   type AnthropicToolNameWire,
 } from "../logic/anthropic-tool-names.js";
+import { ANTHROPIC_API_VERSION } from "../logic/anthropic-api-version.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
@@ -80,7 +81,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       method: "GET",
       headers: {
         "x-api-key": req.apiKey,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": ANTHROPIC_API_VERSION,
         ...req.extraHeaders,
       },
     })) as { data?: Array<{ id?: string; display_name?: string }> };
@@ -149,7 +150,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       method: "POST",
       headers: {
         "x-api-key": req.apiKey,
-        "anthropic-version": "2023-06-01",
+        "anthropic-version": ANTHROPIC_API_VERSION,
         "Content-Type": "application/json",
         ...req.extraHeaders,
       },
@@ -175,7 +176,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
           method: "POST",
           headers: {
             "x-api-key": req.apiKey,
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": ANTHROPIC_API_VERSION,
             "Content-Type": "application/json",
             ...req.extraHeaders,
           },

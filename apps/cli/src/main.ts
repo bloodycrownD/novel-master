@@ -4,7 +4,7 @@
  * @module main
  */
 
-import { greet, type VfsService } from "@novel-master/core";
+import { PACKAGE_NAME, type VfsService } from "@novel-master/core";
 import { runPreferences } from "./preferences-cmd/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
@@ -194,6 +194,6 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   }
 
   const name = argv[0] ?? "world";
-  console.log(greet(name));
+  console.log(`Hello, ${name} from ${PACKAGE_NAME}`);
   return 0;
 }
