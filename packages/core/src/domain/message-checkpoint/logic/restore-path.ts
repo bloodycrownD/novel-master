@@ -14,13 +14,13 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { sessionFsRestoreRevisionMissing } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
-import type { VfsService } from "@/service/vfs/vfs.port.js";
+import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
 
 /**
  * Creates parent directories from root down (idempotent mkdir).
  */
 export async function ensureDirectoryChain(
-  vfs: VfsService,
+  vfs: VfsRestorePort,
   logicalPath: string,
 ): Promise<void> {
   const normalized = normalizePath(logicalPath);
@@ -39,7 +39,7 @@ export async function ensureDirectoryChain(
  * Restores one logical path to the content/status of a stored revision.
  */
 export async function restorePathToRevision(
-  vfs: VfsService,
+  vfs: VfsRestorePort,
   revisionRepo: VfsRevisionRepository,
   scope: VfsScope,
   logicalPath: string,

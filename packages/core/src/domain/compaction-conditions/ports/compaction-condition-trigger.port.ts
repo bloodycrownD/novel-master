@@ -9,7 +9,7 @@ import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
-} from "@/service/prompt/render-prompt.js";
+} from "@/domain/prompt/model/prompt-render-context.js";
 
 export interface CompactionConditionModelContext {
   readonly workspaceModelId: string;

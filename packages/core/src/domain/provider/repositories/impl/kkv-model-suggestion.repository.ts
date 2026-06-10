@@ -6,7 +6,7 @@
 
 import { decode } from "@/infra/serialization/decode.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
-import type { KkvService } from "@/service/kkv/kkv.port.js";
+import type { KkvReaderPort } from "@/domain/kkv/ports/kkv-reader.port.js";
 import type { ModelSuggestion } from "../../model/model-suggestion.js";
 import type { ModelSuggestionCache } from "../../model/model-suggestion-cache.js";
 import { modelSuggestionCacheSchema } from "../../model/model-suggestion-cache.schema.js";
@@ -34,7 +34,7 @@ function emptyCache(): ModelSuggestionCache {
 
 /** KKV-backed model suggestion repository. */
 export class KkvModelSuggestionRepository implements ModelSuggestionRepository {
-  constructor(private readonly kkv: KkvService) {}
+  constructor(private readonly kkv: KkvReaderPort) {}
 
   async listByProvider(providerId: string): Promise<ModelSuggestion[]> {
     const cache = await this.readCache(providerId);
