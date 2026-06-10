@@ -10,6 +10,7 @@ import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {toastMessage} from '../../errors/toast-message';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
+  persistFailedUpdateCheck,
   persistUpdateCheckResult,
   readLastCheckRemoteVersion,
   readLastCheckStatus,
@@ -95,7 +96,7 @@ export function AboutScreen() {
         void writeDismissedVersion(appUi, data.remoteVersion);
       });
     } catch (err) {
-      await persistUpdateCheckResult(appUi, null);
+      await persistFailedUpdateCheck(appUi);
       setLastStatus('error');
       showToast(toastMessage('检查失败', err));
     } finally {

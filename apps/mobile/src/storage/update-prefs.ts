@@ -62,20 +62,23 @@ export async function readLastCheckRemoteVersion(
   return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION);
 }
 
-/** Persists last check metadata after manual or automatic check. */
+/** Persists successful check metadata (also updates 24h throttle timestamp). */
 export async function persistUpdateCheckResult(
   appUi: AppUiPreferences,
-  data: UpdateCheckData | null,
+  data: UpdateCheckData,
 ): Promise<void> {
   const now = new Date().toISOString();
   await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_AT, now);
-  if (data) {
-    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
-    await appUi.set(
-      APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
-      data.status === 'update-available' ? 'available' : 'up-to-date',
-    );
-  } else {
-    await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, 'error');
-  }
+  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION, data.remoteVersion);
+  await appUi.set(
+    APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
+    data.status === 'update-available' ? 'available' : 'up-to-date',
+  );
+}
+
+/** Persists failed check status without advancing the 24h throttle clock. */
+export async function persistFailedUpdateCheck(
+  appUi: AppUiPreferences,
+): Promise<void> {
+  await appUi.set(APP_UI_KEY_UPDATES_LAST_CHECK_STATUS, 'error');
 }

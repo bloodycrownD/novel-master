@@ -60,41 +60,35 @@ export function AboutView() {
     void refresh();
   }, [refresh]);
 
-  const persistCheckResult = useCallback(
-    async (data: UpdateCheckData | null, error?: string) => {
-      const now = new Date().toISOString();
-      await ipcAppUiSet("updates.lastCheckAt", now);
-      if (data) {
-        await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
-        await ipcAppUiSet(
-          KEY_LAST_STATUS,
-          data.status === "update-available" ? "available" : "up-to-date",
-        );
-      } else {
-        await ipcAppUiSet(KEY_LAST_STATUS, "error");
-      }
-      if (error) {
-        setLastStatus("error");
-      } else if (data) {
-        setLastStatus(
-          data.status === "update-available" ? "available" : "up-to-date",
-        );
-        setLastRemote(data.remoteVersion);
-      }
-    },
-    [],
-  );
+  const persistSuccessfulCheck = useCallback(async (data: UpdateCheckData) => {
+    const now = new Date().toISOString();
+    await ipcAppUiSet("updates.lastCheckAt", now);
+    await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
+    await ipcAppUiSet(
+      KEY_LAST_STATUS,
+      data.status === "update-available" ? "available" : "up-to-date",
+    );
+    setLastStatus(
+      data.status === "update-available" ? "available" : "up-to-date",
+    );
+    setLastRemote(data.remoteVersion);
+  }, []);
+
+  const persistFailedCheck = useCallback(async () => {
+    await ipcAppUiSet(KEY_LAST_STATUS, "error");
+    setLastStatus("error");
+  }, []);
 
   const runManualCheck = useCallback(async () => {
     setChecking(true);
     try {
       const res = await ipcAppCheckForUpdates();
       if (!res.ok) {
-        await persistCheckResult(null, res.error.message);
+        await persistFailedCheck();
         showToast(res.error.message);
         return;
       }
-      await persistCheckResult(res.data);
+      await persistSuccessfulCheck(res.data);
       if (res.data.status === "up-to-date") {
         showToast("当前已是最新版本");
         return;
@@ -103,7 +97,7 @@ export function AboutView() {
     } finally {
       setChecking(false);
     }
-  }, [persistCheckResult]);
+  }, [persistFailedCheck, persistSuccessfulCheck]);
 
   const openLink = useCallback(async (url: string) => {
     const res = await ipcAppOpenExternal(url);

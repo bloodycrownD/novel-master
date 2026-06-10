@@ -16,6 +16,7 @@ import type { UpdateCheckData } from "../../shared/ipc-types";
 const AUTO_CHECK_DELAY_MS = 2000;
 /** Minimum interval between automatic checks (24 hours). */
 const AUTO_CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000;
+const UPDATE_TOAST_MS = 8000;
 
 const KEY_AUTO_CHECK = "updates.autoCheck";
 const KEY_LAST_CHECK_AT = "updates.lastCheckAt";
@@ -30,24 +31,24 @@ function isThrottled(lastCheckAt: string | undefined): boolean {
   return Date.now() - last < AUTO_CHECK_THROTTLE_MS;
 }
 
+async function persistSuccessfulCheck(data: UpdateCheckData): Promise<void> {
+  const now = new Date().toISOString();
+  await ipcAppUiSet(KEY_LAST_CHECK_AT, now);
+  await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
+  await ipcAppUiSet(
+    KEY_LAST_STATUS,
+    data.status === "update-available" ? "available" : "up-to-date",
+  );
+}
+
+async function persistFailedCheck(): Promise<void> {
+  await ipcAppUiSet(KEY_LAST_STATUS, "error");
+}
+
 export function AutoUpdateCheckHost() {
   const ranRef = useRef(false);
   const [updateModal, setUpdateModal] = useState<UpdateCheckData | null>(null);
   const [modalBusy, setModalBusy] = useState(false);
-
-  const persistCheckResult = useCallback(async (data: UpdateCheckData | null) => {
-    const now = new Date().toISOString();
-    await ipcAppUiSet(KEY_LAST_CHECK_AT, now);
-    if (data) {
-      await ipcAppUiSet(KEY_LAST_REMOTE, data.remoteVersion);
-      await ipcAppUiSet(
-        KEY_LAST_STATUS,
-        data.status === "update-available" ? "available" : "up-to-date",
-      );
-    } else {
-      await ipcAppUiSet(KEY_LAST_STATUS, "error");
-    }
-  }, []);
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -64,10 +65,10 @@ export function AutoUpdateCheckHost() {
 
         const checkRes = await ipcAppCheckForUpdates();
         if (!checkRes.ok) {
-          await persistCheckResult(null);
+          await persistFailedCheck();
           return;
         }
-        await persistCheckResult(checkRes.data);
+        await persistSuccessfulCheck(checkRes.data);
 
         if (checkRes.data.status !== "update-available") return;
 
@@ -75,13 +76,16 @@ export function AutoUpdateCheckHost() {
         const dismissed = dismissedRes.ok ? dismissedRes.data : undefined;
         if (dismissed === checkRes.data.remoteVersion) return;
 
-        showToast(`发现新版本 ${checkRes.data.remoteVersion}`);
-        setUpdateModal(checkRes.data);
+        const updateData = checkRes.data;
+        showToast(`发现新版本 ${updateData.remoteVersion}`, UPDATE_TOAST_MS, {
+          actionLabel: "查看",
+          onAction: () => setUpdateModal(updateData),
+        });
       })();
     }, AUTO_CHECK_DELAY_MS);
 
     return () => clearTimeout(timer);
-  }, [persistCheckResult]);
+  }, []);
 
   const handleDownload = useCallback(async () => {
     if (!updateModal) return;

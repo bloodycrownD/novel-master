@@ -7,6 +7,7 @@ import {Alert, Linking} from 'react-native';
 import {useToast} from '../components/chrome/ToastHost';
 import {useNovelMaster} from '../runtime/novel-master-context';
 import {
+  persistFailedUpdateCheck,
   persistUpdateCheckResult,
   readDismissedVersion,
   readLastCheckAt,
@@ -14,6 +15,7 @@ import {
   writeDismissedVersion,
 } from '../storage/update-prefs';
 import {checkForUpdates} from '../update-check/check-for-updates';
+import type {UpdateCheckData} from '../update-check/types';
 
 const AUTO_CHECK_DELAY_MS = 2000;
 /** Minimum interval between automatic checks (24 hours). */
@@ -24,6 +26,26 @@ function isThrottled(lastCheckAt: string | undefined): boolean {
   const last = Date.parse(lastCheckAt);
   if (!Number.isFinite(last)) return false;
   return Date.now() - last < AUTO_CHECK_THROTTLE_MS;
+}
+
+function showUpdateDetailAlert(
+  data: UpdateCheckData,
+  onLater: () => void,
+): void {
+  const message = data.releaseNotesExcerpt
+    ? `新版本 ${data.remoteVersion}\n\n${data.releaseNotesExcerpt}`
+    : `新版本 ${data.remoteVersion}`;
+
+  Alert.alert('发现新版本', message, [
+    {text: '取消', style: 'cancel'},
+    {text: '稍后', onPress: onLater},
+    {
+      text: '前往下载',
+      onPress: () => {
+        void Linking.openURL(data.releaseUrl);
+      },
+    },
+  ]);
 }
 
 export function useAutoUpdateCheck(): void {
@@ -52,29 +74,16 @@ export function useAutoUpdateCheck(): void {
           const dismissed = await readDismissedVersion(appUi);
           if (dismissed === data.remoteVersion) return;
 
-          showToast(`发现新版本 ${data.remoteVersion}`);
-
-          const message = data.releaseNotesExcerpt
-            ? `新版本 ${data.remoteVersion}\n\n${data.releaseNotesExcerpt}`
-            : `新版本 ${data.remoteVersion}`;
-
-          Alert.alert('发现新版本', message, [
-            {text: '取消', style: 'cancel'},
-            {
-              text: '稍后',
-              onPress: () => {
+          showToast(`发现新版本 ${data.remoteVersion}`, {
+            actionLabel: '查看',
+            onAction: () => {
+              showUpdateDetailAlert(data, () => {
                 void writeDismissedVersion(appUi, data.remoteVersion);
-              },
+              });
             },
-            {
-              text: '前往下载',
-              onPress: () => {
-                void Linking.openURL(data.releaseUrl);
-              },
-            },
-          ]);
+          });
         } catch {
-          await persistUpdateCheckResult(appUi, null);
+          await persistFailedUpdateCheck(appUi);
         }
       })();
     }, AUTO_CHECK_DELAY_MS);
