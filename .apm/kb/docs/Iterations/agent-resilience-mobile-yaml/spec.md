@@ -59,6 +59,8 @@
   - Core 保持同步 event bus，不引入异步总线，减少架构变更；背压主要在消费端实现。
   - 为 stream 缓冲加上最大缓冲阈值与降级策略（超阈值时合并 chunk 或短暂丢弃 thinking-delta）。
 
+> **脚注（Phase 2，`mobile-sse-stream-resilience`）**：该迭代在 `wrapStreamForBus` 中仅对 `STREAM_*` 事件的 `bus.publish` 使用 `queueMicrotask` 异步派发；`SimpleEventBus` 本身仍为同步 `publish`，非 stream 事件保持同步。
+
 ### 5) 消息分页
 
 - 现状：

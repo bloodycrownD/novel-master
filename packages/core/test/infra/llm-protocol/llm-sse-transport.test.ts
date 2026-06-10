@@ -211,6 +211,93 @@ describe("llm-sse-transport", () => {
     }
   });
 
+  it("U-08: signal.abort before or during XHR rejects with ProviderError", async () => {
+    mock.timers.enable({ apis: ["setInterval"] });
+    setShouldUseXhrForSseOverrideForTests(true);
+
+    type XhrInstance = {
+      abort: ReturnType<typeof mock.fn>;
+      send: ReturnType<typeof mock.fn>;
+      onabort: (() => void) | null;
+    };
+
+    let lastXhr: XhrInstance | undefined;
+
+    class MockXMLHttpRequest {
+      open = mock.fn();
+      setRequestHeader = mock.fn();
+      abort = mock.fn(function (this: MockXMLHttpRequest) {
+        this.onabort?.();
+      });
+      send = mock.fn(function (this: MockXMLHttpRequest) {
+        // Leave request in-flight until aborted.
+      });
+      onprogress: (() => void) | null = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      onabort: (() => void) | null = null;
+      responseText = "";
+      status = 0;
+      getResponseHeader = mock.fn(() => "text/event-stream");
+
+      constructor() {
+        lastXhr = this;
+      }
+    }
+
+    const origXhr = globalThis.XMLHttpRequest;
+    (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+      MockXMLHttpRequest as unknown as typeof XMLHttpRequest;
+
+    try {
+      const preAborted = new AbortController();
+      preAborted.abort();
+      await assert.rejects(
+        () =>
+          postSse(
+            "https://api.example.com/v1/chat/completions",
+            { method: "POST", body: "{}" },
+            () => {},
+            "test-provider",
+            { signal: preAborted.signal },
+          ),
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderError);
+          assert.equal(err.code, "HTTP_ERROR");
+          assert.match(String(err.message), /Request aborted/);
+          return true;
+        },
+      );
+
+      const controller = new AbortController();
+      const promise = postSse(
+        "https://api.example.com/v1/chat/completions",
+        { method: "POST", body: "{}" },
+        () => {},
+        "test-provider",
+        { signal: controller.signal },
+      );
+
+      controller.abort();
+
+      await assert.rejects(
+        promise,
+        (err: unknown) => {
+          assert.ok(err instanceof ProviderError);
+          assert.equal(err.code, "HTTP_ERROR");
+          assert.match(String(err.message), /Request aborted/);
+          return true;
+        },
+      );
+
+      assert.equal(lastXhr!.abort.mock.calls.length, 1);
+      assert.equal(lastXhr!.send.mock.calls.length, 1);
+    } finally {
+      (globalThis as { XMLHttpRequest: typeof XMLHttpRequest }).XMLHttpRequest =
+        origXhr;
+    }
+  });
+
   it("U-06: no stall abort after long idle without onprogress", async () => {
     mock.timers.enable({ apis: ["setInterval"] });
     setShouldUseXhrForSseOverrideForTests(true);

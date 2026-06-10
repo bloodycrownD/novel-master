@@ -2,8 +2,8 @@
 
 > **类型**：性能 / UI 状态 Bug（已修复，2026-06）  
 > **平台**：Android Mobile（`chatTranscriptEngine = webview`）  
-> **分支**：`fix/chat-rollback-vfs-tool-fixes`  
-> **关联迭代**：`chat-tool-turn-phase-ui`、`chat-rollback-vfs-tool-fixes`、`mobile-llm-streaming`、`mobile-chat-stability-fixes`  
+> **分支**：`fix/mobile-sse-stream-resilience`  
+> **关联迭代**：`chat-tool-turn-phase-ui`、`chat-rollback-vfs-tool-fixes`、`mobile-llm-streaming`、`mobile-chat-stability-fixes`、`mobile-sse-stream-resilience`  
 > **调试会话**：`debug-ef0802`（`.cursor/debug-ef0802.log`）
 
 ## 现象
@@ -70,7 +70,7 @@ XHR onprogress → onChunk → EventBus
 | **消费端合并** | Bus 32ms 合并；WebView rAF 合并 `streamDelta` |
 | **绕过 React 流式 state** | WebView 路径：`transcriptWebRef.pushStreamDelta()`，不再 `setStreamingText` |
 | **流式期不做重 CPU 渲染** | 流式 tail 仅纯文本；rich HTML 在 persist / snapshot 后 |
-| **SSE 生产端** | Core `postSseViaXhr`：32ms `setInterval` 整流（每 tick 最多一次 `onChunk`）；`onload` 同步 flush 尾部 |
+| **SSE 生产端** | Core `postSseViaXhr`：32ms `setInterval` 整流（每 tick 最多一次 `onChunk`）；`onload` 同步 flush 尾部。v1.0.2 的 `setTimeout(0)` + 4KB drain 链与 90s stall 已废弃，由本整流器取代 |
 | **增量 + 全量搭配** | assistant 新消息 → `appendTailRows`；**`tool_results` 落库 → `sessionSnapshot('preserve')`**，刷新 `toolPhase` / 工具卡 |
 | **流式期推迟 snapshot** | `streamActiveRef` 为 true 时不发 snapshot，待 `streamReset` 后 flush |
 | **reload 去重** | 并发 `reloadMessages(true)` 合并为单次 in-flight |

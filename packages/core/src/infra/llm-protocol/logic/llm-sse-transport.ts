@@ -183,6 +183,7 @@ function postSseViaXhr(
 
     if (signal != null) {
       if (signal.aborted) {
+        emitter.dispose();
         rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
         return;
       }
