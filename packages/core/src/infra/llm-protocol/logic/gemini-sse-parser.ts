@@ -13,6 +13,7 @@ import {
   finishInlineThinkingAwareText,
 } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
+import { feedSseLines } from "./sse-line-buffer.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -150,13 +151,9 @@ export function feedGeminiSseChunk(
   chunk: string,
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
-  state.buffer += chunk;
-  const lines = state.buffer.split("\n");
-  state.buffer = lines.pop() ?? "";
-
-  for (const line of lines) {
-    processGeminiSseLine(state, line, onStream);
-  }
+  feedSseLines(state, chunk, line =>
+    processGeminiSseLine(state, line, onStream),
+  );
 }
 
 function functionCallsToToolUses(

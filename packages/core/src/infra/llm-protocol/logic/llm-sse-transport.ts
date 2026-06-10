@@ -5,6 +5,10 @@
  * `navigator.product === "ReactNative"`, we use XHR `onprogress` instead.
  * No `stream: false` downgrade on failure.
  *
+ * **Fetch path intentionally does not use {@link createSseChunkEmitter}** — only
+ * `postSseViaXhr` applies RN byte pacing. See
+ * `.apm/kb/docs/Iterations/mobile-sse-stream-resilience/spec.md`.
+ *
  * @module infra/llm-protocol/logic/llm-sse-transport
  */
 

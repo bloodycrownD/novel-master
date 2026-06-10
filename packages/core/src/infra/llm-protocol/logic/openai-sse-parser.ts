@@ -12,6 +12,7 @@ import {
   openAiStreamAccumulatorsToBlocks,
   openAiStreamDeltaToEvents,
 } from "./openai-content-mapper.js";
+import { feedSseLines } from "./sse-line-buffer.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -56,23 +57,19 @@ export function feedOpenAiSseChunk(
   chunk: string,
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
-  state.buffer += chunk;
-  const lines = state.buffer.split("\n");
-  state.buffer = lines.pop() ?? "";
-
-  for (const line of lines) {
+  feedSseLines(state, chunk, line => {
     if (!line.startsWith("data: ")) {
-      continue;
+      return;
     }
     const payload = line.slice(6).trim();
     if (payload === "" || payload === "[DONE]") {
-      continue;
+      return;
     }
     let event: Record<string, unknown>;
     try {
       event = JSON.parse(payload) as Record<string, unknown>;
     } catch {
-      continue;
+      return;
     }
     state.lastEvent = event;
     if (isRecord(event.usage)) {
@@ -80,14 +77,14 @@ export function feedOpenAiSseChunk(
     }
     const choices = event.choices;
     if (!Array.isArray(choices) || choices.length === 0) {
-      continue;
+      return;
     }
     const first = choices[0];
     if (!isRecord(first)) {
-      continue;
+      return;
     }
     openAiStreamDeltaToEvents(first.delta, state, onStream);
-  }
+  });
 }
 
 /** Finalize parser state into content blocks and the last raw SSE event. */

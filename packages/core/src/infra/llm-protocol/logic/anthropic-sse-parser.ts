@@ -10,6 +10,7 @@ import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
+import { feedSseLines } from "./sse-line-buffer.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -230,13 +231,9 @@ export function feedAnthropicSseChunk(
   onStream?: (event: LlmStreamEvent) => void,
   toolNames?: AnthropicToolNameWire,
 ): void {
-  state.buffer += chunk;
-  const lines = state.buffer.split("\n");
-  state.buffer = lines.pop() ?? "";
-
-  for (const line of lines) {
-    processAnthropicSseLine(state, line, onStream, toolNames);
-  }
+  feedSseLines(state, chunk, line =>
+    processAnthropicSseLine(state, line, onStream, toolNames),
+  );
 }
 
 /** Finalize parser state into content blocks (normal stream end). */
