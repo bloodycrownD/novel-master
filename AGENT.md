@@ -11,8 +11,7 @@
 | `apps/desktop` | Electron 桌面端 |
 | `apps/mobile` | React Native Android |
 | `apps/cli` | `nm` 命令行 |
-| `.github/workflows/ci.yml` | **仅 PR** 到 `main` 时跑构建/测试（**push `main` 不触发**） |
-| `.github/workflows/release.yml` | 打 `v*` tag 触发全量 Release（**不 push `main`**） |
+| `.github/workflows/release.yml` | 打 `v*` tag 触发 Release（**唯一** GitHub Actions workflow；push/PR 均不触发） |
 
 ## 发版与版本号
 
@@ -35,7 +34,7 @@ git tag v1.0.4
 git push origin v1.0.4
 ```
 
-若 Release 失败需重跑：修正后 `git tag -f v1.0.4 && git push origin v1.0.4 --force`（仍只保留一个 `v1.0.4`）。日常合入 `main` 走 PR，由 `ci.yml` 在 PR 上检查。
+若 Release 失败需重跑：修正后 `git tag -f v1.0.4 && git push origin v1.0.4 --force`（仍只保留一个 `v1.0.4`）。合入 `main` 与发版分离：日常 push/PR **不会**跑 GitHub Actions，发版前在本地跑测试即可。
 
 ### CI 行为（`.github/workflows/release.yml`）
 
