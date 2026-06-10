@@ -408,53 +408,48 @@ async function applyLlmRegexChannelToVisible(
   return applyRegexChannelToMessages(visible, rules, "llm", depthMap);
 }
 
-function wrapStreamForBus(
+/** @internal Exposed for stream-bus deferral unit tests. */
+export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
-  if (userOnStream == null) {
-    return (ev: LlmStreamEvent) => {
-      if (ev.type === "text-delta") {
+  const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
+    // Defer bus.publish to a microtask so synchronous XHR onprogress stacks can unwind
+    // before UI subscribers run (RN shares one JS thread with core).
+    if (ev.type === "text-delta") {
+      queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
           sessionId,
           text: ev.text,
-        });
-      } else if (ev.type === "thinking-delta") {
+        }),
+      );
+    } else if (ev.type === "thinking-delta") {
+      queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
           sessionId,
           text: ev.text,
-        });
-      } else if (ev.type === "tool-use") {
+        }),
+      );
+    } else if (ev.type === "tool-use") {
+      queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
           sessionId,
           id: ev.id,
           name: ev.name,
           input: ev.input,
-        });
-      }
-    };
+        }),
+      );
+    }
+  };
+
+  if (userOnStream == null) {
+    return scheduleStreamPublish;
   }
 
   return (ev: LlmStreamEvent) => {
-    if (ev.type === "text-delta") {
-      bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
-        sessionId,
-        text: ev.text,
-      });
-    } else if (ev.type === "thinking-delta") {
-      bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
-        sessionId,
-        text: ev.text,
-      });
-    } else if (ev.type === "tool-use") {
-      bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
-        sessionId,
-        id: ev.id,
-        name: ev.name,
-        input: ev.input,
-      });
-    }
+    scheduleStreamPublish(ev);
+    // userOnStream stays synchronous so adapter/parser callers see immediate feedback.
     userOnStream(ev);
   };
 }
