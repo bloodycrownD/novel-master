@@ -5,6 +5,7 @@
   "type": "module",
   "main": "./dist/src/main/main.js",
   "scripts": {
+    "lint": "eslint src test renderer shared",
     "prebuild": "npm run build -w @novel-master/core && npm run build -w @novel-master/tdbc-driver-better-sqlite3 && npm run build -w @novel-master/tokenizer-driver-node && npm run build -w @novel-master/config-forms && npm run build -w @novel-master/sksp-windows && npm run build -w @novel-master/sksp-mac",
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "build:icons": "node scripts/generate-icons.mjs",

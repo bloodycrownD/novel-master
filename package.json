@@ -30,8 +30,11 @@
     "desktop:dist": "npm run dist -w @novel-master/desktop"
   },
   "devDependencies": {
+    "@eslint/js": "^9.22.0",
     "@types/node": "^25.6.2",
-    "typescript": "^6.0.3"
+    "eslint": "^9.22.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.4"
   },
   "engines": {
     "node": ">=20"
