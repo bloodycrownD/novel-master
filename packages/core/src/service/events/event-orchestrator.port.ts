@@ -26,4 +26,6 @@ export interface EventOrchestrator {
   emit(eventType: string, ctx: EventEmitContext): Promise<EventRunResult>;
   /** Subscribes to compaction/message events published on the process bus. */
   attachToBus(): void;
+  /** Removes bus listeners (rebootstrap / tests). */
+  detachFromBus(): void;
 }

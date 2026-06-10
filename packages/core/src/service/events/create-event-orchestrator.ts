@@ -73,3 +73,10 @@ export function createEventOrchestrator(
   orchestrator.attachToBus();
   return orchestrator;
 }
+
+/** Detaches orchestrator bus listeners when rebootstraping or in tests. */
+export function detachEventOrchestratorFromBus(
+  orchestrator: EventOrchestrator,
+): void {
+  orchestrator.detachFromBus();
+}
