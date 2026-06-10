@@ -15,7 +15,7 @@ export interface AgentRunRuntimePort {
     getCurrentModelId(): Promise<string | null | undefined>;
   };
   readonly agentRegistry: {
-    listAgentIds(): Promise<string[]>;
+    listAgentIds(): Promise<readonly string[]>;
     get(agentId: string): Promise<AgentDefinition>;
   };
 }
