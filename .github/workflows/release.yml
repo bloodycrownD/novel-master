@@ -84,7 +84,7 @@ jobs:
         run: npm ci
 
       - name: Set mobile package version
-        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --workspace=@novel-master/mobile
+        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --allow-same-version --workspace=@novel-master/mobile
 
       - name: Build workspace packages
         run: |
@@ -183,7 +183,7 @@ jobs:
         run: cp assets/icon.webp icon.webp
 
       - name: Set desktop package version
-        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --workspace=@novel-master/desktop
+        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --allow-same-version --workspace=@novel-master/desktop
 
       - name: Build desktop dependencies
         run: |
@@ -256,7 +256,7 @@ jobs:
         run: cp assets/icon.webp icon.webp
 
       - name: Set desktop package version
-        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --workspace=@novel-master/desktop
+        run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --allow-same-version --workspace=@novel-master/desktop
 
       - name: Build desktop dependencies
         run: |

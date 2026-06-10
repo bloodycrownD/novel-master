@@ -27,19 +27,21 @@ tag 形如 `v1.0.4` → 应用内版本为 `1.0.4`（去掉前缀 `v`）。
    - `apps/mobile/package.json` — 关于页、`APP_VERSION`、更新检查
 2. 确认 `apps/mobile/android/app/build.gradle` 里本地默认 `versionName` 与 tag 一致（CI 会注入 `-PversionName`，但 dev 包也应可读）。
 3. 跑相关测试与构建（至少 `@novel-master/desktop`、`@novel-master/mobile` 受影响范围）。
-4. 合并到 `main` 后打 tag 并推送：
+4. 合并到 `main` 并推送代码，再打 **一个** tag 触发 Release（只需 `v*` tag，不必重复打多个版本 tag）：
 
 ```bash
-git tag v1.0.4
 git push origin main
+git tag v1.0.4
 git push origin v1.0.4
 ```
+
+若 Release CI 失败需重跑：修正 workflow 后 `git tag -f v1.0.4 && git push origin v1.0.4 --force`（仍只保留一个 `v1.0.4`）。
 
 ### CI 行为（`.github/workflows/release.yml`）
 
 - 触发：`push` 匹配 `v*` tag
 - 并行构建：**Android APK** + **Windows NSIS** + **macOS DMG**
-- CI 内会对 desktop / mobile 再执行 `npm version <tag名无v> --no-git-tag-version`；**仓库里仍应先改好 `package.json` 再发 tag**，这样 dev 构建与关于页在发版前即正确，且 tag 指向的 commit 自洽。
+- CI 内会对 desktop / mobile 再执行 `npm version <tag名无v> --no-git-tag-version --allow-same-version`（仓库已 bump 时不会报错）；**仓库里仍应先改好 `package.json` 再发 tag**，这样 dev 构建与关于页在发版前即正确，且 tag 指向的 commit 自洽。
 - 产物发布到 GitHub Releases：`bloodycrownD/novel-master`
 
 ### 更新检查
