@@ -7,8 +7,8 @@
 import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
 import {
   formatPromptLlmInputForCli,
-  type PromptRenderContext,
 } from "@/service/prompt/render-prompt.js";
+import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 
 /** Same string as CLI preview (`formatPromptLlmInputForCli`) for token parity. */
 export function serializePromptLlmInput(

@@ -6,7 +6,7 @@
 
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
-import type { PromptRenderContext } from "@/service/prompt/render-prompt.js";
+import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
 import type { TokenCounterRegistry } from "../ports/token-counter-registry.port.js";

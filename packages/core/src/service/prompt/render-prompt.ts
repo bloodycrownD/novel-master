@@ -8,6 +8,12 @@ import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
+import type {
+  PromptLlmInput,
+  PromptRenderContext,
+} from "../../domain/prompt/model/prompt-render-context.js";
+
+export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/model/prompt-render-context.js";
 import { formatLocalDateTime } from "../../infra/date-format.js";
 import { renderMacro } from "../../infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
@@ -20,22 +26,6 @@ export interface PromptRenderDot {
 
 /** Worktree strings for prompt macros (excludes chat messages). */
 export type PromptMacroContext = Omit<PromptRenderContext, "messages">;
-
-/** Inputs required to build LLM input from prompt blocks. */
-export interface PromptRenderContext {
-  readonly worktreeDisplay: string;
-  /** ASCII tree from {@link WorktreeService.renderFileTree}; macro `{{.filetree}}`. */
-  readonly filetreeDisplay: string;
-  readonly messages: readonly ChatMessage[];
-  /** Defaults to `new Date()` when omitted (tests inject a fixed time). */
-  readonly now?: Date;
-}
-
-/** Structured input for {@link ModelRequestService}. */
-export interface PromptLlmInput {
-  readonly system?: string;
-  readonly messages: readonly ChatMessage[];
-}
 
 /** One segment from the single assembly traversal (preview / serialize / LLM derive). */
 export interface PromptAssemblySegment {
