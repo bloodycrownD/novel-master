@@ -4,23 +4,9 @@
 
 import {APP_VERSION} from './app-meta';
 import {compareAppVersions} from './compare-app-versions';
+import {excerptReleaseNotes} from './excerpt-release-notes';
 import {resolveLatestRelease, type FetchFn} from './resolve-latest-release';
 import type {UpdateCheckData} from './types';
-
-const NOTES_EXCERPT_MAX = 300;
-
-function excerptReleaseNotes(body: string): string {
-  const plain = body
-    .replace(/```[\s\S]*?```/g, '')
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-    .replace(/[#*_>`~-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (plain.length <= NOTES_EXCERPT_MAX) {
-    return plain;
-  }
-  return `${plain.slice(0, NOTES_EXCERPT_MAX)}…`;
-}
 
 export async function checkForUpdates(
   localVersion: string = APP_VERSION,
@@ -34,7 +20,7 @@ export async function checkForUpdates(
     remoteVersion: release.version,
     tagName: release.tagName,
     releaseUrl: release.htmlUrl,
-    releaseNotesExcerpt: excerptReleaseNotes(release.body),
+    releaseNotesExcerpt: excerptReleaseNotes(release.body, 'mobile'),
     status,
   };
 }

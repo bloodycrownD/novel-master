@@ -1,13 +1,10 @@
 /**
- * Session actions drawer: read-only current agent/model + action rows.
- * Drawer only renders labels and fires callbacks; batch semantics live in ChatTabScreen.
+ * Session actions drawer: rename, prompt preview, compaction, batch ops.
+ * Agent/model selection lives under Profile → 我的.
  */
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {AppModal} from '../ui/AppModal';
-import {useRuntime} from '../../hooks/useRuntime';
-import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
-import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
@@ -15,8 +12,6 @@ type Props = {
   onClose: () => void;
   onRename?: () => void;
   onCompact?: () => void;
-  onSwitchModel?: () => void;
-  onSwitchAgent?: () => void;
   onRealPrompt?: () => void;
   onBatchMessages?: () => void;
 };
@@ -26,56 +21,13 @@ export function SessionActionsDrawer({
   onClose,
   onRename,
   onCompact,
-  onSwitchModel,
-  onSwitchAgent,
   onRealPrompt,
   onBatchMessages,
 }: Props) {
   const {tokens} = useTheme();
-  const runtime = useRuntime();
-  const [agentLabel, setAgentLabel] = useState('—');
-  const [modelLabel, setModelLabel] = useState('—');
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const agent = await resolveCurrentAgentDisplayLabel(runtime);
-      if (cancelled) {
-        return;
-      }
-      setAgentLabel(agent);
-
-      const modelId = await runtime.state.getCurrentModelId();
-      if (cancelled) {
-        return;
-      }
-      if (!modelId) {
-        setModelLabel('未选择');
-        return;
-      }
-      try {
-        setModelLabel(await resolveModelDisplayLabel(runtime, modelId));
-      } catch {
-        setModelLabel(modelId);
-      }
-    })().catch(() => {
-      if (!cancelled) {
-        setAgentLabel('—');
-        setModelLabel('—');
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [visible, runtime]);
 
   const items = [
     {label: '聊天重命名', action: onRename},
-    {label: '切换模型', action: onSwitchModel},
-    {label: '切换 agent', action: onSwitchAgent},
     {label: '查看提示词', action: onRealPrompt},
     {label: '压缩上下文', action: onCompact},
     {label: '批量操作', action: onBatchMessages},
@@ -86,30 +38,6 @@ export function SessionActionsDrawer({
       <View style={styles.overlay}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="关闭" />
         <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
-          <View style={[styles.infoBlock, {borderBottomColor: tokens.border}]}>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, {color: tokens.textSecondary}]}>
-                当前 agent
-              </Text>
-              <Text
-                style={[styles.infoValue, {color: tokens.textSecondary}]}
-                numberOfLines={1}
-                ellipsizeMode="middle">
-                {agentLabel}
-              </Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, {color: tokens.textSecondary}]}>
-                当前模型
-              </Text>
-              <Text
-                style={[styles.infoValue, {color: tokens.textSecondary}]}
-                numberOfLines={1}
-                ellipsizeMode="middle">
-                {modelLabel}
-              </Text>
-            </View>
-          </View>
           {items.map(item => (
             <Pressable
               key={item.label}
@@ -144,19 +72,5 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
   },
-  infoBlock: {
-    gap: 8,
-    paddingBottom: 12,
-    marginBottom: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  infoLabel: {fontSize: 14, flexShrink: 0},
-  infoValue: {fontSize: 14, flex: 1, textAlign: 'right'},
   row: {paddingVertical: 14},
 });

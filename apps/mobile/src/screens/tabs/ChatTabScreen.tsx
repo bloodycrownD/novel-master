@@ -1459,14 +1459,6 @@ export function ChatTabScreen() {
             setSessionDrawerOpen(false);
             handleCompactSession();
           }}
-          onSwitchModel={() => {
-            setSessionDrawerOpen(false);
-            setModelPickerOpen(true);
-          }}
-          onSwitchAgent={() => {
-            setSessionDrawerOpen(false);
-            setAgentPickerOpen(true);
-          }}
           onRealPrompt={() => navigation.navigate('RealPrompt')}
           onBatchMessages={() => {
             setSessionDrawerOpen(false);

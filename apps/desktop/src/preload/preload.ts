@@ -4,6 +4,7 @@
  */
 import { contextBridge, ipcRenderer } from "electron";
 import type { IpcChannel } from "../../shared/ipc-types.js";
+import pkg from "../../package.json" with { type: "json" };
 
 export interface NovelMasterDesktopBridge {
   readonly version: string;
@@ -24,7 +25,7 @@ const ipcListenerByCallback = new WeakMap<
 >();
 
 const novelMasterDesktop: NovelMasterDesktopBridge = {
-  version: "0.0.0",
+  version: pkg.version,
   platform: process.platform,
   customTitleBar:
     process.platform === "win32" || process.platform === "darwin",

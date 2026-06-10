@@ -23,26 +23,26 @@ export function UpdateAvailableModal({
     return null;
   }
 
-  const message = releaseNotesExcerpt
-    ? `新版本 ${remoteVersion}\n\n${releaseNotesExcerpt}`
-    : `新版本 ${remoteVersion}`;
-
   return (
     <div className="text-prompt-overlay" onClick={onCancel}>
       <div
-        className="confirm-modal"
+        className="update-modal"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="update-modal-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 id="update-modal-title" className="confirm-modal__title">
+        <h3 id="update-modal-title" className="update-modal__title">
           发现新版本
         </h3>
-        <p className="confirm-modal__message" style={{ whiteSpace: "pre-wrap" }}>
-          {message}
+        <p className="update-modal__version">v{remoteVersion}</p>
+        {releaseNotesExcerpt ? (
+          <p className="update-modal__notes">{releaseNotesExcerpt}</p>
+        ) : null}
+        <p className="update-modal__hint">
+          将在浏览器中打开 GitHub 发行页，请下载对应平台的安装包。
         </p>
-        <div className="confirm-modal__actions">
+        <div className="update-modal__actions">
           <Button variant="secondary" disabled={busy} onClick={onCancel}>
             取消
           </Button>

@@ -38,8 +38,8 @@ function showUpdateAlert(
   onLater: () => void,
 ): void {
   const message = data.releaseNotesExcerpt
-    ? `新版本 ${data.remoteVersion}\n\n${data.releaseNotesExcerpt}`
-    : `新版本 ${data.remoteVersion}`;
+    ? `v${data.remoteVersion}\n\n${data.releaseNotesExcerpt}\n\n将在浏览器中打开 GitHub 发行页下载。`
+    : `v${data.remoteVersion}\n\n将在浏览器中打开 GitHub 发行页下载。`;
 
   Alert.alert('发现新版本', message, [
     {text: '取消', style: 'cancel'},
