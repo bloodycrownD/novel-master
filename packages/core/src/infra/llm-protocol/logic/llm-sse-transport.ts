@@ -10,6 +10,7 @@
 
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { FetchFn } from "../ports/adapter.port.js";
+import { createSseChunkEmitter } from "./sse-chunk-emitter.js";
 import { assertOk } from "./http-util.js";
 
 export type SseByteHandler = (chunk: string) => void;
@@ -162,71 +163,9 @@ function postSseViaXhr(
       reject(error);
     };
 
-    const MAX_SSE_EMIT_BYTES = 4096;
-    const SSE_STALL_MS = 90_000;
-    let pendingText = "";
-    let drainTimer: ReturnType<typeof setTimeout> | null = null;
-    let lastProgressAt = Date.now();
-    let stallTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
-      if (Date.now() - lastProgressAt < SSE_STALL_MS) {
-        return;
-      }
-      clearDrainTimer();
-      pendingText = "";
-      xhr.abort();
-    }, 5000);
-
-    const clearStallTimer = (): void => {
-      if (stallTimer != null) {
-        clearInterval(stallTimer);
-        stallTimer = null;
-      }
-    };
-
-    const clearDrainTimer = (): void => {
-      if (drainTimer != null) {
-        clearTimeout(drainTimer);
-        drainTimer = null;
-      }
-    };
-
-    const emitPendingChunk = (): boolean => {
-      if (pendingText.length === 0) {
-        return false;
-      }
-      const take = Math.min(pendingText.length, MAX_SSE_EMIT_BYTES);
-      const chunk = pendingText.slice(0, take);
-      pendingText = pendingText.slice(take);
-      onChunk(chunk);
-      return pendingText.length > 0;
-    };
-
-    const scheduleDrain = (): void => {
-      if (drainTimer != null || pendingText.length === 0) {
-        return;
-      }
-      drainTimer = setTimeout(() => {
-        drainTimer = null;
-        if (emitPendingChunk()) {
-          scheduleDrain();
-        }
-      }, 0);
-    };
-
-    const drainAllPending = (onDone: () => void): void => {
-      clearDrainTimer();
-      const step = (): void => {
-        if (emitPendingChunk()) {
-          setTimeout(step, 0);
-          return;
-        }
-        onDone();
-      };
-      step();
-    };
+    const emitter = createSseChunkEmitter(onChunk);
 
     const deliverNewText = (): void => {
-      lastProgressAt = Date.now();
       const text = xhr.responseText;
       if (text.length <= processedLength) {
         return;
@@ -237,8 +176,7 @@ function postSseViaXhr(
         firstChunkLogged = true;
         logSse(logTag, "xhr first chunk", { bytes: chunk.length });
       }
-      pendingText += chunk;
-      scheduleDrain();
+      emitter.append(chunk);
     };
 
     xhr.open(init.method ?? "POST", url);
@@ -262,41 +200,40 @@ function postSseViaXhr(
     };
 
     xhr.onload = () => {
-      clearStallTimer();
       deliverNewText();
-      drainAllPending(() => {
-        const status = xhr.status;
-        const contentType = xhr.getResponseHeader("Content-Type");
-        logSse(logTag, "xhr complete", { status, contentType });
+      // Synchronous flush on complete: no async drain chain; guarantees tail delivery.
+      const tail = emitter.flush();
+      if (tail.length > 0) {
+        onChunk(tail);
+      }
 
-        if (status < 200 || status >= 300) {
-          const body = xhr.responseText;
-          const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
-          rejectOnce(
-            new ProviderError(
-              "HTTP_ERROR",
-              `HTTP ${status}: ${snippet}`,
-              { providerId },
-            ),
-          );
-          return;
-        }
+      const status = xhr.status;
+      const contentType = xhr.getResponseHeader("Content-Type");
+      logSse(logTag, "xhr complete", { status, contentType });
 
-        resolveOnce({ status, contentType });
-      });
+      if (status < 200 || status >= 300) {
+        const body = xhr.responseText;
+        const snippet = body.length > 500 ? `${body.slice(0, 500)}…` : body;
+        rejectOnce(
+          new ProviderError(
+            "HTTP_ERROR",
+            `HTTP ${status}: ${snippet}`,
+            { providerId },
+          ),
+        );
+        return;
+      }
+
+      resolveOnce({ status, contentType });
     };
 
     xhr.onerror = () => {
-      clearStallTimer();
-      clearDrainTimer();
-      pendingText = "";
+      emitter.dispose();
       rejectOnce(new ProviderError("HTTP_ERROR", "XHR network error", { providerId }));
     };
 
     xhr.onabort = () => {
-      clearStallTimer();
-      clearDrainTimer();
-      pendingText = "";
+      emitter.dispose();
       rejectOnce(new ProviderError("HTTP_ERROR", "Request aborted", { providerId }));
     };
 

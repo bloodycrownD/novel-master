@@ -70,7 +70,7 @@ XHR onprogress → onChunk → EventBus
 | **消费端合并** | Bus 32ms 合并；WebView rAF 合并 `streamDelta` |
 | **绕过 React 流式 state** | WebView 路径：`transcriptWebRef.pushStreamDelta()`，不再 `setStreamingText` |
 | **流式期不做重 CPU 渲染** | 流式 tail 仅纯文本；rich HTML 在 persist / snapshot 后 |
-| **SSE 生产端** | `onChunk` 最大 4KB + `setTimeout(0)` 异步 drain；90s stall watchdog |
+| **SSE 生产端** | Core `postSseViaXhr`：32ms `setInterval` 整流（每 tick 最多一次 `onChunk`）；`onload` 同步 flush 尾部 |
 | **增量 + 全量搭配** | assistant 新消息 → `appendTailRows`；**`tool_results` 落库 → `sessionSnapshot('preserve')`**，刷新 `toolPhase` / 工具卡 |
 | **流式期推迟 snapshot** | `streamActiveRef` 为 true 时不发 snapshot，待 `streamReset` 后 flush |
 | **reload 去重** | 并发 `reloadMessages(true)` 合并为单次 in-flight |
@@ -99,7 +99,7 @@ XHR onprogress → onChunk → EventBus
 |------|----------|
 | 流式 UI 更新频率 | ≤ ~30–60 次/秒（bus 32ms + rAF） |
 | 单步 `reloadMessages` | 可接受 ~100ms；全量 snapshot 避免与流式重叠 |
-| `onChunk` 同步处理 | < 16ms；更大块应走 transport 分片 |
+| 传输层 `onChunk` 频率 | ≤ ~30 次/秒（32ms tick 整流）；`onload` 同步 flush 尾部 |
 
 ### 100 token/s 是否安全？
 
@@ -117,7 +117,8 @@ apps/mobile/src/screens/tabs/ChatTabScreen.tsx          # bus 合并、imperativ
 apps/mobile/src/components/chat/ChatTranscriptWebView.tsx # streamActive、appendTailRows / snapshot 分支
 apps/mobile/src/components/chat/message-blocks.ts       # toolPhase、messageIsToolResultsOnly
 apps/mobile/src/web/chat-transcript/main.ts             # appendStreamDelta、appendTailRows、applySnapshot
-packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts  # 分片 drain
+packages/core/src/infra/llm-protocol/logic/llm-sse-transport.ts  # 32ms 整流
+packages/core/src/infra/llm-protocol/logic/sse-chunk-emitter.ts  # XHR burst 平滑
 packages/core/src/service/agent/impl/agent-runner.ts    # checkpoint 非阻塞、step 生命周期
 ```
 
