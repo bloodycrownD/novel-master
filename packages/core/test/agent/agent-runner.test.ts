@@ -7,7 +7,7 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   InMemoryAgentSession,
-  registerVfsTools,
+  registerBuiltinTools,
   SimpleEventBus,
   textBlocks,
   ToolRegistry,
@@ -18,7 +18,7 @@ import {
   type ModelRequestService,
 } from "@novel-master/core";
 import { AgentError } from "../../src/errors/agent-runtime-errors.js";
-import type { VfsService, VfsToolContext } from "@novel-master/core";
+import type { BuiltinToolContext, VfsService } from "@novel-master/core";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -81,11 +81,12 @@ function mockVfs(): VfsService {
   } as unknown as VfsService;
 }
 
-function mockToolCtx(vfs: VfsService): VfsToolContext {
+function mockToolCtx(vfs: VfsService): BuiltinToolContext {
   return {
     vfs,
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
+    listSessionMessages: async () => [],
   };
 }
 
@@ -123,7 +124,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -164,8 +165,8 @@ describe("AgentRunner", () => {
             {
               type: "tool_use",
               id: "tu1",
-              name: "list",
-              input: { dir: "/" },
+              name: "fs",
+              input: { command: "ls /" },
             },
           ],
           raw: {},
@@ -174,7 +175,7 @@ describe("AgentRunner", () => {
     };
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -219,7 +220,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -257,8 +258,8 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "t1",
-            name: "list",
-            input: { dir: "/" },
+            name: "fs",
+            input: { command: "ls /" },
           },
         ],
         raw: {},
@@ -269,8 +270,8 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "t2",
-            name: "list",
-            input: { dir: "/" },
+            name: "fs",
+            input: { command: "ls /" },
           },
         ],
         raw: {},
@@ -283,7 +284,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -352,8 +353,8 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "tu1",
-            name: "list",
-            input: { dir: "/" },
+            name: "fs",
+            input: { command: "ls /" },
           },
         ],
         raw: {},
@@ -365,7 +366,7 @@ describe("AgentRunner", () => {
       },
     ]);
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner({
       session,
       modelRequests: model,
@@ -400,7 +401,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -463,7 +464,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session: chatSession,
@@ -473,6 +474,7 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
         messageCheckpoint: ctx.messageCheckpoint,
       }),
@@ -523,8 +525,8 @@ describe("AgentRunner", () => {
           {
             type: "tool_use",
             id: "l1",
-            name: "list",
-            input: { dir: "/" },
+            name: "fs",
+            input: { command: "ls /" },
           },
         ],
         raw: {},
@@ -537,7 +539,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session: chatSession,
@@ -547,6 +549,7 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
         messageCheckpoint: ctx.messageCheckpoint,
       }),
@@ -605,7 +608,7 @@ describe("AgentRunner", () => {
     ]);
 
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const vfs = ctx.sessionVfs(project.id, session.id);
     const runner = createAgentRunner(
       runnerDeps({
@@ -616,6 +619,7 @@ describe("AgentRunner", () => {
           vfs,
           projectId: project.id,
           sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
         },
       }),
     );
@@ -656,7 +660,7 @@ describe("AgentRunner", () => {
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b1", name: "list", input: { dir: "/" } }],
+        blocks: [{ type: "tool_use", id: "b1", name: "fs", input: { command: "ls /" } }],
         raw: {},
       },
       {
@@ -666,12 +670,12 @@ describe("AgentRunner", () => {
       },
       {
         assistantText: "",
-        blocks: [{ type: "tool_use", id: "b2", name: "list", input: { dir: "/" } }],
+        blocks: [{ type: "tool_use", id: "b2", name: "fs", input: { command: "ls /" } }],
         raw: {},
       },
     ]);
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const runner = createAgentRunner(
       runnerDeps({
         session,

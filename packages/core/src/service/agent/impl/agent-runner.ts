@@ -24,7 +24,7 @@ import {
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
-import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
+import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
@@ -54,8 +54,8 @@ import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js"
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
-  readonly registry: ToolRegistry<VfsToolContext>;
-  readonly toolCtx: VfsToolContext;
+  readonly registry: ToolRegistry<BuiltinToolContext>;
+  readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
   readonly macroCache: SessionMacroCache;
   /** When set, captures checkpoint after mutating tools settle for the step. */
@@ -73,7 +73,7 @@ const DEFAULT_MAX_STEPS = 20;
  * Executes agent loops: conditions → LLM → tools → repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
-  private readonly toolRunner: ToolRunner<VfsToolContext>;
+  private readonly toolRunner: ToolRunner<BuiltinToolContext>;
 
   constructor(private readonly deps: DefaultAgentRunnerDeps) {
     this.toolRunner = new ToolRunner(deps.registry);

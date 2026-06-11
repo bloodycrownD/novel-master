@@ -3,7 +3,7 @@ import { describe, it, mock } from "node:test";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
 import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
-import { toolsFromRegistry, ToolRegistry, registerVfsTools } from "@novel-master/core";
+import { toolsFromRegistry, ToolRegistry, registerBuiltinTools } from "@novel-master/core";
 
 describe("ModelRequest tools + stream (adapters)", () => {
   it("Anthropic chat sends tools in request body", async () => {
@@ -225,7 +225,7 @@ describe("ModelRequest tools + stream (adapters)", () => {
 
   it("toolsFromRegistry produces serializable schemas", () => {
     const registry = new ToolRegistry();
-    registerVfsTools(registry);
+    registerBuiltinTools(registry);
     const tools = toolsFromRegistry(registry);
     assert.ok(tools.length >= 6);
     for (const t of tools) {

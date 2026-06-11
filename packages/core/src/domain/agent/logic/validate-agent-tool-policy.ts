@@ -4,9 +4,23 @@
  * @module domain/agent/logic/validate-agent-tool-policy
  */
 
-import { normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
+import { FILE_TOOL_NAMES, normalizeAgentToolPolicyName } from "@/domain/tool/builtin/vfs-tools.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import type { AgentToolPolicy } from "../model/agent-definition.js";
+
+const LEGACY_TOOL_MIGRATION: Readonly<Record<string, string>> = {
+  replace: "edit",
+  delete: "fs (rm / rm -r)",
+  move: "fs (mv)",
+  copy: "fs (cp / cp -r)",
+  mkdir: "fs (mkdir)",
+  list: "fs (ls / ls -r)",
+};
+
+function migrationHint(raw: string): string | undefined {
+  const normalized = normalizeAgentToolPolicyName(raw);
+  return LEGACY_TOOL_MIGRATION[normalized];
+}
 
 function assertKnownNames(
   names: readonly string[],
@@ -16,9 +30,15 @@ function assertKnownNames(
   for (const raw of names) {
     const name = normalizeAgentToolPolicyName(raw);
     if (!registryNames.has(name)) {
+      const hint = migrationHint(raw);
+      const v2List = FILE_TOOL_NAMES.join(", ") + ", chat_grep";
+      const suffix =
+        hint != null
+          ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.`
+          : ` Known V2 tools: ${v2List}.`;
       throw new AgentConfigError(
         "INVALID_TOOL_POLICY",
-        `${listLabel} references unknown tool: ${raw}`,
+        `${listLabel} references unknown tool: ${raw}.${suffix}`,
       );
     }
   }

@@ -4,13 +4,24 @@ import { z } from "zod";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "../../src/domain/tool/logic/tool-runner.js";
-import {
-  registerVfsTools,
-  type VfsToolContext,
-} from "../../src/domain/tool/builtin/vfs-tools.js";
+import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
+import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+function makeToolContext(
+  vfs: BuiltinToolContext["vfs"],
+  projectId: string,
+  sessionId: string,
+): BuiltinToolContext {
+  return {
+    vfs,
+    projectId,
+    sessionId,
+    listSessionMessages: async () => [],
+  };
+}
 
 describe("ToolRunner.runParallel", () => {
   it("R6: parallel writes to three paths yield one checkpoint tree with three entries", async () => {
@@ -22,14 +33,10 @@ describe("ToolRunner.runParallel", () => {
       blocks: [{ type: "text", text: "write three" }],
     });
 
-    const registry = new ToolRegistry<VfsToolContext>();
-    registerVfsTools(registry);
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
-    const toolContext: VfsToolContext = {
-      vfs,
-      projectId: project.id,
-      sessionId: session.id,
-    };
+    const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
     const outcomes = await runner.runParallel(
       [
@@ -37,7 +44,7 @@ describe("ToolRunner.runParallel", () => {
         { name: "write", input: { path: "/b.md", content: "B" } },
         { name: "write", input: { path: "/c.md", content: "C" } },
       ],
-      toolContext,
+      ctxForTools,
     );
     assert.equal(outcomes.length, 3);
     assert.ok(outcomes.every((o) => o.ok));
@@ -62,14 +69,10 @@ describe("ToolRunner.runParallel", () => {
       blocks: [{ type: "text", text: "race" }],
     });
 
-    const registry = new ToolRegistry<VfsToolContext>();
-    registerVfsTools(registry);
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
-    const toolContext: VfsToolContext = {
-      vfs,
-      projectId: project.id,
-      sessionId: session.id,
-    };
+    const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
     const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
     const originalWrite = vfs.write.bind(vfs);
@@ -87,7 +90,7 @@ describe("ToolRunner.runParallel", () => {
         { name: "write", input: { path: "/race.md", content: "first" } },
         { name: "write", input: { path: "/race.md", content: "second" } },
       ],
-      toolContext,
+      ctxForTools,
     );
 
     const live = await vfs.read("/race.md");
@@ -108,22 +111,18 @@ describe("ToolRunner.runParallel", () => {
     await vfs.write("/x.md", "x");
     await vfs.write("/y.md", "y");
 
-    const registry = new ToolRegistry<VfsToolContext>();
-    registerVfsTools(registry);
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
-    const toolContext: VfsToolContext = {
-      vfs,
-      projectId: project.id,
-      sessionId: session.id,
-    };
+    const ctxForTools = makeToolContext(vfs, project.id, session.id);
 
     const outcomes = await runner.runParallel(
       [
         { name: "read", input: { path: "/x.md" } },
         { name: "read", input: { path: "/y.md" } },
-        { name: "list", input: { dir: "/" } },
+        { name: "fs", input: { command: "ls /" } },
       ],
-      toolContext,
+      ctxForTools,
       { concurrency: 2 },
     );
     assert.equal(outcomes.length, 3);

@@ -8,9 +8,9 @@ import { resolveApplicationModelId } from "@/domain/agent/logic/resolve-applicat
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { RunAgentActionParams } from "@/domain/events-config/model/events-config.js";
-import { registerVfsTools } from "@/domain/tool/builtin/vfs-tools.js";
+import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
+import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { createAgentRunner } from "@/service/agent/create-agent-runner.js";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
@@ -59,8 +59,8 @@ export async function runRunAgentAction(
     throw new Error(`run-agent: no model resolved for agent "${agentId}"`);
   }
 
-  const probe = new ToolRegistry<VfsToolContext>();
-  registerVfsTools(probe);
+  const probe = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(probe);
   await validateAgentDefinition(definition, {
     registeredToolNames: probe.list(),
   });
@@ -77,6 +77,7 @@ export async function runRunAgentAction(
       vfs,
       projectId: ctx.projectId,
       sessionId: ctx.sessionId,
+      listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
     },
     messageCheckpoint: deps.messageCheckpoint,
     eventBus: deps.eventBus,

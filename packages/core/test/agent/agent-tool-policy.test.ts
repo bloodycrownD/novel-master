@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   AgentConfigError,
-  registerVfsTools,
+  registerBuiltinTools,
   resolveAgentToolRegistry,
   toolsFromRegistry,
   ToolError,
@@ -12,6 +12,7 @@ import {
   validateAgentToolPolicy,
   type AgentDefinition,
 } from "@novel-master/core";
+import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 
 const BASE_DEF: AgentDefinition = {
   name: "test",
@@ -19,17 +20,17 @@ const BASE_DEF: AgentDefinition = {
 };
 
 function vfsRegistryNames(): string[] {
-  const registry = new ToolRegistry();
-  registerVfsTools(registry);
+  const registry = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(registry);
   return registry.list();
 }
 
 describe("agent tool policy", () => {
   const registryNames = new Set(vfsRegistryNames());
 
-  it("T1: no tools config exposes all vfs tools", () => {
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+  it("T1: no tools config exposes all builtin tools", () => {
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, BASE_DEF);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
     assert.equal(toolsFromRegistry(filtered).length, vfsRegistryNames().length);
@@ -40,8 +41,8 @@ describe("agent tool policy", () => {
       ...BASE_DEF,
       tools: { allow: ["read", "grep"] },
     };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
     assert.equal(toolsFromRegistry(filtered).length, 2);
@@ -53,8 +54,8 @@ describe("agent tool policy", () => {
       ...BASE_DEF,
       tools: { allow: [] },
     };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list(), []);
     assert.equal(toolsFromRegistry(filtered).length, 0);
@@ -65,8 +66,8 @@ describe("agent tool policy", () => {
       ...BASE_DEF,
       tools: { deny: ["write"] },
     };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.ok(!filtered.list().includes("write"));
     assert.ok(filtered.list().includes("read"));
@@ -90,8 +91,8 @@ describe("agent tool policy", () => {
       ...BASE_DEF,
       tools: { allow: ["vfs.read", "vfs.grep"] },
     };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), ["grep", "read"]);
   });
@@ -102,6 +103,19 @@ describe("agent tool policy", () => {
         validateAgentToolPolicy({ allow: ["vfs.nope"] }, registryNames),
       (e: unknown) =>
         e instanceof AgentConfigError && e.code === "INVALID_TOOL_POLICY",
+    );
+  });
+
+  it("T9: legacy replace tool name fails validation with migration hint", () => {
+    assert.throws(
+      () => validateAgentToolPolicy({ allow: ["replace"] }, registryNames),
+      (e: unknown) => {
+        assert.ok(e instanceof AgentConfigError);
+        assert.equal(e.code, "INVALID_TOOL_POLICY");
+        assert.ok(e.message.includes("replace"));
+        assert.ok(e.message.includes("edit"));
+        return true;
+      },
     );
   });
 
@@ -119,24 +133,24 @@ describe("agent tool policy", () => {
 
   it("empty deny matches default (all tools)", () => {
     const def: AgentDefinition = { ...BASE_DEF, tools: { deny: [] } };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     assert.deepEqual(filtered.list().sort(), vfsRegistryNames().sort());
   });
 
-  it("A10: allow read-only rejects vfs.move with NOT_FOUND", async () => {
+  it("A10: allow read-only rejects fs with NOT_FOUND", async () => {
     const def: AgentDefinition = {
       ...BASE_DEF,
       tools: { allow: ["read", "grep"] },
     };
-    const base = new ToolRegistry();
-    registerVfsTools(base);
+    const base = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(base);
     const filtered = resolveAgentToolRegistry(base, def);
     const runner = new ToolRunner(filtered);
 
     await assert.rejects(
-      () => runner.call("move", { from: "/a", to: "/b" }, {}),
+      () => runner.call("fs", { command: "mv /a /b" }, {} as BuiltinToolContext),
       (e: unknown) => e instanceof ToolError && e.code === "NOT_FOUND",
     );
   });

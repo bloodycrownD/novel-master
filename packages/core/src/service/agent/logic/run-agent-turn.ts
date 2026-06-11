@@ -8,7 +8,8 @@ import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-too
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
-import { registerVfsTools } from "@/domain/tool/builtin/vfs-tools.js";
+import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-tools.js";
+import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
@@ -163,8 +164,8 @@ export async function runAgentTurn(
   }
 
   stage = "validate-agent-definition";
-  const toolProbe = new ToolRegistry();
-  registerVfsTools(toolProbe);
+  const toolProbe = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(toolProbe);
   await validateAgentDefinition(definition, {
     registeredToolNames: toolProbe.list(),
   });
@@ -190,6 +191,8 @@ export async function runAgentTurn(
       vfs,
       projectId: scope.projectId,
       sessionId: scope.sessionId,
+      listSessionMessages: (): Promise<readonly ChatMessage[]> =>
+        runtime.messages.listBySession(scope.sessionId),
     },
     messageCheckpoint: runtime.messageCheckpoint,
     regexConfig: runtime.regexConfig,

@@ -13,32 +13,50 @@ describe("formatToolOutputForLlm", () => {
     assert.equal(formatToolOutputForLlm({ version: 1 }), "ok");
   });
 
-  it("returns ok for replace result with one replacement", () => {
+  it("T10: returns ok for edit result with one replacement", () => {
     assert.equal(
       formatToolOutputForLlm({ version: 2, replacements: 1 }),
       "ok",
     );
   });
 
-  it("summarizes multi replacement replace result", () => {
+  it("T10: summarizes multi replacement edit result", () => {
     assert.equal(
       formatToolOutputForLlm({ version: 2, replacements: 3 }),
       "ok (3 replacements)",
     );
   });
 
-  it("returns ok for { ok: true } mutating tool results", () => {
+  it("returns ok for { ok: true } fs mutating results", () => {
     assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
   });
 
-  it("keeps structured read results as JSON", () => {
+  it("T10: formats truncated read with nextOffset hint", () => {
     const out = formatToolOutputForLlm({
       path: "/a.md",
-      content: "hi",
+      content: "line-1",
       version: 1,
       mtimeMs: 0,
+      offset: 1,
+      limit: 2000,
+      totalLines: 5000,
+      returnedLines: 2000,
+      truncated: true,
+      nextOffset: 2001,
     });
-    assert.ok(out.includes('"path"'));
+    assert.ok(out.includes("line-1"));
+    assert.ok(out.includes("Continue with offset=2001"));
+  });
+
+  it("T10: formats fs ls truncated output", () => {
+    const out = formatToolOutputForLlm({
+      entries: [{ path: "/a", kind: "file" }],
+      total: 100,
+      truncated: true,
+      omitted: 99,
+    });
+    assert.ok(out.includes("/a\tfile"));
+    assert.ok(out.includes("truncated"));
   });
 });
 

@@ -9,38 +9,33 @@ import { z } from "zod";
 import type { Tool } from "../model/tool.js";
 import type {
   VfsGrepMatch,
-  VfsListEntry,
   VfsReadResult,
-  VfsService,
   WriteOptions,
 } from "@/domain/vfs/ports/vfs-service.port.js";
-import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
-import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
-import type { ToolRegistry } from "../logic/tool-registry.js";
-
-/**
- * Context for builtin file tools: session-scoped, revision-aware {@link VfsService}.
- *
- * @remarks Mutating tools write directly to VFS; checkpoint capture runs at Agent step boundary.
- */
-export type VfsToolContext = {
-  readonly vfs: VfsService;
-  readonly projectId: string;
-  readonly sessionId: string;
-};
+import type { BuiltinToolContext } from "./builtin-tool-context.js";
+import {
+  executeFsCommand,
+  parseFsCommand,
+  type FsCommandResult,
+} from "../logic/fs-command.js";
+import {
+  capMatchList,
+  capUtf8Bytes,
+  sliceLinesFromOffset,
+  TOOL_OUTPUT_MAX_LINES,
+  TOOL_OUTPUT_MAX_MATCHES,
+  truncateLine,
+} from "../logic/tool-output-limits.js";
+import { ToolError } from "@/errors/tool-errors.js";
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = [
   "read",
   "write",
-  "replace",
-  "delete",
-  "list",
-  "mkdir",
+  "edit",
+  "fs",
   "glob",
   "grep",
-  "move",
-  "copy",
 ] as const;
 
 export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
@@ -48,11 +43,8 @@ export type FileToolName = (typeof FILE_TOOL_NAMES)[number];
 /** Tools that mutate session file content (checkpoint-eligible). */
 export const MUTATING_FILE_TOOL_NAMES = new Set<FileToolName>([
   "write",
-  "replace",
-  "delete",
-  "mkdir",
-  "move",
-  "copy",
+  "edit",
+  "fs",
 ]);
 
 /** @deprecated Use {@link MUTATING_FILE_TOOL_NAMES}. */
@@ -70,7 +62,7 @@ export const isMutatingVfsToolName = isMutatingFileToolName;
 export const FILE_OPEN_TOOL_NAMES = new Set<FileToolName>([
   "read",
   "write",
-  "replace",
+  "edit",
 ]);
 
 /** Maps legacy agent policy `vfs.read` → `read`. */
@@ -78,33 +70,127 @@ export function normalizeAgentToolPolicyName(name: string): string {
   return name.startsWith("vfs.") ? name.slice(4) : name;
 }
 
+export type ReadToolOutput = {
+  readonly path: string;
+  readonly content: string;
+  readonly version: number;
+  readonly mtimeMs: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly totalLines: number;
+  readonly returnedLines: number;
+  readonly truncated: boolean;
+  readonly nextOffset?: number;
+};
+
+export type GrepToolOutput = {
+  readonly matches: readonly VfsGrepMatch[];
+  readonly total: number;
+  readonly truncated: boolean;
+};
+
+export type GlobToolOutput = {
+  readonly paths: readonly string[];
+  readonly total: number;
+  readonly truncated: boolean;
+};
+
 /**
- * Creates the builtin workspace file tools.
+ * Creates the builtin workspace file tools (V2: 6 tools).
  *
  * @remarks
  * Visibility and access rules come from the injected `VfsService` instance
  * (global / project / session scope). Mutations append revisions via the revision-aware wrapper.
  */
-export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
-  const read: Tool<{ path: string }, VfsReadResult, VfsToolContext> = {
+export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] {
+  const read: Tool<
+    { path: string; offset?: number; limit?: number },
+    ReadToolOutput,
+    BuiltinToolContext
+  > = {
     name: "read",
-    description: "读取工作区文件内容",
-    inputSchema: z.object({ path: z.string().min(1) }),
+    description: "读取工作区文件内容（支持 offset/limit 分页）",
+    inputSchema: z.object({
+      path: z.string().min(1),
+      offset: z.number().int().min(1).optional(),
+      limit: z.number().int().min(1).optional(),
+    }),
     outputSchema: z.object({
       path: z.string(),
       content: z.string(),
       version: z.number().int(),
       mtimeMs: z.number(),
+      offset: z.number().int(),
+      limit: z.number().int(),
+      totalLines: z.number().int(),
+      returnedLines: z.number().int(),
+      truncated: z.boolean(),
+      nextOffset: z.number().int().optional(),
     }),
     async run(input, ctx) {
-      return await ctx.vfs.read(input.path);
+      const offset = input.offset ?? 1;
+      const limit = input.limit ?? TOOL_OUTPUT_MAX_LINES;
+      const raw = await ctx.vfs.read(input.path);
+      const lines = raw.content.split("\n");
+      const totalLines = lines.length;
+
+      if (offset > 1 && totalLines === 0) {
+        throw new ToolError(
+          "INVALID_ARGUMENT",
+          `offset ${offset} exceeds file length (0 lines)`,
+          { toolName: "read" },
+        );
+      }
+      if (totalLines > 0 && offset > totalLines) {
+        throw new ToolError(
+          "INVALID_ARGUMENT",
+          `offset ${offset} exceeds file length (${totalLines} lines)`,
+          { toolName: "read" },
+        );
+      }
+
+      const { slice, nextOffset: lineNextOffset } = sliceLinesFromOffset(
+        lines,
+        offset,
+        limit,
+      );
+      const truncatedLines = slice.map((line) => truncateLine(line).line);
+      const byteCapped = capUtf8Bytes(truncatedLines);
+      const content = byteCapped.lines.join("\n");
+      const returnedLines = byteCapped.lines.length;
+      const truncated =
+        byteCapped.truncated ||
+        returnedLines < slice.length ||
+        (lineNextOffset != null && returnedLines >= limit);
+
+      let nextOffset: number | undefined;
+      if (truncated) {
+        if (byteCapped.truncated && returnedLines > 0) {
+          nextOffset = offset + returnedLines;
+        } else if (lineNextOffset != null) {
+          nextOffset = lineNextOffset;
+        }
+      }
+
+      return {
+        path: raw.path,
+        content,
+        version: raw.version,
+        mtimeMs: raw.mtimeMs,
+        offset,
+        limit,
+        totalLines,
+        returnedLines,
+        truncated,
+        ...(nextOffset != null ? { nextOffset } : {}),
+      };
     },
   };
 
   const write: Tool<
     { path: string; content: string; options?: WriteOptions },
     { version: number },
-    VfsToolContext
+    BuiltinToolContext
   > = {
     name: "write",
     description: "写入或覆盖工作区文件（可选版本校验）",
@@ -130,7 +216,7 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     },
   };
 
-  const replace: Tool<
+  const edit: Tool<
     {
       path: string;
       oldString: string;
@@ -138,9 +224,9 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       options?: { replaceAll?: boolean };
     },
     { version: number; replacements: number },
-    VfsToolContext
+    BuiltinToolContext
   > = {
-    name: "replace",
+    name: "edit",
     description: "在工作区文件内查找并替换文本",
     inputSchema: z.object({
       path: z.string().min(1),
@@ -162,69 +248,35 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
     },
   };
 
-  const del: Tool<
-    { path: string; options?: { recursive?: boolean } },
-    { ok: true },
-    VfsToolContext
-  > = {
-    name: "delete",
+  const fs: Tool<{ command: string }, FsCommandResult, BuiltinToolContext> = {
+    name: "fs",
     description:
-      "删除工作区中的文件或空目录；recursive 为 true 时可删除目录树",
-    inputSchema: z.object({
-      path: z.string().min(1),
-      options: z.object({ recursive: z.boolean().optional() }).optional(),
-    }),
-    outputSchema: z.object({ ok: z.literal(true) }),
-    async run(input, ctx) {
-      await ctx.vfs.delete(input.path, {
-        recursive: input.options?.recursive ?? false,
-      });
-      return { ok: true as const };
-    },
-  };
-
-  const list: Tool<
-    { dir: string; options?: { recursive?: boolean; maxDepth?: number } },
-    VfsListEntry[],
-    VfsToolContext
-  > = {
-    name: "list",
-    description: "列出工作区目录下的文件与子目录",
-    inputSchema: z.object({
-      dir: z.string().min(1),
-      options: z
-        .object({
-          recursive: z.boolean().optional(),
-          maxDepth: z.number().int().optional(),
-        })
-        .optional(),
-    }),
-    outputSchema: z.array(
+      "执行单条文件系统命令（ls、rm、mv、cp、mkdir、rmdir）；不支持 shell 链式语法",
+    inputSchema: z.object({ command: z.string().min(1) }),
+    outputSchema: z.union([
+      z.object({ ok: z.literal(true) }),
       z.object({
-        path: z.string(),
-        kind: z.enum(["file", "directory"]),
+        entries: z.array(
+          z.object({
+            path: z.string(),
+            kind: z.enum(["file", "directory"]),
+          }),
+        ),
+        total: z.number().int(),
+        truncated: z.boolean(),
+        omitted: z.number().int().optional(),
       }),
-    ),
+    ]),
     async run(input, ctx) {
-      return await ctx.vfs.list(input.dir, input.options);
-    },
-  };
-
-  const mkdir: Tool<{ path: string }, { ok: true }, VfsToolContext> = {
-    name: "mkdir",
-    description: "在工作区创建空目录（父目录须已存在）",
-    inputSchema: z.object({ path: z.string().min(1) }),
-    outputSchema: z.object({ ok: z.literal(true) }),
-    async run(input, ctx) {
-      await ctx.vfs.mkdir(input.path);
-      return { ok: true as const };
+      const parsed = parseFsCommand(input.command);
+      return await executeFsCommand(ctx.vfs, parsed);
     },
   };
 
   const glob: Tool<
     { pattern: string; options?: { cwd?: string } },
-    string[],
-    VfsToolContext
+    GlobToolOutput,
+    BuiltinToolContext
   > = {
     name: "glob",
     description: "按 glob 模式在工作区中查找路径",
@@ -232,16 +284,26 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       pattern: z.string().min(1),
       options: z.object({ cwd: z.string().optional() }).optional(),
     }),
-    outputSchema: z.array(z.string()),
+    outputSchema: z.object({
+      paths: z.array(z.string()),
+      total: z.number().int(),
+      truncated: z.boolean(),
+    }),
     async run(input, ctx) {
-      return await ctx.vfs.glob(input.pattern, input.options);
+      const allPaths = await ctx.vfs.glob(input.pattern, input.options);
+      const capped = capMatchList(allPaths, TOOL_OUTPUT_MAX_MATCHES, (p) => p);
+      return {
+        paths: capped.items,
+        total: capped.total,
+        truncated: capped.truncated,
+      };
     },
   };
 
   const grep: Tool<
     { pattern: string; options?: { pathPrefix?: string } },
-    VfsGrepMatch[],
-    VfsToolContext
+    GrepToolOutput,
+    BuiltinToolContext
   > = {
     name: "grep",
     description: "在工作区文件中搜索文本或正则",
@@ -249,70 +311,41 @@ export function createVfsTools(): readonly Tool<any, any, VfsToolContext>[] {
       pattern: z.string().min(1),
       options: z.object({ pathPrefix: z.string().optional() }).optional(),
     }),
-    outputSchema: z.array(
-      z.object({
-        path: z.string(),
-        line: z.number().int(),
-        column: z.number().int(),
-        excerpt: z.string(),
-      }),
-    ),
-    async run(input, ctx) {
-      return await ctx.vfs.grep(input.pattern, input.options);
-    },
-  };
-
-  const move: Tool<
-    { from: string; to: string },
-    { ok: true },
-    VfsToolContext
-  > = {
-    name: "move",
-    description: "移动或重命名工作区中的文件/目录",
-    inputSchema: z.object({
-      from: z.string().min(1),
-      to: z.string().min(1),
+    outputSchema: z.object({
+      matches: z.array(
+        z.object({
+          path: z.string(),
+          line: z.number().int(),
+          column: z.number().int(),
+          excerpt: z.string(),
+        }),
+      ),
+      total: z.number().int(),
+      truncated: z.boolean(),
     }),
-    outputSchema: z.object({ ok: z.literal(true) }),
     async run(input, ctx) {
-      await moveVfsPath(ctx.vfs, input.from, input.to);
-      return { ok: true as const };
+      const rawMatches = await ctx.vfs.grep(input.pattern, input.options);
+      const withTruncatedExcerpts = rawMatches.map((m) => ({
+        ...m,
+        excerpt: truncateLine(m.excerpt).line,
+      }));
+      const capped = capMatchList(
+        withTruncatedExcerpts,
+        TOOL_OUTPUT_MAX_MATCHES,
+        (m) => JSON.stringify(m),
+      );
+      return {
+        matches: capped.items,
+        total: capped.total,
+        truncated: capped.truncated,
+      };
     },
   };
 
-  const copy: Tool<
-    {
-      from: string;
-      to: string;
-      options?: { recursive?: boolean };
-    },
-    { ok: true },
-    VfsToolContext
-  > = {
-    name: "copy",
-    description: "复制工作区文件；目录复制需设置 options.recursive 为 true",
-    inputSchema: z.object({
-      from: z.string().min(1),
-      to: z.string().min(1),
-      options: z.object({ recursive: z.boolean().optional() }).optional(),
-    }),
-    outputSchema: z.object({ ok: z.literal(true) }),
-    async run(input, ctx) {
-      await copyVfsPath(ctx.vfs, input.from, input.to, input.options);
-      return { ok: true as const };
-    },
-  };
-
-  return [read, write, replace, del, list, mkdir, glob, grep, move, copy];
+  return [read, write, edit, fs, glob, grep];
 }
 
-/**
- * Registers builtin file tools into a registry.
- *
- * @throws ToolError CONFLICT when a builtin name is already registered
- */
-export function registerVfsTools(registry: ToolRegistry<VfsToolContext>): void {
-  for (const tool of createVfsTools()) {
-    registry.register(tool);
-  }
-}
+export type { VfsReadResult };
+export type { BuiltinToolContext } from "./builtin-tool-context.js";
+/** @deprecated Use {@link BuiltinToolContext}. */
+export type { VfsToolContext } from "./builtin-tool-context.js";

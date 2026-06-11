@@ -129,7 +129,6 @@ export type {
 } from "./domain/tool/logic/tool-runner.js";
 export {
   createVfsTools,
-  registerVfsTools,
   FILE_TOOL_NAMES,
   FILE_OPEN_TOOL_NAMES,
   MUTATING_FILE_TOOL_NAMES,
@@ -140,8 +139,20 @@ export {
   /** @deprecated Use {@link isMutatingFileToolName} */
   isMutatingVfsToolName,
 } from "./domain/tool/builtin/vfs-tools.js";
+export {
+  registerBuiltinTools,
+  /** @deprecated Use {@link registerBuiltinTools} */
+  registerVfsTools,
+} from "./domain/tool/builtin/register-builtin-tools.js";
+export { isMutatingFsCommand } from "./domain/tool/logic/fs-command.js";
+export {
+  TOOL_OUTPUT_MAX_LINES,
+  TOOL_OUTPUT_MAX_LINE_LENGTH,
+  TOOL_OUTPUT_MAX_BYTES,
+  TOOL_OUTPUT_MAX_MATCHES,
+} from "./domain/tool/logic/tool-output-limits.js";
 export type { FileToolName } from "./domain/tool/builtin/vfs-tools.js";
-export type { VfsToolContext } from "./domain/tool/builtin/vfs-tools.js";
+export type { BuiltinToolContext, VfsToolContext } from "./domain/tool/builtin/builtin-tool-context.js";
 
 /**
  * Persistent workspace pointers and behavioral preferences (KKV-backed, modules internal).

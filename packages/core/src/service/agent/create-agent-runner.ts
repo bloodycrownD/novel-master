@@ -6,7 +6,7 @@
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import type { VfsToolContext } from "@/domain/tool/builtin/vfs-tools.js";
+import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
@@ -21,8 +21,8 @@ import { DefaultAgentRunner } from "./impl/agent-runner.js";
 export interface CreateAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
-  readonly registry: ToolRegistry<VfsToolContext>;
-  readonly toolCtx: VfsToolContext;
+  readonly registry: ToolRegistry<BuiltinToolContext>;
+  readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
   readonly macroCache: SessionMacroCache;
   /** Captures message checkpoint after mutating tools complete (fork-join). */

@@ -8,6 +8,69 @@ import { ToolError } from "@/errors/tool-errors.js";
 import { VfsError } from "@/errors/vfs-errors.js";
 import type { ZodIssue } from "zod";
 
+function isTruncatedReadOutput(rec: Record<string, unknown>): boolean {
+  return (
+    typeof rec.path === "string" &&
+    typeof rec.content === "string" &&
+    typeof rec.truncated === "boolean" &&
+    rec.truncated === true
+  );
+}
+
+function formatTruncatedReadOutput(rec: Record<string, unknown>): string {
+  const parts = [rec.content as string];
+  const hints: string[] = ["Output truncated."];
+  if (typeof rec.totalLines === "number") {
+    hints.push(`Total lines: ${rec.totalLines}.`);
+  }
+  if (typeof rec.nextOffset === "number") {
+    hints.push(`Continue with offset=${rec.nextOffset}.`);
+  }
+  parts.push(hints.join(" "));
+  return parts.join("\n\n");
+}
+
+function isTruncatedMatchOutput(rec: Record<string, unknown>): boolean {
+  return (
+    typeof rec.total === "number" &&
+    typeof rec.truncated === "boolean" &&
+    rec.truncated === true
+  );
+}
+
+function formatTruncatedMatchOutput(rec: Record<string, unknown>): string {
+  const matchItems = rec.matches ?? rec.paths;
+  const itemCount = Array.isArray(matchItems) ? matchItems.length : 0;
+  const omitted =
+    typeof rec.total === "number" ? rec.total - itemCount : undefined;
+  const body = JSON.stringify(rec, null, 2);
+  const hint =
+    omitted != null && omitted > 0
+      ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).`
+      : `\n\nOutput truncated (total ${rec.total}).`;
+  return body + hint;
+}
+
+function isFsLsOutput(rec: Record<string, unknown>): boolean {
+  return Array.isArray(rec.entries) && typeof rec.total === "number";
+}
+
+function formatFsLsOutput(rec: Record<string, unknown>): string {
+  const entries = rec.entries as Array<{ path: string; kind: string }>;
+  const lines = entries.map((e) => `${e.path}\t${e.kind}`);
+  let out = lines.join("\n");
+  if (rec.truncated === true) {
+    const omitted =
+      typeof rec.omitted === "number"
+        ? rec.omitted
+        : typeof rec.total === "number"
+          ? rec.total - entries.length
+          : 0;
+    out += `\n\nOutput truncated (${omitted} entries omitted; total ${rec.total}).`;
+  }
+  return out;
+}
+
 /** Compact tool success text for the model (e.g. write → `ok`). */
 export function formatToolOutputForLlm(out: unknown): string {
   if (typeof out === "string") {
@@ -16,6 +79,19 @@ export function formatToolOutputForLlm(out: unknown): string {
   if (out != null && typeof out === "object" && !Array.isArray(out)) {
     const rec = out as Record<string, unknown>;
     const keys = Object.keys(rec);
+
+    if (isTruncatedReadOutput(rec)) {
+      return formatTruncatedReadOutput(rec);
+    }
+
+    if (isFsLsOutput(rec)) {
+      return formatFsLsOutput(rec);
+    }
+
+    if (isTruncatedMatchOutput(rec)) {
+      return formatTruncatedMatchOutput(rec);
+    }
+
     if (keys.length === 1 && typeof rec.version === "number") {
       return "ok";
     }
