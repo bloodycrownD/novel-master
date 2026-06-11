@@ -111,4 +111,28 @@ describe("parseMessageContent", () => {
     assertMessageContent(value);
     assert.equal(value.blocks[0]!.type, "text");
   });
+
+  it("R3: round-trips tool_result ok and summary", () => {
+    const payload = {
+      blocks: [
+        {
+          type: "tool_result",
+          toolUseId: "tu_1",
+          content: "file body",
+          ok: true,
+          summary: "30 lines",
+        },
+      ],
+    };
+    const parsed = parseMessageContent(JSON.stringify(payload));
+    assert.equal(parsed.blocks.length, 1);
+    const block = parsed.blocks[0]!;
+    assert.equal(block.type, "tool_result");
+    if (block.type !== "tool_result") {
+      return;
+    }
+    assert.equal(block.ok, true);
+    assert.equal(block.summary, "30 lines");
+    assert.equal(block.content, "file body");
+  });
 });

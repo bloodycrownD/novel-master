@@ -108,6 +108,40 @@ describe("openai-content-mapper", () => {
     assert.equal(out[0]!.content, "file contents here");
   });
 
+  it("R7: tool_result ok/summary metadata omitted from OpenAI POST body", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "u1",
+        sessionId: "s1",
+        seq: 1,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "call_abc",
+              content: "file contents here",
+              ok: true,
+              summary: "30 lines",
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+    ];
+
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.role, "tool");
+    assert.equal(out[0]!.tool_call_id, "call_abc");
+    assert.equal(out[0]!.content, "file contents here");
+    assert.equal((out[0] as Record<string, unknown>).ok, undefined);
+    assert.equal((out[0] as Record<string, unknown>).summary, undefined);
+  });
+
   it("O6: image url block �?vision image_url part", () => {
     const content = blocksToOpenAiMessageContent([
       { type: "text", text: "describe this" },

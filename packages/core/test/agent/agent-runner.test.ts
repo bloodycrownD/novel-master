@@ -245,6 +245,9 @@ describe("AgentRunner", () => {
       .flatMap((m) => m.content.blocks)
       .find((b) => b.type === "tool_result");
     assert.ok(toolResult);
+    if (toolResult.type === "tool_result") {
+      assert.equal(toolResult.ok, true);
+    }
   });
 
   it("maxSteps=3: two tool rounds then text completion", async () => {
@@ -504,7 +507,8 @@ describe("AgentRunner", () => {
     assert.ok(tree);
     assert.equal(tree.size, 2);
     assert.equal(
-      (await repo.listFilePointersForSession(session.id)).length,
+      (await repo.listFilePointersForMessages(session.id, [firstAssistant.id]))
+        .length,
       2,
     );
   });
@@ -644,6 +648,7 @@ describe("AgentRunner", () => {
       (b) => b.type === "tool_result",
     );
     assert.ok(resultBlock && resultBlock.type === "tool_result");
+    assert.equal(resultBlock.ok, false);
     assert.ok(resultBlock.content.includes("Error:"));
     assert.ok(resultBlock.content.includes("/missing.txt"));
     assert.notEqual(resultBlock.content, "Error: Tool failed: read");

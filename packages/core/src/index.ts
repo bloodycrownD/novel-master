@@ -128,6 +128,11 @@ export type {
   ParallelToolOutcome,
 } from "./domain/tool/logic/tool-runner.js";
 export {
+  buildToolResultBlock,
+  resolveToolResultOk,
+} from "./domain/tool/logic/build-tool-result-block.js";
+export type { BuildToolResultBlockMeta } from "./domain/tool/logic/build-tool-result-block.js";
+export {
   createVfsTools,
   FILE_TOOL_NAMES,
   FILE_OPEN_TOOL_NAMES,

@@ -17,10 +17,7 @@ import {
   CROSS_ROUND_WINDOW,
   DOOM_LOOP_THRESHOLD,
 } from "@/domain/agent/logic/doom-loop.js";
-import {
-  formatToolErrorForLlm,
-  formatToolOutputForLlm,
-} from "@/domain/tool/logic/format-tool-output.js";
+import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-block.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
@@ -301,17 +298,9 @@ export class DefaultAgentRunner implements AgentRunner {
           toolUses.map((tu) => ({ name: tu.name, input: tu.input })),
           this.deps.toolCtx,
         );
-        const toolResults: ToolResultBlock[] = toolUses.map((tu, i) => {
-          const outcome = parallelOutcomes[i]!;
-          const content = outcome.ok
-            ? formatToolOutputForLlm(outcome.output)
-            : formatToolErrorForLlm(outcome.error);
-          return {
-            type: "tool_result" as const,
-            toolUseId: tu.id,
-            content,
-          };
-        });
+        const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
+          buildToolResultBlock(tu.id, parallelOutcomes[i]!, { toolName: tu.name }),
+        );
 
         // WHY: checkpoint records final tree after all tools settle (fork-join), not per action.
         if (

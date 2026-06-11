@@ -33,6 +33,10 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -121,7 +125,15 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       const toolUseId = requireString(value, "toolUseId", `blocks[${index}] tool_result`);
       const content =
         typeof value.content === "string" ? value.content : "";
-      return { type: "tool_result", toolUseId, content } satisfies ToolResultBlock;
+      const ok = optionalBoolean(value.ok);
+      const summary = optionalString(value.summary);
+      return {
+        type: "tool_result",
+        toolUseId,
+        content,
+        ...(ok !== undefined ? { ok } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+      } satisfies ToolResultBlock;
     }
     case "thinking": {
       const text = typeof value.text === "string" ? value.text : "";

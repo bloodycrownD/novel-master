@@ -40,6 +40,10 @@ export interface ToolResultBlock {
   readonly type: "tool_result";
   readonly toolUseId: string;
   readonly content: string;
+  /** Runner outcome; omitted on legacy rows (UI falls back to `Error:` prefix). */
+  readonly ok?: boolean;
+  /** Short UI hint; not sent to LLM adapters. */
+  readonly summary?: string;
 }
 
 export interface ThinkingBlock {
