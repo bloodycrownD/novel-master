@@ -194,7 +194,7 @@ export function ProvidersScreen() {
                   <Text style={styles.icon}>🟢</Text>
                 )
               }
-              title={item.displayName?.trim() || item.id}
+              title={item.id}
               subtitle={metaLine(item)}
               onMenuPress={
                 batch.active ? undefined : () => setMenuProviderId(item.id)

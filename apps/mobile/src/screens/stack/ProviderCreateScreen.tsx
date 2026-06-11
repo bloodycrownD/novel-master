@@ -37,7 +37,7 @@ export function ProviderCreateScreen() {
             if (__DEV__) {
               console.info('[ProviderCreate] created', input.id);
             }
-            showToast(`已创建服务商：${input.displayName?.trim() || input.id}`);
+            showToast(`已创建服务商：${input.id}`);
             navigation.replace('ProviderDetail', {providerId: input.id});
           } catch (err) {
             showToast(toastMessage('创建失败', err));

@@ -20,7 +20,6 @@ export type ProviderFormValues = {
   id: string;
   protocol: LlmProtocolKind;
   baseUrl: string;
-  displayName: string;
   apiKey: string;
   headersJson: string;
 };
@@ -29,7 +28,6 @@ export const EMPTY_PROVIDER_FORM: ProviderFormValues = {
   id: '',
   protocol: 'openai',
   baseUrl: '',
-  displayName: '',
   apiKey: '',
   headersJson: '',
 };
@@ -76,7 +74,6 @@ export function providerFormToCreateInput(values: ProviderFormValues) {
     id,
     protocol: values.protocol,
     baseUrl,
-    displayName: values.displayName.trim() || undefined,
     apiKey,
     headers: parseHeadersJson(values.headersJson),
   };
@@ -86,7 +83,6 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
   const patch: {
     protocol?: LlmProtocolKind;
     baseUrl?: string;
-    displayName?: string | null;
     apiKey?: string;
     headers?: Record<string, string>;
   } = {};
@@ -94,7 +90,6 @@ export function providerFormToEditPatch(values: ProviderFormValues) {
   if (baseUrl) {
     patch.baseUrl = baseUrl;
   }
-  patch.displayName = values.displayName.trim() || null;
   const apiKey = values.apiKey.trim();
   if (apiKey) {
     patch.apiKey = apiKey;
@@ -210,14 +205,6 @@ export function ProviderForm({
             autoCapitalize="none"
             autoCorrect={false}
             placeholder="https://api.example.com/v1"
-          />
-        </FormField>
-        <FormField label="显示名称" tokens={tokens} hint="可选">
-          <FormTextInput
-            tokens={tokens}
-            value={values.displayName}
-            onChangeText={text => patch({displayName: text})}
-            placeholder="可选"
           />
         </FormField>
       </FormSectionCard>

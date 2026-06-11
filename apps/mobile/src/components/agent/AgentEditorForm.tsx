@@ -107,7 +107,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setProviders(
       list.map(p => ({
         id: p.id,
-        label: p.displayName?.trim() || p.id,
+        label: p.id,
         protocol: p.protocol,
       })),
     );

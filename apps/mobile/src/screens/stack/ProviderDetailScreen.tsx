@@ -79,7 +79,7 @@ export function ProviderDetailScreen() {
     setLoading(true);
     try {
       const provider = await runtime.providers.get(providerId);
-      setStackOverride({title: provider.displayName?.trim() || provider.id});
+      setStackOverride({title: provider.id});
       const saved = await runtime.providerModels.savedList(providerId);
       const enriched: ModelRow[] = [];
       for (const model of saved) {
