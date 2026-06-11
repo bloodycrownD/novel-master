@@ -27,14 +27,17 @@ tag 形如 `v1.0.4` → 应用内版本为 `1.0.4`（去掉前缀 `v`）。
    - `apps/mobile/package.json` — 关于页、`APP_VERSION`、更新检查
 2. 确认 `apps/mobile/android/app/build.gradle` 里本地默认 `versionName` 与 tag 一致（CI 会注入 `-PversionName`，但 dev 包也应可读）。
 3. 跑相关测试与构建（至少 `@novel-master/desktop`、`@novel-master/mobile` 受影响范围）。
-4. 在本地 `main` 上完成版本 bump 与合并后，**只推送 tag** 触发 Release（不要 `git push origin main`，避免多余 Action）：
+4. 在本地 `main` 上完成版本 bump 与合并后，打 tag 并推送以触发 Release：
 
 ```bash
-git tag v1.0.4
-git push origin v1.0.4
+git tag v1.0.5
+git push origin v1.0.5    # 触发 Release；会一并上传 tag 指向的 commit，但不更新远程 main 分支 ref
+git push origin main      # 同步远程 main（可选但推荐）；同样不触发 CI
 ```
 
-若 Release 失败需重跑：修正后 `git tag -f v1.0.4 && git push origin v1.0.4 --force`（仍只保留一个 `v1.0.4`）。合入 `main` 与发版分离：日常 push/PR **不会**跑 GitHub Actions，发版前在本地跑测试即可。
+**Push 与 CI**：仓库仅有 `release.yml`，且只在 `push` 匹配 `v*` tag 时运行。`git push origin main`、推 feature 分支、PR **均不会**触发 GitHub Actions。发版前在本地跑测试即可。
+
+若 Release 失败需重跑：修正后 `git tag -f v1.0.5 && git push origin v1.0.5 --force`（仍只保留一个 `v1.0.5`）。
 
 ### CI 行为（`.github/workflows/release.yml`）
 
