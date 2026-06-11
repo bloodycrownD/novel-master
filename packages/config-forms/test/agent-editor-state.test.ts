@@ -2,33 +2,33 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildAgentDefinitionFromForm,
-  buildToolsPolicy,
+  buildToolsPolicyFromSelection,
   formSnapshotJson,
   stripRemovedPromptBlocks,
-  toolsFromDefinition,
+  toolsSelectionFromDefinition,
 } from "../src/agent/agent-editor-state.js";
 
-test("buildToolsPolicy returns undefined for default mode", () => {
-  assert.equal(buildToolsPolicy("default", "read"), undefined);
+test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
+  assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);
 });
 
-test("buildToolsPolicy parses allow/deny lists", () => {
-  assert.deepEqual(buildToolsPolicy("allow", "vfs.read, vfs.grep"), {
+test("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
+  assert.deepEqual(buildToolsPolicyFromSelection("allow", ["read", "grep"]), {
     allow: ["read", "grep"],
   });
-  assert.deepEqual(buildToolsPolicy("deny", "write"), {
+  assert.deepEqual(buildToolsPolicyFromSelection("deny", ["write"]), {
     deny: ["write"],
   });
 });
 
-test("toolsFromDefinition round-trips policy modes", () => {
+test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
   assert.deepEqual(
-    toolsFromDefinition({ name: "a", prompts: [], tools: { allow: ["read"] } }),
-    { mode: "allow", listText: "read" },
+    toolsSelectionFromDefinition({ name: "a", prompts: [], tools: { allow: ["read"] } }),
+    { mode: "allow", selected: ["read"] },
   );
-  assert.deepEqual(toolsFromDefinition({ name: "a", prompts: [] }), {
+  assert.deepEqual(toolsSelectionFromDefinition({ name: "a", prompts: [] }), {
     mode: "default",
-    listText: "",
+    selected: [],
   });
 });
 
@@ -49,7 +49,7 @@ test("formSnapshotJson omits model fields when disabled", () => {
     providerId: "p",
     vendorModelId: "m",
     toolsMode: "default",
-    toolsList: "",
+    toolsSelected: [],
     prompts: [{ name: "system", type: "text", role: "system", content: "" }],
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
@@ -66,7 +66,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       providerId: "",
       vendorModelId: "",
       toolsMode: "default",
-      toolsList: "",
+      toolsSelected: [],
       prompts: [],
     }).ok,
     false,

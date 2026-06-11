@@ -5,6 +5,10 @@ import type {
   PromptBlockRole,
 } from "@novel-master/core";
 import { formatApplicationModelId } from "../shared/application-model-id.js";
+import {
+  buildToolsPolicyFromSelection,
+  toolsSelectionFromDefinition,
+} from "./agent-tool-catalog.js";
 
 export type ToolsMode = "default" | "allow" | "deny";
 
@@ -28,10 +32,11 @@ export type AgentEditorFormInput = {
   providerId: string;
   vendorModelId: string;
   toolsMode: ToolsMode;
-  toolsList: string;
+  toolsSelected: readonly string[];
   prompts: readonly PromptBlock[];
 };
 
+/** Parses comma/newline tool lists — retained for YAML import compatibility only. */
 export function parseToolsList(text: string): string[] {
   return text
     .split(/[,\n]+/)
@@ -39,32 +44,24 @@ export function parseToolsList(text: string): string[] {
     .filter((part) => part.length > 0);
 }
 
+/** @deprecated Use {@link buildToolsPolicyFromSelection}. */
 export function buildToolsPolicy(
   mode: ToolsMode,
   listText: string,
 ): AgentToolPolicy | undefined {
-  if (mode === "default") {
-    return undefined;
-  }
-  const names = parseToolsList(listText);
-  if (mode === "allow") {
-    return { allow: names };
-  }
-  return { deny: names };
+  return buildToolsPolicyFromSelection(mode, parseToolsList(listText));
 }
 
+/** @deprecated Use {@link toolsSelectionFromDefinition}. */
 export function toolsFromDefinition(def: AgentDefinition): {
   mode: ToolsMode;
   listText: string;
 } {
-  if (def.tools?.allow != null) {
-    return { mode: "allow", listText: def.tools.allow.join(", ") };
-  }
-  if (def.tools?.deny != null) {
-    return { mode: "deny", listText: def.tools.deny.join(", ") };
-  }
-  return { mode: "default", listText: "" };
+  const { mode, selected } = toolsSelectionFromDefinition(def);
+  return { mode, listText: selected.join(", ") };
 }
+
+export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 
 export function blockTypeLabel(type: PromptBlock["type"]): string {
   return type === "text" ? "文本" : "会话";
@@ -93,7 +90,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     maxSteps: input.maxSteps,
     modelEnabled: input.modelEnabled,
     toolsMode: input.toolsMode,
-    toolsList: input.toolsList,
+    toolsSelected: input.toolsSelected,
     ...(input.modelEnabled
       ? {
           providerId: input.providerId,
@@ -114,7 +111,7 @@ export function buildAgentDefinitionFromForm(
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
   const steps = Number(input.maxSteps);
-  const tools = buildToolsPolicy(input.toolsMode, input.toolsList);
+  const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   const def: AgentDefinition = {
     name: input.name.trim(),
     prompts: [...input.prompts],
