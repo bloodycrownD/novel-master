@@ -279,7 +279,9 @@ export function ChatTabScreen() {
     useCallback(() => {
       refreshChatRichTextPref().catch(() => undefined);
       refreshChatTranscriptEngine().catch(() => undefined);
-    }, [refreshChatRichTextPref, refreshChatTranscriptEngine]),
+      // Re-read KKV currentModelId when returning from Profile tab.
+      refreshChatMeta().catch(() => undefined);
+    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatMeta]),
   );
 
   const sessionRenameModal = (
