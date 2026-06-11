@@ -32,6 +32,76 @@ function msg(
 }
 
 describe('message-blocks', () => {
+  it('does not mark success read as error when file body contains "terrors"', () => {
+    const ravenSnippet =
+      'Thrilled me—filled me with fantastic terrors never felt before;';
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/poem.txt'}},
+      ], 1),
+      msg('u1', 'user', [
+        {
+          type: 'tool_result',
+          toolUseId: 'tu1',
+          content: JSON.stringify(
+            {path: '/poem.txt', content: ravenSnippet, truncated: false},
+            null,
+            2,
+          ),
+        },
+      ], 2),
+    ];
+    const items = buildChatListItems(messages);
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools[0]?.status).toBe('success');
+    }
+  });
+
+  it('R5: ok true with terrors in content shows success card', () => {
+    const ravenSnippet =
+      'Thrilled me—filled me with fantastic terrors never felt before;';
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/poem.txt'}},
+      ], 1),
+      msg('u1', 'user', [
+        {
+          type: 'tool_result',
+          toolUseId: 'tu1',
+          ok: true,
+          content: JSON.stringify(
+            {path: '/poem.txt', content: ravenSnippet, truncated: false},
+            null,
+            2,
+          ),
+        },
+      ], 2),
+    ];
+    const items = buildChatListItems(messages);
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools[0]?.status).toBe('success');
+    }
+  });
+
+  it('marks tool_result starting with Error: as error', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/missing'}},
+      ], 1),
+      msg('u1', 'user', [
+        {
+          type: 'tool_result',
+          toolUseId: 'tu1',
+          content: 'Error: Path not found: /missing',
+        },
+      ], 2),
+    ];
+    const items = buildChatListItems(messages);
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools[0]?.status).toBe('error');
+    }
+  });
+
   it('pairs tool_result with tool_use id', () => {
     const messages = [
       msg('a1', 'assistant', [

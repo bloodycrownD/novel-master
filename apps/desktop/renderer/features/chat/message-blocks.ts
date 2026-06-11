@@ -1,6 +1,7 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
+import { resolveToolResultOk } from "@novel-master/core";
 import type { ChatMessageDto, ContentBlockDto } from "../../../shared/ipc-types";
 
 export type ToolCallStatus = "success" | "error";
@@ -131,15 +132,8 @@ export function isTurnToolExecuting(
 function toolStatusFromResult(
   result: Extract<ContentBlockDto, { type: "tool_result" }>,
 ): ToolCallStatus {
-  const lower = result.content.toLowerCase();
-  if (
-    lower.includes("error") ||
-    lower.includes("failed") ||
-    lower.startsWith("[error")
-  ) {
-    return "error";
-  }
-  return "success";
+  // Prefer persisted `ok`; legacy blocks fall back to Error: prefix only (core helper).
+  return resolveToolResultOk(result) ? "success" : "error";
 }
 
 export function toolCallViewFromUse(

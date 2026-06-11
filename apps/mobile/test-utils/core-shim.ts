@@ -35,6 +35,10 @@ export type {
 export { messageBodyText } from "../../../packages/core/dist/domain/chat/content/message-body-text.js";
 export { textBlocks } from "../../../packages/core/dist/domain/chat/content/text-blocks.js";
 export { ToolRegistry } from "../../../packages/core/dist/domain/tool/logic/tool-registry.js";
+export {
+  buildToolResultBlock,
+  resolveToolResultOk,
+} from "../../../packages/core/dist/domain/tool/logic/build-tool-result-block.js";
 export { registerBuiltinTools } from "../../../packages/core/dist/domain/tool/builtin/register-builtin-tools.js";
 export { resolveAgentToolRegistry } from "../../../packages/core/dist/domain/agent/logic/resolve-agent-tool-registry.js";
 export { validateAgentDefinition } from "../../../packages/core/dist/domain/agent/logic/validate-agent-definition.js";

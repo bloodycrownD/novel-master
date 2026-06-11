@@ -7,6 +7,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock,
 } from '@novel-master/core';
+import {resolveToolResultOk} from '@novel-master/core';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 
@@ -156,15 +157,7 @@ export function isTurnToolExecuting(
 }
 
 function toolStatusFromResult(result: ToolResultBlock): ToolCallStatus {
-  const lower = result.content.toLowerCase();
-  if (
-    lower.includes('error') ||
-    lower.includes('failed') ||
-    lower.startsWith('[error')
-  ) {
-    return 'error';
-  }
-  return 'success';
+  return resolveToolResultOk(result) ? 'success' : 'error';
 }
 
 export function toolCallViewFromUse(

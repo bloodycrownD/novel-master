@@ -377,6 +377,8 @@ export type ContentBlockDto =
       readonly type: "tool_result";
       readonly toolUseId: string;
       readonly content: string;
+      readonly ok?: boolean;
+      readonly summary?: string;
     };
 
 export type ChatMessageDto = {

@@ -39,6 +39,8 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
         type: "tool_result",
         toolUseId: block.toolUseId,
         content: block.content,
+        ...(block.ok !== undefined ? { ok: block.ok } : {}),
+        ...(block.summary !== undefined ? { summary: block.summary } : {}),
       };
     default:
       return null;
