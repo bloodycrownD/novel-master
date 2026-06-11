@@ -122,9 +122,16 @@ function parseBlock(value: unknown, index: number): ContentBlock {
       } satisfies ToolUseBlock;
     }
     case "tool_result": {
-      const toolUseId = requireString(value, "toolUseId", `blocks[${index}] tool_result`);
+      const label = `blocks[${index}] tool_result`;
+      const toolUseId = requireString(value, "toolUseId", label);
       const content =
         typeof value.content === "string" ? value.content : "";
+      if ("ok" in value && typeof value.ok !== "boolean") {
+        throw chatInvalidArgument(`${label}: ok must be a boolean`);
+      }
+      if ("summary" in value && typeof value.summary !== "string") {
+        throw chatInvalidArgument(`${label}: summary must be a string`);
+      }
       const ok = optionalBoolean(value.ok);
       const summary = optionalString(value.summary);
       return {

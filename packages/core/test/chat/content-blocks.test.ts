@@ -112,6 +112,55 @@ describe("parseMessageContent", () => {
     assert.equal(value.blocks[0]!.type, "text");
   });
 
+  it("rejects tool_result with non-boolean ok", () => {
+    assert.throws(
+      () =>
+        parseMessageContent(
+          JSON.stringify({
+            blocks: [
+              {
+                type: "tool_result",
+                toolUseId: "tu_1",
+                content: "found",
+                ok: "false",
+              },
+            ],
+          }),
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ChatError);
+        assert.equal(err.code, "INVALID_ARGUMENT");
+        assert.match(err.message, /ok must be a boolean/);
+        return true;
+      },
+    );
+  });
+
+  it("rejects tool_result with non-string summary", () => {
+    assert.throws(
+      () =>
+        parseMessageContent(
+          JSON.stringify({
+            blocks: [
+              {
+                type: "tool_result",
+                toolUseId: "tu_1",
+                content: "found",
+                ok: true,
+                summary: 30,
+              },
+            ],
+          }),
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof ChatError);
+        assert.equal(err.code, "INVALID_ARGUMENT");
+        assert.match(err.message, /summary must be a string/);
+        return true;
+      },
+    );
+  });
+
   it("R3: round-trips tool_result ok and summary", () => {
     const payload = {
       blocks: [
