@@ -11,6 +11,11 @@ export const TOOL_OUTPUT_MAX_MATCHES = 100;
 export const TOOL_OUTPUT_LINE_TRUNCATED_SUFFIX =
   `... (line truncated to ${TOOL_OUTPUT_MAX_LINE_LENGTH} chars)`;
 
+/** UTF-8 byte length without Node `Buffer` (RN/Hermes has no global Buffer). */
+function utf8ByteLength(text: string): number {
+  return new TextEncoder().encode(text).byteLength;
+}
+
 /** Truncates a single line when it exceeds {@link TOOL_OUTPUT_MAX_LINE_LENGTH}. */
 export function truncateLine(
   text: string,
@@ -61,7 +66,7 @@ export function capUtf8Bytes(
   let truncated = false;
 
   for (const line of lines) {
-    const lineBytes = Buffer.byteLength(line, "utf8");
+    const lineBytes = utf8ByteLength(line);
     const separatorBytes = result.length > 0 ? 1 : 0;
     if (bytesUsed + separatorBytes + lineBytes > maxBytes) {
       // WHY: stop before exceeding budget — partial line inclusion would mislead the model.
@@ -97,7 +102,7 @@ export function capMatchList<T>(
   let bytesUsed = 0;
   for (const item of countCapped) {
     const formatted = formatItem(item);
-    const lineBytes = Buffer.byteLength(formatted, "utf8");
+    const lineBytes = utf8ByteLength(formatted);
     const separatorBytes = kept.length > 0 ? 1 : 0;
     if (bytesUsed + separatorBytes + lineBytes > TOOL_OUTPUT_MAX_BYTES) {
       truncated = true;

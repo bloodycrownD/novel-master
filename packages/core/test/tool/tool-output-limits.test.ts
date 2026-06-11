@@ -22,7 +22,7 @@ describe("tool-output-limits", () => {
   it("T1: capUtf8Bytes stops at 50KB", () => {
     const line = "x".repeat(1000);
     const lines: string[] = [];
-    while (Buffer.byteLength(lines.join("\n"), "utf8") < TOOL_OUTPUT_MAX_BYTES + 5000) {
+    while (new TextEncoder().encode(lines.join("\n")).byteLength < TOOL_OUTPUT_MAX_BYTES + 5000) {
       lines.push(line);
     }
     const capped = capUtf8Bytes(lines);
