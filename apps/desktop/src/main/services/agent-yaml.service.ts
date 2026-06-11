@@ -8,7 +8,7 @@ import {
   decode,
   encode,
   parseText,
-  registerVfsTools,
+  registerBuiltinTools,
   stringifyText,
   ToolRegistry,
   validateAgentDefinition,
@@ -92,7 +92,7 @@ export async function importAgentYamlWithDialog(
   try {
     const def = decodeAgentYamlText(yaml);
     const probe = new ToolRegistry();
-    registerVfsTools(probe);
+    registerBuiltinTools(probe);
     await validateAgentDefinition(def, { registeredToolNames: probe.list() });
     await runtime.agentRegistry.upsert(agentId, def, {
       registeredToolNames: probe.list(),

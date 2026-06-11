@@ -9,18 +9,18 @@ import {
   TOOL_MODE_OPTIONS,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
-  buildToolsPolicy,
   formSnapshotJson,
   stripRemovedPromptBlocks,
-  toolsFromDefinition,
+  toolsSelectionFromDefinition,
   type ToolsMode,
 } from '@novel-master/config-forms/agent';
 import {
   formatApplicationModelId,
   parseApplicationModelId,
-  registerVfsTools,
+  registerBuiltinTools,
   ToolRegistry,
 } from '@novel-master/core';
+import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormSelectField} from '../form/FormSelectField';
@@ -62,7 +62,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [addBlockVisible, setAddBlockVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
-  const [toolsList, setToolsList] = useState('');
+  const [toolsSelected, setToolsSelected] = useState<string[]>([]);
 
   const dismissAllOverlays = useCallback(() => {
     setAddBlockVisible(false);
@@ -79,7 +79,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         providerId,
         vendorModelId,
         toolsMode,
-        toolsList,
+        toolsSelected,
         prompts,
       }),
     [
@@ -89,7 +89,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       providerId,
       vendorModelId,
       toolsMode,
-      toolsList,
+      toolsSelected,
       prompts,
     ],
   );
@@ -136,9 +136,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     if (removedAbstract > 0) {
       showToast('已移除已废弃的摘要块（abstract）');
     }
-    const toolsWire = toolsFromDefinition(def);
+    const toolsWire = toolsSelectionFromDefinition(def);
     setToolsMode(toolsWire.mode);
-    setToolsList(toolsWire.listText);
+    setToolsSelected([...toolsWire.selected]);
     const providerList = await loadProviders();
     if (def.model) {
       setModelEnabled(true);
@@ -190,7 +190,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         providerId: baselineProviderId,
         vendorModelId: baselineVendorModelId,
         toolsMode: toolsWire.mode,
-        toolsList: toolsWire.listText,
+        toolsSelected: [...toolsWire.selected],
         prompts: loadedPrompts,
       }),
     );
@@ -212,7 +212,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       providerId,
       vendorModelId,
       toolsMode,
-      toolsList,
+      toolsSelected,
       prompts,
     });
     if (!built.ok) {
@@ -223,7 +223,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setSaving(true);
     try {
       const probe = new ToolRegistry();
-      registerVfsTools(probe);
+      registerBuiltinTools(probe);
       await runtime.agentRegistry.upsert(agentId, def, {
         registeredToolNames: probe.list(),
       });
@@ -439,20 +439,17 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           </FormField>
           {toolsMode !== 'default' ? (
             <FormField
-              label={toolsMode === 'allow' ? '白名单工具名' : '黑名单工具名'}
-              tokens={tokens}
-              hint="逗号分隔，如 read, grep">
-              <FormTextInput
+              label={toolsMode === 'allow' ? '白名单工具' : '黑名单工具'}
+              tokens={tokens}>
+              <ToolPolicyPicker
                 tokens={tokens}
-                value={toolsList}
-                onChangeText={setToolsList}
-                placeholder="read, grep"
-                multiline
+                selected={toolsSelected}
+                onChange={setToolsSelected}
               />
             </FormField>
           ) : (
             <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              未配置时使用全部 10 个文件工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
+              未配置时使用全部内置工具（7 个）：read、write、edit、fs、glob、grep、chat_grep。
             </Text>
           )}
         </FormSectionCard>

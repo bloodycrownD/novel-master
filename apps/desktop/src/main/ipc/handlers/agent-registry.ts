@@ -1,7 +1,7 @@
 /**
  * Agent registry CRUD IPC handlers.
  */
-import { registerVfsTools, ToolRegistry } from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import type {
   AgentRegistryDeleteRequest,
   AgentRegistryGetRequest,
@@ -64,7 +64,7 @@ export async function handleAgentRegistryUpsert(
   try {
     const rt = await getDesktopRuntime();
     const probe = new ToolRegistry();
-    registerVfsTools(probe);
+    registerBuiltinTools(probe);
     await rt.agentRegistry.upsert(req.agentId, req.definition as Parameters<
       typeof rt.agentRegistry.upsert
     >[1], {
@@ -99,7 +99,7 @@ export async function handleAgentRegistryCreateBlank(): Promise<
     const rt = await getDesktopRuntime();
     const agentId = `agent-${Date.now()}`;
     const probe = new ToolRegistry();
-    registerVfsTools(probe);
+    registerBuiltinTools(probe);
     await rt.agentRegistry.upsert(
       agentId,
       {

@@ -10,7 +10,7 @@ import {
   encode,
   agentDefinitionSchema,
   parseApplicationModelId,
-  registerVfsTools,
+  registerBuiltinTools,
   ToolRegistry,
   type AgentRegistryService,
 } from "@novel-master/core";
@@ -132,7 +132,7 @@ export function createRegistryValidateOptions(
   rt: NovelMasterRuntime,
 ): Parameters<AgentRegistryService["upsert"]>[2] {
   const probe = new ToolRegistry();
-  registerVfsTools(probe);
+  registerBuiltinTools(probe);
   return {
     assertSavedModel: (id) => assertSavedModel(rt, id),
     registeredToolNames: probe.list(),

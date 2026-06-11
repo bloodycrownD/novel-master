@@ -289,11 +289,11 @@ describe('message-blocks', () => {
     }
   });
 
-  it('vfsToolFilePath returns path for vfs read/write/replace only', () => {
+  it('vfsToolFilePath returns path for vfs read/write/edit only', () => {
     expect(
       vfsToolFilePath({
         toolUseId: 't1',
-        name: 'replace',
+        name: 'edit',
         input: {path: '/续写/a.md'},
         status: 'success',
       }),
@@ -301,8 +301,8 @@ describe('message-blocks', () => {
     expect(
       vfsToolFilePath({
         toolUseId: 't2',
-        name: 'list',
-        input: {path: '/'},
+        name: 'fs',
+        input: {command: 'ls /'},
         status: 'success',
       }),
     ).toBeUndefined();

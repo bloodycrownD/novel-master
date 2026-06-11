@@ -19,7 +19,7 @@ jest.mock('@novel-master/core', () => ({
     schema.toWire(value),
   decode: (...args: any[]) => mockDecode(...args),
   parseText: (...args: any[]) => mockParseText(...args),
-  registerVfsTools: () => undefined,
+  registerBuiltinTools: () => undefined,
   stringifyText: (...args: any[]) => mockStringifyText(...args),
   ToolRegistry: class ToolRegistry {
     list() {

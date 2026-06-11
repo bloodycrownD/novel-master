@@ -11,9 +11,10 @@ import {
   formSnapshotJson,
   parseApplicationModelId,
   stripRemovedPromptBlocks,
-  toolsFromDefinition,
+  toolsSelectionFromDefinition,
   type ToolsMode,
 } from "@novel-master/config-forms/agent";
+import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Switch } from "../../components/ui/Switch";
@@ -49,7 +50,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [vendorModelId, setVendorModelId] = useState("");
   const [prompts, setPrompts] = useState<PromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
-  const [toolsList, setToolsList] = useState("");
+  const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
   const [savedModels, setSavedModels] = useState<
     Array<{ vendorModelId: string; displayName: string }>
@@ -69,10 +70,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         providerId,
         vendorModelId,
         toolsMode,
-        toolsList,
+        toolsSelected,
         prompts,
       }),
-    [name, maxSteps, modelEnabled, providerId, vendorModelId, toolsMode, toolsList, prompts],
+    [name, maxSteps, modelEnabled, providerId, vendorModelId, toolsMode, toolsSelected, prompts],
   );
 
   const loadSavedModels = useCallback(async (pid: string) => {
@@ -111,9 +112,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       if (removed > 0) {
         showToast("已移除已废弃的摘要块（abstract）");
       }
-      const toolsWire = toolsFromDefinition(def);
+      const toolsWire = toolsSelectionFromDefinition(def);
       setToolsMode(toolsWire.mode);
-      setToolsList(toolsWire.listText);
+      setToolsSelected([...toolsWire.selected]);
 
       const providerRows = providerRes.ok
         ? providerRes.data.map((p) => ({
@@ -155,7 +156,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           providerId: baselineProviderId,
           vendorModelId: baselineVendorModelId,
           toolsMode: toolsWire.mode,
-          toolsList: toolsWire.listText,
+          toolsSelected: [...toolsWire.selected],
           prompts: loadedPrompts.length > 0 ? loadedPrompts : [createDefaultTextBlock(0)],
         }),
       );
@@ -185,7 +186,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       providerId,
       vendorModelId,
       toolsMode,
-      toolsList,
+      toolsSelected,
       prompts,
     });
     if (!built.ok) {
@@ -352,17 +353,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </select>
           </SettingsField>
           {toolsMode !== "default" ? (
-            <SettingsField label={toolsMode === "allow" ? "白名单工具名" : "黑名单工具名"}>
-              <textarea
-                rows={3}
-                value={toolsList}
-                onChange={(e) => setToolsList(e.target.value)}
-                placeholder="read, grep"
-              />
+            <SettingsField label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}>
+              <ToolPolicyPicker selected={toolsSelected} onChange={setToolsSelected} />
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部 10 个文件工具（read、write、replace、delete、glob、grep、list、mkdir、move、copy）。
+              未配置时使用全部内置工具（7 个）：read、write、edit、fs、glob、grep、chat_grep。
             </p>
           )}
         </SettingsSection>

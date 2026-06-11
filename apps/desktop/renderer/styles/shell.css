@@ -2573,6 +2573,59 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--primary);
 }
 
+.tool-policy-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tool-policy-picker__search {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.tool-policy-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.tool-policy-picker__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.tool-policy-picker__row:hover {
+  background: var(--surface-hover);
+}
+
+.tool-policy-picker__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 88px;
+}
+
+.tool-policy-picker__desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
 .settings-page .btn-primary {
   padding: 8px 14px;
   border: none;

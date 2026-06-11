@@ -10,7 +10,7 @@ import {
   createAgentRunner,
   loadPromptBlocksFromYaml,
   parseApplicationModelId,
-  registerVfsTools,
+  registerBuiltinTools,
   resolveAgentToolRegistry,
   textBlocks,
   ToolRegistry,
@@ -82,7 +82,7 @@ async function resolveDefinition(
   }
 
   const toolProbe = new ToolRegistry();
-  registerVfsTools(toolProbe);
+  registerBuiltinTools(toolProbe);
   await validateAgentDefinition(definition, {
     assertSavedModel: async (applicationModelId) => {
       const { providerId, vendorModelId } =
@@ -188,7 +188,7 @@ export async function runAgent(
 
       const baseRegistry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
-      registerVfsTools(baseRegistry);
+      registerBuiltinTools(baseRegistry);
       const registry = resolveAgentToolRegistry(baseRegistry, definition);
 
       const session = new ChatAgentSession(rt.messages, sessionId);
@@ -201,6 +201,7 @@ export async function runAgent(
           vfs,
           projectId,
           sessionId,
+          listSessionMessages: () => rt.messages.listBySession(sessionId),
         },
         messageCheckpoint: rt.messageCheckpoint,
         regexConfig: rt.regexConfig,

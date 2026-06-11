@@ -31,7 +31,7 @@ export function buildTranscriptBootScript(): string {
   var SCROLL_TOP_LOAD_OLDER = 24;
   var SCHEMA_V = 2;
   var BRIDGE_V = 1;
-  var VFS_FILE_TOOLS = { read: 1, write: 1, replace: 1 };
+  var VFS_FILE_TOOLS = { read: 1, write: 1, edit: 1 };
   var state = {
     ready: false,
     nearBottom: true,

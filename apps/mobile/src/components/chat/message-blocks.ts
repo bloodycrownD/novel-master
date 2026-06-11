@@ -199,7 +199,7 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
 }
 
 /** File tools whose `input.path` points at a file we can open in session workspace. */
-const FILE_OPEN_TOOL_NAMES = new Set(['read', 'write', 'replace']);
+const FILE_OPEN_TOOL_NAMES = new Set(['read', 'write', 'edit']);
 
 /** Logical file path for workspace preview, or undefined if not openable. */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
