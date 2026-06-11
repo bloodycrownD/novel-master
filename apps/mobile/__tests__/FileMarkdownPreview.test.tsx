@@ -213,4 +213,85 @@ no closing fence
     });
     expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
   });
+
+  it('non-md txt with previewFill wraps content in ScrollView (T1)', async () => {
+    const content = 'line one\n'.repeat(80);
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.txt"
+          content={content}
+          tokens={tokens}
+          previewFill
+          renderKind="txt"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(
+      tree!.root.findAllByType(require('react-native').ScrollView as React.ComponentType)
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('non-md markdown tab mounts RichDocumentWebView when webview engine (T2)', async () => {
+    const content = '# Heading\n\n- item';
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.txt"
+          content={content}
+          tokens={tokens}
+          renderKind="markdown"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(tree!.root.findByProps({testID: 'rich-document-webview'})).toBeTruthy();
+  });
+
+  it('non-md markdown tab mounts RichContentBody when rn engine (T2)', async () => {
+    mockReadEngine.mockResolvedValue('rn');
+    const content = '# Heading\n\n- item';
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.txt"
+          content={content}
+          tokens={tokens}
+          renderKind="markdown"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(tree!.root.findByProps({testID: 'rich-content-body'})).toBeTruthy();
+  });
+
+  it('non-md txt tab does not mount RichDocumentWebView (T3)', async () => {
+    const content = '# Not rendered as markdown';
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileMarkdownPreview
+          path="/notes/readme.txt"
+          content={content}
+          tokens={tokens}
+          renderKind="txt"
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(() => tree!.root.findByProps({testID: 'rich-document-webview'})).toThrow();
+  });
 });

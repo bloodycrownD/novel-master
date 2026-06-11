@@ -114,6 +114,11 @@ export function FileEditorScreen() {
     };
   }, [path, resolveVfs]);
 
+  // Reset preview tab default when opening a different file.
+  useEffect(() => {
+    setPreviewRenderKind(isMarkdownPreviewPath(path) ? 'markdown' : 'txt');
+  }, [path]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -200,7 +205,7 @@ export function FileEditorScreen() {
           </Text>
         </View>
       ) : null}
-      {previewMode && isMarkdownPreviewPath(path) ? (
+      {previewMode ? (
         <SegmentedControl
           options={[
             {value: 'markdown', label: 'Markdown'},

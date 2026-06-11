@@ -33,8 +33,29 @@ interface FileMarkdownPreviewProps {
   tokens: ThemeTokens;
   /** When true, WebView body expands (flex:1) — caller must not wrap WebView in ScrollView. */
   previewFill?: boolean;
-  /** Markdown paths only: 'txt' shows raw source; 'markdown' runs the preview pipeline. */
+  /** Tab selection: 'txt' shows raw source; 'markdown' runs the preview pipeline. */
   renderKind?: PreviewRenderKind;
+}
+
+/** Wrap plain/RN markdown in ScrollView when previewFill — WebView paths skip this. */
+function PreviewScrollWrap({
+  previewFill,
+  children,
+}: {
+  previewFill: boolean;
+  children: React.ReactNode;
+}) {
+  if (!previewFill) {
+    return <>{children}</>;
+  }
+  return (
+    <ScrollView
+      style={styles.rnBodyScroll}
+      contentContainerStyle={styles.rnBodyContent}
+      keyboardShouldPersistTaps="handled">
+      {children}
+    </ScrollView>
+  );
 }
 
 export function FileMarkdownPreview({
@@ -63,42 +84,63 @@ export function FileMarkdownPreview({
     }, [refreshPreviewEngine]),
   );
 
-  const useMarkdown = isMarkdownPreviewPath(path);
+  const isMdPath = isMarkdownPreviewPath(path);
   const split = useMemo(
-    () => (useMarkdown ? splitMarkdownFrontMatter(content) : null),
-    [content, useMarkdown],
+    () => (isMdPath ? splitMarkdownFrontMatter(content) : null),
+    [content, isMdPath],
   );
 
   const fmLines = split?.frontMatterLines ?? null;
-  const showFrontMatter = useMarkdown && fmLines !== null;
+  const showFrontMatter = isMdPath && fmLines !== null;
   const fmFields =
     showFrontMatter && split?.closed
       ? parseFrontMatterFields(fmLines)
       : [];
-  const body =
-    useMarkdown && split?.closed ? (split.body ?? '').trim() : '';
+  const mdBody =
+    isMdPath && split?.closed ? (split.body ?? '').trim() : '';
 
-  const overLimit = isRichContentOverLimit(body);
-  const bodyHtml = useMemo(() => {
-    if (!body || overLimit || previewEngine !== 'webview') {
+  // Non-md + Markdown Tab: full file as body (no front-matter split).
+  const nonMdBody = useMemo(
+    () => (!isMdPath ? content.trim() : ''),
+    [content, isMdPath],
+  );
+
+  const mdOverLimit = isRichContentOverLimit(mdBody);
+  const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
+
+  const mdBodyHtml = useMemo(() => {
+    if (!mdBody || mdOverLimit || previewEngine !== 'webview') {
       return undefined;
     }
     try {
-      // Same sanitize path as chat transcript WebView (prepareTranscriptRichHtml).
-      return prepareTranscriptRichHtml(body);
+      return prepareTranscriptRichHtml(mdBody);
     } catch {
       return undefined;
     }
-  }, [body, overLimit, previewEngine]);
+  }, [mdBody, mdOverLimit, previewEngine]);
 
-  const useWebViewPreview =
+  const nonMdBodyHtml = useMemo(() => {
+    if (!nonMdBody || nonMdOverLimit || previewEngine !== 'webview') {
+      return undefined;
+    }
+    try {
+      return prepareTranscriptRichHtml(nonMdBody);
+    } catch {
+      return undefined;
+    }
+  }, [nonMdBody, nonMdOverLimit, previewEngine]);
+
+  const mdUseWebViewPreview =
     previewEngine === 'webview' &&
-    useMarkdown &&
+    isMdPath &&
     split?.closed === true &&
-    (body.length > 0 || showFrontMatter);
+    (mdBody.length > 0 || showFrontMatter);
+
+  const nonMdUseWebViewPreview =
+    previewEngine === 'webview' && !isMdPath && nonMdBody.length > 0;
 
   const frontMatterHtml = useMemo(() => {
-    if (!useWebViewPreview || !showFrontMatter) {
+    if (!mdUseWebViewPreview || !showFrontMatter) {
       return undefined;
     }
     return buildFrontMatterDocumentHtml({
@@ -108,7 +150,7 @@ export function FileMarkdownPreview({
       rawLines: !split?.closed ? fmLines : undefined,
     });
   }, [
-    useWebViewPreview,
+    mdUseWebViewPreview,
     showFrontMatter,
     fmFields,
     split?.closed,
@@ -123,46 +165,60 @@ export function FileMarkdownPreview({
     );
   }
 
-  if (!useMarkdown) {
-    return (
-      <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
-    );
-  }
-
-  // Txt mode: show full source as-is — bypass FM split, WebView, and markdown rendering.
+  // renderKind drives tab: txt shows raw source for all file types.
   if (renderKind === 'txt') {
     const plain = (
       <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
     );
-    if (previewFill) {
-      return (
-        <ScrollView
-          style={styles.rnBodyScroll}
-          contentContainerStyle={styles.rnBodyContent}
-          keyboardShouldPersistTaps="handled">
-          {plain}
-        </ScrollView>
-      );
-    }
-    return plain;
+    return (
+      <PreviewScrollWrap previewFill={previewFill}>{plain}</PreviewScrollWrap>
+    );
+  }
+
+  // Non-md Markdown Tab: render full content as markdown body (no FM split).
+  if (!isMdPath) {
+    return (
+      <View
+        style={[
+          styles.root,
+          previewFill && nonMdUseWebViewPreview && styles.fillRoot,
+        ]}>
+        {nonMdUseWebViewPreview ? (
+          <RichDocumentWebView
+            html={nonMdBodyHtml}
+            plain={nonMdBody}
+            overLimit={nonMdOverLimit}
+            style={previewFill ? styles.webBody : undefined}
+          />
+        ) : nonMdBody ? (
+          <PreviewScrollWrap previewFill={previewFill}>
+            <RichContentBody
+              content={nonMdBody}
+              tokens={tokens}
+              variant="file-preview"
+            />
+          </PreviewScrollWrap>
+        ) : null}
+      </View>
+    );
   }
 
   return (
-    <View style={[styles.root, previewFill && useWebViewPreview && styles.fillRoot]}>
+    <View style={[styles.root, previewFill && mdUseWebViewPreview && styles.fillRoot]}>
       {!split?.closed ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           请返回编辑并补全结束的 --- 后再预览正文。
         </Text>
       ) : null}
-      {useWebViewPreview ? (
+      {mdUseWebViewPreview ? (
         <RichDocumentWebView
-          html={bodyHtml}
-          plain={body}
-          overLimit={overLimit}
+          html={mdBodyHtml}
+          plain={mdBody}
+          overLimit={mdOverLimit}
           frontMatterHtml={frontMatterHtml}
           style={previewFill ? styles.webBody : undefined}
         />
-      ) : body ? (
+      ) : mdBody ? (
         <>
           {showFrontMatter ? (
             <FrontMatterCard
@@ -173,16 +229,13 @@ export function FileMarkdownPreview({
               rawLines={!split?.closed ? fmLines : undefined}
             />
           ) : null}
-          <ScrollView
-            style={previewFill ? styles.rnBodyScroll : undefined}
-            contentContainerStyle={styles.rnBodyContent}
-            keyboardShouldPersistTaps="handled">
+          <PreviewScrollWrap previewFill={previewFill}>
             <RichContentBody
-              content={body}
+              content={mdBody}
               tokens={tokens}
               variant="file-preview"
             />
-          </ScrollView>
+          </PreviewScrollWrap>
         </>
       ) : split?.closed && showFrontMatter ? (
         <>
