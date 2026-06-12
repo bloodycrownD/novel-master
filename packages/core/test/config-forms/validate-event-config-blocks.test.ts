@@ -1,5 +1,5 @@
-import type { EventBlockDraft } from "../src/events/event-config-state.js";
-import { validateEventConfigBlocks } from "../src/events/validate-event-config-blocks.js";
+import type { EventBlockDraft } from "../../src/config-forms/events/event-config-state.js";
+import { validateEventConfigBlocks } from "../../src/config-forms/events/validate-event-config-blocks.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 

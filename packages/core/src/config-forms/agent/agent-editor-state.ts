@@ -1,9 +1,5 @@
-import type {
-  AgentDefinition,
-  AgentToolPolicy,
-  PromptBlock,
-  PromptBlockRole,
-} from "@novel-master/core";
+import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
+import type { PromptBlock, PromptBlockRole } from "@/domain/prompt/model/prompt-block.js";
 import { formatApplicationModelId } from "../shared/application-model-id.js";
 import {
   buildToolsPolicyFromSelection,

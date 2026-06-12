@@ -1,7 +1,10 @@
 /**
  * Draft state for events config UI (array of blocks ↔ KKV document).
  */
-import type { EventActionNode, EventsConfig } from "@novel-master/core";
+import type {
+  EventActionNode,
+  EventsConfig,
+} from "@/domain/events-config/model/events-config.js";
 
 export type EventBlockDraft = {
   readonly id: string;

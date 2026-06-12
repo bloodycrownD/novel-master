@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { EventsConfig } from "@novel-master/core";
+import type { EventsConfig } from "@/domain/events-config/model/events-config.js";
 import {
   configToEventBlocks,
   eventBlocksToConfig,
   newEventBlockId,
-} from "../src/events/event-config-state.js";
+} from "../../src/config-forms/events/event-config-state.js";
 
 test("configToEventBlocks maps events record to draft blocks", () => {
   const config: EventsConfig = {

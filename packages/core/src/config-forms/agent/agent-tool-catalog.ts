@@ -1,6 +1,5 @@
-import type { AgentToolPolicy } from "@novel-master/core";
+import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
 import type { ToolsMode } from "./agent-editor-state.js";
-import type { AgentDefinition } from "@novel-master/core";
 
 /** Catalog of V2 builtin tools for Agent policy UI (names sync with FILE_TOOL_NAMES + chat_grep). */
 export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{

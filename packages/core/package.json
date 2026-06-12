@@ -29,6 +29,18 @@
     "./kkv": {
       "types": "./dist/service/kkv/index.d.ts",
       "import": "./dist/service/kkv/index.js"
+    },
+    "./config-forms": {
+      "types": "./dist/config-forms/index.d.ts",
+      "import": "./dist/config-forms/index.js"
+    },
+    "./config-forms/agent": {
+      "types": "./dist/config-forms/agent/index.d.ts",
+      "import": "./dist/config-forms/agent/index.js"
+    },
+    "./config-forms/events": {
+      "types": "./dist/config-forms/events/index.d.ts",
+      "import": "./dist/config-forms/events/index.js"
     }
   },
   "scripts": {

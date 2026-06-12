@@ -6,7 +6,7 @@ import {
   formSnapshotJson,
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
-} from "../src/agent/agent-editor-state.js";
+} from "../../src/config-forms/agent/agent-editor-state.js";
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
   assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);

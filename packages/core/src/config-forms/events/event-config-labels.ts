@@ -1,4 +1,7 @@
-import type { EventActionNode, EventActionType } from "@novel-master/core";
+import type {
+  EventActionNode,
+  EventActionType,
+} from "@/domain/events-config/model/events-config.js";
 
 export function createDefaultAction(type: EventActionType): EventActionNode {
   switch (type) {

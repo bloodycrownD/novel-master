@@ -4,4 +4,4 @@
 export {
   matchDepth,
   validateDepthSlice,
-} from "../../../core/dist/domain/depth/logic/depth-slice.js";
+} from "@/domain/depth/logic/depth-slice.js";

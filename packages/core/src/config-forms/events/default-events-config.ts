@@ -1,7 +1,7 @@
 /**
  * Built-in default events configuration when KKV is unset (UI fallback).
  */
-import type { EventsConfig } from "@novel-master/core";
+import type { EventsConfig } from "@/domain/events-config/model/events-config.js";
 
 const EVENT_SESSION_COMPACTION_REQUESTED = "session.compaction.requested";
 
