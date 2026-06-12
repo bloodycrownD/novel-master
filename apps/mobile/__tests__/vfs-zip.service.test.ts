@@ -145,6 +145,37 @@ describe('vfs-zip.service', () => {
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
   });
 
+  it('M-native-4: non-ASCII entry names skip native zip and fall back to Core STORE', async () => {
+    const mockFallbackExport = jest.fn();
+    mockCreateVfsZipIoService.mockImplementation(
+      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => {
+        if (opts?.buildZip != null) {
+          return {
+            export: () =>
+              opts.buildZip!({
+                files: new Map([['笔记/第一章.md', '正文']]),
+                directoryEntryNames: ['空目录/'],
+              }),
+            import: mockImport,
+          };
+        }
+        return {export: mockFallbackExport, import: mockImport};
+      },
+    );
+    mockFallbackExport.mockResolvedValue(
+      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]),
+    );
+
+    const onNativeZipFallback = jest.fn();
+    const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
+
+    expect(result).toBe('saved');
+    expect(nativeBuildVfsZip).not.toHaveBeenCalled();
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(2);
+    expect(onNativeZipFallback).toHaveBeenCalledTimes(1);
+    expect(mockFallbackExport).toHaveBeenCalledWith(scope);
+  });
+
   it('M-native-3: native zip failure falls back to default STORE export', async () => {
     const mockFallbackExport = jest.fn();
     jest.mocked(nativeBuildVfsZip).mockRejectedValue(new Error('native zip failed'));

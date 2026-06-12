@@ -112,6 +112,25 @@ export type ExportVfsZipOptions = {
   onNativeZipFallback?: () => void;
 };
 
+/** 检测 gather 结果是否含非 ASCII 条目名（native zip 易乱码 UTF-8 路径）。 */
+export function hasNonAsciiZipEntryName(input: {
+  files: ReadonlyMap<string, string>;
+  directoryEntryNames: readonly string[];
+}): boolean {
+  const nonAscii = /[^\x00-\x7F]/;
+  for (const name of input.files.keys()) {
+    if (nonAscii.test(name)) {
+      return true;
+    }
+  }
+  for (const name of input.directoryEntryNames) {
+    if (nonAscii.test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Marks failures from the injected buildZip step (native zip), not VFS gather. */
 class NativeZipBuildFailedError extends Error {
   constructor(cause: unknown) {
@@ -124,6 +143,11 @@ class NativeZipBuildFailedError extends Error {
 
 /** Android-only: wrap native buildZip so fallback catches zip step failures only. */
 const androidNativeBuildZip: VfsZipBuildFn = async (input) => {
+  if (hasNonAsciiZipEntryName(input)) {
+    throw new NativeZipBuildFailedError(
+      new Error('non-ASCII entry names require Core ZIP builder'),
+    );
+  }
   try {
     return await nativeBuildVfsZip(input);
   } catch (cause) {

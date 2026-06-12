@@ -93,6 +93,27 @@ describe('nativeBuildVfsZip', () => {
     expect(bytes).toEqual(new Uint8Array([0x64, 0x61, 0x74, 0x61]));
   });
 
+  it('preserves non-ASCII entry names parseable by parseVfsZip', async () => {
+    const input = {
+      files: new Map([['笔记/第一章.md', '正文']]),
+      directoryEntryNames: ['空目录/'],
+    };
+
+    mockZip.mockImplementation(async () => {
+      const zipBytes = buildVfsZip(input.files, input.directoryEntryNames);
+      mockReadFile.mockResolvedValue(bytesToBase64(zipBytes));
+      return '/cache/vfs-export-test.zip';
+    });
+
+    const bytes = await nativeBuildVfsZip(input);
+    const entries = parseVfsZip(bytes);
+
+    expect(entries.has('空目录/')).toBe(true);
+    expect(entries.get('笔记/第一章.md')).toEqual(
+      new TextEncoder().encode('正文'),
+    );
+  });
+
   it('includes empty directory entry parseable by parseVfsZip', async () => {
     const input = {
       files: new Map([['a.md', 'A']]),

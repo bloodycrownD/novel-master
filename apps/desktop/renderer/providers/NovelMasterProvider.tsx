@@ -24,7 +24,8 @@ export interface NovelMasterContextValue {
   status: RuntimeStatus;
   dbPath: string | undefined;
   error: string | undefined;
-  retry: () => void;
+  /** 默认重新 bootstrap；主进程已 rebootstrap 时传 skipRebootstrap 仅刷新 UI。 */
+  retry: (options?: { skipRebootstrap?: boolean }) => void;
 }
 
 const NovelMasterContext = createContext<NovelMasterContextValue | undefined>(
@@ -50,8 +51,10 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
   const [dbPath, setDbPath] = useState<string | undefined>();
   const [error, setError] = useState<string | undefined>();
   const [bootToken, setBootToken] = useState(0);
+  const [skipRebootstrap, setSkipRebootstrap] = useState(false);
 
-  const retry = useCallback(() => {
+  const retry = useCallback((options?: { skipRebootstrap?: boolean }) => {
+    setSkipRebootstrap(options?.skipRebootstrap ?? false);
     setBootToken((t) => t + 1);
   }, []);
 
@@ -62,7 +65,9 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       const response =
-        bootToken > 0 ? await rebootstrap() : await getBootstrapStatus();
+        bootToken > 0 && !skipRebootstrap
+          ? await rebootstrap()
+          : await getBootstrapStatus();
       if (cancelled) {
         return;
       }
@@ -85,7 +90,7 @@ export function NovelMasterProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [bootToken]);
+  }, [bootToken, skipRebootstrap]);
 
   const value = useMemo<NovelMasterContextValue>(
     () => ({

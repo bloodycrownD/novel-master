@@ -47,7 +47,6 @@ import {
   ipcRegexListRules,
   ipcRegexUpdateGroup,
   ipcRegexUpdateRule,
-  rebootstrap,
 } from "../../ipc/client";
 import type { SettingsNavState } from "./settings-nav";
 import {
@@ -104,8 +103,7 @@ export function DataManagementView() {
       const res = await ipcBackupImport();
       if (res.ok) {
         if (res.data === "imported") {
-          await rebootstrap();
-          retry();
+          retry({ skipRebootstrap: true });
           toastSettingsSuccess("已导入并重新加载");
         } else {
           toastSettingsSuccess("已取消");
