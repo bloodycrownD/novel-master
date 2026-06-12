@@ -115,6 +115,83 @@ describe("validatePromptBlocks", () => {
     );
   });
 
+  it("L1: parses lifecycle once on user text block", () => {
+    const blocks = validatePromptBlocks({
+      kick: {
+        type: "text",
+        role: "user",
+        content: "继续",
+        lifecycle: "once",
+      },
+    });
+    assert.equal(blocks.length, 1);
+    if (blocks[0]?.type === "text") {
+      assert.equal(blocks[0].lifecycle, "once");
+    }
+  });
+
+  it("L2: omits lifecycle when not set", () => {
+    const blocks = validatePromptBlocks({
+      a: { type: "text", role: "user", content: "x" },
+    });
+    if (blocks[0]?.type === "text") {
+      assert.equal(blocks[0].lifecycle, undefined);
+    }
+  });
+
+  it("L3: rejects invalid lifecycle", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks({
+          a: {
+            type: "text",
+            role: "user",
+            content: "x",
+            lifecycle: "foo",
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        return true;
+      },
+    );
+  });
+
+  it("L4: rejects lifecycle on system text block", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks({
+          a: {
+            type: "text",
+            role: "system",
+            content: "x",
+            lifecycle: "once",
+          },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        assert.match(error.message, /system text block must not include lifecycle/);
+        return true;
+      },
+    );
+  });
+
+  it("L5: rejects lifecycle on chat block", () => {
+    assert.throws(
+      () =>
+        validatePromptBlocks({
+          a: { type: "chat", lifecycle: "once" },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof PromptError);
+        assert.equal(error.code, "INVALID_BLOCK");
+        return true;
+      },
+    );
+  });
+
   it("rejects when on text block", () => {
     assert.throws(
       () =>

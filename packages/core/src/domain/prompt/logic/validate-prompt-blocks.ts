@@ -5,9 +5,14 @@
  */
 
 import { PromptError } from "@/errors/prompt-errors.js";
-import type { PromptBlock, PromptBlockRole } from "../model/prompt-block.js";
+import type {
+  PromptBlock,
+  PromptBlockLifecycle,
+  PromptBlockRole,
+} from "../model/prompt-block.js";
 
 const ROLES = new Set<PromptBlockRole>(["system", "user", "assistant"]);
+const LIFECYCLES = new Set<PromptBlockLifecycle>(["always", "once"]);
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
@@ -24,6 +29,36 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
       `${label}: when is no longer supported; remove the when field`,
     );
   }
+}
+
+function parseTextBlockLifecycle(
+  label: string,
+  role: PromptBlockRole,
+  record: Record<string, unknown>,
+): PromptBlockLifecycle | undefined {
+  if (!("lifecycle" in record)) {
+    return undefined;
+  }
+  if (role === "system") {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}: system text block must not include lifecycle`,
+    );
+  }
+  const lifecycle = record.lifecycle;
+  if (lifecycle === undefined) {
+    return undefined;
+  }
+  if (typeof lifecycle !== "string" || !LIFECYCLES.has(lifecycle as PromptBlockLifecycle)) {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}: lifecycle must be always or once`,
+    );
+  }
+  if (lifecycle === "always") {
+    return undefined;
+  }
+  return "once";
 }
 
 function validateBlockEntry(
@@ -63,15 +98,24 @@ function validateBlockEntry(
         `${label}: text block requires string content`,
       );
     }
+    const parsedRole = role as PromptBlockRole;
+    const lifecycle = parseTextBlockLifecycle(label, parsedRole, record);
     return {
       name,
       type: "text",
-      role: role as PromptBlockRole,
+      role: parsedRole,
       content: record.content,
+      ...(lifecycle != null ? { lifecycle } : {}),
     };
   }
 
   if (type === "chat") {
+    if ("lifecycle" in record) {
+      throw new PromptError(
+        "INVALID_BLOCK",
+        `${label}: chat block must not include lifecycle`,
+      );
+    }
     if ("role" in record) {
       throw new PromptError(
         "INVALID_BLOCK",

@@ -145,6 +145,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const promptInput = buildPromptLlmInput(
           options.definition.prompts,
           promptRenderCtx,
+          { agentStepIndex: step },
         );
 
         if (persistMessages && this.deps.compactionConditions != null) {

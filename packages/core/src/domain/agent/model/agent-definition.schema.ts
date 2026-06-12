@@ -15,8 +15,17 @@ const textPromptBlockValueSchema = z
     type: z.literal("text"),
     role: z.enum(["system", "user", "assistant"]),
     content: z.string(),
+    lifecycle: z.enum(["always", "once"]).optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((block, ctx) => {
+    if (block.role === "system" && block.lifecycle != null) {
+      ctx.addIssue({
+        code: "custom",
+        message: `system text block must not include lifecycle`,
+      });
+    }
+  });
 
 const chatPromptBlockValueSchema = z
   .object({
@@ -102,6 +111,7 @@ function blockToMapValue(
       type: "text",
       role: block.role,
       content: block.content,
+      ...(block.lifecycle === "once" ? { lifecycle: "once" as const } : {}),
     };
   }
   return { type: "chat" };

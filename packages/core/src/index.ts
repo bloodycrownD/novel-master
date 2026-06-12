@@ -334,8 +334,10 @@ export { PromptError } from "./errors/prompt-errors.js";
 export type { PromptErrorCode } from "./errors/prompt-errors.js";
 export type {
   PromptBlock,
+  PromptBlockLifecycle,
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
+export { shouldIncludePromptTextBlock } from "./domain/prompt/logic/should-include-prompt-text-block.js";
 export { messageBodyText } from "./domain/prompt/logic/message-body.js";
 export {
   validatePromptBlocks,
@@ -349,6 +351,7 @@ export {
 } from "./service/prompt/render-prompt.js";
 export type {
   PromptAssemblySegment,
+  PromptAssemblyOptions,
   PromptRenderContext,
   PromptRenderDot,
   PromptMacroContext,

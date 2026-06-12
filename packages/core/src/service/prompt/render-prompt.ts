@@ -8,6 +8,7 @@ import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
+import { shouldIncludePromptTextBlock } from "../../domain/prompt/logic/should-include-prompt-text-block.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
@@ -42,6 +43,16 @@ export interface PromptPreviewSegment {
   readonly role: string;
   readonly title: string;
   readonly body: string;
+}
+
+/** Agent run step context for prompt assembly (defaults to step 0). */
+export interface PromptAssemblyOptions {
+  /** Agent run step index; 0 = first LLM round after user action. */
+  readonly agentStepIndex?: number;
+}
+
+function resolveAgentStepIndex(options?: PromptAssemblyOptions): number {
+  return options?.agentStepIndex ?? 0;
 }
 
 function formatSegment(role: string, body: string): string {
@@ -97,13 +108,18 @@ function macroRoot(ctx: PromptRenderContext): {
 export function buildPromptAssembly(
   blocks: readonly PromptBlock[],
   ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
 ): readonly PromptAssemblySegment[] {
+  const agentStepIndex = resolveAgentStepIndex(options);
   const { dotRecord, root } = macroRoot(ctx);
   const segments: PromptAssemblySegment[] = [];
   let segmentIndex = 0;
 
   for (const block of blocks) {
     if (block.type === "text") {
+      if (!shouldIncludePromptTextBlock(block, agentStepIndex)) {
+        continue;
+      }
       const content = renderMacroContent(block.content, dotRecord, root);
       segments.push({
         id: `text-${block.name}`,
@@ -159,13 +175,18 @@ function syntheticTemplateMessage(
 export function buildPromptLlmInput(
   blocks: readonly PromptBlock[],
   ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
 ): PromptLlmInput {
+  const agentStepIndex = resolveAgentStepIndex(options);
   const { dotRecord, root } = macroRoot(ctx);
   const systemParts: string[] = [];
   const messages: ChatMessage[] = [];
 
   for (const block of blocks) {
     if (block.type === "text") {
+      if (!shouldIncludePromptTextBlock(block, agentStepIndex)) {
+        continue;
+      }
       const expanded = renderMacroContent(block.content, dotRecord, root);
       if (block.role === "system") {
         systemParts.push(expanded);
@@ -193,8 +214,9 @@ export function buildPromptLlmInput(
 export function buildPromptPreviewSegments(
   blocks: readonly PromptBlock[],
   ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
 ): PromptPreviewSegment[] {
-  return buildPromptAssembly(blocks, ctx).map((segment) => ({
+  return buildPromptAssembly(blocks, ctx, options).map((segment) => ({
     id: segment.id,
     role: segment.role,
     title: segment.title,
@@ -208,8 +230,9 @@ export function buildPromptPreviewSegments(
 export function formatPromptLlmInputForCli(
   blocks: readonly PromptBlock[],
   ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
 ): string {
-  return buildPromptAssembly(blocks, ctx)
+  return buildPromptAssembly(blocks, ctx, options)
     .map((segment) => formatSegment(segment.role, segment.body))
     .join("\n");
 }
