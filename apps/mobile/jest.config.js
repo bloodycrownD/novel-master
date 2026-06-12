@@ -40,17 +40,17 @@ module.exports = {
       repoRoot,
       'packages/tokenizer-driver-rn/dist/index.js',
     ),
-    '^@novel-master/config-forms/events$': path.join(
+    '^@novel-master/core/config-forms/events$': path.join(
       repoRoot,
-      'packages/config-forms/dist/events/index.js',
+      'packages/core/dist/config-forms/events/index.js',
     ),
-    '^@novel-master/config-forms/agent$': path.join(
+    '^@novel-master/core/config-forms/agent$': path.join(
       repoRoot,
-      'packages/config-forms/dist/agent/index.js',
+      'packages/core/dist/config-forms/agent/index.js',
     ),
-    '^@novel-master/config-forms$': path.join(
+    '^@novel-master/core/config-forms$': path.join(
       repoRoot,
-      'packages/config-forms/dist/index.js',
+      'packages/core/dist/config-forms/index.js',
     ),
     '^@novel-master/cloud-sync-driver-s3$': path.join(
       repoRoot,

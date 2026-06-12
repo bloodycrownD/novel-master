@@ -1,6 +1,6 @@
 import React, {useMemo, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {BUILTIN_TOOL_CATALOG} from '@novel-master/config-forms/agent';
+import {BUILTIN_TOOL_CATALOG} from '@novel-master/core/config-forms/agent';
 import {FormTextInput} from '../form/FormTextInput';
 import type {ThemeTokens} from '../../theme/tokens';
 

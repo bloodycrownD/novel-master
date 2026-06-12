@@ -13,7 +13,7 @@ import {
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
   type ToolsMode,
-} from '@novel-master/config-forms/agent';
+} from '@novel-master/core/config-forms/agent';
 import {
   formatApplicationModelId,
   parseApplicationModelId,

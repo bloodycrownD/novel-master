@@ -1,5 +1,5 @@
-import type {EventBlockDraft} from '@novel-master/config-forms/events';
-import {validateEventConfigBlocks} from '@novel-master/config-forms/events';
+import type {EventBlockDraft} from '@novel-master/core/config-forms/events';
+import {validateEventConfigBlocks} from '@novel-master/core/config-forms/events';
 
 const MSG_RECEIVED = 'session.message.received';
 const COMPACTION = 'session.compaction.requested';

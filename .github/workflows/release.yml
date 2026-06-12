@@ -89,7 +89,7 @@ jobs:
       - name: Build workspace packages
         run: |
           npm run build -w @novel-master/core
-          npm run build -w @novel-master/config-forms -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
+          npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
 
       - name: Prepare release keystore
         id: keystore
@@ -189,7 +189,7 @@ jobs:
         run: |
           npm run build -w @novel-master/core
           npm run build -w @novel-master/tdbc-driver-better-sqlite3
-          npm run build -w @novel-master/config-forms -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
+          npm run build -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
 
       - name: Build and package Windows installer
         shell: bash
@@ -262,7 +262,7 @@ jobs:
         run: |
           npm run build -w @novel-master/core
           npm run build -w @novel-master/tdbc-driver-better-sqlite3
-          npm run build -w @novel-master/config-forms -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
+          npm run build -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
 
       - name: Build and package macOS DMG
         env:

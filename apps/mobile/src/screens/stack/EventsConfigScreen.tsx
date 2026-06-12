@@ -15,7 +15,7 @@ import {
   newEventBlockId,
   validateEventConfigBlocks,
   type EventBlockDraft,
-} from '@novel-master/config-forms/events';
+} from '@novel-master/core/config-forms/events';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';

@@ -13,7 +13,7 @@ import {
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
   type ToolsMode,
-} from "@novel-master/config-forms/agent";
+} from "@novel-master/core/config-forms/agent";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";

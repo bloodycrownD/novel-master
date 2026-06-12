@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "start": "react-native start",
-    "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/config-forms",
+    "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3",
     "test": "jest",
     "prebuild": "npm run build -w @novel-master/core",
     "build": "tsc --noEmit -p tsconfig.build.json",
@@ -19,14 +19,13 @@
     "e2e:build-apk": "cd android && gradlew.bat assembleDebug",
     "e2e:tsc": "tsc -p e2e/tsconfig.json",
     "icons": "node scripts/generate-app-icons.mjs",
-    "prestart": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/config-forms -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
-    "preandroid": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/config-forms -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
-    "preios": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/config-forms -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn"
+    "prestart": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
+    "preandroid": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn",
+    "preios": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.1.2",
     "@novel-master/cloud-sync-driver-s3": "*",
-    "@novel-master/config-forms": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-android": "*",
     "@novel-master/tdbc-driver-rn": "*",

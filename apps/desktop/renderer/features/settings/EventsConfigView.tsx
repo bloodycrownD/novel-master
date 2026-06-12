@@ -15,7 +15,7 @@ import {
   newEventBlockId,
   validateEventConfigBlocks,
   type EventBlockDraft,
-} from "@novel-master/config-forms/events";
+} from "@novel-master/core/config-forms/events";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";

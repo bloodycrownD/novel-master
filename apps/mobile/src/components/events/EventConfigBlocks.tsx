@@ -9,14 +9,14 @@ import {FormTextInput} from '../form/FormTextInput';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
-import type {EventBlockDraft} from '@novel-master/config-forms/events';
+import type {EventBlockDraft} from '@novel-master/core/config-forms/events';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {
   actionTypeHint,
   actionTypeLabel,
   eventTypeHint,
   eventTypeLabel,
-} from '@novel-master/config-forms/events';
+} from '@novel-master/core/config-forms/events';
 
 function BlockIconButton({
   label,
