@@ -1,17 +1,11 @@
 ---
 createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-05-31 19:45:00'
+updatedAt: '2026-06-13 00:15:00'
 ---
-2026-05-31: 启动 **mobile-fix** 迭代：`apps/mobile` bug 修复；PRD/SPEC 占位（`.apm/kb/docs/Iterations/mobile-fix/`），流程为先修 bug 再回填文档。
+2026-06-13: **prompt-block-lifecycle** 已合并至 **main**（`99f6f77`）：Prompt 块 `lifecycle: always|once`；双端「常驻」开关；`agentStepIndex` 步进过滤；Desktop 添加块 ContextMenu 修复。PRD/SPEC：`.apm/kb/docs/Iterations/prompt-block-lifecycle/`。
 
-2026-05-31: **mobile-app**（`feature/mobile-app-c0`）合并至 **main**：C0 Core 前置 + `apps/mobile` M1–M6 Android 产品 App（3 Tab、VFS、Chat、配置、SessionLog、§14）；Metro tiktoken/js-tiktoken + zod CJS shim；左侧项目抽屉 + 项目新建/重命名；Gradle sksp autolink 去重。PRD/SPEC：`.apm/kb/docs/Iterations/mobile-app/`。
+2026-06-12: **config-forms-merge-into-core** 已合并至 **main**（`ea36a3c`）：`@novel-master/config-forms` 迁入 core 子路径并删除独立包。
 
-2026-05-31: **core-package-structure** 已 fast-forward 合并至 **main**（`bf3fba1`）：core 包 domain/infra 目录规整、`ARCHITECTURE.md`、Breaking `createSqliteCompactionAgentResolver`。PRD/SPEC：`.apm/kb/docs/Iterations/core-package-structure/`。
+2026-05-31: **mobile-app** 已合并至 **main**：C0 Core + `apps/mobile` M1–M6。PRD/SPEC：`.apm/kb/docs/Iterations/mobile-app/`。
 
-2026-05-31: **core-package-structure** 分支开发完成（合并前记录）：`packages/core/ARCHITECTURE.md` 落地；domain 统一 `model/` / `logic/` / `ports/`、errors 收拢；infra adapter 型（llm-protocol、sksp、tdbc）→ `ports/` + `impl/` + `logic/`；`VfsService` port 下沉 `domain/vfs/ports/`；`zodToJsonSchema` 迁至 `infra/serialization/`。
-
-2026-05-30: 合并 **global-compaction-policy** 至 main：压缩策略从 AgentDefinition 解耦为全局 **CompactionPolicy**（KKV）；CLI `nm compaction`；摘要 `agentId` + agents registry；mobile「我的 → 压缩策略」。PRD/SPEC：`.apm/kb/docs/Iterations/global-compaction-policy/`。
-
-2026-05-30: 合并 **mobile-prototype-session-drawer** 至 main（`examples/mobile`）：顶栏 ☰ 按 `chatSubview` 分流；会话操作抽屉；会话日志时间线。PRD/SPEC：`.apm/kb/docs/Iterations/mobile-prototype-session-drawer/`。
-
-2026-05-25: 完成 message-visibility SPEC（待实现或已合并，见 main）。PRD/SPEC：`.apm/kb/docs/Iterations/message-visibility/`。
+2026-05-31: **core-package-structure** 已合并至 **main**（`bf3fba1`）。PRD/SPEC：`.apm/kb/docs/Iterations/core-package-structure/`。
