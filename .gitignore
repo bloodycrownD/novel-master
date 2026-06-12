@@ -42,3 +42,6 @@ tmp/
 # Generated knowledge-base search index (rebuild locally)
 .apm/kb/index/
 .apm/status.json
+
+# Cursor IDE local files (debug logs, etc.)
+.cursor/
