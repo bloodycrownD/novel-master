@@ -6,7 +6,7 @@
   "main": "./dist/src/main/main.js",
   "scripts": {
     "lint": "eslint src test renderer shared",
-    "prebuild": "npm run build -w @novel-master/core && npm run build -w @novel-master/tdbc-driver-better-sqlite3 && npm run build -w @novel-master/tokenizer-driver-node && npm run build -w @novel-master/config-forms && npm run build -w @novel-master/sksp-windows && npm run build -w @novel-master/sksp-mac",
+    "prebuild": "npm run build -w @novel-master/core && npm run build -w @novel-master/cloud-sync-driver-s3 && npm run build -w @novel-master/tdbc-driver-better-sqlite3 && npm run build -w @novel-master/tokenizer-driver-node && npm run build -w @novel-master/config-forms && npm run build -w @novel-master/sksp-windows && npm run build -w @novel-master/sksp-mac",
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "build:icons": "node scripts/generate-icons.mjs",
     "build:main": "tsc -p tsconfig.json",
@@ -27,6 +27,7 @@
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.43.0",
+    "@novel-master/cloud-sync-driver-s3": "*",
     "@novel-master/config-forms": "*",
     "@novel-master/core": "*",
     "@novel-master/sksp-mac": "*",

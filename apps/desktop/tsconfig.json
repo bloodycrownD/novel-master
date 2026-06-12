@@ -9,6 +9,7 @@
   "exclude": ["src/preload/**/*"],
   "references": [
     { "path": "../../packages/core" },
+    { "path": "../../packages/cloud-sync-driver-s3" },
     { "path": "../../packages/tdbc-driver-better-sqlite3" },
     { "path": "../../packages/tokenizer-driver-node" },
     { "path": "../../packages/sksp-windows" },
