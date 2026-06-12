@@ -4,18 +4,25 @@
  * @module services/cloud-sync.service
  */
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   CloudSyncCoordinator,
   CloudSyncError,
   isCloudSyncError,
+  normalizePrefix,
   parseCloudSyncStatus,
   statusKey,
 } from "@novel-master/core";
 import { createS3ObjectStorage } from "@novel-master/cloud-sync-driver-s3";
-import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+import type { S3StorageConfig } from "@novel-master/cloud-sync-driver-s3";
+import {
+  HeadBucketCommand,
+  ListObjectsV2Command,
+  S3Client,
+  type S3ClientConfig,
+} from "@aws-sdk/client-s3";import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import {
   createCloudSyncConfigStore,
@@ -56,8 +63,7 @@ function isConfigured(config: CloudSyncConfigDto, secret: string | null): boolea
   );
 }
 
-function mapStorageError(error: unknown): CloudSyncError {
-  if (isCloudSyncError(error)) {
+function mapStorageError(error: unknown): CloudSyncError {  if (isCloudSyncError(error)) {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
@@ -83,6 +89,36 @@ function mapStorageError(error: unknown): CloudSyncError {
   return new CloudSyncError("NETWORK", message, { cause: error });
 }
 
+function buildS3Client(config: S3StorageConfig): S3Client {
+  const clientConfig: S3ClientConfig = {
+    region: config.region || "us-east-1",
+    endpoint: config.endpoint,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+    forcePathStyle: config.forcePathStyle ?? false,
+  };
+  return new S3Client(clientConfig);
+}
+
+async function buildS3StorageConfigFromStore(
+  configStore: CloudSyncConfigStore,
+): Promise<S3StorageConfig> {
+  const publicConfig = await configStore.getPublicConfig();
+  const secret = await configStore.getSecretAccessKey();
+  if (secret == null || secret.length === 0) {
+    throw new CloudSyncError("NOT_CONFIGURED", "请先配置云存储");
+  }
+  return {
+    endpoint: publicConfig.endpoint,
+    region: publicConfig.region,
+    bucket: publicConfig.bucket,
+    accessKeyId: publicConfig.accessKeyId,
+    secretAccessKey: secret,
+    forcePathStyle: publicConfig.forcePathStyle,
+  };
+}
 export class DesktopCloudSyncService {
   private readonly runtime: DesktopNovelMasterRuntime;
   private readonly configStore: CloudSyncConfigStore;
@@ -104,15 +140,27 @@ export class DesktopCloudSyncService {
   }
 
   async testConnection(): Promise<void> {
-    const storage = await this.buildStorage();
+    const s3Config = await buildS3StorageConfigFromStore(this.configStore);
+    const client = buildS3Client(s3Config);
     const publicConfig = await this.configStore.getPublicConfig();
+    const pathPrefix = normalizePrefix(publicConfig.pathPrefix);
+
     try {
-      await storage.head(statusKey(publicConfig.pathPrefix));
-    } catch (error) {
-      throw mapStorageError(error);
+      await client.send(new HeadBucketCommand({ Bucket: s3Config.bucket }));
+    } catch (headError) {
+      try {
+        await client.send(
+          new ListObjectsV2Command({
+            Bucket: s3Config.bucket,
+            Prefix: pathPrefix,
+            MaxKeys: 1,
+          }),
+        );
+      } catch (listError) {
+        throw mapStorageError(listError ?? headError);
+      }
     }
   }
-
   async getLocalStatus(): Promise<CloudSyncLocalStatusDto> {
     const config = await this.configStore.getConfig();
     const meta = await this.configStore.getLocalMeta();
@@ -154,14 +202,18 @@ export class DesktopCloudSyncService {
       throw new Error("云同步进行中，请稍后再试");
     }
     syncBusy = true;
+    const meta = await this.configStore.getLocalMeta();
     try {
-      const coordinator = await this.buildCoordinator();
-      const meta = await this.configStore.getLocalMeta();
+      const { coordinator } = await this.buildCoordinator();
       const result = await coordinator.pull({ lastSyncedRev: meta.lastSyncedRev });
       await this.configStore.setLastSyncedRev(result.rev);
       await this.configStore.recordPull(true, `已同步至 rev ${result.rev}`);
       return result;
     } catch (error) {
+      if (isCloudSyncError(error) && error.code === "ALREADY_UP_TO_DATE") {
+        await this.configStore.recordPull(true, "已是最新");
+        return { rev: meta.lastSyncedRev };
+      }
       const detail =
         error instanceof Error ? error.message : String(error);
       await this.configStore.recordPull(false, detail).catch(() => undefined);
@@ -176,10 +228,12 @@ export class DesktopCloudSyncService {
       throw new Error("云同步进行中，请稍后再试");
     }
     syncBusy = true;
+    let exportTempPath: string | undefined;
     try {
-      const coordinator = await this.buildCoordinator();
+      const built = await this.buildCoordinator();
+      exportTempPath = built.exportTempPath;
       const meta = await this.configStore.getLocalMeta();
-      const result = await coordinator.push({
+      const result = await built.coordinator.push({
         lastSyncedRev: meta.lastSyncedRev,
         forceOverwriteRemote: options?.forceOverwriteRemote,
       });
@@ -193,9 +247,11 @@ export class DesktopCloudSyncService {
       throw error;
     } finally {
       syncBusy = false;
+      if (exportTempPath != null) {
+        await unlink(exportTempPath).catch(() => undefined);
+      }
     }
   }
-
   private async readRemoteRev(): Promise<number> {
     const storage = await this.buildStorage();
     const publicConfig = await this.configStore.getPublicConfig();
@@ -225,8 +281,10 @@ export class DesktopCloudSyncService {
     });
   }
 
-  private async buildCoordinator(): Promise<CloudSyncCoordinator> {
-    const publicConfig = await this.configStore.getPublicConfig();
+  private async buildCoordinator(): Promise<{
+    coordinator: CloudSyncCoordinator;
+    exportTempPath: string;
+  }> {    const publicConfig = await this.configStore.getPublicConfig();
     const secret = await this.configStore.getSecretAccessKey();
     if (
       publicConfig.endpoint.trim().length === 0 ||
@@ -267,22 +325,24 @@ export class DesktopCloudSyncService {
       },
     };
 
-    return new CloudSyncCoordinator({
-      storage,
-      dbSync,
-      pathPrefix: publicConfig.pathPrefix,
-      deviceId: publicConfig.deviceId,
+    return {
+      coordinator: new CloudSyncCoordinator({
+        storage,
+        dbSync,
+        pathPrefix: publicConfig.pathPrefix,
+        deviceId: publicConfig.deviceId,
+        exportTempPath,
+        computeSha256Hex,
+        readSnapshotBytes: async (path: string) => readFile(path),
+        getSnapshotBytes: async (path: string) => {
+          const info = await stat(path);
+          return info.size;
+        },
+      }),
       exportTempPath,
-      computeSha256Hex,
-      readSnapshotBytes: async (path: string) => readFile(path),
-      getSnapshotBytes: async (path: string) => {
-        const info = await stat(path);
-        return info.size;
-      },
-    });
+    };
   }
 }
-
 let service: DesktopCloudSyncService | undefined;
 
 export async function getDesktopCloudSyncService(): Promise<DesktopCloudSyncService> {

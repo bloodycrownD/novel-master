@@ -4,12 +4,15 @@
  * @module services/cloud-sync-config.store
  */
 import { randomUUID } from "node:crypto";
-import { KkvError } from "@novel-master/core";
+import { KkvError, normalizePrefix } from "@novel-master/core";
 import type { KkvService } from "@novel-master/core/kkv";
 import type { SecretStore } from "@novel-master/core/sksp";
 
 export const CLOUD_SYNC_KKV_MODULE = "nm-cloud-sync";
 export const CLOUD_SYNC_SKSP_SECRET_REF = "cloud-sync/s3-secret-key";
+
+/** 默认云同步路径前缀 */
+export const DEFAULT_CLOUD_SYNC_PATH_PREFIX = "novel-master/sync/";
 
 export const CLOUD_SYNC_KEY_ENDPOINT = "endpoint";
 export const CLOUD_SYNC_KEY_BUCKET = "bucket";
@@ -155,7 +158,7 @@ export function createCloudSyncConfigStore(
       endpoint: endpoint ?? "",
       bucket: bucket ?? "",
       region: region ?? "",
-      pathPrefix: pathPrefix ?? "",
+      pathPrefix: pathPrefix ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
       accessKeyId: accessKeyId ?? "",
       forcePathStyle: parseBool(forcePathStyle),
       deviceId: deviceId ?? "",
@@ -200,6 +203,10 @@ export function createCloudSyncConfigStore(
       const deviceId =
         existing.deviceId.trim().length > 0 ? existing.deviceId : randomUUID();
 
+      const normalizedPrefix = normalizePrefix(
+        input.pathPrefix.trim() || DEFAULT_CLOUD_SYNC_PATH_PREFIX,
+      );
+
       await Promise.all([
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENDPOINT, input.endpoint.trim()),
         kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_BUCKET, input.bucket.trim()),
@@ -207,9 +214,8 @@ export function createCloudSyncConfigStore(
         kkv.set(
           CLOUD_SYNC_KKV_MODULE,
           CLOUD_SYNC_KEY_PATH_PREFIX,
-          input.pathPrefix.trim(),
-        ),
-        kkv.set(
+          normalizedPrefix,
+        ),        kkv.set(
           CLOUD_SYNC_KKV_MODULE,
           CLOUD_SYNC_KEY_ACCESS_KEY_ID,
           input.accessKeyId.trim(),
