@@ -1,7 +1,8 @@
 ---
-createdAt: '2026-05-23 17:38:51'
+
+## createdAt: '2026-05-23 17:38:51'
 updatedAt: '2026-06-13 00:15:00'
----
+
 ## 项目
 
 Novel Master（novel-master）小说大师，npm workspaces Monorepo。
@@ -12,7 +13,7 @@ Novel Master（novel-master）小说大师，npm workspaces Monorepo。
 - Node 22+、TypeScript ESM；根目录 `npm run build` 构建全部
 - 改动最小化、匹配现有风格；仅在被要求时 git commit
 - Core 分层见 `packages/core/ARCHITECTURE.md`
-- 应用图标源图：`assets/icon.webp`（构建/CI 复制为根目录 `icon.webp` 供 icon 脚本，**不入库**）
+- 应用图标源图：`assets/icon.webp`（icon 生成脚本与 UI 均引用此路径）
 
 ## 现状
 
