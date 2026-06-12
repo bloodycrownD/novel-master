@@ -1,0 +1,26 @@
+{
+  "name": "@novel-master/cloud-sync-driver-s3",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true }); rmSync('tsconfig.tsbuildinfo', { force: true })\"",
+    "test": "tsx --test test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.758.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}
