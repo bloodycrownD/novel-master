@@ -1,6 +1,8 @@
 import {
   exportDatabaseBackup,
+  exportDatabaseBackupToPath,
   importDatabaseBackup,
+  importDatabaseBackupFromBytes,
 } from '../src/services/db-backup.service';
 
 const mockCheckpoint = jest.fn();
@@ -10,6 +12,7 @@ const mockGetPath = jest.fn();
 const mockCp = jest.fn();
 const mockExists = jest.fn();
 const mockUnlink = jest.fn();
+const mockWriteFile = jest.fn();
 const mockReadFile = jest.fn();
 const mockSaveDocuments = jest.fn();
 const mockPick = jest.fn();
@@ -63,6 +66,7 @@ jest.mock('react-native-blob-util', () => ({
       cp: (...args: unknown[]) => mockCp(...args),
       exists: (...args: unknown[]) => mockExists(...args),
       unlink: (...args: unknown[]) => mockUnlink(...args),
+      writeFile: (...args: unknown[]) => mockWriteFile(...args),
       readFile: (...args: unknown[]) => mockReadFile(...args),
     },
   },
@@ -96,6 +100,7 @@ describe('db-backup.service', () => {
     mockCp.mockReset().mockResolvedValue(undefined);
     mockExists.mockReset().mockResolvedValue(true);
     mockUnlink.mockReset().mockResolvedValue(undefined);
+    mockWriteFile.mockReset().mockResolvedValue(undefined);
     mockReadFile.mockReset().mockResolvedValue(SQLITE_HEADER_BASE64);
     mockSaveDocuments.mockReset().mockResolvedValue([{}]);
     mockPick.mockReset();
@@ -142,9 +147,10 @@ describe('db-backup.service', () => {
 
     expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
     expect(mockClose).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith(
-      '/cache/import.nmbackup',
+    expect(mockWriteFile).toHaveBeenCalledWith(
       '/db/novel_master_vfs',
+      expect.any(String),
+      'base64',
     );
     expect(mockOpen).toHaveBeenCalled();
     expect(mockRestoreSnapshot).toHaveBeenCalledWith(
@@ -166,5 +172,50 @@ describe('db-backup.service', () => {
       /不是有效的/,
     );
     expect(onRebootstrap).not.toHaveBeenCalled();
+  });
+
+  it('exportDatabaseBackupToPath checkpoints, copies, and scrubs without dialog', async () => {
+    const destPath = '/cache/cloud-sync-snapshot.nmbackup';
+    await exportDatabaseBackupToPath(runtime, destPath);
+
+    expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
+    expect(mockGetPath).toHaveBeenCalled();
+    expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', destPath);
+    expect(mockScrubInDatabase).toHaveBeenCalledWith(
+      liveConn,
+      destPath,
+      'export_db',
+    );
+    expect(mockSaveDocuments).not.toHaveBeenCalled();
+  });
+
+  it('importDatabaseBackupFromBytes dumps, replaces, restores without rebootstrap', async () => {
+    const bytes = new Uint8Array(Buffer.from('SQLite format 3\0padding'));
+
+    await importDatabaseBackupFromBytes(bytes);
+
+    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
+    expect(mockClose).toHaveBeenCalled();
+    expect(mockWriteFile).toHaveBeenCalledWith(
+      '/db/novel_master_vfs',
+      expect.any(String),
+      'base64',
+    );
+    expect(mockOpen).toHaveBeenCalled();
+    expect(mockRestoreSnapshot).toHaveBeenCalledWith(
+      restoreConn,
+      emptySnapshot,
+    );
+    expect(mockRestoreConnClose).toHaveBeenCalled();
+    expect(onRebootstrap).not.toHaveBeenCalled();
+  });
+
+  it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {
+    const bytes = new Uint8Array(Buffer.from('not sqlite'));
+
+    await expect(importDatabaseBackupFromBytes(bytes)).rejects.toThrow(
+      /不是有效的/,
+    );
+    expect(mockDumpSnapshot).not.toHaveBeenCalled();
   });
 });

@@ -50,6 +50,58 @@ async function openDbForProviderRestore(): Promise<TdbcConnection> {
   return open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });
 }
 
+/**
+ * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无文件对话框。
+ * 调用方负责 Agent 守卫与目标路径管理。
+ */
+export async function exportDatabaseBackupToPath(
+  runtime: DesktopNovelMasterRuntime,
+  destPath: string,
+): Promise<void> {
+  await checkpointDesktopDatabase(runtime.conn);
+  const dbPath = resolveDbPath();
+  await copyFile(dbPath, destPath);
+  await scrubProviderTablesInDatabase(
+    runtime.conn,
+    destPath,
+    EXPORT_ATTACH_ALIAS,
+  );
+}
+
+/**
+ * 从内存中的备份字节导入数据库（dump → close → replace → restore），无对话框与 rebootstrap。
+ * 调用方须在成功后执行 rebootstrap。
+ */
+export async function importDatabaseBackupFromBytes(
+  bytes: Uint8Array,
+): Promise<void> {
+  assertSqliteFile(bytes);
+
+  const dbPath = resolveDbPath();
+  const bakPath = `${dbPath}.nmbackup.bak`;
+
+  const liveConn = await getDesktopConnection();
+  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
+  try {
+    await copyFile(dbPath, bakPath).catch(() => undefined);
+    await closeDesktopConnection();
+    await writeFile(dbPath, bytes);
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+  } catch (error) {
+    await copyFile(bakPath, dbPath).catch(() => undefined);
+    throw error;
+  } finally {
+    await unlink(bakPath).catch(() => undefined);
+  }
+}
+
 export async function exportDatabaseBackup(
   runtime: DesktopNovelMasterRuntime,
   parentWindow?: BrowserWindow | null,
@@ -58,8 +110,6 @@ export async function exportDatabaseBackup(
     throw new Error("Agent 运行中，请稍后再导出数据库");
   }
 
-  await checkpointDesktopDatabase(runtime.conn);
-  const dbPath = resolveDbPath();
   const fileName = backupFileName();
   const win = parentWindow ?? undefined;
 
@@ -76,12 +126,7 @@ export async function exportDatabaseBackup(
     return "cancelled";
   }
 
-  await copyFile(dbPath, result.filePath);
-  await scrubProviderTablesInDatabase(
-    runtime.conn,
-    result.filePath,
-    EXPORT_ATTACH_ALIAS,
-  );
+  await exportDatabaseBackupToPath(runtime, result.filePath);
   return "saved";
 }
 
@@ -112,31 +157,6 @@ export async function importDatabaseBackup(
 
   const pickedPath = result.filePaths[0]!;
   const bytes = await readFile(pickedPath);
-  assertSqliteFile(bytes);
-
-  const dbPath = resolveDbPath();
-  const bakPath = `${dbPath}.nmbackup.bak`;
-
-  const liveConn = await getDesktopConnection();
-  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
-
-  try {
-    await copyFile(dbPath, bakPath).catch(() => undefined);
-    await closeDesktopConnection();
-    await writeFile(dbPath, bytes);
-
-    const restoreConn = await openDbForProviderRestore();
-    try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
-    } finally {
-      await restoreConn.close();
-    }
-
-    return "imported";
-  } catch (error) {
-    await copyFile(bakPath, dbPath).catch(() => undefined);
-    throw error;
-  } finally {
-    await unlink(bakPath).catch(() => undefined);
-  }
+  await importDatabaseBackupFromBytes(bytes);
+  return "imported";
 }

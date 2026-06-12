@@ -60,6 +60,16 @@ function assertSqliteFile(bytes: Uint8Array): void {
   }
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const slice = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...slice);
+  }
+  return globalThis.btoa(binary);
+}
+
 async function readFileAsBytes(fsPath: string): Promise<Uint8Array> {
   const exists = await ReactNativeBlobUtil.fs.exists(fsPath);
   if (!exists) {
@@ -83,6 +93,67 @@ async function openDbForProviderRestore(): Promise<TdbcConnection> {
 }
 
 /**
+ * 将数据库导出到指定路径（checkpoint → 拷贝 → 清除服务商三表），无分享对话框。
+ * 调用方负责 Agent 守卫与目标路径管理。
+ */
+export async function exportDatabaseBackupToPath(
+  runtime: MobileNovelMasterRuntime,
+  destPath: string,
+): Promise<void> {
+  await checkpointMobileDatabase(runtime.conn);
+  const dbPath = await resolveMobileDatabaseFilePath();
+  await ReactNativeBlobUtil.fs.cp(dbPath, destPath);
+  await scrubProviderTablesInDatabase(
+    runtime.conn,
+    destPath,
+    EXPORT_ATTACH_ALIAS,
+  );
+}
+
+/**
+ * 从内存中的备份字节导入数据库（dump → close → replace → restore），无选择器与 rebootstrap。
+ * 调用方须在成功后执行 rebootstrap。
+ */
+export async function importDatabaseBackupFromBytes(
+  bytes: Uint8Array,
+): Promise<void> {
+  assertSqliteFile(bytes);
+
+  const dbPath = await resolveMobileDatabaseFilePath();
+  const bakPath = `${dbPath}.nmbackup.bak`;
+
+  const liveConn = await getMobileConnection();
+  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
+  const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);
+  if (dbExists) {
+    await ReactNativeBlobUtil.fs.cp(dbPath, bakPath);
+  }
+
+  try {
+    await closeMobileConnection();
+    await ReactNativeBlobUtil.fs.writeFile(
+      dbPath,
+      bytesToBase64(bytes),
+      'base64',
+    );
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+  } catch (error) {
+    const bakExists = await ReactNativeBlobUtil.fs.exists(bakPath);
+    if (bakExists) {
+      await ReactNativeBlobUtil.fs.cp(bakPath, dbPath).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/**
  * 导出全量应用数据库为可分享的 `.nmbackup` 文件（副本不含服务商表）。
  * @returns `'saved'` 用户完成分享；`'cancelled'` 用户取消选择器。
  */
@@ -93,17 +164,10 @@ export async function exportDatabaseBackup(
     throw new Error('Agent 运行中，请稍后再导出数据库');
   }
 
-  await checkpointMobileDatabase(runtime.conn);
-  const dbPath = await resolveMobileDatabaseFilePath();
   const fileName = backupFileName();
   const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
 
-  await ReactNativeBlobUtil.fs.cp(dbPath, tmpPath);
-  await scrubProviderTablesInDatabase(
-    runtime.conn,
-    tmpPath,
-    EXPORT_ATTACH_ALIAS,
-  );
+  await exportDatabaseBackupToPath(runtime, tmpPath);
 
   try {
     const [result] = await saveDocuments({
@@ -156,36 +220,6 @@ export async function importDatabaseBackup(
 
   const pickedPath = localUriToFsPath(copyResult.localUri);
   const bytes = await readFileAsBytes(pickedPath);
-  assertSqliteFile(bytes);
-
-  const dbPath = await resolveMobileDatabaseFilePath();
-  const bakPath = `${dbPath}.nmbackup.bak`;
-
-  const liveConn = await getMobileConnection();
-  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
-
-  const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);
-  if (dbExists) {
-    await ReactNativeBlobUtil.fs.cp(dbPath, bakPath);
-  }
-
-  try {
-    await closeMobileConnection();
-    await ReactNativeBlobUtil.fs.cp(pickedPath, dbPath);
-
-    const restoreConn = await openDbForProviderRestore();
-    try {
-      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
-    } finally {
-      await restoreConn.close();
-    }
-
-    onRebootstrap();
-  } catch (error) {
-    const bakExists = await ReactNativeBlobUtil.fs.exists(bakPath);
-    if (bakExists) {
-      await ReactNativeBlobUtil.fs.cp(bakPath, dbPath).catch(() => undefined);
-    }
-    throw error;
-  }
+  await importDatabaseBackupFromBytes(bytes);
+  onRebootstrap();
 }
