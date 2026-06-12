@@ -27,6 +27,7 @@ import {
   pushCloudSync,
 } from '../../services/cloud-sync.service';
 import {isCloudSyncError} from '@novel-master/core';
+import {isMobileAgentActive} from '../../runtime/agent-activity';
 import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
@@ -79,6 +80,7 @@ export function ProfileTabScreen() {
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [cloudLastPullAt, setCloudLastPullAt] = useState<string | undefined>();
   const [cloudLastPushAt, setCloudLastPushAt] = useState<string | undefined>();
+  const [agentActive, setAgentActive] = useState(false);
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
@@ -180,8 +182,23 @@ export function ProfileTabScreen() {
     return date.toLocaleString();
   };
 
+  const syncControlsDisabled = dbBusy || syncBusy || agentActive;
+
+  const syncControlValue = (lastAt?: string): string => {
+    if (agentActive) {
+      return 'Agent 运行中';
+    }
+    if (syncBusy) {
+      return '处理中…';
+    }
+    if (lastAt) {
+      return `上次 ${formatSyncTime(lastAt)}`;
+    }
+    return '手动同步';
+  };
+
   const runPull = useCallback(() => {
-    if (dbBusy || syncBusy) {
+    if (syncControlsDisabled) {
       return;
     }
     Alert.alert(
@@ -210,11 +227,11 @@ export function ProfileTabScreen() {
         },
       ],
     );
-  }, [dbBusy, syncBusy, runtime, retry, showToast, refreshCloudSyncStatus]);
+  }, [syncControlsDisabled, runtime, retry, showToast, refreshCloudSyncStatus]);
 
   const runPush = useCallback(
     (forceOverwriteRemote = false) => {
-      if (dbBusy || syncBusy) {
+      if (syncControlsDisabled) {
         return;
       }
       setSyncBusy(true);
@@ -252,8 +269,7 @@ export function ProfileTabScreen() {
         });
     },
     [
-      dbBusy,
-      syncBusy,
+      syncControlsDisabled,
       runtime,
       retry,
       showToast,
@@ -264,6 +280,7 @@ export function ProfileTabScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      setAgentActive(isMobileAgentActive());
       refreshModelLabel().catch(() => setModelLabel('—'));
       refreshAgentLabel().catch(() => setAgentLabel('—'));
       refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
@@ -394,26 +411,14 @@ export function ProfileTabScreen() {
         <ProfileMenuItem
           icon="⬇️"
           label="从云端拉取"
-          value={
-            syncBusy
-              ? '处理中…'
-              : cloudLastPullAt
-                ? `上次 ${formatSyncTime(cloudLastPullAt)}`
-                : '手动同步'
-          }
+          value={syncControlValue(cloudLastPullAt)}
           tokens={tokens}
           onPress={runPull}
         />
         <ProfileMenuItem
           icon="⬆️"
           label="推送到云端"
-          value={
-            syncBusy
-              ? '处理中…'
-              : cloudLastPushAt
-                ? `上次 ${formatSyncTime(cloudLastPushAt)}`
-                : '手动同步'
-          }
+          value={syncControlValue(cloudLastPushAt)}
           tokens={tokens}
           onPress={() => runPush()}
         />
