@@ -574,6 +574,39 @@ export async function ipcBackupImport() {
   return bridge().invoke(IPC_CHANNELS.BACKUP_IMPORT);
 }
 
+export async function ipcCloudSyncGetConfig() {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG);
+}
+
+export async function ipcCloudSyncSetConfig(req: {
+  endpoint: string;
+  bucket: string;
+  region: string;
+  pathPrefix: string;
+  accessKeyId: string;
+  secretAccessKey?: string;
+  forcePathStyle: boolean;
+  deviceLabel?: string;
+}) {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, req);
+}
+
+export async function ipcCloudSyncTestConnection() {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION);
+}
+
+export async function ipcCloudSyncGetLocalStatus() {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS);
+}
+
+export async function ipcCloudSyncPull() {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_PULL);
+}
+
+export async function ipcCloudSyncPush(req?: { forceOverwriteRemote?: boolean }) {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req);
+}
+
 export async function ipcShellMenuPopup(req: {
   menuId: "file" | "edit" | "view" | "window" | "help";
   x: number;

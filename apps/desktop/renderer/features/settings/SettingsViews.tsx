@@ -26,6 +26,12 @@ import {
   ipcAgentYamlImport,
   ipcBackupExport,
   ipcBackupImport,
+  ipcCloudSyncGetConfig,
+  ipcCloudSyncGetLocalStatus,
+  ipcCloudSyncPull,
+  ipcCloudSyncPush,
+  ipcCloudSyncSetConfig,
+  ipcCloudSyncTestConnection,
   ipcEventsExportYaml,
   ipcEventsGetConfig,
   ipcEventsImportYaml,
@@ -53,6 +59,8 @@ import {
   SettingsActionSection,
   SettingsField,
   SettingsFormSection,
+  SettingsStatus,
+  SettingsSwitchRow,
   SettingsListEmpty,
   SettingsListItem,
   SettingsListSection,
@@ -75,10 +83,169 @@ type Nav = {
   navState: SettingsNavState;
 };
 
+type CloudSyncStatusState = {
+  configured: boolean;
+  lastSyncedRev: number;
+  remoteRev?: number;
+  lastPullAt?: string;
+  lastPushAt?: string;
+  lastPullResult?: string;
+  lastPushResult?: string;
+  suggestsPull: boolean;
+  syncBusy: boolean;
+  agentActive: boolean;
+};
+
 export function DataManagementView() {
   const { retry } = useNovelMaster();
   const [busy, setBusy] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
+
+  const [endpoint, setEndpoint] = useState("");
+  const [bucket, setBucket] = useState("");
+  const [region, setRegion] = useState("");
+  const [pathPrefix, setPathPrefix] = useState("");
+  const [accessKeyId, setAccessKeyId] = useState("");
+  const [secretAccessKey, setSecretAccessKey] = useState("");
+  const [forcePathStyle, setForcePathStyle] = useState(true);
+  const [deviceLabel, setDeviceLabel] = useState("");
+  const [hasSecretKey, setHasSecretKey] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
+  const [status, setStatus] = useState<CloudSyncStatusState | null>(null);
+  const [confirmPull, setConfirmPull] = useState(false);
+  const [confirmPushOverwrite, setConfirmPushOverwrite] = useState(false);
+
+  const reloadStatus = useCallback(async () => {
+    const res = await ipcCloudSyncGetLocalStatus();
+    if (res.ok) {
+      setStatus(res.data);
+    }
+  }, []);
+
+  const reloadConfig = useCallback(async () => {
+    setConfigLoading(true);
+    try {
+      const res = await ipcCloudSyncGetConfig();
+      if (res.ok) {
+        setEndpoint(res.data.endpoint);
+        setBucket(res.data.bucket);
+        setRegion(res.data.region);
+        setPathPrefix(res.data.pathPrefix);
+        setAccessKeyId(res.data.accessKeyId);
+        setForcePathStyle(res.data.forcePathStyle);
+        setDeviceLabel(res.data.deviceLabel);
+        setHasSecretKey(res.data.hasSecretKey);
+        setSecretAccessKey("");
+      }
+    } finally {
+      setConfigLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void reloadConfig();
+    void reloadStatus();
+  }, [reloadConfig, reloadStatus]);
+
+  const controlsDisabled =
+    busy || status?.syncBusy === true || status?.agentActive === true;
+
+  const saveConfig = async () => {
+    setBusy(true);
+    try {
+      const res = await ipcCloudSyncSetConfig({
+        endpoint: endpoint.trim(),
+        bucket: bucket.trim(),
+        region: region.trim(),
+        pathPrefix: pathPrefix.trim(),
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim() || undefined,
+        forcePathStyle,
+        deviceLabel: deviceLabel.trim() || undefined,
+      });
+      if (res.ok) {
+        toastSettingsSuccess("云同步配置已保存");
+        setSecretAccessKey("");
+        await reloadConfig();
+        await reloadStatus();
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const testConnection = async () => {
+    setBusy(true);
+    try {
+      const saveRes = await ipcCloudSyncSetConfig({
+        endpoint: endpoint.trim(),
+        bucket: bucket.trim(),
+        region: region.trim(),
+        pathPrefix: pathPrefix.trim(),
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim() || undefined,
+        forcePathStyle,
+        deviceLabel: deviceLabel.trim() || undefined,
+      });
+      if (!saveRes.ok) {
+        toastSettingsError(saveRes.error.message);
+        return;
+      }
+      const res = await ipcCloudSyncTestConnection();
+      if (res.ok) {
+        toastSettingsSuccess("连接成功");
+        await reloadConfig();
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runPull = async () => {
+    setConfirmPull(false);
+    setBusy(true);
+    try {
+      const res = await ipcCloudSyncPull();
+      if (res.ok) {
+        retry({ skipRebootstrap: true });
+        toastSettingsSuccess(`已拉取云端数据（rev ${res.data.rev}）`);
+        await reloadStatus();
+      } else if (res.error.code === "ALREADY_UP_TO_DATE") {
+        showToast(res.error.message);
+        await reloadStatus();
+      } else {
+        toastSettingsError(res.error.message);
+        await reloadStatus();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runPush = async (forceOverwriteRemote = false) => {
+    setConfirmPushOverwrite(false);
+    setBusy(true);
+    try {
+      const res = await ipcCloudSyncPush(
+        forceOverwriteRemote ? { forceOverwriteRemote: true } : undefined,
+      );
+      if (res.ok) {
+        toastSettingsSuccess(`已推送到云端（rev ${res.data.rev}）`);
+        await reloadStatus();
+      } else if (res.error.code === "NEED_PULL_FIRST") {
+        setConfirmPushOverwrite(true);
+      } else {
+        toastSettingsError(res.error.message);
+        await reloadStatus();
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const runExport = async () => {
     setBusy(true);
@@ -118,11 +285,155 @@ export function DataManagementView() {
 
   return (
     <SettingsPanel>
+      <SettingsFormSection
+        title="云同步"
+        desc="通过 S3 兼容对象存储在 Desktop 与 Mobile 之间同步数据库快照。Secret Key 经 SKSP 加密存储。"
+        toolbar={
+          <div className="settings-toolbar settings-toolbar--inline">
+            <Button
+              variant="secondary"
+              disabled={controlsDisabled || configLoading}
+              onClick={() => void testConnection()}
+            >
+              测试连接
+            </Button>
+            <Button
+              variant="primary"
+              disabled={controlsDisabled || configLoading}
+              onClick={() => void saveConfig()}
+            >
+              保存配置
+            </Button>
+          </div>
+        }
+        footer={
+          status?.suggestsPull ? (
+            <SettingsStatus
+              error="云端有更新，建议先拉取后再推送。"
+              inline
+            />
+          ) : null
+        }
+      >
+        <SettingsField label="Endpoint">
+          <input
+            value={endpoint}
+            disabled={configLoading}
+            onChange={(e) => setEndpoint(e.target.value)}
+            placeholder="https://s3.example.com"
+          />
+        </SettingsField>
+        <SettingsField label="Bucket">
+          <input
+            value={bucket}
+            disabled={configLoading}
+            onChange={(e) => setBucket(e.target.value)}
+          />
+        </SettingsField>
+        <div className="settings-field-grid">
+          <SettingsField label="Region">
+            <input
+              value={region}
+              disabled={configLoading}
+              onChange={(e) => setRegion(e.target.value)}
+              placeholder="可留空（MinIO）"
+            />
+          </SettingsField>
+          <SettingsField label="路径前缀">
+            <input
+              value={pathPrefix}
+              disabled={configLoading}
+              onChange={(e) => setPathPrefix(e.target.value)}
+              placeholder="novel-master/sync/"
+            />
+          </SettingsField>
+        </div>
+        <SettingsField label="Access Key ID">
+          <input
+            value={accessKeyId}
+            disabled={configLoading}
+            onChange={(e) => setAccessKeyId(e.target.value)}
+          />
+        </SettingsField>
+        <SettingsField
+          label={
+            hasSecretKey
+              ? "Secret Access Key（留空则不修改）"
+              : "Secret Access Key"
+          }
+        >
+          <input
+            type="password"
+            value={secretAccessKey}
+            disabled={configLoading}
+            onChange={(e) => setSecretAccessKey(e.target.value)}
+          />
+        </SettingsField>
+        <SettingsField label="设备名称（可选）">
+          <input
+            value={deviceLabel}
+            disabled={configLoading}
+            onChange={(e) => setDeviceLabel(e.target.value)}
+          />
+        </SettingsField>
+        <SettingsSwitchRow
+          label="Path style（MinIO / 部分 OSS）"
+          checked={forcePathStyle}
+          onChange={setForcePathStyle}
+        />
+      </SettingsFormSection>
+
+      <SettingsSection
+        title="同步状态"
+        desc={
+          status?.agentActive
+            ? "Agent 运行中，同步与备份操作已禁用。"
+            : "显示本机与云端的 rev 对齐情况。"
+        }
+      >
+        <SettingsStatus
+          message={
+            status == null
+              ? "加载中…"
+              : [
+                  `云端 rev：${status.remoteRev ?? "—"}`,
+                  `本机已同步 rev：${status.lastSyncedRev}`,
+                  status.lastPullAt
+                    ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
+                    : null,
+                  status.lastPushAt
+                    ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
+                    : null,
+                  status.lastPullResult ? `拉取结果：${status.lastPullResult}` : null,
+                  status.lastPushResult ? `推送结果：${status.lastPushResult}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+          }
+        />
+        <div className="settings-toolbar settings-toolbar--inline">
+          <Button
+            variant="secondary"
+            disabled={controlsDisabled || !status?.configured}
+            onClick={() => setConfirmPull(true)}
+          >
+            从云端拉取
+          </Button>
+          <Button
+            variant="primary"
+            disabled={controlsDisabled || !status?.configured}
+            onClick={() => void runPush()}
+          >
+            推送到云端
+          </Button>
+        </div>
+      </SettingsSection>
+
       <SettingsActionSection
         title="导出"
         desc="将当前数据库导出为 .nmbackup 文件，可与 mobile 互通。"
         action={
-          <Button variant="primary" disabled={busy} onClick={() => void runExport()}>
+          <Button variant="primary" disabled={controlsDisabled} onClick={() => void runExport()}>
             导出数据库
           </Button>
         }
@@ -131,10 +442,37 @@ export function DataManagementView() {
         title="导入"
         desc="用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。"
         action={
-          <Button variant="primary" disabled={busy} onClick={() => setConfirmImport(true)}>
+          <Button variant="primary" disabled={controlsDisabled} onClick={() => setConfirmImport(true)}>
             导入数据库
           </Button>
         }
+      />
+
+      <ConfirmModal
+        open={confirmPull}
+        title="确认拉取"
+        message="拉取将用云端快照替换本机数据库（本机服务商与 API Key 将保留）。确定继续？"
+        danger
+        busy={busy}
+        onConfirm={() => void runPull()}
+        onCancel={() => !busy && setConfirmPull(false)}
+      />
+      <ConfirmModal
+        open={confirmPushOverwrite}
+        title="云端较新"
+        message="云端有尚未拉取的更新。可先拉取合并，或仍要覆盖云端（将丢失云端未拉取的变更）。"
+        confirmLabel="仍要覆盖云端"
+        cancelLabel="先拉取"
+        danger
+        busy={busy}
+        onConfirm={() => void runPush(true)}
+        onCancel={() => {
+          if (busy) {
+            return;
+          }
+          setConfirmPushOverwrite(false);
+          setConfirmPull(true);
+        }}
       />
       <ConfirmModal
         open={confirmImport}
