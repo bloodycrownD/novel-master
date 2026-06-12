@@ -220,7 +220,7 @@ describe("formatPromptLlmInputForCli", () => {
     ];
     const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages, now: fixedNow };
     const out = formatPromptLlmInputForCli(blocks, ctx);
-    assert.match(out, /assistant: \[tool_use name=vfs\.write id=tool-1\]/);
+    assert.match(out, /assistant: \[tool_use name=write id=tool-1\]/);
     assert.match(out, /"path": "\/love_message\.txt"/);
     assert.match(out, /tool: ok/);
     assert.ok(!out.includes("user: [tool_result"));

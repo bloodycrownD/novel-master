@@ -49,6 +49,7 @@ export async function buildSessionPromptInput(
   const filetreeDisplay = snapshot.filetreeDisplay;
 
   const ctx: PromptRenderContext = {worktreeDisplay, filetreeDisplay, messages};
+  // buildPromptLlmInput 默认 agentStepIndex 为 0；预览与 token 计数含 once 块
   const input = buildPromptLlmInput(resolved.prompts, ctx);
   return {definition: resolved, blocks: resolved.prompts, ctx, input};
 }

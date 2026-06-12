@@ -1,5 +1,5 @@
 /**
- * Prompt text block lifecycle filtering for assembly.
+ * 非 system 文本块 lifecycle 过滤：`always` 每步带入，`once` 仅在 agentStepIndex === 0 带入。
  *
  * @module domain/prompt/logic/should-include-prompt-text-block
  */

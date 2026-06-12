@@ -205,4 +205,72 @@ describe("agentDefinitionSchema", () => {
       (e: unknown) => e instanceof ConfigDecodeError,
     );
   });
+
+  it("L10-Z1: rejects lifecycle on system text block via schema", () => {
+    assert.throws(
+      () =>
+        decode(
+          {
+            schemaVersion: 1,
+            name: "x",
+            prompts: {
+              blocks: {
+                a: {
+                  type: "text",
+                  role: "system",
+                  content: "x",
+                  lifecycle: "once",
+                },
+              },
+            },
+          },
+          agentDefinitionSchema,
+        ),
+      (e: unknown) => e instanceof ConfigDecodeError,
+    );
+  });
+
+  it("L10-Z2: rejects lifecycle on chat block via schema", () => {
+    assert.throws(
+      () =>
+        decode(
+          {
+            schemaVersion: 1,
+            name: "x",
+            prompts: {
+              blocks: {
+                a: { type: "chat", lifecycle: "once" },
+              },
+            },
+          },
+          agentDefinitionSchema,
+        ),
+      (e: unknown) => e instanceof ConfigDecodeError,
+    );
+  });
+
+  it("L10-Z3: rejects invalid lifecycle on text block via schema", () => {
+    assert.throws(
+      () =>
+        decode(
+          {
+            schemaVersion: 1,
+            name: "x",
+            prompts: {
+              blocks: {
+                a: {
+                  type: "text",
+                  role: "user",
+                  content: "x",
+                  lifecycle: "foo",
+                },
+              },
+            },
+          },
+          agentDefinitionSchema,
+        ),
+      (e: unknown) => e instanceof ConfigDecodeError,
+    );
+  });
+
 });
