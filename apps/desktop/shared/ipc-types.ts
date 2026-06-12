@@ -124,6 +124,13 @@ export const IPC_CHANNELS = {
   BACKUP_EXPORT: "nm:backup/export",
   BACKUP_IMPORT: "nm:backup/import",
 
+  CLOUD_SYNC_GET_CONFIG: "nm:cloud-sync/getConfig",
+  CLOUD_SYNC_SET_CONFIG: "nm:cloud-sync/setConfig",
+  CLOUD_SYNC_TEST_CONNECTION: "nm:cloud-sync/testConnection",
+  CLOUD_SYNC_GET_LOCAL_STATUS: "nm:cloud-sync/getLocalStatus",
+  CLOUD_SYNC_PULL: "nm:cloud-sync/pull",
+  CLOUD_SYNC_PUSH: "nm:cloud-sync/push",
+
   SHELL_MENU_POPUP: "nm:shell/menuPopup",
   SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
   SHELL_OPEN_EXTERNAL: "nm:shell/openExternal",
@@ -687,6 +694,56 @@ export type CompactionConditionsSetRequest = {
 
 export type BackupExportResult = "saved" | "cancelled";
 export type BackupImportResult = "imported" | "cancelled";
+
+export type CloudSyncConfigDto = {
+  readonly endpoint: string;
+  readonly bucket: string;
+  readonly region: string;
+  readonly pathPrefix: string;
+  readonly accessKeyId: string;
+  readonly forcePathStyle: boolean;
+  readonly deviceId: string;
+  readonly deviceLabel: string;
+  readonly hasSecretKey: boolean;
+};
+
+export type CloudSyncSetConfigRequest = {
+  readonly endpoint: string;
+  readonly bucket: string;
+  readonly region: string;
+  readonly pathPrefix: string;
+  readonly accessKeyId: string;
+  readonly secretAccessKey?: string;
+  readonly forcePathStyle: boolean;
+  readonly deviceLabel?: string;
+};
+
+export type CloudSyncLocalStatusDto = {
+  readonly configured: boolean;
+  readonly deviceId?: string;
+  readonly deviceLabel?: string;
+  readonly lastSyncedRev: number;
+  readonly remoteRev?: number;
+  readonly lastPullAt?: string;
+  readonly lastPushAt?: string;
+  readonly lastPullResult?: string;
+  readonly lastPushResult?: string;
+  readonly suggestsPull: boolean;
+  readonly syncBusy: boolean;
+  readonly agentActive: boolean;
+};
+
+export type CloudSyncPullResult = {
+  readonly rev: number;
+};
+
+export type CloudSyncPushRequest = {
+  readonly forceOverwriteRemote?: boolean;
+};
+
+export type CloudSyncPushResult = {
+  readonly rev: number;
+};
 
 export type ShellMenuId = "file" | "edit" | "view" | "window" | "help";
 

@@ -33,6 +33,14 @@ import {
   handleBackupImport,
 } from "./handlers/backup.js";
 import {
+  handleCloudSyncGetConfig,
+  handleCloudSyncGetLocalStatus,
+  handleCloudSyncPull,
+  handleCloudSyncPush,
+  handleCloudSyncSetConfig,
+  handleCloudSyncTestConnection,
+} from "./handlers/cloud-sync.js";
+import {
   handleEventsClearConfig,
   handleEventsExportYaml,
   handleEventsGetConfig,
@@ -398,6 +406,23 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(IPC_CHANNELS.BACKUP_EXPORT, () => handleBackupExport());
   ipcMain.handle(IPC_CHANNELS.BACKUP_IMPORT, () => handleBackupImport());
+
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, () =>
+    handleCloudSyncGetConfig(),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, (_event, req) =>
+    handleCloudSyncSetConfig(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION, () =>
+    handleCloudSyncTestConnection(),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS, () =>
+    handleCloudSyncGetLocalStatus(),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_PULL, () => handleCloudSyncPull());
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_PUSH, (_event, req) =>
+    handleCloudSyncPush(req),
+  );
 
   ipcMain.handle(IPC_CHANNELS.SHELL_MENU_POPUP, (event, req) =>
     handleShellMenuPopup(event, req),

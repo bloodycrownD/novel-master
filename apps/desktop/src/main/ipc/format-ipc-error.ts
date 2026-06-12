@@ -4,6 +4,7 @@
  * @module ipc/format-ipc-error
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
+import { isCloudSyncError } from "@novel-master/core";
 import { ZodError } from "zod";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -49,6 +50,9 @@ function typedDomainCode(err: Error): string | undefined {
  * Typed Core errors use their domain `code`; generic errors fall back to `name`.
  */
 export function formatIpcError(err: unknown): IpcErrorPayload {
+  if (isCloudSyncError(err)) {
+    return { code: err.code, message: err.message };
+  }
   if (err instanceof ZodError) {
     return { code: "VALIDATION", message: formatZodIssues(err) };
   }
