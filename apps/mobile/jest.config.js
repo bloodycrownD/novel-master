@@ -52,5 +52,9 @@ module.exports = {
       repoRoot,
       'packages/config-forms/dist/index.js',
     ),
+    '^@novel-master/cloud-sync-driver-s3$': path.join(
+      repoRoot,
+      'packages/cloud-sync-driver-s3/dist/index.js',
+    ),
   },
 };

@@ -18,6 +18,14 @@ export { ProviderError } from "../../../packages/core/dist/errors/provider-error
 export { ChatError } from "../../../packages/core/dist/errors/chat-errors.js";
 export { ToolError } from "../../../packages/core/dist/errors/tool-errors.js";
 export { AgentError } from "../../../packages/core/dist/errors/agent-runtime-errors.js";
+export {
+  CloudSyncError,
+  isCloudSyncError,
+  CloudSyncCoordinator,
+  normalizePrefix,
+  parseCloudSyncStatus,
+  statusKey,
+} from "../../../packages/core/dist/infra/cloud-sync/index.js";
 export type { KkvService } from "../../../packages/core/dist/service/kkv/kkv.port.js";
 export {
   matchDepth,
