@@ -6,7 +6,7 @@ import {
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
-import type { ObjectStoragePort } from "./object-storage.port.js";
+import { CloudSyncError, type ObjectStoragePort } from "@novel-master/core";
 import type { S3StorageConfig } from "./s3-config.js";
 
 /** 测试注入用：可传入自定义 S3Client 以 mock SDK。 */
@@ -42,6 +42,29 @@ function isNotFoundError(error: unknown): boolean {
     error.$metadata !== null &&
     "httpStatusCode" in error.$metadata &&
     error.$metadata.httpStatusCode === 404
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isPreconditionFailedError(error: unknown): boolean {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "PreconditionFailed"
+  ) {
+    return true;
+  }
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "$metadata" in error &&
+    typeof error.$metadata === "object" &&
+    error.$metadata !== null &&
+    "httpStatusCode" in error.$metadata &&
+    error.$metadata.httpStatusCode === 412
   ) {
     return true;
   }
@@ -106,20 +129,29 @@ export function createS3ObjectStorage(
     },
 
     async put(key, body, options) {
-      const response = await client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: body,
-          IfMatch: options?.ifMatch,
-          IfNoneMatch: options?.ifNoneMatch,
-        }),
-      );
-      const etag = normalizeEtag(response.ETag);
-      if (etag == null) {
-        throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
+      try {
+        const response = await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: body,
+            IfMatch: options?.ifMatch,
+            IfNoneMatch: options?.ifNoneMatch,
+          }),
+        );
+        const etag = normalizeEtag(response.ETag);
+        if (etag == null) {
+          throw new Error(`S3 PutObject 未返回 ETag: ${key}`);
+        }
+        return { etag };
+      } catch (error) {
+        if (isPreconditionFailedError(error)) {
+          throw new CloudSyncError("LOCK_CONTENTION", "同步冲突，请重试", {
+            cause: error,
+          });
+        }
+        throw error;
       }
-      return { etag };
     },
   };
 }

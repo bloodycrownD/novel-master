@@ -7,4 +7,4 @@ export type { S3ObjectStorageDeps } from "./create-s3-object-storage.js";
 export type {
   ObjectStorageHeadResult,
   ObjectStoragePort,
-} from "./object-storage.port.js";
+} from "@novel-master/core";

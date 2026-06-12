@@ -7,6 +7,7 @@ import {
   PutObjectCommand,
   type S3Client,
 } from "@aws-sdk/client-s3";
+import { CloudSyncError } from "@novel-master/core";
 import { createS3ObjectStorage } from "../src/create-s3-object-storage.js";
 import type { S3StorageConfig } from "../src/s3-config.js";
 
@@ -93,7 +94,7 @@ describe("createS3ObjectStorage", () => {
     assert.equal(result.etag, "new-etag");
   });
 
-  it("put：If-Match 冲突时原样抛出 SDK 错误", async () => {
+  it("CS-S1: put If-Match 冲突映射为 LOCK_CONTENTION", async () => {
     const preconditionFailed = Object.assign(new Error("Precondition Failed"), {
       name: "PreconditionFailed",
       $metadata: { httpStatusCode: 412 },
@@ -113,10 +114,8 @@ describe("createS3ObjectStorage", () => {
           ifMatch: "stale-etag",
         }),
       (error: unknown) => {
-        assert.equal(
-          (error as { name?: string }).name,
-          "PreconditionFailed",
-        );
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "LOCK_CONTENTION");
         return true;
       },
     );
