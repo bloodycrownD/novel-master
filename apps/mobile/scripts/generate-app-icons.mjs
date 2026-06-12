@@ -1,11 +1,11 @@
 /**
- * Generates Android (legacy + adaptive) and iOS AppIcon PNGs from repo-root icon.webp.
+ * Generates Android (legacy + adaptive) and iOS AppIcon PNGs from assets/icon.webp.
  *
  * Artwork is scaled into the platform "safe zone" so circle / squircle / rounded-square
  * launcher masks do not clip the book & quill. Background color is sampled from corners.
  *
  * Usage: npm run icons -w @novel-master/mobile
- * Source: ../../icon.webp (monorepo root)
+ * Source: ../../assets/icon.webp
  */
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -15,7 +15,7 @@ import sharp from "sharp";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const mobileRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(mobileRoot, "../..");
-const sourceWebp = path.join(repoRoot, "icon.webp");
+const sourceWebp = path.join(repoRoot, "assets/icon.webp");
 
 /** Fraction of canvas used for artwork (Material adaptive safe zone ≈ 66/108). */
 const CONTENT_SCALE = 0.72;

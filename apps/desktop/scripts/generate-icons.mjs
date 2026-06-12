@@ -1,5 +1,5 @@
 /**
- * Generates Electron app icons from repo-root icon.webp.
+ * Generates Electron app icons from assets/icon.webp.
  * Outputs: build/icons/icon.png (256), icon-512.png, icon.ico; icon.icns on macOS.
  *
  * Usage: npm run build:icons -w @novel-master/desktop
@@ -14,7 +14,7 @@ import sharp from "sharp";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(__dirname, "..");
 const repoRoot = path.resolve(desktopRoot, "../..");
-const sourceWebp = path.join(repoRoot, "icon.webp");
+const sourceWebp = path.join(repoRoot, "assets/icon.webp");
 const outDir = path.join(desktopRoot, "build/icons");
 
 async function writePng(size, filename) {

@@ -178,10 +178,6 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
-      - name: Prepare app icon
-        shell: bash
-        run: cp assets/icon.webp icon.webp
-
       - name: Set desktop package version
         run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --allow-same-version --workspace=@novel-master/desktop
 
@@ -251,9 +247,6 @@ jobs:
 
       - name: Install npm dependencies
         run: npm ci
-
-      - name: Prepare app icon
-        run: cp assets/icon.webp icon.webp
 
       - name: Set desktop package version
         run: npm version ${{ needs.resolve-version.outputs.name }} --no-git-tag-version --allow-same-version --workspace=@novel-master/desktop

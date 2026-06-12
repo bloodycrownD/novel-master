@@ -54,7 +54,7 @@ npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn
 
 ## App launcher icon
 
-Source: repo root [`icon.webp`](../../icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
+Source: [`assets/icon.webp`](../../assets/icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
 
 The generator scales artwork to **72%** of the canvas (inside Material / iOS safe zone) on a **corner-sampled brown background**, so circle, squircle, and rounded-square launcher masks do not clip the book. Android **8+** also gets adaptive icon layers (`foreground` + `background`) via `mipmap-anydpi-v26`.
 
