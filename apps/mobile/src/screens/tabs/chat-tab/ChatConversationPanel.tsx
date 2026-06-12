@@ -1,7 +1,7 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, {useMemo} from 'react';
+import React, {useCallback, useEffect, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {
   ChatMessage,
@@ -27,7 +27,10 @@ import {MessageList} from '../../../components/chat/MessageList';
 import {MessageBatchHeader} from '../../../components/batch/MessageBatchHeader';
 import {ModelPickerModal} from '../../../components/provider/ModelPickerModal';
 import {SessionActionsDrawer} from '../../../components/chrome/SessionActionsDrawer';
-import {VfsFileManager} from '../../../components/vfs/VfsFileManager';
+import {
+  VfsFileManager,
+  type VfsFileManagerHandle,
+} from '../../../components/vfs/VfsFileManager';
 import {SegmentedControl} from '../../../components/ui/SegmentedControl';
 import type {MessageMenuAnchor} from '../../../components/chat/MessageActionMenu';
 import type {ChatListScrollSnapshot} from '../../../services/chat-list-scroll-cache';
@@ -111,6 +114,10 @@ export type ChatConversationPanelProps = {
   onNeedModel: () => void;
   bumpVfsRefresh: () => void;
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
+  workspaceVfsRef?: React.RefObject<VfsFileManagerHandle | null>;
+  onWorkspaceBackStateChange?: (
+    state: {canGoUp: boolean; goUp: () => void} | null,
+  ) => void;
 };
 
 export function ChatConversationPanel({
@@ -185,6 +192,8 @@ export function ChatConversationPanel({
   onNeedModel,
   bumpVfsRefresh,
   onOpenFileEditor,
+  workspaceVfsRef,
+  onWorkspaceBackStateChange,
 }: ChatConversationPanelProps) {
   const sessionVfsScope = useMemo((): VfsScope | null => {
     if (projectId == null || sessionId == null) {
@@ -192,6 +201,29 @@ export function ChatConversationPanel({
     }
     return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
+
+  const emitWorkspaceBackState = useCallback(() => {
+    if (!onWorkspaceBackStateChange) {
+      return;
+    }
+    if (conversationPanel !== 'workspace') {
+      onWorkspaceBackStateChange(null);
+      return;
+    }
+    const handle = workspaceVfsRef?.current;
+    if (!handle) {
+      onWorkspaceBackStateChange(null);
+      return;
+    }
+    onWorkspaceBackStateChange({
+      canGoUp: handle.canGoUp(),
+      goUp: () => handle.goUp(),
+    });
+  }, [conversationPanel, onWorkspaceBackStateChange, workspaceVfsRef]);
+
+  useEffect(() => {
+    emitWorkspaceBackState();
+  }, [emitWorkspaceBackState, vfsRefreshKey]);
 
   return (
     <View
@@ -304,6 +336,7 @@ export function ChatConversationPanel({
                 conversationPanel === 'workspace' ? 'auto' : 'none'
               }>
               <VfsFileManager
+                ref={workspaceVfsRef}
                 key={`session-vfs-${vfsRefreshKey}`}
                 scope={sessionVfsScope!}
                 vfs={sessionVfs}
@@ -314,6 +347,7 @@ export function ChatConversationPanel({
                   onPulled: bumpVfsRefresh,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
+                onDirectoryChange={emitWorkspaceBackState}
               />
             </View>
           ) : conversationPanel === 'workspace' ? (

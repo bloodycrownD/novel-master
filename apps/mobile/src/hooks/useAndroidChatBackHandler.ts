@@ -20,6 +20,10 @@ export type AndroidChatBackState = {
   sessionRenameOpen: boolean;
   projectDrawerOpen: boolean;
   sessionBatchActive: boolean;
+  /** 工作区是否可返回上级目录（根目录时为 false）。 */
+  workspaceCanGoUp?: boolean;
+  /** 工作区返回上级目录。 */
+  workspaceGoUp?: () => void;
 };
 
 export type AndroidChatBackActions = {
@@ -55,6 +59,8 @@ export function useAndroidChatBackHandler(
     sessionRenameOpen,
     projectDrawerOpen,
     sessionBatchActive,
+    workspaceCanGoUp,
+    workspaceGoUp,
   } = state;
 
   const {
@@ -105,6 +111,10 @@ export function useAndroidChatBackHandler(
 
     if (chatSubview === 'conversation') {
       if (conversationPanel === 'workspace') {
+        if (workspaceCanGoUp && workspaceGoUp) {
+          workspaceGoUp();
+          return true;
+        }
         showChatPanel();
         return true;
       }
@@ -140,6 +150,8 @@ export function useAndroidChatBackHandler(
     projectDrawerOpen,
     sessionBatchActive,
     sessionListPanel,
+    workspaceCanGoUp,
+    workspaceGoUp,
     backFromConversation,
     showChatPanel,
     closeSessionDrawer,

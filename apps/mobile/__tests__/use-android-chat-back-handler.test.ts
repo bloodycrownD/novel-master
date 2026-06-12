@@ -111,19 +111,42 @@ describe('useAndroidChatBackHandler', () => {
     expect(showChatPanel).not.toHaveBeenCalled();
   });
 
-  it('T-B1b: conversation workspace panel returns to chat before session list', () => {
+  it('T-B1d: conversation workspace at root returns to chat panel', () => {
     const backFromConversation = jest.fn();
     const showChatPanel = jest.fn();
+    const workspaceGoUp = jest.fn();
     const handler = mountAndGetHandler(
       defaultState({
         chatSubview: 'conversation',
         conversationPanel: 'workspace',
+        workspaceCanGoUp: false,
       }),
       defaultActions({backFromConversation, showChatPanel}),
     );
 
     expect(handler()).toBe(true);
     expect(showChatPanel).toHaveBeenCalledTimes(1);
+    expect(workspaceGoUp).not.toHaveBeenCalled();
+    expect(backFromConversation).not.toHaveBeenCalled();
+  });
+
+  it('T-B1c: conversation workspace in subdirectory goes up before chat panel', () => {
+    const backFromConversation = jest.fn();
+    const showChatPanel = jest.fn();
+    const workspaceGoUp = jest.fn();
+    const handler = mountAndGetHandler(
+      defaultState({
+        chatSubview: 'conversation',
+        conversationPanel: 'workspace',
+        workspaceCanGoUp: true,
+        workspaceGoUp,
+      }),
+      defaultActions({backFromConversation, showChatPanel}),
+    );
+
+    expect(handler()).toBe(true);
+    expect(workspaceGoUp).toHaveBeenCalledTimes(1);
+    expect(showChatPanel).not.toHaveBeenCalled();
     expect(backFromConversation).not.toHaveBeenCalled();
   });
 

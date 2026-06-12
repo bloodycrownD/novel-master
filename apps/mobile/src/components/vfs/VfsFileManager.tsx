@@ -1,7 +1,15 @@
 /**
  * VFS file manager (prototype vfs-fm): list, rules, CRUD, open file editor.
  */
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -74,6 +82,12 @@ export type VfsFileManagerPullScope =
   | {kind: 'project'; projectId: string}
   | {kind: 'session'; sessionId: string};
 
+/** 供父组件控制系统返回时逐级退出目录。 */
+export type VfsFileManagerHandle = {
+  canGoUp: () => boolean;
+  goUp: () => void;
+};
+
 export type VfsFileManagerProps = {
   scope: VfsScope;
   vfs: VfsService;
@@ -84,6 +98,8 @@ export type VfsFileManagerProps = {
     scope: VfsFileManagerPullScope;
     onPulled?: () => void;
   };
+  /** 当前目录变化时通知父组件（用于同步系统返回状态）。 */
+  onDirectoryChange?: () => void;
 };
 
 type PromptState = {
@@ -93,14 +109,21 @@ type PromptState = {
   onSubmit: (value: string) => Promise<void>;
 };
 
-export function VfsFileManager({
-  scope,
-  vfs,
-  worktree,
-  onOpenFile,
-  rootPath,
-  pullFromParent,
-}: VfsFileManagerProps) {
+export const VfsFileManager = forwardRef<
+  VfsFileManagerHandle,
+  VfsFileManagerProps
+>(function VfsFileManager(
+  {
+    scope,
+    vfs,
+    worktree,
+    onOpenFile,
+    rootPath,
+    pullFromParent,
+    onDirectoryChange,
+  },
+  ref,
+) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const runtime = useRuntime();
@@ -142,6 +165,26 @@ export function VfsFileManager({
   useEffect(() => {
     setCurrentPath(root);
   }, [root]);
+
+  const goUp = useCallback(() => {
+    const parent = parentLogicalPath(currentPath);
+    if (parent != null) {
+      setCurrentPath(parent);
+    }
+  }, [currentPath]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      canGoUp: () => currentPath !== root,
+      goUp,
+    }),
+    [currentPath, root, goUp],
+  );
+
+  useEffect(() => {
+    onDirectoryChange?.();
+  }, [currentPath, onDirectoryChange]);
 
   const [worktreeRows, setWorktreeRows] = useState<WorktreeListRow[]>([]);
   const vfsRef = useRef(vfs);
@@ -328,6 +371,7 @@ export function VfsFileManager({
   );
 
   const canGoUp = currentPath !== root;
+  const handleGoUp = goUp;
   const metaForMenu = menuPath
     ? worktreeRows.find(r => r.path === menuPath)
     : undefined;
@@ -599,12 +643,7 @@ export function VfsFileManager({
           <Pressable
             disabled={!canGoUp}
             accessibilityLabel="上级目录"
-            onPress={() => {
-              const parent = parentLogicalPath(currentPath);
-              if (parent != null) {
-                setCurrentPath(parent);
-              }
-            }}
+            onPress={handleGoUp}
             style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}>
             <ParentDirIcon
               color={canGoUp ? tokens.primary : tokens.textSecondary}
@@ -825,7 +864,7 @@ export function VfsFileManager({
       </AppModal>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   root: {flex: 1},

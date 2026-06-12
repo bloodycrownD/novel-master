@@ -17,6 +17,7 @@ import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import type {RootStackParamList} from '../../navigation/types';
 import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
+import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
@@ -84,6 +85,11 @@ export function ChatTabScreen() {
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const transcriptWebRef = useRef<ChatTranscriptWebViewHandle>(null);
+  const workspaceVfsRef = useRef<VfsFileManagerHandle>(null);
+  const [workspaceBackState, setWorkspaceBackState] = useState<{
+    canGoUp: boolean;
+    goUp: () => void;
+  } | null>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [chatTranscriptEngine, setChatTranscriptEngine] =
     useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
@@ -183,6 +189,8 @@ export function ChatTabScreen() {
       sessionRenameOpen: scope.sessionRenamePrompt != null,
       projectDrawerOpen: scope.projectDrawerOpen,
       sessionBatchActive: sessionBatch.active,
+      workspaceCanGoUp: workspaceBackState?.canGoUp ?? false,
+      workspaceGoUp: workspaceBackState?.goUp,
     },
     {
       backFromConversation: scope.backFromConversation,
@@ -421,6 +429,8 @@ export function ChatTabScreen() {
         onNeedModel={() => setModelPickerOpen(true)}
         bumpVfsRefresh={scope.bumpVfsRefresh}
         onOpenFileEditor={scope.openFileEditor}
+        workspaceVfsRef={workspaceVfsRef}
+        onWorkspaceBackStateChange={setWorkspaceBackState}
       />
       ) : null}
       <ChatSessionListPanel
