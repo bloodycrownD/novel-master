@@ -20,6 +20,7 @@ export type RootStackParamList = {
   ModelSampling: {applicationModelId?: string} | undefined;
   CompactionConditions: undefined;
   EventsConfig: undefined;
+  CloudSyncConfig: undefined;
   GlobalTemplate: undefined;
   RegexGroups: undefined;
   RegexRules: {groupId?: string} | undefined;

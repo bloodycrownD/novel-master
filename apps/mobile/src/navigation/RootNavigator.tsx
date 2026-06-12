@@ -24,6 +24,7 @@ import {ProviderDetailScreen} from '../screens/stack/ProviderDetailScreen';
 import {ModelSamplingScreen} from '../screens/stack/ModelSamplingScreen';
 import {CompactionConditionsScreen} from '../screens/stack/CompactionConditionsScreen';
 import {EventsConfigScreen} from '../screens/stack/EventsConfigScreen';
+import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
@@ -165,6 +166,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="EventsConfig"
             component={withStackLayout('EventsConfig', EventsConfigScreen)}
+          />
+          <Stack.Screen
+            name="CloudSyncConfig"
+            component={withStackLayout('CloudSyncConfig', CloudSyncConfigScreen)}
           />
           <Stack.Screen
             name="GlobalTemplate"

@@ -25,6 +25,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   ModelSampling: {title: '采样配置', showBack: true, showNav: false},
   CompactionConditions: {title: '压缩条件', showBack: true, showNav: false},
   EventsConfig: {title: '事件配置', showBack: true, showNav: false},
+  CloudSyncConfig: {title: '云存储配置', showBack: true, showNav: false},
   GlobalTemplate: {title: '全局工作区', showBack: true, showNav: false},
   RegexGroups: {title: '正则配置', showBack: true, showNav: false},
   RegexRules: {title: '正则规则', showBack: true, showNav: false},

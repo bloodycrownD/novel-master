@@ -22,6 +22,12 @@ import {
   importDatabaseBackup,
 } from '../../services/db-backup.service';
 import {
+  getCloudSyncStatusView,
+  pullCloudSync,
+  pushCloudSync,
+} from '../../services/cloud-sync.service';
+import {isCloudSyncError} from '@novel-master/core';
+import {
   readChatRichTextEnabled,
   writeChatRichTextEnabled,
 } from '../../storage/chat-rich-text-pref';
@@ -64,6 +70,15 @@ export function ProfileTabScreen() {
   const {appUi, retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [dbBusy, setDbBusy] = useState(false);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [cloudRemoteRev, setCloudRemoteRev] = useState<number | null>(null);
+  const [cloudLastSyncedRev, setCloudLastSyncedRev] = useState<number | null>(
+    null,
+  );
+  const [cloudSuggestPull, setCloudSuggestPull] = useState(false);
+  const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [cloudLastPullAt, setCloudLastPullAt] = useState<string | undefined>();
+  const [cloudLastPushAt, setCloudLastPushAt] = useState<string | undefined>();
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
   const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
@@ -135,6 +150,118 @@ export function ProfileTabScreen() {
     setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
   }, [appUi]);
 
+  const refreshCloudSyncStatus = useCallback(async () => {
+    try {
+      const status = await getCloudSyncStatusView(runtime);
+      setCloudConfigured(status.configured);
+      setCloudRemoteRev(status.remoteRev);
+      setCloudLastSyncedRev(status.lastSyncedRev);
+      setCloudSuggestPull(status.suggestPull);
+      setCloudLastPullAt(status.lastPullAt);
+      setCloudLastPushAt(status.lastPushAt);
+    } catch {
+      setCloudConfigured(false);
+      setCloudRemoteRev(null);
+      setCloudLastSyncedRev(null);
+      setCloudSuggestPull(false);
+      setCloudLastPullAt(undefined);
+      setCloudLastPushAt(undefined);
+    }
+  }, [runtime]);
+
+  const formatSyncTime = (iso?: string): string => {
+    if (!iso) {
+      return '—';
+    }
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) {
+      return '—';
+    }
+    return date.toLocaleString();
+  };
+
+  const runPull = useCallback(() => {
+    if (dbBusy || syncBusy) {
+      return;
+    }
+    Alert.alert(
+      '从云端拉取',
+      '将用云端最新快照替换本机数据（项目、会话、消息等）。本机服务商与 API Key 将保留。是否继续？',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '拉取',
+          onPress: () => {
+            setSyncBusy(true);
+            pullCloudSync(runtime, retry)
+              .then(result => {
+                if (result.alreadyUpToDate) {
+                  showToast('已是最新');
+                } else {
+                  showToast('拉取成功，正在重新加载…');
+                }
+              })
+              .catch(err => showToast(toastMessage('拉取失败', err)))
+              .finally(() => {
+                setSyncBusy(false);
+                refreshCloudSyncStatus().catch(() => undefined);
+              });
+          },
+        },
+      ],
+    );
+  }, [dbBusy, syncBusy, runtime, retry, showToast, refreshCloudSyncStatus]);
+
+  const runPush = useCallback(
+    (forceOverwriteRemote = false) => {
+      if (dbBusy || syncBusy) {
+        return;
+      }
+      setSyncBusy(true);
+      pushCloudSync(runtime, {forceOverwriteRemote})
+        .then(() => showToast('推送成功'))
+        .catch(err => {
+          if (
+            isCloudSyncError(err) &&
+            err.code === 'NEED_PULL_FIRST' &&
+            !forceOverwriteRemote
+          ) {
+            Alert.alert(
+              '云端有更新',
+              '建议先拉取云端数据。仍要覆盖云端吗？',
+              [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '先拉取',
+                  onPress: () => runPull(),
+                },
+                {
+                  text: '仍要覆盖云端',
+                  style: 'destructive',
+                  onPress: () => runPush(true),
+                },
+              ],
+            );
+            return;
+          }
+          showToast(toastMessage('推送失败', err));
+        })
+        .finally(() => {
+          setSyncBusy(false);
+          refreshCloudSyncStatus().catch(() => undefined);
+        });
+    },
+    [
+      dbBusy,
+      syncBusy,
+      runtime,
+      retry,
+      showToast,
+      runPull,
+      refreshCloudSyncStatus,
+    ],
+  );
+
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
@@ -143,6 +270,7 @@ export function ProfileTabScreen() {
       refreshStreamPref().catch(() => undefined);
       refreshSessionFsVersionCheckPref().catch(() => undefined);
       refreshChatRichTextPref().catch(() => undefined);
+      refreshCloudSyncStatus().catch(() => undefined);
     }, [
       refreshModelLabel,
       refreshAgentLabel,
@@ -150,6 +278,7 @@ export function ProfileTabScreen() {
       refreshStreamPref,
       refreshSessionFsVersionCheckPref,
       refreshChatRichTextPref,
+      refreshCloudSyncStatus,
     ]),
   );
 
@@ -241,6 +370,53 @@ export function ProfileTabScreen() {
           }}
         />
         <ListSectionTitle title="数据管理" tokens={tokens} />
+        <ListSectionTitle title="云同步" tokens={tokens} />
+        <ProfileMenuItem
+          icon="☁️"
+          label="云存储配置"
+          value={cloudConfigured ? '已配置' : '未配置'}
+          tokens={tokens}
+          onPress={() => navigateTo('CloudSyncConfig')}
+        />
+        <ProfileMenuItem
+          icon="📊"
+          label="同步状态"
+          value={
+            cloudRemoteRev != null && cloudLastSyncedRev != null
+              ? `云端 rev ${cloudRemoteRev} · 本机 ${cloudLastSyncedRev}${
+                  cloudSuggestPull ? ' · 建议先拉取' : ''
+                }`
+              : '—'
+          }
+          tokens={tokens}
+          onPress={() => refreshCloudSyncStatus().catch(() => undefined)}
+        />
+        <ProfileMenuItem
+          icon="⬇️"
+          label="从云端拉取"
+          value={
+            syncBusy
+              ? '处理中…'
+              : cloudLastPullAt
+                ? `上次 ${formatSyncTime(cloudLastPullAt)}`
+                : '手动同步'
+          }
+          tokens={tokens}
+          onPress={runPull}
+        />
+        <ProfileMenuItem
+          icon="⬆️"
+          label="推送到云端"
+          value={
+            syncBusy
+              ? '处理中…'
+              : cloudLastPushAt
+                ? `上次 ${formatSyncTime(cloudLastPushAt)}`
+                : '手动同步'
+          }
+          tokens={tokens}
+          onPress={() => runPush()}
+        />
         <ProfileMenuItem
           icon="💾"
           label="导出数据库"
