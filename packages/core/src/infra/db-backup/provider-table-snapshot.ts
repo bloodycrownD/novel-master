@@ -32,7 +32,11 @@ const SCRUB_TABLE_ORDER: readonly ProviderBackupTableName[] = [
 export async function dumpProviderTableSnapshot(
   conn: TdbcConnection,
 ): Promise<ProviderTableSnapshot> {
-  const snapshot = {} as ProviderTableSnapshot;
+  const snapshot: Record<ProviderBackupTableName, Row[]> = {
+    sksp_secrets: [],
+    llm_provider: [],
+    llm_saved_model: [],
+  };
   for (const table of DB_BACKUP_PROVIDER_TABLES) {
     snapshot[table] = await conn.query(`SELECT * FROM ${table}`);
   }

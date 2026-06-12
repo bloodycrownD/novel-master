@@ -131,7 +131,7 @@ export function DataManagementView() {
       />
       <SettingsActionSection
         title="导入"
-        desc="用备份文件完全替换当前数据库，操作不可撤销。"
+        desc="用备份文件完全替换当前数据库。本机服务商与 API Key 将保留，备份中的服务商配置不会导入。操作不可撤销。"
         action={
           <Button variant="primary" disabled={busy} onClick={() => setConfirmImport(true)}>
             导入数据库
@@ -141,7 +141,7 @@ export function DataManagementView() {
       <ConfirmModal
         open={confirmImport}
         title="确认导入"
-        message="导入将完全替换当前数据库，确定继续？"
+        message="导入将完全替换当前数据库；本机服务商与 API Key 将保留，备份中的服务商配置不会导入。确定继续？"
         danger
         busy={busy}
         onConfirm={() => void runImport()}

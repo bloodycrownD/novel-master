@@ -5,6 +5,7 @@ import {
 
 const mockCheckpoint = jest.fn();
 const mockClose = jest.fn();
+const mockGetConnection = jest.fn();
 const mockGetPath = jest.fn();
 const mockCp = jest.fn();
 const mockExists = jest.fn();
@@ -14,10 +15,32 @@ const mockSaveDocuments = jest.fn();
 const mockPick = jest.fn();
 const mockKeepLocalCopy = jest.fn();
 const mockAgentActive = jest.fn();
+const mockDumpSnapshot = jest.fn();
+const mockScrubInDatabase = jest.fn();
+const mockRestoreSnapshot = jest.fn();
+const mockOpen = jest.fn();
+const mockRestoreConnClose = jest.fn();
+
+const liveConn = {tag: 'live'};
+const restoreConn = {close: mockRestoreConnClose};
+
+jest.mock('@novel-master/core', () => ({
+  dumpProviderTableSnapshot: (...args: unknown[]) => mockDumpSnapshot(...args),
+  scrubProviderTablesInDatabase: (...args: unknown[]) =>
+    mockScrubInDatabase(...args),
+  restoreProviderTableSnapshot: (...args: unknown[]) =>
+    mockRestoreSnapshot(...args),
+  open: (...args: unknown[]) => mockOpen(...args),
+}));
+
+jest.mock('@novel-master/tdbc-driver-rn/native', () => ({
+  registerRnDriver: jest.fn(),
+}));
 
 jest.mock('../src/db/connection', () => ({
   checkpointMobileDatabase: (...args: unknown[]) => mockCheckpoint(...args),
   closeMobileConnection: (...args: unknown[]) => mockClose(...args),
+  getMobileConnection: (...args: unknown[]) => mockGetConnection(...args),
 }));
 
 jest.mock('../src/db/db-file-path', () => ({
@@ -55,14 +78,20 @@ jest.mock('@react-native-documents/picker', () => ({
 }));
 
 const SQLITE_HEADER_BASE64 = Buffer.from('SQLite format 3\0').toString('base64');
+const emptySnapshot = {
+  sksp_secrets: [],
+  llm_provider: [],
+  llm_saved_model: [],
+};
 
 describe('db-backup.service', () => {
-  const runtime = {conn: {}} as never;
+  const runtime = {conn: liveConn} as never;
   const onRebootstrap = jest.fn();
 
   beforeEach(() => {
     mockCheckpoint.mockReset().mockResolvedValue(undefined);
     mockClose.mockReset().mockResolvedValue(undefined);
+    mockGetConnection.mockReset().mockResolvedValue(liveConn);
     mockGetPath.mockReset().mockResolvedValue('/db/novel_master_vfs');
     mockCp.mockReset().mockResolvedValue(undefined);
     mockExists.mockReset().mockResolvedValue(true);
@@ -72,16 +101,27 @@ describe('db-backup.service', () => {
     mockPick.mockReset();
     mockKeepLocalCopy.mockReset();
     mockAgentActive.mockReset().mockReturnValue(false);
+    mockDumpSnapshot.mockReset().mockResolvedValue(emptySnapshot);
+    mockScrubInDatabase.mockReset().mockResolvedValue(undefined);
+    mockRestoreSnapshot.mockReset().mockResolvedValue(undefined);
+    mockOpen.mockReset().mockResolvedValue(restoreConn);
+    mockRestoreConnClose.mockReset().mockResolvedValue(undefined);
     onRebootstrap.mockReset();
   });
 
-  it('export calls checkpoint and copies db to cache', async () => {
+  it('export calls checkpoint, copies db, and scrubs provider tables on copy', async () => {
     await exportDatabaseBackup(runtime);
-    expect(mockCheckpoint).toHaveBeenCalledWith(runtime.conn);
+
+    expect(mockCheckpoint).toHaveBeenCalledWith(liveConn);
     expect(mockGetPath).toHaveBeenCalled();
-    expect(mockCp).toHaveBeenCalledWith(
-      '/db/novel_master_vfs',
+    const tmpPath = expect.stringMatching(
+      /\/cache\/novel-master-backup-\d+\.nmbackup/,
+    );
+    expect(mockCp).toHaveBeenCalledWith('/db/novel_master_vfs', tmpPath);
+    expect(mockScrubInDatabase).toHaveBeenCalledWith(
+      liveConn,
       expect.stringMatching(/\/cache\/novel-master-backup-\d+\.nmbackup/),
+      'export_db',
     );
     expect(mockSaveDocuments).toHaveBeenCalled();
   });
@@ -92,7 +132,7 @@ describe('db-backup.service', () => {
     expect(mockCheckpoint).not.toHaveBeenCalled();
   });
 
-  it('import closes connection, copies file, and rebootstraps', async () => {
+  it('import dumps providers, replaces db, restores, then rebootstraps', async () => {
     mockPick.mockResolvedValue([{uri: 'content://backup'}]);
     mockKeepLocalCopy.mockResolvedValue([
       {status: 'success', localUri: 'file:///cache/import.nmbackup'},
@@ -100,11 +140,18 @@ describe('db-backup.service', () => {
 
     await importDatabaseBackup(onRebootstrap);
 
+    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
     expect(mockClose).toHaveBeenCalled();
     expect(mockCp).toHaveBeenCalledWith(
       '/cache/import.nmbackup',
       '/db/novel_master_vfs',
     );
+    expect(mockOpen).toHaveBeenCalled();
+    expect(mockRestoreSnapshot).toHaveBeenCalledWith(
+      restoreConn,
+      emptySnapshot,
+    );
+    expect(mockRestoreConnClose).toHaveBeenCalled();
     expect(onRebootstrap).toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 /**
- * Full SQLite database export/import for mobile (file-level copy).
+ * 全量 SQLite 数据库导出/导入（文件级拷贝 + 服务商表隔离）。
  *
  * @module services/db-backup.service
  */
@@ -14,15 +14,26 @@ import {
   types,
 } from '@react-native-documents/picker';
 import {
+  dumpProviderTableSnapshot,
+  open,
+  restoreProviderTableSnapshot,
+  scrubProviderTablesInDatabase,
+  type TdbcConnection,
+} from '@novel-master/core';
+import {registerRnDriver} from '@novel-master/tdbc-driver-rn/native';
+import {
   checkpointMobileDatabase,
   closeMobileConnection,
+  getMobileConnection,
 } from '../db/connection';
 import {resolveMobileDatabaseFilePath} from '../db/db-file-path';
 import {isMobileAgentActive} from '../runtime/agent-activity';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
+import {MOBILE_TDBC_URL} from '../vfs/constants';
 
 const SQLITE_MAGIC = 'SQLite format 3';
 const BACKUP_EXT = '.nmbackup';
+const EXPORT_ATTACH_ALIAS = 'export_db';
 
 function toFileUri(path: string): string {
   return path.startsWith('file://') ? path : `file://${path}`;
@@ -64,8 +75,16 @@ async function readFileAsBytes(fsPath: string): Promise<Uint8Array> {
 }
 
 /**
- * Exports the full app database to a shareable `.nmbackup` file.
- * @returns `'saved'` when shared, `'cancelled'` when user dismisses picker.
+ * 短连接打开 live DB，仅用于导入后恢复本机服务商三表（不跑 bootstrap）。
+ */
+async function openDbForProviderRestore(): Promise<TdbcConnection> {
+  registerRnDriver();
+  return open(MOBILE_TDBC_URL, {driver: 'rn'});
+}
+
+/**
+ * 导出全量应用数据库为可分享的 `.nmbackup` 文件（副本不含服务商表）。
+ * @returns `'saved'` 用户完成分享；`'cancelled'` 用户取消选择器。
  */
 export async function exportDatabaseBackup(
   runtime: MobileNovelMasterRuntime,
@@ -80,6 +99,11 @@ export async function exportDatabaseBackup(
   const tmpPath = `${ReactNativeBlobUtil.fs.dirs.CacheDir}/${fileName}`;
 
   await ReactNativeBlobUtil.fs.cp(dbPath, tmpPath);
+  await scrubProviderTablesInDatabase(
+    runtime.conn,
+    tmpPath,
+    EXPORT_ATTACH_ALIAS,
+  );
 
   try {
     const [result] = await saveDocuments({
@@ -103,8 +127,8 @@ export async function exportDatabaseBackup(
 }
 
 /**
- * Replaces the app database from a picked backup file.
- * Caller must invoke `onRebootstrap` after success (e.g. NovelMasterProvider.retry).
+ * 用所选备份文件替换应用数据库；本机服务商三表在替换后写回。
+ * 调用方须在成功后执行 `onRebootstrap`（例如 NovelMasterProvider.retry）。
  */
 export async function importDatabaseBackup(
   onRebootstrap: () => void,
@@ -137,6 +161,9 @@ export async function importDatabaseBackup(
   const dbPath = await resolveMobileDatabaseFilePath();
   const bakPath = `${dbPath}.nmbackup.bak`;
 
+  const liveConn = await getMobileConnection();
+  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
   const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);
   if (dbExists) {
     await ReactNativeBlobUtil.fs.cp(dbPath, bakPath);
@@ -145,6 +172,14 @@ export async function importDatabaseBackup(
   try {
     await closeMobileConnection();
     await ReactNativeBlobUtil.fs.cp(pickedPath, dbPath);
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+
     onRebootstrap();
   } catch (error) {
     const bakExists = await ReactNativeBlobUtil.fs.exists(bakPath);

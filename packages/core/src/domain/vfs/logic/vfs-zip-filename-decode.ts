@@ -20,9 +20,9 @@ export function decodeZipEntryName(rawBytes: Uint8Array, gpbf: number): string {
   if ((gpbf & ZIP_GPBF_UTF8_EFS) !== 0) {
     name = new TextDecoder("utf-8", { fatal: true }).decode(rawBytes);
   } else if (rawBytes.some((byte) => byte >= 0x80)) {
-    name = iconv.decode(rawBytes, "gbk");
+    name = iconv.decode(Buffer.from(rawBytes), "gbk");
   } else {
-    name = iconv.decode(rawBytes, "cp437");
+    name = iconv.decode(Buffer.from(rawBytes), "cp437");
   }
   return name.replace(/\\/g, "/");
 }
