@@ -89,6 +89,7 @@ jobs:
       - name: Build workspace packages
         run: |
           npm run build -w @novel-master/core
+          npm run build -w @novel-master/cloud-sync-driver-s3
           npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
 
       - name: Prepare release keystore
@@ -184,6 +185,7 @@ jobs:
       - name: Build desktop dependencies
         run: |
           npm run build -w @novel-master/core
+          npm run build -w @novel-master/cloud-sync-driver-s3
           npm run build -w @novel-master/tdbc-driver-better-sqlite3
           npm run build -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
 
@@ -254,6 +256,7 @@ jobs:
       - name: Build desktop dependencies
         run: |
           npm run build -w @novel-master/core
+          npm run build -w @novel-master/cloud-sync-driver-s3
           npm run build -w @novel-master/tdbc-driver-better-sqlite3
           npm run build -w @novel-master/tokenizer-driver-node -w @novel-master/sksp-windows -w @novel-master/sksp-mac
 
