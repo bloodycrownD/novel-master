@@ -87,6 +87,37 @@ export type {
   ProviderBackupTableName,
   ProviderTableSnapshot,
 } from "./infra/db-backup/index.js";
+/**
+ * 跨端云同步：协调器、租约锁、status schema 与存储/数据库端口。
+ */
+export {
+  CloudSyncError,
+  isCloudSyncError,
+  CloudSyncCoordinator,
+  parseCloudSyncStatus,
+  EMPTY_CLOUD_SYNC_STATUS,
+  isEffectiveLock,
+  canAcquireLock,
+  buildLease,
+  renewLease,
+  DEFAULT_LEASE_SECONDS,
+  normalizePrefix,
+  statusKey,
+  snapshotKey,
+} from "./infra/cloud-sync/index.js";
+export type {
+  CloudSyncErrorCode,
+  ObjectStorageHeadResult,
+  ObjectStoragePort,
+  DbSyncPort,
+  CloudSyncLock,
+  CloudSyncStatus,
+  CloudSyncCoordinatorDeps,
+  PullOptions,
+  PullResult,
+  PushOptions,
+  PushResult,
+} from "./infra/cloud-sync/index.js";
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
