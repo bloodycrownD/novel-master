@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 export type ContextMenuItem = {
   readonly label: string;
@@ -23,25 +24,39 @@ export function ContextMenu({
   onSelect,
   onClose,
 }: ContextMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (!open) {
       return;
     }
-    const onDocClick = () => onClose();
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    const onDocPointer = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && menuRef.current?.contains(target)) {
+        return;
+      }
+      onClose();
+    };
+    const timer = window.setTimeout(() => {
+      document.addEventListener("mousedown", onDocPointer);
+    }, 0);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("mousedown", onDocPointer);
+    };
   }, [open, onClose]);
 
   if (!open) {
     return null;
   }
 
-  return (
+  return createPortal(
     <div
+      ref={menuRef}
       className="context-menu"
       role="menu"
       style={{ left: x, top: y }}
-      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
     >
       {items.map((item) => (
         <button
@@ -57,6 +72,7 @@ export function ContextMenu({
           {item.label}
         </button>
       ))}
-    </div>
+    </div>,
+    document.body,
   );
 }

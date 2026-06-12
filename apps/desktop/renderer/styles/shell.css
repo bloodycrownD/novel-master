@@ -2521,6 +2521,56 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--text-secondary);
 }
 
+.config-block-card__switch-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.config-block-card__switch-row .settings-switch {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.config-block-card__switch-hint {
+  margin: 0;
+  padding-top: 2px;
+}
+
+.config-block-card__switch-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.config-block-card .settings-switch {
+  width: 36px;
+  height: 22px;
+}
+
+.config-block-card .settings-switch-slider {
+  background: var(--border-light);
+  border: 1px solid var(--border-light);
+}
+
+.config-block-card .settings-switch-slider::before {
+  width: 16px;
+  height: 16px;
+  left: 2px;
+  top: 2px;
+}
+
+.config-block-card .settings-switch input:checked + .settings-switch-slider {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.config-block-card .settings-switch input:checked + .settings-switch-slider::before {
+  transform: translateX(14px);
+}
+
 .settings-section--form .settings-fields > .config-block-card--sync {
   margin-top: 4px;
 }

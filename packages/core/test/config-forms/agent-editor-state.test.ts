@@ -54,6 +54,21 @@ test("withPromptBlockPersistence maps UI switch to lifecycle", () => {
   assert.equal(again.lifecycle, undefined);
 });
 
+test("withPromptBlockPersistence restore requires full block replace in UI", () => {
+  const once = {
+    name: "k",
+    type: "text" as const,
+    role: "user" as const,
+    content: "x",
+    lifecycle: "once" as const,
+  };
+  const restored = withPromptBlockPersistence(once, true);
+  assert.equal("lifecycle" in restored, false);
+  // Partial merge ({ ...once, ...restored }) would incorrectly keep lifecycle: once.
+  const badMerge = { ...once, ...restored };
+  assert.equal(badMerge.lifecycle, "once");
+});
+
 test("withPromptBlockRole strips lifecycle for system role", () => {
   const block = {
     name: "k",

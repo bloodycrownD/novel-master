@@ -272,6 +272,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
+  const replaceBlock = (index: number, next: PromptBlock) => {
+    setPrompts(prev => prev.map((block, i) => (i === index ? next : block)));
+  };
+
   const updateBlock = (index: number, patch: Partial<PromptBlock>) => {
     setPrompts(prev =>
       prev.map((block, i) =>
@@ -550,7 +554,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                         tokens={tokens}
                         value={block.role}
                         onChange={role =>
-                          updateBlock(
+                          replaceBlock(
                             index,
                             withPromptBlockRole(block, role as PromptBlockRole),
                           )
@@ -560,22 +564,28 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                       />
                     </FormField>
                     {block.role !== 'system' ? (
-                      <FormSwitchRow
-                        label="常驻"
-                        tokens={tokens}
-                        value={isPromptBlockPersistent(block)}
-                        onValueChange={persistent =>
-                          updateBlock(
-                            index,
-                            withPromptBlockPersistence(block, persistent),
-                          )
-                        }
-                        description={
-                          isPromptBlockPersistent(block)
-                            ? undefined
-                            : '仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。'
-                        }
-                      />
+                      <>
+                        <FormSwitchRow
+                          label="常驻"
+                          tokens={tokens}
+                          value={isPromptBlockPersistent(block)}
+                          onValueChange={persistent =>
+                            replaceBlock(
+                              index,
+                              withPromptBlockPersistence(block, persistent),
+                            )
+                          }
+                        />
+                        {!isPromptBlockPersistent(block) ? (
+                          <Text
+                            style={[
+                              styles.fieldHint,
+                              {color: tokens.textSecondary},
+                            ]}>
+                            仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。
+                          </Text>
+                        ) : null}
+                      </>
                     ) : null}
                     <Text
                       style={[styles.fieldHint, {color: tokens.textSecondary}]}>

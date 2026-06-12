@@ -20,7 +20,7 @@ import {
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { Switch } from "../../components/ui/Switch";
+import { ContextMenu } from "../../components/ui/ContextMenu";
 import { showToast } from "../../components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
 import {
@@ -37,8 +37,8 @@ import {
   SettingsFormSection,
   SettingsPanel,
   SettingsSection,
-  SettingsSwitchRow,
 } from "./settings-ui";
+import { Switch } from "../../components/ui/Switch";
 
 type Nav = {
   push: (viewId: string) => void;
@@ -63,7 +63,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
-  const [addBlockMenu, setAddBlockMenu] = useState(false);
+  const [addBlockMenu, setAddBlockMenu] = useState<{ x: number; y: number } | null>(null);
 
   const snapshot = useMemo(
     () =>
@@ -214,6 +214,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
+  const replaceBlock = (index: number, next: PromptBlock) => {
+    setPrompts((prev) => prev.map((block, i) => (i === index ? next : block)));
+  };
+
   const updateBlock = (index: number, patch: Partial<PromptBlock>) => {
     setPrompts((prev) =>
       prev.map((block, i) => (i === index ? ({ ...block, ...patch } as PromptBlock) : block)),
@@ -246,7 +250,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         ? [...prev, createDefaultTextBlock(prev.length)]
         : [...prev, createDefaultChatBlock()],
     );
-    setAddBlockMenu(false);
+    setAddBlockMenu(null);
   };
 
   const handleProviderChange = async (pid: string) => {
@@ -370,20 +374,36 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         <SettingsSection title="Prompt 块">
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">块列表</span>
-            <button type="button" className="settings-link-btn" onClick={() => setAddBlockMenu((v) => !v)}>
+            <button
+              type="button"
+              className="settings-link-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setAddBlockMenu({
+                  x: Math.max(8, rect.right - 140),
+                  y: Math.max(8, rect.bottom + 4),
+                });
+              }}
+            >
               添加
             </button>
           </div>
-          {addBlockMenu ? (
-            <div className="config-inline-actions">
-              <Button variant="secondary" onClick={() => addBlock("text")}>
-                文本块
-              </Button>
-              <Button variant="secondary" onClick={() => addBlock("chat")}>
-                会话块
-              </Button>
-            </div>
-          ) : null}
+          <ContextMenu
+            open={addBlockMenu != null}
+            x={addBlockMenu?.x ?? 0}
+            y={addBlockMenu?.y ?? 0}
+            items={[
+              { label: "文本块", action: "text" },
+              { label: "会话块", action: "chat" },
+            ]}
+            onSelect={(action) => {
+              if (action === "text" || action === "chat") {
+                addBlock(action);
+              }
+            }}
+            onClose={() => setAddBlockMenu(null)}
+          />
           <div className="config-block-list">
             {prompts.map((block, index) => (
               <div key={`prompt-${index}`} className="config-block-card config-block-card--prompt">
@@ -416,7 +436,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         <select
                           value={block.role}
                           onChange={(e) =>
-                            updateBlock(
+                            replaceBlock(
                               index,
                               withPromptBlockRole(
                                 block,
@@ -434,18 +454,21 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       </SettingsField>
                       {block.role !== "system" ? (
                         <>
-                          <SettingsSwitchRow
-                            label="常驻"
-                            checked={isPromptBlockPersistent(block)}
-                            onChange={(persistent) =>
-                              updateBlock(
-                                index,
-                                withPromptBlockPersistence(block, persistent),
-                              )
-                            }
-                          />
+                          <div className="config-block-card__switch-row">
+                            <span className="config-block-card__switch-label">常驻</span>
+                            <Switch
+                              checked={isPromptBlockPersistent(block)}
+                              onChange={(persistent) =>
+                                replaceBlock(
+                                  index,
+                                  withPromptBlockPersistence(block, persistent),
+                                )
+                              }
+                              aria-label="常驻"
+                            />
+                          </div>
                           {!isPromptBlockPersistent(block) ? (
-                            <p className="config-block-card__hint">
+                            <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
                               仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。
                             </p>
                           ) : null}
