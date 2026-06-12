@@ -73,6 +73,20 @@ export {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
 } from "./bootstrap/novel-master-bootstrap.js";
+/**
+ * 数据库备份：导出时清除、导入时保留服务商三表。
+ */
+export {
+  DB_BACKUP_PROVIDER_TABLES,
+  dumpProviderTableSnapshot,
+  scrubProviderTables,
+  scrubProviderTablesInDatabase,
+  restoreProviderTableSnapshot,
+} from "./infra/db-backup/index.js";
+export type {
+  ProviderBackupTableName,
+  ProviderTableSnapshot,
+} from "./infra/db-backup/index.js";
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
