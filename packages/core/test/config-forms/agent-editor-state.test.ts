@@ -4,8 +4,11 @@ import {
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
   formSnapshotJson,
+  isPromptBlockPersistent,
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
+  withPromptBlockPersistence,
+  withPromptBlockRole,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
@@ -39,6 +42,29 @@ test("stripRemovedPromptBlocks drops abstract blocks", () => {
   ]);
   assert.equal(result.removed, 1);
   assert.equal(result.prompts.length, 1);
+});
+
+test("withPromptBlockPersistence maps UI switch to lifecycle", () => {
+  const block = { name: "k", type: "text" as const, role: "user" as const, content: "go" };
+  assert.equal(isPromptBlockPersistent(block), true);
+  const once = withPromptBlockPersistence(block, false);
+  assert.equal(once.lifecycle, "once");
+  assert.equal(isPromptBlockPersistent(once), false);
+  const again = withPromptBlockPersistence(once, true);
+  assert.equal(again.lifecycle, undefined);
+});
+
+test("withPromptBlockRole strips lifecycle for system role", () => {
+  const block = {
+    name: "k",
+    type: "text" as const,
+    role: "user" as const,
+    content: "go",
+    lifecycle: "once" as const,
+  };
+  const system = withPromptBlockRole(block, "system");
+  assert.equal(system.role, "system");
+  assert.equal(system.lifecycle, undefined);
 });
 
 test("formSnapshotJson omits model fields when disabled", () => {

@@ -12,6 +12,9 @@ import {
   formSnapshotJson,
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
+  isPromptBlockPersistent,
+  withPromptBlockPersistence,
+  withPromptBlockRole,
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
 import {
@@ -22,6 +25,7 @@ import {
 } from '@novel-master/core';
 import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
+import {FormSwitchRow} from '../form/FormSwitchRow';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormSelectField} from '../form/FormSelectField';
 import {FormTextInput} from '../form/FormTextInput';
@@ -546,15 +550,33 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                         tokens={tokens}
                         value={block.role}
                         onChange={role =>
-                          updateBlock(index, {
-                            type: 'text',
-                            role: role as PromptBlockRole,
-                          })
+                          updateBlock(
+                            index,
+                            withPromptBlockRole(block, role as PromptBlockRole),
+                          )
                         }
                         options={ROLE_OPTIONS}
                         sheetTitle="选择角色"
                       />
                     </FormField>
+                    {block.role !== 'system' ? (
+                      <FormSwitchRow
+                        label="常驻"
+                        tokens={tokens}
+                        value={isPromptBlockPersistent(block)}
+                        onValueChange={persistent =>
+                          updateBlock(
+                            index,
+                            withPromptBlockPersistence(block, persistent),
+                          )
+                        }
+                        description={
+                          isPromptBlockPersistent(block)
+                            ? undefined
+                            : '仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。'
+                        }
+                      />
+                    ) : null}
                     <Text
                       style={[styles.fieldHint, {color: tokens.textSecondary}]}>
                       仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。

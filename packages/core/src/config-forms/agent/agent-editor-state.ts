@@ -63,6 +63,38 @@ export function blockTypeLabel(type: PromptBlock["type"]): string {
   return type === "text" ? "文本" : "会话";
 }
 
+type TextPromptBlock = Extract<PromptBlock, { type: "text" }>;
+
+/** Whether a non-system text block is included on every agent step (常驻). */
+export function isPromptBlockPersistent(block: TextPromptBlock): boolean {
+  return (block.lifecycle ?? "always") === "always";
+}
+
+/** Maps UI「常驻」switch to lifecycle (omit field when persistent). */
+export function withPromptBlockPersistence(
+  block: TextPromptBlock,
+  persistent: boolean,
+): TextPromptBlock {
+  if (persistent) {
+    const { lifecycle: _removed, ...rest } = block;
+    return rest;
+  }
+  return { ...block, lifecycle: "once" };
+}
+
+/** Strips lifecycle when role changes to system. */
+export function withPromptBlockRole(
+  block: TextPromptBlock,
+  role: PromptBlockRole,
+): TextPromptBlock {
+  const next: TextPromptBlock = { ...block, role };
+  if (role === "system") {
+    const { lifecycle: _removed, ...rest } = next;
+    return rest;
+  }
+  return next;
+}
+
 /** Drop removed `abstract` blocks from legacy agent configs. */
 export function stripRemovedPromptBlocks(
   blocks: readonly PromptBlock[],

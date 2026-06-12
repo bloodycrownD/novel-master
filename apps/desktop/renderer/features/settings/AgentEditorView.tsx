@@ -12,6 +12,9 @@ import {
   parseApplicationModelId,
   stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
+  isPromptBlockPersistent,
+  withPromptBlockPersistence,
+  withPromptBlockRole,
   type ToolsMode,
 } from "@novel-master/core/config-forms/agent";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
@@ -34,6 +37,7 @@ import {
   SettingsFormSection,
   SettingsPanel,
   SettingsSection,
+  SettingsSwitchRow,
 } from "./settings-ui";
 
 type Nav = {
@@ -412,10 +416,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         <select
                           value={block.role}
                           onChange={(e) =>
-                            updateBlock(index, {
-                              type: "text",
-                              role: e.target.value as PromptBlockRole,
-                            })
+                            updateBlock(
+                              index,
+                              withPromptBlockRole(
+                                block,
+                                e.target.value as PromptBlockRole,
+                              ),
+                            )
                           }
                         >
                           {ROLE_OPTIONS.map((o) => (
@@ -425,6 +432,25 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           ))}
                         </select>
                       </SettingsField>
+                      {block.role !== "system" ? (
+                        <>
+                          <SettingsSwitchRow
+                            label="常驻"
+                            checked={isPromptBlockPersistent(block)}
+                            onChange={(persistent) =>
+                              updateBlock(
+                                index,
+                                withPromptBlockPersistence(block, persistent),
+                              )
+                            }
+                          />
+                          {!isPromptBlockPersistent(block) ? (
+                            <p className="config-block-card__hint">
+                              仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。
+                            </p>
+                          ) : null}
+                        </>
+                      ) : null}
                       <p className="config-block-card__hint">
                         仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
                       </p>
