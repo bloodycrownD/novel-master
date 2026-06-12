@@ -13,6 +13,7 @@ import {
   handleCloudSyncGetConfig,
   handleCloudSyncGetLocalStatus,
   handleCloudSyncSetConfig,
+  handleCloudSyncSetEnabled,
 } from "../src/main/ipc/handlers/cloud-sync.js";
 import { resetDesktopCloudSyncServiceForTest } from "../src/main/services/cloud-sync.service.js";
 
@@ -48,6 +49,7 @@ describe("cloud-sync ipc handlers", () => {
     if (result.ok) {
       assert.equal(result.data.endpoint, "");
       assert.equal(result.data.hasSecretKey, false);
+      assert.equal(result.data.enabled, false);
     }
   });
 
@@ -69,6 +71,7 @@ describe("cloud-sync ipc handlers", () => {
     if (config.ok) {
       assert.equal(config.data.bucket, "test-bucket");
       assert.equal(config.data.hasSecretKey, true);
+      assert.equal(config.data.enabled, true);
       assert.equal(config.data.deviceLabel, "测试设备");
       assert.ok(config.data.deviceId.length > 0);
     }
@@ -79,6 +82,22 @@ describe("cloud-sync ipc handlers", () => {
       assert.equal(status.data.configured, true);
       assert.equal(status.data.lastSyncedRev, 0);
       assert.equal(status.data.deviceLabel, "测试设备");
+    }
+
+    const disabled = await handleCloudSyncSetEnabled(false);
+    assert.equal(disabled.ok, true);
+
+    const afterDisable = await handleCloudSyncGetLocalStatus();
+    assert.equal(afterDisable.ok, true);
+    if (afterDisable.ok) {
+      assert.equal(afterDisable.data.configured, false);
+    }
+
+    const configAfter = await handleCloudSyncGetConfig();
+    assert.equal(configAfter.ok, true);
+    if (configAfter.ok) {
+      assert.equal(configAfter.data.enabled, false);
+      assert.equal(configAfter.data.bucket, "test-bucket");
     }
   });
 });

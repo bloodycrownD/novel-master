@@ -591,6 +591,10 @@ export async function ipcCloudSyncSetConfig(req: {
   return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, req);
 }
 
+export async function ipcCloudSyncSetEnabled(enabled: boolean) {
+  return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED, enabled);
+}
+
 export async function ipcCloudSyncTestConnection() {
   return bridge().invoke(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION);
 }

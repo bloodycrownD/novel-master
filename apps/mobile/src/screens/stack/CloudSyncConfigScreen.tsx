@@ -247,28 +247,24 @@ export function CloudSyncConfigScreen() {
             placeholder="便于识别本机"
           />
         </FormField>
-      </FormSectionCard>
-
-      <View style={styles.testRow}>
         <SecondaryButton
           tokens={tokens}
+          fullWidth
           label={testing ? '测试中…' : '测试连接'}
           onPress={() => {
             handleTest().catch(() => undefined);
           }}
           disabled={testing || saving}
         />
-      </View>
-
-      <Text style={[styles.note, {color: tokens.textTertiary}]}>
-        测试连接仅校验桶访问权限，不会执行拉取或推送。
-      </Text>
+        <Text style={[styles.note, {color: tokens.textTertiary}]}>
+          测试连接仅校验桶访问权限，不会执行拉取或推送。
+        </Text>
+      </FormSectionCard>
     </ScreenFormLayout>
   );
 }
 
 const styles = StyleSheet.create({
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center'},
-  testRow: {paddingHorizontal: 16, marginTop: 8},
-  note: {fontSize: 12, lineHeight: 18, paddingHorizontal: 16, marginTop: 8},
+  note: {fontSize: 12, lineHeight: 18, marginTop: 4},
 });

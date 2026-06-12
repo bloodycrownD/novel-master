@@ -22,6 +22,7 @@ export const CLOUD_SYNC_KEY_ACCESS_KEY_ID = "accessKeyId";
 export const CLOUD_SYNC_KEY_FORCE_PATH_STYLE = "forcePathStyle";
 export const CLOUD_SYNC_KEY_DEVICE_ID = "deviceId";
 export const CLOUD_SYNC_KEY_DEVICE_LABEL = "deviceLabel";
+export const CLOUD_SYNC_KEY_ENABLED = "enabled";
 export const CLOUD_SYNC_KEY_LAST_SYNCED_REV = "lastSyncedRev";
 export const CLOUD_SYNC_KEY_LAST_PULL_AT = "lastPullAt";
 export const CLOUD_SYNC_KEY_LAST_PUSH_AT = "lastPushAt";
@@ -38,6 +39,7 @@ export type CloudSyncPublicConfig = {
   forcePathStyle: boolean;
   deviceId: string;
   deviceLabel: string;
+  enabledRaw?: string;
   lastSyncedRev: number;
   lastPullAt: string;
   lastPushAt: string;
@@ -55,6 +57,7 @@ export type CloudSyncConfigDto = {
   deviceId: string;
   deviceLabel: string;
   hasSecretKey: boolean;
+  enabled: boolean;
 };
 
 export type CloudSyncSetConfigInput = {
@@ -79,6 +82,7 @@ export type CloudSyncLocalMeta = {
 export interface CloudSyncConfigStore {
   getConfig(): Promise<CloudSyncConfigDto>;
   setConfig(input: CloudSyncSetConfigInput): Promise<void>;
+  setEnabled(enabled: boolean): Promise<void>;
   getPublicConfig(): Promise<CloudSyncPublicConfig>;
   getSecretAccessKey(): Promise<string | null>;
   getLocalMeta(): Promise<CloudSyncLocalMeta>;
@@ -119,6 +123,10 @@ function assertNonEmpty(label: string, value: string): void {
   }
 }
 
+function resolveEnabledFlag(enabledRaw: string | undefined): boolean {
+  return enabledRaw === "true";
+}
+
 export function createCloudSyncConfigStore(
   kkv: KkvService,
   secretStore: SecretStore,
@@ -133,6 +141,7 @@ export function createCloudSyncConfigStore(
       forcePathStyle,
       deviceId,
       deviceLabel,
+      enabledRaw,
       lastSyncedRev,
       lastPullAt,
       lastPushAt,
@@ -147,6 +156,7 @@ export function createCloudSyncConfigStore(
       kkvGet(kkv, CLOUD_SYNC_KEY_FORCE_PATH_STYLE),
       kkvGet(kkv, CLOUD_SYNC_KEY_DEVICE_ID),
       kkvGet(kkv, CLOUD_SYNC_KEY_DEVICE_LABEL),
+      kkvGet(kkv, CLOUD_SYNC_KEY_ENABLED),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_SYNCED_REV),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PULL_AT),
       kkvGet(kkv, CLOUD_SYNC_KEY_LAST_PUSH_AT),
@@ -163,6 +173,7 @@ export function createCloudSyncConfigStore(
       forcePathStyle: parseBool(forcePathStyle),
       deviceId: deviceId ?? "",
       deviceLabel: deviceLabel ?? "",
+      enabledRaw,
       lastSyncedRev: parseRev(lastSyncedRev),
       lastPullAt: lastPullAt ?? "",
       lastPushAt: lastPushAt ?? "",
@@ -185,7 +196,16 @@ export function createCloudSyncConfigStore(
         deviceId: publicConfig.deviceId,
         deviceLabel: publicConfig.deviceLabel,
         hasSecretKey,
+        enabled: resolveEnabledFlag(publicConfig.enabledRaw),
       };
+    },
+
+    async setEnabled(enabled: boolean) {
+      await kkv.set(
+        CLOUD_SYNC_KKV_MODULE,
+        CLOUD_SYNC_KEY_ENABLED,
+        enabled ? "true" : "false",
+      );
     },
 
     async setConfig(input) {
@@ -215,7 +235,8 @@ export function createCloudSyncConfigStore(
           CLOUD_SYNC_KKV_MODULE,
           CLOUD_SYNC_KEY_PATH_PREFIX,
           normalizedPrefix,
-        ),        kkv.set(
+        ),
+        kkv.set(
           CLOUD_SYNC_KKV_MODULE,
           CLOUD_SYNC_KEY_ACCESS_KEY_ID,
           input.accessKeyId.trim(),
@@ -231,6 +252,7 @@ export function createCloudSyncConfigStore(
           CLOUD_SYNC_KEY_DEVICE_LABEL,
           (input.deviceLabel ?? existing.deviceLabel).trim(),
         ),
+        kkv.set(CLOUD_SYNC_KKV_MODULE, CLOUD_SYNC_KEY_ENABLED, "true"),
       ]);
 
       if (secret.length > 0) {

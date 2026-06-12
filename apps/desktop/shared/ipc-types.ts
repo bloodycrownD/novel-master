@@ -126,6 +126,7 @@ export const IPC_CHANNELS = {
 
   CLOUD_SYNC_GET_CONFIG: "nm:cloud-sync/getConfig",
   CLOUD_SYNC_SET_CONFIG: "nm:cloud-sync/setConfig",
+  CLOUD_SYNC_SET_ENABLED: "nm:cloud-sync/setEnabled",
   CLOUD_SYNC_TEST_CONNECTION: "nm:cloud-sync/testConnection",
   CLOUD_SYNC_GET_LOCAL_STATUS: "nm:cloud-sync/getLocalStatus",
   CLOUD_SYNC_PULL: "nm:cloud-sync/pull",
@@ -705,6 +706,11 @@ export type CloudSyncConfigDto = {
   readonly deviceId: string;
   readonly deviceLabel: string;
   readonly hasSecretKey: boolean;
+  readonly enabled: boolean;
+};
+
+export type CloudSyncSetEnabledRequest = {
+  readonly enabled: boolean;
 };
 
 export type CloudSyncSetConfigRequest = {

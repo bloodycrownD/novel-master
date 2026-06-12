@@ -31,6 +31,16 @@ for (const rel of coreDistSmokeFiles) {
 }
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
+const nodeFsShim = path.resolve(__dirname, 'src/shims/node-fs.js');
+const readableStream = require.resolve('readable-stream', {paths: [__dirname]});
+const bufferModule = require.resolve('buffer/', {paths: [__dirname]});
+/** AWS SDK browser/native builds still import Node built-ins (e.g. node:stream). */
+const nodeBuiltinAliases = {
+  stream: readableStream,
+  buffer: bufferModule,
+  fs: nodeFsShim,
+  'fs/promises': nodeFsShim,
+};
 const zodCjs = path.resolve(zodRoot, 'index.cjs');
 /** markdown-it@10 pins entities@2; hoisted entities@4 lacks lib/maps/entities.json */
 const entitiesDecode = path.resolve(
@@ -99,6 +109,31 @@ function resolveCorePathAlias(moduleName) {
   return null;
 }
 
+function resolveNodeBuiltin(moduleName) {
+  const bare = moduleName.startsWith('node:') ? moduleName.slice(5) : moduleName;
+  const mapped = nodeBuiltinAliases[bare];
+  if (mapped != null && fs.existsSync(mapped)) {
+    return mapped;
+  }
+  return null;
+}
+
+/** @aws-sdk/client-* dist-cjs defaults to Node runtimeConfig; RN needs .native. */
+function resolveAwsSdkRuntimeConfig(context, moduleName) {
+  if (moduleName !== './runtimeConfig' && moduleName !== './runtimeConfig.js') {
+    return null;
+  }
+  const origin = context.originModulePath ?? '';
+  if (!origin.includes(`${path.sep}@aws-sdk${path.sep}`)) {
+    return null;
+  }
+  const nativePath = path.join(path.dirname(origin), 'runtimeConfig.native.js');
+  if (fs.existsSync(nativePath)) {
+    return nativePath;
+  }
+  return null;
+}
+
 /** Block Node-only tokenizer-driver-node from RN bundles. */
 const metroBlockList = [
   /[\\/]packages[\\/]tokenizer-driver-node[\\/]/,
@@ -120,6 +155,16 @@ const config = {
     resolverMainFields: ['react-native', 'browser', 'main'],
     unstable_conditionNames: ['require', 'react-native', 'browser'],
     resolveRequest(context, moduleName, platform) {
+      const nodeBuiltinPath = resolveNodeBuiltin(moduleName);
+      if (nodeBuiltinPath != null) {
+        return {type: 'sourceFile', filePath: nodeBuiltinPath};
+      }
+
+      const awsRuntimePath = resolveAwsSdkRuntimeConfig(context, moduleName);
+      if (awsRuntimePath != null) {
+        return {type: 'sourceFile', filePath: awsRuntimePath};
+      }
+
       if (isTiktokenModule(moduleName)) {
         return {type: 'sourceFile', filePath: tiktokenShim};
       }

@@ -38,6 +38,18 @@ export async function handleCloudSyncSetConfig(
   }
 }
 
+export async function handleCloudSyncSetEnabled(
+  enabled: boolean,
+): Promise<IpcResult<void>> {
+  try {
+    const service = await getDesktopCloudSyncService();
+    await service.setEnabled(enabled);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
 export async function handleCloudSyncTestConnection(): Promise<IpcResult<void>> {
   try {
     const service = await getDesktopCloudSyncService();

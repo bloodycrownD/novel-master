@@ -2299,7 +2299,26 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   padding-top: 0;
   border-top: none;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
+}
+
+.settings-form-actions .btn-secondary,
+.settings-form-actions .btn-primary {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  min-width: 96px;
+}
+
+.settings-form-actions .btn-secondary {
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.settings-form-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover, var(--surface));
 }
 
 .settings-section--form > .settings-section__desc {
@@ -2419,7 +2438,8 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 
 .config-block-card--event,
 .config-block-card--action,
-.config-block-card--prompt {
+.config-block-card--prompt,
+.config-block-card--sync {
   background: var(--surface-muted);
 }
 
@@ -2499,6 +2519,16 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.settings-section--form .settings-fields > .config-block-card--sync {
+  margin-top: 4px;
+}
+
+.settings-section--form .settings-fields > .config-block-card--sync .settings-form-actions {
+  margin-top: 12px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .settings-section--form .settings-fields > .settings-section .config-block-list {

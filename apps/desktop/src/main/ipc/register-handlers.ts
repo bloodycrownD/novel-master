@@ -38,6 +38,7 @@ import {
   handleCloudSyncPull,
   handleCloudSyncPush,
   handleCloudSyncSetConfig,
+  handleCloudSyncSetEnabled,
   handleCloudSyncTestConnection,
 } from "./handlers/cloud-sync.js";
 import {
@@ -412,6 +413,9 @@ export function registerIpcHandlers(): void {
   );
   ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, (_event, req) =>
     handleCloudSyncSetConfig(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED, (_event, enabled: boolean) =>
+    handleCloudSyncSetEnabled(enabled),
   );
   ipcMain.handle(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION, () =>
     handleCloudSyncTestConnection(),

@@ -31,6 +31,7 @@ import {
   ipcCloudSyncPull,
   ipcCloudSyncPush,
   ipcCloudSyncSetConfig,
+  ipcCloudSyncSetEnabled,
   ipcCloudSyncTestConnection,
   ipcEventsExportYaml,
   ipcEventsGetConfig,
@@ -66,7 +67,6 @@ import {
   SettingsListSection,
   SettingsPanel,
   SettingsSection,
-  SettingsSwitchRow,
 } from "./settings-ui";
 import { deriveRegexGroupId } from "../../utils/regex-group-id";
 import {
@@ -110,6 +110,7 @@ export function DataManagementView() {
   const [forcePathStyle, setForcePathStyle] = useState(true);
   const [deviceLabel, setDeviceLabel] = useState("");
   const [hasSecretKey, setHasSecretKey] = useState(false);
+  const [cloudSyncEnabled, setCloudSyncEnabled] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
   const [status, setStatus] = useState<CloudSyncStatusState | null>(null);
   const [confirmPull, setConfirmPull] = useState(false);
@@ -135,6 +136,7 @@ export function DataManagementView() {
         setForcePathStyle(res.data.forcePathStyle);
         setDeviceLabel(res.data.deviceLabel);
         setHasSecretKey(res.data.hasSecretKey);
+        setCloudSyncEnabled(res.data.enabled);
         setSecretAccessKey("");
       }
     } finally {
@@ -146,6 +148,16 @@ export function DataManagementView() {
     void reloadConfig();
     void reloadStatus();
   }, [reloadConfig, reloadStatus]);
+
+  /** 轮询同步状态，使 Agent 运行中等标志与 main 进程一致 */
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void reloadStatus();
+    }, 2000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [reloadStatus]);
 
   const controlsDisabled =
     busy || status?.syncBusy === true || status?.agentActive === true;
@@ -166,10 +178,27 @@ export function DataManagementView() {
       if (res.ok) {
         toastSettingsSuccess("云同步配置已保存");
         setSecretAccessKey("");
+        setCloudSyncEnabled(true);
         await reloadConfig();
         await reloadStatus();
       } else {
         toastSettingsError(res.error.message);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setCloudSyncEnabledPersisted = async (next: boolean) => {
+    setCloudSyncEnabled(next);
+    setBusy(true);
+    try {
+      const res = await ipcCloudSyncSetEnabled(next);
+      if (res.ok) {
+        await reloadStatus();
+      } else {
+        toastSettingsError(res.error.message);
+        await reloadConfig();
       }
     } finally {
       setBusy(false);
@@ -288,146 +317,163 @@ export function DataManagementView() {
       <SettingsFormSection
         title="云同步"
         desc="通过 S3 兼容对象存储在 Desktop 与 Mobile 之间同步数据库快照。Secret Key 经 SKSP 加密存储。"
-        toolbar={
-          <div className="settings-toolbar settings-toolbar--inline">
-            <Button
-              variant="secondary"
-              disabled={controlsDisabled || configLoading}
-              onClick={() => void testConnection()}
-            >
-              测试连接
-            </Button>
-            <Button
-              variant="primary"
-              disabled={controlsDisabled || configLoading}
-              onClick={() => void saveConfig()}
-            >
-              保存配置
-            </Button>
-          </div>
-        }
-        footer={
-          status?.suggestsPull ? (
-            <SettingsStatus
-              error="云端有更新，建议先拉取后再推送。"
-              inline
-            />
-          ) : null
-        }
       >
-        <SettingsField label="Endpoint">
-          <input
-            value={endpoint}
-            disabled={configLoading}
-            onChange={(e) => setEndpoint(e.target.value)}
-            placeholder="https://s3.example.com"
-          />
-        </SettingsField>
-        <SettingsField label="Bucket">
-          <input
-            value={bucket}
-            disabled={configLoading}
-            onChange={(e) => setBucket(e.target.value)}
-          />
-        </SettingsField>
-        <div className="settings-field-grid">
-          <SettingsField label="Region">
-            <input
-              value={region}
-              disabled={configLoading}
-              onChange={(e) => setRegion(e.target.value)}
-              placeholder="可留空（MinIO）"
-            />
-          </SettingsField>
-          <SettingsField label="路径前缀">
-            <input
-              value={pathPrefix}
-              disabled={configLoading}
-              onChange={(e) => setPathPrefix(e.target.value)}
-              placeholder="novel-master/sync/"
-            />
-          </SettingsField>
-        </div>
-        <SettingsField label="Access Key ID">
-          <input
-            value={accessKeyId}
-            disabled={configLoading}
-            onChange={(e) => setAccessKeyId(e.target.value)}
-          />
-        </SettingsField>
-        <SettingsField
-          label={
-            hasSecretKey
-              ? "Secret Access Key（留空则不修改）"
-              : "Secret Access Key"
-          }
-        >
-          <input
-            type="password"
-            value={secretAccessKey}
-            disabled={configLoading}
-            onChange={(e) => setSecretAccessKey(e.target.value)}
-          />
-        </SettingsField>
-        <SettingsField label="设备名称（可选）">
-          <input
-            value={deviceLabel}
-            disabled={configLoading}
-            onChange={(e) => setDeviceLabel(e.target.value)}
-          />
-        </SettingsField>
         <SettingsSwitchRow
-          label="Path style（MinIO / 部分 OSS）"
-          checked={forcePathStyle}
-          onChange={setForcePathStyle}
+          label="启用云同步"
+          checked={cloudSyncEnabled}
+          onChange={(next) => {
+            if (controlsDisabled || configLoading) {
+              return;
+            }
+            void setCloudSyncEnabledPersisted(next);
+          }}
         />
-      </SettingsFormSection>
+        {cloudSyncEnabled ? (
+          <>
+            <SettingsField label="Endpoint">
+              <input
+                value={endpoint}
+                disabled={configLoading}
+                onChange={(e) => setEndpoint(e.target.value)}
+                placeholder="https://s3.example.com"
+              />
+            </SettingsField>
+            <SettingsField label="Bucket">
+              <input
+                value={bucket}
+                disabled={configLoading}
+                onChange={(e) => setBucket(e.target.value)}
+              />
+            </SettingsField>
+            <div className="settings-field-grid">
+              <SettingsField label="Region">
+                <input
+                  value={region}
+                  disabled={configLoading}
+                  onChange={(e) => setRegion(e.target.value)}
+                  placeholder="可留空（MinIO）"
+                />
+              </SettingsField>
+              <SettingsField label="路径前缀">
+                <input
+                  value={pathPrefix}
+                  disabled={configLoading}
+                  onChange={(e) => setPathPrefix(e.target.value)}
+                  placeholder="novel-master/sync/"
+                />
+              </SettingsField>
+            </div>
+            <SettingsField label="Access Key ID">
+              <input
+                value={accessKeyId}
+                disabled={configLoading}
+                onChange={(e) => setAccessKeyId(e.target.value)}
+              />
+            </SettingsField>
+            <SettingsField
+              label={
+                hasSecretKey
+                  ? "Secret Access Key（留空则不修改）"
+                  : "Secret Access Key"
+              }
+            >
+              <input
+                type="password"
+                value={secretAccessKey}
+                disabled={configLoading}
+                onChange={(e) => setSecretAccessKey(e.target.value)}
+              />
+            </SettingsField>
+            <SettingsField label="设备名称（可选）">
+              <input
+                value={deviceLabel}
+                disabled={configLoading}
+                onChange={(e) => setDeviceLabel(e.target.value)}
+              />
+            </SettingsField>
+            <SettingsSwitchRow
+              label="Path style（MinIO / 部分 OSS）"
+              checked={forcePathStyle}
+              onChange={setForcePathStyle}
+            />
+            <div className="settings-form-actions settings-form-actions--solo">
+              <Button
+                variant="secondary"
+                disabled={controlsDisabled || configLoading}
+                onClick={() => void testConnection()}
+              >
+                测试连接
+              </Button>
+              <Button
+                variant="primary"
+                disabled={controlsDisabled || configLoading}
+                onClick={() => void saveConfig()}
+              >
+                保存配置
+              </Button>
+            </div>
 
-      <SettingsSection
-        title="同步状态"
-        desc={
-          status?.agentActive
-            ? "Agent 运行中，同步与备份操作已禁用。"
-            : "显示本机与云端的 rev 对齐情况。"
-        }
-      >
-        <SettingsStatus
-          message={
-            status == null
-              ? "加载中…"
-              : [
-                  `云端 rev：${status.remoteRev ?? "—"}`,
-                  `本机已同步 rev：${status.lastSyncedRev}`,
-                  status.lastPullAt
-                    ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
-                    : null,
-                  status.lastPushAt
-                    ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
-                    : null,
-                  status.lastPullResult ? `拉取结果：${status.lastPullResult}` : null,
-                  status.lastPushResult ? `推送结果：${status.lastPushResult}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-          }
-        />
-        <div className="settings-toolbar settings-toolbar--inline">
-          <Button
-            variant="secondary"
-            disabled={controlsDisabled || !status?.configured}
-            onClick={() => setConfirmPull(true)}
-          >
-            从云端拉取
-          </Button>
-          <Button
-            variant="primary"
-            disabled={controlsDisabled || !status?.configured}
-            onClick={() => void runPush()}
-          >
-            推送到云端
-          </Button>
-        </div>
-      </SettingsSection>
+            <div className="config-block-card config-block-card--sync">
+              <div className="config-block-card__header">
+                <span className="config-block-card__section-label">同步状态</span>
+              </div>
+              <div className="config-block-card__body">
+                <p className="config-block-card__hint config-block-card__hint--subtle">
+                  {status?.agentActive
+                    ? "Agent 运行中，同步操作已禁用。"
+                    : "显示本机与云端的 rev 对齐情况；须先保存配置后再拉取/推送。"}
+                </p>
+                {status?.suggestsPull ? (
+                  <SettingsStatus
+                    error="云端有更新，建议先拉取后再推送。"
+                    inline
+                  />
+                ) : null}
+                <SettingsStatus
+                  message={
+                    status == null
+                      ? "加载中…"
+                      : [
+                          `云端 rev：${status.remoteRev ?? "—"}`,
+                          `本机已同步 rev：${status.lastSyncedRev}`,
+                          status.lastPullAt
+                            ? `上次拉取：${new Date(status.lastPullAt).toLocaleString()}`
+                            : null,
+                          status.lastPushAt
+                            ? `上次推送：${new Date(status.lastPushAt).toLocaleString()}`
+                            : null,
+                          status.lastPullResult
+                            ? `拉取结果：${status.lastPullResult}`
+                            : null,
+                          status.lastPushResult
+                            ? `推送结果：${status.lastPushResult}`
+                            : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                  }
+                />
+                <div className="settings-form-actions settings-form-actions--solo">
+                  <Button
+                    variant="secondary"
+                    disabled={controlsDisabled || !status?.configured}
+                    onClick={() => setConfirmPull(true)}
+                  >
+                    从云端拉取
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={controlsDisabled || !status?.configured}
+                    onClick={() => void runPush()}
+                  >
+                    推送到云端
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : null}
+      </SettingsFormSection>
 
       <SettingsActionSection
         title="导出"

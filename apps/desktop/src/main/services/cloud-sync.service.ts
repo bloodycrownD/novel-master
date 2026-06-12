@@ -22,7 +22,8 @@ import {
   ListObjectsV2Command,
   S3Client,
   type S3ClientConfig,
-} from "@aws-sdk/client-s3";import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+} from "@aws-sdk/client-s3";
+import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import {
   createCloudSyncConfigStore,
@@ -54,6 +55,7 @@ function computeSha256Hex(bytes: Uint8Array): string {
 
 function isConfigured(config: CloudSyncConfigDto, secret: string | null): boolean {
   return (
+    config.enabled &&
     config.endpoint.trim().length > 0 &&
     config.bucket.trim().length > 0 &&
     config.accessKeyId.trim().length > 0 &&
@@ -139,6 +141,10 @@ export class DesktopCloudSyncService {
     await this.configStore.setConfig(input);
   }
 
+  async setEnabled(enabled: boolean): Promise<void> {
+    await this.configStore.setEnabled(enabled);
+  }
+
   async testConnection(): Promise<void> {
     const s3Config = await buildS3StorageConfigFromStore(this.configStore);
     const client = buildS3Client(s3Config);
@@ -203,9 +209,13 @@ export class DesktopCloudSyncService {
     }
     syncBusy = true;
     const meta = await this.configStore.getLocalMeta();
+    let exportTempPath: string | undefined;
     try {
-      const { coordinator } = await this.buildCoordinator();
-      const result = await coordinator.pull({ lastSyncedRev: meta.lastSyncedRev });
+      const built = await this.buildCoordinator();
+      exportTempPath = built.exportTempPath;
+      const result = await built.coordinator.pull({
+        lastSyncedRev: meta.lastSyncedRev,
+      });
       await this.configStore.setLastSyncedRev(result.rev);
       await this.configStore.recordPull(true, `已同步至 rev ${result.rev}`);
       return result;
@@ -220,6 +230,9 @@ export class DesktopCloudSyncService {
       throw error;
     } finally {
       syncBusy = false;
+      if (exportTempPath != null) {
+        await unlink(exportTempPath).catch(() => undefined);
+      }
     }
   }
 
