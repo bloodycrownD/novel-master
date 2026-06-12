@@ -9,6 +9,7 @@ import type { VfsService } from "@novel-master/core";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
+import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
 
 
 async function listFilePaths(vfs: VfsService, dir = "/"): Promise<string[]> {
@@ -410,6 +411,51 @@ describe("VfsZipIoService", () => {
       sessionId: session.id,
     });
     assert.deepEqual(bytes, magic);
+  });
+
+  it("Z8: GBK 中文路径 ZIP 导入后列表路径正确", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-z8-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const logicalPath = "笔记/第一章.md";
+    const zipBytes = buildGbkFilenameZip([
+      { logicalPath, content: "GBK 正文" },
+    ]);
+
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, zipBytes, { confirmed: true });
+
+    const paths = await listFilePaths(vfs);
+    assert.deepEqual(paths, [`/${logicalPath}`]);
+    assert.equal((await vfs.read(`/${logicalPath}`)).content, "GBK 正文");
+  });
+
+  it("Z9: GBK ZIP 全量覆盖后无旧文件残留", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-z9-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    await vfs.write("/old.md", "旧内容");
+
+    const zipBytes = buildGbkFilenameZip([{ logicalPath: "new.md", content: "新内容" }]);
+    const zipSvc = createVfsZipIoService(ctx.conn);
+    await zipSvc.import(scope, zipBytes, { confirmed: true });
+
+    const paths = await listFilePaths(vfs);
+    assert.deepEqual(paths, ["/new.md"]);
+    await assert.rejects(() => vfs.read("/old.md"));
+    assert.equal((await vfs.read("/new.md")).content, "新内容");
   });
 
   it("Z-buildZip-3: without buildZip, session export paths match Z1", async () => {

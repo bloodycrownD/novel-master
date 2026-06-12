@@ -1,24 +1,27 @@
 /**
- * Parses ZIP bytes into entry name → raw bytes (includes `dir/` directory markers).
+ * 将 ZIP 字节解析为条目名 → 原始字节映射（含 `dir/` 目录标记）。
  *
  * @module domain/vfs/logic/vfs-zip-parse
  */
 
-import { unzipSync } from "fflate";
-import { vfsZipError } from "@/errors/vfs-zip-errors.js";
+import { vfsZipError, VfsZipError } from "@/errors/vfs-zip-errors.js";
+import { parseZipCentralDirectory } from "./vfs-zip-central-dir.js";
 
 /**
- * @throws {VfsZipError} `INVALID_ZIP` when the archive cannot be read
+ * @throws {VfsZipError} `INVALID_ZIP` 当归档无法读取
  */
 export function parseVfsZip(zipBytes: Uint8Array): Map<string, Uint8Array> {
   try {
-    const raw = unzipSync(zipBytes);
+    const parsed = parseZipCentralDirectory(zipBytes);
     const entries = new Map<string, Uint8Array>();
-    for (const [name, content] of Object.entries(raw)) {
-      entries.set(name, content);
+    for (const entry of parsed) {
+      entries.set(entry.entryName, entry.data);
     }
     return entries;
-  } catch {
+  } catch (error) {
+    if (error instanceof VfsZipError) {
+      throw error;
+    }
     throw vfsZipError("INVALID_ZIP", "failed to read ZIP archive");
   }
 }
