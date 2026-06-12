@@ -4,6 +4,7 @@
 import {
   AgentError,
   ChatError,
+  CloudSyncError,
   ProviderError,
   SessionFsError,
   TdbcError,
@@ -34,7 +35,8 @@ export function formatError(error: unknown): string {
     error instanceof ProviderError ||
     error instanceof ChatError ||
     error instanceof AgentError ||
-    error instanceof SessionFsError
+    error instanceof SessionFsError ||
+    error instanceof CloudSyncError
   ) {
     return error.message;
   }
