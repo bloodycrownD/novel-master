@@ -10,20 +10,15 @@ describe("anthropic-sse-parser", () => {
   it("T3: incremental text, thinking, and tool_use", () => {
     const state = createAnthropicSseParserState();
     const deltas: string[] = [];
-    const toolDeltas: string[] = [];
     const toolUses: unknown[] = [];
     const onStream = (ev: {
       type: string;
       text?: string;
-      delta?: string;
       name?: string;
       input?: Record<string, unknown>;
     }) => {
       if (ev.type === "text-delta" && ev.text != null) {
         deltas.push(ev.text);
-      }
-      if (ev.type === "tool-use-delta" && ev.delta != null) {
-        toolDeltas.push(ev.delta);
       }
       if (ev.type === "tool-use") {
         toolUses.push(ev);
@@ -51,7 +46,6 @@ describe("anthropic-sse-parser", () => {
 
     const { blocks } = finishAnthropicSse(state, onStream);
     assert.deepEqual(deltas, ["Hi"]);
-    assert.deepEqual(toolDeltas, ['{"path":', '"/a"}']);
     assert.equal(toolUses.length, 1);
     assert.equal(blocks.filter((b) => b.type === "text").length, 1);
     assert.equal(blocks.filter((b) => b.type === "thinking").length, 1);

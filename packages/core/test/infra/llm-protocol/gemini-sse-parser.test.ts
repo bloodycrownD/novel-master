@@ -86,12 +86,12 @@ describe("gemini-sse-parser", () => {
     }
   });
 
-  it("functionCall 参数增长时 emit tool-use-delta", () => {
+  it("functionCall 参数增长时累积 args 并在 finish 时 emit tool-use", () => {
     const state = createGeminiSseParserState();
-    const toolDeltas: string[] = [];
-    const onStream = (ev: { type: string; delta?: string }) => {
-      if (ev.type === "tool-use-delta" && ev.delta != null) {
-        toolDeltas.push(ev.delta);
+    const toolUses: unknown[] = [];
+    const onStream = (ev: { type: string; name?: string }) => {
+      if (ev.type === "tool-use") {
+        toolUses.push(ev);
       }
     };
 
@@ -107,12 +107,7 @@ describe("gemini-sse-parser", () => {
     );
 
     finishGeminiSse(state, onStream);
-    assert.equal(toolDeltas.length, 2);
-    assert.ok(toolDeltas.every((d) => d.length > 0));
-    const finalJson = JSON.stringify({ path: "/a", content: "hello" });
-    assert.ok(
-      toolDeltas.reduce((n, d) => n + d.length, 0) >= finalJson.length,
-    );
+    assert.equal(toolUses.length, 1);
   });
 
   it("T7: abort partial keeps thinking without empty text", () => {

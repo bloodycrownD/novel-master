@@ -91,14 +91,6 @@ function mergeFunctionCallPart(
         }
         delta = newJson.slice(common);
       }
-      if (delta !== "") {
-        onStream?.({
-          type: "tool-use-delta",
-          id: acc.id,
-          name: acc.name,
-          delta,
-        });
-      }
       acc.argsJson = newJson;
     }
   }

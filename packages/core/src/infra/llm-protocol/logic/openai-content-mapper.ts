@@ -343,14 +343,6 @@ export function openAiStreamDeltaToEvents(
       }
       if (typeof fn.arguments === "string" && fn.arguments !== "") {
         acc.argumentsJson += fn.arguments;
-        if (acc.id !== "" && acc.name !== "") {
-          onStream?.({
-            type: "tool-use-delta",
-            id: acc.id,
-            name: acc.name,
-            delta: fn.arguments,
-          });
-        }
       }
     }
   }

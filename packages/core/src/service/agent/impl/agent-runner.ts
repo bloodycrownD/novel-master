@@ -44,7 +44,6 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
-  EVENT_AGENT_STREAM_TOOL_USE_DELTA,
   EVENT_SESSION_COMPACTION_REQUESTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
 } from "@/domain/events/model/event-types.js";
@@ -435,15 +434,6 @@ export function wrapStreamForBus(
           id: ev.id,
           name: ev.name,
           input: ev.input,
-        }),
-      );
-    } else if (ev.type === "tool-use-delta") {
-      queueMicrotask(() =>
-        bus.publish(EVENT_AGENT_STREAM_TOOL_USE_DELTA, {
-          sessionId,
-          id: ev.id,
-          name: ev.name,
-          delta: ev.delta,
         }),
       );
     }

@@ -217,13 +217,6 @@ function processAnthropicSseLine(
     ) {
       const tu = state.toolUses[state.active.index]!;
       tu.inputJson += delta.partial_json;
-      const name = toolNames?.fromWire(tu.name) ?? tu.name;
-      onStream?.({
-        type: "tool-use-delta",
-        id: tu.id,
-        name,
-        delta: delta.partial_json,
-      });
     }
   } else if (type === "content_block_stop") {
     flushActiveBlock(state, onStream, toolNames);

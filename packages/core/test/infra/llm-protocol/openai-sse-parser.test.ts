@@ -83,7 +83,6 @@ describe("openai-sse-parser", () => {
   it("SSE-04: tool delta accumulated by index", () => {
     const state = createOpenAiSseParserState();
     const toolUses: Array<{ name: string; input: Record<string, unknown> }> = [];
-    const toolDeltas: string[] = [];
 
     const chunk1 = {
       choices: [
@@ -110,12 +109,9 @@ describe("openai-sse-parser", () => {
       ],
     };
 
-    const onStream = (ev: { type: string; name?: string; input?: Record<string, unknown>; delta?: string }) => {
+    const onStream = (ev: { type: string; name?: string; input?: Record<string, unknown> }) => {
       if (ev.type === "tool-use") {
         toolUses.push({ name: ev.name!, input: ev.input! });
-      }
-      if (ev.type === "tool-use-delta" && ev.delta != null) {
-        toolDeltas.push(ev.delta);
       }
     };
 
@@ -124,7 +120,6 @@ describe("openai-sse-parser", () => {
 
     const { blocks } = finishOpenAiSse(state, onStream);
 
-    assert.deepEqual(toolDeltas, ['{"path":', '"/tmp/x"}']);
     assert.equal(toolUses.length, 1);
     assert.equal(toolUses[0]!.name, "read");
     assert.equal(toolUses[0]!.input.path, "/tmp/x");
