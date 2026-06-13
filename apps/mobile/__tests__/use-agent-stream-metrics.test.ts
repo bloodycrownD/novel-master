@@ -148,4 +148,21 @@ describe('ChatStreamMetricsBar', () => {
     expect(line).not.toContain('工具调用生成中');
     expect(line).toContain('工具参数');
   });
+
+  it('mixed 且仅有思考+工具参数时运行中显示工具调用生成中', () => {
+    const line = buildChatStreamMetricsLine({
+      running: true,
+      streamKind: 'mixed',
+      toolUseChars: 42,
+      textChars: 0,
+      thinkingChars: 128,
+      elapsedMs: 3000,
+      totalChars: 170,
+      charsPerSecond: 56.7,
+    });
+    expect(line).toContain('工具调用生成中');
+    expect(line).not.toMatch(/^生成中/);
+    expect(line).toContain('工具参数');
+    expect(line).toContain('思考');
+  });
 });

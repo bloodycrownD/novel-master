@@ -21,6 +21,12 @@ export function buildAgentStreamMetricsLabel(
       ? Math.round(metrics.charsPerSecond)
       : Math.round(metrics.charsPerSecond * 10) / 10;
 
+  // 思考已结束、仅工具参数增量时 streamKind 可能为 mixed，仍应显示工具调用前缀。
+  const toolCallingPrefix =
+    metrics.running &&
+    metrics.toolUseChars > 0 &&
+    metrics.textChars === 0;
+
   if (metrics.streamKind === "tool") {
     const prefix = metrics.running ? "工具调用生成中" : "上次生成";
     const parts = [
@@ -33,7 +39,11 @@ export function buildAgentStreamMetricsLabel(
     return parts.join(" · ");
   }
 
-  const prefix = metrics.running ? "生成中" : "上次生成";
+  const prefix = metrics.running
+    ? toolCallingPrefix
+      ? "工具调用生成中"
+      : "生成中"
+    : "上次生成";
   const parts: string[] = [`${prefix} · ${elapsedLabel}`];
 
   if (metrics.streamKind === "mixed") {

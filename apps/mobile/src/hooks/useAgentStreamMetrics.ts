@@ -92,10 +92,13 @@ export function buildChatStreamMetricsLine(
       ? Math.round(metrics.charsPerSecond)
       : Math.round(metrics.charsPerSecond * 10) / 10;
 
+  // 思考已结束、仅工具参数增量时 streamKind 可能为 mixed，仍应显示工具调用前缀。
   const prefix = metrics.running
-    ? metrics.streamKind === 'tool'
+    ? metrics.toolUseChars > 0 && metrics.textChars === 0
       ? '工具调用生成中'
-      : '生成中'
+      : metrics.streamKind === 'tool'
+        ? '工具调用生成中'
+        : '生成中'
     : '上次生成';
 
   if (metrics.streamKind === 'tool') {

@@ -35,4 +35,21 @@ describe("AgentStreamMetricsBar", () => {
     assert.doesNotMatch(label, /工具调用生成中/);
     assert.match(label, /工具参数/);
   });
+
+  it("mixed 且仅有思考+工具参数时运行中显示工具调用生成中", () => {
+    const label = buildAgentStreamMetricsLabel({
+      running: true,
+      streamKind: "mixed",
+      toolUseChars: 42,
+      textChars: 0,
+      thinkingChars: 128,
+      elapsedMs: 3000,
+      totalChars: 170,
+      charsPerSecond: 56.7,
+    });
+    assert.match(label, /工具调用生成中/);
+    assert.doesNotMatch(label, /^生成中/);
+    assert.match(label, /工具参数/);
+    assert.match(label, /思考/);
+  });
 });
