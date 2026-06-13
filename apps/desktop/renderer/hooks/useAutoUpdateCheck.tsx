@@ -1,5 +1,5 @@
 /**
- * Background update check: 2s after bootstrap ready, 24h throttle, dismiss per version.
+ * Background update check: 2s after bootstrap ready, first-screen result modal.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,17 +10,17 @@ import {
   ipcAppUiSet,
 } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
+import {
+  UpdateCheckResultModal,
+  type UpdateCheckResultKind,
+} from "../components/ui/UpdateCheckResultModal";
 import { UpdateAvailableModal } from "../components/ui/UpdateAvailableModal";
+import { DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL } from "../../src/main/storage/app-ui-prefs";
 import type { UpdateCheckData } from "../../shared/ipc-types";
 
 const AUTO_CHECK_DELAY_MS = 2000;
-/** Minimum interval between automatic checks (24 hours). */
-const AUTO_CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000;
 const UPDATE_TOAST_MS = 8000;
-/** 自动检查「已最新」toast 短时长（秒级，避免打扰）。 */
-const UP_TO_DATE_TOAST_MS = 3500;
-const CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
-const UP_TO_DATE_MESSAGE = "当前已是最新版本";
+const UPDATE_SNOOZE_MS = 24 * 60 * 60 * 1000;
 
 const KEY_AUTO_CHECK = "updates.autoCheck";
 const KEY_LAST_CHECK_AT = "updates.lastCheckAt";
@@ -28,11 +28,21 @@ const KEY_LAST_STATUS = "updates.lastCheckStatus";
 const KEY_LAST_REMOTE = "updates.lastCheckRemoteVersion";
 const KEY_DISMISSED = "updates.dismissedVersion";
 
-function isThrottled(lastCheckAt: string | undefined): boolean {
-  if (!lastCheckAt) return false;
-  const last = Date.parse(lastCheckAt);
-  if (!Number.isFinite(last)) return false;
-  return Date.now() - last < AUTO_CHECK_THROTTLE_MS;
+function isSnoozed(snoozeUntil: string | undefined): boolean {
+  if (!snoozeUntil) return false;
+  const until = Date.parse(snoozeUntil);
+  if (!Number.isFinite(until)) return false;
+  return Date.now() < until;
+}
+
+async function readSnoozeUntil(): Promise<string | undefined> {
+  const res = await ipcAppUiGet(DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL);
+  return res.ok ? res.data : undefined;
+}
+
+async function writeSnoozeUntil(): Promise<void> {
+  const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
+  await ipcAppUiSet(DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
 }
 
 async function persistSuccessfulCheck(data: UpdateCheckData): Promise<void> {
@@ -53,6 +63,9 @@ export function AutoUpdateCheckHost() {
   const ranRef = useRef(false);
   const [updateModal, setUpdateModal] = useState<UpdateCheckData | null>(null);
   const [modalBusy, setModalBusy] = useState(false);
+  const [resultModal, setResultModal] = useState<UpdateCheckResultKind | null>(
+    null,
+  );
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -64,26 +77,32 @@ export function AutoUpdateCheckHost() {
         const autoCheck = autoRes.ok ? autoRes.data !== "false" : true;
         if (!autoCheck) return;
 
-        const lastAtRes = await ipcAppUiGet(KEY_LAST_CHECK_AT);
-        if (lastAtRes.ok && isThrottled(lastAtRes.data)) return;
+        const snoozeUntil = await readSnoozeUntil();
+        const snoozed = isSnoozed(snoozeUntil);
 
         let checkRes;
         try {
           checkRes = await ipcAppCheckForUpdates();
         } catch {
           await persistFailedCheck();
-          showToast(CHECK_FAILED_MESSAGE);
+          if (!snoozed) {
+            setResultModal("error");
+          }
           return;
         }
         if (!checkRes.ok) {
           await persistFailedCheck();
-          showToast(CHECK_FAILED_MESSAGE);
+          if (!snoozed) {
+            setResultModal("error");
+          }
           return;
         }
         await persistSuccessfulCheck(checkRes.data);
 
+        if (snoozed) return;
+
         if (checkRes.data.status === "up-to-date") {
-          showToast(UP_TO_DATE_MESSAGE, UP_TO_DATE_TOAST_MS);
+          setResultModal("up-to-date");
           return;
         }
 
@@ -126,15 +145,32 @@ export function AutoUpdateCheckHost() {
     }
   }, [updateModal]);
 
+  const handleCloseResultModal = useCallback(() => {
+    setResultModal(null);
+  }, []);
+
+  const handleSnoozeToday = useCallback(async () => {
+    await writeSnoozeUntil();
+    setResultModal(null);
+  }, []);
+
   return (
-    <UpdateAvailableModal
-      open={updateModal != null}
-      remoteVersion={updateModal?.remoteVersion ?? ""}
-      releaseNotesExcerpt={updateModal?.releaseNotesExcerpt ?? ""}
-      busy={modalBusy}
-      onDownload={handleDownload}
-      onLater={handleLater}
-      onCancel={() => setUpdateModal(null)}
-    />
+    <>
+      <UpdateCheckResultModal
+        open={resultModal != null}
+        kind={resultModal ?? "up-to-date"}
+        onClose={handleCloseResultModal}
+        onSnoozeToday={handleSnoozeToday}
+      />
+      <UpdateAvailableModal
+        open={updateModal != null}
+        remoteVersion={updateModal?.remoteVersion ?? ""}
+        releaseNotesExcerpt={updateModal?.releaseNotesExcerpt ?? ""}
+        busy={modalBusy}
+        onDownload={handleDownload}
+        onLater={handleLater}
+        onCancel={() => setUpdateModal(null)}
+      />
+    </>
   );
 }

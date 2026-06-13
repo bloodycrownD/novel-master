@@ -8,6 +8,7 @@ import {
   APP_UI_KEY_UPDATES_LAST_CHECK_AT,
   APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION,
   APP_UI_KEY_UPDATES_LAST_CHECK_STATUS,
+  APP_UI_KEY_UPDATES_SNOOZE_UNTIL,
 } from './app-ui-keys';
 import type {AppUiPreferences} from './app-ui-prefs';
 import type {UpdateCheckData} from '../update-check/types';
@@ -62,7 +63,31 @@ export async function readLastCheckRemoteVersion(
   return appUi.get(APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION);
 }
 
-/** Persists successful check metadata (also updates 24h throttle timestamp). */
+/** 24h snooze window after user taps「今日不再提醒」. */
+const UPDATE_SNOOZE_MS = 24 * 60 * 60 * 1000;
+
+/** Returns true when snoozeUntil is in the future. */
+export function isSnoozed(snoozeUntil: string | undefined): boolean {
+  if (!snoozeUntil) return false;
+  const until = Date.parse(snoozeUntil);
+  if (!Number.isFinite(until)) return false;
+  return Date.now() < until;
+}
+
+export async function readSnoozeUntil(
+  appUi: AppUiPreferences,
+): Promise<string | undefined> {
+  return appUi.get(APP_UI_KEY_UPDATES_SNOOZE_UNTIL);
+}
+
+export async function writeSnoozeUntil(
+  appUi: AppUiPreferences,
+): Promise<void> {
+  const until = new Date(Date.now() + UPDATE_SNOOZE_MS).toISOString();
+  await appUi.set(APP_UI_KEY_UPDATES_SNOOZE_UNTIL, until);
+}
+
+/** Persists successful check metadata (updates lastCheckAt for About page). */
 export async function persistUpdateCheckResult(
   appUi: AppUiPreferences,
   data: UpdateCheckData,
@@ -76,7 +101,7 @@ export async function persistUpdateCheckResult(
   );
 }
 
-/** Persists failed check status without advancing the 24h throttle clock. */
+/** Persists failed check status (lastCheckAt unchanged). */
 export async function persistFailedUpdateCheck(
   appUi: AppUiPreferences,
 ): Promise<void> {

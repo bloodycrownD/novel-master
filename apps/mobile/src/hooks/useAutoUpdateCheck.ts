@@ -1,34 +1,29 @@
 /**
- * Background update check: 2s after runtime ready, 24h throttle, dismiss per version.
+ * Background update check: 2s after runtime ready, first-screen result modal.
  */
 
-import {useEffect, useRef} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Linking} from 'react-native';
 import {useToast} from '../components/chrome/ToastHost';
+import {
+  UpdateCheckResultModal,
+  type UpdateCheckResultKind,
+} from '../components/update/UpdateCheckResultModal';
 import {useNovelMaster} from '../runtime/novel-master-context';
 import {
+  isSnoozed,
   persistFailedUpdateCheck,
   persistUpdateCheckResult,
   readDismissedVersion,
-  readLastCheckAt,
+  readSnoozeUntil,
   readUpdatesAutoCheck,
   writeDismissedVersion,
+  writeSnoozeUntil,
 } from '../storage/update-prefs';
 import {checkForUpdates} from '../update-check/check-for-updates';
 import type {UpdateCheckData} from '../update-check/types';
 
 const AUTO_CHECK_DELAY_MS = 2000;
-/** Minimum interval between automatic checks (24 hours). */
-const AUTO_CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000;
-const CHECK_FAILED_MESSAGE = '无法检查更新，请检查网络';
-const UP_TO_DATE_MESSAGE = '当前已是最新版本';
-
-function isThrottled(lastCheckAt: string | undefined): boolean {
-  if (!lastCheckAt) return false;
-  const last = Date.parse(lastCheckAt);
-  if (!Number.isFinite(last)) return false;
-  return Date.now() - last < AUTO_CHECK_THROTTLE_MS;
-}
 
 function showUpdateDetailAlert(
   data: UpdateCheckData,
@@ -50,10 +45,23 @@ function showUpdateDetailAlert(
   ]);
 }
 
-export function useAutoUpdateCheck(): void {
+export function useAutoUpdateCheck(): React.ReactNode {
   const {status, appUi} = useNovelMaster();
   const {showToast} = useToast();
   const ranRef = useRef(false);
+  const [resultModal, setResultModal] = useState<UpdateCheckResultKind | null>(
+    null,
+  );
+
+  const handleCloseResultModal = useCallback(() => {
+    setResultModal(null);
+  }, []);
+
+  const handleSnoozeToday = useCallback(async () => {
+    if (!appUi) return;
+    await writeSnoozeUntil(appUi);
+    setResultModal(null);
+  }, [appUi]);
 
   useEffect(() => {
     if (status !== 'ready' || !appUi || ranRef.current) return;
@@ -64,15 +72,17 @@ export function useAutoUpdateCheck(): void {
         const autoCheck = await readUpdatesAutoCheck(appUi);
         if (!autoCheck) return;
 
-        const lastAt = await readLastCheckAt(appUi);
-        if (isThrottled(lastAt)) return;
+        const snoozeUntil = await readSnoozeUntil(appUi);
+        const snoozed = isSnoozed(snoozeUntil);
 
         try {
           const data = await checkForUpdates();
           await persistUpdateCheckResult(appUi, data);
 
+          if (snoozed) return;
+
           if (data.status === 'up-to-date') {
-            showToast(UP_TO_DATE_MESSAGE);
+            setResultModal('up-to-date');
             return;
           }
 
@@ -91,11 +101,20 @@ export function useAutoUpdateCheck(): void {
           });
         } catch {
           await persistFailedUpdateCheck(appUi);
-          showToast(CHECK_FAILED_MESSAGE);
+          if (!snoozed) {
+            setResultModal('error');
+          }
         }
       })();
     }, AUTO_CHECK_DELAY_MS);
 
     return () => clearTimeout(timer);
   }, [status, appUi, showToast]);
+
+  return React.createElement(UpdateCheckResultModal, {
+    visible: resultModal != null,
+    kind: resultModal ?? 'up-to-date',
+    onClose: handleCloseResultModal,
+    onSnoozeToday: handleSnoozeToday,
+  });
 }

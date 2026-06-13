@@ -18,6 +18,8 @@ export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_STATUS = "updates.lastCheckStatus
 export const DESKTOP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
   "updates.lastCheckRemoteVersion";
 export const DESKTOP_UI_KEY_UPDATES_DISMISSED_VERSION = "updates.dismissedVersion";
+/** ISO-8601 — suppress auto-check result modal until this instant. */
+export const DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL = "updates.snoozeUntil";
 
 export const DESKTOP_UI_DEFAULTS: Record<string, string> = {
   [DESKTOP_UI_KEY_THEME]: "light",

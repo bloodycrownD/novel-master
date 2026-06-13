@@ -22,6 +22,8 @@ export const APP_UI_KEY_UPDATES_LAST_CHECK_STATUS = 'updates.lastCheckStatus';
 export const APP_UI_KEY_UPDATES_LAST_CHECK_REMOTE_VERSION =
   'updates.lastCheckRemoteVersion';
 export const APP_UI_KEY_UPDATES_DISMISSED_VERSION = 'updates.dismissedVersion';
+/** ISO-8601 — suppress auto-check result modal until this instant. */
+export const APP_UI_KEY_UPDATES_SNOOZE_UNTIL = 'updates.snoozeUntil';
 
 /** Default string values when a key is missing. */
 export const APP_UI_DEFAULTS = {

@@ -114,10 +114,12 @@ function withStackLayout(
 
 export function RootNavigator() {
   const {tokens} = useTheme();
-  useAutoUpdateCheck();
+  const autoUpdateUi = useAutoUpdateCheck();
 
   return (
-    <NavigationContainer>
+    <>
+      {autoUpdateUi}
+      <NavigationContainer>
       <HeaderProvider>
         <Stack.Navigator
           screenOptions={{
@@ -203,6 +205,7 @@ export function RootNavigator() {
         </Stack.Navigator>
       </HeaderProvider>
     </NavigationContainer>
+    </>
   );
 }
 
