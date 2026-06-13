@@ -382,7 +382,6 @@ export { decode } from "./infra/serialization/decode.js";
 export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
 export { ConfigDecodeError } from "./errors/config-decode-errors.js";
 export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";
-export { loadPromptBlocksFromYaml } from "./domain/prompt/logic/load-prompt-blocks-from-yaml.js";
 export type { AgentDefinition } from "./domain/agent/model/agent-definition.js";
 export {
   agentDefinitionSchema,
