@@ -71,6 +71,3 @@ export function invalidateSessionWorktreeSnapshot(
     rt.worktreeSnapshot.markDirty(scope.projectId, scope.sessionId);
   }
 }
-
-/** @deprecated 使用 {@link invalidateSessionWorktreeSnapshot} */
-export const invalidateSessionMacroCache = invalidateSessionWorktreeSnapshot;
