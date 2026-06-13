@@ -14,9 +14,8 @@ const MINIMAL_AGENT_YAML = `
 schemaVersion: 1
 name: e2e-agent
 prompts:
-  blocks:
-    c:
-      type: chat
+  persist: {}
+  dynamic: {}
 `;
 
 const AGENT_WITH_PINNED_MODEL = `
@@ -24,9 +23,8 @@ schemaVersion: 1
 name: e2e-pin
 model: mock/pinned
 prompts:
-  blocks:
-    c:
-      type: chat
+  persist: {}
+  dynamic: {}
 `;
 
 const MOCK_ENV_REPORT_MODEL = {
@@ -172,7 +170,7 @@ describe("agent config CLI", () => {
     try {
       await writeFile(
         promptPath,
-        `blocks:\n  c:\n    type: chat\n`,
+        `persist: {}\ndynamic: {}\n`,
         "utf8",
       );
 

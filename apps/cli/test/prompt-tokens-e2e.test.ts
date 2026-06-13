@@ -12,9 +12,8 @@ import { describe, it } from "node:test";
 import { runNm } from "./helpers.js";
 
 const PROMPT_YAML = `
-blocks:
-  chat:
-    type: chat
+persist: {}
+dynamic: {}
 `;
 
 async function setupSession(dbPath: string): Promise<{

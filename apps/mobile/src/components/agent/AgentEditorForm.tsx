@@ -157,7 +157,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setPersist(
       promptForm.persist.length > 0
         ? [...promptForm.persist]
-        : createDefaultAgentEditorPrompts().persist,
+        : [...createDefaultAgentEditorPrompts().persist],
     );
     setDynamic([...promptForm.dynamic]);
 

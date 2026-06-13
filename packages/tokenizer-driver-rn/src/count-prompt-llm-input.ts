@@ -143,14 +143,14 @@ async function countSerialized(
 export async function countPromptLlmInputRn(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { blocks, ctx, applicationModelId, registry } = params;
+  const { layout, ctx, applicationModelId, registry } = params;
   const { vendorModelId } = parseApplicationModelId(applicationModelId);
   const override =
     params.tokenizerOverride ??
     (await registry.getTokenizerOverride?.()) ??
     "auto";
   const family = resolveTokenizerFamily(vendorModelId, override);
-  const serialized = serializePromptLlmInput(blocks, ctx);
+  const serialized = await serializePromptLlmInput(layout, ctx);
   const { count, counterKind, estimated } = await countSerialized(
     family,
     serialized,
