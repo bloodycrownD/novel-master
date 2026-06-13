@@ -10,9 +10,23 @@ describe("anthropic-sse-parser", () => {
   it("T3: incremental text, thinking, and tool_use", () => {
     const state = createAnthropicSseParserState();
     const deltas: string[] = [];
-    const onStream = (ev: { type: string; text?: string }) => {
+    const toolDeltas: string[] = [];
+    const toolUses: unknown[] = [];
+    const onStream = (ev: {
+      type: string;
+      text?: string;
+      delta?: string;
+      name?: string;
+      input?: Record<string, unknown>;
+    }) => {
       if (ev.type === "text-delta" && ev.text != null) {
         deltas.push(ev.text);
+      }
+      if (ev.type === "tool-use-delta" && ev.delta != null) {
+        toolDeltas.push(ev.delta);
+      }
+      if (ev.type === "tool-use") {
+        toolUses.push(ev);
       }
     };
 
@@ -25,7 +39,9 @@ describe("anthropic-sse-parser", () => {
         "",
         'data: {"type":"content_block_start","content_block":{"type":"tool_use","id":"t1","name":"read"}}',
         "",
-        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"path\\":\\"/a\\"}"}}',
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"{\\"path\\":"}}',
+        "",
+        'data: {"type":"content_block_delta","delta":{"type":"input_json_delta","partial_json":"\\"/a\\"}"}}',
         "",
         'data: {"type":"content_block_stop"}',
         "",
@@ -35,6 +51,8 @@ describe("anthropic-sse-parser", () => {
 
     const { blocks } = finishAnthropicSse(state, onStream);
     assert.deepEqual(deltas, ["Hi"]);
+    assert.deepEqual(toolDeltas, ['{"path":', '"/a"}']);
+    assert.equal(toolUses.length, 1);
     assert.equal(blocks.filter((b) => b.type === "text").length, 1);
     assert.equal(blocks.filter((b) => b.type === "thinking").length, 1);
     assert.equal(blocks.filter((b) => b.type === "tool_use").length, 1);

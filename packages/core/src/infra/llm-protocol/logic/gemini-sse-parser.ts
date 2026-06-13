@@ -54,6 +54,7 @@ export function createGeminiSseParserState(): GeminiSseParserState {
 function mergeFunctionCallPart(
   state: GeminiSseParserState,
   part: Record<string, unknown>,
+  onStream?: (event: LlmStreamEvent) => void,
 ): void {
   const fc = part.functionCall;
   if (!isRecord(fc) || typeof fc.name !== "string") {
@@ -70,7 +71,36 @@ function mergeFunctionCallPart(
     state.functionCalls.set(key, acc);
   }
   if (isRecord(fc.args)) {
-    acc.argsJson = JSON.stringify(fc.args);
+    const newJson = JSON.stringify(fc.args);
+    const prevJson = acc.argsJson;
+    if (newJson !== prevJson) {
+      let delta: string;
+      if (prevJson === "") {
+        delta = newJson;
+      } else if (
+        prevJson.endsWith("}") &&
+        newJson.startsWith(prevJson.slice(0, -1))
+      ) {
+        // Gemini 流式常逐块扩展 args 对象：在闭合 } 前插入新字段
+        delta = newJson.slice(prevJson.length - 1);
+      } else {
+        let common = 0;
+        const limit = Math.min(prevJson.length, newJson.length);
+        while (common < limit && prevJson[common] === newJson[common]) {
+          common++;
+        }
+        delta = newJson.slice(common);
+      }
+      if (delta !== "") {
+        onStream?.({
+          type: "tool-use-delta",
+          id: acc.id,
+          name: acc.name,
+          delta,
+        });
+      }
+      acc.argsJson = newJson;
+    }
   }
   const sig = readThoughtSignature(part);
   if (sig != null) {
@@ -120,7 +150,7 @@ function processGeminiResponseChunk(
       }
     }
     if (part.functionCall != null) {
-      mergeFunctionCallPart(state, part);
+      mergeFunctionCallPart(state, part, onStream);
     }
   }
 }

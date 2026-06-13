@@ -86,6 +86,35 @@ describe("gemini-sse-parser", () => {
     }
   });
 
+  it("functionCall 参数增长时 emit tool-use-delta", () => {
+    const state = createGeminiSseParserState();
+    const toolDeltas: string[] = [];
+    const onStream = (ev: { type: string; delta?: string }) => {
+      if (ev.type === "tool-use-delta" && ev.delta != null) {
+        toolDeltas.push(ev.delta);
+      }
+    };
+
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"write","args":{"path":"/a"},"id":"c1"}}]}}]}\n',
+      onStream,
+    );
+    feedGeminiSseChunk(
+      state,
+      'data: {"candidates":[{"content":{"parts":[{"functionCall":{"name":"write","args":{"path":"/a","content":"hello"},"id":"c1"}}]}}]}\n',
+      onStream,
+    );
+
+    finishGeminiSse(state, onStream);
+    assert.equal(toolDeltas.length, 2);
+    assert.ok(toolDeltas.every((d) => d.length > 0));
+    const finalJson = JSON.stringify({ path: "/a", content: "hello" });
+    assert.ok(
+      toolDeltas.reduce((n, d) => n + d.length, 0) >= finalJson.length,
+    );
+  });
+
   it("T7: abort partial keeps thinking without empty text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(

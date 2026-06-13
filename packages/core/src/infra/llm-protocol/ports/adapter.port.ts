@@ -32,6 +32,12 @@ export type LlmStreamEvent =
       readonly name: string;
       readonly input: Record<string, unknown>;
     }
+  | {
+      readonly type: "tool-use-delta";
+      readonly id: string;
+      readonly name: string;
+      readonly delta: string;
+    }
   | { readonly type: "done"; readonly result: LlmChatResult };
 
 export interface LlmChatRequest {

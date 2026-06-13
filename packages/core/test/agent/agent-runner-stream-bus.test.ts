@@ -4,6 +4,7 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_TOOL_USE_DELTA,
 } from "../../src/domain/events/model/event-types.js";
 import { SimpleEventBus } from "../../src/infra/events/simple-event-bus.js";
 import { wrapStreamForBus } from "../../src/service/agent/impl/agent-runner.js";
@@ -24,6 +25,9 @@ describe("agent-runner stream bus", () => {
     bus.subscribe(EVENT_AGENT_STREAM_TOOL_USE, () => {
       published.push("tool-use");
     });
+    bus.subscribe(EVENT_AGENT_STREAM_TOOL_USE_DELTA, () => {
+      published.push("tool-use-delta");
+    });
 
     const onStream = wrapStreamForBus(bus, sessionId, () => {
       userCalled = true;
@@ -42,10 +46,21 @@ describe("agent-runner stream bus", () => {
       name: "read",
       input: { path: "a.txt" },
     });
+    onStream!({
+      type: "tool-use-delta",
+      id: "t1",
+      name: "read",
+      delta: '{"path":',
+    });
     assert.equal(published.length, 0);
 
     await Promise.resolve();
-    assert.deepEqual(published, ["text-delta", "thinking-delta", "tool-use"]);
+    assert.deepEqual(published, [
+      "text-delta",
+      "thinking-delta",
+      "tool-use",
+      "tool-use-delta",
+    ]);
   });
 
   it("defers bus.publish when no userOnStream callback", async () => {

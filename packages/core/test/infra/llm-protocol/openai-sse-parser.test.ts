@@ -83,6 +83,7 @@ describe("openai-sse-parser", () => {
   it("SSE-04: tool delta accumulated by index", () => {
     const state = createOpenAiSseParserState();
     const toolUses: Array<{ name: string; input: Record<string, unknown> }> = [];
+    const toolDeltas: string[] = [];
 
     const chunk1 = {
       choices: [
@@ -109,19 +110,21 @@ describe("openai-sse-parser", () => {
       ],
     };
 
-    feedOpenAiSseChunk(state, `data: ${JSON.stringify(chunk1)}\n\n`, (ev) => {
+    const onStream = (ev: { type: string; name?: string; input?: Record<string, unknown>; delta?: string }) => {
       if (ev.type === "tool-use") {
-        toolUses.push({ name: ev.name, input: ev.input });
+        toolUses.push({ name: ev.name!, input: ev.input! });
       }
-    });
-    feedOpenAiSseChunk(state, `data: ${JSON.stringify(chunk2)}\n\n`);
-
-    const { blocks } = finishOpenAiSse(state, (ev) => {
-      if (ev.type === "tool-use") {
-        toolUses.push({ name: ev.name, input: ev.input });
+      if (ev.type === "tool-use-delta" && ev.delta != null) {
+        toolDeltas.push(ev.delta);
       }
-    });
+    };
 
+    feedOpenAiSseChunk(state, `data: ${JSON.stringify(chunk1)}\n\n`, onStream);
+    feedOpenAiSseChunk(state, `data: ${JSON.stringify(chunk2)}\n\n`, onStream);
+
+    const { blocks } = finishOpenAiSse(state, onStream);
+
+    assert.deepEqual(toolDeltas, ['{"path":', '"/tmp/x"}']);
     assert.equal(toolUses.length, 1);
     assert.equal(toolUses[0]!.name, "read");
     assert.equal(toolUses[0]!.input.path, "/tmp/x");
