@@ -21,10 +21,8 @@ test("SESSION_FS_LABELS 提供标题与开关联动 hint", () => {
 test("REGEX_UI_LABELS 深度与通道为主中文文案", () => {
   assert.equal(REGEX_UI_LABELS.startDepth, "开始深度");
   assert.equal(REGEX_UI_LABELS.endDepth, "结束深度");
-  assert.equal(REGEX_UI_LABELS.previewDepth, "预览消息深度");
   assert.equal(REGEX_UI_LABELS.promptChannel, "提示词通道");
   assert.equal(REGEX_UI_LABELS.displayChannel, "展示通道");
-  assert.match(REGEX_UI_LABELS.previewDepthHint, /样例文本试跑/);
 });
 
 test("AGENT_LIST_LABELS 提供需修复与最大步数文案", () => {

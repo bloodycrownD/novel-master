@@ -134,6 +134,32 @@ export function previewRegexRule(
   return { ok: true, text: applyRegexRules(text, [compiled.compiled], ctx) };
 }
 
+/** 样例文本试跑：仅 pattern + 所选通道 replace，不校验 depth/role。 */
+export function previewRegexReplacementOnly(
+  text: string,
+  draftFields: RegexRuleDraftFields,
+  channel: RegexChannel,
+): { ok: true; text: string } | { ok: false; message: string } {
+  if (!draftFields.enabled) return { ok: true, text };
+  if (!draftFields.pattern.trim()) {
+    return { ok: false, message: "请填写正则表达式" };
+  }
+  const replacement = channel === "llm" ? draftFields.llmReplace : draftFields.displayReplace;
+  if (replacement == null || replacement === "") {
+    return {
+      ok: false,
+      message: channel === "llm" ? "请先启用并填写提示词替换" : "请先启用并填写显示替换",
+    };
+  }
+  try {
+    const pattern = new RegExp(draftFields.pattern, draftFields.flags || "");
+    return { ok: true, text: text.replace(pattern, replacement) };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    return { ok: false, message: `无效的正则表达式: ${msg}` };
+  }
+}
+
 export function parseOptionalDepthInput(text: string): number | null {
   const trimmed = text.trim();
   if (trimmed === "") return null;

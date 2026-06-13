@@ -15,9 +15,6 @@ export const SESSION_FS_LABELS = {
 export const REGEX_UI_LABELS = {
   startDepth: "开始深度",
   endDepth: "结束深度",
-  previewDepth: "预览消息深度",
-  previewDepthHint:
-    "仅用于样例文本试跑，模拟该条消息距最新的尾深度，以验证规则深度范围是否命中。",
   promptChannel: "提示词通道",
   displayChannel: "展示通道",
 } as const;

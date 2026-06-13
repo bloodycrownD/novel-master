@@ -73,7 +73,7 @@ import {
 import { deriveRegexGroupId } from "../../utils/regex-group-id";
 import {
   parseOptionalDepthInput,
-  previewRegexRule,
+  previewRegexReplacementOnly,
   regexRuleForIpc,
   validateRegexRuleDraft,
   type RegexChannel,
@@ -1589,7 +1589,6 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   const [displayOn, setDisplayOn] = useState(false);
   const [testText, setTestText] = useState("mysecret@email.com");
   const [testChannel, setTestChannel] = useState<RegexChannel>("display");
-  const [testDepthFromTail, setTestDepthFromTail] = useState("0");
   const [preview, setPreview] = useState("");
 
   useEffect(() => {
@@ -1623,13 +1622,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   });
 
   const runPreview = () => {
-    const depthFromTail = Math.max(0, Number.parseInt(testDepthFromTail, 10) || 0);
-    const result = previewRegexRule(testText, fieldsForSave(), {
-      text: testText,
-      channel: testChannel,
-      depthFromTail,
-      role: draft.scopeAssistant && !draft.scopeUser ? "assistant" : "user",
-    });
+    const result = previewRegexReplacementOnly(testText, fieldsForSave(), testChannel);
     if (result.ok) setPreview(result.text);
     else setPreview(result.message);
   };
@@ -1763,7 +1756,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title="测试预览">
-          <p className="settings-hint">保存前可本地试跑；通道与深度仅影响预览，不改变规则保存内容。</p>
+          <p className="settings-hint">对样例文本应用所选通道的替换规则；保存前可本地试跑。</p>
           <SettingsField label="样例文本">
             <input value={testText} onChange={(e) => setTestText(e.target.value)} />
           </SettingsField>
@@ -1777,15 +1770,6 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
               onChange={setTestChannel}
               aria-label="预览通道"
             />
-          </SettingsField>
-          <SettingsField label={REGEX_UI_LABELS.previewDepth}>
-            <input
-              value={testDepthFromTail}
-              placeholder="0"
-              inputMode="numeric"
-              onChange={(e) => setTestDepthFromTail(e.target.value)}
-            />
-            <p className="settings-hint">{REGEX_UI_LABELS.previewDepthHint}</p>
           </SettingsField>
           {preview ? <pre className="settings-preview-box">{preview}</pre> : null}
         </SettingsSection>

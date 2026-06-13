@@ -14,8 +14,7 @@ import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {
   parseOptionalDepthInput,
-  previewRegexRule,
-  regexPreviewRoleFromScope,
+  previewRegexReplacementOnly,
   validateRegexRuleDraft,
   type RegexChannel,
   type RegexRuleDraftFields,
@@ -72,7 +71,6 @@ export function RegexRuleEditorScreen() {
   const [displayEnabled, setDisplayEnabled] = useState(false);
   const [testText, setTestText] = useState('mysecret@email.com');
   const [testChannel, setTestChannel] = useState<RegexChannel>('display');
-  const [testDepthFromTail, setTestDepthFromTail] = useState('0');
   const [previewOutput, setPreviewOutput] = useState('');
   const [previewError, setPreviewError] = useState(false);
   const [loading, setLoading] = useState(Boolean(ruleId));
@@ -190,16 +188,7 @@ export function RegexRuleEditorScreen() {
       setPreviewError(true);
       return;
     }
-    const depthFromTail = Math.max(
-      0,
-      Number.parseInt(testDepthFromTail, 10) || 0,
-    );
-    const result = previewRegexRule(testText, fields, {
-      channel: testChannel,
-      depthFromTail,
-      role: regexPreviewRoleFromScope(fields),
-      text: testText,
-    });
+    const result = previewRegexReplacementOnly(testText, fields, testChannel);
     if (!result.ok) {
       setPreviewOutput(result.message);
       setPreviewError(true);
@@ -207,7 +196,7 @@ export function RegexRuleEditorScreen() {
     }
     setPreviewOutput(result.text);
     setPreviewError(false);
-  }, [draft, llmEnabled, displayEnabled, testText, testChannel, testDepthFromTail]);
+  }, [draft, llmEnabled, displayEnabled, testText, testChannel]);
 
   useEffect(() => {
     updatePreview();
@@ -405,7 +394,10 @@ export function RegexRuleEditorScreen() {
         ) : null}
       </FormSectionCard>
 
-      <FormSectionCard title="测试预览" tokens={tokens} hint="保存前可本地试跑。">
+      <FormSectionCard
+        title="测试预览"
+        tokens={tokens}
+        hint="对样例文本应用所选通道的替换规则；保存前可本地试跑。">
         <FormField label="样例文本" tokens={tokens}>
           <FormTextInput
             tokens={tokens}
@@ -420,17 +412,6 @@ export function RegexRuleEditorScreen() {
             options={CHANNEL_OPTIONS}
             value={testChannel}
             onChange={setTestChannel}
-          />
-        </FormField>
-        <FormField
-          label={REGEX_UI_LABELS.previewDepth}
-          tokens={tokens}
-          hint={REGEX_UI_LABELS.previewDepthHint}>
-          <FormTextInput
-            tokens={tokens}
-            value={testDepthFromTail}
-            onChangeText={setTestDepthFromTail}
-            keyboardType="number-pad"
           />
         </FormField>
         <FormField label="预览结果" tokens={tokens}>
