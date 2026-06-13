@@ -1,7 +1,7 @@
 /**
  * Events configuration: editable event blocks with nested actions (prompt-block UX).
  */
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
 import {DEFAULT_EVENTS_CONFIG, type EventsConfig} from '@novel-master/core';
 import {EventBlockEditor} from '../../components/events/EventConfigBlocks';
@@ -44,6 +44,8 @@ function collectUnknownWireKeys(blocks: readonly EventBlockDraft[]): string[] {
 export function EventsConfigScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const runtime = useRuntime();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,18 +72,20 @@ export function EventsConfigScreen() {
       setBlocks(loaded.blocks);
       setLoadError(null);
       if (loaded.unknownActions.length > 0) {
-        showToast(`未知 action：${loaded.unknownActions.join('、')}，请移除后保存`);
+        showToastRef.current(
+          `未知 action：${loaded.unknownActions.join('、')}，请移除后保存`,
+        );
       }
     } catch (error) {
       const message = toastMessage('加载事件配置失败', error);
       setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
       setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
       setLoadError(message);
-      showToast(message);
+      showToastRef.current(message);
     } finally {
       setLoading(false);
     }
-  }, [runtime, showToast]);
+  }, [runtime]);
 
   useEffect(() => {
     load().catch(() => undefined);
@@ -254,16 +258,8 @@ export function EventsConfigScreen() {
     JSON.stringify(eventBlocksToConfig(blocks, schemaVersion).events) ===
     JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
 
-  if (loading) {
-    return (
-      <View style={styles.loaderWrap}>
-        <ActivityIndicator />
-      </View>
-    );
-  }
-
   return (
-    <>
+    <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <ScreenFormLayout
         tokens={tokens}
         scrollEnabled={!addEventVisible && addActionEventId == null}
@@ -416,12 +412,23 @@ export function EventsConfigScreen() {
           }
         }}
       />
-    </>
+
+      {loading ? (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  loaderWrap: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  root: {flex: 1},
+  loadingOverlay: {
+    ...StyleSheet.absoluteFill,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -430,7 +437,7 @@ const styles = StyleSheet.create({
   },
   rightActions: {flexDirection: 'row', alignItems: 'center', gap: 12},
   status: {flex: 1, fontSize: 13, lineHeight: 18},
-  blockList: {gap: 12},
+  blockList: {gap: 12, marginHorizontal: 5},
   empty: {textAlign: 'center', padding: 24, fontSize: 14},
   recoveryCard: {
     borderWidth: 1,

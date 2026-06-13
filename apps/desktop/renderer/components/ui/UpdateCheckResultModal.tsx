@@ -42,7 +42,7 @@ export function UpdateCheckResultModal({
           {UPDATE_CHECK_RESULT_TITLE}
         </h3>
         <p className="update-modal__hint">{messageForKind(kind)}</p>
-        <div className="update-modal__actions">
+        <div className="update-modal__actions update-modal__actions--between">
           <Button variant="secondary" onClick={onClose}>
             关闭
           </Button>

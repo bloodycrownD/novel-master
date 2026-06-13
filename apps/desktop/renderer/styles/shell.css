@@ -4785,3 +4785,7 @@ html[data-theme="dark"] .chat-message {
   justify-content: flex-end;
   gap: 8px;
 }
+
+.update-modal__actions--between {
+  justify-content: space-between;
+}
