@@ -426,6 +426,11 @@ export function EventBlockEditor({
             />
           );
         })}
+        {block.actions.length === 0 ? (
+          <Text style={[styles.emptyActionsHint, {color: tokens.danger}]}>
+            至少添加一个动作方可保存
+          </Text>
+        ) : null}
       </View>
     </View>
   );
@@ -499,4 +504,5 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   warn: {fontSize: 12, lineHeight: 17},
+  emptyActionsHint: {fontSize: 12, lineHeight: 17, textAlign: 'center', paddingVertical: 8},
 });

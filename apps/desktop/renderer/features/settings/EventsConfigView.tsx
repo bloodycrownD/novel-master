@@ -7,6 +7,7 @@ import {
   UNKNOWN_ACTION_BADGE,
   actionTypeHint,
   actionTypeLabel,
+  configToEventBlocks,
   createDefaultAction,
   defaultDagForEvent,
   eventBlocksToConfig,
@@ -38,6 +39,18 @@ import {
   SettingsFormSection,
   SettingsPanel,
 } from "./settings-ui";
+
+function collectUnknownWireKeys(blocks: readonly EventBlockDraft[]): string[] {
+  const keys = new Set<string>();
+  for (const block of blocks) {
+    for (const action of block.actions) {
+      if (isUnknownActionDraft(action)) {
+        keys.add(action.wireKey);
+      }
+    }
+  }
+  return [...keys];
+}
 
 function UnknownActionBlockEditor({
   action,
@@ -311,6 +324,9 @@ function EventBlockEditor({
               />
             );
           })}
+          {block.actions.length === 0 ? (
+            <p className="config-block-card__empty-hint">至少添加一个动作方可保存</p>
+          ) : null}
         </div>
       </div>
     </div>
@@ -398,7 +414,40 @@ export function EventsConfigView() {
     );
   };
 
+  const removeAllUnknownActions = () => {
+    setBlocks((prev) =>
+      prev.map((block) => ({
+        ...block,
+        actions: block.actions.filter((action) => !isUnknownActionDraft(action)),
+      })),
+    );
+    showToast("已移除全部未知动作");
+  };
+
+  const restoreDefaultAndSave = async () => {
+    setSaving(true);
+    try {
+      const res = await ipcEventsSetConfig({ config: DEFAULT_EVENTS_CONFIG });
+      if (res.ok) {
+        setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
+        setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+        toastSettingsSuccess("已恢复默认并保存");
+      } else {
+        toastSettingsError(res.error.message);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const unknownWireKeys = collectUnknownWireKeys(blocks);
+  const hasUnknownActions = unknownWireKeys.length > 0;
+
   const save = async () => {
+    if (blocks.some((block) => block.actions.length === 0)) {
+      toastSettingsError("请为每个事件至少保留一个有效动作");
+      return;
+    }
     const err = validateEventConfigBlocks(blocks);
     if (err != null) {
       toastSettingsError(err);
@@ -419,7 +468,13 @@ export function EventsConfigView() {
   };
 
   if (loading) {
-    return <p className="settings-hint">加载中…</p>;
+    return (
+      <SettingsPanel>
+        <div className="settings-loading-center">
+          <p className="settings-hint">加载中…</p>
+        </div>
+      </SettingsPanel>
+    );
   }
 
   return (
@@ -451,6 +506,25 @@ export function EventsConfigView() {
           </Button>
         }
       >
+        {hasUnknownActions ? (
+          <div className="settings-error-panel">
+            <p className="settings-error-panel__title">
+              <span className="settings-tag settings-tag--warn">已废弃动作</span>
+              配置含已废弃动作
+            </p>
+            <p className="settings-error-panel__message">
+              {unknownWireKeys.join("、")} 等，请删除后保存
+            </p>
+            <div className="settings-error-panel__actions">
+              <Button variant="secondary" disabled={saving} onClick={removeAllUnknownActions}>
+                移除全部未知动作
+              </Button>
+              <Button variant="secondary" disabled={saving} onClick={() => void restoreDefaultAndSave()}>
+                恢复默认并保存
+              </Button>
+            </div>
+          </div>
+        ) : null}
         <div className="config-events-toolbar">
           <span className="config-events-toolbar__label">事件链</span>
           <button

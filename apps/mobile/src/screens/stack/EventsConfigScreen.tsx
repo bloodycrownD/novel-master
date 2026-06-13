@@ -12,6 +12,7 @@ import {
   createDefaultAction,
   defaultDagForEvent,
   eventBlocksToConfig,
+  isUnknownActionDraft,
   loadEventsConfigForEditor,
   newEventBlockId,
   validateEventConfigBlocks,
@@ -27,6 +28,18 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {exportEventsYaml, importEventsYaml} from '../../services/events-yaml.service';
+
+function collectUnknownWireKeys(blocks: readonly EventBlockDraft[]): string[] {
+  const keys = new Set<string>();
+  for (const block of blocks) {
+    for (const action of block.actions) {
+      if (isUnknownActionDraft(action)) {
+        keys.add(action.wireKey);
+      }
+    }
+  }
+  return [...keys];
+}
 
 export function EventsConfigScreen() {
   const {tokens} = useTheme();
@@ -134,7 +147,24 @@ export function EventsConfigScreen() {
     setAddActionEventId(null);
   };
 
+  const removeAllUnknownActions = () => {
+    setBlocks(prev =>
+      prev.map(block => ({
+        ...block,
+        actions: block.actions.filter(action => !isUnknownActionDraft(action)),
+      })),
+    );
+    showToast('已移除全部未知动作');
+  };
+
+  const unknownWireKeys = collectUnknownWireKeys(blocks);
+  const hasUnknownActions = unknownWireKeys.length > 0;
+
   const handleSave = async () => {
+    if (blocks.some(block => block.actions.length === 0)) {
+      showToast('请为每个事件至少保留一个有效动作');
+      return;
+    }
     const err = validateEventConfigBlocks(blocks);
     if (err != null) {
       showToast(err);
@@ -225,7 +255,11 @@ export function EventsConfigScreen() {
     JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
 
   if (loading) {
-    return <ActivityIndicator style={styles.loader} />;
+    return (
+      <View style={styles.loaderWrap}>
+        <ActivityIndicator />
+      </View>
+    );
   }
 
   return (
@@ -287,6 +321,37 @@ export function EventsConfigScreen() {
                 <Pressable disabled={recovering || saving} onPress={() => handleRecoverClearAndSave()}>
                   <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
                     清空旧配置并保存
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          {hasUnknownActions ? (
+            <View
+              style={[
+                styles.unknownBanner,
+                {
+                  borderColor: tokens.danger,
+                  backgroundColor: `${tokens.danger}14`,
+                },
+              ]}>
+              <Text style={[styles.unknownBannerTitle, {color: tokens.text}]}>
+                配置含已废弃动作
+              </Text>
+              <Text style={[styles.unknownBannerText, {color: tokens.textSecondary}]}>
+                {unknownWireKeys.join('、')} 等，请删除后保存
+              </Text>
+              <View style={styles.unknownBannerActions}>
+                <Pressable disabled={saving || recovering} onPress={removeAllUnknownActions}>
+                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
+                    移除全部未知动作
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={saving || recovering}
+                  onPress={() => handleRecoverRestoreAndSave()}>
+                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
+                    恢复默认并保存
                   </Text>
                 </Pressable>
               </View>
@@ -356,7 +421,7 @@ export function EventsConfigScreen() {
 }
 
 const styles = StyleSheet.create({
-  loader: {marginTop: 32},
+  loaderWrap: {flex: 1, justifyContent: 'center', alignItems: 'center'},
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -377,4 +442,14 @@ const styles = StyleSheet.create({
   recoveryTitle: {fontSize: 13, fontWeight: '600', lineHeight: 18},
   recoveryText: {fontSize: 12, lineHeight: 17},
   recoveryActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
+  unknownBanner: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+    marginBottom: 12,
+  },
+  unknownBannerTitle: {fontSize: 13, fontWeight: '600', lineHeight: 18},
+  unknownBannerText: {fontSize: 12, lineHeight: 17},
+  unknownBannerActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
 });

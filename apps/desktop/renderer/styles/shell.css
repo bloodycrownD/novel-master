@@ -2015,6 +2015,14 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   color: var(--text-secondary);
 }
 
+.settings-loading-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+}
+
 .settings-hint--switch {
   margin: -4px 0 8px;
   padding-left: 2px;
