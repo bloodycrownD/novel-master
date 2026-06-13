@@ -64,8 +64,19 @@ jest.mock('react-native-blob-util', () => ({
   },
 }));
 
-/** Minimal ZIP local file header (PK\\x03\\x04) + stub payload for magic checks. */
-const ZIP_PK_BASE64 = 'UEsDBBQAAAAIAAAAAAAAAAAAAAAAAAAAAAA=';
+/** 含 EOCD 的最小有效 ZIP（fflate zipSync 单文件 a.md）。 */
+const VALID_ZIP_BYTES = new Uint8Array([
+  80, 75, 3, 4, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0,
+  0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 97, 46, 109, 100, 75, 4, 0, 80, 75, 1, 2, 20,
+  0, 20, 0, 0, 0, 8, 0, 98, 80, 205, 92, 67, 190, 183, 232, 3, 0, 0, 0, 1, 0,
+  0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 97, 46, 109, 100,
+  80, 75, 5, 6, 0, 0, 0, 0, 1, 0, 1, 0, 50, 0, 0, 0, 37, 0, 0, 0, 0, 0,
+]);
+const VALID_ZIP_BASE64 =
+  'UEsDBBQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAYS5tZEsEAFBLAQIUABQAAAAIAGJQzVxDvrfoAwAAAAEAAAAEAAAAAAAAAAAAAAAAAAAAAABhLm1kUEsFBgAAAAABAAEAMgAAACUAAAAAAA==';
+
+/** 仅有 local header、无 EOCD 的截断 ZIP。 */
+const TRUNCATED_ZIP_BASE64 = 'UEsDBBQAAAAIAAAAAAAAAAAAAAAAAAAAAAA=';
 
 describe('vfs-zip.service', () => {
   const runtime = {conn: {}} as never;
@@ -90,7 +101,7 @@ describe('vfs-zip.service', () => {
       export: mockExport,
       import: mockImport,
     });
-    mockExport.mockResolvedValue(new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]));
+    mockExport.mockResolvedValue(VALID_ZIP_BYTES);
     mockSaveDocuments.mockResolvedValue([
       {uri: 'content://saved', name: 'x.zip', error: null},
     ]);
@@ -108,7 +119,7 @@ describe('vfs-zip.service', () => {
       },
     ]);
     mockExists.mockResolvedValue(true);
-    mockReadFile.mockResolvedValue(ZIP_PK_BASE64);
+    mockReadFile.mockResolvedValue(VALID_ZIP_BASE64);
   });
 
   it('M-native-1: Android export passes buildZip to createVfsZipIoService', async () => {
@@ -140,6 +151,7 @@ describe('vfs-zip.service', () => {
         sourceUris: ['file:///cache/vfs-session-s.zip'],
         mimeType: 'application/zip',
         fileName: 'vfs-session-s.zip',
+        copy: true,
       }),
     );
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
@@ -162,9 +174,7 @@ describe('vfs-zip.service', () => {
         return {export: mockFallbackExport, import: mockImport};
       },
     );
-    mockFallbackExport.mockResolvedValue(
-      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]),
-    );
+    mockFallbackExport.mockResolvedValue(VALID_ZIP_BYTES);
 
     const onNativeZipFallback = jest.fn();
     const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
@@ -194,9 +204,7 @@ describe('vfs-zip.service', () => {
         return {export: mockFallbackExport, import: mockImport};
       },
     );
-    mockFallbackExport.mockResolvedValue(
-      new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00]),
-    );
+    mockFallbackExport.mockResolvedValue(VALID_ZIP_BYTES);
 
     const onNativeZipFallback = jest.fn();
     const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
@@ -233,6 +241,21 @@ describe('vfs-zip.service', () => {
     mockSaveDocuments.mockRejectedValue({code: 'OPERATION_CANCELED'});
     const result = await exportVfsZip(runtime, scope);
     expect(result).toBe('cancelled');
+  });
+
+  it('import rejects truncated ZIP missing EOCD', async () => {
+    mockPick.mockResolvedValue([
+      {uri: 'content://downloads/bad.zip', name: 'bad.zip'},
+    ]);
+    mockReadFile.mockResolvedValue(TRUNCATED_ZIP_BASE64);
+
+    await expect(
+      importVfsZip(runtime, scope, {confirmed: true}),
+    ).rejects.toMatchObject({
+      code: 'INVALID_ZIP',
+      message: expect.stringContaining('missing EOCD'),
+    });
+    expect(mockImport).not.toHaveBeenCalled();
   });
 
   it('imports via keepLocalCopy and blob read', async () => {

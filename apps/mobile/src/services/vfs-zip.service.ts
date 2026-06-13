@@ -56,17 +56,44 @@ function base64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
+const EOCD_SIGNATURE = 0x06054b50;
+
+/** 自文件尾向前扫描 EOCD（PK\\x05\\x06），用于发现截断或损坏的归档。 */
+function findZipEocdOffset(bytes: Uint8Array): number {
+  const minEocdSize = 22;
+  const maxCommentLen = 0xffff;
+  const searchStart = Math.max(0, bytes.length - (minEocdSize + maxCommentLen));
+  for (let i = bytes.length - minEocdSize; i >= searchStart; i--) {
+    const sig =
+      (bytes[i]! |
+        (bytes[i + 1]! << 8) |
+        (bytes[i + 2]! << 16) |
+        (bytes[i + 3]! << 24)) >>>
+      0;
+    if (sig === EOCD_SIGNATURE) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 function assertZipArchive(bytes: Uint8Array): void {
-  const ok =
+  const hasLocalHeader =
     bytes.length >= 4 &&
     bytes[0] === 0x50 &&
     bytes[1] === 0x4b &&
     (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
     (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08);
-  if (!ok) {
+  if (!hasLocalHeader) {
     throw new VfsZipError(
       'INVALID_ZIP',
       `not a ZIP archive (${bytes.length} bytes)`,
+    );
+  }
+  if (findZipEocdOffset(bytes) < 0) {
+    throw new VfsZipError(
+      'INVALID_ZIP',
+      `ZIP archive incomplete or corrupt (${bytes.length} bytes, missing EOCD)`,
     );
   }
 }
@@ -199,7 +226,7 @@ export async function exportVfsZip(
       sourceUris: [toFileUri(tmpPath)],
       mimeType: 'application/zip',
       fileName,
-      copy: Platform.OS === 'ios',
+      copy: true,
     });
     if (result?.error) {
       throw new Error(result.error);
