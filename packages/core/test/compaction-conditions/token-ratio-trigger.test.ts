@@ -18,17 +18,18 @@ import {
   countPromptLlmInput,
   createDefaultTokenCounterRegistry,
 } from "@novel-master/core";
-import type { PromptBlock } from "../../src/domain/prompt/model/prompt-block.js";
-import type { PromptRenderContext } from "../../src/service/prompt/render-prompt.js";
+import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
+import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";
 
 function systemOnlyEvaluation(systemContent: string) {
-  const blocks: PromptBlock[] = [
-    { name: "s", type: "text", role: "system", content: systemContent },
-  ];
+  const layout: AgentPromptLayout = {
+    system: systemContent,
+    persist: [],
+    dynamic: [],
+  };
   const ctx: PromptRenderContext = {
     worktreeDisplay: "",
-    filetreeDisplay: "",
     messages: [],
   };
   return {
@@ -37,7 +38,7 @@ function systemOnlyEvaluation(systemContent: string) {
       applicationModelId: "openai/gpt-4o",
     },
     promptInput: { system: systemContent, messages: [] },
-    blocks,
+    layout,
     ctx,
   };
 }
@@ -86,7 +87,7 @@ describe("TokenRatioConditionTrigger", () => {
       },
     };
     const { tokenCount } = await countPromptLlmInput({
-      blocks: evaluation.blocks,
+      layout: evaluation.layout,
       ctx: evaluation.ctx,
       applicationModelId: evaluation.modelContext.applicationModelId,
       registry,
@@ -109,7 +110,7 @@ describe("TokenRatioConditionTrigger", () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
     const evaluation = systemOnlyEvaluation("x".repeat(340_000));
     const { tokenCount } = await countPromptLlmInput({
-      blocks: evaluation.blocks,
+      layout: evaluation.layout,
       ctx: evaluation.ctx,
       applicationModelId: "openai/test",
       registry,

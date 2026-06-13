@@ -11,16 +11,17 @@ test("configToEventBlocks maps events record to draft blocks", () => {
   const config: EventsConfig = {
     schemaVersion: 2,
     events: {
-      "session.message.received": [{ type: "refresh-macros", params: {} }],
       "session.compaction.requested": [
         { type: "hide-message", params: { startDepth: 6 } },
       ],
     },
   };
   const blocks = configToEventBlocks(config);
-  assert.equal(blocks.length, 2);
-  assert.equal(blocks[0]!.eventType, "session.message.received");
-  assert.deepEqual(blocks[0]!.actions, [{ type: "refresh-macros", params: {} }]);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0]!.eventType, "session.compaction.requested");
+  assert.deepEqual(blocks[0]!.actions, [
+    { type: "hide-message", params: { startDepth: 6 } },
+  ]);
 });
 
 test("eventBlocksToConfig skips blocks with blank event type", () => {
@@ -29,12 +30,12 @@ test("eventBlocksToConfig skips blocks with blank event type", () => {
       {
         id: newEventBlockId(),
         eventType: "  ",
-        actions: [{ type: "refresh-macros", params: {} }],
+        actions: [{ type: "hide-message", params: { startDepth: 6 } }],
       },
       {
         id: newEventBlockId(),
         eventType: "session.compaction.requested",
-        actions: [{ type: "refresh-macros", params: {} }],
+        actions: [{ type: "hide-message", params: { startDepth: 3 } }],
       },
     ],
     2,
@@ -42,7 +43,9 @@ test("eventBlocksToConfig skips blocks with blank event type", () => {
   assert.deepEqual(config, {
     schemaVersion: 2,
     events: {
-      "session.compaction.requested": [{ type: "refresh-macros", params: {} }],
+      "session.compaction.requested": [
+        { type: "hide-message", params: { startDepth: 3 } },
+      ],
     },
   });
 });
@@ -53,7 +56,6 @@ test("configToEventBlocks and eventBlocksToConfig round-trip", () => {
     events: {
       "session.compaction.requested": [
         { type: "hide-message", params: { startDepth: 3 } },
-        { type: "refresh-macros", params: {} },
       ],
     },
   };

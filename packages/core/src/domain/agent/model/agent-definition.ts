@@ -4,7 +4,7 @@
  * @module domain/agent/model/agent-definition
  */
 
-import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 
 /** Allowlist or denylist tool policy (mutually exclusive). */
 export interface AgentToolPolicy {
@@ -15,7 +15,7 @@ export interface AgentToolPolicy {
 /** Serializable agent configuration (Core truth source). */
 export interface AgentDefinition {
   readonly name: string;
-  readonly prompts: readonly PromptBlock[];
+  readonly prompts: AgentPromptLayout;
   /** Optional default model pin (applicationModelId); host resolves with flag/state. */
   readonly model?: string;
   readonly runtime?: {

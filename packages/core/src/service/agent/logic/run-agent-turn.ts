@@ -20,7 +20,7 @@ import type { EventOrchestrator } from "@/service/events/event-orchestrator.port
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
-import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
+import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
@@ -43,7 +43,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly messages: MessageService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly eventBus: SimpleEventBus;
   readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
@@ -179,8 +179,16 @@ export async function runAgentTurn(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   });
-  await runtime.macroCache.refresh(scope.projectId, scope.sessionId, () =>
-    wt.materialize(),
+  await runtime.worktreeSnapshot.getOrRefresh(
+    scope.projectId,
+    scope.sessionId,
+    async () => {
+      const [worktreeDisplay, listRows] = await Promise.all([
+        wt.renderDisplay(),
+        wt.buildListRows(),
+      ]);
+      return { worktreeDisplay, listRows };
+    },
   );
 
   const runner = createAgentRunner({
@@ -199,7 +207,8 @@ export async function runAgentTurn(
     listAllSessionMessages: (): Promise<readonly ChatMessage[]> =>
       runtime.messages.listBySession(scope.sessionId),
     eventBus: runtime.eventBus,
-    macroCache: runtime.macroCache,
+    worktreeSnapshot: runtime.worktreeSnapshot,
+    worktree: runtime.worktree,
     compactionConditions: runtime.compactionConditionEvaluator,
     eventOrchestrator: runtime.eventOrchestrator,
   });

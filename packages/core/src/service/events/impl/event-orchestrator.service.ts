@@ -9,7 +9,7 @@ import type { EventsConfigStore } from "@/service/events-config/events-config-st
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
+import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
@@ -25,7 +25,6 @@ import type {
 } from "../event-orchestrator.port.js";
 import type { EventActionFailure, EventRunResult } from "../event-run-result.js";
 import { runHideMessageAction } from "./actions/hide-message.handler.js";
-import { runRefreshMacrosAction } from "./actions/refresh-macros.handler.js";
 import {
   runRunAgentAction,
   type RunAgentHandlerDeps,
@@ -36,7 +35,7 @@ export interface DefaultEventOrchestratorDeps {
   readonly eventsConfig: EventsConfigStore;
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly createSession: (sessionId: string) => AgentSession;
   readonly runAgent?: RunAgentHandlerDeps;
@@ -236,12 +235,7 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
           action.params as DepthSlice,
           { messages: this.deps.messages },
         );
-        return;
-      case "refresh-macros":
-        await runRefreshMacrosAction(ctx.projectId, ctx.sessionId, {
-          macroCache: this.deps.macroCache,
-          worktree: this.deps.worktree,
-        });
+        this.deps.worktreeSnapshot.markDirty(ctx.projectId, ctx.sessionId);
         return;
       case "run-agent": {
         if (this.deps.runAgent == null) {

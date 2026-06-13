@@ -331,7 +331,7 @@ export { createTemplatePullService } from "./service/template/create-template-pu
 export type { TemplatePullService } from "./service/template/template-pull.port.js";
 
 /**
- * Prompt engine: YAML blocks, macros, and plain-text rendering.
+ * Prompt engine: 三区 layout、宏与纯文本渲染。
  */
 export { PromptError } from "./errors/prompt-errors.js";
 export type { PromptErrorCode } from "./errors/prompt-errors.js";
@@ -340,27 +340,41 @@ export type {
   PromptBlockLifecycle,
   PromptBlockRole,
 } from "./domain/prompt/model/prompt-block.js";
+export type {
+  AgentPromptLayout,
+  PersistPromptBlock,
+  DynamicPromptBlock,
+  PersistTextPromptBlock,
+  PersistWorktreePromptBlock,
+} from "./domain/prompt/model/agent-prompt-layout.js";
 export { shouldIncludePromptTextBlock } from "./domain/prompt/logic/should-include-prompt-text-block.js";
+export { shouldIncludeDynamicBlock } from "./domain/prompt/logic/should-include-dynamic-block.js";
 export { messageBodyText } from "./domain/prompt/logic/message-body.js";
 export {
   validatePromptBlocks,
   validatePromptBlocksFromMap,
 } from "./domain/prompt/logic/validate-prompt-blocks.js";
 export {
-  buildPromptAssembly,
-  buildPromptLlmInput,
-  formatPromptLlmInputForCli,
-  buildPromptPreviewSegments,
+  validateAgentPromptLayoutFromMaps,
+} from "./domain/prompt/logic/validate-agent-prompt-layout.js";
+export { validateDynamicMacros } from "./domain/prompt/logic/validate-dynamic-macros.js";
+export { expandDynamicMacros } from "./domain/prompt/logic/expand-dynamic-macros.js";
+export { renderSessionVfsTree } from "./domain/vfs/logic/render-session-vfs-tree.js";
+export {
+  buildPromptAssemblyFromLayout,
+  buildPromptLlmInputFromLayout,
+  formatPromptLlmInputForCliFromLayout,
+  buildPromptPreviewSegmentsFromLayout,
 } from "./service/prompt/render-prompt.js";
 export type {
   PromptAssemblySegment,
   PromptAssemblyOptions,
-  PromptRenderContext,
-  PromptRenderDot,
-  PromptMacroContext,
-  PromptLlmInput,
   PromptPreviewSegment,
 } from "./service/prompt/render-prompt.js";
+export type {
+  PromptRenderContext,
+  PromptLlmInput,
+} from "./domain/prompt/model/prompt-render-context.js";
 export { parseText, type TextFormat } from "./infra/serialization/parse-text.js";
 export { stringifyText } from "./infra/serialization/stringify-text.js";
 export { decode } from "./infra/serialization/decode.js";
@@ -442,8 +456,11 @@ export {
 } from "./service/events/create-event-orchestrator.js";
 export type { EventRunResult, EventActionFailure } from "./service/events/event-run-result.js";
 export { EventsError } from "./errors/events-errors.js";
-export type { SessionMacroCache, SessionMacroSnapshot } from "./service/prompt/session-macro-cache.port.js";
-export { createSessionMacroCache } from "./service/prompt/create-session-macro-cache.js";
+export type {
+  SessionWorktreeSnapshot,
+  SessionWorktreeSnapshotStore,
+} from "./service/prompt/session-worktree-snapshot.port.js";
+export { createSessionWorktreeSnapshotStore } from "./service/prompt/create-session-worktree-snapshot-store.js";
 export type { AgentRegistryService } from "./service/agent/agent-registry.port.js";
 export { createAgentRegistryService } from "./service/agent/create-agent-registry-service.js";
 export { AgentConfigError } from "./errors/agent-config-errors.js";

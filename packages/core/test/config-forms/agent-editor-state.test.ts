@@ -26,10 +26,10 @@ test("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
 
 test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
   assert.deepEqual(
-    toolsSelectionFromDefinition({ name: "a", prompts: [], tools: { allow: ["read"] } }),
+    toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] }, tools: { allow: ["read"] } }),
     { mode: "allow", selected: ["read"] },
   );
-  assert.deepEqual(toolsSelectionFromDefinition({ name: "a", prompts: [] }), {
+  assert.deepEqual(toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] } }), {
     mode: "default",
     selected: [],
   });
@@ -91,7 +91,7 @@ test("formSnapshotJson omits model fields when disabled", () => {
     vendorModelId: "m",
     toolsMode: "default",
     toolsSelected: [],
-    prompts: [{ name: "system", type: "text", role: "system", content: "" }],
+    prompts: { system: "", persist: [], dynamic: [] },
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.providerId, undefined);
@@ -108,7 +108,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       vendorModelId: "",
       toolsMode: "default",
       toolsSelected: [],
-      prompts: [],
+      prompts: { persist: [], dynamic: [] },
     }).ok,
     false,
   );

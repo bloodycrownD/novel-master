@@ -26,14 +26,16 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
-import { buildPromptLlmInput } from "../../prompt/render-prompt.js";
+import { buildPromptLlmInputFromLayout } from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
+import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
+import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import {
@@ -55,11 +57,12 @@ export interface DefaultAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktree: (scope: VfsScope) => WorktreeService;
   /** When set, captures checkpoint after mutating tools settle for the step. */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
-  /** Runs hide-message / refresh-macros before prompt build on condition trigger (not bus.publish). */
+  /** Runs hide-message before prompt build on condition trigger (not bus.publish). */
   readonly eventOrchestrator?: EventOrchestrator;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
@@ -111,6 +114,11 @@ export class DefaultAgentRunner implements AgentRunner {
       options.definition.runtime?.doomLoopCrossRoundWindow ?? CROSS_ROUND_WINDOW;
 
     const tools = toolsFromRegistry(this.deps.registry);
+    const wtScope: VfsScope = {
+      kind: "session",
+      projectId,
+      sessionId,
+    };
 
     try {
       for (let step = 0; step < maxSteps; step++) {
@@ -119,11 +127,19 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
         let stepCompactionEmitted = false;
-        const macro = this.deps.macroCache.get(projectId, sessionId);
-        const promptContext = {
-          worktreeDisplay: macro?.worktreeDisplay ?? "",
-          filetreeDisplay: macro?.filetreeDisplay ?? "",
-        };
+
+        const snapshot = await this.deps.worktreeSnapshot.getOrRefresh(
+          projectId,
+          sessionId,
+          async () => {
+            const wt = this.deps.worktree(wtScope);
+            const [worktreeDisplay, listRows] = await Promise.all([
+              wt.renderDisplay(),
+              wt.buildListRows(),
+            ]);
+            return { worktreeDisplay, listRows };
+          },
+        );
 
         let visible = await session.list();
         if (signal?.aborted) {
@@ -141,10 +157,11 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const promptRenderCtx = {
-          ...promptContext,
+          worktreeDisplay: snapshot.worktreeDisplay,
           messages: visible,
+          vfs: this.deps.toolCtx.vfs,
         };
-        const promptInput = buildPromptLlmInput(
+        const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
           promptRenderCtx,
           { agentStepIndex: step },
@@ -160,7 +177,7 @@ export class DefaultAgentRunner implements AgentRunner {
                   applicationModelId: options.applicationModelId,
                 },
                 promptInput,
-                blocks: options.definition.prompts,
+                layout: options.definition.prompts,
                 ctx: promptRenderCtx,
               },
             );
@@ -252,7 +269,6 @@ export class DefaultAgentRunner implements AgentRunner {
         );
 
         if (toolUses.length === 0) {
-          // WHY: pure-text assistant turns are rollback anchors too.
           if (
             persistMessages &&
             assistantMessage != null &&
@@ -287,7 +303,6 @@ export class DefaultAgentRunner implements AgentRunner {
             toolUseWindow.shift();
           }
         }
-        // WHY: single-message checks miss cross-round A-B-A-B cycles.
         assertNoCrossRoundDoomLoop(toolUseWindow, {
           crossRoundWindow: doomLoopCrossRoundWindow,
         });
@@ -303,11 +318,13 @@ export class DefaultAgentRunner implements AgentRunner {
         );
         const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
+        if (vfsMutated) {
+          this.deps.worktreeSnapshot.markDirty(projectId, sessionId);
+        }
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
           buildToolResultBlock(tu.id, parallelOutcomes[i]!, { toolName: tu.name }),
         );
 
-        // WHY: checkpoint records final tree after all tools settle (fork-join), not per action.
         if (
           persistMessages &&
           assistantMessage != null &&
@@ -411,8 +428,6 @@ export function wrapStreamForBus(
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
-    // Defer bus.publish to a microtask so synchronous XHR onprogress stacks can unwind
-    // before UI subscribers run (RN shares one JS thread with core).
     if (ev.type === "text-delta") {
       queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
@@ -445,7 +460,6 @@ export function wrapStreamForBus(
 
   return (ev: LlmStreamEvent) => {
     scheduleStreamPublish(ev);
-    // userOnStream stays synchronous so adapter/parser callers see immediate feedback.
     userOnStream(ev);
   };
 }

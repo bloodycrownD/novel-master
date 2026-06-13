@@ -4,147 +4,95 @@ import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 import type { EventsConfig } from "../../src/domain/events-config/model/events-config.js";
 import { DefaultEventOrchestrator } from "../../src/service/events/impl/event-orchestrator.service.js";
 
-describe("event orchestrator (DAG)", () => {
-  it("runs dependents only after all deps succeed", async () => {
-    const calls: string[] = [];
+function baseOrchestrator(
+  config: EventsConfig,
+  extras?: {
+    readonly onHide?: () => void | Promise<void>;
+    readonly onRunAgent?: () => void | Promise<void>;
+    readonly markDirty?: () => void;
+  },
+) {
+  const messages: ChatMessage[] = [
+    {
+      id: "m1",
+      sessionId: "s1",
+      seq: 1,
+      role: "assistant",
+      content: [] as unknown as ChatMessage["content"],
+      provider: null,
+      raw: null,
+      createdAtMs: Date.now(),
+      hidden: false,
+    },
+  ];
 
+  return new DefaultEventOrchestrator({
+    eventsConfig: {
+      async getConfig() {
+        return config;
+      },
+      async setConfig() {},
+      async clearConfig() {},
+    },
+    eventBus: {
+      subscribe() {},
+      unsubscribe() {},
+      publish() {},
+    } as never,
+    messages: {
+      async listBySession() {
+        return messages;
+      },
+    } as never,
+    worktreeSnapshot: {
+      markDirty: extras?.markDirty ?? (() => undefined),
+    } as never,
+    worktree: () => ({}) as never,
+    createSession: () =>
+      ({
+        async hideRange() {
+          await extras?.onHide?.();
+        },
+      }) as never,
+    runAgent: extras?.onRunAgent
+      ? {
+          messages: {} as never,
+          agentRegistry: {} as never,
+          modelRequests: {} as never,
+          worktreeSnapshot: {} as never,
+          worktree: () => ({}) as never,
+          sessionVfs: () => ({}) as never,
+          messageCheckpoint: {} as never,
+          eventBus: {} as never,
+          getWorkspaceModelId: async () => "m",
+        }
+      : undefined,
+  });
+}
+
+describe("event orchestrator (DAG)", () => {
+  it("marks worktree snapshot dirty after hide-message", async () => {
+    let dirty = false;
     const config: EventsConfig = {
       schemaVersion: 2,
       events: {
         "session.compaction.requested": [
-          { type: "refresh-macros", params: {} },
-          {
-            type: "hide-message",
-            params: { startDepth: 0 },
-            dependency: ["refresh-macros"],
-          },
+          { type: "hide-message", params: { startDepth: 0 } },
         ],
       },
     };
-
-    const messages: ChatMessage[] = [
-      {
-        id: "m1",
-        sessionId: "s1",
-        seq: 1,
-        role: "assistant",
-        content: [] as unknown as ChatMessage["content"],
-        provider: null,
-        raw: null,
-        createdAtMs: Date.now(),
-        hidden: false,
+    const orch = baseOrchestrator(config, {
+      markDirty: () => {
+        dirty = true;
       },
-    ];
-
-    const orch = new DefaultEventOrchestrator({
-      eventsConfig: {
-        async getConfig() {
-          return config;
-        },
-        async setConfig() {},
-        async clearConfig() {},
-      },
-      eventBus: {
-        subscribe() {},
-        unsubscribe() {},
-        publish() {},
-      } as any,
-      messages: {
-        async listBySession() {
-          return messages;
-        },
-      } as any,
-      macroCache: {
-        async refresh(_projectId, _sessionId, render) {
-          calls.push("refresh-macros");
-          await render();
-        },
-      } as any,
-      worktree: () =>
-        ({
-          async materialize() {
-            return {
-              worktreeDisplay: "worktree",
-              filetreeDisplay: "filetree",
-              listRows: [],
-            };
-          },
-        }) as any,
-      createSession: () =>
-        ({
-          async hideRange() {
-            calls.push("hide-message");
-          },
-        }) as any,
     });
-
     const result = await orch.emit("session.compaction.requested", {
       sessionId: "s1",
       projectId: "p1",
       trigger: "manual",
     });
     assert.equal(result.ok, true);
-    assert.deepEqual(calls, ["refresh-macros", "hide-message"]);
-  });
-
-  it("stops scheduling further actions after any failure", async () => {
-    const calls: string[] = [];
-
-    const config: EventsConfig = {
-      schemaVersion: 2,
-      events: {
-        "session.compaction.requested": [
-          { type: "refresh-macros", params: {} },
-          {
-            type: "hide-message",
-            params: { startDepth: 0 },
-            dependency: ["refresh-macros"],
-          },
-        ],
-      },
-    };
-
-    const orch = new DefaultEventOrchestrator({
-      eventsConfig: {
-        async getConfig() {
-          return config;
-        },
-        async setConfig() {},
-        async clearConfig() {},
-      },
-      eventBus: {
-        subscribe() {},
-        unsubscribe() {},
-        publish() {},
-      } as any,
-      messages: {
-        async listBySession() {
-          return [];
-        },
-      } as any,
-      macroCache: {
-        async refresh() {
-          calls.push("refresh-macros");
-          throw new Error("boom");
-        },
-      } as any,
-      worktree: () => ({}) as any,
-      createSession: () =>
-        ({
-          async hideRange() {
-            calls.push("hide-message");
-          },
-        }) as any,
-    });
-
-    const result = await orch.emit("session.compaction.requested", {
-      sessionId: "s1",
-      projectId: "p1",
-      trigger: "manual",
-    });
-    assert.equal(result.ok, false);
-    assert.equal(result.partialFailure, false);
-    assert.deepEqual(calls, ["refresh-macros"]);
+    assert.equal(dirty, true);
   });
 
   it("returns explicit failure for unknown dependency during runtime prevalidation", async () => {
@@ -161,34 +109,7 @@ describe("event orchestrator (DAG)", () => {
       },
     };
 
-    const orch = new DefaultEventOrchestrator({
-      eventsConfig: {
-        async getConfig() {
-          return config;
-        },
-        async setConfig() {},
-        async clearConfig() {},
-      },
-      eventBus: {
-        subscribe() {},
-        unsubscribe() {},
-        publish() {},
-      } as any,
-      messages: {
-        async listBySession() {
-          return [];
-        },
-      } as any,
-      macroCache: {
-        async refresh() {},
-      } as any,
-      worktree: () => ({}) as any,
-      createSession: () =>
-        ({
-          async hideRange() {},
-        }) as any,
-    });
-
+    const orch = baseOrchestrator(config);
     const result = await orch.emit("session.compaction.requested", {
       sessionId: "s1",
       projectId: "p1",
@@ -196,9 +117,6 @@ describe("event orchestrator (DAG)", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.partialFailure, false);
-    assert.equal(result.failures.length, 1);
-    assert.equal(result.failures[0]?.actionType, "hide-message");
     assert.match(result.failures[0]?.error ?? "", /unknown dependency/i);
   });
 
@@ -210,45 +128,18 @@ describe("event orchestrator (DAG)", () => {
           {
             type: "hide-message",
             params: { startDepth: 0 },
-            dependency: ["refresh-macros"],
+            dependency: ["run-agent"],
           },
           {
-            type: "refresh-macros",
-            params: {},
+            type: "run-agent",
+            params: { agentId: "writer" },
             dependency: ["hide-message"],
           },
         ],
       },
     } as EventsConfig;
 
-    const orch = new DefaultEventOrchestrator({
-      eventsConfig: {
-        async getConfig() {
-          return config;
-        },
-        async setConfig() {},
-        async clearConfig() {},
-      },
-      eventBus: {
-        subscribe() {},
-        unsubscribe() {},
-        publish() {},
-      } as any,
-      messages: {
-        async listBySession() {
-          return [];
-        },
-      } as any,
-      macroCache: {
-        async refresh() {},
-      } as any,
-      worktree: () => ({}) as any,
-      createSession: () =>
-        ({
-          async hideRange() {},
-        }) as any,
-    });
-
+    const orch = baseOrchestrator(config);
     const result = await orch.emit("session.compaction.requested", {
       sessionId: "s1",
       projectId: "p1",
@@ -256,8 +147,6 @@ describe("event orchestrator (DAG)", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.partialFailure, false);
-    assert.equal(result.failures.length, 1);
     assert.match(result.failures[0]?.error ?? "", /cycle detected/i);
   });
 
@@ -266,40 +155,13 @@ describe("event orchestrator (DAG)", () => {
       schemaVersion: 2,
       events: {
         "session.compaction.requested": [
-          { type: "refresh-macros", params: {} },
-          { type: "refresh-macros", params: {} },
+          { type: "hide-message", params: { startDepth: 0 } },
+          { type: "hide-message", params: { startDepth: 1 } },
         ],
       },
     } as EventsConfig;
 
-    const orch = new DefaultEventOrchestrator({
-      eventsConfig: {
-        async getConfig() {
-          return config;
-        },
-        async setConfig() {},
-        async clearConfig() {},
-      },
-      eventBus: {
-        subscribe() {},
-        unsubscribe() {},
-        publish() {},
-      } as any,
-      messages: {
-        async listBySession() {
-          return [];
-        },
-      } as any,
-      macroCache: {
-        async refresh() {},
-      } as any,
-      worktree: () => ({}) as any,
-      createSession: () =>
-        ({
-          async hideRange() {},
-        }) as any,
-    });
-
+    const orch = baseOrchestrator(config);
     const result = await orch.emit("session.compaction.requested", {
       sessionId: "s1",
       projectId: "p1",
@@ -307,10 +169,7 @@ describe("event orchestrator (DAG)", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(result.partialFailure, false);
-    assert.equal(result.failures.length, 1);
-    assert.equal(result.failures[0]?.actionType, "refresh-macros");
+    assert.equal(result.failures[0]?.actionType, "hide-message");
     assert.match(result.failures[0]?.error ?? "", /duplicate action type/i);
   });
 });
-

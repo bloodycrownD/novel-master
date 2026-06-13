@@ -8,10 +8,12 @@ import type { AgentSession } from "@/domain/agent/session/agent-session.port.js"
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionMacroCache } from "../prompt/session-macro-cache.port.js";
+import type { SessionWorktreeSnapshotStore } from "../prompt/session-worktree-snapshot.port.js";
+import type { WorktreeService } from "../worktree/worktree.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "../events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "../message-checkpoint/message-checkpoint.port.js";
@@ -24,7 +26,8 @@ export interface CreateAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktree: (scope: VfsScope) => WorktreeService;
   /** Captures message checkpoint after mutating tools complete (fork-join). */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;

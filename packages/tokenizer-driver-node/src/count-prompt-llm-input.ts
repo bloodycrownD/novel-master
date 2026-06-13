@@ -45,14 +45,14 @@ const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { blocks, ctx, applicationModelId, registry } = params;
+  const { layout, ctx, applicationModelId, registry } = params;
   const { vendorModelId } = parseApplicationModelId(applicationModelId);
   const override =
     params.tokenizerOverride ??
     (await registry.getTokenizerOverride?.()) ??
     "auto";
   const family = resolveTokenizerFamily(vendorModelId, override);
-  const serialized = serializePromptLlmInput(blocks, ctx);
+  const serialized = await serializePromptLlmInput(layout, ctx);
 
   let tokenCount: number;
   let counterKind: TokenCounterKind;

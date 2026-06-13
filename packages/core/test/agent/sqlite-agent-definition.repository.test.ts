@@ -16,9 +16,9 @@ describe("SqliteAgentDefinitionRepository", () => {
         schemaVersion: 1,
         name: "writer",
         prompts: {
-          blocks: {
-            s: { type: "text", role: "system", content: "hi" },
-          },
+          system: "hi",
+          persist: {},
+          dynamic: {},
         },
         model: "mock/test",
         runtime: { maxSteps: 5 },

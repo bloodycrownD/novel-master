@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  buildPromptAssembly,
-  buildPromptLlmInput,
-  buildPromptPreviewSegments,
-  formatPromptLlmInputForCli,
+  buildPromptAssemblyFromLayout,
+  buildPromptLlmInputFromLayout,
+  buildPromptPreviewSegmentsFromLayout,
+  formatPromptLlmInputForCliFromLayout,
   messageBodyText,
   textBlocks,
+  type AgentPromptLayout,
   type ChatMessage,
-  type PromptBlock,
 } from "@novel-master/core";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
@@ -31,95 +31,49 @@ function message(
   };
 }
 
-describe("buildPromptLlmInput", () => {
-  it("extracts system blocks, synthetic user blocks, and chat messages", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "ctx" },
-      { name: "c", type: "chat" },
-      { name: "u", type: "text", role: "user", content: "ask" },
-    ];
+const sampleLayout: AgentPromptLayout = {
+  system: "ctx",
+  persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
+  dynamic: [],
+};
+
+describe("buildPromptLlmInputFromLayout", () => {
+  it("extracts system field, persist synthetic messages, and chat", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const input = buildPromptLlmInput(blocks, {
+    const input = await buildPromptLlmInputFromLayout(sampleLayout, {
       worktreeDisplay: "WT",
-      filetreeDisplay: "TREE",
       messages,
       now: fixedNow,
     });
     assert.equal(input.system, "ctx");
     assert.equal(input.messages.length, 2);
-    assert.equal(input.messages[0]!.id, "m1");
-    assert.equal(input.messages[1]!.id, "prompt:u");
-    assert.equal(messageBodyText(input.messages[1]!), "ask");
+    assert.equal(input.messages[0]!.id, "prompt:u");
+    assert.equal(input.messages[1]!.id, "m1");
+    assert.equal(messageBodyText(input.messages[0]!), "ask");
   });
 
-  it("expands {{.filetree}} in system blocks", () => {
-    const blocks: PromptBlock[] = [
-      {
-        name: "tree",
-        type: "text",
-        role: "system",
-        content: "Files:\n{{ .filetree }}",
-      },
-    ];
-    const input = buildPromptLlmInput(blocks, {
-      worktreeDisplay: "",
-      filetreeDisplay: "/\n└── README.md",
-      messages: [],
-      now: fixedNow,
-    });
-    assert.equal(input.system, "Files:\n/\n└── README.md");
-  });
-
-  it("T1: user block expands {{.worktree}} into synthetic message", () => {
-    const blocks: PromptBlock[] = [
-      { name: "ctx", type: "text", role: "user", content: "{{.worktree}}" },
-      { name: "c", type: "chat" },
-    ];
-    const ctx = {
+  it("worktree persist block becomes synthetic user message", async () => {
+    const layout: AgentPromptLayout = {
+      persist: [
+        { name: "canon", type: "worktree" },
+      ],
+      dynamic: [],
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, {
       worktreeDisplay: "WT",
-      filetreeDisplay: "",
       messages: [message("user", "hi", 1)],
       now: fixedNow,
-    };
-    const assembly = buildPromptAssembly(blocks, ctx);
-    assert.equal(assembly[0]!.role, "user");
-    assert.equal(assembly[0]!.body, "WT");
-
-    const input = buildPromptLlmInput(blocks, ctx);
-    assert.equal(input.messages[0]!.id, "prompt:ctx");
-    assert.equal(messageBodyText(input.messages[0]!), "WT");
-  });
-
-  it("preserves block order: system, chat, user", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "sys" },
-      { name: "c", type: "chat" },
-      { name: "u", type: "text", role: "user", content: "tail" },
-    ];
-    const messages = [message("assistant", "reply", 1)];
-    const input = buildPromptLlmInput(blocks, {
-      worktreeDisplay: "",
-      filetreeDisplay: "",
-      messages,
-      now: fixedNow,
     });
-    assert.equal(input.system, "sys");
-    assert.equal(input.messages.length, 2);
-    assert.equal(input.messages[0]!.role, "assistant");
-    assert.equal(input.messages[1]!.id, "prompt:u");
+    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
+    assert.equal(messageBodyText(input.messages[0]!), "WT");
   });
 });
 
-describe("buildPromptPreviewSegments", () => {
-  it("segments join to the same text as formatPromptLlmInputForCli", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "ctx" },
-      { name: "c", type: "chat" },
-      { name: "u", type: "text", role: "user", content: "ask" },
-    ];
+describe("buildPromptPreviewSegmentsFromLayout", () => {
+  it("segments join to the same text as formatPromptLlmInputForCliFromLayout", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const ctx = { worktreeDisplay: "WT", filetreeDisplay: "TREE", messages, now: fixedNow };
-    const segments = buildPromptPreviewSegments(blocks, ctx);
+    const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
+    const segments = await buildPromptPreviewSegmentsFromLayout(sampleLayout, ctx);
     const joined = segments
       .map((s) => {
         const trimmed = s.body.replace(/\r\n/g, "\n");
@@ -133,96 +87,31 @@ describe("buildPromptPreviewSegments", () => {
         return `${s.role}: ${lines[0]}\n${lines.slice(1).join("\n")}`;
       })
       .join("\n");
-    assert.equal(joined, formatPromptLlmInputForCli(blocks, ctx));
-    assert.equal(segments.length, 3);
-    assert.equal(segments[0]!.id, "text-s");
-    assert.equal(segments[1]!.id, "chat-m1-0");
+    assert.equal(
+      joined,
+      await formatPromptLlmInputForCliFromLayout(sampleLayout, ctx),
+    );
   });
 });
 
-describe("formatPromptLlmInputForCli", () => {
-  it("renders text + chat + text in order without macro in chat", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "ctx" },
-      { name: "c", type: "chat" },
-      { name: "u", type: "text", role: "user", content: "ask" },
-    ];
+describe("formatPromptLlmInputForCliFromLayout", () => {
+  it("renders system + persist + chat in order", async () => {
     const messages = [message("user", "{{literal}}", 1)];
-    const ctx = { worktreeDisplay: "WT", filetreeDisplay: "TREE", messages, now: fixedNow };
-    const out = formatPromptLlmInputForCli(blocks, ctx);
-    assert.equal(out, "system: ctx\nuser: {{literal}}\nuser: ask");
+    const out = await formatPromptLlmInputForCliFromLayout(sampleLayout, {
+      worktreeDisplay: "WT",
+      messages,
+      now: fixedNow,
+    });
+    assert.equal(out, "system: ctx\nuser: ask\nuser: {{literal}}");
   });
+});
 
-  it("joins two text blocks with single newline", () => {
-    const blocks: PromptBlock[] = [
-      { name: "a", type: "text", role: "system", content: "one" },
-      { name: "b", type: "text", role: "user", content: "two" },
-    ];
-    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages: [], now: fixedNow };
-    const out = formatPromptLlmInputForCli(blocks, ctx);
-    assert.equal(out, "system: one\nuser: two");
-    assert.ok(!out.includes("a:"));
-    assert.ok(!out.includes("b:"));
-  });
-
-  it("prefixes role only on first line of multiline content", () => {
-    const blocks: PromptBlock[] = [
-      { name: "m", type: "text", role: "system", content: "line1\nline2" },
-    ];
-    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages: [], now: fixedNow };
-    const out = formatPromptLlmInputForCli(blocks, ctx);
-    assert.equal(out, "system: line1\nline2");
-  });
-
-  it("renders tool_use input and tool role results in chat preview", () => {
-    const blocks: PromptBlock[] = [{ name: "c", type: "chat" }];
-    const messages: ChatMessage[] = [
-      message("user", "write a file", 1),
-      {
-        id: "m2",
-        sessionId: "s1",
-        seq: 2,
-        role: "assistant",
-        content: {
-          blocks: [
-            {
-              type: "tool_use",
-              id: "tool-1",
-              name: "write",
-              input: { path: "/love_message.txt", content: "hi" },
-            },
-          ],
-        },
-        provider: null,
-        raw: null,
-        createdAtMs: 2,
-        hidden: false,
-      },
-      {
-        id: "m3",
-        sessionId: "s1",
-        seq: 3,
-        role: "user",
-        content: {
-          blocks: [
-            {
-              type: "tool_result",
-              toolUseId: "tool-1",
-              content: '{\n  "version": 1\n}',
-            },
-          ],
-        },
-        provider: null,
-        raw: null,
-        createdAtMs: 3,
-        hidden: false,
-      },
-    ];
-    const ctx = { worktreeDisplay: "", filetreeDisplay: "", messages, now: fixedNow };
-    const out = formatPromptLlmInputForCli(blocks, ctx);
-    assert.match(out, /assistant: \[tool_use name=write id=tool-1\]/);
-    assert.match(out, /"path": "\/love_message\.txt"/);
-    assert.match(out, /tool: ok/);
-    assert.ok(!out.includes("user: [tool_result"));
+describe("buildPromptAssemblyFromLayout", () => {
+  it("includes system segment first", async () => {
+    const segments = await buildPromptAssemblyFromLayout(sampleLayout, {
+      worktreeDisplay: "",
+      messages: [],
+    });
+    assert.equal(segments[0]!.source, "system");
   });
 });

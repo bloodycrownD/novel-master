@@ -62,13 +62,6 @@ function actionNodeToWire(node: EventActionNode): unknown {
     wire.dependency = [...node.dependency];
   }
 
-  if (node.type === "refresh-macros") {
-    if (Object.keys(wire).length === 0) {
-      return "refresh-macros";
-    }
-    return { "refresh-macros": wire };
-  }
-
   if (node.type === "hide-message") {
     if (node.params.startDepth != null) {
       wire["start-depth"] = node.params.startDepth;
@@ -105,7 +98,7 @@ function eventsConfigToWire(config: EventsConfig): EventsConfigWireDocument {
 function parseActionNode(raw: unknown): EventActionNode {
   if (typeof raw === "string") {
     if (raw === "refresh-macros") {
-      return { type: "refresh-macros", params: {} };
+      throw new Error("refresh-macros action is removed");
     }
     throw new Error(`unknown action shorthand: ${raw}`);
   }
@@ -119,13 +112,7 @@ function parseActionNode(raw: unknown): EventActionNode {
   }
   const type = keys[0]!;
   if (type === "refresh-macros") {
-    const paramsRaw = obj[type];
-    const wire =
-      paramsRaw != null && typeof paramsRaw === "object"
-        ? (paramsRaw as Record<string, unknown>)
-        : {};
-    const dependency = parseDependency(wire);
-    return withDependency({ type: "refresh-macros", params: {} }, dependency);
+    throw new Error("refresh-macros action is removed");
   }
   if (type === "hide-message") {
     const paramsRaw = obj[type];

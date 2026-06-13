@@ -6,18 +6,23 @@ import {
   encode,
   AgentConfigError,
   ConfigDecodeError,
+  PromptError,
 } from "@novel-master/core";
 
+const emptyPrompts = { persist: {}, dynamic: {} };
+
 describe("agentDefinitionSchema", () => {
-  it("parses valid document with blocks map", () => {
+  it("parses valid document with system + persist + dynamic", () => {
     const def = decode(
       {
         schemaVersion: 1,
         name: "writer",
         prompts: {
-          blocks: {
-            s: { type: "text", role: "system", content: "hi" },
+          system: "hi",
+          persist: {
+            persona: { type: "text", role: "user", content: "人设" },
           },
+          dynamic: {},
         },
         model: "openai/gpt-4",
       },
@@ -25,7 +30,8 @@ describe("agentDefinitionSchema", () => {
     );
     assert.equal(def.name, "writer");
     assert.equal(def.model, "openai/gpt-4");
-    assert.equal(def.prompts[0]?.name, "s");
+    assert.equal(def.prompts.system, "hi");
+    assert.equal(def.prompts.persist[0]?.name, "persona");
   });
 
   it("T1: rejects preferredModelId with friendly message", () => {
@@ -35,7 +41,7 @@ describe("agentDefinitionSchema", () => {
           {
             schemaVersion: 1,
             name: "x",
-            prompts: { blocks: {} },
+            prompts: emptyPrompts,
             preferredModelId: "a/b",
           },
           agentDefinitionSchema,
@@ -54,7 +60,7 @@ describe("agentDefinitionSchema", () => {
           {
             schemaVersion: 1,
             name: "x",
-            prompts: { blocks: {} },
+            prompts: emptyPrompts,
             model: { applicationModelId: "a/b" },
           },
           agentDefinitionSchema,
@@ -71,7 +77,7 @@ describe("agentDefinitionSchema", () => {
       {
         schemaVersion: 1,
         name: "x",
-        prompts: { blocks: {} },
+        prompts: emptyPrompts,
         model: "mock/test",
       },
       agentDefinitionSchema,
@@ -82,41 +88,47 @@ describe("agentDefinitionSchema", () => {
     assert.equal(again.model, "mock/test");
   });
 
-  it("T4: blocks map order matches definition.prompts order", () => {
+  it("T4: persist map order matches definition.prompts.persist order", () => {
     const def = decode(
       {
         schemaVersion: 1,
         name: "writer",
         prompts: {
-          blocks: {
-            alpha: { type: "text", role: "system", content: "a" },
-            beta: { type: "chat" },
-            gamma: { type: "text", role: "system", content: "c" },
+          persist: {
+            alpha: { type: "text", role: "user", content: "a" },
+            beta: { type: "worktree" },
+          },
+          dynamic: {
+            gamma: { type: "text", role: "user", content: "c" },
           },
         },
       },
       agentDefinitionSchema,
     );
     assert.deepEqual(
-      def.prompts.map((b) => b.name),
-      ["alpha", "beta", "gamma"],
+      def.prompts.persist.map((b) => b.name),
+      ["alpha", "beta"],
+    );
+    assert.deepEqual(
+      def.prompts.dynamic.map((b) => b.name),
+      ["gamma"],
     );
   });
 
-  it("T5: rejects blocks array at schema layer", () => {
+  it("T5: rejects prompts.blocks", () => {
     assert.throws(
       () =>
         decode(
           {
             schemaVersion: 1,
             name: "x",
-            prompts: {
-              blocks: [{ name: "a", type: "chat" }],
-            },
+            prompts: { blocks: {} },
           },
           agentDefinitionSchema,
         ),
-      (e: unknown) => e instanceof ConfigDecodeError,
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.message.includes("prompts.blocks is removed"),
     );
   });
 
@@ -127,7 +139,7 @@ describe("agentDefinitionSchema", () => {
           {
             schemaVersion: 1,
             name: "x",
-            prompts: { blocks: {} },
+            prompts: emptyPrompts,
             model: "a/b",
             compact: {
               trigger: { tokenThreshold: 100 },
@@ -140,26 +152,7 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("rejects abstract prompt block in map", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "writer",
-            prompts: {
-              blocks: {
-                summary: { type: "abstract", content: "{{.abstract}}" },
-              },
-            },
-          },
-          agentDefinitionSchema,
-        ),
-      (e: unknown) => e instanceof ConfigDecodeError,
-    );
-  });
-
-  it("rejects text block with when in full document", () => {
+  it("rejects persist text with when", () => {
     assert.throws(
       () =>
         decode(
@@ -167,14 +160,15 @@ describe("agentDefinitionSchema", () => {
             schemaVersion: 1,
             name: "x",
             prompts: {
-              blocks: {
+              persist: {
                 a: {
                   type: "text",
-                  role: "system",
+                  role: "user",
                   content: "x",
                   when: { present: "abstract" },
                 },
               },
+              dynamic: {},
             },
           },
           agentDefinitionSchema,
@@ -183,7 +177,7 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("rejects abstract block with role", () => {
+  it("L10-Z1: rejects lifecycle on persist text via validate", () => {
     assert.throws(
       () =>
         decode(
@@ -191,37 +185,15 @@ describe("agentDefinitionSchema", () => {
             schemaVersion: 1,
             name: "x",
             prompts: {
-              blocks: {
-                a: {
-                  type: "abstract",
-                  role: "system",
-                  content: "x",
-                },
-              },
-            },
-          },
-          agentDefinitionSchema,
-        ),
-      (e: unknown) => e instanceof ConfigDecodeError,
-    );
-  });
-
-  it("L10-Z1: rejects lifecycle on system text block via schema", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: {
-              blocks: {
+              persist: {
                 a: {
                   type: "text",
-                  role: "system",
+                  role: "user",
                   content: "x",
                   lifecycle: "once",
                 },
               },
+              dynamic: {},
             },
           },
           agentDefinitionSchema,
@@ -230,7 +202,7 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("L10-Z2: rejects lifecycle on chat block via schema", () => {
+  it("L10-Z3: rejects invalid lifecycle on dynamic text block", () => {
     assert.throws(
       () =>
         decode(
@@ -238,26 +210,8 @@ describe("agentDefinitionSchema", () => {
             schemaVersion: 1,
             name: "x",
             prompts: {
-              blocks: {
-                a: { type: "chat", lifecycle: "once" },
-              },
-            },
-          },
-          agentDefinitionSchema,
-        ),
-      (e: unknown) => e instanceof ConfigDecodeError,
-    );
-  });
-
-  it("L10-Z3: rejects invalid lifecycle on text block via schema", () => {
-    assert.throws(
-      () =>
-        decode(
-          {
-            schemaVersion: 1,
-            name: "x",
-            prompts: {
-              blocks: {
+              persist: {},
+              dynamic: {
                 a: {
                   type: "text",
                   role: "user",
@@ -272,5 +226,4 @@ describe("agentDefinitionSchema", () => {
       (e: unknown) => e instanceof ConfigDecodeError,
     );
   });
-
 });

@@ -1,0 +1,60 @@
+/**
+ * dynamic 区宏白名单校验（仅 `$time`、`$week_cn`、`$filetree`）。
+ *
+ * @module domain/prompt/logic/validate-dynamic-macros
+ */
+
+import { PromptError } from "@/errors/prompt-errors.js";
+import { scanMacroActions } from "@/infra/prompt-template/macro-scan.js";
+
+const ALLOWED_ROOT_MACROS = new Set(["time", "week_cn", "filetree"]);
+
+const LEGACY_DOT_MACROS = new Set(["worktree", "filetree"]);
+
+/**
+ * 校验 dynamic 文本内容中的宏；拒绝 dot 宏与非法 `$` 根键。
+ */
+export function validateDynamicMacros(content: string, blockLabel: string): void {
+  const actions = scanMacroActions(content);
+  for (const action of actions) {
+    if (action.kind === "comment") {
+      continue;
+    }
+    if (action.kind === "dot") {
+      const top = action.path[0] ?? "";
+      if (LEGACY_DOT_MACROS.has(top)) {
+        const hint =
+          top === "worktree"
+            ? "use persist worktree block instead of {{.worktree}}"
+            : "use {{$filetree}} instead of {{.filetree}}";
+        throw new PromptError(
+          "UNSUPPORTED_SYNTAX",
+          `${blockLabel}: {{.${top}}} is not allowed in dynamic; ${hint}`,
+        );
+      }
+      throw new PromptError(
+        "UNSUPPORTED_SYNTAX",
+        `${blockLabel}: dot macros ({{.${action.path.join(".")}}}) are not supported in dynamic`,
+      );
+    }
+    const key = action.path[0] ?? "";
+    if (!ALLOWED_ROOT_MACROS.has(key)) {
+      throw new PromptError(
+        "UNKNOWN_FIELD",
+        `${blockLabel}: unknown dynamic macro {{$${key}}}; allowed: $time, $week_cn, $filetree`,
+      );
+    }
+  }
+}
+
+/**
+ * persist 区禁止任何 `{{` 宏语法。
+ */
+export function rejectPersistMacros(content: string, blockLabel: string): void {
+  if (content.includes("{{")) {
+    throw new PromptError(
+      "UNSUPPORTED_SYNTAX",
+      `${blockLabel}: persist text blocks must not contain macros ({{...}})`,
+    );
+  }
+}

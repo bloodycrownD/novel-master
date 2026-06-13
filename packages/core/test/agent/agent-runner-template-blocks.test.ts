@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
+  createSessionWorktreeSnapshotStore,
   registerBuiltinTools,
   InMemoryAgentSession,
   messageBodyText,
@@ -14,29 +15,12 @@ import {
   type ModelRequestOptions,
   type ModelRequestService,
   type BuiltinToolContext,
-  type SessionMacroCache,
   type VfsService,
 } from "@novel-master/core";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p1";
 const SESSION_ID = "s1";
-
-function mockMacroCache(worktreeDisplay: string): SessionMacroCache {
-  const snapshot = {
-    worktreeDisplay,
-    filetreeDisplay: "",
-    listRows: [],
-    refreshedAtMs: 0,
-  };
-  return {
-    get: (projectId, sessionId) =>
-      projectId === PROJECT_ID && sessionId === SESSION_ID ? snapshot : undefined,
-    refresh: async () => snapshot,
-    clear: () => undefined,
-  };
-}
-
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -78,27 +62,34 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
 }
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "macroCache">,
-  macroCache: SessionMacroCache,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
+  worktreeDisplay: string,
 ): CreateAgentRunnerDeps {
+  const store = createSessionWorktreeSnapshotStore();
   return {
     ...deps,
     eventBus: new SimpleEventBus(),
-    macroCache,
+    worktreeSnapshot: store,
+    worktree: () =>
+      ({
+        scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
+        renderDisplay: async () => worktreeDisplay,
+        buildListRows: async () => [],
+      }) as never,
   };
 }
 
 describe("AgentRunner template blocks", () => {
-  it("T5: history includes synthetic user message from template block", async () => {
+  it("T5: history includes synthetic worktree message from persist block", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
     const definition: AgentDefinition = {
       name: "ctx-agent",
-      prompts: [
-        { name: "ctx", type: "text", role: "user", content: "{{.worktree}}" },
-        { name: "c", type: "chat" },
-      ],
+      prompts: {
+        persist: [{ name: "canon", type: "worktree" }],
+        dynamic: [],
+      },
     };
 
     const captured: { options?: ModelRequestOptions } = {};
@@ -119,9 +110,9 @@ describe("AgentRunner template blocks", () => {
           session,
           modelRequests: model,
           registry: new ToolRegistry(),
-          toolCtx: {} as CreateAgentRunnerDeps["toolCtx"],
+          toolCtx: mockToolCtx(mockVfs()),
         },
-        mockMacroCache("WORKTREE_SNAPSHOT"),
+        "WORKTREE_SNAPSHOT",
       ),
     );
 
@@ -136,21 +127,21 @@ describe("AgentRunner template blocks", () => {
 
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 2);
-    assert.equal(history[0]!.id, "prompt:ctx");
+    assert.equal(history[0]!.id, "prompt:worktree:canon");
     assert.equal(messageBodyText(history[0]!), "WORKTREE_SNAPSHOT");
     assert.equal(history[1]!.role, "user");
   });
 
-  it("R3: template user block without lifecycle on step 0 and step 1", async () => {
+  it("R3: persist worktree block on step 0 and step 1", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
     const definition: AgentDefinition = {
       name: "ctx-agent",
-      prompts: [
-        { name: "ctx", type: "text", role: "user", content: "{{.worktree}}" },
-        { name: "c", type: "chat" },
-      ],
+      prompts: {
+        persist: [{ name: "canon", type: "worktree" }],
+        dynamic: [],
+      },
     };
 
     const histories: ModelRequestOptions[] = [];
@@ -190,7 +181,7 @@ describe("AgentRunner template blocks", () => {
           registry,
           toolCtx: mockToolCtx(vfs),
         },
-        mockMacroCache("WORKTREE_SNAPSHOT"),
+        "WORKTREE_SNAPSHOT",
       ),
     );
 
@@ -205,10 +196,15 @@ describe("AgentRunner template blocks", () => {
 
     assert.equal(histories.length, 2);
     for (const opts of histories) {
-      assert.equal(opts.history?.some((m) => m.id === "prompt:ctx"), true);
-      const ctxMsg = opts.history?.find((m) => m.id === "prompt:ctx");
-      assert.equal(ctxMsg != null ? messageBodyText(ctxMsg) : "", "WORKTREE_SNAPSHOT");
+      assert.equal(
+        opts.history?.some((m) => m.id === "prompt:worktree:canon"),
+        true,
+      );
+      const ctxMsg = opts.history?.find((m) => m.id === "prompt:worktree:canon");
+      assert.equal(
+        ctxMsg != null ? messageBodyText(ctxMsg) : "",
+        "WORKTREE_SNAPSHOT",
+      );
     }
   });
-
 });

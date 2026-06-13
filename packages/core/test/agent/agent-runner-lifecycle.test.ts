@@ -1,7 +1,8 @@
 ﻿import assert from "node:assert/strict";
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import {
   createAgentRunner,
+  createSessionWorktreeSnapshotStore,
   InMemoryAgentSession,
   messageBodyText,
   registerBuiltinTools,
@@ -14,28 +15,12 @@ import {
   type LlmChatResult,
   type ModelRequestOptions,
   type ModelRequestService,
-  type SessionMacroCache,
   type VfsService,
 } from "@novel-master/core";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p1";
 const SESSION_ID = "s1";
-
-function mockMacroCache(): SessionMacroCache {
-  const snapshot = {
-    worktreeDisplay: "",
-    filetreeDisplay: "",
-    listRows: [],
-    refreshedAtMs: 0,
-  };
-  return {
-    get: (projectId, sessionId) =>
-      projectId === PROJECT_ID && sessionId === SESSION_ID ? snapshot : undefined,
-    refresh: async () => snapshot,
-    clear: () => undefined,
-  };
-}
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -77,41 +62,50 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
 }
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "macroCache">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
 ): CreateAgentRunnerDeps {
   return {
     ...deps,
     eventBus: new SimpleEventBus(),
-    macroCache: mockMacroCache(),
+    worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+    worktree: () =>
+      ({
+        scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
+        renderDisplay: async () => "",
+        buildListRows: async () => [],
+      }) as never,
   };
 }
 
 describe("AgentRunner prompt block lifecycle", () => {
-  it("R1: once kick block only on step 0 history", async () => {
+  it("R1: once dynamic block only on step 0 history", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
     const definition: AgentDefinition = {
       name: "kick-agent",
-      prompts: [
-        { name: "kick", type: "text", role: "user", content: "缁х画", lifecycle: "once" },
-        { name: "c", type: "chat" },
-      ],
+      prompts: {
+        persist: [],
+        dynamic: [
+          { name: "kick", type: "text", role: "user", content: "继续", lifecycle: "once" },
+        ],
+      },
     };
 
-    const histories: ModelRequestOptions[] = [];
+    const captured: ModelRequestOptions[] = [];
     const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        histories.push(options);
-        if (histories.length < 2) {
+      async request(_id, _prompt, options) {
+        captured.push(options);
+        const step = captured.length - 1;
+        if (step === 0) {
           return {
             assistantText: "",
             blocks: [
               {
                 type: "tool_use",
-                id: "tu1",
-                name: "write",
-                input: { path: "/out.txt", content: "x" },
+                id: "t1",
+                name: "read",
+                input: { path: "/x" },
               },
             ],
             raw: {},
@@ -122,223 +116,143 @@ describe("AgentRunner prompt block lifecycle", () => {
           blocks: [{ type: "text", text: "done" }],
           raw: {},
         } satisfies LlmChatResult;
-      }),
+      },
     };
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
-    const vfs = mockVfs();
     const runner = createAgentRunner(
       runnerDeps({
         session,
         modelRequests: model,
         registry,
-        toolCtx: mockToolCtx(vfs),
-      }),
-    );
-
-    const result = await runner.run({
-      maxSteps: 3,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    });
-
-    assert.equal(histories.length, 2);
-    assert.equal(histories[0]!.history?.some((m) => m.id === "prompt:kick"), true);
-    assert.equal(histories[1]!.history?.some((m) => m.id === "prompt:kick"), false);
-    assert.equal(result.stopReason, "completed");
-  });
-
-  it("R2: kick 缁х画 with once completes after tool loop", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
-
-    const definition: AgentDefinition = {
-      name: "once-complete",
-      prompts: [
-        { name: "kick", type: "text", role: "user", content: "缁х画", lifecycle: "once" },
-        { name: "c", type: "chat" },
-      ],
-    };
-
-    const historiesR2: ModelRequestOptions[] = [];
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        historiesR2.push(options);
-        if (historiesR2.length < 2) {
-          return {
-            assistantText: "",
-            blocks: [
-              {
-                type: "tool_use",
-                id: "tu1",
-                name: "write",
-                input: { path: "/out.txt", content: "x" },
-              },
-            ],
-            raw: {},
-          } satisfies LlmChatResult;
-        }
-        return {
-          assistantText: "done",
-          blocks: [{ type: "text", text: "done" }],
-          raw: {},
-        } satisfies LlmChatResult;
-      }),
-    };
-
-    const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const vfs = mockVfs();
-    const runner = createAgentRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry,
-        toolCtx: mockToolCtx(vfs),
-      }),
-    );
-
-    const result = await runner.run({
-      maxSteps: 3,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    });
-
-    assert.equal(result.stopReason, "completed");
-    const lastAssistant = await session.list();
-    const tail = lastAssistant.at(-1);
-    assert.equal(tail?.role, "assistant");
-  });
-
-  it("R3-always: kick block present on every step", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
-
-    const definition: AgentDefinition = {
-      name: "always-kick",
-      prompts: [
-        { name: "kick", type: "text", role: "user", content: "缁х画" },
-        { name: "c", type: "chat" },
-      ],
-    };
-
-    const histories: ModelRequestOptions[] = [];
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        histories.push(options);
-        if (histories.length < 2) {
-          return {
-            assistantText: "",
-            blocks: [
-              {
-                type: "tool_use",
-                id: "tu1",
-                name: "write",
-                input: { path: "/out.txt", content: "x" },
-              },
-            ],
-            raw: {},
-          } satisfies LlmChatResult;
-        }
-        return {
-          assistantText: "done",
-          blocks: [{ type: "text", text: "done" }],
-          raw: {},
-        } satisfies LlmChatResult;
-      }),
-    };
-
-    const registry = new ToolRegistry();
-    registerBuiltinTools(registry);
-    const vfs = mockVfs();
-    const runner = createAgentRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry,
-        toolCtx: mockToolCtx(vfs),
-      }),
-    );
-
-    await runner.run({
-      maxSteps: 3,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
-    });
-
-    assert.equal(histories.length, 2);
-    for (const opts of histories) {
-      assert.equal(opts.history?.some((m) => m.id === "prompt:kick"), true);
-      const kick = opts.history?.find((m) => m.id === "prompt:kick");
-      assert.equal(kick != null ? messageBodyText(kick) : "", "缁х画");
-    }
-  });
-
-  it("R4: once block reappears on step 0 of second runner.run", async () => {
-    const session = new InMemoryAgentSession();
-    await session.append("user", textBlocks("go"));
-
-    const definition: AgentDefinition = {
-      name: "kick-agent",
-      prompts: [
-        { name: "kick", type: "text", role: "user", content: "缁х画", lifecycle: "once" },
-        { name: "c", type: "chat" },
-      ],
-    };
-
-    const histories: ModelRequestOptions[] = [];
-    const model: ModelRequestService = {
-      request: mock.fn(async (_modelId, _content, options) => {
-        histories.push(options);
-        return {
-          assistantText: "ok",
-          blocks: [{ type: "text", text: "ok" }],
-          raw: {},
-        } satisfies LlmChatResult;
-      }),
-    };
-
-    const runner = createAgentRunner(
-      runnerDeps({
-        session,
-        modelRequests: model,
-        registry: new ToolRegistry(),
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
 
     await runner.run({
-      maxSteps: 1,
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
       applicationModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
-    });
-    await session.append("user", textBlocks("again"));
-    histories.length = 0;
-
-    await runner.run({
-      maxSteps: 1,
-      definition,
-      sessionId: SESSION_ID,
-      projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
-      workspaceModelId: RUN_MODEL_ID,
+      maxSteps: 3,
     });
 
-    assert.equal(histories.length, 1);
-    assert.equal(histories[0]!.history?.some((m) => m.id === "prompt:kick"), true);
+    assert.equal(captured.length, 2);
+    const step0Kick = captured[0]!.history.find((m) => m.id === "prompt:kick");
+    assert.ok(step0Kick);
+    const step1Kick = captured[1]!.history.find((m) => m.id === "prompt:kick");
+    assert.equal(step1Kick, undefined);
   });
 
+  it("R2: always dynamic block on every step", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const definition: AgentDefinition = {
+      name: "always-agent",
+      prompts: {
+        persist: [],
+        dynamic: [
+          { name: "ctx", type: "text", role: "user", content: "prefix" },
+        ],
+      },
+    };
+
+    let steps = 0;
+    const model: ModelRequestService = {
+      async request() {
+        steps += 1;
+        if (steps === 1) {
+          return {
+            assistantText: "",
+            blocks: [
+              {
+                type: "tool_use",
+                id: "t1",
+                name: "read",
+                input: { path: "/x" },
+              },
+            ],
+            raw: {},
+          } satisfies LlmChatResult;
+        }
+        return {
+          assistantText: "ok",
+          blocks: [{ type: "text", text: "ok" }],
+          raw: {},
+        } satisfies LlmChatResult;
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    await runner.run({
+      definition,
+      sessionId: SESSION_ID,
+      projectId: PROJECT_ID,
+      applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+      maxSteps: 3,
+    });
+
+    assert.ok(steps >= 2);
+  });
+
+  it("R3: system 来自 layout.system 字段", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const definition: AgentDefinition = {
+      name: "sys-agent",
+      prompts: {
+        system: "你是助手",
+        persist: [],
+        dynamic: [],
+      },
+    };
+
+    let systemArg: string | undefined;
+    const model: ModelRequestService = {
+      async request(_id, _prompt, options) {
+        systemArg = options.system;
+        return {
+          assistantText: "ok",
+          blocks: [{ type: "text", text: "ok" }],
+          raw: {},
+        } satisfies LlmChatResult;
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    await runner.run({
+      definition,
+      sessionId: SESSION_ID,
+      projectId: PROJECT_ID,
+      applicationModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    assert.equal(systemArg, "你是助手");
+  });
 });

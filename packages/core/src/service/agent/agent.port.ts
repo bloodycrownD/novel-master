@@ -19,7 +19,7 @@ export interface AgentRunOptions {
   readonly workspaceModelId: string;
   /** When set, CLI `--modelId` as highest priority for model resolution. */
   readonly cliModelId?: string;
-  /** Legacy: macro strings; runner reads {@link SessionMacroCache} when set. */
+  /** Runner reads {@link SessionWorktreeSnapshotStore} for worktree persist blocks. */
   readonly promptContext?: PromptMacroContext;
   readonly maxSteps?: number;
   readonly stream?: boolean;

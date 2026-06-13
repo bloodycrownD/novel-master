@@ -17,7 +17,7 @@ import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
-import type { SessionMacroCache } from "@/service/prompt/session-macro-cache.port.js";
+import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
@@ -29,7 +29,7 @@ export interface RunAgentHandlerDeps {
   readonly messages: MessageService;
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -81,7 +81,8 @@ export async function runRunAgentAction(
     },
     messageCheckpoint: deps.messageCheckpoint,
     eventBus: deps.eventBus,
-    macroCache: deps.macroCache,
+    worktreeSnapshot: deps.worktreeSnapshot,
+    worktree: deps.worktree,
     regexConfig: deps.regexConfig,
     listAllSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
   });

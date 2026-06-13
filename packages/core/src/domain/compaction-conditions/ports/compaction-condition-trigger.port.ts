@@ -5,7 +5,7 @@
  */
 
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
@@ -19,7 +19,7 @@ export interface CompactionConditionModelContext {
 export interface CompactionEvaluationContext {
   readonly modelContext: CompactionConditionModelContext;
   readonly promptInput: PromptLlmInput;
-  readonly blocks: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
 }
 

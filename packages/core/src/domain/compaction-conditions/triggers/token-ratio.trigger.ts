@@ -44,7 +44,7 @@ export class TokenRatioConditionTrigger implements CompactionConditionTrigger {
     const tokenizerOverride =
       await this.options.resolveTokenizerOverride(evaluation);
     const { tokenCount } = await countPromptLlmInput({
-      blocks: evaluation.blocks,
+      layout: evaluation.layout,
       ctx: evaluation.ctx,
       applicationModelId: evaluation.modelContext.applicationModelId,
       registry: this.tokenCounters,

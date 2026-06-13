@@ -5,7 +5,7 @@
  */
 
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
 import type { TokenCounterKind, TokenizerFamily } from "../ports/token-counter.port.js";
@@ -15,7 +15,7 @@ import { resolveTokenizerFamily } from "./resolve-tokenizer-family.js";
 import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 
 export interface CountPromptLlmInputParams {
-  readonly blocks: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly applicationModelId: string;
   readonly registry: TokenCounterRegistry;
@@ -44,10 +44,10 @@ export async function countPromptLlmInput(
 export async function countPromptLlmInputHeuristicOnly(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { applicationModelId, registry, blocks, ctx } = params;
+  const { applicationModelId, registry, layout, ctx } = params;
   const { vendorModelId } = parseApplicationModelId(applicationModelId);
   const family = resolveTokenizerFamily(vendorModelId, "auto");
-  const serialized = serializePromptLlmInput(blocks, ctx);
+  const serialized = await serializePromptLlmInput(layout, ctx);
   const tokenCount = registry.heuristic.countText(serialized);
   return {
     tokenCount,

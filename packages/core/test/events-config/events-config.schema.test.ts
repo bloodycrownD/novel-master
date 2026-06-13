@@ -57,8 +57,7 @@ describe("events config schema", () => {
           schemaVersion: 2,
           events: {
             "session.compaction.requested": [
-              { "hide-message": { dependency: ["run-agent"], "start-depth": 6 } },
-              "refresh-macros",
+              { "hide-message": { dependency: ["missing-action"], "start-depth": 6 } },
             ],
           },
         }),
@@ -71,13 +70,6 @@ describe("events config schema", () => {
     const doc = eventsConfigSchema.parse(wire);
     assert.deepEqual(doc, DEFAULT_EVENTS_CONFIG);
     const nodes = wire.events[Object.keys(wire.events)[0]!]!;
-    assert.ok(
-      nodes.some(
-        (n) =>
-          n === "refresh-macros" ||
-          (typeof n === "object" && n != null && "refresh-macros" in n),
-      ),
-    );
     assert.ok(
       nodes.some(
         (n) => typeof n === "object" && n != null && "hide-message" in n,
@@ -107,12 +99,25 @@ describe("events config schema", () => {
           schemaVersion: 2,
           events: {
             "session.compaction.requested": [
-              { "hide-message": { dependency: ["refresh-macros"], startDepth: 6 } },
-              { "refresh-macros": { dependency: ["hide-message"] } },
+              { "hide-message": { dependency: ["run-agent"], "start-depth": 6 } },
+              { "run-agent": { "agent-id": "writer", dependency: ["hide-message"] } },
             ],
           },
         }),
       /cycle/,
+    );
+  });
+
+  it("rejects refresh-macros action", () => {
+    assert.throws(
+      () =>
+        eventsConfigSchema.parse({
+          schemaVersion: 2,
+          events: {
+            "session.compaction.requested": ["refresh-macros"],
+          },
+        }),
+      /refresh-macros action is removed/,
     );
   });
 });

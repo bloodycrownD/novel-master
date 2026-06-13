@@ -6,54 +6,74 @@
 
 import { z } from "zod";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
-import { validatePromptBlocksFromMap } from "@/domain/prompt/logic/validate-prompt-blocks.js";
-import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
+import { validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
-const textPromptBlockValueSchema = z
+const persistTextBlockValueSchema = z
   .object({
     type: z.literal("text"),
-    role: z.enum(["system", "user", "assistant"]),
+    role: z.enum(["user", "assistant"]),
     content: z.string(),
-    lifecycle: z.enum(["always", "once"]).optional(),
-  })
-  .strict()
-  .superRefine((block, ctx) => {
-    if (block.role === "system" && block.lifecycle != null) {
-      ctx.addIssue({
-        code: "custom",
-        message: `system text block must not include lifecycle`,
-      });
-    }
-  });
-
-const chatPromptBlockValueSchema = z
-  .object({
-    type: z.literal("chat"),
   })
   .strict();
 
-const promptBlockValueSchema = z.union([
-  textPromptBlockValueSchema,
-  chatPromptBlockValueSchema,
+const persistWorktreeBlockValueSchema = z
+  .object({
+    type: z.literal("worktree"),
+  })
+  .strict();
+
+const persistBlockValueSchema = z.union([
+  persistTextBlockValueSchema,
+  persistWorktreeBlockValueSchema,
 ]);
 
-const promptsDocumentSchema = z
+const dynamicTextBlockValueSchema = z
   .object({
-    blocks: z.record(z.string().min(1), promptBlockValueSchema),
+    type: z.literal("text"),
+    role: z.enum(["user", "assistant"]),
+    content: z.string(),
+    lifecycle: z.enum(["always", "once"]).optional(),
   })
-  .strict()
-  .superRefine((doc, ctx) => {
-    for (const [name, block] of Object.entries(doc.blocks)) {
-      const raw = block as { type?: string };
-      if (raw.type === "abstract") {
-        ctx.addIssue({
-          code: "custom",
-          message: `prompt block "${name}" uses removed type "abstract"; remove it from agent config`,
-        });
-      }
-    }
-  });
+  .strict();
+
+function rejectLegacyPromptKeys(raw: unknown): unknown {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+    return raw;
+  }
+  const record = raw as Record<string, unknown>;
+  if ("blocks" in record) {
+    throw new AgentConfigError(
+      "INVALID_SCHEMA",
+      "prompts.blocks is removed; use prompts.system / persist / dynamic",
+    );
+  }
+  if ("regions" in record) {
+    throw new AgentConfigError(
+      "INVALID_SCHEMA",
+      "prompts.regions is not supported; use prompts.system / persist / dynamic",
+    );
+  }
+  if ("chat" in record) {
+    throw new AgentConfigError(
+      "INVALID_SCHEMA",
+      "prompts.chat is not supported; chat is a runtime slot only",
+    );
+  }
+  return raw;
+}
+
+const promptsDocumentSchema = z.preprocess(
+  rejectLegacyPromptKeys,
+  z
+    .object({
+      system: z.string().optional(),
+      persist: z.record(z.string().min(1), persistBlockValueSchema).default({}),
+      dynamic: z.record(z.string().min(1), dynamicTextBlockValueSchema).default({}),
+    })
+    .strict(),
+);
 
 const agentToolPolicyDocumentSchema = z
   .object({
@@ -62,7 +82,7 @@ const agentToolPolicyDocumentSchema = z
   })
   .strict();
 
-/** Root agent definition wire document schema (strict ??rejects legacy keys). */
+/** Root agent definition wire document schema (strict — rejects legacy keys). */
 export const agentDefinitionDocumentSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -103,18 +123,28 @@ function assertNoLegacyAgentFields(raw: unknown): void {
   }
 }
 
-function blockToMapValue(
-  block: PromptBlock,
-): AgentDefinitionDocument["prompts"]["blocks"][string] {
-  if (block.type === "text") {
-    return {
-      type: "text",
-      role: block.role,
-      content: block.content,
-      ...(block.lifecycle === "once" ? { lifecycle: "once" as const } : {}),
-    };
+function persistBlockToWire(
+  block: AgentPromptLayout["persist"][number],
+): AgentDefinitionDocument["prompts"]["persist"][string] {
+  if (block.type === "worktree") {
+    return { type: "worktree" };
   }
-  return { type: "chat" };
+  return {
+    type: "text",
+    role: block.role,
+    content: block.content,
+  };
+}
+
+function dynamicBlockToWire(
+  block: AgentPromptLayout["dynamic"][number],
+): AgentDefinitionDocument["prompts"]["dynamic"][string] {
+  return {
+    type: "text",
+    role: block.role,
+    content: block.content,
+    ...(block.lifecycle === "once" ? { lifecycle: "once" as const } : {}),
+  };
 }
 
 function wireToolsToDomain(
@@ -130,11 +160,15 @@ function wireToolsToDomain(
 }
 
 function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
-  const blocks = validatePromptBlocksFromMap(doc.prompts.blocks);
+  const prompts = validateAgentPromptLayoutFromMaps(
+    doc.prompts.persist,
+    doc.prompts.dynamic,
+    doc.prompts.system,
+  );
   const tools = wireToolsToDomain(doc.tools);
   return {
     name: doc.name,
-    prompts: blocks,
+    prompts,
     model: doc.model,
     runtime: doc.runtime,
     ...(tools != null ? { tools } : {}),
@@ -142,14 +176,22 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
 }
 
 function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
-  const blocks: AgentDefinitionDocument["prompts"]["blocks"] = {};
-  for (const block of def.prompts) {
-    blocks[block.name] = blockToMapValue(block);
+  const persist: AgentDefinitionDocument["prompts"]["persist"] = {};
+  for (const block of def.prompts.persist) {
+    persist[block.name] = persistBlockToWire(block);
+  }
+  const dynamic: AgentDefinitionDocument["prompts"]["dynamic"] = {};
+  for (const block of def.prompts.dynamic) {
+    dynamic[block.name] = dynamicBlockToWire(block);
   }
   return {
     schemaVersion: 1,
     name: def.name,
-    prompts: { blocks },
+    prompts: {
+      ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
+      persist,
+      dynamic,
+    },
     ...(def.model != null ? { model: def.model } : {}),
     ...(def.runtime != null ? { runtime: def.runtime } : {}),
     ...(def.tools != null
@@ -170,10 +212,14 @@ const agentDefinitionWireSchema = z.preprocess((raw) => {
   return raw;
 }, agentDefinitionDocumentSchema);
 
-/** Domain parser: wire document ??{@link AgentDefinition}. */
+/** Domain parser: wire document → {@link AgentDefinition}. */
 export const agentDefinitionSchema = Object.assign(
   agentDefinitionWireSchema.transform(documentToDefinition),
   { toWire: definitionToDocument },
 );
 
-export { promptsDocumentSchema, promptBlockValueSchema };
+export {
+  promptsDocumentSchema,
+  persistBlockValueSchema,
+  dynamicTextBlockValueSchema,
+};

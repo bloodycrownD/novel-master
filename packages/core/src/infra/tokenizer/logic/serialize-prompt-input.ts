@@ -1,19 +1,21 @@
 /**
- * Serializes full prompt LLM input to a single string for token counting.
+ * 将完整 Prompt LLM 输入序列化为 token 计数字符串。
  *
  * @module infra/tokenizer/logic/serialize-prompt-input
  */
 
-import type { PromptBlock } from "@/domain/prompt/model/prompt-block.js";
-import {
-  formatPromptLlmInputForCli,
-} from "@/service/prompt/render-prompt.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
+import {
+  formatPromptLlmInputForCliFromLayout,
+  type PromptAssemblyOptions,
+} from "@/service/prompt/render-prompt.js";
 
-/** Same string as CLI preview (`formatPromptLlmInputForCli`) for token parity. */
-export function serializePromptLlmInput(
-  blocks: readonly PromptBlock[],
+/** 与 CLI 预览相同的序列化字符串（token 计数 parity）。 */
+export async function serializePromptLlmInput(
+  layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-): string {
-  return formatPromptLlmInputForCli(blocks, ctx);
+  options?: PromptAssemblyOptions,
+): Promise<string> {
+  return formatPromptLlmInputForCliFromLayout(layout, ctx, options);
 }

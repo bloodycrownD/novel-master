@@ -3,7 +3,6 @@ import { validateEventConfigBlocks } from "../../src/config-forms/events/validat
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const MSG_RECEIVED = "session.message.received";
 const COMPACTION = "session.compaction.requested";
 
 function draft(
@@ -19,11 +18,10 @@ function draft(
 
 test("validateEventConfigBlocks rejects duplicate event types", () => {
   const err = validateEventConfigBlocks([
-    draft(MSG_RECEIVED, [{ type: "refresh-macros", params: {} }]),
-    draft(MSG_RECEIVED, [{ type: "refresh-macros", params: {} }]),
+    draft(COMPACTION, [{ type: "hide-message", params: { startDepth: 6 } }]),
+    draft(COMPACTION, [{ type: "hide-message", params: { startDepth: 3 } }]),
   ]);
   assert.match(err ?? "", /重复/);
-  assert.match(err ?? "", /收到助手消息后/);
 });
 
 test("validateEventConfigBlocks rejects duplicate action types in one event", () => {
@@ -37,12 +35,12 @@ test("validateEventConfigBlocks rejects duplicate action types in one event", ()
   assert.match(err ?? "", /重复/);
 });
 
-test("validateEventConfigBlocks accepts distinct actions", () => {
+test("validateEventConfigBlocks accepts hide + run-agent", () => {
   assert.equal(
     validateEventConfigBlocks([
       draft(COMPACTION, [
         { type: "hide-message", params: { startDepth: 6 } },
-        { type: "refresh-macros", params: {} },
+        { type: "run-agent", params: { agentId: "writer" } },
       ]),
     ]),
     null,
@@ -57,7 +55,6 @@ test("validateEventConfigBlocks rejects unknown dependency references", () => {
         params: { startDepth: 6 },
         dependency: ["run-agent"],
       },
-      { type: "refresh-macros", params: {} },
     ]),
   ]);
   assert.match(err ?? "", /依赖不存在/);
@@ -83,11 +80,11 @@ test("validateEventConfigBlocks rejects cycle dependencies", () => {
       {
         type: "hide-message",
         params: { startDepth: 6 },
-        dependency: ["refresh-macros"],
+        dependency: ["run-agent"],
       },
       {
-        type: "refresh-macros",
-        params: {},
+        type: "run-agent",
+        params: { agentId: "writer" },
         dependency: ["hide-message"],
       },
     ]),

@@ -12,7 +12,7 @@ import {
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
-  prompts: [],
+  prompts: { persist: [], dynamic: [] },
   model: "provider:model",
 };
 

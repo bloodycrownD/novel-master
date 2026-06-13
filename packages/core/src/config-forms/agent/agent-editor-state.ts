@@ -1,4 +1,5 @@
 import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
+import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptBlock, PromptBlockRole } from "@/domain/prompt/model/prompt-block.js";
 import { formatApplicationModelId } from "../shared/application-model-id.js";
 import {
@@ -29,7 +30,7 @@ export type AgentEditorFormInput = {
   vendorModelId: string;
   toolsMode: ToolsMode;
   toolsSelected: readonly string[];
-  prompts: readonly PromptBlock[];
+  prompts: AgentPromptLayout;
 };
 
 /** Parses comma/newline tool lists — retained for YAML import compatibility only. */
@@ -135,14 +136,18 @@ export function buildAgentDefinitionFromForm(
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
   }
-  if (input.prompts.length === 0) {
+  if (
+    (input.prompts.system == null || input.prompts.system.trim() === "") &&
+    input.prompts.persist.length === 0 &&
+    input.prompts.dynamic.length === 0
+  ) {
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
   const steps = Number(input.maxSteps);
   const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   const def: AgentDefinition = {
     name: input.name.trim(),
-    prompts: [...input.prompts],
+    prompts: input.prompts,
     ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
     ...(input.modelEnabled && input.providerId && input.vendorModelId
       ? { model: formatApplicationModelId(input.providerId, input.vendorModelId) }

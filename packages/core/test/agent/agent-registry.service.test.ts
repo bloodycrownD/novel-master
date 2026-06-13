@@ -18,7 +18,7 @@ describe("AgentRegistryService", () => {
       {
         schemaVersion: 1,
         name: "写作助手",
-        prompts: { blocks: {} },
+        prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema,
     );
@@ -36,7 +36,7 @@ describe("AgentRegistryService", () => {
         {
           schemaVersion: 1,
           name: "summarizer",
-          prompts: { blocks: {} },
+          prompts: { persist: {}, dynamic: {} },
         },
         agentDefinitionSchema,
       ),

@@ -16,7 +16,7 @@ import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-t
 
 const BASE_DEF: AgentDefinition = {
   name: "test",
-  prompts: [{ name: "c", type: "chat" }],
+  prompts: { persist: [], dynamic: [] },
 };
 
 function vfsRegistryNames(): string[] {

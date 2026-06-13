@@ -9,7 +9,7 @@ import {
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
-  prompts: [],
+  prompts: { persist: [], dynamic: [] },
   model: "provider:model",
 };
 
@@ -40,9 +40,16 @@ function makeRuntime(overrides: {
       capture: async () => undefined,
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    macroCache: {
-      refresh: async () => undefined,
-    } as AgentTurnRuntimePort["macroCache"],
+    worktreeSnapshot: {
+      getOrRefresh: async (_p, _s, render) => {
+        const data = await render();
+        return {
+          worktreeDisplay: data.worktreeDisplay,
+          listRows: data.listRows,
+          refreshedAtMs: Date.now(),
+        };
+      },
+    } as AgentTurnRuntimePort["worktreeSnapshot"],
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
@@ -56,11 +63,8 @@ function makeRuntime(overrides: {
       : never),
     worktree: () =>
       ({
-        materialize: async () => ({
-          worktreeDisplay: "",
-          filetreeDisplay: "",
-          listRows: [],
-        }),
+        renderDisplay: async () => "",
+        buildListRows: async () => [],
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
   };
 }

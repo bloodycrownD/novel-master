@@ -6,7 +6,7 @@
 
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
-export type EventActionType = "hide-message" | "refresh-macros" | "run-agent";
+export type EventActionType = "hide-message" | "run-agent";
 
 export interface HideMessageActionParams extends DepthSlice {}
 
@@ -16,7 +16,6 @@ export interface RunAgentActionParams {
 
 export type EventAction =
   | { readonly type: "hide-message"; readonly params: HideMessageActionParams }
-  | { readonly type: "refresh-macros"; readonly params: Record<string, never> }
   | { readonly type: "run-agent"; readonly params: RunAgentActionParams };
 
 export type EventActionNode = EventAction & {

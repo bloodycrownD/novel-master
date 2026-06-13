@@ -1,5 +1,5 @@
 /**
- * Prompt → LLM input and CLI formatting.
+ * Prompt → LLM input and CLI formatting（三区 layout）。
  *
  * @module service/prompt/render-prompt
  */
@@ -7,26 +7,20 @@
 import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
-import type { PromptBlock } from "../../domain/prompt/model/prompt-block.js";
-import { shouldIncludePromptTextBlock } from "../../domain/prompt/logic/should-include-prompt-text-block.js";
+import type {
+  AgentPromptLayout,
+  DynamicPromptBlock,
+  PersistPromptBlock,
+  PersistTextPromptBlock,
+} from "../../domain/prompt/model/agent-prompt-layout.js";
+import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
+import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
 } from "../../domain/prompt/model/prompt-render-context.js";
 
 export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/model/prompt-render-context.js";
-import { formatLocalDateTime } from "../../infra/date-format.js";
-import { renderMacro } from "../../infra/prompt-template/macro-render.js";
-import { formatWeekCn } from "../../infra/prompt-template/week-cn.js";
-
-/** Dot fields available during prompt macro expansion. */
-export interface PromptRenderDot {
-  readonly worktree: string;
-  readonly filetree: string;
-}
-
-/** Worktree strings for prompt macros (excludes chat messages). */
-export type PromptMacroContext = Omit<PromptRenderContext, "messages">;
 
 /** One segment from the single assembly traversal (preview / serialize / LLM derive). */
 export interface PromptAssemblySegment {
@@ -34,7 +28,7 @@ export interface PromptAssemblySegment {
   readonly role: string;
   readonly title: string;
   readonly body: string;
-  readonly source: "template" | "message";
+  readonly source: "template" | "message" | "system";
 }
 
 /** One collapsible preview card in CLI / mobile real-prompt UI. */
@@ -67,92 +61,8 @@ function formatSegment(role: string, body: string): string {
   return `${role}: ${lines[0]}\n${lines.slice(1).join("\n")}`;
 }
 
-function buildDot(ctx: PromptRenderContext): PromptRenderDot {
-  return {
-    worktree: ctx.worktreeDisplay,
-    filetree: ctx.filetreeDisplay,
-  };
-}
-
-function renderMacroContent(
-  content: string,
-  dotRecord: Readonly<Record<string, unknown>>,
-  root: { readonly time: string; readonly week_cn: string },
-): string {
-  return renderMacro(content, {
-    dot: dotRecord,
-    root,
-  });
-}
-
-function macroRoot(ctx: PromptRenderContext): {
-  readonly now: Date;
-  readonly dotRecord: Readonly<Record<string, unknown>>;
-  readonly root: { readonly time: string; readonly week_cn: string };
-} {
-  const now = ctx.now ?? new Date();
-  const dot = buildDot(ctx);
-  const dotRecord = dot as unknown as Readonly<Record<string, unknown>>;
-  const root = {
-    time: formatLocalDateTime(now),
-    week_cn: formatWeekCn(now),
-  };
-  return { now, dotRecord, root };
-}
-
-/**
- * Single block-order traversal: text macros + chat preview segments.
- * Preview, CLI format, and token serialize derive from this; LLM input uses
- * the same macro expansion and block order via a parallel walk in buildPromptLlmInput.
- */
-export function buildPromptAssembly(
-  blocks: readonly PromptBlock[],
-  ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
-): readonly PromptAssemblySegment[] {
-  const agentStepIndex = resolveAgentStepIndex(options);
-  const { dotRecord, root } = macroRoot(ctx);
-  const segments: PromptAssemblySegment[] = [];
-  let segmentIndex = 0;
-
-  for (const block of blocks) {
-    if (block.type === "text") {
-      if (!shouldIncludePromptTextBlock(block, agentStepIndex)) {
-        continue;
-      }
-      const content = renderMacroContent(block.content, dotRecord, root);
-      segments.push({
-        id: `text-${block.name}`,
-        role: block.role,
-        title: block.name,
-        body: content,
-        source: "template",
-      });
-      continue;
-    }
-
-    for (const message of ctx.messages) {
-      const messageSegments = formatChatMessageForCliPreview(message);
-      for (let i = 0; i < messageSegments.length; i++) {
-        const segment = messageSegments[i]!;
-        segments.push({
-          id: `chat-${message.id}-${segmentIndex}`,
-          role: segment.role,
-          title: `#${message.seq} · ${segment.role}`,
-          body: segment.body,
-          source: "message",
-        });
-        segmentIndex += 1;
-      }
-    }
-  }
-
-  return segments;
-}
-
-/** Ephemeral template message — not persisted; satisfies mapper shape only. */
 function syntheticTemplateMessage(
-  block: Extract<PromptBlock, { type: "text" }>,
+  block: PersistTextPromptBlock | DynamicPromptBlock,
   expanded: string,
   ctx: PromptRenderContext,
 ): ChatMessage {
@@ -169,54 +79,154 @@ function syntheticTemplateMessage(
   };
 }
 
-/**
- * Builds LLM input: system text blocks, synthetic template messages, then chat history.
- */
-export function buildPromptLlmInput(
-  blocks: readonly PromptBlock[],
+function syntheticWorktreeMessage(
+  block: Extract<PersistPromptBlock, { type: "worktree" }>,
+  worktreeDisplay: string,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
-): PromptLlmInput {
-  const agentStepIndex = resolveAgentStepIndex(options);
-  const { dotRecord, root } = macroRoot(ctx);
-  const systemParts: string[] = [];
-  const messages: ChatMessage[] = [];
-
-  for (const block of blocks) {
-    if (block.type === "text") {
-      if (!shouldIncludePromptTextBlock(block, agentStepIndex)) {
-        continue;
-      }
-      const expanded = renderMacroContent(block.content, dotRecord, root);
-      if (block.role === "system") {
-        systemParts.push(expanded);
-      } else {
-        messages.push(syntheticTemplateMessage(block, expanded, ctx));
-      }
-      continue;
-    }
-
-    messages.push(...ctx.messages);
-  }
-
-  const system =
-    systemParts.length > 0 ? systemParts.join("\n") : undefined;
-
+): ChatMessage {
   return {
-    system,
-    messages,
+    id: `prompt:worktree:${block.name}`,
+    sessionId: ctx.messages[0]?.sessionId ?? "",
+    seq: 0,
+    role: "user",
+    content: textBlocks(worktreeDisplay),
+    provider: null,
+    raw: null,
+    createdAtMs: 0,
+    hidden: false,
   };
 }
 
 /**
- * Builds ordered preview segments (one card per role-prefixed bubble).
+ * 三区 layout 单次遍历：system → persist → chat → dynamic。
  */
-export function buildPromptPreviewSegments(
-  blocks: readonly PromptBlock[],
+export async function buildPromptAssemblyFromLayout(
+  layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions,
-): PromptPreviewSegment[] {
-  return buildPromptAssembly(blocks, ctx, options).map((segment) => ({
+): Promise<readonly PromptAssemblySegment[]> {
+  const agentStepIndex = resolveAgentStepIndex(options);
+  const segments: PromptAssemblySegment[] = [];
+  let segmentIndex = 0;
+
+  if (layout.system != null && layout.system.trim() !== "") {
+    segments.push({
+      id: "system",
+      role: "system",
+      title: "system",
+      body: layout.system,
+      source: "system",
+    });
+  }
+
+  for (const block of layout.persist) {
+    if (block.type === "text") {
+      segments.push({
+        id: `persist-${block.name}`,
+        role: block.role,
+        title: block.name,
+        body: block.content,
+        source: "template",
+      });
+    } else {
+      segments.push({
+        id: `persist-worktree-${block.name}`,
+        role: "user",
+        title: block.name,
+        body: ctx.worktreeDisplay,
+        source: "template",
+      });
+    }
+  }
+
+  for (const message of ctx.messages) {
+    if (message.hidden) {
+      continue;
+    }
+    const messageSegments = formatChatMessageForCliPreview(message);
+    for (let i = 0; i < messageSegments.length; i++) {
+      const segment = messageSegments[i]!;
+      segments.push({
+        id: `chat-${message.id}-${segmentIndex}`,
+        role: segment.role,
+        title: `#${message.seq} · ${segment.role}`,
+        body: segment.body,
+        source: "message",
+      });
+      segmentIndex += 1;
+    }
+  }
+
+  for (const block of layout.dynamic) {
+    if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
+      continue;
+    }
+    const expanded = await expandDynamicMacros(block.content, {
+      now: ctx.now,
+      vfs: ctx.vfs,
+    });
+    segments.push({
+      id: `dynamic-${block.name}`,
+      role: block.role,
+      title: block.name,
+      body: expanded,
+      source: "template",
+    });
+  }
+
+  return segments;
+}
+
+/**
+ * 构建 LLM 输入：system 字段 + persist 合成消息 + chat + dynamic。
+ */
+export async function buildPromptLlmInputFromLayout(
+  layout: AgentPromptLayout,
+  ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
+): Promise<PromptLlmInput> {
+  const agentStepIndex = resolveAgentStepIndex(options);
+  const messages: ChatMessage[] = [];
+
+  for (const block of layout.persist) {
+    if (block.type === "text") {
+      messages.push(syntheticTemplateMessage(block, block.content, ctx));
+    } else {
+      messages.push(
+        syntheticWorktreeMessage(block, ctx.worktreeDisplay, ctx),
+      );
+    }
+  }
+
+  messages.push(...ctx.messages.filter((m) => !m.hidden));
+
+  for (const block of layout.dynamic) {
+    if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
+      continue;
+    }
+    const expanded = await expandDynamicMacros(block.content, {
+      now: ctx.now,
+      vfs: ctx.vfs,
+    });
+    messages.push(syntheticTemplateMessage(block, expanded, ctx));
+  }
+
+  const system =
+    layout.system != null && layout.system.trim() !== ""
+      ? layout.system
+      : undefined;
+
+  return { system, messages };
+}
+
+/** 构建有序预览分段（每段一张卡片）。 */
+export async function buildPromptPreviewSegmentsFromLayout(
+  layout: AgentPromptLayout,
+  ctx: PromptRenderContext,
+  options?: PromptAssemblyOptions,
+): Promise<PromptPreviewSegment[]> {
+  const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
+  return segments.map((segment) => ({
     id: segment.id,
     role: segment.role,
     title: segment.title,
@@ -224,15 +234,14 @@ export function buildPromptPreviewSegments(
   }));
 }
 
-/**
- * Formats prompt assembly as role-prefixed plain text for CLI preview and token counting.
- */
-export function formatPromptLlmInputForCli(
-  blocks: readonly PromptBlock[],
+/** CLI 预览与 token 计数用的 role 前缀纯文本。 */
+export async function formatPromptLlmInputForCliFromLayout(
+  layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   options?: PromptAssemblyOptions,
-): string {
-  return buildPromptAssembly(blocks, ctx, options)
+): Promise<string> {
+  const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
+  return segments
     .map((segment) => formatSegment(segment.role, segment.body))
     .join("\n");
 }

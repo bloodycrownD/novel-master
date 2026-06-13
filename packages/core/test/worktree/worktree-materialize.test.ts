@@ -173,33 +173,36 @@ describe("worktree materialize", () => {
     );
   });
 
-  it("session macro cache refresh stores listRows from materialize", async () => {
+  it("session worktree snapshot getOrRefresh stores listRows", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
 
-    const { createSessionMacroCache, createWorktreeService } = await import(
+    const { createSessionWorktreeSnapshotStore, createWorktreeService } = await import(
       "@novel-master/core"
     );
-    const macroCache = createSessionMacroCache();
+    const store = createSessionWorktreeSnapshotStore();
     const wt = createWorktreeService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
 
-    const snapshot = await macroCache.refresh(
+    const snapshot = await store.getOrRefresh(
       project.id,
       session.id,
-      () => wt.materialize(),
+      async () => ({
+        worktreeDisplay: await wt.renderDisplay(),
+        listRows: await wt.buildListRows(),
+      }),
     );
     assert.ok(snapshot.listRows.length >= 2);
-    const materialized = await wt.materialize();
+    const listRows = await wt.buildListRows();
     assert.deepEqual(
       snapshot.listRows.map((r) => r.path),
-      materialized.listRows.map((r) => r.path),
+      listRows.map((r) => r.path),
     );
   });
 });

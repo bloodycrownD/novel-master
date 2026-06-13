@@ -12,7 +12,7 @@ describe("validateAgentDefinition", () => {
       {
         schemaVersion: 1,
         name: "pinned",
-      prompts: { blocks: {} },
+        prompts: { persist: {}, dynamic: {} },
       model: "mock/test",
       },
       agentDefinitionSchema,
@@ -31,7 +31,7 @@ describe("validateAgentDefinition", () => {
       {
         schemaVersion: 1,
         name: "pinned",
-      prompts: { blocks: {} },
+        prompts: { persist: {}, dynamic: {} },
       model: "mock/ghost",
       },
       agentDefinitionSchema,
@@ -52,7 +52,7 @@ describe("validateAgentDefinition", () => {
       {
         schemaVersion: 1,
         name: "bare",
-      prompts: { blocks: {} },
+        prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema,
     );

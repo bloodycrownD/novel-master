@@ -5,13 +5,11 @@ agents:
     runtime:
       maxSteps: 20
     prompts:
-      blocks:
-        system:
-          type: text
-          role: system
-          content: "You are a helpful assistant."
-        history:
-          type: chat
+      system: |
+        You are a helpful assistant.
+      persist: {}
+      dynamic: {}
   summarizer:
     prompts:
-      blocks: {}
+      persist: {}
+      dynamic: {}

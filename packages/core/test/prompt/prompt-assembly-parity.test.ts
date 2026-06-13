@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  formatPromptLlmInputForCli,
+  formatPromptLlmInputForCliFromLayout,
   serializePromptLlmInput,
   textBlocks,
+  type AgentPromptLayout,
   type ChatMessage,
-  type PromptBlock,
 } from "@novel-master/core";
+
+const layout: AgentPromptLayout = {
+  system: "ctx",
+  persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
+  dynamic: [],
+};
 
 function message(role: string, content: string, seq: number): ChatMessage {
   return {
@@ -23,63 +29,30 @@ function message(role: string, content: string, seq: number): ChatMessage {
 }
 
 describe("prompt assembly parity", () => {
-  it("T2: serializePromptLlmInput equals formatPromptLlmInputForCli", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "You are helpful." },
-      { name: "ctx", type: "text", role: "user", content: "{{.worktree}}" },
-      { name: "c", type: "chat" },
-    ];
+  it("T2: serializePromptLlmInput equals formatPromptLlmInputForCliFromLayout", async () => {
     const ctx = {
-      worktreeDisplay: "WORKTREE_BODY",
-      filetreeDisplay: "TREE",
-      messages: [message("user", "hello", 1), message("assistant", "hi", 2)],
+      worktreeDisplay: "WT",
+      messages: [message("user", "hi", 1)],
     };
-    const formatted = formatPromptLlmInputForCli(blocks, ctx);
-    const serialized = serializePromptLlmInput(blocks, ctx);
+    const serialized = await serializePromptLlmInput(layout, ctx);
+    const formatted = await formatPromptLlmInputForCliFromLayout(layout, ctx);
     assert.equal(serialized, formatted);
   });
 
-  it("T3: system+chat only matches writer-agent shape", () => {
-    const blocks: PromptBlock[] = [
-      { name: "s", type: "text", role: "system", content: "Write stories." },
-      { name: "c", type: "chat" },
-    ];
-    const ctx = {
-      worktreeDisplay: "",
-      filetreeDisplay: "",
-      messages: [message("user", "go", 1)],
-    };
-    const out = serializePromptLlmInput(blocks, ctx);
-    assert.match(out, /^system: Write stories\./);
-    assert.match(out, /user: go/);
-    assert.ok(!out.includes("\n\n"));
-  });
-
-  it("T4: hide shortens chat portion but worktree template remains", () => {
-    const worktree = "W".repeat(10_000);
-    const blocks: PromptBlock[] = [
-      { name: "ctx", type: "text", role: "user", content: "{{.worktree}}" },
-      { name: "c", type: "chat" },
-    ];
+  it("hidden messages excluded from chat segment", async () => {
     const fullCtx = {
-      worktreeDisplay: worktree,
-      filetreeDisplay: "",
+      worktreeDisplay: "",
       messages: [
-        message("user", "one", 1),
-        message("assistant", "two", 2),
-        message("user", "three", 3),
+        message("user", "visible", 1),
+        { ...message("assistant", "hidden", 2), hidden: true },
       ],
     };
     const hiddenCtx = {
-      ...fullCtx,
-      messages: [message("user", "one", 1)],
+      worktreeDisplay: "",
+      messages: [message("user", "visible", 1)],
     };
-    const full = serializePromptLlmInput(blocks, fullCtx);
-    const hidden = serializePromptLlmInput(blocks, hiddenCtx);
-    const drop = full.length - hidden.length;
-    assert.ok(full.includes(worktree));
-    assert.ok(hidden.includes(worktree));
-    assert.ok(drop > 0);
-    assert.ok(drop < worktree.length);
+    const full = await serializePromptLlmInput(layout, fullCtx);
+    const hidden = await serializePromptLlmInput(layout, hiddenCtx);
+    assert.equal(full, hidden);
   });
 });

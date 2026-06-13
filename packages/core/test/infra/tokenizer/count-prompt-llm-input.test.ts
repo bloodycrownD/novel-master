@@ -10,8 +10,8 @@ import {
 import { emptyRegistryDeps } from "./registry-test-helpers.js";
 
 const minimalParams = {
-  blocks: [{ name: "c", type: "chat" as const }],
-  ctx: { worktreeDisplay: "", filetreeDisplay: "", messages: [] },
+  layout: { persist: [], dynamic: [] },
+  ctx: { worktreeDisplay: "", messages: [] },
   applicationModelId: "openai/gpt-4o",
   registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
 } as const;

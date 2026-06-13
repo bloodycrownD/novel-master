@@ -3,7 +3,7 @@ import { describe, it, mock } from "node:test";
 import {
   ChatAgentSession,
   createAgentRunner,
-  createSessionMacroCache,
+  createSessionWorktreeSnapshotStore,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_SESSION_MESSAGE_RECEIVED,
@@ -27,7 +27,7 @@ import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix 
 function minimalDefinition(): AgentDefinition {
   return {
     name: "test",
-    prompts: [{ name: "c", type: "chat" }],
+    prompts: { persist: [], dynamic: [] },
   };
 }
 
@@ -36,12 +36,18 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "macroCache">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
 ): CreateAgentRunnerDeps {
   return {
     ...deps,
     eventBus: new SimpleEventBus(),
-    macroCache: createSessionMacroCache(),
+    worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+    worktree: () =>
+      ({
+        scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+        renderDisplay: async () => "WT",
+        buildListRows: async () => [],
+      }) as never,
   };
 }
 
@@ -332,7 +338,13 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      macroCache: createSessionMacroCache(),
+      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktree: () =>
+        ({
+          scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+        }) as never,
     });
     await runner.run({
       maxSteps: 1,
@@ -378,7 +390,13 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      macroCache: createSessionMacroCache(),
+      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktree: () =>
+        ({
+          scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+        }) as never,
     });
     await runner.run({
       maxSteps: 5,
@@ -443,7 +461,13 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      macroCache: createSessionMacroCache(),
+      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktree: () =>
+        ({
+          scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+        }) as never,
     });
     await runner.run({
       maxSteps: 5,
@@ -489,7 +513,7 @@ describe("AgentRunner", () => {
       () =>
         runner.run({
           maxSteps: 3,
-          definition: { ...minimalDefinition(), prompts: [] },
+          definition: { ...minimalDefinition(), prompts: { persist: [], dynamic: [] } },
           ...defaultRunScope,
         }),
       (e: unknown) =>
