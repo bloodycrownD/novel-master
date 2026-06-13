@@ -298,6 +298,24 @@ export type TranscriptStreamState = {
   readonly thinking: string;
 };
 
+/**
+ * 基于完整会话构建 transcript 行，再按 tail 消息 id 筛选待 append 行。
+ * appendTail 必须带全量上下文，否则 isTurnToolExecuting / toolPhase 在多轮或已配对 hidden tool_result 时会判错。
+ */
+export function selectTailTranscriptRows(
+  allMessages: readonly ChatMessage[],
+  tailMessages: readonly ChatMessage[],
+  options: BuildChatListItemsOptions = {},
+): TranscriptRow[] {
+  if (tailMessages.length === 0) {
+    return [];
+  }
+  const tailIds = new Set(tailMessages.map(message => message.id));
+  return buildTranscriptRows(allMessages, undefined, options).filter(
+    row => row.kind === 'message' && tailIds.has(row.id),
+  );
+}
+
 /** Maps session messages to Web transcript rows (seq ascending, forward DOM order). */
 export function buildTranscriptRows(
   messages: readonly ChatMessage[],

@@ -48,6 +48,22 @@ function sampleMessage(id: string, seq: number): ChatMessage {
   };
 }
 
+function assistantWithToolUse(id: string, seq: number): ChatMessage {
+  return {
+    id,
+    sessionId: 's1',
+    seq,
+    role: 'assistant',
+    content: {
+      blocks: [{type: 'tool_use', id: `tu-${id}`, name: 'read', input: {}}],
+    },
+    provider: null,
+    raw: null,
+    createdAtMs: seq,
+    hidden: false,
+  };
+}
+
 function messageTypesSince(clearAfterIndex: number): string[] {
   return mockWebViewPostMessages.slice(clearAfterIndex).map(raw => {
     const parsed = decodeHostToTranscript(raw);
@@ -88,6 +104,14 @@ async function flushAnimationFrame(): Promise<void> {
   await act(async () => {
     await new Promise<void>(resolve => {
       requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+async function flushDeferredSnapshot(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => {
+      setTimeout(resolve, 0);
     });
   });
 }
@@ -349,5 +373,40 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterRerender = messageTypesSince(baseline);
     expect(typesAfterRerender).not.toContain('flagsUpdate');
     expect(typesAfterRerender).not.toContain('sessionSnapshot');
+  });
+
+  it('agent 运行中 assistant 含 tool_use 落库时走 sessionSnapshot 而非 appendTailRows', async () => {
+    const initialMessages = [sampleMessage('u1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantWithToolUse('a1', 2)]}
+          agentRunning
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const typesAfterCommit = messageTypesSince(baseline);
+    expect(typesAfterCommit).toContain('sessionSnapshot');
+    expect(typesAfterCommit).not.toContain('appendTailRows');
   });
 });

@@ -2,6 +2,7 @@ import type {ChatMessage} from '@novel-master/core';
 import {
   buildChatListItems,
   buildTranscriptRows,
+  selectTailTranscriptRows,
 } from '../src/components/chat/message-blocks';
 
 function msg(
@@ -149,5 +150,31 @@ describe('buildTranscriptRows', () => {
     ];
     const row = buildTranscriptRows(messages)[0];
     expect(row).toMatchObject({kind: 'message', hidden: true});
+  });
+
+  it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时不应仍显示 executing', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+      ], 1),
+      msg(
+        'u1',
+        'user',
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
+        2,
+        true,
+      ),
+    ];
+    const tailOnly = buildTranscriptRows([messages[0]!], undefined, {
+      agentRunning: true,
+    })[0];
+    const fromFull = selectTailTranscriptRows(messages, [messages[0]!], {
+      agentRunning: true,
+    })[0];
+    expect(tailOnly).toMatchObject({toolPhase: 'executing'});
+    expect(fromFull).not.toHaveProperty('toolPhase');
+    expect(fromFull).toMatchObject({
+      tools: [expect.objectContaining({toolUseId: 'tu1'})],
+    });
   });
 });

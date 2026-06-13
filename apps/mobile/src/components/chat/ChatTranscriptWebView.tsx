@@ -24,7 +24,12 @@ import {
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
 import {enrichTranscriptRows} from './enrich-transcript-rows';
-import {buildTranscriptRows, messageIsToolResultsOnly} from './message-blocks';
+import {
+  buildTranscriptRows,
+  messageHasToolUse,
+  messageIsToolResultsOnly,
+  selectTailTranscriptRows,
+} from './message-blocks';
 import {
   CHAT_TRANSCRIPT_BASE_URL,
   CHAT_TRANSCRIPT_HTML,
@@ -355,16 +360,19 @@ export const ChatTranscriptWebView = forwardRef<
       }
       const richText = flags?.richText ?? false;
       const rows = enrichTranscriptRows(
-        buildTranscriptRows(tailMessages, undefined, {agentRunning}),
+        selectTailTranscriptRows(messages, tailMessages, {agentRunning}),
         richText,
       );
+      if (rows.length === 0) {
+        return;
+      }
       postToWeb({
         v: 1,
         type: 'appendTailRows',
         payload: {rows},
       });
     },
-    [postToWeb, flags?.richText, agentRunning],
+    [postToWeb, flags?.richText, agentRunning, messages],
   );
 
   const resetStreamTail = useCallback(() => {
@@ -633,9 +641,14 @@ export const ChatTranscriptWebView = forwardRef<
       sendPrependPage(prependedCount);
     } else if (agentRunning && grew) {
       const added = messages.slice(prevCount);
-      // WHY: appendTailRows leaves prior assistant rows stuck at toolPhase=executing.
-      const toolResultsCommitted = added.some(messageIsToolResultsOnly);
-      if (toolResultsCommitted) {
+      // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
+      const needsFullSnapshot =
+        added.some(messageIsToolResultsOnly) ||
+        added.some(
+          message =>
+            message.role === 'assistant' && messageHasToolUse(message),
+        );
+      if (needsFullSnapshot) {
         sendSessionSnapshot('preserve');
       } else {
         sendAppendTailRows(added);
