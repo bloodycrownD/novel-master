@@ -1,10 +1,38 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import iconv from "iconv-lite";
+import { strToU8, zipSync } from "fflate";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { decodeZipEntryName, ZIP_GPBF_UTF8_EFS } from "../../src/domain/vfs/logic/vfs-zip-filename-decode.js";
 import { parseVfsZip } from "../../src/domain/vfs/logic/vfs-zip-parse.js";
 import { buildGbkFilenameZip } from "./helpers/gbk-zip-fixture.js";
+
+const EOCD_SIGNATURE = 0x06054b50;
+
+/** 损坏中央目录签名，保留 local entry 供 unzipSync 扫描。 */
+function buildCentralDirCorruptZip(): Uint8Array {
+  const zipBytes = zipSync({ "a.md": strToU8("hi") });
+  const copy = new Uint8Array(zipBytes);
+  for (let i = copy.length - 22; i >= 0; i--) {
+    const sig =
+      (copy[i]! |
+        (copy[i + 1]! << 8) |
+        (copy[i + 2]! << 16) |
+        (copy[i + 3]! << 24)) >>>
+      0;
+    if (sig !== EOCD_SIGNATURE) {
+      continue;
+    }
+    const centralDirOffset =
+      copy[i + 16]! |
+      (copy[i + 17]! << 8) |
+      (copy[i + 18]! << 16) |
+      (copy[i + 19]! << 24);
+    copy[centralDirOffset] = 0x00;
+    break;
+  }
+  return copy;
+}
 
 describe("parseVfsZip", () => {
   it("UTF-8 EFS：buildVfsZip 中文路径往返一致", () => {
@@ -56,5 +84,19 @@ describe("parseVfsZip", () => {
     const raw = iconv.encode("笔记\\第一章.md", "gbk");
     const decoded = decodeZipEntryName(raw, 0);
     assert.equal(decoded, "笔记/第一章.md");
+  });
+
+  it("fflate zipSync 产物可由 parseVfsZip 解析", () => {
+    const zipBytes = zipSync({ "fallback/a.md": strToU8("content") });
+    const entries = parseVfsZip(zipBytes);
+    assert.ok(entries.has("fallback/a.md"));
+    assert.equal(new TextDecoder().decode(entries.get("fallback/a.md")!), "content");
+  });
+
+  it("中央目录解析失败时回退 unzipSync", () => {
+    const zipBytes = buildCentralDirCorruptZip();
+    const entries = parseVfsZip(zipBytes);
+    assert.ok(entries.has("a.md"));
+    assert.equal(new TextDecoder().decode(entries.get("a.md")!), "hi");
   });
 });
