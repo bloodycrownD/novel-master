@@ -2,6 +2,10 @@
  * Agent registry CRUD IPC handlers.
  */
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import {
+  createDefaultAgentEditorPrompts,
+  layoutFromFormInput,
+} from "@novel-master/core/config-forms/agent";
 import type {
   AgentRegistryDeleteRequest,
   AgentRegistryGetRequest,
@@ -100,15 +104,13 @@ export async function handleAgentRegistryCreateBlank(): Promise<
     const agentId = `agent-${Date.now()}`;
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
+    const defaultPrompts = createDefaultAgentEditorPrompts();
     await rt.agentRegistry.upsert(
       agentId,
       {
         name: "new-agent",
         runtime: { maxSteps: 20 },
-        prompts: [
-          { name: "system", type: "text", role: "system", content: "" },
-          { name: "history", type: "chat" },
-        ],
+        prompts: layoutFromFormInput(defaultPrompts),
       },
       { registeredToolNames: probe.list() },
     );

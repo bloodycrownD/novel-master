@@ -5,32 +5,21 @@ import {
 } from '../src/services/worktree-snapshot.service';
 
 describe('worktree-snapshot.service', () => {
-  it('getOrRefresh returns cached snapshot with listRows without rematerializing', async () => {
+  it('getOrRefresh delegates to worktreeSnapshot store', async () => {
     const materialize = jest.fn(async () => ({
       worktreeDisplay: 'wt',
-      filetreeDisplay: 'ft',
       listRows: [{kind: 'dir' as const, path: '/', ruleState: '', inclusionMode: '', displayState: ''}],
     }));
-    const refresh = jest.fn(async (_p, _s, loader) => loader());
+    const getOrRefresh = jest.fn(async (_p, _s, loader) => {
+      const rendered = await loader();
+      return {
+        worktreeDisplay: rendered.worktreeDisplay,
+        listRows: rendered.listRows,
+        refreshedAtMs: Date.now(),
+      };
+    });
     const runtime = {
-      macroCache: {
-        get: () => ({
-          worktreeDisplay: 'cached-wt',
-          filetreeDisplay: 'cached-ft',
-          listRows: [
-            {
-              kind: 'file' as const,
-              path: '/a.md',
-              ruleState: '',
-              inclusionMode: '',
-              displayState: '',
-            },
-          ],
-          refreshedAtMs: 1,
-        }),
-        refresh,
-        clear: jest.fn(),
-      },
+      worktreeSnapshot: {getOrRefresh, markDirty: jest.fn()},
       worktree: () => ({materialize}),
     };
 
@@ -39,72 +28,17 @@ describe('worktree-snapshot.service', () => {
       sessionId: 's1',
     });
 
-    expect(snap.worktreeDisplay).toBe('cached-wt');
-    expect(materialize).not.toHaveBeenCalled();
-    expect(refresh).not.toHaveBeenCalled();
-  });
-
-  it('getOrRefresh treats legacy snapshot without listRows as cache miss', async () => {
-    const materialize = jest.fn(async () => ({
-      worktreeDisplay: 'wt',
-      filetreeDisplay: 'ft',
-      listRows: [],
-    }));
-    const refresh = jest.fn(async (_p, _s, loader) => loader());
-    const runtime = {
-      macroCache: {
-        get: () =>
-          ({
-            worktreeDisplay: 'legacy-wt',
-            filetreeDisplay: 'legacy-ft',
-            refreshedAtMs: 1,
-          }) as any,
-        refresh,
-        clear: jest.fn(),
-      },
-      worktree: () => ({materialize}),
-    };
-
-    await getOrRefreshSessionWorktreeSnapshot(runtime as any, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
-
+    expect(snap.worktreeDisplay).toBe('wt');
+    expect(getOrRefresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
     expect(materialize).toHaveBeenCalledTimes(1);
-    expect(refresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
   });
 
-  it('getOrRefresh materializes on cache miss', async () => {
-    const materialize = jest.fn(async () => ({
-      worktreeDisplay: 'wt',
-      filetreeDisplay: 'ft',
-      listRows: [],
-    }));
-    const refresh = jest.fn(async (_p, _s, loader) => loader());
+  it('invalidate marks session dirty', () => {
+    const markDirty = jest.fn();
     const runtime = {
-      macroCache: {
-        get: () => undefined,
-        refresh,
-        clear: jest.fn(),
-      },
-      worktree: () => ({materialize}),
-    };
-
-    await getOrRefreshSessionWorktreeSnapshot(runtime as any, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
-
-    expect(materialize).toHaveBeenCalledTimes(1);
-    expect(refresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
-  });
-
-  it('invalidate clears macro cache for session', () => {
-    const clear = jest.fn();
-    const runtime = {
-      macroCache: {clear},
+      worktreeSnapshot: {markDirty},
     };
     invalidateSessionWorktreeSnapshot(runtime as any, 'p1', 's1');
-    expect(clear).toHaveBeenCalledWith('p1', 's1');
+    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
   });
 });

@@ -86,13 +86,11 @@ const fixedListRows = [
 const buildListRows = jest.fn(async () => []);
 const list = jest.fn(async () => []);
 const getDirRule = jest.fn(async () => null);
-const clear = jest.fn();
+const markDirty = jest.fn();
 
 const mockRuntime = {
-  macroCache: {
-    get: jest.fn(),
-    refresh: jest.fn(),
-    clear,
+  worktreeSnapshot: {
+    markDirty,
   },
   worktree: jest.fn(),
 };
@@ -126,11 +124,10 @@ describe('VfsFileManager session worktree snapshot', () => {
     buildListRows.mockClear();
     list.mockClear();
     getDirRule.mockClear();
-    clear.mockClear();
+    markDirty.mockClear();
     mockGetOrRefresh.mockReset();
     mockGetOrRefresh.mockImplementation(async (_runtime, _scope) => ({
       worktreeDisplay: 'wt',
-      filetreeDisplay: 'ft',
       listRows: fixedListRows,
       refreshedAtMs: 1,
     }));
@@ -149,7 +146,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     expect(buildListRows).not.toHaveBeenCalled();
   });
 
-  it('invalidate clears macro cache and reload re-fetches snapshot', async () => {
+  it('invalidate marks snapshot dirty and reload re-fetches snapshot', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
@@ -160,7 +157,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     await act(async () => {
       invalidateSessionWorktreeSnapshot(mockRuntime as any, 'p1', 's1');
     });
-    expect(clear).toHaveBeenCalledWith('p1', 's1');
+    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
 
     await act(async () => {
       tree!.update(renderSessionVfm('/subdir'));

@@ -55,7 +55,7 @@ export async function loadChatPromptTokenStats(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
-  const { definition, blocks, ctx } = await buildSessionPromptInput(
+  const { definition, layout, ctx } = await buildSessionPromptInput(
     runtime,
     scope,
   );
@@ -67,7 +67,7 @@ export async function loadChatPromptTokenStats(
   });
 
   if (!applicationModelId) {
-    const serialized = serializePromptLlmInput(blocks, ctx);
+    const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return buildTokenStats(count, true, "heuristic", undefined);
   }
@@ -78,7 +78,7 @@ export async function loadChatPromptTokenStats(
   );
 
   const result = await countPromptLlmInput({
-    blocks,
+    layout,
     ctx,
     applicationModelId,
     registry: runtime.tokenCounters,

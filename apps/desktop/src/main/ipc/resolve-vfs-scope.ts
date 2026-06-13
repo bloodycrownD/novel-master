@@ -62,12 +62,15 @@ export function getWorktreeForScope(
   return rt.worktree(scope);
 }
 
-/** Clears session macro cache after chat-scope VFS mutations. */
-export function invalidateSessionMacroCache(
+/** 会话 scope VFS / 规则变更后标记 worktree 快照 dirty。 */
+export function invalidateSessionWorktreeSnapshot(
   rt: DesktopNovelMasterRuntime,
   scope: VfsScope,
 ): void {
   if (scope.kind === "session") {
-    rt.macroCache.clear(scope.projectId, scope.sessionId);
+    rt.worktreeSnapshot.markDirty(scope.projectId, scope.sessionId);
   }
 }
+
+/** @deprecated 使用 {@link invalidateSessionWorktreeSnapshot} */
+export const invalidateSessionMacroCache = invalidateSessionWorktreeSnapshot;

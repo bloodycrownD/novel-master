@@ -1,9 +1,9 @@
 /**
- * Session worktree snapshot helpers: unified macro cache for list + display.
+ * Session worktree 快照 helpers（list + display 统一存储）。
  *
  * @module services/worktree-snapshot.service
  */
-import type {SessionMacroSnapshot} from '@novel-master/core';
+import type {SessionWorktreeSnapshot} from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export interface SessionWorktreeSnapshotScope {
@@ -11,41 +11,30 @@ export interface SessionWorktreeSnapshotScope {
   readonly sessionId: string;
 }
 
-function hasMaterializedListRows(
-  snapshot: SessionMacroSnapshot | undefined,
-): snapshot is SessionMacroSnapshot {
-  return snapshot != null && Array.isArray(snapshot.listRows);
-}
-
 /**
- * Returns cached session worktree snapshot or materializes and stores one.
- * Treats snapshots missing `listRows` as a cache miss.
+ * 返回已缓存快照，或在 dirty / miss 时 materialize 并写入 store。
  */
 export async function getOrRefreshSessionWorktreeSnapshot(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorktreeSnapshotScope,
-): Promise<SessionMacroSnapshot> {
-  const cached = runtime.macroCache.get(scope.projectId, scope.sessionId);
-  if (hasMaterializedListRows(cached)) {
-    return cached;
-  }
+): Promise<SessionWorktreeSnapshot> {
   const wt = runtime.worktree({
     kind: 'session',
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   });
-  return runtime.macroCache.refresh(
+  return runtime.worktreeSnapshot.getOrRefresh(
     scope.projectId,
     scope.sessionId,
     () => wt.materialize(),
   );
 }
 
-/** Clears session worktree snapshot after VFS or rule mutations. */
+/** VFS 或规则变更后标记 session worktree 快照为 dirty。 */
 export function invalidateSessionWorktreeSnapshot(
   runtime: MobileNovelMasterRuntime,
   projectId: string,
   sessionId: string,
 ): void {
-  runtime.macroCache.clear(projectId, sessionId);
+  runtime.worktreeSnapshot.markDirty(projectId, sessionId);
 }

@@ -10,7 +10,7 @@ import {
   agentDefinitionSchema,
   decode,
   parseText,
-  validatePromptBlocksFromMap,
+  validateAgentPromptLayoutFromMaps,
   type AgentDefinition,
   type TextFormat,
 } from "@novel-master/core";
@@ -49,10 +49,14 @@ export async function loadAgentFromConfig(
     if (entry == null) {
       throw new Error(`agent not found in bundle: ${agentId}`);
     }
-    const blocks = validatePromptBlocksFromMap(entry.prompts.blocks);
+    const prompts = validateAgentPromptLayoutFromMaps(
+      entry.prompts.persist,
+      entry.prompts.dynamic,
+      entry.prompts.system,
+    );
     return {
       name: agentId,
-      prompts: blocks,
+      prompts,
       model: entry.model,
       runtime: entry.runtime,
     };

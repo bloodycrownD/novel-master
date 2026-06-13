@@ -210,7 +210,7 @@ export async function handleMessagesRollback(
       req.projectId,
       req.messageId,
     );
-    rt.macroCache.clear(req.projectId, req.sessionId);
+    rt.worktreeSnapshot.markDirty(req.projectId, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

@@ -2,8 +2,7 @@
  * Real prompt preview: agent prompts + llm-channel regex + structured segments.
  */
 import {
-  buildPromptPreviewSegments,
-  type AgentDefinition,
+  buildPromptPreviewSegmentsFromLayout,
   type PromptPreviewSegment,
 } from '@novel-master/core';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -21,10 +20,10 @@ export async function buildRealPromptPreviewSegments(
   scope: PromptPreviewScope,
 ): Promise<readonly PromptPreviewSegment[]> {
   const {definition} = await resolveCurrentAgentDefinition(runtime);
-  const {blocks, ctx} = await buildSessionPromptInput(
+  const {layout, ctx} = await buildSessionPromptInput(
     runtime,
     scope,
     definition,
   );
-  return buildPromptPreviewSegments(blocks, ctx);
+  return await buildPromptPreviewSegmentsFromLayout(layout, ctx);
 }

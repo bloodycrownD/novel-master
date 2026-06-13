@@ -7,8 +7,23 @@ agents:
     prompts:
       system: |
         You are a helpful assistant.
-      persist: {}
-      dynamic: {}
+      persist:
+        canon:
+          type: worktree
+        persona:
+          type: text
+          role: user
+          content: |
+            主角设定示例。
+      dynamic:
+        state:
+          type: text
+          role: user
+          lifecycle: once
+          content: |
+            当前时间：{{$time}}（{{$week_cn}}）
+            目录：
+            {{$filetree}}
   summarizer:
     prompts:
       persist: {}

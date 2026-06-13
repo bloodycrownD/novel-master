@@ -1,20 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AgentDefinition, PromptBlock, PromptBlockRole } from "@novel-master/core";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  AgentDefinition,
+  DynamicPromptBlock,
+  PersistPromptBlock,
+  PersistTextPromptBlock,
+} from "@novel-master/core";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
-  createDefaultChatBlock,
-  createDefaultTextBlock,
+  createDefaultAgentEditorPrompts,
+  createDefaultDynamicTextBlock,
+  createDefaultPersistTextBlock,
+  createDefaultWorktreeBlock,
+  definitionToForm,
   formatApplicationModelId,
   formSnapshotJson,
   parseApplicationModelId,
-  stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
-  isPromptBlockPersistent,
-  withPromptBlockPersistence,
-  withPromptBlockRole,
+  isDynamicBlockPersistent,
+  withDynamicBlockPersistence,
   type ToolsMode,
 } from "@novel-master/core/config-forms/agent";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
@@ -40,10 +46,31 @@ import {
 } from "./settings-ui";
 import { Switch } from "../../components/ui/Switch";
 
+const DYNAMIC_MACROS = [
+  { label: "$time", token: "{{$time}}" },
+  { label: "$week_cn", token: "{{$week_cn}}" },
+  { label: "$filetree", token: "{{$filetree}}" },
+] as const;
+
 type Nav = {
   push: (viewId: string) => void;
   navState: SettingsNavState;
 };
+
+type AddMenuTarget = "persist" | "dynamic" | null;
+
+function insertAtCursor(
+  value: string,
+  insert: string,
+  textarea: HTMLTextAreaElement | null,
+): string {
+  if (textarea == null) {
+    return value + insert;
+  }
+  const start = textarea.selectionStart ?? value.length;
+  const end = textarea.selectionEnd ?? value.length;
+  return value.slice(0, start) + insert + value.slice(end);
+}
 
 export function AgentEditorView({ nav }: { nav: Nav }) {
   const agentId = nav.navState.editingAgentId;
@@ -52,7 +79,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState("");
   const [vendorModelId, setVendorModelId] = useState("");
-  const [prompts, setPrompts] = useState<PromptBlock[]>([]);
+  const [systemEnabled, setSystemEnabled] = useState(false);
+  const [systemContent, setSystemContent] = useState("");
+  const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
+  const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
@@ -63,7 +93,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
-  const [addBlockMenu, setAddBlockMenu] = useState<{ x: number; y: number } | null>(null);
+  const [addBlockMenu, setAddBlockMenu] = useState<{
+    x: number;
+    y: number;
+    target: AddMenuTarget;
+  } | null>(null);
+  const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(null);
 
   const snapshot = useMemo(
     () =>
@@ -75,9 +111,24 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         vendorModelId,
         toolsMode,
         toolsSelected,
-        prompts,
+        systemEnabled,
+        systemContent,
+        persist,
+        dynamic,
       }),
-    [name, maxSteps, modelEnabled, providerId, vendorModelId, toolsMode, toolsSelected, prompts],
+    [
+      name,
+      maxSteps,
+      modelEnabled,
+      providerId,
+      vendorModelId,
+      toolsMode,
+      toolsSelected,
+      systemEnabled,
+      systemContent,
+      persist,
+      dynamic,
+    ],
   );
 
   const loadSavedModels = useCallback(async (pid: string) => {
@@ -105,17 +156,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         return;
       }
       const def = agentRes.data as AgentDefinition;
+      const promptForm = definitionToForm(def);
       setName(def.name ?? "");
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-      const { prompts: loadedPrompts, removed } = stripRemovedPromptBlocks(def.prompts ?? []);
-      if (loadedPrompts.length === 0) {
-        setPrompts([createDefaultTextBlock(0)]);
-      } else {
-        setPrompts(loadedPrompts);
-      }
-      if (removed > 0) {
-        showToast("已移除已废弃的摘要块（abstract）");
-      }
+      setSystemEnabled(promptForm.systemEnabled);
+      setSystemContent(promptForm.systemContent);
+      setPersist(
+        promptForm.persist.length > 0
+          ? [...promptForm.persist]
+          : createDefaultAgentEditorPrompts().persist,
+      );
+      setDynamic([...promptForm.dynamic]);
+
       const toolsWire = toolsSelectionFromDefinition(def);
       setToolsMode(toolsWire.mode);
       setToolsSelected([...toolsWire.selected]);
@@ -161,7 +213,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           vendorModelId: baselineVendorModelId,
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
-          prompts: loadedPrompts.length > 0 ? loadedPrompts : [createDefaultTextBlock(0)],
+          ...promptForm,
+          persist:
+            promptForm.persist.length > 0
+              ? [...promptForm.persist]
+              : createDefaultAgentEditorPrompts().persist,
         }),
       );
     } finally {
@@ -191,7 +247,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       vendorModelId,
       toolsMode,
       toolsSelected,
-      prompts,
+      systemEnabled,
+      systemContent,
+      persist,
+      dynamic,
     });
     if (!built.ok) {
       showToast(built.message);
@@ -214,18 +273,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  const replaceBlock = (index: number, next: PromptBlock) => {
-    setPrompts((prev) => prev.map((block, i) => (i === index ? next : block)));
-  };
-
-  const updateBlock = (index: number, patch: Partial<PromptBlock>) => {
-    setPrompts((prev) =>
-      prev.map((block, i) => (i === index ? ({ ...block, ...patch } as PromptBlock) : block)),
-    );
-  };
-
-  const moveBlock = (index: number, dir: -1 | 1) => {
-    setPrompts((prev) => {
+  const movePersist = (index: number, dir: -1 | 1) => {
+    setPersist((prev) => {
       const next = [...prev];
       const target = index + dir;
       if (target < 0 || target >= next.length) return prev;
@@ -236,20 +285,49 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     });
   };
 
-  const deleteBlock = (index: number) => {
-    if (prompts.length <= 1) {
+  const moveDynamic = (index: number, dir: -1 | 1) => {
+    setDynamic((prev) => {
+      const next = [...prev];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) return prev;
+      const tmp = next[target]!;
+      next[target] = next[index]!;
+      next[index] = tmp;
+      return next;
+    });
+  };
+
+  const deletePersist = (index: number) => {
+    if (persist.length <= 1 && dynamic.length === 0 && !systemEnabled) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
-    setPrompts((prev) => prev.filter((_, i) => i !== index));
+    setPersist((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const addBlock = (kind: "text" | "chat") => {
-    setPrompts((prev) =>
-      kind === "text"
-        ? [...prev, createDefaultTextBlock(prev.length)]
-        : [...prev, createDefaultChatBlock()],
-    );
+  const deleteDynamic = (index: number) => {
+    if (dynamic.length <= 1 && persist.length === 0 && !systemEnabled) {
+      showToast("至少保留一个 Prompt 块");
+      return;
+    }
+    setDynamic((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const addPersistBlock = (kind: "text" | "worktree") => {
+    setPersist((prev) => {
+      if (kind === "worktree" && prev.some((b) => b.type === "worktree")) {
+        showToast("persist 区至多一个 worktree 块");
+        return prev;
+      }
+      return kind === "text"
+        ? [...prev, createDefaultPersistTextBlock(prev.length)]
+        : [...prev, createDefaultWorktreeBlock(prev.length)];
+    });
+    setAddBlockMenu(null);
+  };
+
+  const addDynamicBlock = () => {
+    setDynamic((prev) => [...prev, createDefaultDynamicTextBlock(prev.length)]);
     setAddBlockMenu(null);
   };
 
@@ -271,6 +349,29 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   };
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
+
+  const renderBlockActions = (
+    index: number,
+    total: number,
+    onMove: (i: number, d: -1 | 1) => void,
+    onDelete: (i: number) => void,
+  ) => (
+    <div className="config-block-card__actions">
+      {index > 0 ? (
+        <button type="button" className="icon-btn" onClick={() => onMove(index, -1)} aria-label="上移">
+          ↑
+        </button>
+      ) : null}
+      {index < total - 1 ? (
+        <button type="button" className="icon-btn" onClick={() => onMove(index, 1)} aria-label="下移">
+          ↓
+        </button>
+      ) : null}
+      <button type="button" className="icon-btn" onClick={() => onDelete(index)} aria-label="删除">
+        ×
+      </button>
+    </div>
+  );
 
   return (
     <SettingsPanel>
@@ -371,9 +472,37 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           )}
         </SettingsSection>
 
-        <SettingsSection title="Prompt 块">
+        <SettingsSection title="Prompt 布局（WYSIWYG）">
+          <p className="settings-hint">
+            纵向顺序与 LLM 组装一致：System → Persist → 会话历史 → Dynamic。
+          </p>
+
+          <div className="config-block-card config-block-card--prompt">
+            <div className="config-block-card__header">
+              <span className="config-block-card__badge">System</span>
+              <span className="config-block-card__meta">API system 字段</span>
+              <Switch
+                checked={systemEnabled}
+                onChange={setSystemEnabled}
+                aria-label="启用 System"
+              />
+            </div>
+            {systemEnabled ? (
+              <SettingsField label="System 内容">
+                <textarea
+                  rows={4}
+                  value={systemContent}
+                  onChange={(e) => setSystemContent(e.target.value)}
+                  placeholder="写入 LLM system 字段的单段提示…"
+                />
+              </SettingsField>
+            ) : (
+              <p className="config-block-card__hint">关闭时不写入 prompts.system。</p>
+            )}
+          </div>
+
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">块列表</span>
+            <span className="config-block-card__section-label">Persist 块</span>
             <button
               type="button"
               className="settings-link-btn"
@@ -383,52 +512,33 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 setAddBlockMenu({
                   x: Math.max(8, rect.right - 140),
                   y: Math.max(8, rect.bottom + 4),
+                  target: "persist",
                 });
               }}
             >
               添加
             </button>
           </div>
-          <ContextMenu
-            open={addBlockMenu != null}
-            x={addBlockMenu?.x ?? 0}
-            y={addBlockMenu?.y ?? 0}
-            items={[
-              { label: "文本块", action: "text" },
-              { label: "会话块", action: "chat" },
-            ]}
-            onSelect={(action) => {
-              if (action === "text" || action === "chat") {
-                addBlock(action);
-              }
-            }}
-            onClose={() => setAddBlockMenu(null)}
-          />
           <div className="config-block-list">
-            {prompts.map((block, index) => (
-              <div key={`prompt-${index}`} className="config-block-card config-block-card--prompt">
+            {persist.map((block, index) => (
+              <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
                   <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
                   <span className="config-block-card__meta">{block.name}</span>
-                  <div className="config-block-card__actions">
-                    {index > 0 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, -1)} aria-label="上移">
-                        ↑
-                      </button>
-                    ) : null}
-                    {index < prompts.length - 1 ? (
-                      <button type="button" className="icon-btn" onClick={() => moveBlock(index, 1)} aria-label="下移">
-                        ↓
-                      </button>
-                    ) : null}
-                    <button type="button" className="icon-btn" onClick={() => deleteBlock(index)} aria-label="删除">
-                      ×
-                    </button>
-                  </div>
+                  {renderBlockActions(index, persist.length, movePersist, deletePersist)}
                 </div>
                 <div className="config-block-card__body">
                   <SettingsField label="名称">
-                    <input value={block.name} onChange={(e) => updateBlock(index, { name: e.target.value })} />
+                    <input
+                      value={block.name}
+                      onChange={(e) =>
+                        setPersist((prev) =>
+                          prev.map((b, i) =>
+                            i === index ? { ...b, name: e.target.value } : b,
+                          ),
+                        )
+                      }
+                    />
                   </SettingsField>
                   {block.type === "text" ? (
                     <>
@@ -436,11 +546,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         <select
                           value={block.role}
                           onChange={(e) =>
-                            replaceBlock(
-                              index,
-                              withPromptBlockRole(
-                                block,
-                                e.target.value as PromptBlockRole,
+                            setPersist((prev) =>
+                              prev.map((b, i) =>
+                                i === index && b.type === "text"
+                                  ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
+                                  : b,
                               ),
                             )
                           }
@@ -452,50 +562,190 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           ))}
                         </select>
                       </SettingsField>
-                      {block.role !== "system" ? (
-                        <>
-                          <div className="config-block-card__switch-row">
-                            <span className="config-block-card__switch-label">常驻</span>
-                            <Switch
-                              checked={isPromptBlockPersistent(block)}
-                              onChange={(persistent) =>
-                                replaceBlock(
-                                  index,
-                                  withPromptBlockPersistence(block, persistent),
-                                )
-                              }
-                              aria-label="常驻"
-                            />
-                          </div>
-                          {!isPromptBlockPersistent(block) ? (
-                            <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
-                              仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。
-                            </p>
-                          ) : null}
-                        </>
-                      ) : null}
-                      <p className="config-block-card__hint">
-                        仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
-                      </p>
+                      <p className="config-block-card__hint">persist 区禁止宏与 lifecycle。</p>
                       <SettingsField label="内容">
                         <textarea
                           rows={4}
                           value={block.content}
-                          onChange={(e) => updateBlock(index, { type: "text", content: e.target.value })}
+                          onChange={(e) =>
+                            setPersist((prev) =>
+                              prev.map((b, i) =>
+                                i === index && b.type === "text"
+                                  ? { ...b, content: e.target.value }
+                                  : b,
+                              ),
+                            )
+                          }
                         />
                       </SettingsField>
                     </>
                   ) : (
                     <p className="config-block-card__hint">
-                      chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。
+                      worktree 块注入 materialize 后的会话树 display（非宏）。
                     </p>
                   )}
                 </div>
               </div>
             ))}
           </div>
+
+          <div className="config-block-card config-block-card--prompt config-block-card--readonly">
+            <div className="config-block-card__header">
+              <span className="config-block-card__badge">Chat</span>
+              <span className="config-block-card__meta">会话历史</span>
+            </div>
+            <p className="config-block-card__hint">
+              运行时注入当前会话可见消息，不可配置、不可排序。
+            </p>
+          </div>
+
+          <div className="config-block-card__section-head">
+            <span className="config-block-card__section-label">Dynamic 块</span>
+            <button
+              type="button"
+              className="settings-link-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = e.currentTarget.getBoundingClientRect();
+                setAddBlockMenu({
+                  x: Math.max(8, rect.right - 140),
+                  y: Math.max(8, rect.bottom + 4),
+                  target: "dynamic",
+                });
+              }}
+            >
+              添加
+            </button>
+          </div>
+          <div className="config-block-list">
+            {dynamic.map((block, index) => (
+              <div key={`dynamic-${index}`} className="config-block-card config-block-card--prompt">
+                <div className="config-block-card__header">
+                  <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
+                  <span className="config-block-card__meta">{block.name}</span>
+                  {renderBlockActions(index, dynamic.length, moveDynamic, deleteDynamic)}
+                </div>
+                <div className="config-block-card__body">
+                  <SettingsField label="名称">
+                    <input
+                      value={block.name}
+                      onChange={(e) =>
+                        setDynamic((prev) =>
+                          prev.map((b, i) => (i === index ? { ...b, name: e.target.value } : b)),
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <SettingsField label="角色">
+                    <select
+                      value={block.role}
+                      onChange={(e) =>
+                        setDynamic((prev) =>
+                          prev.map((b, i) =>
+                            i === index
+                              ? { ...b, role: e.target.value as DynamicPromptBlock["role"] }
+                              : b,
+                          ),
+                        )
+                      }
+                    >
+                      {ROLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </SettingsField>
+                  <div className="config-block-card__switch-row">
+                    <span className="config-block-card__switch-label">常驻</span>
+                    <Switch
+                      checked={isDynamicBlockPersistent(block)}
+                      onChange={(persistent) =>
+                        setDynamic((prev) =>
+                          prev.map((b, i) =>
+                            i === index ? withDynamicBlockPersistence(b, persistent) : b,
+                          ),
+                        )
+                      }
+                      aria-label="常驻"
+                    />
+                  </div>
+                  {!isDynamicBlockPersistent(block) ? (
+                    <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
+                      lifecycle: once — 仅首轮 agent step 带入。
+                    </p>
+                  ) : null}
+                  <SettingsField label="内容">
+                    <textarea
+                      ref={dynamicInsertIndex === index ? dynamicTextareaRef : undefined}
+                      rows={4}
+                      value={block.content}
+                      onFocus={() => setDynamicInsertIndex(index)}
+                      onChange={(e) =>
+                        setDynamic((prev) =>
+                          prev.map((b, i) =>
+                            i === index ? { ...b, content: e.target.value } : b,
+                          ),
+                        )
+                      }
+                    />
+                  </SettingsField>
+                  <div className="config-dep-chips">
+                    <span className="config-block-card__hint">宏：</span>
+                    {DYNAMIC_MACROS.map((macro) => (
+                      <button
+                        key={macro.token}
+                        type="button"
+                        className="config-dep-chip"
+                        onClick={() => {
+                          setDynamicInsertIndex(index);
+                          setDynamic((prev) =>
+                            prev.map((b, i) =>
+                              i === index
+                                ? {
+                                    ...b,
+                                    content: insertAtCursor(
+                                      b.content,
+                                      macro.token,
+                                      dynamicInsertIndex === index
+                                        ? dynamicTextareaRef.current
+                                        : null,
+                                    ),
+                                  }
+                                : b,
+                            ),
+                          );
+                        }}
+                      >
+                        {macro.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </SettingsSection>
       </SettingsFormSection>
+      <ContextMenu
+        open={addBlockMenu != null}
+        x={addBlockMenu?.x ?? 0}
+        y={addBlockMenu?.y ?? 0}
+        items={
+          addBlockMenu?.target === "dynamic"
+            ? [{ label: "文本块", action: "dynamic-text" }]
+            : [
+                { label: "文本块", action: "persist-text" },
+                { label: "Worktree 块", action: "persist-worktree" },
+              ]
+        }
+        onSelect={(action) => {
+          if (action === "persist-text") addPersistBlock("text");
+          else if (action === "persist-worktree") addPersistBlock("worktree");
+          else if (action === "dynamic-text") addDynamicBlock();
+        }}
+        onClose={() => setAddBlockMenu(null)}
+      />
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"

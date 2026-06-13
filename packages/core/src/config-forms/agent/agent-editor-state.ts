@@ -1,6 +1,11 @@
 import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
-import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
-import type { PromptBlock, PromptBlockRole } from "@/domain/prompt/model/prompt-block.js";
+import type {
+  AgentPromptLayout,
+  DynamicPromptBlock,
+  PersistPromptBlock,
+  PersistTextPromptBlock,
+  PersistWorktreePromptBlock,
+} from "@/domain/prompt/model/agent-prompt-layout.js";
 import { formatApplicationModelId } from "../shared/application-model-id.js";
 import {
   buildToolsPolicyFromSelection,
@@ -9,7 +14,8 @@ import {
 
 export type ToolsMode = "default" | "allow" | "deny";
 
-export const PROMPT_BLOCK_ROLES = ["system", "user", "assistant"] as const;
+/** persist / dynamic 文本块可选角色（system 单独顶置）。 */
+export const PROMPT_BLOCK_ROLES = ["user", "assistant"] as const;
 
 export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
   { value: "default", label: "默认（全部工具）" },
@@ -22,6 +28,7 @@ export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
   label: role,
 }));
 
+/** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
 export type AgentEditorFormInput = {
   name: string;
   maxSteps: string;
@@ -30,7 +37,10 @@ export type AgentEditorFormInput = {
   vendorModelId: string;
   toolsMode: ToolsMode;
   toolsSelected: readonly string[];
-  prompts: AgentPromptLayout;
+  systemEnabled: boolean;
+  systemContent: string;
+  persist: readonly PersistPromptBlock[];
+  dynamic: readonly DynamicPromptBlock[];
 };
 
 /** Parses comma/newline tool lists — retained for YAML import compatibility only. */
@@ -60,22 +70,27 @@ export function toolsFromDefinition(def: AgentDefinition): {
 
 export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 
-export function blockTypeLabel(type: PromptBlock["type"]): string {
-  return type === "text" ? "文本" : "会话";
+export function blockTypeLabel(
+  type: PersistPromptBlock["type"] | DynamicPromptBlock["type"],
+): string {
+  if (type === "worktree") {
+    return "Worktree";
+  }
+  return "文本";
 }
 
-type TextPromptBlock = Extract<PromptBlock, { type: "text" }>;
+type DynamicTextBlock = DynamicPromptBlock;
 
-/** Whether a non-system text block is included on every agent step (常驻). */
-export function isPromptBlockPersistent(block: TextPromptBlock): boolean {
+/** dynamic 文本块是否在每轮 agent step 带入（lifecycle always）。 */
+export function isDynamicBlockPersistent(block: DynamicTextBlock): boolean {
   return (block.lifecycle ?? "always") === "always";
 }
 
-/** Maps UI「常驻」switch to lifecycle (omit field when persistent). */
-export function withPromptBlockPersistence(
-  block: TextPromptBlock,
+/** 将 UI「常驻」开关映射为 lifecycle（常驻时省略字段）。 */
+export function withDynamicBlockPersistence(
+  block: DynamicTextBlock,
   persistent: boolean,
-): TextPromptBlock {
+): DynamicTextBlock {
   if (persistent) {
     const { lifecycle: _removed, ...rest } = block;
     return rest;
@@ -83,33 +98,76 @@ export function withPromptBlockPersistence(
   return { ...block, lifecycle: "once" };
 }
 
-/** Strips lifecycle when role changes to system. */
-export function withPromptBlockRole(
-  block: TextPromptBlock,
-  role: PromptBlockRole,
-): TextPromptBlock {
-  const next: TextPromptBlock = { ...block, role };
-  if (role === "system") {
-    const { lifecycle: _removed, ...rest } = next;
-    return rest;
-  }
-  return next;
+/** 新建 Agent 默认 Prompt 表单片段。 */
+export function createDefaultAgentEditorPrompts(): Pick<
+  AgentEditorFormInput,
+  "systemEnabled" | "systemContent" | "persist" | "dynamic"
+> {
+  return {
+    systemEnabled: false,
+    systemContent: "",
+    persist: [createDefaultPersistTextBlock(0)],
+    dynamic: [],
+  };
 }
 
-/** Drop removed `abstract` blocks from legacy agent configs. */
-export function stripRemovedPromptBlocks(
-  blocks: readonly PromptBlock[],
-): { readonly prompts: PromptBlock[]; readonly removed: number } {
-  const kept: PromptBlock[] = [];
-  let removed = 0;
-  for (const block of blocks) {
-    if ((block as { type: string }).type === "abstract") {
-      removed += 1;
-      continue;
-    }
-    kept.push(block);
-  }
-  return { prompts: kept, removed };
+export function createDefaultPersistTextBlock(index: number): PersistTextPromptBlock {
+  return {
+    name: `persist-${index + 1}`,
+    type: "text",
+    role: "user",
+    content: "",
+  };
+}
+
+export function createDefaultWorktreeBlock(index = 0): PersistWorktreePromptBlock {
+  return {
+    name: index === 0 ? "canon" : `worktree-${index + 1}`,
+    type: "worktree",
+  };
+}
+
+export function createDefaultDynamicTextBlock(index: number): DynamicPromptBlock {
+  return {
+    name: `dynamic-${index + 1}`,
+    type: "text",
+    role: "user",
+    content: "",
+  };
+}
+
+/** AgentDefinition → 编辑器表单 Prompt 字段。 */
+export function definitionToForm(
+  def: AgentDefinition,
+): Pick<
+  AgentEditorFormInput,
+  "systemEnabled" | "systemContent" | "persist" | "dynamic"
+> {
+  const system = def.prompts.system?.trim() ?? "";
+  return {
+    systemEnabled: system.length > 0,
+    systemContent: def.prompts.system ?? "",
+    persist: [...def.prompts.persist],
+    dynamic: [...def.prompts.dynamic],
+  };
+}
+
+/** 表单 Prompt 字段 → {@link AgentPromptLayout}（system 关闭时 omit）。 */
+export function layoutFromFormInput(
+  input: Pick<
+    AgentEditorFormInput,
+    "systemEnabled" | "systemContent" | "persist" | "dynamic"
+  >,
+): AgentPromptLayout {
+  const system =
+    input.systemEnabled && input.systemContent.trim() !== ""
+      ? input.systemContent
+      : undefined;
+  return {
+    ...(system != null ? { system } : {}),
+    persist: [...input.persist],
+    dynamic: [...input.dynamic],
+  };
 }
 
 /** Stable JSON for dirty check; omits model ids when专属模型 is off. */
@@ -126,7 +184,10 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
           vendorModelId: input.vendorModelId,
         }
       : {}),
-    prompts: input.prompts,
+    systemEnabled: input.systemEnabled,
+    systemContent: input.systemContent,
+    persist: input.persist,
+    dynamic: input.dynamic,
   });
 }
 
@@ -136,10 +197,11 @@ export function buildAgentDefinitionFromForm(
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
   }
+  const layout = layoutFromFormInput(input);
   if (
-    (input.prompts.system == null || input.prompts.system.trim() === "") &&
-    input.prompts.persist.length === 0 &&
-    input.prompts.dynamic.length === 0
+    layout.system == null &&
+    layout.persist.length === 0 &&
+    layout.dynamic.length === 0
   ) {
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
@@ -147,7 +209,7 @@ export function buildAgentDefinitionFromForm(
   const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   const def: AgentDefinition = {
     name: input.name.trim(),
-    prompts: input.prompts,
+    prompts: layout,
     ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
     ...(input.modelEnabled && input.providerId && input.vendorModelId
       ? { model: formatApplicationModelId(input.providerId, input.vendorModelId) }
@@ -155,17 +217,4 @@ export function buildAgentDefinitionFromForm(
     ...(tools != null ? { tools } : {}),
   };
   return { ok: true, definition: def };
-}
-
-export function createDefaultTextBlock(index: number): PromptBlock {
-  return {
-    name: `block-${index + 1}`,
-    type: "text",
-    role: "system" as PromptBlockRole,
-    content: "",
-  };
-}
-
-export function createDefaultChatBlock(): PromptBlock {
-  return { name: "history", type: "chat" };
 }

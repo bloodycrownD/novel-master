@@ -30,7 +30,7 @@ import {
 } from "../../services/vfs-zip.service.js";
 import {
   getVfsForScope,
-  invalidateSessionMacroCache,
+  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 
@@ -103,7 +103,7 @@ export async function handleVfsWrite(
         versionCheck: req.versionCheck ?? false,
       });
     }
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -118,7 +118,7 @@ export async function handleVfsMkdir(
     const scope = resolveVfsScopeFromRequest(req);
     const vfs = getVfsForScope(rt, scope);
     await vfs.mkdir(req.path);
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -133,7 +133,7 @@ export async function handleVfsDelete(
     const scope = resolveVfsScopeFromRequest(req);
     const vfs = getVfsForScope(rt, scope);
     await deleteVfsEntry(vfs, req.path, { recursive: req.recursive });
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -158,7 +158,7 @@ export async function handleVfsRename(
     } else {
       await renameVfsFile(vfs, req.oldPath, req.newPath);
     }
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -191,7 +191,7 @@ export async function handleVfsZipImport(
       focusedWindow(),
     );
     if (result === "imported") {
-      invalidateSessionMacroCache(rt, scope);
+      invalidateSessionWorktreeSnapshot(rt, scope);
     }
     return { ok: true, data: result };
   } catch (err) {

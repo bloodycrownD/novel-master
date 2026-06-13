@@ -72,8 +72,8 @@ describe('chat-prompt-tokens.service', () => {
   it('loadChatPromptTokenLabel appends counterKind suffix', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {model: 'openai/gpt-4o'},
-      blocks: [],
-      ctx: {worktreeDisplay: '', filetreeDisplay: '', messages: []},
+      layout: {persist: [], dynamic: []},
+      ctx: {worktreeDisplay: '', messages: []},
     });
     mockResolveApplicationModelId.mockReturnValue('openai/gpt-4o');
     mockResolveTokenCounterModeForModel.mockResolvedValue('gemma');
@@ -97,8 +97,8 @@ describe('chat-prompt-tokens.service', () => {
   it('loadChatPromptTokenLabel without model uses heuristic suffix', async () => {
     mockBuildSessionPromptInput.mockResolvedValue({
       definition: {},
-      blocks: [],
-      ctx: {worktreeDisplay: '', filetreeDisplay: '', messages: []},
+      layout: {persist: [], dynamic: []},
+      ctx: {worktreeDisplay: '', messages: []},
     });
     mockResolveApplicationModelId.mockReturnValue(undefined);
 

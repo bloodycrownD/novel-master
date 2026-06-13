@@ -22,7 +22,7 @@ import {
   createScopedVfsService,
   createSessionFsService,
   createSessionService,
-  createSessionMacroCache,
+  createSessionWorktreeSnapshotStore,
   createWorktreeService,
   SimpleEventBus,
   type VfsScope,
@@ -56,7 +56,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const macroCache = createSessionMacroCache();
+  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -71,13 +71,13 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventsConfig,
     eventBus,
     messages,
-    macroCache,
+    worktreeSnapshot,
     worktree: s => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
-      macroCache,
+      worktreeSnapshot,
       worktree: s => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {kind: 'session', projectId, sessionId}),
@@ -97,7 +97,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    macroCache,
+    worktreeSnapshot,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

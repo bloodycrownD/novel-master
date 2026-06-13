@@ -8,12 +8,12 @@ import { readFile } from "node:fs/promises";
 import {
   applyRegexChannelForLlm,
   countPromptLlmInput,
-  formatPromptLlmInputForCli,
-  loadPromptBlocksFromYaml,
+  formatPromptLlmInputForCliFromLayout,
   parseApplicationModelId,
   serializePromptLlmInput,
 } from "@novel-master/core";
 import type { NovelMasterRuntime } from "../runtime.js";
+import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runPrompt(
@@ -22,6 +22,8 @@ export async function runPrompt(
     | "messages"
     | "scope"
     | "worktree"
+    | "worktreeSnapshot"
+    | "sessionVfs"
     | "state"
     | "regexConfig"
     | "tokenCounters"
@@ -45,7 +47,7 @@ export async function runPrompt(
   }
 
   const source = await readFile(path, "utf8");
-  const blocks = loadPromptBlocksFromYaml(source);
+  const layout = loadAgentPromptLayoutFromYaml(source);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
   const allMessages = await rt.messages.listBySession(sessionId);
   const activeGroupId = await rt.state.getCurrentRegexGroupId();
@@ -56,13 +58,14 @@ export async function runPrompt(
     allMessages.filter((m) => !m.hidden),
   );
   const wt = rt.worktree({ kind: "session", projectId, sessionId });
-  const [worktreeDisplay, filetreeDisplay] = await Promise.all([
-    wt.renderDisplay(),
-    wt.renderFileTree(),
-  ]);
-
-  const ctx = { worktreeDisplay, filetreeDisplay, messages };
-  const text = formatPromptLlmInputForCli(blocks, ctx);
+  const snapshot = await rt.worktreeSnapshot.getOrRefresh(
+    projectId,
+    sessionId,
+    () => wt.materialize(),
+  );
+  const vfs = rt.sessionVfs(projectId, sessionId);
+  const ctx = { worktreeDisplay: snapshot.worktreeDisplay, messages, vfs };
+  const text = await formatPromptLlmInputForCliFromLayout(layout, ctx);
   if (text.length > 0) {
     process.stdout.write(text);
   }
@@ -77,7 +80,7 @@ export async function runPrompt(
     }
 
     if (applicationModelId == null) {
-      const serialized = serializePromptLlmInput(blocks, ctx);
+      const serialized = await serializePromptLlmInput(layout, ctx);
       const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
       console.error(
         JSON.stringify({
@@ -103,7 +106,7 @@ export async function runPrompt(
       applicationModelId,
     );
     const result = await countPromptLlmInput({
-      blocks,
+      layout,
       ctx,
       applicationModelId,
       registry: rt.tokenCounters,

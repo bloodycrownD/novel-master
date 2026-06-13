@@ -58,7 +58,10 @@ describe('agent-yaml.service', () => {
   it('exports yaml via temp file + picker save flow', async () => {
     const runtime = {
       agentRegistry: {
-        get: jest.fn(async () => ({name: 'A', prompts: [{name: 'c', type: 'chat'}]})),
+        get: jest.fn(async () => ({
+          name: 'A',
+          prompts: {persist: [], dynamic: []},
+        })),
       },
     } as any;
     await expect(exportAgentYaml(runtime, 'a1')).resolves.toBe('saved');
@@ -80,7 +83,10 @@ describe('agent-yaml.service', () => {
       {status: 'success', localUri: 'file:///tmp/local-a1.agent.yaml'},
     ]);
     mockReadFile.mockResolvedValueOnce('name: imported');
-    mockDecode.mockImplementationOnce(() => ({name: 'imported', prompts: [{name: 'c', type: 'chat'}]}));
+    mockDecode.mockImplementationOnce(() => ({
+      name: 'imported',
+      prompts: {persist: [], dynamic: []},
+    }));
     const runtime = {
       agentRegistry: {
         upsert: jest.fn(async () => undefined),

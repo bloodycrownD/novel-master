@@ -8,7 +8,6 @@ import { readFile } from "node:fs/promises";
 import {
   ChatAgentSession,
   createAgentRunner,
-  loadPromptBlocksFromYaml,
   parseApplicationModelId,
   registerBuiltinTools,
   resolveAgentToolRegistry,
@@ -21,6 +20,7 @@ import {
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
+import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
 import {
   createRegistryValidateOptions,
@@ -61,8 +61,8 @@ async function resolveDefinition(
     }
   } else if (promptPath != null) {
     const source = await readFile(promptPath, "utf8");
-    const blocks = loadPromptBlocksFromYaml(source);
-    definition = buildMinimalDefinition({ prompts: blocks });
+    const layout = loadAgentPromptLayoutFromYaml(source);
+    definition = buildMinimalDefinition({ layout });
   } else {
     const currentAgentId = await rt.state.getCurrentAgentId();
     if (currentAgentId != null && currentAgentId !== "") {
@@ -77,7 +77,9 @@ async function resolveDefinition(
         throw error;
       }
     } else {
-      definition = buildMinimalDefinition({ prompts: [] });
+      definition = buildMinimalDefinition({
+        layout: { persist: [], dynamic: [] },
+      });
     }
   }
 
@@ -184,7 +186,9 @@ export async function runAgent(
       }
 
       const wt = rt.worktree({ kind: "session", projectId, sessionId });
-      await rt.macroCache.refresh(projectId, sessionId, () => wt.materialize());
+      await rt.worktreeSnapshot.getOrRefresh(projectId, sessionId, () =>
+        wt.materialize(),
+      );
 
       const baseRegistry = new ToolRegistry();
       const vfs = rt.sessionVfs(projectId, sessionId);
@@ -207,7 +211,8 @@ export async function runAgent(
         regexConfig: rt.regexConfig,
         listAllSessionMessages: () => rt.messages.listBySession(sessionId),
         eventBus: rt.eventBus,
-        macroCache: rt.macroCache,
+        worktreeSnapshot: rt.worktreeSnapshot,
+        worktree: rt.worktree,
         compactionConditions: rt.compactionConditionEvaluator,
         eventOrchestrator: rt.eventOrchestrator,
       });

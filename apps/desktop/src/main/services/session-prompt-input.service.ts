@@ -2,9 +2,9 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import {
-  buildPromptLlmInput,
+  buildPromptLlmInputFromLayout,
   type AgentDefinition,
-  type PromptBlock,
+  type AgentPromptLayout,
   type PromptLlmInput,
   type PromptRenderContext,
 } from "@novel-master/core";
@@ -19,7 +19,7 @@ export interface SessionPromptScope {
 
 export interface SessionPromptInputBundle {
   readonly definition: AgentDefinition;
-  readonly blocks: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
 }
@@ -28,17 +28,15 @@ async function getSessionWorktreeSnapshot(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ) {
-  const cached = runtime.macroCache.get(scope.projectId, scope.sessionId);
-  if (cached != null && Array.isArray(cached.listRows)) {
-    return cached;
-  }
   const wt = runtime.worktree({
     kind: "session",
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   });
-  return runtime.macroCache.refresh(scope.projectId, scope.sessionId, () =>
-    wt.materialize(),
+  return runtime.worktreeSnapshot.getOrRefresh(
+    scope.projectId,
+    scope.sessionId,
+    () => wt.materialize(),
   );
 }
 
@@ -61,12 +59,13 @@ export async function buildSessionPromptInput(
     "llm",
   );
   const snapshot = await getSessionWorktreeSnapshot(runtime, scope);
+  const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const ctx: PromptRenderContext = {
     worktreeDisplay: snapshot.worktreeDisplay,
-    filetreeDisplay: snapshot.filetreeDisplay,
     messages,
+    vfs,
   };
-  // buildPromptLlmInput 默认 agentStepIndex 为 0；预览与 token 计数含 once 块
-  const input = buildPromptLlmInput(resolved.prompts, ctx);
-  return { definition: resolved, blocks: resolved.prompts, ctx, input };
+  // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块
+  const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  return { definition: resolved, layout: resolved.prompts, ctx, input };
 }

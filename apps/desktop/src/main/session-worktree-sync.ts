@@ -8,7 +8,7 @@ import {
   type AgentStepCommittedPayload,
   type SimpleEventBus,
 } from "@novel-master/core";
-import { invalidateSessionMacroCache } from "./ipc/resolve-vfs-scope.js";
+import { invalidateSessionWorktreeSnapshot } from "./ipc/resolve-vfs-scope.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 
 async function invalidateSessionWorktree(
@@ -16,14 +16,14 @@ async function invalidateSessionWorktree(
   sessionId: string,
 ): Promise<void> {
   const rt = await getDesktopRuntime();
-  invalidateSessionMacroCache(rt, {
+  invalidateSessionWorktreeSnapshot(rt, {
     kind: "session",
     projectId,
     sessionId,
   });
 }
 
-/** Clears stale session macro cache when agent tools mutate chat VFS. */
+/** Clears stale session worktree snapshot when agent tools mutate chat VFS. */
 export function attachSessionWorktreeSync(eventBus: SimpleEventBus): () => void {
   const subs = [
     eventBus.subscribe(

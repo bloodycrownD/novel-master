@@ -1,20 +1,28 @@
 /**
- * Agent definition editor: name, model pin, maxSteps, prompt blocks.
+ * Agent definition editor: name, model pin, maxSteps, three-region prompt layout.
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
-import type {AgentDefinition, PromptBlock, PromptBlockRole} from '@novel-master/core';
+import type {
+  AgentDefinition,
+  DynamicPromptBlock,
+  PersistPromptBlock,
+  PersistTextPromptBlock,
+} from '@novel-master/core';
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
+  createDefaultAgentEditorPrompts,
+  createDefaultDynamicTextBlock,
+  createDefaultPersistTextBlock,
+  createDefaultWorktreeBlock,
+  definitionToForm,
   formSnapshotJson,
-  stripRemovedPromptBlocks,
   toolsSelectionFromDefinition,
-  isPromptBlockPersistent,
-  withPromptBlockPersistence,
-  withPromptBlockRole,
+  isDynamicBlockPersistent,
+  withDynamicBlockPersistence,
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
 import {
@@ -46,6 +54,8 @@ type Props = {
   onSaved?: () => void;
 };
 
+type AddMenuTarget = 'persist' | 'dynamic';
+
 export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -55,7 +65,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState('');
   const [vendorModelId, setVendorModelId] = useState('');
-  const [prompts, setPrompts] = useState<PromptBlock[]>([]);
+  const [systemEnabled, setSystemEnabled] = useState(false);
+  const [systemContent, setSystemContent] = useState('');
+  const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
+  const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
     Array<{id: string; label: string; protocol: string}>
   >([]);
@@ -64,6 +77,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [addBlockVisible, setAddBlockVisible] = useState(false);
+  const [addBlockTarget, setAddBlockTarget] = useState<AddMenuTarget>('persist');
   const [saving, setSaving] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
@@ -84,7 +98,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         vendorModelId,
         toolsMode,
         toolsSelected,
-        prompts,
+        systemEnabled,
+        systemContent,
+        persist,
+        dynamic,
       }),
     [
       name,
@@ -94,7 +111,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       vendorModelId,
       toolsMode,
       toolsSelected,
-      prompts,
+      systemEnabled,
+      systemContent,
+      persist,
+      dynamic,
     ],
   );
 
@@ -129,17 +149,18 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
   const loadAgent = useCallback(async () => {
     const def = await runtime.agentRegistry.get(agentId);
+    const promptForm = definitionToForm(def);
     setName(def.name);
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-    const {prompts: loadedPrompts, removed: removedAbstract} =
-      stripRemovedPromptBlocks(def.prompts);
-    if (loadedPrompts.length === 0) {
-      throw new Error('Agent 至少需要一个 Prompt 块');
-    }
-    setPrompts(loadedPrompts);
-    if (removedAbstract > 0) {
-      showToast('已移除已废弃的摘要块（abstract）');
-    }
+    setSystemEnabled(promptForm.systemEnabled);
+    setSystemContent(promptForm.systemContent);
+    setPersist(
+      promptForm.persist.length > 0
+        ? [...promptForm.persist]
+        : createDefaultAgentEditorPrompts().persist,
+    );
+    setDynamic([...promptForm.dynamic]);
+
     const toolsWire = toolsSelectionFromDefinition(def);
     setToolsMode(toolsWire.mode);
     setToolsSelected([...toolsWire.selected]);
@@ -195,10 +216,14 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         vendorModelId: baselineVendorModelId,
         toolsMode: toolsWire.mode,
         toolsSelected: [...toolsWire.selected],
-        prompts: loadedPrompts,
+        ...promptForm,
+        persist:
+          promptForm.persist.length > 0
+            ? [...promptForm.persist]
+            : createDefaultAgentEditorPrompts().persist,
       }),
     );
-  }, [agentId, runtime, loadProviders, loadSavedModels, showToast]);
+  }, [agentId, runtime, loadProviders, loadSavedModels]);
 
   useEffect(() => {
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
@@ -217,7 +242,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       vendorModelId,
       toolsMode,
       toolsSelected,
-      prompts,
+      systemEnabled,
+      systemContent,
+      persist,
+      dynamic,
     });
     if (!built.ok) {
       showToast(built.message);
@@ -272,20 +300,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
-  const replaceBlock = (index: number, next: PromptBlock) => {
-    setPrompts(prev => prev.map((block, i) => (i === index ? next : block)));
-  };
-
-  const updateBlock = (index: number, patch: Partial<PromptBlock>) => {
-    setPrompts(prev =>
-      prev.map((block, i) =>
-        i === index ? ({...block, ...patch} as PromptBlock) : block,
-      ),
-    );
-  };
-
-  const moveBlock = (index: number, dir: -1 | 1) => {
-    setPrompts(prev => {
+  const movePersist = (index: number, dir: -1 | 1) => {
+    setPersist(prev => {
       const next = [...prev];
       const target = index + dir;
       if (target < 0 || target >= next.length) {
@@ -298,28 +314,52 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     });
   };
 
-  const deleteBlock = (index: number) => {
-    if (prompts.length <= 1) {
+  const moveDynamic = (index: number, dir: -1 | 1) => {
+    setDynamic(prev => {
+      const next = [...prev];
+      const target = index + dir;
+      if (target < 0 || target >= next.length) {
+        return prev;
+      }
+      const tmp = next[target];
+      next[target] = next[index];
+      next[index] = tmp;
+      return next;
+    });
+  };
+
+  const deletePersist = (index: number) => {
+    if (persist.length <= 1 && dynamic.length === 0 && !systemEnabled) {
       showToast('至少保留一个 Prompt 块');
       return;
     }
-    setPrompts(prev => prev.filter((_, i) => i !== index));
+    setPersist(prev => prev.filter((_, i) => i !== index));
   };
 
-  const addBlock = (kind: 'text' | 'chat') => {
-    if (kind === 'text') {
-      setPrompts(prev => [
-        ...prev,
-        {
-          name: `block-${prev.length + 1}`,
-          type: 'text',
-          role: 'system',
-          content: '',
-        },
-      ]);
-    } else {
-      setPrompts(prev => [...prev, {name: 'history', type: 'chat'}]);
+  const deleteDynamic = (index: number) => {
+    if (dynamic.length <= 1 && persist.length === 0 && !systemEnabled) {
+      showToast('至少保留一个 Prompt 块');
+      return;
     }
+    setDynamic(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const addPersistBlock = (kind: 'text' | 'worktree') => {
+    if (kind === 'worktree' && persist.some(b => b.type === 'worktree')) {
+      showToast('persist 区至多一个 worktree 块');
+      setAddBlockVisible(false);
+      return;
+    }
+    setPersist(prev =>
+      kind === 'text'
+        ? [...prev, createDefaultPersistTextBlock(prev.length)]
+        : [...prev, createDefaultWorktreeBlock(prev.length)],
+    );
+    setAddBlockVisible(false);
+  };
+
+  const addDynamicBlock = () => {
+    setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]);
     setAddBlockVisible(false);
   };
 
@@ -337,6 +377,35 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     value: m.vendorModelId,
     label: m.displayName?.trim() || m.vendorModelId,
   }));
+
+  const renderBlockActions = (
+    index: number,
+    total: number,
+    onMove: (i: number, d: -1 | 1) => void,
+    onDelete: (i: number) => void,
+  ) => (
+    <View style={styles.blockActions}>
+      {index > 0 ? (
+        <Pressable
+          style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
+          onPress={() => onMove(index, -1)}>
+          <Text style={{color: tokens.textSecondary}}>↑</Text>
+        </Pressable>
+      ) : null}
+      {index < total - 1 ? (
+        <Pressable
+          style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
+          onPress={() => onMove(index, 1)}>
+          <Text style={{color: tokens.textSecondary}}>↓</Text>
+        </Pressable>
+      ) : null}
+      <Pressable
+        style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
+        onPress={() => onDelete(index)}>
+        <Text style={{color: tokens.danger}}>×</Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <>
@@ -360,11 +429,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Pressable>
           </View>
           <FormField label="名称" tokens={tokens}>
-            <FormTextInput
-              tokens={tokens}
-              value={name}
-              onChangeText={setName}
-            />
+            <FormTextInput tokens={tokens} value={name} onChangeText={setName} />
           </FormField>
         </FormSectionCard>
 
@@ -373,9 +438,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           tokens={tokens}
           rightAction={
             <View style={styles.switchRow}>
-              <Text style={{color: tokens.textSecondary, fontSize: 13}}>
-                专属模型
-              </Text>
+              <Text style={{color: tokens.textSecondary, fontSize: 13}}>专属模型</Text>
               <Switch
                 value={modelEnabled}
                 onValueChange={setModelEnabled}
@@ -462,89 +525,84 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           )}
         </FormSectionCard>
 
-        <FormSectionCard
-          title="Prompt 块"
-          tokens={tokens}
-          rightAction={
-            <Pressable onPress={() => setAddBlockVisible(true)}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                添加
+        <FormSectionCard title="Prompt 布局" tokens={tokens}>
+          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+            纵向顺序：System → Persist → 会话历史 → Dynamic。
+          </Text>
+
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            <View style={styles.blockHeader}>
+              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>System</Text>
+              </View>
+              <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
+                API system
               </Text>
+              <Switch
+                value={systemEnabled}
+                onValueChange={setSystemEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
+            </View>
+            {systemEnabled ? (
+              <FormField label="System 内容" tokens={tokens}>
+                <FormTextInput
+                  tokens={tokens}
+                  value={systemContent}
+                  onChangeText={setSystemContent}
+                  multiline
+                  placeholder="写入 LLM system 字段…"
+                />
+              </FormField>
+            ) : (
+              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                关闭时不写入 prompts.system。
+              </Text>
+            )}
+          </View>
+
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionLabel, {color: tokens.text}]}>Persist 块</Text>
+            <Pressable
+              onPress={() => {
+                setAddBlockTarget('persist');
+                setAddBlockVisible(true);
+              }}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
             </Pressable>
-          }>
+          </View>
           <View style={styles.blockList}>
-            {prompts.map((block, index) => (
+            {persist.map((block, index) => (
               <View
-                // WHY: stable key — block.name in key remounts TextInput on each keystroke (Android keyboard blur).
-                key={`prompt-block-${index}`}
+                key={`persist-block-${index}`}
                 style={[
                   styles.blockCard,
-                  {
-                    backgroundColor: tokens.surface,
-                    borderColor: tokens.border,
-                  },
+                  {backgroundColor: tokens.surface, borderColor: tokens.border},
                 ]}>
                 <View style={styles.blockHeader}>
-                  <View
-                    style={[
-                      styles.typeBadge,
-                      {backgroundColor: `${tokens.primary}1A`},
-                    ]}>
-                    <Text
-                      style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                  <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                    <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
                       {blockTypeLabel(block.type)}
                     </Text>
                   </View>
-                  <Text
-                    style={[styles.blockName, {color: tokens.text}]}
-                    numberOfLines={1}>
+                  <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
                     {block.name}
                   </Text>
-                  <View style={styles.blockActions}>
-                    {index > 0 ? (
-                      <Pressable
-                        style={[
-                          styles.actionBtn,
-                          {
-                            borderColor: tokens.border,
-                            backgroundColor: tokens.surface,
-                          },
-                        ]}
-                        onPress={() => moveBlock(index, -1)}>
-                        <Text style={{color: tokens.textSecondary}}>↑</Text>
-                      </Pressable>
-                    ) : null}
-                    {index < prompts.length - 1 ? (
-                      <Pressable
-                        style={[
-                          styles.actionBtn,
-                          {
-                            borderColor: tokens.border,
-                            backgroundColor: tokens.surface,
-                          },
-                        ]}
-                        onPress={() => moveBlock(index, 1)}>
-                        <Text style={{color: tokens.textSecondary}}>↓</Text>
-                      </Pressable>
-                    ) : null}
-                    <Pressable
-                      style={[
-                        styles.actionBtn,
-                        {
-                          borderColor: tokens.border,
-                          backgroundColor: tokens.surface,
-                        },
-                      ]}
-                      onPress={() => deleteBlock(index)}>
-                      <Text style={{color: tokens.danger}}>×</Text>
-                    </Pressable>
-                  </View>
+                  {renderBlockActions(index, persist.length, movePersist, deletePersist)}
                 </View>
                 <FormField label="名称" tokens={tokens}>
                   <FormTextInput
                     tokens={tokens}
                     value={block.name}
-                    onChangeText={v => updateBlock(index, {name: v})}
+                    onChangeText={v =>
+                      setPersist(prev =>
+                        prev.map((b, i) => (i === index ? {...b, name: v} : b)),
+                      )
+                    }
                   />
                 </FormField>
                 {block.type === 'text' ? (
@@ -554,60 +612,150 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                         tokens={tokens}
                         value={block.role}
                         onChange={role =>
-                          replaceBlock(
-                            index,
-                            withPromptBlockRole(block, role as PromptBlockRole),
+                          setPersist(prev =>
+                            prev.map((b, i) =>
+                              i === index && b.type === 'text'
+                                ? {...b, role: role as PersistTextPromptBlock['role']}
+                                : b,
+                            ),
                           )
                         }
                         options={ROLE_OPTIONS}
                         sheetTitle="选择角色"
                       />
                     </FormField>
-                    {block.role !== 'system' ? (
-                      <>
-                        <FormSwitchRow
-                          label="常驻"
-                          tokens={tokens}
-                          value={isPromptBlockPersistent(block)}
-                          onValueChange={persistent =>
-                            replaceBlock(
-                              index,
-                              withPromptBlockPersistence(block, persistent),
-                            )
-                          }
-                        />
-                        {!isPromptBlockPersistent(block) ? (
-                          <Text
-                            style={[
-                              styles.fieldHint,
-                              {color: tokens.textSecondary},
-                            ]}>
-                            仅在用户发送或恢复后的第一轮带入；工具循环后续轮不再重复。
-                          </Text>
-                        ) : null}
-                      </>
-                    ) : null}
-                    <Text
-                      style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      仅 system 文本块会合并进 LLM system；会话历史请用 chat 块。
+                    <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                      persist 区禁止宏与 lifecycle。
                     </Text>
                     <FormField label="内容" tokens={tokens}>
-                      <PromptMacroTextInput
+                      <FormTextInput
                         tokens={tokens}
                         value={block.content}
                         onChangeText={v =>
-                          updateBlock(index, {type: 'text', content: v})
+                          setPersist(prev =>
+                            prev.map((b, i) =>
+                              i === index && b.type === 'text' ? {...b, content: v} : b,
+                            ),
+                          )
                         }
-                        placeholder="输入 system 提示词…"
+                        multiline
                       />
                     </FormField>
                   </>
-                ) : null}
-                {block.type === 'chat' ? (
+                ) : (
                   <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                    chat 块将会话消息注入模型上下文，通常放在 prompt 列表末尾。
+                    worktree 块注入 materialize 后的会话树 display。
+                  </Text>
+                )}
+              </View>
+            ))}
+          </View>
+
+          <View
+            style={[
+              styles.blockCard,
+              styles.readonlyCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            <View style={styles.blockHeader}>
+              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>Chat</Text>
+              </View>
+              <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
+                会话历史
+              </Text>
+            </View>
+            <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+              运行时注入可见会话消息，不可配置。
+            </Text>
+          </View>
+
+          <View style={styles.sectionHead}>
+            <Text style={[styles.sectionLabel, {color: tokens.text}]}>Dynamic 块</Text>
+            <Pressable
+              onPress={() => {
+                setAddBlockTarget('dynamic');
+                setAddBlockVisible(true);
+              }}>
+              <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
+            </Pressable>
+          </View>
+          <View style={styles.blockList}>
+            {dynamic.map((block, index) => (
+              <View
+                key={`dynamic-block-${index}`}
+                style={[
+                  styles.blockCard,
+                  {backgroundColor: tokens.surface, borderColor: tokens.border},
+                ]}>
+                <View style={styles.blockHeader}>
+                  <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                    <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                      {blockTypeLabel(block.type)}
+                    </Text>
+                  </View>
+                  <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
+                    {block.name}
+                  </Text>
+                  {renderBlockActions(index, dynamic.length, moveDynamic, deleteDynamic)}
+                </View>
+                <FormField label="名称" tokens={tokens}>
+                  <FormTextInput
+                    tokens={tokens}
+                    value={block.name}
+                    onChangeText={v =>
+                      setDynamic(prev =>
+                        prev.map((b, i) => (i === index ? {...b, name: v} : b)),
+                      )
+                    }
+                  />
+                </FormField>
+                <FormField label="角色" tokens={tokens}>
+                  <FormSelectField
+                    tokens={tokens}
+                    value={block.role}
+                    onChange={role =>
+                      setDynamic(prev =>
+                        prev.map((b, i) =>
+                          i === index
+                            ? {...b, role: role as DynamicPromptBlock['role']}
+                            : b,
+                        ),
+                      )
+                    }
+                    options={ROLE_OPTIONS}
+                    sheetTitle="选择角色"
+                  />
+                </FormField>
+                <FormSwitchRow
+                  label="常驻"
+                  tokens={tokens}
+                  value={isDynamicBlockPersistent(block)}
+                  onValueChange={persistent =>
+                    setDynamic(prev =>
+                      prev.map((b, i) =>
+                        i === index ? withDynamicBlockPersistence(b, persistent) : b,
+                      ),
+                    )
+                  }
+                />
+                {!isDynamicBlockPersistent(block) ? (
+                  <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                    lifecycle: once — 仅首轮 agent step 带入。
                   </Text>
                 ) : null}
+                <FormField label="内容" tokens={tokens}>
+                  <PromptMacroTextInput
+                    tokens={tokens}
+                    value={block.content}
+                    onChangeText={v =>
+                      setDynamic(prev =>
+                        prev.map((b, i) => (i === index ? {...b, content: v} : b)),
+                      )
+                    }
+                    placeholder="支持 $time、$week_cn、$filetree…"
+                  />
+                </FormField>
               </View>
             ))}
           </View>
@@ -615,14 +763,22 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       </ScreenFormLayout>
       <BottomSheetMenu
         visible={addBlockVisible}
-        items={[
-          {label: '文本块', action: 'text'},
-          {label: '会话块', action: 'chat'},
-        ]}
+        items={
+          addBlockTarget === 'dynamic'
+            ? [{label: '文本块', action: 'dynamic-text'}]
+            : [
+                {label: '文本块', action: 'persist-text'},
+                {label: 'Worktree 块', action: 'persist-worktree'},
+              ]
+        }
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {
-          if (action === 'text' || action === 'chat') {
-            addBlock(action);
+          if (action === 'persist-text') {
+            addPersistBlock('text');
+          } else if (action === 'persist-worktree') {
+            addPersistBlock('worktree');
+          } else if (action === 'dynamic-text') {
+            addDynamicBlock();
           }
         }}
       />
@@ -635,6 +791,13 @@ const styles = StyleSheet.create({
   fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
   yamlActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
+  sectionHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  sectionLabel: {fontSize: 14, fontWeight: '600'},
   blockList: {gap: 12},
   blockCard: {
     borderWidth: 1,
@@ -642,6 +805,7 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 10,
   },
+  readonlyCard: {opacity: 0.85},
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',

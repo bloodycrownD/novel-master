@@ -4,21 +4,21 @@
  * @module config/build-minimal-definition
  */
 
-import type { AgentDefinition, PromptBlock } from "@novel-master/core";
+import type { AgentDefinition, AgentPromptLayout } from "@novel-master/core";
 
 export interface BuildMinimalDefinitionInput {
   readonly name?: string;
-  readonly prompts: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
 }
 
 /**
- * Wraps prompt blocks only; model id is resolved separately at run time.
+ * Wraps prompt layout only; model id is resolved separately at run time.
  */
 export function buildMinimalDefinition(
   input: BuildMinimalDefinitionInput,
 ): AgentDefinition {
   return {
     name: input.name ?? "cli-minimal",
-    prompts: input.prompts,
+    prompts: input.layout,
   };
 }

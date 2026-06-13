@@ -7,7 +7,6 @@
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import type { AgentRunResult } from "@/domain/agent/model/agent-run-result.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
-import type { PromptMacroContext } from "../prompt/render-prompt.js";
 
 export interface AgentRunOptions {
   readonly definition: AgentDefinition;
@@ -19,8 +18,6 @@ export interface AgentRunOptions {
   readonly workspaceModelId: string;
   /** When set, CLI `--modelId` as highest priority for model resolution. */
   readonly cliModelId?: string;
-  /** Runner reads {@link SessionWorktreeSnapshotStore} for worktree persist blocks. */
-  readonly promptContext?: PromptMacroContext;
   readonly maxSteps?: number;
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;

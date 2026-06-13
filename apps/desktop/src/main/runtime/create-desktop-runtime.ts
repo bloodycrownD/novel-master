@@ -21,7 +21,7 @@ import {
   createRunAgentHandlerDeps,
   createScopedVfsService,
   createSessionFsService,
-  createSessionMacroCache,
+  createSessionWorktreeSnapshotStore,
   createSessionService,
   createWorktreeService,
   SimpleEventBus,
@@ -65,7 +65,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const macroCache = createSessionMacroCache();
+  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -80,13 +80,13 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     eventBus,
     messages,
-    macroCache,
+    worktreeSnapshot,
     worktree: (s) => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
-      macroCache,
+      worktreeSnapshot,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
@@ -111,7 +111,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    macroCache,
+    worktreeSnapshot,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

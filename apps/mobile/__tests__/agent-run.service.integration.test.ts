@@ -13,7 +13,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
       listAgentIds: async () => ['a1'],
       get: async () => ({
         name: 'x',
-        prompts: [{name: 'c', type: 'chat'}],
+        prompts: { persist: [], dynamic: [] },
         model: 'openai/gpt',
       }),
     },
@@ -28,11 +28,10 @@ function baseRuntime(overrides: Partial<any> = {}) {
     sessionFs: {},
     regexConfig: {},
     eventBus: {publish: jest.fn(), subscribe: () => ({unsubscribe: () => undefined})},
-    macroCache: {refresh: async () => undefined},
+    worktreeSnapshot: {getOrRefresh: async () => ({worktreeDisplay: '', listRows: [], refreshedAtMs: 0})},
     worktree: () => ({
       materialize: async () => ({
         worktreeDisplay: '',
-        filetreeDisplay: '',
         listRows: [],
       }),
     }),

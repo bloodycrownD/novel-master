@@ -12,7 +12,7 @@ import {
   encode,
   parseText,
   stringifyText,
-  validatePromptBlocksFromMap,
+  validateAgentPromptLayoutFromMaps,
   type AgentDefinition,
   type AgentRegistryService,
   type ValidateAgentDefinitionOptions,
@@ -32,10 +32,14 @@ function bundleToDefinitions(
 ): ReadonlyMap<string, AgentDefinition> {
   const map = new Map<string, AgentDefinition>();
   for (const [agentId, entry] of Object.entries(doc.agents)) {
-    const blocks = validatePromptBlocksFromMap(entry.prompts.blocks);
+    const prompts = validateAgentPromptLayoutFromMaps(
+      entry.prompts.persist,
+      entry.prompts.dynamic,
+      entry.prompts.system,
+    );
     map.set(agentId, {
       name: agentId,
-      prompts: blocks,
+      prompts,
       model: entry.model,
       runtime: entry.runtime,
     });

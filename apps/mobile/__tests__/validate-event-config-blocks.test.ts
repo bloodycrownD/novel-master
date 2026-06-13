@@ -18,8 +18,8 @@ function draft(
 describe('validateEventConfigBlocks', () => {
   it('rejects duplicate event types', () => {
     const err = validateEventConfigBlocks([
-      draft(MSG_RECEIVED, [{type: 'refresh-macros', params: {}}]),
-      draft(MSG_RECEIVED, [{type: 'refresh-macros', params: {}}]),
+      draft(MSG_RECEIVED, [{type: 'hide-message', params: {startDepth: 6}}]),
+      draft(MSG_RECEIVED, [{type: 'run-agent', params: {agentId: 'a1'}}]),
     ]);
     expect(err).toMatch(/重复/);
     expect(err).toMatch(/收到助手消息后/);
@@ -41,7 +41,7 @@ describe('validateEventConfigBlocks', () => {
       validateEventConfigBlocks([
         draft(COMPACTION, [
           {type: 'hide-message', params: {startDepth: 6}},
-          {type: 'refresh-macros', params: {}},
+          {type: 'run-agent', params: {agentId: 'writer'}},
         ]),
       ]),
     ).toBeNull();
@@ -53,13 +53,12 @@ describe('validateEventConfigBlocks', () => {
         {
           type: 'hide-message',
           params: {startDepth: 6},
-          dependency: ['run-agent'],
+          dependency: ['missing-action'],
         },
-        {type: 'refresh-macros', params: {}},
       ]),
     ]);
     expect(err).toMatch(/依赖不存在/);
-    expect(err).toMatch(/run-agent/);
+    expect(err).toMatch(/missing-action/);
   });
 
   it('rejects self dependency', () => {
@@ -81,11 +80,11 @@ describe('validateEventConfigBlocks', () => {
         {
           type: 'hide-message',
           params: {startDepth: 6},
-          dependency: ['refresh-macros'],
+          dependency: ['run-agent'],
         },
         {
-          type: 'refresh-macros',
-          params: {},
+          type: 'run-agent',
+          params: {agentId: 'writer'},
           dependency: ['hide-message'],
         },
       ]),

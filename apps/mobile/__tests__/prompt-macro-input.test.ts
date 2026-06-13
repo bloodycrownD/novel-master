@@ -4,12 +4,12 @@ import {
 } from '../src/components/agent/prompt-macro-input';
 
 describe('splitPromptMacroSegments', () => {
-  it('splits macros from plain text', () => {
+  it('splits dynamic macros from plain text', () => {
     expect(
-      splitPromptMacroSegments('hi {{.worktree}} there {{$time}}'),
+      splitPromptMacroSegments('hi {{$filetree}} there {{$time}}'),
     ).toEqual([
       {kind: 'text', value: 'hi '},
-      {kind: 'macro', value: '{{.worktree}}'},
+      {kind: 'macro', value: '{{$filetree}}'},
       {kind: 'text', value: ' there '},
       {kind: 'macro', value: '{{$time}}'},
     ]);

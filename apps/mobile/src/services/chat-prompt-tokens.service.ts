@@ -34,7 +34,7 @@ export async function loadChatPromptTokenLabel(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<string> {
-  const {definition, blocks, ctx} = await buildSessionPromptInput(runtime, scope);
+  const {definition, layout, ctx} = await buildSessionPromptInput(runtime, scope);
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
   const applicationModelId = resolveApplicationModelId({
@@ -43,7 +43,7 @@ export async function loadChatPromptTokenLabel(
   });
 
   if (!applicationModelId) {
-    const serialized = serializePromptLlmInput(blocks, ctx);
+    const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return formatChatTokenLabel(
       {tokenCount: count, estimated: true, counterKind: 'heuristic'},
@@ -57,7 +57,7 @@ export async function loadChatPromptTokenLabel(
   );
 
   const result = await countPromptLlmInput({
-    blocks,
+    layout,
     ctx,
     applicationModelId,
     registry: runtime.tokenCounters,

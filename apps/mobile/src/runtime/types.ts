@@ -21,7 +21,7 @@ import type {
   RegexConfigService,
   SecretStore,
   SessionFsService,
-  SessionMacroCache,
+  SessionWorktreeSnapshotStore,
   SessionService,
   SimpleEventBus,
   TdbcConnection,
@@ -48,7 +48,7 @@ export interface MobileNovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;

@@ -1,9 +1,8 @@
-/** Prompt template macros insertable from the Agent editor. */
+/** dynamic 区可插入的 Prompt 宏（白名单 $ 根键）。 */
 export const PROMPT_INSERTABLE_MACROS = [
-  {label: '.worktree', token: '{{.worktree}}'},
-  {label: '.filetree', token: '{{.filetree}}'},
   {label: '$time', token: '{{$time}}'},
   {label: '$week_cn', token: '{{$week_cn}}'},
+  {label: '$filetree', token: '{{$filetree}}'},
 ] as const;
 
 const MACRO_PATTERN = /(\{\{[^}]+\}\})/g;
@@ -12,7 +11,7 @@ export type PromptMacroSegment =
   | {readonly kind: 'text'; readonly value: string}
   | {readonly kind: 'macro'; readonly value: string};
 
-/** Split plain text into literal segments and `{{ ... }}` macro tokens. */
+/** 将纯文本拆分为字面量段与 `{{ ... }}` 宏 token。 */
 export function splitPromptMacroSegments(text: string): readonly PromptMacroSegment[] {
   if (text === '') {
     return [];

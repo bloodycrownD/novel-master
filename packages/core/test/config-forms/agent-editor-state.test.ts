@@ -3,12 +3,14 @@ import test from "node:test";
 import {
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
+  createDefaultAgentEditorPrompts,
+  createDefaultWorktreeBlock,
+  definitionToForm,
   formSnapshotJson,
-  isPromptBlockPersistent,
-  stripRemovedPromptBlocks,
+  isDynamicBlockPersistent,
+  layoutFromFormInput,
   toolsSelectionFromDefinition,
-  withPromptBlockPersistence,
-  withPromptBlockRole,
+  withDynamicBlockPersistence,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
@@ -26,60 +28,74 @@ test("T8: buildToolsPolicyFromSelection builds allow/deny lists", () => {
 
 test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
   assert.deepEqual(
-    toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] }, tools: { allow: ["read"] } }),
+    toolsSelectionFromDefinition({
+      name: "a",
+      prompts: { persist: [], dynamic: [] },
+      tools: { allow: ["read"] },
+    }),
     { mode: "allow", selected: ["read"] },
   );
-  assert.deepEqual(toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] } }), {
-    mode: "default",
-    selected: [],
+  assert.deepEqual(
+    toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] } }),
+    {
+      mode: "default",
+      selected: [],
+    },
+  );
+});
+
+test("definitionToForm maps system toggle and three regions", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      system: "sys",
+      persist: [{ name: "canon", type: "worktree" }],
+      dynamic: [
+        {
+          name: "state",
+          type: "text",
+          role: "user",
+          content: "{{$time}}",
+          lifecycle: "once",
+        },
+      ],
+    },
   });
+  assert.equal(form.systemEnabled, true);
+  assert.equal(form.systemContent, "sys");
+  assert.equal(form.persist.length, 1);
+  assert.equal(form.dynamic[0]?.lifecycle, "once");
 });
 
-test("stripRemovedPromptBlocks drops abstract blocks", () => {
-  const result = stripRemovedPromptBlocks([
-    { name: "a", type: "text", role: "system", content: "x" },
-    { name: "b", type: "abstract" } as never,
-  ]);
-  assert.equal(result.removed, 1);
-  assert.equal(result.prompts.length, 1);
+test("layoutFromFormInput omits system when switch off", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "ignored",
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [],
+  });
+  assert.equal(layout.system, undefined);
 });
 
-test("withPromptBlockPersistence maps UI switch to lifecycle", () => {
+test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
   const block = { name: "k", type: "text" as const, role: "user" as const, content: "go" };
-  assert.equal(isPromptBlockPersistent(block), true);
-  const once = withPromptBlockPersistence(block, false);
+  assert.equal(isDynamicBlockPersistent(block), true);
+  const once = withDynamicBlockPersistence(block, false);
   assert.equal(once.lifecycle, "once");
-  assert.equal(isPromptBlockPersistent(once), false);
-  const again = withPromptBlockPersistence(once, true);
+  assert.equal(isDynamicBlockPersistent(once), false);
+  const again = withDynamicBlockPersistence(once, true);
   assert.equal(again.lifecycle, undefined);
 });
 
-test("withPromptBlockPersistence restore requires full block replace in UI", () => {
-  const once = {
-    name: "k",
-    type: "text" as const,
-    role: "user" as const,
-    content: "x",
-    lifecycle: "once" as const,
-  };
-  const restored = withPromptBlockPersistence(once, true);
-  assert.equal("lifecycle" in restored, false);
-  // Partial merge ({ ...once, ...restored }) would incorrectly keep lifecycle: once.
-  const badMerge = { ...once, ...restored };
-  assert.equal(badMerge.lifecycle, "once");
+test("createDefaultWorktreeBlock uses stable name", () => {
+  assert.deepEqual(createDefaultWorktreeBlock(), { name: "canon", type: "worktree" });
 });
 
-test("withPromptBlockRole strips lifecycle for system role", () => {
-  const block = {
-    name: "k",
-    type: "text" as const,
-    role: "user" as const,
-    content: "go",
-    lifecycle: "once" as const,
-  };
-  const system = withPromptBlockRole(block, "system");
-  assert.equal(system.role, "system");
-  assert.equal(system.lifecycle, undefined);
+test("createDefaultAgentEditorPrompts includes one persist text block", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  assert.equal(defaults.systemEnabled, false);
+  assert.equal(defaults.persist.length, 1);
+  assert.equal(defaults.dynamic.length, 0);
 });
 
 test("formSnapshotJson omits model fields when disabled", () => {
@@ -91,7 +107,7 @@ test("formSnapshotJson omits model fields when disabled", () => {
     vendorModelId: "m",
     toolsMode: "default",
     toolsSelected: [],
-    prompts: { system: "", persist: [], dynamic: [] },
+    ...createDefaultAgentEditorPrompts(),
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.providerId, undefined);
@@ -108,7 +124,8 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       vendorModelId: "",
       toolsMode: "default",
       toolsSelected: [],
-      prompts: { persist: [], dynamic: [] },
+      ...createDefaultAgentEditorPrompts(),
+      persist: [],
     }).ok,
     false,
   );

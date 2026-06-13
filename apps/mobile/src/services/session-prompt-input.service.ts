@@ -2,9 +2,9 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import {
-  buildPromptLlmInput,
+  buildPromptLlmInputFromLayout,
   type AgentDefinition,
-  type PromptBlock,
+  type AgentPromptLayout,
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core';
@@ -20,12 +20,12 @@ export interface SessionPromptScope {
 
 export interface SessionPromptInputBundle {
   readonly definition: AgentDefinition;
-  readonly blocks: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
 }
 
-/** Visible session messages + worktree context → LLM input for current agent. */
+/** 可见会话消息 + worktree/VFS 上下文 → 当前 Agent 的 LLM 输入。 */
 export async function buildSessionPromptInput(
   runtime: MobileNovelMasterRuntime,
   scope: SessionPromptScope,
@@ -45,11 +45,12 @@ export async function buildSessionPromptInput(
     'llm',
   );
   const snapshot = await getOrRefreshSessionWorktreeSnapshot(runtime, scope);
-  const worktreeDisplay = snapshot.worktreeDisplay;
-  const filetreeDisplay = snapshot.filetreeDisplay;
-
-  const ctx: PromptRenderContext = {worktreeDisplay, filetreeDisplay, messages};
-  // buildPromptLlmInput 默认 agentStepIndex 为 0；预览与 token 计数含 once 块
-  const input = buildPromptLlmInput(resolved.prompts, ctx);
-  return {definition: resolved, blocks: resolved.prompts, ctx, input};
+  const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  const ctx: PromptRenderContext = {
+    worktreeDisplay: snapshot.worktreeDisplay,
+    messages,
+    vfs,
+  };
+  const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
+  return {definition: resolved, layout: resolved.prompts, ctx, input};
 }

@@ -26,7 +26,7 @@ import {
   createSessionService,
   createProviderServices,
   createRegexConfigService,
-  createSessionMacroCache,
+  createSessionWorktreeSnapshotStore,
   createWorktreeService,
   open,
   SimpleEventBus,
@@ -47,7 +47,7 @@ import {
   type ProjectService,
   type SessionFsService,
   type SessionService,
-  type SessionMacroCache,
+  type SessionWorktreeSnapshotStore,
   type TdbcConnection,
   type VfsScope,
   type VfsService,
@@ -97,7 +97,7 @@ export interface NovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly macroCache: SessionMacroCache;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -154,7 +154,7 @@ export async function createNovelMasterRuntime(
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const macroCache = createSessionMacroCache();
+  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -169,13 +169,13 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     eventBus,
     messages,
-    macroCache,
+    worktreeSnapshot,
     worktree: (s) => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests,
-      macroCache,
+      worktreeSnapshot,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
@@ -195,7 +195,7 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    macroCache,
+    worktreeSnapshot,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

@@ -14,7 +14,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorktreeForScope,
-  invalidateSessionMacroCache,
+  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 
@@ -47,12 +47,8 @@ async function loadWorktreeRows(
 ): Promise<WorktreeListRowDto[]> {
   const scope = resolveVfsScopeFromRequest(req);
   if (scope.kind === "session") {
-    const cached = rt.macroCache.get(scope.projectId, scope.sessionId);
-    if (cached != null && Array.isArray(cached.listRows)) {
-      return [...cached.listRows];
-    }
     const wt = getWorktreeForScope(rt, scope);
-    const snap = await rt.macroCache.refresh(
+    const snap = await rt.worktreeSnapshot.getOrRefresh(
       scope.projectId,
       scope.sessionId,
       () => wt.materialize(),
@@ -91,7 +87,7 @@ export async function handleWorktreeSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -109,7 +105,7 @@ export async function handleWorktreeSetFileRule(
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
     });
-    invalidateSessionMacroCache(rt, scope);
+    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
