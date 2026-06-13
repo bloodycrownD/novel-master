@@ -4,10 +4,14 @@
  */
 import {useCallback, useEffect, useRef, useState} from 'react';
 
+export type AgentStreamKind = 'text' | 'tool' | 'mixed';
+
 export type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
   readonly textChars: number;
   readonly thinkingChars: number;
+  readonly toolUseChars: number;
+  readonly streamKind: AgentStreamKind;
 };
 
 export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
@@ -16,14 +20,37 @@ export type AgentStreamMetricsView = AgentStreamMetricsSnapshot & {
   readonly charsPerSecond: number;
 };
 
-function snapshotFromAcc(
-  acc: {textChars: number; thinkingChars: number; startedAtMs: number},
-  elapsedMs: number,
-): AgentStreamMetricsSnapshot {
+type MetricsAcc = {
+  textChars: number;
+  thinkingChars: number;
+  toolUseChars: number;
+  startedAtMs: number;
+};
+
+/** 根据各通道累计字数判定 metrics 条展示模式。 */
+export function computeStreamKind(chars: {
+  textChars: number;
+  thinkingChars: number;
+  toolUseChars: number;
+}): AgentStreamKind {
+  const hasContent = chars.textChars > 0 || chars.thinkingChars > 0;
+  const hasTool = chars.toolUseChars > 0;
+  if (hasContent && hasTool) {
+    return 'mixed';
+  }
+  if (hasTool) {
+    return 'tool';
+  }
+  return 'text';
+}
+
+function snapshotFromAcc(acc: MetricsAcc, elapsedMs: number): AgentStreamMetricsSnapshot {
   return {
     elapsedMs,
     textChars: acc.textChars,
     thinkingChars: acc.thinkingChars,
+    toolUseChars: acc.toolUseChars,
+    streamKind: computeStreamKind(acc),
   };
 }
 
@@ -31,10 +58,14 @@ function toView(
   running: boolean,
   snap: AgentStreamMetricsSnapshot,
 ): AgentStreamMetricsView {
-  const totalChars = snap.textChars + snap.thinkingChars;
+  const totalChars = snap.textChars + snap.thinkingChars + snap.toolUseChars;
   const secs = snap.elapsedMs / 1000;
   const charsPerSecond = secs > 0 ? totalChars / secs : 0;
   return {...snap, running, totalChars, charsPerSecond};
+}
+
+function emptyAcc(): MetricsAcc {
+  return {textChars: 0, thinkingChars: 0, toolUseChars: 0, startedAtMs: 0};
 }
 
 /** Format seconds for the meta bar (one decimal under 60s, else integer). */
@@ -57,12 +88,9 @@ export function useAgentStreamMetrics(running: boolean): {
   readonly metrics: AgentStreamMetricsView | null;
   readonly noteTextDelta: (delta: string) => void;
   readonly noteThinkingDelta: (delta: string) => void;
+  readonly noteToolUseDelta: (delta: string) => void;
 } {
-  const accRef = useRef({
-    textChars: 0,
-    thinkingChars: 0,
-    startedAtMs: 0,
-  });
+  const accRef = useRef<MetricsAcc>(emptyAcc());
   const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
     null,
   );
@@ -70,7 +98,7 @@ export function useAgentStreamMetrics(running: boolean): {
 
   useEffect(() => {
     if (running) {
-      accRef.current = {textChars: 0, thinkingChars: 0, startedAtMs: Date.now()};
+      accRef.current = {...emptyAcc(), startedAtMs: Date.now()};
       setLastRun(null);
       const id = setInterval(() => setTick(t => t + 1), 250);
       return () => clearInterval(id);
@@ -80,7 +108,7 @@ export function useAgentStreamMetrics(running: boolean): {
       setLastRun(
         snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
       );
-      accRef.current = {textChars: 0, thinkingChars: 0, startedAtMs: 0};
+      accRef.current = emptyAcc();
     }
     return undefined;
   }, [running]);
@@ -100,6 +128,13 @@ export function useAgentStreamMetrics(running: boolean): {
     accRef.current.thinkingChars += delta.length;
   }, []);
 
+  const noteToolUseDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    accRef.current.toolUseChars += delta.length;
+  }, []);
+
   void tick;
 
   let metrics: AgentStreamMetricsView | null = null;
@@ -113,5 +148,5 @@ export function useAgentStreamMetrics(running: boolean): {
     metrics = toView(false, lastRun);
   }
 
-  return {metrics, noteTextDelta, noteThinkingDelta};
+  return {metrics, noteTextDelta, noteThinkingDelta, noteToolUseDelta};
 }

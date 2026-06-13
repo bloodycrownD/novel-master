@@ -9,10 +9,12 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE_DELTA,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUseDeltaPayload,
 } from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
@@ -32,7 +34,10 @@ type Props = {
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
+  onStreamToolUseDelta?: (delta: string) => void;
   onMessagesChanged: () => void | Promise<void>;
+  onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
+  onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onNeedModel: () => void;
   canResumeWithoutInput: boolean;
 };
@@ -45,7 +50,10 @@ export function ChatComposer({
   onStreamText,
   onStreamThinking,
   onStreamReset,
+  onStreamToolUseDelta,
   onMessagesChanged,
+  onStepCommitted,
+  onRunFinished,
   onNeedModel,
   canResumeWithoutInput,
 }: Props) {
@@ -61,14 +69,20 @@ export function ChatComposer({
   const streamHandlersRef = useRef({
     onStreamText,
     onStreamThinking,
+    onStreamToolUseDelta,
     onMessagesChanged,
     onStreamReset,
+    onStepCommitted,
+    onRunFinished,
   });
   streamHandlersRef.current = {
     onStreamText,
     onStreamThinking,
+    onStreamToolUseDelta,
     onMessagesChanged,
     onStreamReset,
+    onStepCommitted,
+    onRunFinished,
   };
 
   useEffect(() => {
@@ -94,6 +108,14 @@ export function ChatComposer({
         }
       },
     );
+    const subToolUseDelta = bus.subscribe(
+      EVENT_AGENT_STREAM_TOOL_USE_DELTA,
+      (payload: AgentStreamToolUseDeltaPayload) => {
+        if (payload.sessionId === sid) {
+          streamHandlersRef.current.onStreamToolUseDelta?.(payload.delta);
+        }
+      },
+    );
     const subStep = bus.subscribe(
       EVENT_AGENT_STEP_COMMITTED,
       (payload: AgentStepCommittedPayload) => {
@@ -101,24 +123,33 @@ export function ChatComposer({
           const {
             onMessagesChanged: reload,
             onStreamReset: reset,
+            onStepCommitted: onCommitted,
           } = streamHandlersRef.current;
-          flushAgentStepUi(payload.phase, reload, reset).catch(() => undefined);
+          flushAgentStepUi(payload.phase, reload, reset)
+            .then(() => onCommitted?.(payload))
+            .catch(() => undefined);
         }
       },
     );
     const subFinished = bus.subscribe(
       EVENT_AGENT_RUN_FINISHED,
       (payload: AgentRunFinishedPayload) => {
-      if (payload.sessionId === sid) {
-        const {onMessagesChanged: reload, onStreamReset: reset} =
-          streamHandlersRef.current;
-        flushRunUi(reload, reset).catch(() => undefined);
-      }
-    },
+        if (payload.sessionId === sid) {
+          const {
+            onMessagesChanged: reload,
+            onStreamReset: reset,
+            onRunFinished: onFinished,
+          } = streamHandlersRef.current;
+          flushRunUi(reload, reset)
+            .then(() => onFinished?.(payload))
+            .catch(() => undefined);
+        }
+      },
     );
     return () => {
       subText.unsubscribe();
       subThinking.unsubscribe();
+      subToolUseDelta.unsubscribe();
       subStep.unsubscribe();
       subFinished.unsubscribe();
     };

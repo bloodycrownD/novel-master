@@ -4,6 +4,8 @@
 import React, {useCallback, useEffect, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import type {
+  AgentRunFinishedPayload,
+  AgentStepCommittedPayload,
   ChatMessage,
   VfsScope,
   VfsService,
@@ -109,8 +111,11 @@ export type ChatConversationPanelProps = {
   onAgentRunningChange: (running: boolean) => void;
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
+  onStreamToolUseDelta: (delta: string) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void;
+  onStepCommitted: (payload: AgentStepCommittedPayload) => void;
+  onRunFinished: (payload: AgentRunFinishedPayload) => void;
   onNeedModel: () => void;
   bumpVfsRefresh: () => void;
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
@@ -187,8 +192,11 @@ export function ChatConversationPanel({
   onAgentRunningChange,
   onStreamText,
   onStreamThinking,
+  onStreamToolUseDelta,
   onStreamReset,
   onMessagesChanged,
+  onStepCommitted,
+  onRunFinished,
   onNeedModel,
   bumpVfsRefresh,
   onOpenFileEditor,
@@ -320,8 +328,11 @@ export function ChatConversationPanel({
               }}
               onStreamText={onStreamText}
               onStreamThinking={onStreamThinking}
+              onStreamToolUseDelta={onStreamToolUseDelta}
               onStreamReset={onStreamReset}
               onMessagesChanged={onMessagesChanged}
+              onStepCommitted={onStepCommitted}
+              onRunFinished={onRunFinished}
               onNeedModel={onNeedModel}
               canResumeWithoutInput={canResumeWithoutInput}
             />

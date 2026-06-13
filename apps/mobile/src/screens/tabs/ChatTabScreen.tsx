@@ -6,6 +6,10 @@ import {Alert, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {ChatMessage} from '@novel-master/core';
+import type {
+  AgentRunFinishedPayload,
+  AgentStepCommittedPayload,
+} from '@novel-master/core';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {useToast} from '../../components/chrome/ToastHost';
 import {
@@ -148,6 +152,24 @@ export function ChatTabScreen() {
     setWebMenuOpen(false);
     setWebMenuCloseSignal(signal => signal + 1);
   }, []);
+
+  const handleStepCommitted = useCallback(
+    (payload: AgentStepCommittedPayload) => {
+      if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
+        scope.bumpVfsRefresh();
+      }
+    },
+    [scope.bumpVfsRefresh],
+  );
+
+  const handleRunFinished = useCallback(
+    (payload: AgentRunFinishedPayload) => {
+      if (payload.vfsMutated === true) {
+        scope.bumpVfsRefresh();
+      }
+    },
+    [scope.bumpVfsRefresh],
+  );
 
   const {
     setProjectDrawerOpen,
@@ -422,10 +444,13 @@ export function ChatTabScreen() {
         onAgentRunningChange={stream.setAgentRunning}
         onStreamText={stream.handleStreamText}
         onStreamThinking={stream.handleStreamThinking}
+        onStreamToolUseDelta={stream.handleStreamToolUseDelta}
         onStreamReset={stream.handleStreamReset}
         onMessagesChanged={() =>
           messages.handleMessagesChanged(scope.refreshChatTokenLabel).catch(() => undefined)
         }
+        onStepCommitted={handleStepCommitted}
+        onRunFinished={handleRunFinished}
         onNeedModel={() => setModelPickerOpen(true)}
         bumpVfsRefresh={scope.bumpVfsRefresh}
         onOpenFileEditor={scope.openFileEditor}

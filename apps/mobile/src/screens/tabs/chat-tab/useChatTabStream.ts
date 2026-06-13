@@ -30,12 +30,16 @@ export function useChatTabStream({
   transcriptWebRef,
 }: UseChatTabStreamParams) {
   const [agentRunning, setAgentRunning] = useState(false);
-  const {metrics: streamMetrics, noteTextDelta, noteThinkingDelta} =
-    useAgentStreamMetrics(agentRunning);
+  const {
+    metrics: streamMetrics,
+    noteTextDelta,
+    noteThinkingDelta,
+    noteToolUseDelta,
+  } = useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
-  const streamMetricsRef = useRef({noteTextDelta, noteThinkingDelta});
-  streamMetricsRef.current = {noteTextDelta, noteThinkingDelta};
+  const streamMetricsRef = useRef({noteTextDelta, noteThinkingDelta, noteToolUseDelta});
+  streamMetricsRef.current = {noteTextDelta, noteThinkingDelta, noteToolUseDelta};
   const pendingBusStreamRef = useRef({text: '', thinking: ''});
   const busStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const useWebviewTranscriptRef = useRef(false);
@@ -111,6 +115,13 @@ export function useChatTabStream({
     [scheduleBusStreamFlush],
   );
 
+  const handleStreamToolUseDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    streamMetricsRef.current.noteToolUseDelta(delta);
+  }, []);
+
   const handleStreamReset = useCallback(() => {
     if (busStreamTimerRef.current != null) {
       clearTimeout(busStreamTimerRef.current);
@@ -146,6 +157,7 @@ export function useChatTabStream({
     streamingThinking,
     handleStreamText,
     handleStreamThinking,
+    handleStreamToolUseDelta,
     handleStreamReset,
     resetStreamingDisplay,
   };
