@@ -20,6 +20,8 @@ import type {UpdateCheckData} from '../update-check/types';
 const AUTO_CHECK_DELAY_MS = 2000;
 /** Minimum interval between automatic checks (24 hours). */
 const AUTO_CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000;
+const CHECK_FAILED_MESSAGE = '无法检查更新，请检查网络';
+const UP_TO_DATE_MESSAGE = '当前已是最新版本';
 
 function isThrottled(lastCheckAt: string | undefined): boolean {
   if (!lastCheckAt) return false;
@@ -69,6 +71,11 @@ export function useAutoUpdateCheck(): void {
           const data = await checkForUpdates();
           await persistUpdateCheckResult(appUi, data);
 
+          if (data.status === 'up-to-date') {
+            showToast(UP_TO_DATE_MESSAGE);
+            return;
+          }
+
           if (data.status !== 'update-available') return;
 
           const dismissed = await readDismissedVersion(appUi);
@@ -84,6 +91,7 @@ export function useAutoUpdateCheck(): void {
           });
         } catch {
           await persistFailedUpdateCheck(appUi);
+          showToast(CHECK_FAILED_MESSAGE);
         }
       })();
     }, AUTO_CHECK_DELAY_MS);

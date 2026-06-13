@@ -17,6 +17,10 @@ const AUTO_CHECK_DELAY_MS = 2000;
 /** Minimum interval between automatic checks (24 hours). */
 const AUTO_CHECK_THROTTLE_MS = 24 * 60 * 60 * 1000;
 const UPDATE_TOAST_MS = 8000;
+/** 自动检查「已最新」toast 短时长（秒级，避免打扰）。 */
+const UP_TO_DATE_TOAST_MS = 3500;
+const CHECK_FAILED_MESSAGE = "无法检查更新，请检查网络";
+const UP_TO_DATE_MESSAGE = "当前已是最新版本";
 
 const KEY_AUTO_CHECK = "updates.autoCheck";
 const KEY_LAST_CHECK_AT = "updates.lastCheckAt";
@@ -63,12 +67,25 @@ export function AutoUpdateCheckHost() {
         const lastAtRes = await ipcAppUiGet(KEY_LAST_CHECK_AT);
         if (lastAtRes.ok && isThrottled(lastAtRes.data)) return;
 
-        const checkRes = await ipcAppCheckForUpdates();
+        let checkRes;
+        try {
+          checkRes = await ipcAppCheckForUpdates();
+        } catch {
+          await persistFailedCheck();
+          showToast(CHECK_FAILED_MESSAGE);
+          return;
+        }
         if (!checkRes.ok) {
           await persistFailedCheck();
+          showToast(CHECK_FAILED_MESSAGE);
           return;
         }
         await persistSuccessfulCheck(checkRes.data);
+
+        if (checkRes.data.status === "up-to-date") {
+          showToast(UP_TO_DATE_MESSAGE, UP_TO_DATE_TOAST_MS);
+          return;
+        }
 
         if (checkRes.data.status !== "update-available") return;
 

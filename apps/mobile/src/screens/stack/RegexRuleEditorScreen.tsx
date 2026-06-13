@@ -26,6 +26,7 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import type {RootStackParamList} from '../../navigation/types';
+import {REGEX_UI_LABELS} from '@novel-master/core/config-forms/shared';
 
 type EditorRoute = RouteProp<RootStackParamList, 'RegexRuleEditor'>;
 
@@ -53,8 +54,8 @@ const DEFAULT_DRAFT: RegexRuleDraftFields = {
 };
 
 const CHANNEL_OPTIONS = [
-  {value: 'display' as const, label: '显示'},
-  {value: 'llm' as const, label: '模型'},
+  {value: 'display' as const, label: REGEX_UI_LABELS.displayChannel},
+  {value: 'llm' as const, label: REGEX_UI_LABELS.promptChannel},
 ];
 
 export function RegexRuleEditorScreen() {
@@ -319,7 +320,7 @@ export function RegexRuleEditorScreen() {
         hint="0 = 最新一条；留空表示该侧无界。至少填一侧。">
         <View style={styles.row2}>
           <View style={styles.cell}>
-            <FormField label="start-depth" tokens={tokens}>
+            <FormField label={REGEX_UI_LABELS.startDepth} tokens={tokens}>
               <FormTextInput
                 tokens={tokens}
                 value={
@@ -334,7 +335,7 @@ export function RegexRuleEditorScreen() {
             </FormField>
           </View>
           <View style={styles.cell}>
-            <FormField label="end-depth" tokens={tokens}>
+            <FormField label={REGEX_UI_LABELS.endDepth} tokens={tokens}>
               <FormTextInput
                 tokens={tokens}
                 value={draft.endDepth != null ? String(draft.endDepth) : ''}
@@ -368,7 +369,7 @@ export function RegexRuleEditorScreen() {
         <FormSwitchRow
           tokens={tokens}
           label="改写送入模型的文本"
-          description="对应 llm 通道；关闭时不替换。"
+          description={`对应${REGEX_UI_LABELS.promptChannel}；关闭时不替换。`}
           value={llmEnabled}
           onValueChange={setLlmEnabled}
         />
@@ -388,7 +389,7 @@ export function RegexRuleEditorScreen() {
         <FormSwitchRow
           tokens={tokens}
           label="改写界面展示文本"
-          description="对应 display 通道；关闭时不替换。"
+          description={`对应${REGEX_UI_LABELS.displayChannel}；关闭时不替换。`}
           value={displayEnabled}
           onValueChange={setDisplayEnabled}
         />
@@ -422,9 +423,9 @@ export function RegexRuleEditorScreen() {
           />
         </FormField>
         <FormField
-          label="预览深度 depthFromTail"
+          label={REGEX_UI_LABELS.previewDepth}
           tokens={tokens}
-          hint="模拟该条消息距最新可见消息的尾深度（0=最新）。">
+          hint={REGEX_UI_LABELS.previewDepthHint}>
           <FormTextInput
             tokens={tokens}
             value={testDepthFromTail}
