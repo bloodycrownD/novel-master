@@ -4,8 +4,8 @@ import {
   countPromptLlmInput,
   createDefaultTokenCounterRegistry,
   resolveContextWindowTokens,
+  type AgentPromptLayout,
   type ChatMessage,
-  type PromptBlock,
   type PromptRenderContext,
 } from "@novel-master/core";
 import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
@@ -30,19 +30,19 @@ function fixtureParams(overrides?: {
   readonly systemContent?: string;
   readonly messages?: readonly ChatMessage[];
 }): {
-  readonly blocks: readonly PromptBlock[];
+  readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
 } {
   const systemContent = overrides?.systemContent ?? "You are helpful.";
   const messages = overrides?.messages ?? [msg("user", "Hello")];
   return {
-    blocks: [
-      { name: "s", type: "text", role: "system", content: systemContent },
-      { name: "c", type: "chat" },
-    ],
+    layout: {
+      system: systemContent,
+      persist: [],
+      dynamic: [],
+    },
     ctx: {
       worktreeDisplay: "",
-      filetreeDisplay: "",
       messages,
     },
   };
@@ -56,15 +56,15 @@ describe("countPromptLlmInput", () => {
   const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
 
   it("C1: stable count for same input and model", async () => {
-    const { blocks, ctx } = fixtureParams();
+    const { layout, ctx } = fixtureParams();
     const a = await countPromptLlmInput({
-      blocks,
+      layout,
       ctx,
       applicationModelId: "openai/gpt-4o",
       registry,
     });
     const b = await countPromptLlmInput({
-      blocks,
+      layout,
       ctx,
       applicationModelId: "openai/gpt-4o",
       registry,
