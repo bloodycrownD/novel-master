@@ -7,25 +7,17 @@ import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
 const fixedNow = new Date(2026, 4, 24, 15, 30, 45);
 
 describe("renderMacro", () => {
-  it("substitutes .worktree", () => {
-    const out = renderMacro("wt={{ .worktree }}", {
-      dot: { worktree: "DISPLAY", filetree: "" },
-      root: { time: "t", week_cn: "w" },
-    });
-    assert.equal(out, "wt=DISPLAY");
-  });
-
-  it("substitutes .filetree", () => {
-    const out = renderMacro("tree:\n{{ .filetree }}", {
-      dot: { worktree: "", filetree: "/\n└── a.md" },
-      root: { time: "t", week_cn: "w" },
+  it("substitutes $filetree via root context", () => {
+    const out = renderMacro("tree:\n{{ $filetree }}", {
+      dot: {},
+      root: { time: "t", week_cn: "w", filetree: "/\n└── a.md" },
     });
     assert.equal(out, "tree:\n/\n└── a.md");
   });
 
   it("substitutes $.time with fixed now", () => {
     const out = renderMacro("at {{ $.time }}", {
-      dot: { worktree: "" },
+      dot: {},
       root: {
         time: formatLocalDateTime(fixedNow),
         week_cn: fixedNow.toLocaleDateString("zh-CN", { weekday: "long" }),
@@ -37,7 +29,7 @@ describe("renderMacro", () => {
   it("substitutes $.week_cn", () => {
     const week = fixedNow.toLocaleDateString("zh-CN", { weekday: "long" });
     const out = renderMacro("{{ $.week_cn }}", {
-      dot: { worktree: "" },
+      dot: {},
       root: { time: "t", week_cn: week },
     });
     assert.equal(out, week);
@@ -46,7 +38,7 @@ describe("renderMacro", () => {
 
   it("removes comments", () => {
     const out = renderMacro("a{{/* hidden */}}b", {
-      dot: { worktree: "" },
+      dot: {},
       root: { time: "t", week_cn: "w" },
     });
     assert.equal(out, "ab");
@@ -56,7 +48,7 @@ describe("renderMacro", () => {
     assert.throws(
       () =>
         renderMacro("{{ if .x }}", {
-          dot: { worktree: "" },
+          dot: {},
           root: { time: "t", week_cn: "w" },
         }),
       (error: unknown) => {
@@ -71,7 +63,7 @@ describe("renderMacro", () => {
     assert.throws(
       () =>
         renderMacro("{{ $.foo }}", {
-          dot: { worktree: "" },
+          dot: {},
           root: { time: "t", week_cn: "w" },
         }),
       (error: unknown) => {
@@ -82,11 +74,11 @@ describe("renderMacro", () => {
     );
   });
 
-  it("throws UNKNOWN_FIELD for missing dot path", () => {
+  it("throws UNKNOWN_FIELD for missing dot path when dot is empty", () => {
     assert.throws(
       () =>
         renderMacro("{{ .missing }}", {
-          dot: { worktree: "x" },
+          dot: {},
           root: { time: "t", week_cn: "w" },
         }),
       (error: unknown) => {

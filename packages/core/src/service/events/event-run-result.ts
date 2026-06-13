@@ -13,7 +13,7 @@ export interface EventActionFailure {
  * Outcome of an event action chain (sequential or parallel).
  *
  * @property partialFailure - Parallel mode only: some actions succeeded and others
- *   failed (e.g. hide-message ok, refresh-macros failed). Failed actions are not rolled back.
+ *   failed (e.g. one parallel action ok, another failed). Failed actions are not rolled back.
  */
 export interface EventRunResult {
   readonly ok: boolean;

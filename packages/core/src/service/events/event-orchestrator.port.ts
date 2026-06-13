@@ -7,7 +7,7 @@
 import type { EventRunResult } from "./event-run-result.js";
 
 /**
- * Scope for running configured event actions (hide-message, refresh-macros, etc.).
+ * Scope for running configured event actions (hide-message, run-agent, etc.).
  */
 export interface EventEmitContext {
   readonly sessionId: string;
