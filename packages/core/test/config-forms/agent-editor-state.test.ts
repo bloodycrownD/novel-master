@@ -3,14 +3,17 @@ import test from "node:test";
 import {
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
+  countFormPromptSources,
   createDefaultAgentEditorPrompts,
   createDefaultWorktreeBlock,
   definitionToForm,
   formSnapshotJson,
   isDynamicBlockPersistent,
   layoutFromFormInput,
+  splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
+  WORKTREE_BLOCK_WIRE_NAME,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
@@ -88,13 +91,41 @@ test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
 });
 
 test("createDefaultWorktreeBlock uses stable name", () => {
-  assert.deepEqual(createDefaultWorktreeBlock(), { name: "canon", type: "worktree" });
+  assert.deepEqual(createDefaultWorktreeBlock(), {
+    name: WORKTREE_BLOCK_WIRE_NAME,
+    type: "worktree",
+  });
 });
 
-test("createDefaultAgentEditorPrompts includes one persist text block", () => {
+test("splitPersistBlocksForEditor normalizes worktree wire name", () => {
+  const split = splitPersistBlocksForEditor([
+    { name: "persona", type: "text", role: "user", content: "x" },
+    { name: "custom", type: "worktree" },
+  ]);
+  assert.equal(split.textBlocks.length, 1);
+  assert.deepEqual(split.worktree, { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" });
+});
+
+test("layoutFromFormInput places worktree after text blocks with fixed name", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "",
+    persist: [
+      { name: "custom", type: "worktree" },
+      { name: "persona", type: "text", role: "user", content: "x" },
+    ],
+    dynamic: [],
+  });
+  assert.deepEqual(layout.persist, [
+    { name: "persona", type: "text", role: "user", content: "x" },
+    { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" },
+  ]);
+});
+
+test("createDefaultAgentEditorPrompts starts with empty persist", () => {
   const defaults = createDefaultAgentEditorPrompts();
   assert.equal(defaults.systemEnabled, false);
-  assert.equal(defaults.persist.length, 1);
+  assert.equal(defaults.persist.length, 0);
   assert.equal(defaults.dynamic.length, 0);
 });
 
@@ -125,9 +156,100 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       toolsMode: "default",
       toolsSelected: [],
       ...createDefaultAgentEditorPrompts(),
-      persist: [],
     }).ok,
     false,
+  );
+  assert.equal(
+    buildAgentDefinitionFromForm({
+      name: "writer",
+      maxSteps: "20",
+      modelEnabled: false,
+      providerId: "",
+      vendorModelId: "",
+      toolsMode: "default",
+      toolsSelected: [],
+      ...createDefaultAgentEditorPrompts(),
+    }).ok,
+    false,
+  );
+});
+
+test("buildAgentDefinitionFromForm allows empty persist with system content", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: true,
+    systemContent: "你是写作助手",
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.system, "你是写作助手");
+    assert.deepEqual(result.definition.prompts.persist, []);
+  }
+});
+
+test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persist: [],
+    dynamic: [{ name: "state", type: "text", role: "user", content: "{{$time}}" }],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("buildAgentDefinitionFromForm allows worktree-only persist", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persist: [createDefaultWorktreeBlock()],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("countFormPromptSources ignores enabled system without content", () => {
+  assert.equal(
+    countFormPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      persist: [],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+    }),
+    1,
+  );
+  assert.equal(
+    countFormPromptSources(
+      {
+        systemEnabled: true,
+        systemContent: "sys",
+        persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+        dynamic: [],
+      },
+      { excludePersistTextIndex: 0 },
+    ),
+    1,
   );
 });
 

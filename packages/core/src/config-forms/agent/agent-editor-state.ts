@@ -72,13 +72,121 @@ export function toolsFromDefinition(def: AgentDefinition): {
 
 export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 
+/** 工作树块在 wire 中的固定键名（UI 不暴露、不可改）。 */
+export const WORKTREE_BLOCK_WIRE_NAME = "canon";
+
+/** 工作树块在编辑器中的固定展示名。 */
+export const WORKTREE_BLOCK_LABEL = "工作树";
+
+/** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
+export const PROMPT_REGION_LABELS = {
+  system: "系统",
+  systemContent: "系统内容",
+  enableSystem: "启用系统",
+  apiSystemField: "API system 字段",
+  persistBlocks: "持久区",
+  dynamicBlocks: "动态区",
+  persistRegionHint: "持久区禁止宏与 lifecycle。",
+  layoutOrder: "系统 → 持久区 → 会话历史 → 动态区",
+  layoutOrderPrefix: "纵向顺序与 LLM 组装一致：",
+  layoutOrderPrefixShort: "纵向顺序：",
+  systemDisabledHint: "关闭时不写入 prompts.system。",
+  systemPlaceholder: "写入 LLM system 字段的单段提示…",
+  systemPlaceholderShort: "写入 LLM system 字段…",
+} as const;
+
 export function blockTypeLabel(
   type: PersistPromptBlock["type"] | DynamicPromptBlock["type"],
 ): string {
   if (type === "worktree") {
-    return "Worktree";
+    return WORKTREE_BLOCK_LABEL;
   }
   return "文本";
+}
+
+/** 将 persist 拆为可编辑文本块与至多一个固定工作树块（编辑器 UI 用）。 */
+export function splitPersistBlocksForEditor(persist: readonly PersistPromptBlock[]): {
+  readonly textBlocks: readonly PersistTextPromptBlock[];
+  readonly worktree: PersistWorktreePromptBlock | null;
+} {
+  const textBlocks: PersistTextPromptBlock[] = [];
+  let worktree: PersistWorktreePromptBlock | null = null;
+  for (const block of persist) {
+    if (block.type === "worktree") {
+      worktree = { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" };
+    } else {
+      textBlocks.push(block);
+    }
+  }
+  return { textBlocks, worktree };
+}
+
+/** 合并文本块与工作树块为 persist 数组（工作树固定置于文本块之后）。 */
+export function joinPersistBlocksForLayout(
+  textBlocks: readonly PersistTextPromptBlock[],
+  worktree: PersistWorktreePromptBlock | null,
+): PersistPromptBlock[] {
+  return worktree
+    ? [...textBlocks, { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" }]
+    : [...textBlocks];
+}
+
+export function mapPersistTextBlocks(
+  persist: readonly PersistPromptBlock[],
+  mapper: (block: PersistTextPromptBlock, index: number) => PersistTextPromptBlock,
+): PersistPromptBlock[] {
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
+  return joinPersistBlocksForLayout(
+    textBlocks.map((block, index) => mapper(block, index)),
+    worktree,
+  );
+}
+
+export function movePersistTextBlock(
+  persist: readonly PersistPromptBlock[],
+  textIndex: number,
+  direction: -1 | 1,
+): PersistPromptBlock[] {
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
+  const next = [...textBlocks];
+  const target = textIndex + direction;
+  if (target < 0 || target >= next.length) {
+    return [...persist];
+  }
+  const tmp = next[target]!;
+  next[target] = next[textIndex]!;
+  next[textIndex] = tmp;
+  return joinPersistBlocksForLayout(next, worktree);
+}
+
+export function deletePersistTextBlock(
+  persist: readonly PersistPromptBlock[],
+  textIndex: number,
+): PersistPromptBlock[] {
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
+  return joinPersistBlocksForLayout(
+    textBlocks.filter((_, index) => index !== textIndex),
+    worktree,
+  );
+}
+
+export function addPersistWorktreeBlock(
+  persist: readonly PersistPromptBlock[],
+): PersistPromptBlock[] {
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
+  if (worktree != null) {
+    return [...persist];
+  }
+  return joinPersistBlocksForLayout(textBlocks, {
+    name: WORKTREE_BLOCK_WIRE_NAME,
+    type: "worktree",
+  });
+}
+
+export function removePersistWorktreeBlock(
+  persist: readonly PersistPromptBlock[],
+): PersistPromptBlock[] {
+  return joinPersistBlocksForLayout(splitPersistBlocksForEditor(persist).textBlocks, null);
 }
 
 type DynamicTextBlock = DynamicPromptBlock;
@@ -108,9 +216,34 @@ export function createDefaultAgentEditorPrompts(): Pick<
   return {
     systemEnabled: false,
     systemContent: "",
-    persist: [createDefaultPersistTextBlock(0)],
+    persist: [],
     dynamic: [],
   };
+}
+
+/** 统计表单中有效 Prompt 来源数量（删除块时校验下限）。 */
+export function countFormPromptSources(
+  input: Pick<
+    AgentEditorFormInput,
+    "systemEnabled" | "systemContent" | "persist" | "dynamic"
+  >,
+  options?: {
+    excludePersistTextIndex?: number;
+    excludeDynamicIndex?: number;
+    excludeWorktree?: boolean;
+  },
+): number {
+  let count = 0;
+  if (input.systemEnabled && input.systemContent.trim() !== "") {
+    count += 1;
+  }
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(input.persist);
+  count += textBlocks.filter((_, index) => index !== options?.excludePersistTextIndex).length;
+  if (worktree != null && !options?.excludeWorktree) {
+    count += 1;
+  }
+  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
+  return count;
 }
 
 export function createDefaultPersistTextBlock(index: number): PersistTextPromptBlock {
@@ -122,9 +255,9 @@ export function createDefaultPersistTextBlock(index: number): PersistTextPromptB
   };
 }
 
-export function createDefaultWorktreeBlock(index = 0): PersistWorktreePromptBlock {
+export function createDefaultWorktreeBlock(): PersistWorktreePromptBlock {
   return {
-    name: index === 0 ? "canon" : `worktree-${index + 1}`,
+    name: WORKTREE_BLOCK_WIRE_NAME,
     type: "worktree",
   };
 }
@@ -165,9 +298,10 @@ export function layoutFromFormInput(
     input.systemEnabled && input.systemContent.trim() !== ""
       ? input.systemContent
       : undefined;
+  const { textBlocks, worktree } = splitPersistBlocksForEditor(input.persist);
   return {
     ...(system != null ? { system } : {}),
-    persist: [...input.persist],
+    persist: joinPersistBlocksForLayout(textBlocks, worktree),
     dynamic: [...input.dynamic],
   };
 }
