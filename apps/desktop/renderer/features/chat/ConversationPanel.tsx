@@ -53,7 +53,7 @@ export function ConversationPanel({
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
-  const { metrics: streamMetrics, noteTextDelta, noteThinkingDelta, noteToolUseDelta } =
+  const { metrics: streamMetrics, noteTextDelta, noteThinkingDelta, noteToolUseDelta, freezeToLastRun } =
     useAgentStreamMetrics(running);
   const [streamingText, setStreamingText] = useState("");
   const [streamingThinking, setStreamingThinking] = useState("");
@@ -123,11 +123,14 @@ export function ConversationPanel({
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
+      if (payload.phase === "assistant") {
+        freezeToLastRun();
+      }
       if (payload.phase === "tool_results" && payload.vfsMutated === true) {
         refreshWorkspaceTrees();
       }
     },
-    [reloadMessages, refreshWorkspaceTrees, onStreamReset],
+    [reloadMessages, refreshWorkspaceTrees, onStreamReset, freezeToLastRun],
   );
 
   const onRunFinished = useCallback(

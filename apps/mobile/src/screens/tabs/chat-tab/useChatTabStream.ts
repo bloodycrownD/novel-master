@@ -35,6 +35,7 @@ export function useChatTabStream({
     noteTextDelta,
     noteThinkingDelta,
     noteToolUseDelta,
+    freezeToLastRun,
   } = useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
@@ -153,6 +154,7 @@ export function useChatTabStream({
     agentRunning,
     setAgentRunning,
     streamMetrics,
+    freezeToLastRun,
     streamingText,
     streamingThinking,
     handleStreamText,

@@ -81,6 +81,54 @@ export function formatCharCount(n: number): string {
   return n.toLocaleString('zh-CN');
 }
 
+/** 构建 metrics 条文案（供 ChatStreamMetricsBar 与单测共用）。 */
+export function buildChatStreamMetricsLine(
+  metrics: AgentStreamMetricsView,
+): string {
+  const elapsedSec = metrics.elapsedMs / 1000;
+  const elapsedLabel = formatStreamElapsed(elapsedSec);
+  const rate =
+    metrics.charsPerSecond >= 10
+      ? Math.round(metrics.charsPerSecond)
+      : Math.round(metrics.charsPerSecond * 10) / 10;
+
+  const prefix = metrics.running
+    ? metrics.streamKind === 'tool'
+      ? '工具调用生成中'
+      : '生成中'
+    : '上次生成';
+
+  if (metrics.streamKind === 'tool') {
+    const parts = [
+      `${prefix} · ${elapsedLabel}`,
+      `工具参数 ${formatCharCount(metrics.toolUseChars)} 字`,
+    ];
+    if (metrics.toolUseChars > 0 && elapsedSec > 0) {
+      parts.push(`${rate} 字/秒`);
+    }
+    return parts.join(' · ');
+  }
+  if (metrics.streamKind === 'mixed') {
+    const parts = [`${prefix} · 正文 ${formatCharCount(metrics.textChars)} 字`];
+    if (metrics.thinkingChars > 0) {
+      parts.push(`思考 ${formatCharCount(metrics.thinkingChars)} 字`);
+    }
+    parts.push(`工具参数 ${formatCharCount(metrics.toolUseChars)} 字`);
+    return parts.join(' · ');
+  }
+  const parts: string[] = [
+    `${prefix} · ${elapsedLabel}`,
+    `正文 ${formatCharCount(metrics.textChars)} 字`,
+  ];
+  if (metrics.thinkingChars > 0) {
+    parts.push(`思考 ${formatCharCount(metrics.thinkingChars)} 字`);
+  }
+  if (metrics.totalChars > 0 && elapsedSec > 0) {
+    parts.push(`${rate} 字/秒`);
+  }
+  return parts.join(' · ');
+}
+
 /**
  * Live metrics while `running`; frozen {@link lastRun} after the run ends until the next one.
  */
@@ -89,16 +137,30 @@ export function useAgentStreamMetrics(running: boolean): {
   readonly noteTextDelta: (delta: string) => void;
   readonly noteThinkingDelta: (delta: string) => void;
   readonly noteToolUseDelta: (delta: string) => void;
+  /** assistant 落库后冻结为「上次生成」，run 仍进行时由阶段条承担执行期展示。 */
+  readonly freezeToLastRun: () => void;
 } {
   const accRef = useRef<MetricsAcc>(emptyAcc());
+  const frozenRef = useRef(false);
   const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
     null,
   );
   const [tick, setTick] = useState(0);
 
+  const resumeLiveIfFrozen = useCallback(() => {
+    if (!frozenRef.current || !running) {
+      return;
+    }
+    frozenRef.current = false;
+    accRef.current = {...emptyAcc(), startedAtMs: Date.now()};
+    setLastRun(null);
+    setTick(t => t + 1);
+  }, [running]);
+
   useEffect(() => {
     if (running) {
       accRef.current = {...emptyAcc(), startedAtMs: Date.now()};
+      frozenRef.current = false;
       setLastRun(null);
       const id = setInterval(() => setTick(t => t + 1), 250);
       return () => clearInterval(id);
@@ -113,32 +175,50 @@ export function useAgentStreamMetrics(running: boolean): {
     return undefined;
   }, [running]);
 
+  const freezeToLastRun = useCallback(() => {
+    const acc = accRef.current;
+    if (acc.startedAtMs <= 0) {
+      return;
+    }
+    setLastRun(
+      snapshotFromAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
+    );
+    frozenRef.current = true;
+    accRef.current = emptyAcc();
+    setTick(t => t + 1);
+  }, []);
+
   const noteTextDelta = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
+    resumeLiveIfFrozen();
     accRef.current.textChars += delta.length;
     // WHY: metrics bar refreshes via 250ms interval — per-delta setTick re-rendered ChatTabScreen on every SSE token.
-  }, []);
+  }, [resumeLiveIfFrozen]);
 
   const noteThinkingDelta = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
+    resumeLiveIfFrozen();
     accRef.current.thinkingChars += delta.length;
-  }, []);
+  }, [resumeLiveIfFrozen]);
 
   const noteToolUseDelta = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
+    resumeLiveIfFrozen();
     accRef.current.toolUseChars += delta.length;
-  }, []);
+  }, [resumeLiveIfFrozen]);
 
   void tick;
 
   let metrics: AgentStreamMetricsView | null = null;
-  if (running && accRef.current.startedAtMs > 0) {
+  if (frozenRef.current && lastRun != null) {
+    metrics = toView(false, lastRun);
+  } else if (running && accRef.current.startedAtMs > 0) {
     const elapsedMs = Math.max(0, Date.now() - accRef.current.startedAtMs);
     metrics = toView(
       true,
@@ -148,5 +228,11 @@ export function useAgentStreamMetrics(running: boolean): {
     metrics = toView(false, lastRun);
   }
 
-  return {metrics, noteTextDelta, noteThinkingDelta, noteToolUseDelta};
+  return {
+    metrics,
+    noteTextDelta,
+    noteThinkingDelta,
+    noteToolUseDelta,
+    freezeToLastRun,
+  };
 }

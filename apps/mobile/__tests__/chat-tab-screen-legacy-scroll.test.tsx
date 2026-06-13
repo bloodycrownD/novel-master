@@ -192,6 +192,7 @@ jest.mock('../src/hooks/useAgentStreamMetrics', () => ({
     noteTextDelta: jest.fn(),
     noteThinkingDelta: jest.fn(),
     noteToolUseDelta: jest.fn(),
+    freezeToLastRun: jest.fn(),
   }),
 }));
 jest.mock('../src/hooks/useAndroidChatBackHandler', () => ({

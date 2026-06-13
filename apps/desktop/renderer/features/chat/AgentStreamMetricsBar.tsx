@@ -11,7 +11,9 @@ type Props = {
   metrics: AgentStreamMetricsView;
 };
 
-function buildLabel(metrics: AgentStreamMetricsView): string {
+export function buildAgentStreamMetricsLabel(
+  metrics: AgentStreamMetricsView,
+): string {
   const elapsedSec = metrics.elapsedMs / 1000;
   const elapsedLabel = formatStreamElapsed(elapsedSec);
   const rate =
@@ -57,7 +59,9 @@ function buildLabel(metrics: AgentStreamMetricsView): string {
 export function AgentStreamMetricsBar({ metrics }: Props) {
   return (
     <div className="agent-stream-metrics-bar" aria-live="polite">
-      <span className="agent-stream-metrics-bar__line">{buildLabel(metrics)}</span>
+      <span className="agent-stream-metrics-bar__line">
+        {buildAgentStreamMetricsLabel(metrics)}
+      </span>
     </div>
   );
 }

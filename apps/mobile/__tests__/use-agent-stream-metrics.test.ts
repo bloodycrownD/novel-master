@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
+  buildChatStreamMetricsLine,
   computeStreamKind,
   formatCharCount,
   formatStreamElapsed,
@@ -97,5 +98,54 @@ describe('useAgentStreamMetrics hook', () => {
     expect(metrics!.toolUseChars).toBe(2);
     expect(metrics!.streamKind).toBe('mixed');
     expect(metrics!.totalChars).toBe(7);
+  });
+
+  it('freezeToLastRun 在 agent 仍 running 时冻结为上次生成', () => {
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(Probe, {running: true}));
+    });
+    act(() => {
+      api.noteToolUseDelta('{"path":"/a"}');
+      api.freezeToLastRun();
+    });
+    expect(metrics).not.toBeNull();
+    expect(metrics!.running).toBe(false);
+    expect(metrics!.toolUseChars).toBe(13);
+    expect(metrics!.streamKind).toBe('tool');
+  });
+
+  it('冻结后新一轮流式 delta 恢复 live metrics', () => {
+    act(() => {
+      renderer = TestRenderer.create(React.createElement(Probe, {running: true}));
+    });
+    act(() => {
+      api.noteToolUseDelta('{}');
+      api.freezeToLastRun();
+    });
+    expect(metrics!.running).toBe(false);
+    act(() => {
+      api.noteTextDelta('续写');
+    });
+    expect(metrics!.running).toBe(true);
+    expect(metrics!.textChars).toBe(2);
+    expect(metrics!.streamKind).toBe('text');
+  });
+});
+
+describe('ChatStreamMetricsBar', () => {
+  it('assistant 落库后展示上次生成而非工具调用生成中', () => {
+    const line = buildChatStreamMetricsLine({
+      running: false,
+      streamKind: 'tool',
+      toolUseChars: 1234,
+      textChars: 0,
+      thinkingChars: 0,
+      elapsedMs: 5200,
+      totalChars: 1234,
+      charsPerSecond: 237,
+    });
+    expect(line).toContain('上次生成');
+    expect(line).not.toContain('工具调用生成中');
+    expect(line).toContain('工具参数');
   });
 });

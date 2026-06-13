@@ -155,11 +155,14 @@ export function ChatTabScreen() {
 
   const handleStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
+      if (payload.phase === 'assistant') {
+        stream.freezeToLastRun();
+      }
       if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
         scope.bumpVfsRefresh();
       }
     },
-    [scope.bumpVfsRefresh],
+    [scope.bumpVfsRefresh, stream.freezeToLastRun],
   );
 
   const handleRunFinished = useCallback(
