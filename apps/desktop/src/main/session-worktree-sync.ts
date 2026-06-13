@@ -29,7 +29,7 @@ export function attachSessionWorktreeSync(eventBus: SimpleEventBus): () => void 
     eventBus.subscribe(
       EVENT_AGENT_STEP_COMMITTED,
       (payload: AgentStepCommittedPayload) => {
-        if (payload.phase !== "tool_results") {
+        if (payload.phase !== "tool_results" || payload.vfsMutated !== true) {
           return;
         }
         void invalidateSessionWorktree(payload.projectId, payload.sessionId);
@@ -38,6 +38,9 @@ export function attachSessionWorktreeSync(eventBus: SimpleEventBus): () => void 
     eventBus.subscribe(
       EVENT_AGENT_RUN_FINISHED,
       (payload: AgentRunFinishedPayload) => {
+        if (payload.vfsMutated !== true) {
+          return;
+        }
         void invalidateSessionWorktree(payload.projectId, payload.sessionId);
       },
     ),

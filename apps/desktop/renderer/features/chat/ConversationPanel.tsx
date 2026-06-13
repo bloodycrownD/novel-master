@@ -2,9 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import type {
   AgentRunFailedPayload,
+  AgentRunFinishedPayload,
   AgentStepCommittedPayload,
+  AgentStreamToolUseDeltaPayload,
 } from "../../../shared/agent-event-types";
 import { useAgentStream } from "../../hooks/useAgentStream";
+import { useAgentStreamMetrics } from "../../hooks/useAgentStreamMetrics";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -31,6 +34,7 @@ import { MessageEditModal } from "./MessageEditModal";
 import { flushAgentStepUi } from "./flush-run-ui";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
+import { AgentStreamMetricsBar } from "./AgentStreamMetricsBar";
 
 interface ConversationPanelProps {
   projectId: string;
@@ -49,6 +53,8 @@ export function ConversationPanel({
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
+  const { metrics: streamMetrics, noteTextDelta, noteThinkingDelta, noteToolUseDelta } =
+    useAgentStreamMetrics(running);
   const [streamingText, setStreamingText] = useState("");
   const [streamingThinking, setStreamingThinking] = useState("");
   const [chatRichText, setChatRichText] = useState(true);
@@ -93,12 +99,21 @@ export function ConversationPanel({
   }, []);
 
   const onTextDelta = useCallback((delta: string) => {
+    noteTextDelta(delta);
     setStreamingText((prev) => prev + delta);
-  }, []);
+  }, [noteTextDelta]);
 
   const onThinkingDelta = useCallback((delta: string) => {
+    noteThinkingDelta(delta);
     setStreamingThinking((prev) => prev + delta);
-  }, []);
+  }, [noteThinkingDelta]);
+
+  const onToolUseDelta = useCallback(
+    (payload: AgentStreamToolUseDeltaPayload) => {
+      noteToolUseDelta(payload.delta);
+    },
+    [noteToolUseDelta],
+  );
 
   const onStreamReset = useCallback(() => {
     setStreamingText("");
@@ -108,20 +123,25 @@ export function ConversationPanel({
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
-      if (payload.phase === "tool_results") {
+      if (payload.phase === "tool_results" && payload.vfsMutated === true) {
         refreshWorkspaceTrees();
       }
     },
     [reloadMessages, refreshWorkspaceTrees, onStreamReset],
   );
 
-  const onRunFinished = useCallback(() => {
-    setRunning(false);
-    setStreamingText("");
-    setStreamingThinking("");
-    void reloadMessages();
-    refreshWorkspaceTrees();
-  }, [reloadMessages, refreshWorkspaceTrees]);
+  const onRunFinished = useCallback(
+    (payload: AgentRunFinishedPayload) => {
+      setRunning(false);
+      setStreamingText("");
+      setStreamingThinking("");
+      void reloadMessages();
+      if (payload.vfsMutated === true) {
+        refreshWorkspaceTrees();
+      }
+    },
+    [reloadMessages, refreshWorkspaceTrees],
+  );
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload) => {
@@ -138,6 +158,7 @@ export function ConversationPanel({
     sessionId,
     onTextDelta,
     onThinkingDelta,
+    onToolUseDelta,
     onStepCommitted,
     onRunFinished,
     onRunFailed,
@@ -406,6 +427,9 @@ export function ConversationPanel({
         data-conversation-panel="chat"
         hidden={tab !== "chat"}
       >
+        {streamMetrics != null ? (
+          <AgentStreamMetricsBar metrics={streamMetrics} />
+        ) : null}
         <div
           className={`chat-messages${messageBatch.active ? " chat-messages--batch" : ""}`}
           id="chat-messages"

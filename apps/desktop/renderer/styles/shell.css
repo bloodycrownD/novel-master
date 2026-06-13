@@ -3327,6 +3327,20 @@ html[data-theme="dark"] .conversation-tab.is-active {
   background: var(--pane-chat-bg);
 }
 
+.agent-stream-metrics-bar {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.agent-stream-metrics-bar__line {
+  display: block;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
 .chat-messages__empty {
   margin: 0;
   padding: 24px 0;

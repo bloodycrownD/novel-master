@@ -8,12 +8,16 @@ export const EVENT_AGENT_STREAM_TEXT_DELTA = "agent.stream.text-delta" as const;
 export const EVENT_AGENT_STREAM_THINKING_DELTA =
   "agent.stream.thinking-delta" as const;
 export const EVENT_AGENT_STREAM_TOOL_USE = "agent.stream.tool-use" as const;
+export const EVENT_AGENT_STREAM_TOOL_USE_DELTA =
+  "agent.stream.tool-use-delta" as const;
 export const EVENT_AGENT_STEP_COMMITTED = "agent.step.committed" as const;
 
 export interface AgentRunFinishedPayload {
   readonly sessionId: string;
   readonly projectId: string;
   readonly stopReason: string;
+  /** 本次 run 内是否曾突变 session VFS（任意 tool 轮） */
+  readonly vfsMutated?: boolean;
 }
 
 export interface AgentRunFailedPayload {
@@ -39,10 +43,19 @@ export interface AgentStreamToolUsePayload {
   readonly input: Record<string, unknown>;
 }
 
+export interface AgentStreamToolUseDeltaPayload {
+  readonly sessionId: string;
+  readonly id: string;
+  readonly name: string;
+  readonly delta: string;
+}
+
 export type AgentStepCommittedPhase = "assistant" | "tool_results";
 
 export interface AgentStepCommittedPayload {
   readonly sessionId: string;
   readonly projectId: string;
   readonly phase: AgentStepCommittedPhase;
+  /** 仅 phase === 'tool_results' 时存在；本轮是否突变 session VFS */
+  readonly vfsMutated?: boolean;
 }
