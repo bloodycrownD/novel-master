@@ -1,5 +1,5 @@
 /**
- * Primary / secondary buttons aligned with examples/mobile prototype.
+ * Primary / Secondary 按钮，对齐 examples/mobile 原型紧凑样式。
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text} from 'react-native';
@@ -49,41 +49,37 @@ export function SecondaryButton({
         styles.secondary,
         fullWidth ? styles.fullWidth : null,
         {
-          backgroundColor: tokens.surface,
-          borderColor: tokens.primary,
+          backgroundColor: tokens.bgSecondary,
           opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
         },
       ]}>
-      <Text style={[styles.secondaryText, {color: tokens.primary}]}>{label}</Text>
+      <Text style={[styles.secondaryText, {color: tokens.text}]}>{label}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   primary: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
   },
   primaryText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   secondary: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: 44,
   },
   secondaryText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   fullWidth: {

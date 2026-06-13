@@ -1,5 +1,8 @@
 import {normalizeFillPolicyForMobile} from '../src/storage/fill-policy-mobile';
-import {dirRuleToForm} from '../src/services/worktree-operations.service';
+import {
+  defaultDirRuleForm,
+  dirRuleToForm,
+} from '../src/services/worktree-operations.service';
 
 describe('normalizeFillPolicyForMobile', () => {
   it('maps full to hidden', () => {
@@ -25,5 +28,12 @@ describe('dirRuleToForm', () => {
       ruleEnabled: true,
     });
     expect(form.fillPolicy).toBe('hidden');
+  });
+});
+
+describe('defaultDirRuleForm', () => {
+  it('uses Core default header fill', () => {
+    expect(defaultDirRuleForm('/docs').fillPolicy).toBe('header');
+    expect(defaultDirRuleForm('/docs').ruleEnabled).toBe(true);
   });
 });
