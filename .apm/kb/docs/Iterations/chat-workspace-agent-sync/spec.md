@@ -46,11 +46,15 @@ agentRunning
 
 | 类别 | 项 |
 |------|-----|
-| Metrics | `useAgentStreamMetrics`、`ChatStreamMetricsBar`、`AgentStreamMetricsBar`、相关单测、`freezeToLastRun` |
-| Delta | `EVENT_AGENT_STREAM_TOOL_USE_DELTA`、agent-runner 发布、ChatComposer/onStreamToolUseDelta、desktop `useAgentStream` 订阅、forward-event-bus |
-| Parser | `LlmStreamEvent tool-use-delta` 及 anthropic/gemini/openai emit |
-| GLM | `glm-tool-stream.ts`、openai.adapter `tool_stream`、相关单测 |
-| Phase bar | message 行 `toolPhase` / `ToolTurnPhaseBar`（stream tail 保留改文案） |
+| Tool delta | `EVENT_AGENT_STREAM_TOOL_USE_DELTA`、parser emit、`tool_stream` |
+| Phase bar | message 行 `toolPhase` / assistant 落库后 phase bar |
+
+## 保留 / 恢复
+
+| 类别 | 项 |
+|------|-----|
+| Metrics | `useAgentStreamMetrics`（仅 text/thinking + 计时）、`ChatStreamMetricsBar` |
+| Stream 阶段 | stream tail「工具调用中」（`useStreamToolInvoking` + 样式化 phase bar） |
 
 ## 新增/迁移
 

@@ -1,26 +1,31 @@
 /**
- * Turn-level tool execution phase hint (no per-tool cards yet).
+ * Stream tail 工具调用阶段提示（与思考块分隔，带脉冲指示）。
  */
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
   embedded?: boolean;
-  /** 默认「正在执行工具调用…」；stream tail 传「工具调用中」。 */
+  /** 默认「工具调用中」。 */
   label?: string;
 };
 
 export function ToolTurnPhaseBar({
   embedded = true,
-  label = '正在执行工具调用…',
+  label = '工具调用中',
 }: Props) {
   const {tokens} = useTheme();
   return (
-    <View style={embedded ? styles.embedded : styles.standalone}>
-      <Text style={[styles.label, {color: tokens.textSecondary}]}>
-        {label}
-      </Text>
+    <View
+      style={[
+        embedded ? styles.embedded : styles.standalone,
+        {
+          borderTopColor: tokens.borderLight,
+        },
+      ]}>
+      <ActivityIndicator size="small" color={tokens.primary} />
+      <Text style={[styles.label, {color: tokens.primary}]}>{label}</Text>
     </View>
   );
 }
@@ -28,13 +33,21 @@ export function ToolTurnPhaseBar({
 const styles = StyleSheet.create({
   embedded: {
     alignSelf: 'stretch',
-    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
   standalone: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginVertical: 4,
   },
   label: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

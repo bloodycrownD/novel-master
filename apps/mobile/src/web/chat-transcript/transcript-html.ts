@@ -43,6 +43,9 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-status.success { color: var(--primary, #007aff); }
     .tool-status.error { color: #ff3b30; }
     .tool-phase-bar { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary, #888); }
+    .tool-invoking-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #e5e5ea); font-size: 12px; font-weight: 600; color: var(--primary, #007aff); }
+    .tool-invoking-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 4px; background: var(--primary, #007aff); animation: tool-invoking-pulse 1.2s ease-in-out infinite; }
+    @keyframes tool-invoking-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
     .tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
     .tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
     .load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }

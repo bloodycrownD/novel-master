@@ -375,6 +375,81 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterRerender).not.toContain('sessionSnapshot');
   });
 
+  it('webReady 后 toolInvoking 变化 post streamToolInvoking', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          toolInvoking={false}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          toolInvoking
+        />,
+      );
+    });
+
+    const invokingMsg = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(msg => msg.type === 'streamToolInvoking');
+    expect(invokingMsg?.type).toBe('streamToolInvoking');
+    if (invokingMsg?.type === 'streamToolInvoking') {
+      expect(invokingMsg.payload.active).toBe(true);
+    }
+  });
+
+  it('richText flag 切换时不抛错并 post sessionSnapshot', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: false, batchMode: false}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true, batchMode: false}}
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const typesAfterToggle = messageTypesSince(baseline);
+    expect(typesAfterToggle).toContain('sessionSnapshot');
+  });
+
   it('agent 运行中 assistant 含 tool_use 落库时走 sessionSnapshot 而非 appendTailRows', async () => {
     const initialMessages = [sampleMessage('u1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

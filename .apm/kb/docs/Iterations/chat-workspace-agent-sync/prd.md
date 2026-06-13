@@ -21,21 +21,23 @@ branch: fix/glm-tool-stream-stalled-metrics
 
 ## 废弃项
 
-- `useAgentStreamMetrics`、`ChatStreamMetricsBar`、`AgentStreamMetricsBar` 及单测
-- `EVENT_AGENT_STREAM_TOOL_USE_DELTA` / `LlmStreamEvent tool-use-delta` 全链路
-- `glm-tool-stream.ts`、`openai.adapter` 的 `tool_stream`
-- `ToolTurnPhaseBar` 用于 message 行（assistant 落库后 phase bar）
-- `freezeToLastRun`（仅 metrics 用）
+- tool 参数流式计数（`TOOL_USE_DELTA`、`toolUseChars`、`tool_stream`）
+- assistant 落库后「正在执行工具调用…」phase bar
 - `toolPhase: executing` 用于 UI 的路径
+
+## 保留项
+
+- **Stream metrics 条**：仅计时 + 正文/思考字数 + 速率（**不含** tool 参数计数）
+- stream tail「**工具调用中**」阶段条（两事件模型事件 1）
 
 ## 非目标
 
 - 不在 LLM 流式中途提前渲染 per-tool 参数增量
-- 不恢复 stream metrics 字数/速率条
+- metrics 条不显示「工具调用生成中」或工具参数字数
 
 ## 验收标准
 
 1. thinking 结束后、tool_use 落库前，stream tail 稳定显示「工具调用中」
 2. assistant 含 `tool_use` 落库后立即出现 pending 工具卡，tool_result 返回后变为 success/error
-3. 无 metrics 条、无 phase bar、无 TOOL_USE_DELTA 订阅
-4. mobile jest + core test 通过
+3. metrics 条显示生成计时与正文/思考字数；**不**含 tool 参数计数
+4. mobile jest 通过

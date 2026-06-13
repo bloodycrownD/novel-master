@@ -181,7 +181,11 @@ export function buildTranscriptBootScript(): string {
   }
 
   function renderToolInvokingBar() {
-    return '<div class="tool-invoking-bar">工具调用中</div>';
+    return (
+      '<div class="tool-invoking-bar">' +
+      '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
+      '<span class="tool-invoking-label">工具调用中</span></div>'
+    );
   }
 
   function thinkingBodyInner(text, thinkingHtml) {

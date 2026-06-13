@@ -583,6 +583,10 @@ export const ChatTranscriptWebView = forwardRef<
   }, [webReady, toolInvoking, postToWeb]);
 
   useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    const richText = flags?.richText ?? false;
     if (prevRichTextRef.current === richText) {
       return;
     }

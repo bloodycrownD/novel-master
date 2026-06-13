@@ -6,6 +6,7 @@ import type {RefObject} from 'react';
 import type {ChatTranscriptWebViewHandle} from '../../../components/chat/ChatTranscriptWebView';
 import type {ChatTranscriptScrollSnapshot} from '../../../components/chat/ChatTranscriptBridge';
 import {useStreamToolInvoking} from '../../../hooks/useStreamToolInvoking';
+import {useAgentStreamMetrics} from '../../../hooks/useAgentStreamMetrics';
 import {
   getScrollSnapshot,
   scrollCacheKey,
@@ -32,14 +33,29 @@ export function useChatTabStream({
   const [agentRunning, setAgentRunning] = useState(false);
   const {
     toolInvoking,
-    noteTextDelta,
-    noteThinkingDelta,
+    noteTextDelta: noteInvokingTextDelta,
+    noteThinkingDelta: noteInvokingThinkingDelta,
     reset: resetToolInvoking,
   } = useStreamToolInvoking(agentRunning);
+  const {
+    metrics: streamMetrics,
+    noteTextDelta: noteMetricsTextDelta,
+    noteThinkingDelta: noteMetricsThinkingDelta,
+  } = useAgentStreamMetrics(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
-  const streamInvokingRef = useRef({noteTextDelta, noteThinkingDelta});
-  streamInvokingRef.current = {noteTextDelta, noteThinkingDelta};
+  const streamHandlersRef = useRef({
+    noteInvokingTextDelta,
+    noteInvokingThinkingDelta,
+    noteMetricsTextDelta,
+    noteMetricsThinkingDelta,
+  });
+  streamHandlersRef.current = {
+    noteInvokingTextDelta,
+    noteInvokingThinkingDelta,
+    noteMetricsTextDelta,
+    noteMetricsThinkingDelta,
+  };
   const pendingBusStreamRef = useRef({text: '', thinking: ''});
   const busStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const useWebviewTranscriptRef = useRef(false);
@@ -49,14 +65,18 @@ export function useChatTabStream({
     () =>
       createStreamBuffer({
         onTextFlush: delta => {
-          streamInvokingRef.current.noteTextDelta(delta);
+          const h = streamHandlersRef.current;
+          h.noteInvokingTextDelta(delta);
+          h.noteMetricsTextDelta(delta);
           if (useWebviewTranscriptRef.current) {
             return;
           }
           setStreamingText(prev => prev + delta);
         },
         onThinkingFlush: delta => {
-          streamInvokingRef.current.noteThinkingDelta(delta);
+          const h = streamHandlersRef.current;
+          h.noteInvokingThinkingDelta(delta);
+          h.noteMetricsThinkingDelta(delta);
           if (useWebviewTranscriptRef.current) {
             return;
           }
@@ -74,13 +94,16 @@ export function useChatTabStream({
     }
     pendingBusStreamRef.current = {text: '', thinking: ''};
     if (useWebviewTranscriptRef.current) {
+      const h = streamHandlersRef.current;
       if (pending.text.length > 0) {
         transcriptWebRef.current?.pushStreamDelta('text', pending.text);
-        streamInvokingRef.current.noteTextDelta(pending.text);
+        h.noteInvokingTextDelta(pending.text);
+        h.noteMetricsTextDelta(pending.text);
       }
       if (pending.thinking.length > 0) {
         transcriptWebRef.current?.pushStreamDelta('thinking', pending.thinking);
-        streamInvokingRef.current.noteThinkingDelta(pending.thinking);
+        h.noteInvokingThinkingDelta(pending.thinking);
+        h.noteMetricsThinkingDelta(pending.thinking);
       }
       return;
     }
@@ -147,6 +170,7 @@ export function useChatTabStream({
     agentRunning,
     setAgentRunning,
     toolInvoking,
+    streamMetrics,
     streamingText,
     streamingThinking,
     handleStreamText,

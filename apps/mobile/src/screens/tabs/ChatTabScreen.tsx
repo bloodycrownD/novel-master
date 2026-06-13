@@ -345,6 +345,7 @@ export function ChatTabScreen() {
         projectId={projectId}
         sessionId={sessionId}
         agentMeta={scope.agentMeta}
+        streamMetrics={stream.streamMetrics}
         toolInvoking={stream.toolInvoking}
         messageBatchActive={messageBatch.active}
         messageBatchSelectedCount={messageBatch.selectedCount}
