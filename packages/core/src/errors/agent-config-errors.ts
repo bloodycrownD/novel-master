@@ -12,7 +12,8 @@ export type AgentConfigErrorCode =
   | "INVALID_TOOL_POLICY"
   | "PROTOCOL_MISMATCH"
   | "AGENT_NOT_FOUND"
-  | "AGENT_IN_USE";
+  | "AGENT_IN_USE"
+  | "DUPLICATE_NAME";
 
 /**
  * Unified error for agent definition parse and validation.

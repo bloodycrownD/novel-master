@@ -23,6 +23,7 @@ import {formatRelativeTimeMs} from '../../utils/format-relative-time';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {pickEntityIcon} from '../../utils/entity-icon';
 
 const PROJECT_ICONS = ['📁', '📚', '✨', '🚀', '📝', '🎯'];
 
@@ -167,7 +168,7 @@ export function ProjectDrawer({
                         />
                       ) : (
                         <Text style={styles.projectIcon}>
-                          {PROJECT_ICONS[index % PROJECT_ICONS.length]}
+                          {pickEntityIcon(project.id, PROJECT_ICONS)}
                         </Text>
                       )}
                       <View style={styles.projectInfo}>

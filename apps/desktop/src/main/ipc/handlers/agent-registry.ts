@@ -3,6 +3,7 @@
  */
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import {
+  allocateAgentDisplayName,
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from "@novel-master/core/config-forms/agent";
@@ -106,10 +107,20 @@ export async function handleAgentRegistryCreateBlank(): Promise<
     const probe = new ToolRegistry();
     registerBuiltinTools(probe);
     const defaultPrompts = createDefaultAgentEditorPrompts();
+    const slots = [];
+    for (const id of await rt.agentRegistry.listAgentIds()) {
+      try {
+        const def = await rt.agentRegistry.get(id);
+        slots.push({ id, name: def.name });
+      } catch {
+        slots.push({ id, name: id });
+      }
+    }
+    const name = allocateAgentDisplayName(slots);
     await rt.agentRegistry.upsert(
       agentId,
       {
-        name: "new-agent",
+        name,
         runtime: { maxSteps: 20 },
         prompts: layoutFromFormInput(defaultPrompts),
       },

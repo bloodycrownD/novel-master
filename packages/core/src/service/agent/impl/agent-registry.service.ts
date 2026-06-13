@@ -41,8 +41,32 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
         "agent name must not be empty",
       );
     }
+    await this.assertUniqueDisplayName(agentId, trimmedName);
+
     const normalized: AgentDefinition = { ...def, name: trimmedName };
     await this.repository.upsert(agentId, normalized);
+  }
+
+  private async assertUniqueDisplayName(
+    agentId: string,
+    name: string,
+  ): Promise<void> {
+    const ids = await this.repository.listIds();
+    for (const otherId of ids) {
+      if (otherId === agentId) {
+        continue;
+      }
+      let otherName: string;
+      try {
+        const otherDef = await this.repository.get(otherId);
+        otherName = otherDef == null ? otherId.trim() : otherDef.name.trim();
+      } catch {
+        otherName = otherId.trim();
+      }
+      if (otherName.length > 0 && otherName === name) {
+        throw new AgentConfigError("DUPLICATE_NAME", "Agent 名称已存在");
+      }
+    }
   }
 
   async delete(agentId: string): Promise<void> {

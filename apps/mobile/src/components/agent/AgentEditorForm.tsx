@@ -20,6 +20,7 @@ import {
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
+  countMinimumPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
   definitionToForm,
@@ -375,13 +376,16 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   };
 
   const deletePersist = (textIndex: number) => {
-    const remaining = countFormPromptSources(
-      {systemEnabled, systemContent, persist, dynamic},
-      {excludePersistTextIndex: textIndex},
-    );
-    if (remaining < 1) {
-      showToast('至少保留一个 Prompt 块');
-      return;
+    const minimum = countMinimumPromptSources({systemEnabled, systemContent, dynamic});
+    if (minimum < 1) {
+      const remaining = countFormPromptSources(
+        {systemEnabled, systemContent, persist, dynamic},
+        {excludePersistTextIndex: textIndex},
+      );
+      if (remaining < 1) {
+        showToast('至少保留一个 Prompt 块');
+        return;
+      }
     }
     setPersist(prev => deletePersistTextBlock(prev, textIndex));
   };
@@ -415,13 +419,16 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   };
 
   const removePersistWorktree = () => {
-    const remaining = countFormPromptSources(
-      {systemEnabled, systemContent, persist, dynamic},
-      {excludeWorktree: true},
-    );
-    if (remaining < 1) {
-      showToast('至少保留一个 Prompt 块');
-      return;
+    const minimum = countMinimumPromptSources({systemEnabled, systemContent, dynamic});
+    if (minimum < 1) {
+      const remaining = countFormPromptSources(
+        {systemEnabled, systemContent, persist, dynamic},
+        {excludeWorktree: true},
+      );
+      if (remaining < 1) {
+        showToast('至少保留一个 Prompt 块');
+        return;
+      }
     }
     setPersist(prev => removePersistWorktreeBlock(prev));
     setAddBlockVisible(false);

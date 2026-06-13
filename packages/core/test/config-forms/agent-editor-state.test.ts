@@ -4,6 +4,7 @@ import {
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
   countFormPromptSources,
+  countMinimumPromptSources,
   createDefaultAgentEditorPrompts,
   createDefaultWorktreeBlock,
   definitionToForm,
@@ -248,6 +249,39 @@ test("buildAgentDefinitionFromForm allows worktree-only persist", () => {
     dynamic: [],
   });
   assert.equal(result.ok, true);
+});
+
+test("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
+  assert.equal(
+    countMinimumPromptSources({
+      systemEnabled: true,
+      systemContent: "sys",
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+    }),
+    2,
+  );
+  assert.equal(
+    countMinimumPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      dynamic: [],
+    }),
+    0,
+  );
+  assert.equal(
+    countMinimumPromptSources(
+      {
+        systemEnabled: false,
+        systemContent: "",
+        dynamic: [
+          { name: "d1", type: "text", role: "user", content: "a" },
+          { name: "d2", type: "text", role: "user", content: "b" },
+        ],
+      },
+      { excludeDynamicIndex: 0 },
+    ),
+    1,
+  );
 });
 
 test("countFormPromptSources ignores enabled system without content", () => {

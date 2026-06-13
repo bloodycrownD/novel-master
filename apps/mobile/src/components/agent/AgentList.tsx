@@ -30,6 +30,7 @@ import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
+import {pickEntityIcon} from '../../utils/entity-icon';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -280,7 +281,7 @@ export function AgentList({onCreate}: Props) {
                     {backgroundColor: tokens.bgSecondary},
                   ]}>
                   <Text style={styles.avatarIcon}>
-                    {AGENT_ICONS[index % AGENT_ICONS.length]}
+                    {pickEntityIcon(item.id, AGENT_ICONS)}
                   </Text>
                 </View>
               )}

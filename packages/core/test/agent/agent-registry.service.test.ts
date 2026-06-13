@@ -48,4 +48,75 @@ describe("AgentRegistryService", () => {
         e instanceof AgentConfigError && e.code === "AGENT_NOT_FOUND",
     );
   });
+
+  it("upsert 拒绝与其他 Agent 重名的显示名", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "写作助手",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    await registry.upsert("writer-a", def);
+    await assert.rejects(
+      () => registry.upsert("writer-b", def),
+      (e: unknown) =>
+        e instanceof AgentConfigError &&
+        e.code === "DUPLICATE_NAME" &&
+        e.message === "Agent 名称已存在",
+    );
+  });
+
+  it("upsert 允许同一 Agent 保存原显示名", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "写作助手",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    await registry.upsert("writer", def);
+    await registry.upsert("writer", { ...def, runtime: { maxSteps: 10 } });
+    const loaded = await registry.get("writer");
+    assert.equal(loaded.name, "写作助手");
+    assert.equal(loaded.runtime?.maxSteps, 10);
+  });
+
+  it("upsert 保存前 trim 显示名并参与重名校验", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    await registry.upsert(
+      "writer-a",
+      decode(
+        {
+          schemaVersion: 1,
+          name: "  写作助手  ",
+          prompts: { persist: {}, dynamic: {} },
+        },
+        agentDefinitionSchema,
+      ),
+    );
+    await assert.rejects(
+      () =>
+        registry.upsert(
+          "writer-b",
+          decode(
+            {
+              schemaVersion: 1,
+              name: "写作助手",
+              prompts: { persist: {}, dynamic: {} },
+            },
+            agentDefinitionSchema,
+          ),
+        ),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.code === "DUPLICATE_NAME",
+    );
+  });
 });

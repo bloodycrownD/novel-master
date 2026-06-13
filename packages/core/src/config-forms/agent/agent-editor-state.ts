@@ -233,6 +233,19 @@ export function createDefaultAgentEditorPrompts(): Pick<
   };
 }
 
+/** 统计 system + dynamic 有效 Prompt 来源（删除持久区块时允许 persist 全空）。 */
+export function countMinimumPromptSources(
+  input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "dynamic">,
+  options?: { excludeDynamicIndex?: number },
+): number {
+  let count = 0;
+  if (input.systemEnabled && input.systemContent.trim() !== "") {
+    count += 1;
+  }
+  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
+  return count;
+}
+
 /** 统计表单中有效 Prompt 来源数量（删除块时校验下限）。 */
 export function countFormPromptSources(
   input: Pick<
