@@ -17,16 +17,9 @@ const mockUnlink = jest.fn();
 const mockParseVfsZip = jest.fn();
 
 jest.mock('@novel-master/core', () => ({
+  ...jest.requireActual('@novel-master/core'),
   createVfsZipIoService: (...args: unknown[]) => mockCreateVfsZipIoService(...args),
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
-  VfsZipError: class VfsZipError extends Error {
-    code: string;
-    constructor(code: string, message: string) {
-      super(message);
-      this.name = 'VfsZipError';
-      this.code = code;
-    }
-  },
 }));
 
 jest.mock('../src/native/vfs-zip-native', () => ({
@@ -157,84 +150,58 @@ describe('vfs-zip.service', () => {
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
   });
 
-  it('M-native-4: non-ASCII entry names skip native zip and fall back to Core STORE', async () => {
-    const mockFallbackExport = jest.fn();
+  it('M-native-4: non-ASCII entry names use Core STORE without native zip', async () => {
     mockCreateVfsZipIoService.mockImplementation(
-      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => {
-        if (opts?.buildZip != null) {
-          return {
-            export: () =>
-              opts.buildZip!({
-                files: new Map([['笔记/第一章.md', '正文']]),
-                directoryEntryNames: ['空目录/'],
-              }),
-            import: mockImport,
-          };
-        }
-        return {export: mockFallbackExport, import: mockImport};
-      },
+      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => ({
+        export: () =>
+          opts!.buildZip!({
+            files: new Map([['笔记/第一章.md', '正文']]),
+            directoryEntryNames: ['空目录/'],
+          }),
+        import: mockImport,
+      }),
     );
-    mockFallbackExport.mockResolvedValue(VALID_ZIP_BYTES);
 
-    const onNativeZipFallback = jest.fn();
-    const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
+    const result = await exportVfsZip(runtime, scope);
 
     expect(result).toBe('saved');
     expect(nativeBuildVfsZip).not.toHaveBeenCalled();
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(2);
-    expect(onNativeZipFallback).toHaveBeenCalledTimes(1);
-    expect(mockFallbackExport).toHaveBeenCalledWith(scope);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
   });
 
-  it('M-native-3: native zip failure falls back to default STORE export', async () => {
-    const mockFallbackExport = jest.fn();
+  it('M-native-3: native zip failure silently uses Core STORE in buildZip', async () => {
     jest.mocked(nativeBuildVfsZip).mockRejectedValue(new Error('native zip failed'));
     mockCreateVfsZipIoService.mockImplementation(
-      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => {
-        if (opts?.buildZip != null) {
-          return {
-            export: () =>
-              opts.buildZip!({
-                files: new Map<string, string>(),
-                directoryEntryNames: [],
-              }),
-            import: mockImport,
-          };
-        }
-        return {export: mockFallbackExport, import: mockImport};
-      },
+      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => ({
+        export: () =>
+          opts!.buildZip!({
+            files: new Map<string, string>(),
+            directoryEntryNames: [],
+          }),
+        import: mockImport,
+      }),
     );
-    mockFallbackExport.mockResolvedValue(VALID_ZIP_BYTES);
 
-    const onNativeZipFallback = jest.fn();
-    const result = await exportVfsZip(runtime, scope, {onNativeZipFallback});
+    const result = await exportVfsZip(runtime, scope);
 
     expect(result).toBe('saved');
     expect(nativeBuildVfsZip).toHaveBeenCalled();
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(2);
-    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toEqual(
-      expect.objectContaining({buildZip: expect.any(Function)}),
-    );
-    expect(mockCreateVfsZipIoService.mock.calls[1]?.[1]).toBeUndefined();
-    expect(onNativeZipFallback).toHaveBeenCalledTimes(1);
-    expect(mockFallbackExport).toHaveBeenCalledWith(scope);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
     expect(mockSaveDocuments).toHaveBeenCalled();
   });
 
-  it('does not fallback when export throws VfsZipError during gather', async () => {
+  it('surfaces VfsZipError from gather without retry', async () => {
     const vfsErr = new VfsZipError(
       'EXTERNAL_NOT_SUPPORTED',
       'external storage not supported',
     );
     mockExport.mockRejectedValue(vfsErr);
-    const onNativeZipFallback = jest.fn();
 
-    await expect(
-      exportVfsZip(runtime, scope, {onNativeZipFallback}),
-    ).rejects.toThrow('external storage not supported');
+    await expect(exportVfsZip(runtime, scope)).rejects.toThrow(
+      'external storage not supported',
+    );
 
     expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-    expect(onNativeZipFallback).not.toHaveBeenCalled();
   });
 
   it('returns cancelled when save-as dialog dismissed', async () => {

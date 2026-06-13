@@ -530,10 +530,7 @@ export const VfsFileManager = forwardRef<
 
   const handleExportZip = useCallback(() => {
     setExportingZip(true);
-    exportVfsZip(runtime, scope, {
-      onNativeZipFallback: () =>
-        showToast('原生打包失败，已改用备用方式'),
-    })
+    exportVfsZip(runtime, scope)
       .then(result => {
         if (result === 'saved') {
           showToast('ZIP 已保存到所选位置');

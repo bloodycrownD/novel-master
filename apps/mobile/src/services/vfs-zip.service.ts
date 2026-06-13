@@ -6,6 +6,7 @@
 import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
+  buildVfsZip,
   createVfsZipIoService,
   type VfsScope,
   type VfsZipBuildFn,
@@ -134,11 +135,6 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
   return bytes;
 }
 
-export type ExportVfsZipOptions = {
-  /** Invoked once when native zip fails and export retries with Core default STORE. */
-  onNativeZipFallback?: () => void;
-};
-
 /** 检测 gather 结果是否含非 ASCII 条目名（native zip 易乱码 UTF-8 路径）。 */
 export function hasNonAsciiZipEntryName(input: {
   files: ReadonlyMap<string, string>;
@@ -158,34 +154,21 @@ export function hasNonAsciiZipEntryName(input: {
   return false;
 }
 
-/** Marks failures from the injected buildZip step (native zip), not VFS gather. */
-class NativeZipBuildFailedError extends Error {
-  constructor(cause: unknown) {
-    super(
-      cause instanceof Error ? cause.message : 'native zip build failed',
-    );
-    this.name = 'NativeZipBuildFailedError';
-  }
-}
-
-/** Android-only: wrap native buildZip so fallback catches zip step failures only. */
-const androidNativeBuildZip: VfsZipBuildFn = async (input) => {
+/** Android：优先 native zip（仅 ASCII 路径），否则或失败时静默用 Core STORE。 */
+const androidBuildZip: VfsZipBuildFn = async (input) => {
   if (hasNonAsciiZipEntryName(input)) {
-    throw new NativeZipBuildFailedError(
-      new Error('non-ASCII entry names require Core ZIP builder'),
-    );
+    return buildVfsZip(input.files, input.directoryEntryNames);
   }
   try {
     return await nativeBuildVfsZip(input);
-  } catch (cause) {
-    throw new NativeZipBuildFailedError(cause);
+  } catch {
+    return buildVfsZip(input.files, input.directoryEntryNames);
   }
 };
 
 async function exportVfsZipBytes(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options?: ExportVfsZipOptions,
 ): Promise<Uint8Array> {
   if (Platform.OS !== 'android') {
     // iOS still uses Core default fflate STORE until M3 native zip is validated.
@@ -193,27 +176,17 @@ async function exportVfsZipBytes(
     return await zipSvc.export(scope);
   }
 
-  try {
-    const zipSvc = createVfsZipIoService(runtime.conn, {
-      buildZip: androidNativeBuildZip,
-    });
-    return await zipSvc.export(scope);
-  } catch (error) {
-    if (!(error instanceof NativeZipBuildFailedError)) {
-      throw error;
-    }
-    options?.onNativeZipFallback?.();
-    const fallbackSvc = createVfsZipIoService(runtime.conn);
-    return await fallbackSvc.export(scope);
-  }
+  const zipSvc = createVfsZipIoService(runtime.conn, {
+    buildZip: androidBuildZip,
+  });
+  return await zipSvc.export(scope);
 }
 
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
-  options?: ExportVfsZipOptions,
 ): Promise<'saved' | 'cancelled'> {
-  const bytes = await exportVfsZipBytes(runtime, scope, options);
+  const bytes = await exportVfsZipBytes(runtime, scope);
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope);

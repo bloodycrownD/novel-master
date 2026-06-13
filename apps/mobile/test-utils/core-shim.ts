@@ -12,6 +12,9 @@
 
 export { VfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
 export { VfsZipError } from "../../../packages/core/dist/errors/vfs-zip-errors.js";
+export { buildVfsZip } from "../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js";
+export { parseVfsZip } from "../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js";
+export { createVfsZipIoService } from "../../../packages/core/dist/service/vfs/create-vfs-zip-io-service.js";
 export { TdbcError } from "../../../packages/core/dist/infra/tdbc/errors.js";
 export { KkvError } from "../../../packages/core/dist/errors/kkv-errors.js";
 export { ProviderError } from "../../../packages/core/dist/errors/provider-errors.js";
