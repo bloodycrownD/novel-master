@@ -1,12 +1,21 @@
 ---
+createdAt: '2026-05-25 00:45:47'
+updatedAt: '2026-06-13 23:30:00'
+---
+# refactor: chat-workspace-agent-sync 两事件工具 UX
 
-## createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-06-13 00:15:00'
+**分支**：`fix/glm-tool-stream-stalled-metrics`
 
-2026-06-13: **prompt-block-lifecycle** 已合并至 **main**（`99f6f77`）：Prompt 块 `lifecycle: always|once`；双端「常驻」开关；`agentStepIndex` 步进过滤；Desktop 添加块 ContextMenu 修复。PRD/SPEC：`.apm/kb/docs/Iterations/prompt-block-lifecycle/`。
+**UX（用户确认）**：
+1. thinking 流结束且无正文 → stream tail「工具调用中」（`useStreamToolInvoking`，idle ≥300ms）
+2. assistant 落库含 tool_use → pending 工具卡（「执行中」），去掉 message 行 phase bar
 
-2026-06-12: **config-forms-merge-into-core** 已合并至 **main**（`ea36a3c`）：`@novel-master/config-forms` 迁入 core 子路径并删除独立包。
+**已删除**：metrics 全链路、TOOL_USE_DELTA、glm-tool-stream/tool_stream、toolPhase UI、freezeToLastRun
 
-2026-05-31: **mobile-app** 已合并至 **main**：C0 Core + `apps/mobile` M1–M6。PRD/SPEC：`.apm/kb/docs/Iterations/mobile-app/`。
+**文档**：
+- `.apm/kb/docs/Iterations/chat-workspace-agent-sync/prd.md`
+- `.apm/kb/docs/Iterations/chat-workspace-agent-sync/spec.md`
 
-2026-05-31: **core-package-structure** 已合并至 **main**（`bf3fba1`）。PRD/SPEC：`.apm/kb/docs/Iterations/core-package-structure/`。
+**验证**：core test + mobile jest（message-blocks、build-transcript-rows、use-stream-tool-invoking）
+
+**下一步**：真机 GLM 大 write 复测 toolInvoking 时序；确认后 merge
