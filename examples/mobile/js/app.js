@@ -2868,7 +2868,6 @@
                     mode: 'parallel',
                     actions: [
                         { type: 'hide-message', params: { 'start-depth': 6 } },
-                        { type: 'refresh-macros' },
                     ],
                 },
             },
