@@ -34,6 +34,7 @@ import {
 import { parseOpenAiUsage } from "../logic/usage-parser.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
+import { isGlmToolStreamModel } from "../logic/glm-tool-stream.js";
 import {
   createOpenAiSseParserState,
   feedOpenAiSseChunk,
@@ -121,6 +122,10 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.tools != null && req.tools.length > 0) {
       body.tools = openAiTools(req.tools);
       body.tool_choice = this.toolChoiceWhenToolsPresent();
+      // 智谱 GLM 须 tool_stream 才会增量推送 tool_calls.arguments（见 glm-tool-stream.ts）。
+      if (stream && isGlmToolStreamModel(req.vendorModelId)) {
+        body.tool_stream = true;
+      }
     }
     if (req.sampling?.protocol === "openai") {
       Object.assign(body, req.sampling.openai);
