@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PromptPreviewSegmentDto } from "../../../shared/ipc-types";
+import { PROMPT_REGION_LABELS } from "@novel-master/core/config-forms/agent";
 import { ipcPromptRealPreview } from "../../ipc/client";
 
 interface RealPromptPanelProps {
@@ -9,7 +10,7 @@ interface RealPromptPanelProps {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  system: "System",
+  system: PROMPT_REGION_LABELS.system,
   user: "User",
   assistant: "Assistant",
 };

@@ -8,16 +8,24 @@ import type {
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
+  PROMPT_REGION_LABELS,
+  WORKTREE_BLOCK_LABEL,
+  addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
-  createDefaultAgentEditorPrompts,
+  countFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
-  createDefaultWorktreeBlock,
   definitionToForm,
+  deletePersistTextBlock,
   formatApplicationModelId,
   formSnapshotJson,
+  joinPersistBlocksForLayout,
+  mapPersistTextBlocks,
+  movePersistTextBlock,
   parseApplicationModelId,
+  removePersistWorktreeBlock,
+  splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
@@ -161,11 +169,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
-      setPersist(
-        promptForm.persist.length > 0
-          ? [...promptForm.persist]
-          : createDefaultAgentEditorPrompts().persist,
-      );
+      setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
       const toolsWire = toolsSelectionFromDefinition(def);
@@ -214,10 +218,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
-          persist:
-            promptForm.persist.length > 0
-              ? [...promptForm.persist]
-              : createDefaultAgentEditorPrompts().persist,
+          persist: [...promptForm.persist],
         }),
       );
     } finally {
@@ -273,16 +274,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  const movePersist = (index: number, dir: -1 | 1) => {
-    setPersist((prev) => {
-      const next = [...prev];
-      const target = index + dir;
-      if (target < 0 || target >= next.length) return prev;
-      const tmp = next[target]!;
-      next[target] = next[index]!;
-      next[index] = tmp;
-      return next;
-    });
+  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
+    () => splitPersistBlocksForEditor(persist),
+    [persist],
+  );
+
+  const movePersist = (textIndex: number, dir: -1 | 1) => {
+    setPersist((prev) => movePersistTextBlock(prev, textIndex, dir));
   };
 
   const moveDynamic = (index: number, dir: -1 | 1) => {
@@ -297,32 +295,56 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     });
   };
 
-  const deletePersist = (index: number) => {
-    if (persist.length <= 1 && dynamic.length === 0 && !systemEnabled) {
+  const deletePersist = (textIndex: number) => {
+    const remaining = countFormPromptSources(
+      { systemEnabled, systemContent, persist, dynamic },
+      { excludePersistTextIndex: textIndex },
+    );
+    if (remaining < 1) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
-    setPersist((prev) => prev.filter((_, i) => i !== index));
+    setPersist((prev) => deletePersistTextBlock(prev, textIndex));
   };
 
   const deleteDynamic = (index: number) => {
-    if (dynamic.length <= 1 && persist.length === 0 && !systemEnabled) {
+    const remaining = countFormPromptSources(
+      { systemEnabled, systemContent, persist, dynamic },
+      { excludeDynamicIndex: index },
+    );
+    if (remaining < 1) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
     setDynamic((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const addPersistBlock = (kind: "text" | "worktree") => {
+  const addPersistTextBlock = () => {
     setPersist((prev) => {
-      if (kind === "worktree" && prev.some((b) => b.type === "worktree")) {
-        showToast("persist 区至多一个 worktree 块");
-        return prev;
-      }
-      return kind === "text"
-        ? [...prev, createDefaultPersistTextBlock(prev.length)]
-        : [...prev, createDefaultWorktreeBlock(prev.length)];
+      const { textBlocks, worktree } = splitPersistBlocksForEditor(prev);
+      return joinPersistBlocksForLayout(
+        [...textBlocks, createDefaultPersistTextBlock(textBlocks.length)],
+        worktree,
+      );
     });
+    setAddBlockMenu(null);
+  };
+
+  const addPersistWorktree = () => {
+    setPersist((prev) => addPersistWorktreeBlock(prev));
+    setAddBlockMenu(null);
+  };
+
+  const removePersistWorktree = () => {
+    const remaining = countFormPromptSources(
+      { systemEnabled, systemContent, persist, dynamic },
+      { excludeWorktree: true },
+    );
+    if (remaining < 1) {
+      showToast("至少保留一个 Prompt 块");
+      return;
+    }
+    setPersist((prev) => removePersistWorktreeBlock(prev));
     setAddBlockMenu(null);
   };
 
@@ -474,35 +496,36 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
         <SettingsSection title="Prompt 布局（WYSIWYG）">
           <p className="settings-hint">
-            纵向顺序与 LLM 组装一致：System → Persist → 会话历史 → Dynamic。
+            {PROMPT_REGION_LABELS.layoutOrderPrefix}
+            {PROMPT_REGION_LABELS.layoutOrder}。
           </p>
 
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">System</span>
-              <span className="config-block-card__meta">API system 字段</span>
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.system}</span>
+              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.apiSystemField}</span>
               <Switch
                 checked={systemEnabled}
                 onChange={setSystemEnabled}
-                aria-label="启用 System"
+                aria-label={PROMPT_REGION_LABELS.enableSystem}
               />
             </div>
             {systemEnabled ? (
-              <SettingsField label="System 内容">
+              <SettingsField label={PROMPT_REGION_LABELS.systemContent}>
                 <textarea
                   rows={4}
                   value={systemContent}
                   onChange={(e) => setSystemContent(e.target.value)}
-                  placeholder="写入 LLM system 字段的单段提示…"
+                  placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
                 />
               </SettingsField>
             ) : (
-              <p className="config-block-card__hint">关闭时不写入 prompts.system。</p>
+              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.systemDisabledHint}</p>
             )}
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">Persist 块</span>
+            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.persistBlocks}</span>
             <button
               type="button"
               className="settings-link-btn"
@@ -520,12 +543,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </button>
           </div>
           <div className="config-block-list">
-            {persist.map((block, index) => (
+            {persistTextBlocks.map((block, index) => (
               <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
                   <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
                   <span className="config-block-card__meta">{block.name}</span>
-                  {renderBlockActions(index, persist.length, movePersist, deletePersist)}
+                  {renderBlockActions(
+                    index,
+                    persistTextBlocks.length,
+                    movePersist,
+                    deletePersist,
+                  )}
                 </div>
                 <div className="config-block-card__body">
                   <SettingsField label="名称">
@@ -533,61 +561,63 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       value={block.name}
                       onChange={(e) =>
                         setPersist((prev) =>
-                          prev.map((b, i) =>
+                          mapPersistTextBlocks(prev, (b, i) =>
                             i === index ? { ...b, name: e.target.value } : b,
                           ),
                         )
                       }
                     />
                   </SettingsField>
-                  {block.type === "text" ? (
-                    <>
-                      <SettingsField label="角色">
-                        <select
-                          value={block.role}
-                          onChange={(e) =>
-                            setPersist((prev) =>
-                              prev.map((b, i) =>
-                                i === index && b.type === "text"
-                                  ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
-                                  : b,
-                              ),
-                            )
-                          }
-                        >
-                          {ROLE_OPTIONS.map((o) => (
-                            <option key={o.value} value={o.value}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                      </SettingsField>
-                      <p className="config-block-card__hint">persist 区禁止宏与 lifecycle。</p>
-                      <SettingsField label="内容">
-                        <textarea
-                          rows={4}
-                          value={block.content}
-                          onChange={(e) =>
-                            setPersist((prev) =>
-                              prev.map((b, i) =>
-                                i === index && b.type === "text"
-                                  ? { ...b, content: e.target.value }
-                                  : b,
-                              ),
-                            )
-                          }
-                        />
-                      </SettingsField>
-                    </>
-                  ) : (
-                    <p className="config-block-card__hint">
-                      worktree 块注入 materialize 后的会话树 display（非宏）。
-                    </p>
-                  )}
+                  <SettingsField label="角色">
+                    <select
+                      value={block.role}
+                      onChange={(e) =>
+                        setPersist((prev) =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === index
+                              ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
+                              : b,
+                          ),
+                        )
+                      }
+                    >
+                      {ROLE_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </SettingsField>
+                  <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistRegionHint}</p>
+                  <SettingsField label="内容">
+                    <textarea
+                      rows={4}
+                      value={block.content}
+                      onChange={(e) =>
+                        setPersist((prev) =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === index ? { ...b, content: e.target.value } : b,
+                          ),
+                        )
+                      }
+                    />
+                  </SettingsField>
                 </div>
               </div>
             ))}
           </div>
+
+          {persistWorktree != null ? (
+            <div className="config-block-card config-block-card--prompt config-block-card--readonly">
+              <div className="config-block-card__header">
+                <span className="config-block-card__badge">{WORKTREE_BLOCK_LABEL}</span>
+                <span className="config-block-card__meta">{WORKTREE_BLOCK_LABEL}</span>
+              </div>
+              <p className="config-block-card__hint">
+                运行时注入 materialize 后的会话工作树，不可配置、不可排序。
+              </p>
+            </div>
+          ) : null}
 
           <div className="config-block-card config-block-card--prompt config-block-card--readonly">
             <div className="config-block-card__header">
@@ -600,7 +630,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">Dynamic 块</span>
+            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
             <button
               type="button"
               className="settings-link-btn"
@@ -736,12 +766,15 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             ? [{ label: "文本块", action: "dynamic-text" }]
             : [
                 { label: "文本块", action: "persist-text" },
-                { label: "Worktree 块", action: "persist-worktree" },
+                ...(persistWorktree
+                  ? [{ label: "移除工作树", action: "persist-worktree-remove" }]
+                  : [{ label: WORKTREE_BLOCK_LABEL, action: "persist-worktree-add" }]),
               ]
         }
         onSelect={(action) => {
-          if (action === "persist-text") addPersistBlock("text");
-          else if (action === "persist-worktree") addPersistBlock("worktree");
+          if (action === "persist-text") addPersistTextBlock();
+          else if (action === "persist-worktree-add") addPersistWorktree();
+          else if (action === "persist-worktree-remove") removePersistWorktree();
           else if (action === "dynamic-text") addDynamicBlock();
         }}
         onClose={() => setAddBlockMenu(null)}
