@@ -1,6 +1,7 @@
 /**
  * Save-time validation for events config UI drafts.
  */
+import type { EventActionNode } from "@/domain/events-config/model/events-config.js";
 import { validateDepthSlice } from "../shared/depth-slice.js";
 import type { EventBlockDraft } from "./event-config-state.js";
 import { isUnknownActionDraft } from "./event-config-editor-load.js";
@@ -115,7 +116,10 @@ export function validateEventConfigBlocks(
       }
     }
 
-    const dagErr = validateDag(block.actions);
+    const knownActions = block.actions.filter(
+      (action): action is EventActionNode => !isUnknownActionDraft(action),
+    );
+    const dagErr = validateDag(knownActions);
     if (dagErr != null) {
       return `「${eventLabel}」· ${dagErr}`;
     }
