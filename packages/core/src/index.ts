@@ -347,13 +347,8 @@ export type {
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "./domain/prompt/model/agent-prompt-layout.js";
-export { shouldIncludePromptTextBlock } from "./domain/prompt/logic/should-include-prompt-text-block.js";
 export { shouldIncludeDynamicBlock } from "./domain/prompt/logic/should-include-dynamic-block.js";
 export { messageBodyText } from "./domain/prompt/logic/message-body.js";
-export {
-  validatePromptBlocks,
-  validatePromptBlocksFromMap,
-} from "./domain/prompt/logic/validate-prompt-blocks.js";
 export {
   validateAgentPromptLayoutFromMaps,
   validateAgentPromptLayout,

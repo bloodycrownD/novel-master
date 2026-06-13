@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { PromptError, validatePromptBlocks } from "@novel-master/core";
+import { PromptError } from "../../src/errors/prompt-errors.js";
+import { validatePromptBlocks } from "../../src/domain/prompt/logic/validate-prompt-blocks.js";
 
 describe("validatePromptBlocks", () => {
   it("accepts text + chat + text in map key order", () => {
