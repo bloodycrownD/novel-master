@@ -114,7 +114,7 @@ export function mapSessionWorktreePathToProject(logical: string): string {
 | 根目录 `/`（session）或 `/template`（global/project） | **规则·开**，不可通过 CLI 关闭 |
 | 其它目录 | **规则·关**；无目录规则字段 |
 | 文件 | 纳入方式 **`auto`** |
-| 目录规则字段（仅当显式 `worktree dir` 保存后存在） | `sort=name`, `order=asc`, `head=0`, `tail=0`, `fill=hidden`；保存后目录 **规则·开** |
+| 目录规则字段（仅当显式 `worktree dir` 保存后存在） | `sort=name`, `order=asc`, `head=0`, `tail=0`, `fill=header`；保存后目录 **规则·开** |
 
 ### 显示状态计算（`evaluateFileDisplay`）
 

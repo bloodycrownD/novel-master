@@ -97,7 +97,7 @@ describe("worktree eval", () => {
     );
   });
 
-  it("uses default fill hidden for non-priority auto file when dirRule is null", () => {
+  it("uses default fill header for non-priority auto file when dirRule is null", () => {
     assert.equal(
       evaluateFileDisplay({
         inclusion: "auto",
@@ -107,7 +107,7 @@ describe("worktree eval", () => {
         autoFileCount: 2000,
         logicalPath: "/middle.md",
       }),
-      "hidden",
+      "header",
     );
   });
 

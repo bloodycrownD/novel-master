@@ -1,16 +1,18 @@
 /**
- * Default directory rule when no per-path rule is stored.
+ * 目录未持久化规则行时的默认目录规则字段。
+ *
+ * 缺省填充策略为头信息（Markdown front matter / 文件头）。
  *
  * @module domain/worktree/logic/default-dir-rule
  */
 
 import type { FillPolicy, SortField, SortOrder } from "../model/worktree-types.js";
 
-/** Applied when {@link WorktreeDirRule} is missing for a directory with rules enabled. */
+/** 目录启用规则但无 {@link WorktreeDirRule} 行时应用的默认值。 */
 export const DEFAULT_WORKTREE_DIR_RULE = {
   sortField: "name" as const satisfies SortField,
   sortOrder: "asc" as const satisfies SortOrder,
   headCount: 0,
   tailCount: 1000,
-  fillPolicy: "hidden" as const satisfies FillPolicy,
+  fillPolicy: "header" as const satisfies FillPolicy,
 } as const;
