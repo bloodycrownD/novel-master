@@ -5,6 +5,7 @@ import {
   createAgentRunner,
   createSessionMacroCache,
   EVENT_AGENT_STEP_COMMITTED,
+  EVENT_AGENT_RUN_FINISHED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   InMemoryAgentSession,
   registerBuiltinTools,
@@ -13,6 +14,7 @@ import {
   ToolRegistry,
   type AgentDefinition,
   type AgentStepCommittedPayload,
+  type AgentRunFinishedPayload,
   type CreateAgentRunnerDeps,
   type LlmChatResult,
   type ModelRequestService,
@@ -384,6 +386,75 @@ describe("AgentRunner", () => {
       ...defaultRunScope,
     });
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
+  });
+
+  it("tool_results 与 run_finished 携带 vfsMutated", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const bus = new SimpleEventBus();
+    const toolResultSteps: AgentStepCommittedPayload[] = [];
+    let runFinished: AgentRunFinishedPayload | undefined;
+
+    bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
+      if (p.phase === "tool_results") {
+        toolResultSteps.push(p);
+      }
+    });
+    bus.subscribe(EVENT_AGENT_RUN_FINISHED, (p: AgentRunFinishedPayload) => {
+      runFinished = p;
+    });
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu-read",
+            name: "read",
+            input: { path: "/a.txt" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu-write",
+            name: "write",
+            input: { path: "/b.txt", content: "hi" },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner({
+      session,
+      modelRequests: model,
+      registry,
+      toolCtx: mockToolCtx(mockVfs()),
+      eventBus: bus,
+      macroCache: createSessionMacroCache(),
+    });
+    await runner.run({
+      maxSteps: 5,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(toolResultSteps.length, 2);
+    assert.equal(toolResultSteps[0]!.vfsMutated, false);
+    assert.equal(toolResultSteps[1]!.vfsMutated, true);
+    assert.equal(runFinished?.vfsMutated, true);
   });
 
   it("propagates doom_loop from identical tool_use blocks", async () => {

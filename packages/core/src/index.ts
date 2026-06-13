@@ -195,6 +195,10 @@ export {
 } from "./domain/tool/builtin/register-builtin-tools.js";
 export { isMutatingFsCommand } from "./domain/tool/logic/fs-command.js";
 export {
+  toolUseMutatesWorkspace,
+  anyToolUseMutatesWorkspace,
+} from "./domain/tool/logic/tool-use-mutates-workspace.js";
+export {
   TOOL_OUTPUT_MAX_LINES,
   TOOL_OUTPUT_MAX_LINE_LENGTH,
   TOOL_OUTPUT_MAX_BYTES,
@@ -390,6 +394,7 @@ export {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  EVENT_AGENT_STREAM_TOOL_USE_DELTA,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
   EVENT_SESSION_COMPACTION_REQUESTED,
@@ -400,6 +405,7 @@ export type {
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
   AgentStreamToolUsePayload,
+  AgentStreamToolUseDeltaPayload,
   AgentStepCommittedPayload,
   AgentStepCommittedPhase,
   SessionCompactionRequestedPayload,
