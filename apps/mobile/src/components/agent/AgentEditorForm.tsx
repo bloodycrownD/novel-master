@@ -3,6 +3,8 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {
   AgentDefinition,
   DynamicPromptBlock,
@@ -33,6 +35,7 @@ import {
   withDynamicBlockPersistence,
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
+import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
 import {
   formatApplicationModelId,
   parseApplicationModelId,
@@ -41,6 +44,7 @@ import {
 } from '@novel-master/core';
 import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
+import {FormErrorCard} from '../form/FormErrorCard';
 import {FormSwitchRow} from '../form/FormSwitchRow';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormSelectField} from '../form/FormSelectField';
@@ -55,6 +59,9 @@ import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {exportAgentYaml, importAgentYaml} from '../../services/agent-yaml.service';
+import type {RootStackParamList} from '../../navigation/types';
+
+type StackNav = NativeStackNavigationProp<RootStackParamList>;
 
 type Props = {
   agentId: string;
@@ -62,11 +69,10 @@ type Props = {
   onSaved?: () => void;
 };
 
-type AddMenuTarget = 'persist' | 'dynamic';
-
 export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const {tokens} = useTheme();
   const {showToast} = useToast();
+  const navigation = useNavigation<StackNav>();
   const runtime = useRuntime();
   const [name, setName] = useState('');
   const [maxSteps, setMaxSteps] = useState('20');
@@ -85,8 +91,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [addBlockVisible, setAddBlockVisible] = useState(false);
-  const [addBlockTarget, setAddBlockTarget] = useState<AddMenuTarget>('persist');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
 
@@ -156,7 +163,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   );
 
   const loadAgent = useCallback(async () => {
-    const def = await runtime.agentRegistry.get(agentId);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const def = await runtime.agentRegistry.get(agentId);
     const promptForm = definitionToForm(def);
     setName(def.name);
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
@@ -224,11 +234,51 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         persist: [...promptForm.persist],
       }),
     );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setLoadError(message);
+    } finally {
+      setLoading(false);
+    }
   }, [agentId, runtime, loadProviders, loadSavedModels]);
 
   useEffect(() => {
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
   }, [loadAgent, showToast]);
+
+  const handleDeleteBrokenAgent = useCallback(() => {
+    Alert.alert('删除 Agent', `确定删除 ${agentId}？`, [
+      {text: '取消', style: 'cancel'},
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              const ids = await runtime.agentRegistry.listAgentIds();
+              if (ids.length <= 1) {
+                showToast('至少保留一个 Agent');
+                return;
+              }
+              const currentId = await runtime.state.getCurrentAgentId();
+              await runtime.agentRegistry.delete(agentId);
+              if (currentId === agentId) {
+                const remaining = ids.filter(id => id !== agentId);
+                if (remaining.length > 0) {
+                  await runtime.state.setCurrentAgentId(remaining[0]!);
+                } else {
+                  await runtime.state.resetCurrentAgentId();
+                }
+              }
+              navigation.goBack();
+            } catch (error) {
+              showToast(toastMessage('删除失败', error));
+            }
+          })();
+        },
+      },
+    ]);
+  }, [agentId, navigation, runtime, showToast]);
 
   const preferredModelId = modelEnabled
     ? formatApplicationModelId(providerId, vendorModelId)
@@ -397,6 +447,30 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     label: m.displayName?.trim() || m.vendorModelId,
   }));
 
+  if (loading) {
+    return (
+      <View style={styles.loadingWrap}>
+        <Text style={{color: tokens.textSecondary}}>加载中…</Text>
+      </View>
+    );
+  }
+
+  if (loadError != null) {
+    return (
+      <FormErrorCard
+        tokens={tokens}
+        title={`${AGENT_LIST_LABELS.needsRepair} · 无法加载 Agent 配置`}
+        message={loadError}
+        secondaryAction={{label: '返回', onPress: () => navigation.goBack()}}
+        primaryAction={{
+          label: '删除 Agent',
+          danger: true,
+          onPress: handleDeleteBrokenAgent,
+        }}
+      />
+    );
+  }
+
   const renderBlockActions = (
     index: number,
     total: number,
@@ -505,7 +579,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
         <FormSectionCard title="运行时" tokens={tokens}>
           <FormField
-            label="最大步数 maxSteps"
+            label={PROMPT_REGION_LABELS.maxStepsLabel}
             tokens={tokens}
             hint="每轮 run 的模型往返上限；省略时 Core 默认 20。">
             <FormTextInput
@@ -544,7 +618,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           )}
         </FormSectionCard>
 
-        <FormSectionCard title="Prompt 布局" tokens={tokens}>
+        <FormSectionCard title={PROMPT_REGION_LABELS.layoutTitle} tokens={tokens}>
           <Text style={[styles.hint, {color: tokens.textSecondary}]}>
             {PROMPT_REGION_LABELS.layoutOrderPrefixShort}
             {PROMPT_REGION_LABELS.layoutOrder}。
@@ -562,7 +636,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </Text>
               </View>
               <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                {PROMPT_REGION_LABELS.apiSystemField}
+                {PROMPT_REGION_LABELS.systemPromptTitle}
               </Text>
               <Switch
                 value={systemEnabled}
@@ -593,13 +667,17 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Text>
             <Pressable
               onPress={() => {
-                setAddBlockTarget('persist');
                 setAddBlockVisible(true);
               }}>
               <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
             </Pressable>
           </View>
           <View style={styles.blockList}>
+            {persistTextBlocks.length === 0 ? (
+              <Text style={[styles.emptyHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.emptyPersistHint}
+              </Text>
+            ) : null}
             {persistTextBlocks.map((block, index) => (
               <View
                 key={`persist-block-${index}`}
@@ -722,15 +800,16 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             <Text style={[styles.sectionLabel, {color: tokens.text}]}>
               {PROMPT_REGION_LABELS.dynamicBlocks}
             </Text>
-            <Pressable
-              onPress={() => {
-                setAddBlockTarget('dynamic');
-                setAddBlockVisible(true);
-              }}>
+            <Pressable onPress={() => addDynamicBlock()}>
               <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
             </Pressable>
           </View>
           <View style={styles.blockList}>
+            {dynamic.length === 0 ? (
+              <Text style={[styles.emptyHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.emptyDynamicHint}
+              </Text>
+            ) : null}
             {dynamic.map((block, index) => (
               <View
                 key={`dynamic-block-${index}`}
@@ -813,16 +892,12 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       </ScreenFormLayout>
       <BottomSheetMenu
         visible={addBlockVisible}
-        items={
-          addBlockTarget === 'dynamic'
-            ? [{label: '文本块', action: 'dynamic-text'}]
-            : [
-                {label: '文本块', action: 'persist-text'},
-                ...(persistWorktree
-                  ? [{label: '移除工作树', action: 'persist-worktree-remove'}]
-                  : [{label: WORKTREE_BLOCK_LABEL, action: 'persist-worktree-add'}]),
-              ]
-        }
+        items={[
+          {label: '文本块', action: 'persist-text'},
+          ...(persistWorktree
+            ? [{label: '移除工作树', action: 'persist-worktree-remove'}]
+            : [{label: WORKTREE_BLOCK_LABEL, action: 'persist-worktree-add'}]),
+        ]}
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {
           if (action === 'persist-text') {
@@ -831,8 +906,6 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             addPersistWorktree();
           } else if (action === 'persist-worktree-remove') {
             removePersistWorktree();
-          } else if (action === 'dynamic-text') {
-            addDynamicBlock();
           }
         }}
       />
@@ -841,6 +914,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 }
 
 const styles = StyleSheet.create({
+  loadingWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
   hint: {fontSize: 13, lineHeight: 18},
   fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
@@ -882,6 +956,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   blockActions: {flexDirection: 'row', gap: 4},
+  emptyHint: {
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+  },
   actionBtn: {
     width: 28,
     height: 28,

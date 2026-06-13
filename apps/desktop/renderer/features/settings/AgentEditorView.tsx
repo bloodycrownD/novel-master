@@ -38,13 +38,16 @@ import { ContextMenu } from "../../components/ui/ContextMenu";
 import { showToast } from "../../components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
 import {
+  ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
+  ipcAgentRegistryList,
   ipcAgentRegistryUpsert,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "../../ipc/client";
+import { AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
 import type { SettingsNavState } from "./settings-nav";
 import {
   SettingsField,
@@ -62,10 +65,11 @@ const DYNAMIC_MACROS = [
 
 type Nav = {
   push: (viewId: string) => void;
+  pop: () => void;
   navState: SettingsNavState;
 };
 
-type AddMenuTarget = "persist" | "dynamic" | null;
+type AddMenuTarget = "persist" | null;
 
 function insertAtCursor(
   value: string,
@@ -99,6 +103,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
   const [addBlockMenu, setAddBlockMenu] = useState<{
@@ -154,13 +159,14 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [agentRes, providerRes] = await Promise.all([
         ipcAgentRegistryGet({ agentId }),
         ipcProvidersList(),
       ]);
       if (!agentRes.ok) {
-        toastSettingsError(agentRes.error.message);
+        setLoadError(agentRes.error.message);
         return;
       }
       const def = agentRes.data as AgentDefinition;
@@ -232,6 +238,45 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   if (!agentId) {
     return <p className="settings-hint">缺少 agentId</p>;
+  }
+
+  const handleDeleteBrokenAgent = async () => {
+    const listRes = await ipcAgentRegistryList();
+    if (listRes.ok && listRes.data.length <= 1) {
+      showToast("至少保留一个 Agent");
+      return;
+    }
+    const res = await ipcAgentRegistryDelete({ agentId });
+    if (res.ok) {
+      toastSettingsSuccess("已删除 Agent");
+      nav.pop();
+    } else {
+      toastSettingsError(res.error.message);
+    }
+  };
+
+  if (loadError != null) {
+    return (
+      <SettingsPanel>
+        <div className="settings-error-panel">
+          <p className="settings-error-panel__title">
+            <span className="settings-tag settings-tag--warn">
+              {AGENT_LIST_LABELS.needsRepair}
+            </span>
+            无法加载 Agent 配置
+          </p>
+          <p className="settings-error-panel__message">{loadError}</p>
+          <div className="settings-error-panel__actions">
+            <Button variant="secondary" onClick={() => nav.pop()}>
+              返回列表
+            </Button>
+            <Button variant="danger" onClick={() => void handleDeleteBrokenAgent()}>
+              删除 Agent
+            </Button>
+          </div>
+        </div>
+      </SettingsPanel>
+    );
   }
 
   const preferredModelId =
@@ -468,7 +513,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title="运行时">
-          <SettingsField label="最大步数 maxSteps">
+          <SettingsField label={PROMPT_REGION_LABELS.maxStepsLabel}>
             <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
           </SettingsField>
         </SettingsSection>
@@ -494,7 +539,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           )}
         </SettingsSection>
 
-        <SettingsSection title="Prompt 布局（WYSIWYG）">
+        <SettingsSection title={PROMPT_REGION_LABELS.layoutTitle}>
           <p className="settings-hint">
             {PROMPT_REGION_LABELS.layoutOrderPrefix}
             {PROMPT_REGION_LABELS.layoutOrder}。
@@ -503,7 +548,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
               <span className="config-block-card__badge">{PROMPT_REGION_LABELS.system}</span>
-              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.apiSystemField}</span>
+              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.systemPromptTitle}</span>
               <Switch
                 checked={systemEnabled}
                 onChange={setSystemEnabled}
@@ -542,7 +587,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               添加
             </button>
           </div>
-          <div className="config-block-list">
+          <div
+            className={
+              persistTextBlocks.length === 0
+                ? "config-block-list config-block-list--empty"
+                : "config-block-list"
+            }
+          >
+            {persistTextBlocks.length === 0 ? (
+              <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyPersistHint}</p>
+            ) : null}
             {persistTextBlocks.map((block, index) => (
               <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
@@ -631,23 +685,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
-            <button
-              type="button"
-              className="settings-link-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setAddBlockMenu({
-                  x: Math.max(8, rect.right - 140),
-                  y: Math.max(8, rect.bottom + 4),
-                  target: "dynamic",
-                });
-              }}
-            >
+            <button type="button" className="settings-link-btn" onClick={() => addDynamicBlock()}>
               添加
             </button>
           </div>
-          <div className="config-block-list">
+          <div
+            className={
+              dynamic.length === 0 ? "config-block-list config-block-list--empty" : "config-block-list"
+            }
+          >
+            {dynamic.length === 0 ? (
+              <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyDynamicHint}</p>
+            ) : null}
             {dynamic.map((block, index) => (
               <div key={`dynamic-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
@@ -761,21 +810,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         open={addBlockMenu != null}
         x={addBlockMenu?.x ?? 0}
         y={addBlockMenu?.y ?? 0}
-        items={
-          addBlockMenu?.target === "dynamic"
-            ? [{ label: "文本块", action: "dynamic-text" }]
-            : [
-                { label: "文本块", action: "persist-text" },
-                ...(persistWorktree
-                  ? [{ label: "移除工作树", action: "persist-worktree-remove" }]
-                  : [{ label: WORKTREE_BLOCK_LABEL, action: "persist-worktree-add" }]),
-              ]
-        }
+        items={[
+          { label: "文本块", action: "persist-text" },
+          ...(persistWorktree
+            ? [{ label: "移除工作树", action: "persist-worktree-remove" }]
+            : [{ label: WORKTREE_BLOCK_LABEL, action: "persist-worktree-add" }]),
+        ]}
         onSelect={(action) => {
           if (action === "persist-text") addPersistTextBlock();
           else if (action === "persist-worktree-add") addPersistWorktree();
           else if (action === "persist-worktree-remove") removePersistWorktree();
-          else if (action === "dynamic-text") addDynamicBlock();
         }}
         onClose={() => setAddBlockMenu(null)}
       />
