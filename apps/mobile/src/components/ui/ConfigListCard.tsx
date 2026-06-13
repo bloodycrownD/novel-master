@@ -13,6 +13,8 @@ type Props = {
   leading?: ReactNode;
   title: string;
   subtitle?: string;
+  /** 列表行右侧附加内容（如状态标签）。 */
+  trailingMeta?: ReactNode;
   badge?: string;
   onMenuPress?: () => void;
   showChevron?: boolean;
@@ -25,6 +27,7 @@ export function ConfigListCard({
   leading,
   title,
   subtitle,
+  trailingMeta,
   badge,
   onMenuPress,
   showChevron = true,
@@ -49,6 +52,7 @@ export function ConfigListCard({
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       ) : null}
+      {trailingMeta}
       {onMenuPress != null ? (
         <Pressable
           hitSlop={8}

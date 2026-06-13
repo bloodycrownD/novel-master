@@ -124,7 +124,7 @@ export function CompactionConditionsScreen() {
             />
           </FormField>
           <FormField
-            label="可见条数阈值 visible-floor"
+            label="可见条数阈值"
             tokens={tokens}
             hint="可见条数 > 该值时满足">
             <FormTextInput

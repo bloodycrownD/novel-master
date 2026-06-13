@@ -19,6 +19,7 @@ import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
+import {ApiKeyStatusTag} from '../../components/provider/ApiKeyStatusTag';
 import {PrimaryButton} from '../../components/ui/PrototypeButtons';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
@@ -75,7 +76,7 @@ export function ProvidersScreen() {
   );
 
   const metaLine = (row: ProviderRow) =>
-    `${row.savedCount} 个已保存模型 · apiKey: ${row.apiKeyStatus}`;
+    `${row.savedCount} 个已保存模型`;
 
   const deleteProviders = async (providerIds: string[]) => {
     for (const providerId of providerIds) {
@@ -196,6 +197,9 @@ export function ProvidersScreen() {
               }
               title={item.id}
               subtitle={metaLine(item)}
+              trailingMeta={
+                <ApiKeyStatusTag status={item.apiKeyStatus} tokens={tokens} />
+              }
               onMenuPress={
                 batch.active ? undefined : () => setMenuProviderId(item.id)
               }

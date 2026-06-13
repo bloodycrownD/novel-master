@@ -8,6 +8,7 @@ import {FormChipGroup} from '../form/FormChipGroup';
 import {FormField} from '../form/FormField';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormTextInput} from '../form/FormTextInput';
+import {ApiKeyStatusTag} from './ApiKeyStatusTag';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -210,12 +211,20 @@ export function ProviderForm({
       </FormSectionCard>
 
       <FormSectionCard title="认证" tokens={tokens}>
+        {mode === 'edit' && apiKeyStatus != null ? (
+          <View style={styles.statusRow}>
+            <Text style={[styles.statusLabel, {color: tokens.textSecondary}]}>
+              当前状态
+            </Text>
+            <ApiKeyStatusTag status={apiKeyStatus} tokens={tokens} />
+          </View>
+        ) : null}
         <FormField
           label="API Key"
           tokens={tokens}
           hint={
-            mode === 'edit' && apiKeyStatus
-              ? `当前：${apiKeyStatus}；留空则不修改`
+            mode === 'edit'
+              ? '留空则不修改'
               : '必填，写入 SKSP 安全存储'
           }>
           <FormTextInput
@@ -249,4 +258,11 @@ export function ProviderForm({
 const styles = StyleSheet.create({
   readonlyId: {fontSize: 16, fontWeight: '600'},
   savingFooter: {padding: 16, alignItems: 'center'},
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  statusLabel: {fontSize: 13},
 });

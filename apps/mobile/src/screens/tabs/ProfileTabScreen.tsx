@@ -21,6 +21,7 @@ import {
 } from '../../storage/chat-rich-text-pref';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
+import {SESSION_FS_LABELS} from '@novel-master/core/config-forms/shared';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -201,11 +202,11 @@ export function ProfileTabScreen() {
         />
         <ProfileSwitchItem
           icon="🛡️"
-          label="Session FS 版本校验"
+          label={SESSION_FS_LABELS.title}
           subtitle={
             sessionFsVersionCheck
-              ? '写入时校验 VFS 版本号（推荐）'
-              : '写入时跳过版本冲突检查'
+              ? SESSION_FS_LABELS.enabledHint
+              : SESSION_FS_LABELS.disabledHint
           }
           value={sessionFsVersionCheck}
           tokens={tokens}

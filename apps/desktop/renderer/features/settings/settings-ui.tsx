@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { API_KEY_STATUS_LABELS } from "@novel-master/core/config-forms/shared";
 import { Switch } from "../../components/ui/Switch";
 import { BatchCheckbox } from "../../components/batch/BatchCheckbox";
 
@@ -99,6 +100,15 @@ export function SettingsToolbar({
   );
 }
 
+export function ApiKeyStatusTag({ status }: { status: string }) {
+  const connected = status === "set";
+  return (
+    <span className={`settings-tag ${connected ? "settings-tag--ok" : "settings-tag--muted"}`}>
+      {connected ? API_KEY_STATUS_LABELS.set : API_KEY_STATUS_LABELS.notSet}
+    </span>
+  );
+}
+
 export function SettingsListItem({
   title,
   meta,
@@ -109,7 +119,7 @@ export function SettingsListItem({
   onToggleSelect,
 }: {
   title: string;
-  meta?: string;
+  meta?: React.ReactNode;
   onClick?: () => void;
   onMenu?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   batchMode?: boolean;
@@ -176,7 +186,7 @@ export function SettingsFormSection({
   footer,
 }: {
   title: string;
-  desc?: string;
+  desc?: ReactNode;
   toolbar?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
@@ -187,7 +197,13 @@ export function SettingsFormSection({
         <h3 className="settings-section__title">{title}</h3>
         {toolbar ? <div className="settings-form-toolbar">{toolbar}</div> : null}
       </div>
-      {desc ? <p className="settings-section__desc">{desc}</p> : null}
+      {desc ? (
+        typeof desc === "string" ? (
+          <p className="settings-section__desc">{desc}</p>
+        ) : (
+          <div className="settings-section__desc settings-section__desc--inline">{desc}</div>
+        )
+      ) : null}
       <div className="settings-fields">{children}</div>
       {footer ? <div className="settings-section__footer">{footer}</div> : null}
     </section>

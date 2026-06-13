@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SESSION_FS_LABELS } from "@novel-master/core/config-forms/shared";
 import {
   ipcAgentListPicker,
   ipcAgentResolveCurrent,
@@ -210,13 +211,18 @@ export function WorkspaceSettingsView() {
             }}
           />
           <SettingsSwitchRow
-            label="Session FS 版本校验"
+            label={SESSION_FS_LABELS.title}
             checked={sessionFsVersionCheck}
             onChange={async (next) => {
               setSessionFsVersionCheck(next);
               await ipcPreferencesSetSessionFsVersionCheck(next);
             }}
           />
+          <p className="settings-hint settings-hint--switch">
+            {sessionFsVersionCheck
+              ? SESSION_FS_LABELS.enabledHint
+              : SESSION_FS_LABELS.disabledHint}
+          </p>
         </SettingsRows>
       </SettingsSection>
 

@@ -8,6 +8,7 @@ import { FetchModelsModal } from "./FetchModelsModal";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { ContextMenu } from "../../components/ui/ContextMenu";
+import { SegmentedControl } from "../../components/ui/SegmentedControl";
 import { ManageHeader } from "../../components/batch/ManageHeader";
 import { TextPromptModal } from "../../components/ui/TextPromptModal";
 import { showToast } from "../../components/ui/show-toast";
@@ -65,6 +66,7 @@ import {
   SettingsListEmpty,
   SettingsListItem,
   SettingsListSection,
+  ApiKeyStatusTag,
   SettingsPanel,
   SettingsSection,
 } from "./settings-ui";
@@ -74,14 +76,22 @@ import {
   previewRegexRule,
   regexRuleForIpc,
   validateRegexRuleDraft,
+  type RegexChannel,
   type RegexRuleDraftFields,
 } from "../../services/regex-test.service";
+import { REGEX_UI_LABELS, AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
+import type { AgentRegistryListItemDto } from "../../../shared/ipc-types";
 
 type Nav = {
   push: (viewId: string) => void;
   pop: () => void;
   navState: SettingsNavState;
 };
+
+/** 列表 meta 中截断解码错误摘要。 */
+function truncateDecodeError(message: string, max = 80): string {
+  return message.length <= max ? message : `${message.slice(0, max)}…`;
+}
 
 type CloudSyncStatusState = {
   configured: boolean;
@@ -535,7 +545,7 @@ export function DataManagementView() {
 
 export function AgentsSettingsView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
-  const [rows, setRows] = useState<Array<{ agentId: string; name: string }>>([]);
+  const [rows, setRows] = useState<AgentRegistryListItemDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [agentMenu, setAgentMenu] = useState<{
     agentId: string;
@@ -674,6 +684,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     }
     const getRes = await ipcAgentRegistryGet({ agentId: prompt.agentId });
     if (!getRes.ok) {
+      toastSettingsError(getRes.error.message);
       return;
     }
     const def = getRes.data as AgentDefinition;
@@ -717,7 +728,23 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
           <SettingsListItem
             key={row.agentId}
             title={row.name}
-            meta={row.agentId}
+            meta={
+              row.decodeError != null ? (
+                <span className="settings-list-item__meta-row">
+                  <span className="settings-tag settings-tag--warn">
+                    {AGENT_LIST_LABELS.needsRepair}
+                  </span>
+                  <span
+                    className="settings-list-item__meta-error"
+                    title={row.decodeError}
+                  >
+                    {truncateDecodeError(row.decodeError)}
+                  </span>
+                </span>
+              ) : (
+                row.agentId
+              )
+            }
             batchMode={batch.active}
             selected={batch.isSelected(row.agentId)}
             onToggleSelect={() => batch.toggle(row.agentId)}
@@ -905,7 +932,12 @@ export function ProvidersView({ nav }: { nav: Nav }) {
           <SettingsListItem
             key={p.id}
             title={p.displayName?.trim() || p.id}
-            meta={`${p.savedCount} 个模型 · apiKey: ${p.apiKeyStatus}`}
+            meta={
+              <>
+                {`${p.savedCount} 个模型 · `}
+                <ApiKeyStatusTag status={p.apiKeyStatus} />
+              </>
+            }
             batchMode={batch.active}
             selected={batch.isSelected(p.id)}
             onToggleSelect={() => batch.toggle(p.id)}
@@ -1045,7 +1077,16 @@ export function ProviderFormView({
     <SettingsPanel>
       <SettingsFormSection
         title={mode === "create" ? "新建服务商" : "编辑服务商"}
-        desc={mode === "edit" ? `apiKey: ${apiKeyStatus}` : "API Key 将通过 SKSP 安全存储"}
+        desc={
+          mode === "edit" ? (
+            <>
+              API Key 状态：
+              <ApiKeyStatusTag status={apiKeyStatus} />
+            </>
+          ) : (
+            "API Key 将通过 SKSP 安全存储"
+          )
+        }
         footer={
           <Button variant="primary" onClick={() => void submit()}>
             {mode === "create" ? "创建" : "保存"}
@@ -1547,6 +1588,8 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   const [llmOn, setLlmOn] = useState(false);
   const [displayOn, setDisplayOn] = useState(false);
   const [testText, setTestText] = useState("mysecret@email.com");
+  const [testChannel, setTestChannel] = useState<RegexChannel>("display");
+  const [testDepthFromTail, setTestDepthFromTail] = useState("0");
   const [preview, setPreview] = useState("");
 
   useEffect(() => {
@@ -1580,10 +1623,11 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   });
 
   const runPreview = () => {
+    const depthFromTail = Math.max(0, Number.parseInt(testDepthFromTail, 10) || 0);
     const result = previewRegexRule(testText, fieldsForSave(), {
       text: testText,
-      channel: "display",
-      depthFromTail: 0,
+      channel: testChannel,
+      depthFromTail,
       role: draft.scopeAssistant && !draft.scopeUser ? "assistant" : "user",
     });
     if (result.ok) setPreview(result.text);
@@ -1663,7 +1707,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
         <SettingsSection title="深度范围">
           <p className="settings-hint">自最新消息起计数；0 表示最新一条，留空表示该侧无界。</p>
           <div className="settings-field-grid">
-            <SettingsField label="起始深度">
+            <SettingsField label={REGEX_UI_LABELS.startDepth}>
               <input
                 value={draft.startDepth ?? ""}
                 placeholder="0"
@@ -1671,7 +1715,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
                 onChange={(e) => setDraft({ ...draft, startDepth: parseOptionalDepthInput(e.target.value) })}
               />
             </SettingsField>
-            <SettingsField label="结束深度">
+            <SettingsField label={REGEX_UI_LABELS.endDepth}>
               <input
                 value={draft.endDepth ?? ""}
                 placeholder="留空表示无界"
@@ -1719,9 +1763,29 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title="测试预览">
-          <p className="settings-hint">保存前可本地试跑，当前按「显示」通道、深度 0 预览。</p>
+          <p className="settings-hint">保存前可本地试跑；通道与深度仅影响预览，不改变规则保存内容。</p>
           <SettingsField label="样例文本">
             <input value={testText} onChange={(e) => setTestText(e.target.value)} />
+          </SettingsField>
+          <SettingsField label="预览通道">
+            <SegmentedControl
+              value={testChannel}
+              options={[
+                { value: "display", label: REGEX_UI_LABELS.displayChannel },
+                { value: "llm", label: REGEX_UI_LABELS.promptChannel },
+              ]}
+              onChange={setTestChannel}
+              aria-label="预览通道"
+            />
+          </SettingsField>
+          <SettingsField label={REGEX_UI_LABELS.previewDepth}>
+            <input
+              value={testDepthFromTail}
+              placeholder="0"
+              inputMode="numeric"
+              onChange={(e) => setTestDepthFromTail(e.target.value)}
+            />
+            <p className="settings-hint">{REGEX_UI_LABELS.previewDepthHint}</p>
           </SettingsField>
           {preview ? <pre className="settings-preview-box">{preview}</pre> : null}
         </SettingsSection>
