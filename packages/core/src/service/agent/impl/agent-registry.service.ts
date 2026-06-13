@@ -46,8 +46,7 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   }
 
   async delete(agentId: string): Promise<void> {
-    const existing = await this.repository.get(agentId);
-    if (existing == null) {
+    if (!(await this.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
     await this.repository.delete(agentId);
