@@ -6,7 +6,7 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 import 'fast-text-encoding';
 import {Buffer} from 'buffer';
-import {ReadableStream} from 'web-streams-polyfill/dist/polyfill.js';
+import {ReadableStream} from 'web-streams-polyfill';
 
 declare const globalThis: {
   Buffer?: typeof Buffer;
