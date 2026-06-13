@@ -130,3 +130,54 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
     false,
   );
 });
+
+test("buildAgentDefinitionFromForm rejects persist macros", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persist: [
+      {
+        name: "bad",
+        type: "text",
+        role: "user",
+        content: "时间 {{$time}}",
+      },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /persist|macro|宏/i);
+  }
+});
+
+test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persist: [{ name: "p1", type: "text", role: "user", content: "ok" }],
+    dynamic: [
+      {
+        name: "d1",
+        type: "text",
+        role: "user",
+        content: "{{.filetree}}",
+      },
+    ],
+  });
+  assert.equal(result.ok, false);
+});

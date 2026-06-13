@@ -225,3 +225,60 @@ export function validateAgentPromptLayoutFromMaps(
     dynamic,
   };
 }
+
+function assertUniqueBlockNames(
+  blocks: readonly { readonly name: string }[],
+  region: "persist" | "dynamic",
+): void {
+  const seen = new Set<string>();
+  for (const block of blocks) {
+    if (seen.has(block.name)) {
+      throw new PromptError(
+        "INVALID_BLOCK",
+        `prompts.${region}: duplicate block name "${block.name}"`,
+      );
+    }
+    seen.add(block.name);
+  }
+}
+
+function persistBlockToWire(block: PersistPromptBlock): Record<string, unknown> {
+  if (block.type === "worktree") {
+    return { type: "worktree" };
+  }
+  return { type: "text", role: block.role, content: block.content };
+}
+
+function dynamicBlockToWire(block: DynamicPromptBlock): Record<string, unknown> {
+  return {
+    type: "text",
+    role: block.role,
+    content: block.content,
+    ...(block.lifecycle != null ? { lifecycle: block.lifecycle } : {}),
+  };
+}
+
+/**
+ * 校验已组装的 {@link AgentPromptLayout}（表单保存 / upsert 路径与 decode 规则一致）。
+ */
+export function validateAgentPromptLayout(
+  layout: AgentPromptLayout,
+): AgentPromptLayout {
+  assertUniqueBlockNames(layout.persist, "persist");
+  assertUniqueBlockNames(layout.dynamic, "dynamic");
+
+  const persistMap: Record<string, unknown> = {};
+  for (const block of layout.persist) {
+    persistMap[block.name] = persistBlockToWire(block);
+  }
+  const dynamicMap: Record<string, unknown> = {};
+  for (const block of layout.dynamic) {
+    dynamicMap[block.name] = dynamicBlockToWire(block);
+  }
+
+  return validateAgentPromptLayoutFromMaps(
+    persistMap,
+    dynamicMap,
+    layout.system,
+  );
+}

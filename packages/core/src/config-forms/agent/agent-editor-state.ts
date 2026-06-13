@@ -6,6 +6,8 @@ import type {
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
+import { validateAgentPromptLayout } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { PromptError } from "@/errors/prompt-errors.js";
 import { formatApplicationModelId } from "../shared/application-model-id.js";
 import {
   buildToolsPolicyFromSelection,
@@ -205,11 +207,20 @@ export function buildAgentDefinitionFromForm(
   ) {
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
+  let validatedLayout: AgentPromptLayout;
+  try {
+    validatedLayout = validateAgentPromptLayout(layout);
+  } catch (error) {
+    if (error instanceof PromptError) {
+      return { ok: false, message: error.message };
+    }
+    throw error;
+  }
   const steps = Number(input.maxSteps);
   const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   const def: AgentDefinition = {
     name: input.name.trim(),
-    prompts: layout,
+    prompts: validatedLayout,
     ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
     ...(input.modelEnabled && input.providerId && input.vendorModelId
       ? { model: formatApplicationModelId(input.providerId, input.vendorModelId) }

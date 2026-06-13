@@ -356,6 +356,7 @@ export {
 } from "./domain/prompt/logic/validate-prompt-blocks.js";
 export {
   validateAgentPromptLayoutFromMaps,
+  validateAgentPromptLayout,
 } from "./domain/prompt/logic/validate-agent-prompt-layout.js";
 export { validateDynamicMacros } from "./domain/prompt/logic/validate-dynamic-macros.js";
 export { expandDynamicMacros } from "./domain/prompt/logic/expand-dynamic-macros.js";

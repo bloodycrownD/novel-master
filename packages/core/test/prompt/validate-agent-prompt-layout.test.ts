@@ -107,4 +107,17 @@ describe("agentDefinitionSchema wire", () => {
         e instanceof AgentConfigError && e.message.includes("prompts.regions"),
     );
   });
+
+  it("拒绝 prompts.chat", () => {
+    assert.throws(
+      () =>
+        agentDefinitionSchema.parse({
+          schemaVersion: 1,
+          name: "a",
+          prompts: { persist: {}, dynamic: {}, chat: {} },
+        }),
+      (e: unknown) =>
+        e instanceof AgentConfigError && e.message.includes("prompts.chat"),
+    );
+  });
 });
