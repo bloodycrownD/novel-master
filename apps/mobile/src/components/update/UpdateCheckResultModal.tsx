@@ -1,10 +1,13 @@
 /**
  * 自动更新检查结果首屏弹窗（已最新 / 检查失败）。
+ *
+ * 使用 react-native 原生 Modal，而非 AppModal：本组件由 RootNavigator 在
+ * NavigationContainer 之外渲染，AppModal 依赖 useIsFocused() 会触发
+ * "Couldn't find a navigation object" 崩溃。应用级首屏弹窗无需 focus gate。
  */
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {Modal, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
-import {AppModal} from '../ui/AppModal';
 
 export type UpdateCheckResultKind = 'up-to-date' | 'error';
 
@@ -34,7 +37,7 @@ export function UpdateCheckResultModal({
   const {tokens} = useTheme();
 
   return (
-    <AppModal
+    <Modal
       visible={visible}
       animationType="fade"
       transparent
@@ -69,7 +72,7 @@ export function UpdateCheckResultModal({
           </View>
         </Pressable>
       </Pressable>
-    </AppModal>
+    </Modal>
   );
 }
 
