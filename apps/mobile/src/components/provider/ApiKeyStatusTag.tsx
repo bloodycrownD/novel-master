@@ -36,7 +36,7 @@ export function ApiKeyStatusTag({status, tokens}: Props) {
 
 const styles = StyleSheet.create({
   tag: {
-    alignSelf: 'flex-start',
+    alignSelf: 'center',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 999,

@@ -52,7 +52,9 @@ export function ConfigListCard({
           <Text style={styles.badgeText}>{badge}</Text>
         </View>
       ) : null}
-      {trailingMeta}
+      {trailingMeta != null ? (
+        <View style={styles.trailingMeta}>{trailingMeta}</View>
+      ) : null}
       {onMenuPress != null ? (
         <Pressable
           hitSlop={8}
@@ -80,6 +82,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   badgeText: {color: '#FFFFFF', fontSize: 12, fontWeight: '600'},
+  trailingMeta: {justifyContent: 'center'},
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},
 });
