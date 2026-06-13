@@ -91,3 +91,14 @@ test("validateEventConfigBlocks rejects cycle dependencies", () => {
   ]);
   assert.match(err ?? "", /循环/);
 });
+
+test("validateEventConfigBlocks rejects unknown action drafts", () => {
+  const err = validateEventConfigBlocks([
+    {
+      id: "b1",
+      eventType: COMPACTION,
+      actions: [{ kind: "unknown", wireKey: "refresh-macros", raw: "refresh-macros" }],
+    },
+  ]);
+  assert.equal(err, "存在未知 action，请移除后保存");
+});

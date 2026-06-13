@@ -3,6 +3,7 @@
  */
 import { validateDepthSlice } from "../shared/depth-slice.js";
 import type { EventBlockDraft } from "./event-config-state.js";
+import { isUnknownActionDraft } from "./event-config-editor-load.js";
 import { actionTypeLabel, eventTypeLabel } from "./event-config-labels.js";
 
 function validateDag(
@@ -82,6 +83,10 @@ export function validateEventConfigBlocks(
 
     const seenActions = new Set<string>();
     for (const action of block.actions) {
+      if (isUnknownActionDraft(action)) {
+        return "存在未知 action，请移除后保存";
+      }
+
       if (seenActions.has(action.type)) {
         return `「${eventLabel}」中动作「${actionTypeLabel(action.type)}」重复，请删除多余项后再保存`;
       }

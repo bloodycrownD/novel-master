@@ -27,6 +27,14 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     return decode(JSON.parse(raw) as unknown, eventsConfigSchema);
   }
 
+  async getRawWire(): Promise<unknown> {
+    const raw = await this.getRaw();
+    if (raw === undefined) {
+      return encode(DEFAULT_EVENTS_CONFIG, eventsConfigSchema);
+    }
+    return JSON.parse(raw) as unknown;
+  }
+
   async setConfig(config: EventsConfig): Promise<void> {
     const wire = encode(config, eventsConfigSchema);
     await this.kkv.set(MODULE, KEY_CONFIG, JSON.stringify(wire));

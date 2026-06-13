@@ -5,19 +5,20 @@ import type {
   EventActionNode,
   EventsConfig,
 } from "@/domain/events-config/model/events-config.js";
+import {
+  isUnknownActionDraft,
+  type EventActionDraft,
+} from "./event-config-editor-load.js";
+import { newEventBlockId } from "./event-block-id.js";
+export type { EventActionDraft, UnknownActionDraft, EventsEditorLoadResult } from "./event-config-editor-load.js";
+export { isUnknownActionDraft, isEventActionNode, loadEventsConfigForEditor } from "./event-config-editor-load.js";
+export { newEventBlockId } from "./event-block-id.js";
 
 export type EventBlockDraft = {
   readonly id: string;
   eventType: string;
-  actions: EventActionNode[];
+  actions: EventActionDraft[];
 };
-
-let nextBlockId = 0;
-
-export function newEventBlockId(): string {
-  nextBlockId += 1;
-  return `evt-${Date.now()}-${nextBlockId}`;
-}
 
 export function configToEventBlocks(config: EventsConfig): EventBlockDraft[] {
   return Object.entries(config.events).map(([eventType, actions]) => ({
@@ -37,7 +38,9 @@ export function eventBlocksToConfig(
     if (key === "") {
       continue;
     }
-    events[key] = block.actions;
+    events[key] = block.actions.filter(
+      (action): action is EventActionNode => !isUnknownActionDraft(action),
+    );
   }
   return { schemaVersion, events };
 }

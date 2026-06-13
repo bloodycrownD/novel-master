@@ -228,4 +228,4 @@ export const eventsConfigSchema = Object.assign(
   { toWire: eventsConfigToWire },
 );
 
-export { depthWireSchema };
+export { depthWireSchema, parseActionNode };

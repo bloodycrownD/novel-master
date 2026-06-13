@@ -9,14 +9,19 @@ import {FormTextInput} from '../form/FormTextInput';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
-import type {EventBlockDraft} from '@novel-master/core/config-forms/events';
+import type {EventActionDraft, EventBlockDraft} from '@novel-master/core/config-forms/events';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {
+  UNKNOWN_ACTION_BADGE,
   actionTypeHint,
   actionTypeLabel,
   eventTypeHint,
   eventTypeLabel,
+  isEventActionNode,
+  isUnknownActionDraft,
+  unknownActionHint,
 } from '@novel-master/core/config-forms/events';
+import {REGEX_UI_LABELS} from '@novel-master/core/config-forms/shared';
 
 function BlockIconButton({
   label,
@@ -41,6 +46,43 @@ function BlockIconButton({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+function UnknownActionBlockCard({
+  action,
+  index,
+  tokens,
+  onDelete,
+}: {
+  action: Extract<EventActionDraft, {kind: 'unknown'}>;
+  index: number;
+  tokens: ThemeTokens;
+  onDelete: () => void;
+}) {
+  return (
+    <View
+      style={[
+        styles.blockCard,
+        {backgroundColor: tokens.surface, borderColor: tokens.border},
+      ]}>
+      <View style={styles.blockHeader}>
+        <View style={[styles.typeBadge, {backgroundColor: `${tokens.danger}1A`}]}>
+          <Text style={[styles.typeBadgeText, {color: tokens.danger}]}>
+            {UNKNOWN_ACTION_BADGE}
+          </Text>
+        </View>
+        <Text style={[styles.blockIndex, {color: tokens.textSecondary}]}>
+          {action.wireKey} · 动作 {index + 1}
+        </Text>
+        <View style={styles.blockActions}>
+          <BlockIconButton label="×" tokens={tokens} danger onPress={onDelete} />
+        </View>
+      </View>
+      <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+        {unknownActionHint(action.wireKey)}
+      </Text>
+    </View>
   );
 }
 
@@ -179,7 +221,7 @@ function ActionBlockCard({
       </View>
       {action.type === 'hide-message' ? (
         <View style={styles.actionFields}>
-          <FormField label="起始深度" tokens={tokens} hint="0 = 最新一条；留空表示不限制">
+          <FormField label={REGEX_UI_LABELS.startDepth} tokens={tokens} hint="0 = 最新一条；留空表示不限制">
             <FormTextInput
               tokens={tokens}
               value={
@@ -200,7 +242,7 @@ function ActionBlockCard({
               keyboardType="number-pad"
             />
           </FormField>
-          <FormField label="结束深度" tokens={tokens} hint="留空表示不限制">
+          <FormField label={REGEX_UI_LABELS.endDepth} tokens={tokens} hint="留空表示不限制">
             <FormTextInput
               tokens={tokens}
               value={
@@ -269,13 +311,14 @@ export function EventBlockEditor({
 }: EventBlockEditorProps) {
   const displayType = block.eventType.trim();
 
-  const updateAction = (actionIndex: number, action: EventActionNode) => {
+  const updateAction = (actionIndex: number, action: EventActionDraft) => {
     const actions = block.actions.map((a, i) => (i === actionIndex ? action : a));
     onChange({actions});
   };
 
   const deleteAction = (actionIndex: number) => {
-    if (block.actions.length <= 1) {
+    const action = block.actions[actionIndex];
+    if (block.actions.length <= 1 && action != null && !isUnknownActionDraft(action)) {
       return false;
     }
     onChange({actions: block.actions.filter((_, i) => i !== actionIndex)});
@@ -342,9 +385,25 @@ export function EventBlockEditor({
 
       <View style={styles.blockList}>
         {block.actions.map((action, actionIndex) => {
+          if (isUnknownActionDraft(action)) {
+            return (
+              <UnknownActionBlockCard
+                key={`${block.id}-action-${actionIndex}`}
+                action={action}
+                index={actionIndex}
+                tokens={tokens}
+                onDelete={() => {
+                  if (!deleteAction(actionIndex)) {
+                    onMinActions();
+                  }
+                }}
+              />
+            );
+          }
           const availableDependencies = [
             ...new Set(
               block.actions
+                .filter(isEventActionNode)
                 .map(a => a.type)
                 .filter(type => type !== action.type),
             ),

@@ -12,6 +12,7 @@ import {
   createDefaultAction,
   defaultDagForEvent,
   eventBlocksToConfig,
+  loadEventsConfigForEditor,
   newEventBlockId,
   validateEventConfigBlocks,
   type EventBlockDraft,
@@ -50,13 +51,16 @@ export function EventsConfigScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await runtime.eventsConfig.getConfig();
+      const wire = await runtime.eventsConfig.getRawWire();
+      const loaded = loadEventsConfigForEditor(wire);
       setSchemaVersion(loaded.schemaVersion);
-      setBlocks(configToEventBlocks(loaded));
+      setBlocks(loaded.blocks);
       setLoadError(null);
+      if (loaded.unknownActions.length > 0) {
+        showToast(`未知 action：${loaded.unknownActions.join('、')}，请移除后保存`);
+      }
     } catch (error) {
       const message = toastMessage('加载事件配置失败', error);
-      // Keep the editor usable while making the decode failure explicit.
       setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
       setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
       setLoadError(message);

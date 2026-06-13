@@ -595,6 +595,8 @@ export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {
 export type AgentRegistryListItemDto = {
   readonly agentId: string;
   readonly name: string;
+  /** 解码失败时的错误摘要；有值表示该 Agent 需修复。 */
+  readonly decodeError?: string;
 };
 
 export type AgentRegistryGetRequest = {
@@ -676,6 +678,13 @@ export type RegexListPickerResponse = {
 
 export type RegexSetCurrentRequest = {
   readonly groupId: string | null;
+};
+
+export type EventsGetConfigResponse = {
+  /** strict decode 结果；含未知 action 等无法解析时为 null。 */
+  readonly config: unknown | null;
+  /** KKV 原始 wire，供编辑器宽松加载。 */
+  readonly wire: unknown;
 };
 
 export type EventsSetConfigRequest = {

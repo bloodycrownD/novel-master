@@ -4,18 +4,24 @@ import {
   ACTION_ADD_OPTIONS,
   DEFAULT_EVENTS_CONFIG,
   EVENT_ADD_OPTIONS,
+  UNKNOWN_ACTION_BADGE,
   actionTypeHint,
   actionTypeLabel,
-  configToEventBlocks,
   createDefaultAction,
   defaultDagForEvent,
   eventBlocksToConfig,
   eventTypeHint,
   eventTypeLabel,
+  isEventActionNode,
+  isUnknownActionDraft,
+  loadEventsConfigForEditor,
   newEventBlockId,
+  unknownActionHint,
   validateEventConfigBlocks,
+  type EventActionDraft,
   type EventBlockDraft,
 } from "@novel-master/core/config-forms/events";
+import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";
@@ -32,6 +38,33 @@ import {
   SettingsFormSection,
   SettingsPanel,
 } from "./settings-ui";
+
+function UnknownActionBlockEditor({
+  action,
+  index,
+  onDelete,
+}: {
+  action: Extract<EventActionDraft, { kind: "unknown" }>;
+  index: number;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="config-block-card config-block-card--action config-block-card--unknown">
+      <div className="config-block-card__header">
+        <span className="config-block-card__badge">{UNKNOWN_ACTION_BADGE}</span>
+        <span className="config-block-card__meta">{action.wireKey} · 动作 {index + 1}</span>
+        <div className="config-block-card__actions">
+          <button type="button" className="icon-btn" onClick={onDelete} aria-label="删除">
+            ×
+          </button>
+        </div>
+      </div>
+      <div className="config-block-card__body">
+        <p className="config-block-card__hint">{unknownActionHint(action.wireKey)}</p>
+      </div>
+    </div>
+  );
+}
 
 function ActionBlockEditor({
   action,
@@ -98,7 +131,7 @@ function ActionBlockEditor({
         </SettingsField>
         {action.type === "hide-message" ? (
           <div className="settings-field-grid">
-            <SettingsField label="起深度">
+            <SettingsField label={REGEX_UI_LABELS.startDepth}>
               <input
                 type="number"
                 className="settings-field__input--compact"
@@ -115,7 +148,7 @@ function ActionBlockEditor({
                 }
               />
             </SettingsField>
-            <SettingsField label="止深度">
+            <SettingsField label={REGEX_UI_LABELS.endDepth}>
               <input
                 type="number"
                 className="settings-field__input--compact"
@@ -168,12 +201,13 @@ function EventBlockEditor({
 }) {
   const [addActionOpen, setAddActionOpen] = useState(false);
 
-  const updateAction = (actionIndex: number, action: EventActionNode) => {
+  const updateAction = (actionIndex: number, action: EventActionDraft) => {
     onChange({ actions: block.actions.map((a, i) => (i === actionIndex ? action : a)) });
   };
 
   const deleteAction = (actionIndex: number) => {
-    if (block.actions.length <= 1) {
+    const action = block.actions[actionIndex];
+    if (block.actions.length <= 1 && action != null && !isUnknownActionDraft(action)) {
       showToast("至少保留一个动作");
       return;
     }
@@ -246,8 +280,23 @@ function EventBlockEditor({
         ) : null}
         <div className="config-block-list config-block-list--nested">
           {block.actions.map((action, actionIndex) => {
+            if (isUnknownActionDraft(action)) {
+              return (
+                <UnknownActionBlockEditor
+                  key={`${block.id}-${actionIndex}`}
+                  action={action}
+                  index={actionIndex}
+                  onDelete={() => deleteAction(actionIndex)}
+                />
+              );
+            }
             const availableDependencies = [
-              ...new Set(block.actions.map((a) => a.type).filter((t) => t !== action.type)),
+              ...new Set(
+                block.actions
+                  .filter(isEventActionNode)
+                  .map((a) => a.type)
+                  .filter((t) => t !== action.type),
+              ),
             ] as EventActionType[];
             return (
               <ActionBlockEditor
@@ -281,11 +330,16 @@ export function EventsConfigView() {
     try {
       const res = await ipcEventsGetConfig();
       if (res.ok) {
-        setSchemaVersion(res.data.schemaVersion);
-        setBlocks(configToEventBlocks(res.data));
+        const loaded = loadEventsConfigForEditor(res.data.wire);
+        setSchemaVersion(loaded.schemaVersion);
+        setBlocks(loaded.blocks);
+        if (loaded.unknownActions.length > 0) {
+          showToast(`未知 action：${loaded.unknownActions.join("、")}，请移除后保存`);
+        }
       } else {
-        setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
-        setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+        const loaded = loadEventsConfigForEditor(null);
+        setSchemaVersion(loaded.schemaVersion);
+        setBlocks(loaded.blocks);
         toastSettingsError(res.error.message);
       }
     } finally {

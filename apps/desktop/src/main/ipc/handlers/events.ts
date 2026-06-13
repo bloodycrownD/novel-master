@@ -4,6 +4,7 @@
 import { BrowserWindow } from "electron";
 import type {
   EventsSetConfigRequest,
+  EventsGetConfigResponse,
   IpcResult,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -17,11 +18,17 @@ function parentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow();
 }
 
-export async function handleEventsGetConfig(): Promise<IpcResult<unknown>> {
+export async function handleEventsGetConfig(): Promise<IpcResult<EventsGetConfigResponse>> {
   try {
     const rt = await getDesktopRuntime();
-    const config = await rt.eventsConfig.getConfig();
-    return { ok: true, data: config };
+    const wire = await rt.eventsConfig.getRawWire();
+    let config: unknown | null = null;
+    try {
+      config = await rt.eventsConfig.getConfig();
+    } catch {
+      config = null;
+    }
+    return { ok: true, data: { config, wire } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
