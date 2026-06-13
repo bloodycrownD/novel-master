@@ -155,14 +155,11 @@ export function ChatTabScreen() {
 
   const handleStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      if (payload.phase === 'assistant') {
-        stream.freezeToLastRun();
-      }
       if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
         scope.bumpVfsRefresh();
       }
     },
-    [scope.bumpVfsRefresh, stream.freezeToLastRun],
+    [scope.bumpVfsRefresh],
   );
 
   const handleRunFinished = useCallback(
@@ -348,7 +345,7 @@ export function ChatTabScreen() {
         projectId={projectId}
         sessionId={sessionId}
         agentMeta={scope.agentMeta}
-        streamMetrics={stream.streamMetrics}
+        toolInvoking={stream.toolInvoking}
         messageBatchActive={messageBatch.active}
         messageBatchSelectedCount={messageBatch.selectedCount}
         messageBatchSelectedIds={messageBatch.selectedIds}
@@ -447,7 +444,6 @@ export function ChatTabScreen() {
         onAgentRunningChange={stream.setAgentRunning}
         onStreamText={stream.handleStreamText}
         onStreamThinking={stream.handleStreamThinking}
-        onStreamToolUseDelta={stream.handleStreamToolUseDelta}
         onStreamReset={stream.handleStreamReset}
         onMessagesChanged={() =>
           messages.handleMessagesChanged(scope.refreshChatTokenLabel).catch(() => undefined)

@@ -38,7 +38,7 @@ export function buildTranscriptBootScript(): string {
     sessionKey: '',
     rows: [],
     hasMore: false,
-    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '' },
+    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
     flags: { richText: false, batchMode: false, menuDisabled: false },
     selectedIds: [],
     menu: null,
@@ -176,11 +176,12 @@ export function buildTranscriptBootScript(): string {
   function toolStatusLabel(status) {
     if (status === 'success') return '成功';
     if (status === 'error') return '失败';
+    if (status === 'pending') return '执行中';
     return '';
   }
 
-  function renderToolPhaseBar() {
-    return '<div class="tool-phase-bar">正在执行工具调用…</div>';
+  function renderToolInvokingBar() {
+    return '<div class="tool-invoking-bar">工具调用中</div>';
   }
 
   function thinkingBodyInner(text, thinkingHtml) {
@@ -216,7 +217,7 @@ export function buildTranscriptBootScript(): string {
     var filePath = vfsToolFilePath(tool.name, tool.input || {});
     var canOpen = filePath != null;
     var summary = escapeHtml(toolCallSummary(tool));
-    var statusClass = tool.status === 'error' ? 'error' : 'success';
+    var statusClass = tool.status === 'error' ? 'error' : (tool.status === 'pending' ? 'pending' : 'success');
     var statusInner = toolStatusLabel(tool.status);
     var html =
       '<div class="tool-group-item tool-card' + (canOpen ? ' tappable' : '') + '"' +
@@ -257,11 +258,11 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
-  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml, tools, toolGroupKey, toolGroupExpanded, toolPhase) {
+  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml, tools, toolGroupKey, toolGroupExpanded, showToolInvoking) {
     var html = '';
     var hasThinking = !!(thinking && String(thinking).trim());
     var hasTools = !!(tools && tools.length > 0);
-    var hasPhase = toolPhase === 'executing';
+    var hasInvoking = !!showToolInvoking;
     var hasText = !!(text && String(text).trim());
     if (hasThinking) {
       html += renderThinkingSection(
@@ -269,7 +270,7 @@ export function buildTranscriptBootScript(): string {
         thinkingKey,
         thinkingExpanded,
         thinkingHtml,
-        hasText || hasTools || hasPhase
+        hasText || hasTools || hasInvoking
       );
     }
     if (hasText) {
@@ -277,8 +278,8 @@ export function buildTranscriptBootScript(): string {
       var inner = textHtml || escapeHtml(text || '');
       html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
     }
-    if (hasPhase) {
-      html += renderToolPhaseBar();
+    if (hasInvoking) {
+      html += renderToolInvokingBar();
     }
     if (hasTools) {
       html += renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false);
@@ -594,10 +595,10 @@ export function buildTranscriptBootScript(): string {
       if (row.text) {
         html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
       }
-    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0) || row.toolPhase === 'executing') {
+    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
       var toolGroupKey = 'msg:' + row.id;
       var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
-      html += '<div class="bubble' + assistantBubbleExtraClasses(row.textHtml, row.tools, row.text, row.thinking, row.toolPhase) + '">' +
+      html += '<div class="bubble' + assistantBubbleExtraClasses(row.textHtml, row.tools, row.text, row.thinking) + '">' +
         renderAssistantBubbleInner(
           row.text,
           row.textHtml,
@@ -608,7 +609,7 @@ export function buildTranscriptBootScript(): string {
           row.tools,
           toolGroupKey,
           toolGroupExpanded,
-          row.toolPhase
+          false
         ) +
         '</div>';
     }
@@ -626,15 +627,14 @@ export function buildTranscriptBootScript(): string {
     return null;
   }
 
-  function assistantBubbleExtraClasses(textHtml, tools, text, thinking, toolPhase) {
+  function assistantBubbleExtraClasses(textHtml, tools, text, thinking) {
     var extra = '';
     var hasText = !!(text && String(text).trim());
     var hasThinking = !!(thinking && String(thinking).trim());
     var hasTools = !!(tools && tools.length > 0);
-    var hasPhase = toolPhase === 'executing';
     if (state.flags.richText && textHtml) {
       extra += ' rich bubble--wide';
-    } else if (!hasText && (hasThinking || hasTools || hasPhase)) {
+    } else if (!hasText && (hasThinking || hasTools)) {
       extra += ' bubble--fill-width';
     }
     return extra;
@@ -651,7 +651,7 @@ export function buildTranscriptBootScript(): string {
       [],
       'stream:tools',
       false,
-      undefined
+      state.stream.toolInvoking
     );
   }
 
@@ -661,8 +661,7 @@ export function buildTranscriptBootScript(): string {
       state.stream.textHtml,
       [],
       state.stream.text,
-      state.stream.thinking,
-      undefined
+      state.stream.thinking
     );
     var inner = renderStreamBubbleInner();
     if (!inner) return;
@@ -683,7 +682,7 @@ export function buildTranscriptBootScript(): string {
   }
 
   function renderEmptyState() {
-    var hasStream = !!(state.stream.text || state.stream.thinking);
+    var hasStream = !!(state.stream.text || state.stream.thinking || state.stream.toolInvoking);
     if (state.rows.length > 0 || hasStream) return '';
     return '<div class="empty-state">暂无消息</div>';
   }
@@ -706,14 +705,13 @@ export function buildTranscriptBootScript(): string {
         html += renderMessageRow(row);
       }
     }
-    if (state.stream.thinking || state.stream.text) {
+    if (state.stream.thinking || state.stream.text || state.stream.toolInvoking) {
       html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
         assistantBubbleExtraClasses(
           state.stream.textHtml,
           [],
           state.stream.text,
-          state.stream.thinking,
-          undefined
+          state.stream.thinking
         ) + '">' + renderStreamBubbleInner() + '</div></div>';
     }
     html += renderEmptyState();
@@ -736,7 +734,7 @@ export function buildTranscriptBootScript(): string {
     state.hasMore = !!payload.hasMore;
     state.loadOlderArmed = true;
     if (intent !== 'preserve' || sessionChanged) {
-      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
+      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
     }
     if (sessionChanged) {
       closeContextMenu(false);
@@ -1013,8 +1011,19 @@ export function buildTranscriptBootScript(): string {
         appendStreamDelta(p.kind, p.delta || '', p.html || '');
         break;
       case 'streamReset':
-        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '' };
+        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
         renderRows();
+        break;
+      case 'streamToolInvoking':
+        state.stream.toolInvoking = !!p.active;
+        {
+          var invokingTail = document.getElementById('stream-tail');
+          if (invokingTail) {
+            updateStreamBubble(invokingTail);
+          } else if (state.stream.toolInvoking || state.stream.text || state.stream.thinking) {
+            renderRows();
+          }
+        }
         break;
       case 'flagsUpdate':
         if (p.flags) {

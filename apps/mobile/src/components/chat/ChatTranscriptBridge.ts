@@ -27,8 +27,6 @@ export type TranscriptRow =
       readonly hidden: boolean;
       readonly text: string;
       readonly thinking: string;
-      /** Turn-level tool execution phase (no per-tool cards yet). */
-      readonly toolPhase?: 'executing';
       /** Embedded tool group for assistant messages with tool_use. */
       readonly tools?: readonly TranscriptToolView[];
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
@@ -102,6 +100,7 @@ export type HostToTranscriptMessage =
       }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
+  | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>

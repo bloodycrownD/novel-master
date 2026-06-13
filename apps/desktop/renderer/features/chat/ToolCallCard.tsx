@@ -15,6 +15,8 @@ function statusLabel(status: ToolCallView["status"]): string {
       return "成功";
     case "error":
       return "失败";
+    case "pending":
+      return "执行中";
     default:
       return "";
   }

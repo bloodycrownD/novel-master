@@ -152,7 +152,7 @@ describe('message-blocks', () => {
     expect(view.resultContent).toBe('ok');
   });
 
-  it('orphan tool_use without result and !agentRunning → no tools, no phase', () => {
+  it('orphan tool_use without result → pending tool cards', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
@@ -161,12 +161,12 @@ describe('message-blocks', () => {
     const items = buildChatListItems(messages, {agentRunning: false});
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
-      expect(items[0].tools).toHaveLength(0);
-      expect(items[0].toolPhase).toBeUndefined();
+      expect(items[0].tools).toHaveLength(1);
+      expect(items[0].tools[0]?.status).toBe('pending');
     }
   });
 
-  it('tool executing → tools empty + phase when agentRunning', () => {
+  it('tool executing → pending cards when agentRunning', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
@@ -174,8 +174,8 @@ describe('message-blocks', () => {
     ];
     const items = buildChatListItems(messages, {agentRunning: true});
     if (items[0]?.kind === 'message') {
-      expect(items[0].tools).toHaveLength(0);
-      expect(items[0].toolPhase).toBe('executing');
+      expect(items[0].tools).toHaveLength(1);
+      expect(items[0].tools[0]?.status).toBe('pending');
     }
   });
 
@@ -192,11 +192,10 @@ describe('message-blocks', () => {
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('success');
-      expect(items[0].toolPhase).toBeUndefined();
     }
   });
 
-  it('only last incomplete turn shows executing phase', () => {
+  it('incomplete turns always render pending tool cards', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
@@ -209,8 +208,8 @@ describe('message-blocks', () => {
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
-    expect(byId.get('a1')?.toolPhase).toBeUndefined();
-    expect(byId.get('a2')?.toolPhase).toBe('executing');
+    expect(byId.get('a1')?.tools[0]?.status).toBe('pending');
+    expect(byId.get('a2')?.tools[0]?.status).toBe('pending');
   });
 
   it('turnToolResultsComplete detects paired results', () => {
@@ -308,7 +307,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('hidden assistant with incomplete tools shows no cards when agent stopped', () => {
+  it('hidden assistant with incomplete tools shows pending cards', () => {
     const messages = [
       msg(
         'a1',
@@ -322,8 +321,8 @@ describe('message-blocks', () => {
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].message.hidden).toBe(true);
-      expect(items[0].tools).toHaveLength(0);
-      expect(items[0].toolPhase).toBeUndefined();
+      expect(items[0].tools).toHaveLength(1);
+      expect(items[0].tools[0]?.status).toBe('pending');
     }
   });
 

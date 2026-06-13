@@ -56,6 +56,7 @@ export type ChatTranscriptWebViewProps = {
   /** No cached snapshot: open pinned to bottom. */
   readonly defaultScrollToBottom?: boolean;
   readonly agentRunning?: boolean;
+  readonly toolInvoking?: boolean;
   readonly selectedMessageIds?: ReadonlySet<string>;
   readonly menuCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
@@ -147,6 +148,7 @@ export const ChatTranscriptWebView = forwardRef<
     initialScroll = null,
     defaultScrollToBottom = true,
     agentRunning = false,
+    toolInvoking = false,
     selectedMessageIds,
     menuCloseSignal = 0,
     onScrollSnapshot,
@@ -573,7 +575,14 @@ export const ChatTranscriptWebView = forwardRef<
     if (!webReady) {
       return;
     }
-    const richText = flags?.richText ?? false;
+    postToWeb({
+      v: 1,
+      type: 'streamToolInvoking',
+      payload: {active: toolInvoking},
+    });
+  }, [webReady, toolInvoking, postToWeb]);
+
+  useEffect(() => {
     if (prevRichTextRef.current === richText) {
       return;
     }

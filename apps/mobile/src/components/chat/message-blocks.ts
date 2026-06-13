@@ -11,7 +11,7 @@ import {resolveToolResultOk} from '@novel-master/core';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 
-export type ToolCallStatus = 'success' | 'error';
+export type ToolCallStatus = 'success' | 'error' | 'pending';
 
 export interface ToolCallView {
   readonly toolUseId: string;
@@ -21,7 +21,6 @@ export interface ToolCallView {
   readonly resultContent?: string;
 }
 
-export type ToolPhase = 'executing';
 
 export interface MessageListItem {
   readonly kind: 'message';
@@ -29,10 +28,8 @@ export interface MessageListItem {
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
-  /** Resolved tool_use views when turn tool_results are complete. */
+  /** 有 tool_use 即渲染（无 result 时为 pending）。 */
   readonly tools: readonly ToolCallView[];
-  /** Turn-level tool execution phase (no per-tool cards yet). */
-  readonly toolPhase?: ToolPhase;
 }
 
 export type ChatListItem = MessageListItem;
@@ -164,7 +161,15 @@ export function toolCallViewFromUse(
   use: ToolUseBlock,
   results: Map<string, ToolResultBlock>,
 ): ToolCallView {
-  const result = results.get(use.id)!;
+  const result = results.get(use.id);
+  if (result == null) {
+    return {
+      toolUseId: use.id,
+      name: use.name,
+      input: use.input,
+      status: 'pending',
+    };
+  }
   return {
     toolUseId: use.id,
     name: use.name,
@@ -225,7 +230,6 @@ export function buildChatListItems(
   messages: readonly ChatMessage[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
-  const agentRunning = options.agentRunning ?? false;
   const results = buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
 
@@ -268,11 +272,7 @@ export function buildChatListItems(
     }
 
     const hasToolUse = toolUses.length > 0;
-    const complete = !hasToolUse || turnToolResultsComplete(message, messages);
-    const executing = isTurnToolExecuting(message, messages, agentRunning);
-    const tools = complete
-      ? toolUses.map(use => toolCallViewFromUse(use, results))
-      : [];
+    const tools = toolUses.map(use => toolCallViewFromUse(use, results));
 
     if (
       textParts.length > 0 ||
@@ -285,7 +285,6 @@ export function buildChatListItems(
         textParts,
         thinkingParts,
         tools,
-        ...(executing ? {toolPhase: 'executing' as const} : {}),
       });
     }
   }
@@ -300,7 +299,7 @@ export type TranscriptStreamState = {
 
 /**
  * 基于完整会话构建 transcript 行，再按 tail 消息 id 筛选待 append 行。
- * appendTail 必须带全量上下文，否则 isTurnToolExecuting / toolPhase 在多轮或已配对 hidden tool_result 时会判错。
+ * appendTail 必须带全量上下文，否则 tool pending/complete 在多轮或已配对 hidden tool_result 时会判错。
  */
 export function selectTailTranscriptRows(
   allMessages: readonly ChatMessage[],
@@ -333,7 +332,6 @@ export function buildTranscriptRows(
       hidden: item.message.hidden,
       text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
       thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
-      ...(item.toolPhase != null ? {toolPhase: item.toolPhase} : {}),
       ...(item.tools.length > 0
         ? {
             tools: item.tools.map(t => ({

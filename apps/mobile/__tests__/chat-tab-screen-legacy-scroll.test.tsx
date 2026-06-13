@@ -145,9 +145,6 @@ jest.mock('../src/components/chat/MessageList', () => ({
 
 jest.mock('../src/components/chrome/AppHeader', () => ({AppHeader: () => null}));
 jest.mock('../src/components/chat/ChatMetaBar', () => ({ChatMetaBar: () => null}));
-jest.mock('../src/components/chat/ChatStreamMetricsBar', () => ({
-  ChatStreamMetricsBar: () => null,
-}));
 jest.mock('../src/components/chat/ChatComposer', () => ({ChatComposer: () => null}));
 jest.mock('../src/components/chat/MessageActionMenu', () => ({
   MessageActionMenu: () => null,
@@ -186,15 +183,7 @@ jest.mock('../src/components/agent/AgentPickerModal', () => ({
 jest.mock('../src/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
-jest.mock('../src/hooks/useAgentStreamMetrics', () => ({
-  useAgentStreamMetrics: () => ({
-    metrics: {},
-    noteTextDelta: jest.fn(),
-    noteThinkingDelta: jest.fn(),
-    noteToolUseDelta: jest.fn(),
-    freezeToLastRun: jest.fn(),
-  }),
-}));
+
 jest.mock('../src/hooks/useAndroidChatBackHandler', () => ({
   useAndroidChatBackHandler: jest.fn(),
 }));

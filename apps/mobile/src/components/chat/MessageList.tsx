@@ -22,7 +22,7 @@ import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import type {ChatListScrollSnapshot} from '../../services/chat-list-scroll-cache';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
-import {buildChatListItems, type ChatListItem, type ToolPhase} from './message-blocks';
+import {buildChatListItems, type ChatListItem} from './message-blocks';
 import {ThinkingBlockCard} from './ThinkingBlockCard';
 import {ToolCallGroupCard} from './ToolCallGroupCard';
 import {ToolTurnPhaseBar} from './ToolTurnPhaseBar';
@@ -31,6 +31,7 @@ type Props = {
   messages: readonly ChatMessage[];
   streamingText?: string;
   streamingThinking?: string;
+  toolInvoking?: boolean;
   agentRunning?: boolean;
   /** When true, user + assistant bubbles use RichContentBody (streaming tail stays plain Text). */
   chatRichTextEnabled?: boolean;
@@ -111,6 +112,7 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
+  toolInvoking = false,
   agentRunning = false,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
@@ -320,35 +322,37 @@ export function MessageList({
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
     if (
       (streamingText && streamingText.length > 0) ||
-      (streamingThinking && streamingThinking.length > 0)
+      (streamingThinking && streamingThinking.length > 0) ||
+      toolInvoking
     ) {
       list.push({kind: 'stream'});
     }
     return list;
-  }, [items, streamingText, streamingThinking]);
+  }, [items, streamingText, streamingThinking, toolInvoking]);
 
   const renderAssistantBubble = (
     body: string,
     thinking: string,
     tools: readonly import('./message-blocks').ToolCallView[],
-    toolPhase: ToolPhase | undefined,
     selected: boolean,
     hidden: boolean,
     messageId: string,
     options?: {
       defaultExpandedThinking?: boolean;
       forcePlainText?: boolean;
+      showToolInvoking?: boolean;
     },
   ) => {
     const trimmedThinking = thinking.trim();
     const trimmedBody = body.trim();
-    if (!trimmedThinking && !trimmedBody && tools.length === 0 && !toolPhase) {
+    const showToolInvoking = options?.showToolInvoking ?? false;
+    if (!trimmedThinking && !trimmedBody && tools.length === 0 && !showToolInvoking) {
       return null;
     }
     const colors = chatBubbleColors(tokens, false);
     const bubbleFillWidth =
       !trimmedBody &&
-      (trimmedThinking.length > 0 || tools.length > 0 || toolPhase != null);
+      (trimmedThinking.length > 0 || tools.length > 0 || showToolInvoking);
     return (
       <View
         style={[
@@ -372,7 +376,7 @@ export function MessageList({
             richRenderEpoch={richRenderEpoch}
             contentId={`thinking-${messageId}`}
             embedded
-            showDividerBelow={!!trimmedBody || tools.length > 0 || toolPhase != null}
+            showDividerBelow={!!trimmedBody || tools.length > 0 || showToolInvoking}
           />
         ) : null}
         {trimmedBody
@@ -390,7 +394,9 @@ export function MessageList({
               />
             )
           : null}
-        {toolPhase === 'executing' ? <ToolTurnPhaseBar embedded /> : null}
+        {showToolInvoking ? (
+          <ToolTurnPhaseBar embedded label="工具调用中" />
+        ) : null}
         {tools.length > 0 ? (
           <ToolCallGroupCard
             tools={tools}
@@ -480,7 +486,7 @@ export function MessageList({
         return `msg-${row.message.id}`;
       }}
       ListEmptyComponent={
-        !streamingText && !streamingThinking ? (
+        !streamingText && !streamingThinking && !toolInvoking ? (
           <Text style={[styles.empty, {color: tokens.textSecondary}]}>
             暂无消息，发送一条开始对话
           </Text>
@@ -494,11 +500,14 @@ export function MessageList({
                 streamingText ?? '',
                 streamingThinking ?? '',
                 [],
-                undefined,
                 false,
                 false,
                 'stream',
-                {defaultExpandedThinking: true, forcePlainText: true},
+                {
+                  defaultExpandedThinking: true,
+                  forcePlainText: true,
+                  showToolInvoking: toolInvoking,
+                },
               )}
             </View>
           );
@@ -508,7 +517,7 @@ export function MessageList({
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
-        if (!body && !thinking && row.tools.length === 0 && !row.toolPhase) {
+        if (!body && !thinking && row.tools.length === 0) {
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
@@ -519,7 +528,6 @@ export function MessageList({
             body,
             thinking,
             row.tools,
-            row.toolPhase,
             selected,
             hidden,
             row.message.id,

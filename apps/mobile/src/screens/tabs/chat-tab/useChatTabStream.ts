@@ -5,7 +5,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {RefObject} from 'react';
 import type {ChatTranscriptWebViewHandle} from '../../../components/chat/ChatTranscriptWebView';
 import type {ChatTranscriptScrollSnapshot} from '../../../components/chat/ChatTranscriptBridge';
-import {useAgentStreamMetrics} from '../../../hooks/useAgentStreamMetrics';
+import {useStreamToolInvoking} from '../../../hooks/useStreamToolInvoking';
 import {
   getScrollSnapshot,
   scrollCacheKey,
@@ -31,16 +31,15 @@ export function useChatTabStream({
 }: UseChatTabStreamParams) {
   const [agentRunning, setAgentRunning] = useState(false);
   const {
-    metrics: streamMetrics,
+    toolInvoking,
     noteTextDelta,
     noteThinkingDelta,
-    noteToolUseDelta,
-    freezeToLastRun,
-  } = useAgentStreamMetrics(agentRunning);
+    reset: resetToolInvoking,
+  } = useStreamToolInvoking(agentRunning);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
-  const streamMetricsRef = useRef({noteTextDelta, noteThinkingDelta, noteToolUseDelta});
-  streamMetricsRef.current = {noteTextDelta, noteThinkingDelta, noteToolUseDelta};
+  const streamInvokingRef = useRef({noteTextDelta, noteThinkingDelta});
+  streamInvokingRef.current = {noteTextDelta, noteThinkingDelta};
   const pendingBusStreamRef = useRef({text: '', thinking: ''});
   const busStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const useWebviewTranscriptRef = useRef(false);
@@ -50,17 +49,17 @@ export function useChatTabStream({
     () =>
       createStreamBuffer({
         onTextFlush: delta => {
+          streamInvokingRef.current.noteTextDelta(delta);
           if (useWebviewTranscriptRef.current) {
             return;
           }
-          streamMetricsRef.current.noteTextDelta(delta);
           setStreamingText(prev => prev + delta);
         },
         onThinkingFlush: delta => {
+          streamInvokingRef.current.noteThinkingDelta(delta);
           if (useWebviewTranscriptRef.current) {
             return;
           }
-          streamMetricsRef.current.noteThinkingDelta(delta);
           setStreamingThinking(prev => prev + delta);
         },
       }),
@@ -77,11 +76,11 @@ export function useChatTabStream({
     if (useWebviewTranscriptRef.current) {
       if (pending.text.length > 0) {
         transcriptWebRef.current?.pushStreamDelta('text', pending.text);
-        streamMetricsRef.current.noteTextDelta(pending.text);
+        streamInvokingRef.current.noteTextDelta(pending.text);
       }
       if (pending.thinking.length > 0) {
         transcriptWebRef.current?.pushStreamDelta('thinking', pending.thinking);
-        streamMetricsRef.current.noteThinkingDelta(pending.thinking);
+        streamInvokingRef.current.noteThinkingDelta(pending.thinking);
       }
       return;
     }
@@ -116,19 +115,13 @@ export function useChatTabStream({
     [scheduleBusStreamFlush],
   );
 
-  const handleStreamToolUseDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    streamMetricsRef.current.noteToolUseDelta(delta);
-  }, []);
-
   const handleStreamReset = useCallback(() => {
     if (busStreamTimerRef.current != null) {
       clearTimeout(busStreamTimerRef.current);
       busStreamTimerRef.current = null;
     }
     pendingBusStreamRef.current = {text: '', thinking: ''};
+    resetToolInvoking();
     // Discard buffered deltas only — flushing would re-apply text that is already persisted.
     streamBuffer.reset();
     if (useWebviewTranscriptRef.current) {
@@ -137,7 +130,7 @@ export function useChatTabStream({
       setStreamingText('');
       setStreamingThinking('');
     }
-  }, [streamBuffer, transcriptWebRef]);
+  }, [streamBuffer, transcriptWebRef, resetToolInvoking]);
 
   const resetStreamingDisplay = useCallback(() => {
     setStreamingText('');
@@ -153,13 +146,11 @@ export function useChatTabStream({
   return {
     agentRunning,
     setAgentRunning,
-    streamMetrics,
-    freezeToLastRun,
+    toolInvoking,
     streamingText,
     streamingThinking,
     handleStreamText,
     handleStreamThinking,
-    handleStreamToolUseDelta,
     handleStreamReset,
     resetStreamingDisplay,
   };

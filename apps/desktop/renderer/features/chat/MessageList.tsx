@@ -14,6 +14,7 @@ interface MessageListProps {
   messages: readonly ChatMessageDto[];
   streamingText?: string;
   streamingThinking?: string;
+  toolInvoking?: boolean;
   agentRunning?: boolean;
   batchMode?: boolean;
   selectedIds?: ReadonlySet<string>;
@@ -48,6 +49,7 @@ export function MessageList({
   messages,
   streamingText,
   streamingThinking,
+  toolInvoking = false,
   agentRunning = false,
   batchMode = false,
   selectedIds,
@@ -55,7 +57,7 @@ export function MessageList({
   onToggleSelect,
   onOpenMessageMenu,
 }: MessageListProps) {
-  const hasStreaming = !!streamingText || !!streamingThinking;
+  const hasStreaming = !!streamingText || !!streamingThinking || toolInvoking;
 
   if (messages.length === 0 && !hasStreaming) {
     return <p className="chat-messages__empty">暂无消息</p>;
@@ -132,9 +134,6 @@ export function MessageList({
                   alwaysRichText={msg.role === "assistant"}
                 />
               ) : null}
-              {item.toolPhase === "executing" ? (
-                <p className="chat-message__tool-phase">正在执行工具调用…</p>
-              ) : null}
               {item.tools.length > 0 ? (
                 <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
               ) : null}
@@ -156,6 +155,9 @@ export function MessageList({
               <div className="chat-message__markdown">
                 <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
               </div>
+            ) : null}
+            {toolInvoking ? (
+              <p className="chat-message__tool-invoking">工具调用中</p>
             ) : null}
           </div>
         </div>

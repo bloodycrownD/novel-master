@@ -9,12 +9,10 @@ import {
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
-  EVENT_AGENT_STREAM_TOOL_USE_DELTA,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
-  type AgentStreamToolUseDeltaPayload,
 } from '@novel-master/core';
 import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
@@ -34,7 +32,6 @@ type Props = {
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
-  onStreamToolUseDelta?: (delta: string) => void;
   onMessagesChanged: () => void | Promise<void>;
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   onRunFinished?: (payload: AgentRunFinishedPayload) => void;
@@ -50,7 +47,6 @@ export function ChatComposer({
   onStreamText,
   onStreamThinking,
   onStreamReset,
-  onStreamToolUseDelta,
   onMessagesChanged,
   onStepCommitted,
   onRunFinished,
@@ -69,7 +65,6 @@ export function ChatComposer({
   const streamHandlersRef = useRef({
     onStreamText,
     onStreamThinking,
-    onStreamToolUseDelta,
     onMessagesChanged,
     onStreamReset,
     onStepCommitted,
@@ -78,7 +73,6 @@ export function ChatComposer({
   streamHandlersRef.current = {
     onStreamText,
     onStreamThinking,
-    onStreamToolUseDelta,
     onMessagesChanged,
     onStreamReset,
     onStepCommitted,
@@ -105,14 +99,6 @@ export function ChatComposer({
       (payload: AgentStreamThinkingDeltaPayload) => {
         if (payload.sessionId === sid) {
           streamHandlersRef.current.onStreamThinking(payload.text);
-        }
-      },
-    );
-    const subToolUseDelta = bus.subscribe(
-      EVENT_AGENT_STREAM_TOOL_USE_DELTA,
-      (payload: AgentStreamToolUseDeltaPayload) => {
-        if (payload.sessionId === sid) {
-          streamHandlersRef.current.onStreamToolUseDelta?.(payload.delta);
         }
       },
     );
@@ -149,7 +135,6 @@ export function ChatComposer({
     return () => {
       subText.unsubscribe();
       subThinking.unsubscribe();
-      subToolUseDelta.unsubscribe();
       subStep.unsubscribe();
       subFinished.unsubscribe();
     };

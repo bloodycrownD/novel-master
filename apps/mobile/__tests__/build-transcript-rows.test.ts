@@ -61,7 +61,7 @@ describe('buildTranscriptRows', () => {
     expect(tail).not.toHaveProperty('tools');
   });
 
-  it('maps toolPhase on message rows when executing', () => {
+  it('maps pending tools on message rows when incomplete', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
@@ -71,9 +71,8 @@ describe('buildTranscriptRows', () => {
     expect(row).toMatchObject({
       kind: 'message',
       id: 'a1',
-      toolPhase: 'executing',
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
     });
-    expect(row).not.toHaveProperty('tools');
   });
 
   it('maps message fields for Web rows', () => {
@@ -152,7 +151,7 @@ describe('buildTranscriptRows', () => {
     expect(row).toMatchObject({kind: 'message', hidden: true});
   });
 
-  it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时不应仍显示 executing', () => {
+  it('selectTailTranscriptRows 需全量上下文：hidden tool_result 已配对时显示 success 工具卡', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
@@ -171,10 +170,11 @@ describe('buildTranscriptRows', () => {
     const fromFull = selectTailTranscriptRows(messages, [messages[0]!], {
       agentRunning: true,
     })[0];
-    expect(tailOnly).toMatchObject({toolPhase: 'executing'});
-    expect(fromFull).not.toHaveProperty('toolPhase');
+    expect(tailOnly).toMatchObject({
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'pending'})],
+    });
     expect(fromFull).toMatchObject({
-      tools: [expect.objectContaining({toolUseId: 'tu1'})],
+      tools: [expect.objectContaining({toolUseId: 'tu1', status: 'success'})],
     });
   });
 });

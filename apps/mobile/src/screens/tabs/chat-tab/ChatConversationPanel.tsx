@@ -14,7 +14,6 @@ import type {
 import {AgentPickerModal} from '../../../components/agent/AgentPickerModal';
 import {ChatComposer} from '../../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../../components/chat/ChatMetaBar';
-import {ChatStreamMetricsBar} from '../../../components/chat/ChatStreamMetricsBar';
 import {
   ChatTranscriptWebView,
   type ChatTranscriptWebViewHandle,
@@ -37,8 +36,6 @@ import {SegmentedControl} from '../../../components/ui/SegmentedControl';
 import type {MessageMenuAnchor} from '../../../components/chat/MessageActionMenu';
 import type {ChatListScrollSnapshot} from '../../../services/chat-list-scroll-cache';
 import type {ChatAgentMeta} from '../../../services/chat-agent-meta';
-import type {AgentStreamMetricsView} from '../../../hooks/useAgentStreamMetrics';
-import {setMobileAgentActive} from '../../../runtime/agent-activity';
 import type {ThemeTokens} from '../../../theme/tokens';
 import type {ConversationPanel} from './useChatTabScope';
 
@@ -50,7 +47,7 @@ export type ChatConversationPanelProps = {
   projectId: string | undefined;
   sessionId: string | undefined;
   agentMeta: ChatAgentMeta;
-  streamMetrics: AgentStreamMetricsView | null;
+  toolInvoking: boolean;
   messageBatchActive: boolean;
   messageBatchSelectedCount: number;
   messageBatchSelectedIds: ReadonlySet<string>;
@@ -111,7 +108,6 @@ export type ChatConversationPanelProps = {
   onAgentRunningChange: (running: boolean) => void;
   onStreamText: (delta: string) => void;
   onStreamThinking: (delta: string) => void;
-  onStreamToolUseDelta: (delta: string) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void;
   onStepCommitted: (payload: AgentStepCommittedPayload) => void;
@@ -133,7 +129,7 @@ export function ChatConversationPanel({
   projectId,
   sessionId,
   agentMeta,
-  streamMetrics,
+  toolInvoking,
   messageBatchActive,
   messageBatchSelectedCount,
   messageBatchSelectedIds,
@@ -192,7 +188,6 @@ export function ChatConversationPanel({
   onAgentRunningChange,
   onStreamText,
   onStreamThinking,
-  onStreamToolUseDelta,
   onStreamReset,
   onMessagesChanged,
   onStepCommitted,
@@ -255,9 +250,6 @@ export function ChatConversationPanel({
             ]}
             pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
             <ChatMetaBar meta={agentMeta} />
-            {streamMetrics != null ? (
-              <ChatStreamMetricsBar metrics={streamMetrics} />
-            ) : null}
             {messageBatchActive ? (
               <MessageBatchHeader
                 selectedCount={messageBatchSelectedCount}
@@ -275,6 +267,7 @@ export function ChatConversationPanel({
                 messages={chatMessages}
                 hasMore={hasMoreMessages}
                 agentRunning={agentRunning}
+                toolInvoking={toolInvoking}
                 flags={transcriptFlags}
                 selectedMessageIds={messageBatchSelectedIds}
                 menuCloseSignal={webMenuCloseSignal}
@@ -294,6 +287,7 @@ export function ChatConversationPanel({
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
+                toolInvoking={toolInvoking}
                 agentRunning={agentRunning}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
@@ -328,7 +322,6 @@ export function ChatConversationPanel({
               }}
               onStreamText={onStreamText}
               onStreamThinking={onStreamThinking}
-              onStreamToolUseDelta={onStreamToolUseDelta}
               onStreamReset={onStreamReset}
               onMessagesChanged={onMessagesChanged}
               onStepCommitted={onStepCommitted}

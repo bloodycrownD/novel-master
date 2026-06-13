@@ -25,6 +25,8 @@ function statusLabel(status: ToolCallView['status']): string {
       return '成功';
     case 'error':
       return '失败';
+    case 'pending':
+      return '执行中';
     default:
       return '';
   }
@@ -32,9 +34,15 @@ function statusLabel(status: ToolCallView['status']): string {
 
 function statusColor(
   status: ToolCallView['status'],
-  tokens: {primary: string; danger: string},
+  tokens: {primary: string; danger: string; textSecondary: string},
 ): string {
-  return status === 'error' ? tokens.danger : tokens.primary;
+  if (status === 'error') {
+    return tokens.danger;
+  }
+  if (status === 'pending') {
+    return tokens.textSecondary;
+  }
+  return tokens.primary;
 }
 
 export function ToolCallCard({
