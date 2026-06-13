@@ -204,6 +204,30 @@ describe('useAutoUpdateCheck', () => {
       expect.objectContaining({actionLabel: '查看'}),
     );
   });
+
+  it('update-available still shows toast while snooze is active', async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    mockReadSnoozeUntil.mockResolvedValue(future);
+    mockCheckForUpdates.mockResolvedValue({
+      status: 'update-available',
+      remoteVersion: '9.9.9',
+      releaseUrl: 'https://example.com',
+      releaseNotesExcerpt: '',
+    });
+
+    act(() => {
+      TestRenderer.create(<TestHost />);
+    });
+    await flushAutoCheck();
+
+    expect(mockCheckForUpdates).toHaveBeenCalled();
+    expect(mockPersistUpdateCheckResult).toHaveBeenCalled();
+    expect(modalProps?.visible).toBe(false);
+    expect(mockShowToast).toHaveBeenCalledWith(
+      '发现新版本 9.9.9',
+      expect.objectContaining({actionLabel: '查看'}),
+    );
+  });
 });
 
 describe('isSnoozed', () => {

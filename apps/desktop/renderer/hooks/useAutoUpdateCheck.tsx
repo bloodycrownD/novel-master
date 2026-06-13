@@ -99,10 +99,10 @@ export function AutoUpdateCheckHost() {
         }
         await persistSuccessfulCheck(checkRes.data);
 
-        if (snoozed) return;
-
         if (checkRes.data.status === "up-to-date") {
-          setResultModal("up-to-date");
+          if (!snoozed) {
+            setResultModal("up-to-date");
+          }
           return;
         }
 

@@ -79,10 +79,10 @@ export function useAutoUpdateCheck(): React.ReactNode {
           const data = await checkForUpdates();
           await persistUpdateCheckResult(appUi, data);
 
-          if (snoozed) return;
-
           if (data.status === 'up-to-date') {
-            setResultModal('up-to-date');
+            if (!snoozed) {
+              setResultModal('up-to-date');
+            }
             return;
           }
 
