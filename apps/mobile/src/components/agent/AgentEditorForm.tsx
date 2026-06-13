@@ -705,10 +705,12 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             ]}>
             <View style={styles.blockHeader}>
               <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>Chat</Text>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                  {PROMPT_REGION_LABELS.chat}
+                </Text>
               </View>
               <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                会话历史
+                {PROMPT_REGION_LABELS.chat}
               </Text>
             </View>
             <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
@@ -789,7 +791,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 />
                 {!isDynamicBlockPersistent(block) ? (
                   <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                    lifecycle: once — 仅首轮 agent step 带入。
+                    {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
                   </Text>
                 ) : null}
                 <FormField label="内容" tokens={tokens}>

@@ -12,6 +12,13 @@ const ROLE_LABEL: Record<string, string> = {
   tool: '工具',
 };
 
+function segmentTitleLabel(title: string): string {
+  if (title === 'system') {
+    return ROLE_LABEL.system;
+  }
+  return title;
+}
+
 export type PromptPreviewSegmentView = {
   readonly id: string;
   readonly role: string;
@@ -63,7 +70,7 @@ export function PromptPreviewSegmentCard({segment}: Props) {
             {roleLabel}
           </Text>
           <Text style={[styles.title, {color: tokens.text}]} numberOfLines={1}>
-            {segment.title}
+            {segmentTitleLabel(segment.title)}
           </Text>
           {!expanded ? (
             <Text

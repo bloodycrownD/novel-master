@@ -621,8 +621,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
           <div className="config-block-card config-block-card--prompt config-block-card--readonly">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">Chat</span>
-              <span className="config-block-card__meta">会话历史</span>
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chat}</span>
+              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.chat}</span>
             </div>
             <p className="config-block-card__hint">
               运行时注入当前会话可见消息，不可配置、不可排序。
@@ -702,7 +702,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   </div>
                   {!isDynamicBlockPersistent(block) ? (
                     <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
-                      lifecycle: once — 仅首轮 agent step 带入。
+                      {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
                     </p>
                   ) : null}
                   <SettingsField label="内容">

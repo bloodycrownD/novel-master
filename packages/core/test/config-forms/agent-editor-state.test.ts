@@ -253,6 +253,32 @@ test("countFormPromptSources ignores enabled system without content", () => {
   );
 });
 
+test("countFormPromptSources counts all regions and respects exclusions", () => {
+  const input = {
+    systemEnabled: true,
+    systemContent: "sys",
+    persist: [
+      { name: "p1", type: "text", role: "user", content: "a" },
+      { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" as const },
+    ],
+    dynamic: [
+      { name: "d1", type: "text" as const, role: "user" as const, content: "b" },
+      { name: "d2", type: "text" as const, role: "user" as const, content: "c" },
+    ],
+  };
+  assert.equal(countFormPromptSources(input), 5);
+  assert.equal(countFormPromptSources(input, { excludeDynamicIndex: 1 }), 4);
+  assert.equal(countFormPromptSources(input, { excludeWorktree: true }), 4);
+  assert.equal(
+    countFormPromptSources(input, {
+      excludePersistTextIndex: 0,
+      excludeDynamicIndex: 0,
+      excludeWorktree: true,
+    }),
+    2,
+  );
+});
+
 test("buildAgentDefinitionFromForm rejects persist macros", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",

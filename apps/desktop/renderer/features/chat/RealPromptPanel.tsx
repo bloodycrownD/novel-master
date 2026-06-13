@@ -11,9 +11,16 @@ interface RealPromptPanelProps {
 
 const ROLE_LABELS: Record<string, string> = {
   system: PROMPT_REGION_LABELS.system,
-  user: "User",
-  assistant: "Assistant",
+  user: "用户",
+  assistant: "助手",
 };
+
+function segmentTitleLabel(title: string): string {
+  if (title === "system") {
+    return PROMPT_REGION_LABELS.system;
+  }
+  return title;
+}
 
 function previewLine(body: string): string {
   const line = body.replace(/\r\n/g, "\n").split("\n")[0]?.trim() ?? "";
@@ -79,7 +86,9 @@ export function RealPromptPanel({
             >
               <span className="prompt-segment__text">
                 <span className="prompt-segment__role">{roleLabel}</span>
-                <span className="prompt-segment__title">{segment.title}</span>
+                <span className="prompt-segment__title">
+                  {segmentTitleLabel(segment.title)}
+                </span>
                 <span className="prompt-segment__preview">
                   {collapsedHint(segment.body)}
                 </span>

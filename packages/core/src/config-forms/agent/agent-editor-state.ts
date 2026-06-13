@@ -25,9 +25,14 @@ export const TOOL_MODE_OPTIONS: Array<{ value: ToolsMode; label: string }> = [
   { value: "deny", label: "黑名单" },
 ];
 
+const ROLE_LABELS: Record<(typeof PROMPT_BLOCK_ROLES)[number], string> = {
+  user: "用户",
+  assistant: "助手",
+};
+
 export const ROLE_OPTIONS = PROMPT_BLOCK_ROLES.map((role) => ({
   value: role,
-  label: role,
+  label: ROLE_LABELS[role],
 }));
 
 /** Agent 编辑器表单（三区 layout，非扁平 prompts）。 */
@@ -93,6 +98,8 @@ export const PROMPT_REGION_LABELS = {
   systemDisabledHint: "关闭时不写入 prompts.system。",
   systemPlaceholder: "写入 LLM system 字段的单段提示…",
   systemPlaceholderShort: "写入 LLM system 字段…",
+  chat: "会话历史",
+  dynamicLifecycleOnceHint: "仅首轮 agent step 带入。",
 } as const;
 
 export function blockTypeLabel(
