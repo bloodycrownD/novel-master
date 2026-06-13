@@ -486,7 +486,7 @@
 | tokenRatio | 0–1；基于当前模型 `contextWindowTokens` × 比例 |
 | visibleFloor | 可见消息条数阈值 |
 | 触发逻辑 | OR（至少填一项校验）；对齐 Core `CompactionConditions` schemaVersion 3 |
-| 动作 | 不在此页配置；正式 App 由「事件配置」处理 hide/refresh-macros |
+| 动作 | 不在此页配置；正式 App 由「事件配置」处理 hide-message |
 | 保存 | localStorage `globalCompactionConditions` mock |
 
 ### 10.2 扩展设置页（`settings`）
