@@ -15,6 +15,7 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {AgentDefinition} from '@novel-master/core';
+import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
@@ -34,7 +35,9 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 interface AgentRow {
   id: string;
-  def: AgentDefinition;
+  name: string;
+  def?: AgentDefinition;
+  decodeError?: string;
   meta: string;
 }
 
@@ -43,7 +46,7 @@ const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
 function agentMeta(def: AgentDefinition, modelLabel: string, workspace: boolean): string {
   const steps = def.runtime?.maxSteps ?? 20;
   const modelPart = workspace ? `${modelLabel} · 工作区` : modelLabel;
-  return `${modelPart} · maxSteps ${steps}`;
+  return `${modelPart} · ${AGENT_LIST_LABELS.maxSteps(steps)}`;
 }
 
 type Props = {
@@ -88,20 +91,35 @@ export function AgentList({onCreate}: Props) {
       }
       const enriched: AgentRow[] = [];
       for (const id of ids) {
-        const def = await runtime.agentRegistry.get(id);
-        let meta: string;
-        if (def.model) {
-          let label = def.model;
-          try {
-            label = await resolveModelDisplayLabel(runtime, def.model);
-          } catch {
-            /* use raw id */
+        try {
+          const def = await runtime.agentRegistry.get(id);
+          let meta: string;
+          if (def.model) {
+            let label = def.model;
+            try {
+              label = await resolveModelDisplayLabel(runtime, def.model);
+            } catch {
+              /* 使用原始 model id */
+            }
+            meta = agentMeta(def, label, false);
+          } else {
+            meta = agentMeta(def, workspaceLabel, true);
           }
-          meta = agentMeta(def, label, false);
-        } else {
-          meta = agentMeta(def, workspaceLabel, true);
+          enriched.push({
+            id,
+            name: def.name?.trim() || id,
+            def,
+            meta,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          enriched.push({
+            id,
+            name: id,
+            decodeError: message,
+            meta: AGENT_LIST_LABELS.needsRepair,
+          });
         }
-        enriched.push({id, def, meta});
       }
       setRows(enriched);
     } finally {
@@ -111,8 +129,10 @@ export function AgentList({onCreate}: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      reload().catch(() => setRows([]));
-    }, [reload]),
+      reload().catch(err =>
+        showToast(toastMessage('加载 Agent 列表失败', err)),
+      );
+    }, [reload, showToast]),
   );
 
   const handleRename = async (agentId: string, name: string) => {
@@ -268,7 +288,7 @@ export function AgentList({onCreate}: Props) {
                 <Text
                   style={[styles.name, {color: tokens.text}]}
                   numberOfLines={1}>
-                  {item.def.name}
+                  {item.name}
                 </Text>
                 <Text
                   style={[styles.meta, {color: tokens.textSecondary}]}
@@ -311,7 +331,7 @@ export function AgentList({onCreate}: Props) {
           if (action === 'rename') {
             const row = rows.find(r => r.id === id);
             if (row) {
-              setRenamePrompt({agentId: id, initialName: row.def.name});
+              setRenamePrompt({agentId: id, initialName: row.name});
             }
           } else if (action === 'duplicate') {
             handleDuplicate(id).catch(() => undefined);

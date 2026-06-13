@@ -36,13 +36,14 @@ export async function handleAgentRegistryList(): Promise<
     const rows: AgentRegistryListItemDto[] = [];
     for (const agentId of ids) {
       let name = agentId;
+      let decodeError: string | undefined;
       try {
         const def = await rt.agentRegistry.get(agentId);
         name = def.name?.trim() || agentId;
-      } catch {
-        /* keep id */
+      } catch (err) {
+        decodeError = formatIpcError(err).message;
       }
-      rows.push({ agentId, name });
+      rows.push(decodeError != null ? { agentId, name, decodeError } : { agentId, name });
     }
     return { ok: true, data: rows };
   } catch (err) {
