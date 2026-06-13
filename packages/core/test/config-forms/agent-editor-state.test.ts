@@ -10,11 +10,32 @@ import {
   formSnapshotJson,
   isDynamicBlockPersistent,
   layoutFromFormInput,
+  PROMPT_REGION_LABELS,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   withDynamicBlockPersistence,
   WORKTREE_BLOCK_WIRE_NAME,
 } from "../../src/config-forms/agent/agent-editor-state.js";
+
+test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
+  assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
+  assert.equal(PROMPT_REGION_LABELS.apiSystemField, "系统提示词");
+  assert.equal(PROMPT_REGION_LABELS.systemPromptTitle, "系统提示词");
+  assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
+  assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
+  assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
+  assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+
+  const values = Object.values(PROMPT_REGION_LABELS).filter(
+    (value): value is string => typeof value === "string",
+  );
+  for (const value of values) {
+    assert.doesNotMatch(value, /API system/i);
+    assert.doesNotMatch(value, /Prompt 布局/i);
+    assert.doesNotMatch(value, /prompts\.system/i);
+    assert.doesNotMatch(value, /LLM system/i);
+  }
+});
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {
   assert.equal(buildToolsPolicyFromSelection("default", ["read"]), undefined);

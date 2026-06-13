@@ -41,6 +41,10 @@
     "./config-forms/events": {
       "types": "./dist/config-forms/events/index.d.ts",
       "import": "./dist/config-forms/events/index.js"
+    },
+    "./config-forms/shared": {
+      "types": "./dist/config-forms/shared/index.d.ts",
+      "import": "./dist/config-forms/shared/index.js"
     }
   },
   "scripts": {
