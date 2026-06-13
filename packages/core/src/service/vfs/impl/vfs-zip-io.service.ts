@@ -25,13 +25,9 @@ import { deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type {
-  VfsZipBuildFn,
   VfsZipImportOptions,
   VfsZipIoService,
 } from "@/domain/vfs/ports/vfs-zip-io.port.js";
-
-const defaultBuildZip: VfsZipBuildFn = (input) =>
-  buildVfsZip(input.files, input.directoryEntryNames);
 
 /** @internal test hook for import transaction rollback verification */
 export type VfsZipImportTestHook = {
@@ -73,12 +69,10 @@ async function ensureEmptyDirectoryRow(
 export type DefaultVfsZipIoServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: VfsZipImportTestHook;
-  readonly buildZip?: VfsZipBuildFn;
 };
 
 export class DefaultVfsZipIoService implements VfsZipIoService {
   private readonly testHook?: VfsZipImportTestHook;
-  private readonly buildZip?: VfsZipBuildFn;
 
   constructor(
     private readonly conn: TdbcConnection,
@@ -86,7 +80,6 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
     options: DefaultVfsZipIoServiceOptions = {},
   ) {
     this.testHook = options.testHook;
-    this.buildZip = options.buildZip;
   }
 
   async export(scope: VfsScope): Promise<Uint8Array> {
@@ -119,11 +112,7 @@ export class DefaultVfsZipIoService implements VfsZipIoService {
       directoryZipNames.push(zipDirectoryEntryNameFromLogical(logical));
     }
 
-    const build = this.buildZip ?? defaultBuildZip;
-    return await build({
-      files: zipFiles,
-      directoryEntryNames: directoryZipNames,
-    });
+    return buildVfsZip(zipFiles, directoryZipNames);
   }
 
   async import(

@@ -6,10 +6,7 @@
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
-import type {
-  VfsZipBuildFn,
-  VfsZipIoService,
-} from "@/domain/vfs/ports/vfs-zip-io.port.js";
+import type { VfsZipIoService } from "@/domain/vfs/ports/vfs-zip-io.port.js";
 import {
   DefaultVfsZipIoService,
   type VfsZipImportTestHook,
@@ -18,8 +15,6 @@ import {
 export type CreateVfsZipIoServiceOptions = {
   /** @internal import rollback tests only */
   readonly testHook?: VfsZipImportTestHook;
-  /** Replaces fflate STORE packing; omitted uses {@link buildVfsZip}. */
-  readonly buildZip?: VfsZipBuildFn;
 };
 
 /**
@@ -32,6 +27,5 @@ export function createVfsZipIoService(
   const repo = new SqliteVfsEntryRepository(conn);
   return new DefaultVfsZipIoService(conn, repo, {
     testHook: options.testHook,
-    buildZip: options.buildZip,
   });
 }

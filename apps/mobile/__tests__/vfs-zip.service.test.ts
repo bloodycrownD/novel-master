@@ -1,6 +1,5 @@
 import {Platform} from 'react-native';
 import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
-import {nativeBuildVfsZip} from '../src/native/vfs-zip-native';
 import {VfsZipError} from '@novel-master/core';
 
 const mockExport = jest.fn();
@@ -20,10 +19,6 @@ jest.mock('@novel-master/core', () => ({
   ...jest.requireActual('@novel-master/core'),
   createVfsZipIoService: (...args: unknown[]) => mockCreateVfsZipIoService(...args),
   parseVfsZip: (...args: unknown[]) => mockParseVfsZip(...args),
-}));
-
-jest.mock('../src/native/vfs-zip-native', () => ({
-  nativeBuildVfsZip: jest.fn(),
 }));
 
 jest.mock('@react-native-documents/picker', () => ({
@@ -77,7 +72,6 @@ describe('vfs-zip.service', () => {
 
   beforeEach(() => {
     Platform.OS = 'android';
-    jest.mocked(nativeBuildVfsZip).mockReset();
     mockExport.mockReset();
     mockImport.mockReset();
     mockCreateVfsZipIoService.mockReset();
@@ -115,15 +109,14 @@ describe('vfs-zip.service', () => {
     mockReadFile.mockResolvedValue(VALID_ZIP_BASE64);
   });
 
-  it('M-native-1: Android export passes buildZip to createVfsZipIoService', async () => {
+  it('Android export uses Core default createVfsZipIoService(conn)', async () => {
     await exportVfsZip(runtime, scope);
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(
-      runtime.conn,
-      expect.objectContaining({buildZip: expect.any(Function)}),
-    );
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
+    expect(mockCreateVfsZipIoService).toHaveBeenCalledWith(runtime.conn);
+    expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
   });
 
-  it('iOS export omits buildZip and uses Core default STORE until M3', async () => {
+  it('iOS export uses Core default createVfsZipIoService(conn)', async () => {
     Platform.OS = 'ios';
     await exportVfsZip(runtime, scope);
     expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
@@ -131,7 +124,7 @@ describe('vfs-zip.service', () => {
     expect(mockCreateVfsZipIoService.mock.calls[0]?.[1]).toBeUndefined();
   });
 
-  it('M-native-2: writes cache zip then opens save-as dialog', async () => {
+  it('writes cache zip then opens save-as dialog', async () => {
     const result = await exportVfsZip(runtime, scope);
     expect(result).toBe('saved');
     expect(mockWriteFile).toHaveBeenCalledWith(
@@ -148,46 +141,6 @@ describe('vfs-zip.service', () => {
       }),
     );
     expect(mockUnlink).toHaveBeenCalledWith('/cache/vfs-session-s.zip');
-  });
-
-  it('M-native-4: non-ASCII entry names use Core STORE without native zip', async () => {
-    mockCreateVfsZipIoService.mockImplementation(
-      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => ({
-        export: () =>
-          opts!.buildZip!({
-            files: new Map([['笔记/第一章.md', '正文']]),
-            directoryEntryNames: ['空目录/'],
-          }),
-        import: mockImport,
-      }),
-    );
-
-    const result = await exportVfsZip(runtime, scope);
-
-    expect(result).toBe('saved');
-    expect(nativeBuildVfsZip).not.toHaveBeenCalled();
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-  });
-
-  it('M-native-3: native zip failure silently uses Core STORE in buildZip', async () => {
-    jest.mocked(nativeBuildVfsZip).mockRejectedValue(new Error('native zip failed'));
-    mockCreateVfsZipIoService.mockImplementation(
-      (_conn: unknown, opts?: {buildZip?: (input: unknown) => Promise<Uint8Array>}) => ({
-        export: () =>
-          opts!.buildZip!({
-            files: new Map<string, string>(),
-            directoryEntryNames: [],
-          }),
-        import: mockImport,
-      }),
-    );
-
-    const result = await exportVfsZip(runtime, scope);
-
-    expect(result).toBe('saved');
-    expect(nativeBuildVfsZip).toHaveBeenCalled();
-    expect(mockCreateVfsZipIoService).toHaveBeenCalledTimes(1);
-    expect(mockSaveDocuments).toHaveBeenCalled();
   });
 
   it('surfaces VfsZipError from gather without retry', async () => {

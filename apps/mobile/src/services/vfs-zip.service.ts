@@ -3,13 +3,10 @@
  * Export: temp cache file + platform "Save as" (local destination).
  * Import: document picker + keepLocalCopy + confirmed full replace.
  */
-import {Platform} from 'react-native';
 import ReactNativeBlobUtil from 'react-native-blob-util';
 import {
-  buildVfsZip,
   createVfsZipIoService,
   type VfsScope,
-  type VfsZipBuildFn,
   type VfsZipImportOptions,
   VfsZipError,
 } from '@novel-master/core';
@@ -22,7 +19,6 @@ import {
   types,
 } from '@react-native-documents/picker';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {nativeBuildVfsZip} from '../native/vfs-zip-native';
 
 function vfsZipExportFileName(scope: VfsScope): string {
   if (scope.kind === 'global') {
@@ -135,58 +131,12 @@ async function readPickedZipAsBytes(uri: string): Promise<Uint8Array> {
   return bytes;
 }
 
-/** 检测 gather 结果是否含非 ASCII 条目名（native zip 易乱码 UTF-8 路径）。 */
-export function hasNonAsciiZipEntryName(input: {
-  files: ReadonlyMap<string, string>;
-  directoryEntryNames: readonly string[];
-}): boolean {
-  const nonAscii = /[^\x00-\x7F]/;
-  for (const name of input.files.keys()) {
-    if (nonAscii.test(name)) {
-      return true;
-    }
-  }
-  for (const name of input.directoryEntryNames) {
-    if (nonAscii.test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/** Android：优先 native zip（仅 ASCII 路径），否则或失败时静默用 Core STORE。 */
-const androidBuildZip: VfsZipBuildFn = async (input) => {
-  if (hasNonAsciiZipEntryName(input)) {
-    return buildVfsZip(input.files, input.directoryEntryNames);
-  }
-  try {
-    return await nativeBuildVfsZip(input);
-  } catch {
-    return buildVfsZip(input.files, input.directoryEntryNames);
-  }
-};
-
-async function exportVfsZipBytes(
-  runtime: MobileNovelMasterRuntime,
-  scope: VfsScope,
-): Promise<Uint8Array> {
-  if (Platform.OS !== 'android') {
-    // iOS still uses Core default fflate STORE until M3 native zip is validated.
-    const zipSvc = createVfsZipIoService(runtime.conn);
-    return await zipSvc.export(scope);
-  }
-
-  const zipSvc = createVfsZipIoService(runtime.conn, {
-    buildZip: androidBuildZip,
-  });
-  return await zipSvc.export(scope);
-}
-
 export async function exportVfsZip(
   runtime: MobileNovelMasterRuntime,
   scope: VfsScope,
 ): Promise<'saved' | 'cancelled'> {
-  const bytes = await exportVfsZipBytes(runtime, scope);
+  const zipSvc = createVfsZipIoService(runtime.conn);
+  const bytes = await zipSvc.export(scope);
   assertZipArchive(bytes);
 
   const fileName = vfsZipExportFileName(scope);
@@ -234,4 +184,3 @@ export async function importVfsZip(
     confirmed: options.confirmed,
   });
 }
-

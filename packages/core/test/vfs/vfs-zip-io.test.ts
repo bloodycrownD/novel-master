@@ -367,52 +367,6 @@ describe("VfsZipIoService", () => {
     assert.equal(read.content, content);
   });
 
-  it("Z-buildZip-1: custom builder receives gather output once", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-buildZip-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "A");
-    await vfs.write("/dir/b.md", "B");
-
-    let callCount = 0;
-    const zipSvc = createVfsZipIoService(ctx.conn, {
-      buildZip: (input) => {
-        callCount += 1;
-        assert.equal(input.files.get("a.md"), "A");
-        assert.equal(input.files.get("dir/b.md"), "B");
-        assert.ok(!input.files.has("/a.md"));
-        return buildVfsZip(input.files, input.directoryEntryNames);
-      },
-    });
-
-    await zipSvc.export({
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    assert.equal(callCount, 1);
-  });
-
-  it("Z-buildZip-2: custom builder return value is export result", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-buildZip2-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/x.md", "x");
-
-    const magic = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
-    const zipSvc = createVfsZipIoService(ctx.conn, {
-      buildZip: () => magic,
-    });
-    const bytes = await zipSvc.export({
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    assert.deepEqual(bytes, magic);
-  });
-
   it("Z8: GBK 中文路径 ZIP 导入后列表路径正确", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-z8-${testIsolationSuffix()}`);
@@ -458,23 +412,4 @@ describe("VfsZipIoService", () => {
     assert.equal((await vfs.read("/new.md")).content, "新内容");
   });
 
-  it("Z-buildZip-3: without buildZip, session export paths match Z1", async () => {
-    const ctx = getNovelMasterTestContext();
-    const project = await ctx.projects.create(`P-buildZip3-${testIsolationSuffix()}`);
-    const session = await ctx.sessions.create(project.id);
-    const vfs = ctx.sessionVfs(project.id, session.id);
-    await vfs.write("/a.md", "A");
-    await vfs.write("/dir/b.md", "B");
-
-    const zipSvc = createVfsZipIoService(ctx.conn);
-    const bytes = await zipSvc.export({
-      kind: "session",
-      projectId: project.id,
-      sessionId: session.id,
-    });
-    const entries = unzipSync(bytes);
-    assert.ok("a.md" in entries);
-    assert.ok("dir/b.md" in entries);
-    assert.equal(new TextDecoder().decode(entries["a.md"]!), "A");
-  });
 });
