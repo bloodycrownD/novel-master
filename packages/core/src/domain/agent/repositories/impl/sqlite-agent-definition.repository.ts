@@ -52,6 +52,16 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
     return rowToDefinition(rows[0]!);
   }
 
+  async exists(agentId: string): Promise<boolean> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT 1 FROM agent_definition WHERE agent_id = #{agentId} LIMIT 1`,
+      { agentId },
+    );
+    return rows.length > 0;
+  }
+
   async upsert(agentId: string, def: AgentDefinition): Promise<void> {
     const now = Date.now();
     const wire = encode(def, agentDefinitionSchema);
