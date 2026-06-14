@@ -24,6 +24,10 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";
 import { ChatComposer } from "./ChatComposer";
 import {
+  deriveComposerSendState,
+  findLastVisibleMessageDto,
+} from "./composer-send-state";
+import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from "./message-edit";
@@ -101,8 +105,10 @@ export function ConversationPanel({
     [messages],
   );
 
-  const canResumeWithoutInput =
-    messages.length > 0 && messages[messages.length - 1]?.role === "user";
+  const composerSendState = useMemo(
+    () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
+    [messages],
+  );
 
   useEffect(() => {
     void reloadMessages();
@@ -543,7 +549,11 @@ export function ConversationPanel({
             projectId={projectId}
             sessionId={sessionId}
             running={running}
-            canResumeWithoutInput={canResumeWithoutInput}
+            canResumeWithoutInput={composerSendState.canResumeWithoutInput}
+            lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
+            lastMessageIsPlainUserText={
+              composerSendState.lastMessageIsPlainUserText
+            }
             onRunningChange={setRunning}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}

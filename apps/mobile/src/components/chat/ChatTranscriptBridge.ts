@@ -51,6 +51,8 @@ export type TranscriptTheme = {
 export type TranscriptFlags = {
   readonly richText: boolean;
   readonly batchMode: boolean;
+  /** 隐藏 / 恢复专用多选；与 batchMode 同时为 true 时生效。 */
+  readonly batchModeKind?: 'hide' | 'restore' | null;
   /** When true, long-press menu is suppressed (e.g. agent running). */
   readonly menuDisabled?: boolean;
 };

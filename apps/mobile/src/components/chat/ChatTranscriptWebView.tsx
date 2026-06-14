@@ -269,6 +269,7 @@ export const ChatTranscriptWebView = forwardRef<
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
+      batchModeKind: flags?.batchModeKind ?? null,
       menuDisabled: agentRunning,
     };
     postToWeb({
@@ -279,6 +280,7 @@ export const ChatTranscriptWebView = forwardRef<
   }, [
     flags?.richText,
     flags?.batchMode,
+    flags?.batchModeKind,
     postToWeb,
     tokens,
     agentRunning,
@@ -513,6 +515,7 @@ export const ChatTranscriptWebView = forwardRef<
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
+      batchModeKind: flags?.batchModeKind ?? null,
       menuDisabled: agentRunning,
     };
     const prev = prevSentFlagsRef.current;
@@ -520,6 +523,7 @@ export const ChatTranscriptWebView = forwardRef<
       prev != null &&
       prev.richText === resolvedFlags.richText &&
       prev.batchMode === resolvedFlags.batchMode &&
+      prev.batchModeKind === resolvedFlags.batchModeKind &&
       prev.menuDisabled === resolvedFlags.menuDisabled
     ) {
       return;
@@ -534,6 +538,7 @@ export const ChatTranscriptWebView = forwardRef<
     webReady,
     flags?.richText,
     flags?.batchMode,
+    flags?.batchModeKind,
     agentRunning,
     postToWeb,
   ]);

@@ -39,7 +39,7 @@ export function buildTranscriptBootScript(): string {
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
-    flags: { richText: false, batchMode: false, menuDisabled: false },
+    flags: { richText: false, batchMode: false, batchModeKind: null, menuDisabled: false },
     selectedIds: [],
     menu: null,
     menuOverlayHandler: null,
@@ -359,15 +359,61 @@ export function buildTranscriptBootScript(): string {
     return state.selectedIds.indexOf(messageId) >= 0;
   }
 
+  function transcriptSelectableRole(messageRole, batchModeKind) {
+    if (!batchModeKind) return 'none';
+    if (batchModeKind === 'hide') return messageRole === 'assistant' ? 'assistant' : 'none';
+    return messageRole === 'user' ? 'user' : 'none';
+  }
+
+  function parseUserVfsAction(text) {
+    if (!text || text.indexOf('<user-vfs-action') < 0) return null;
+    var match = text.match(/<user-vfs-action\\s+([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/user-vfs-action>)/);
+    if (!match) return null;
+    var attrs = match[1];
+    var inner = match[2] || '';
+    var kind = (attrs.match(/kind="([^"]+)"/) || [])[1] || '';
+    var path = (attrs.match(/path="([^"]+)"/) || [])[1] || '';
+    var method = (attrs.match(/method="([^"]+)"/) || [])[1] || '';
+    var hunks = [];
+    var hunkRe = /<edit-hunk[^>]*index="(\\d+)"[^>]*>[\\s\\S]*?<old>([\\s\\S]*?)<\\/old>[\\s\\S]*?<new>([\\s\\S]*?)<\\/new>[\\s\\S]*?<\\/edit-hunk>/g;
+    var hm;
+    while ((hm = hunkRe.exec(inner)) !== null) {
+      hunks.push({ index: hm[1], old: hm[2], new: hm[3] });
+    }
+    return { kind: kind, path: path, method: method, hunks: hunks };
+  }
+
+  function renderUserVfsActionCard(action) {
+    var html = '<div class="vfs-action-card">';
+    html += '<div class="vfs-action-title">' + escapeHtml(action.kind) + ' · ' + escapeHtml(action.path) + '</div>';
+    if (action.method) {
+      html += '<div class="vfs-action-meta">method: ' + escapeHtml(action.method) + '</div>';
+    }
+    for (var i = 0; i < action.hunks.length; i++) {
+      var h = action.hunks[i];
+      html += '<details class="edit-hunk"><summary>edit-hunk #' + escapeHtml(h.index) + '</summary>';
+      html += '<div class="edit-hunk-old"><span class="edit-hunk-label">old</span><pre>' + escapeHtml(h.old) + '</pre></div>';
+      html += '<div class="edit-hunk-new"><span class="edit-hunk-label">new</span><pre>' + escapeHtml(h.new) + '</pre></div>';
+      html += '</details>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderUserBubbleContent(text) {
+    var action = parseUserVfsAction(text);
+    if (action != null) {
+      return renderUserVfsActionCard(action);
+    }
+    return escapeHtml(text);
+  }
+
   function buildMenuItems(row) {
     var items = [];
     if (row.text) items.push({ label: '编辑', action: 'edit' });
-    if (row.hidden) items.push({ label: '取消隐藏', action: 'unhide' });
-    else items.push({ label: '隐藏', action: 'hide' });
     items.push({ label: '复制', action: 'copy' });
     items.push({ label: 'Fork', action: 'fork' });
     items.push({ label: '回滚', action: 'rollback', danger: true });
-    items.push({ label: '删除', action: 'delete', danger: true });
     return items;
   }
 
@@ -588,16 +634,20 @@ export function buildTranscriptBootScript(): string {
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
     var selected = isSelected(row.id);
     var selectedClass = selected ? ' selected' : '';
+    var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
+    var rowSelectable = selectableRole !== 'none';
     var html = '';
-    if (state.flags.batchMode) {
+    if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
         '" aria-hidden="true">' +
         (selected ? '✓' : '') + '</div><div class="batch-content">';
+    } else if (state.flags.batchMode) {
+      html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
     }
-    html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '">';
+    html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
     if (role === 'user') {
       if (row.text) {
-        html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
+        html += '<div class="bubble">' + renderUserBubbleContent(row.text) + '</div>';
       }
     } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
       var toolGroupKey = 'msg:' + row.id;
@@ -693,6 +743,7 @@ export function buildTranscriptBootScript(): string {
     return (
       a.richText === b.richText &&
       a.batchMode === b.batchMode &&
+      a.batchModeKind === b.batchModeKind &&
       a.menuDisabled === b.menuDisabled
     );
   }
@@ -996,6 +1047,7 @@ export function buildTranscriptBootScript(): string {
           state.flags = {
             richText: !!p.flags.richText,
             batchMode: !!p.flags.batchMode,
+            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
         }
@@ -1032,6 +1084,7 @@ export function buildTranscriptBootScript(): string {
           var nextFlags = {
             richText: !!p.flags.richText,
             batchMode: !!p.flags.batchMode,
+            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
           if (flagsEqual(state.flags, nextFlags)) {

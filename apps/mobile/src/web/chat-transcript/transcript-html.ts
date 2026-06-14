@@ -65,6 +65,15 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .menu-item { flex: 0 0 auto; display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
     body.menu-open { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .menu-item:last-child { border-bottom: none; }
+    .batch-row.batch-row--ineligible { cursor: default; }
+    .batch-row.batch-row--ineligible .batch-content { opacity: 0.85; }
+    .vfs-action-card { display: flex; flex-direction: column; gap: 6px; text-align: left; }
+    .vfs-action-title { font-weight: 600; font-size: 14px; }
+    .vfs-action-meta { font-size: 12px; opacity: 0.85; }
+    .edit-hunk { margin-top: 4px; font-size: 13px; }
+    .edit-hunk summary { cursor: pointer; font-weight: 500; }
+    .edit-hunk-label { display: block; font-size: 11px; font-weight: 600; opacity: 0.75; margin-bottom: 2px; }
+    .edit-hunk pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; margin: 4px 0 8px; }
     .menu-item.danger { color: #ff3b30; }
   </style>
 </head>

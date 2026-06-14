@@ -16,6 +16,19 @@ export type ComposerSendState = {
   readonly lastMessageIsPlainUserText: boolean;
 };
 
+/** 取会话列表中末条未隐藏消息（对应 spec `lastVisible`）。 */
+export function findLastVisibleMessage(
+  messages: readonly ChatMessage[],
+): ChatMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg != null && !msg.hidden) {
+      return msg;
+    }
+  }
+  return undefined;
+}
+
 /** 由末条可见消息推导 Composer 发送规则。 */
 export function deriveComposerSendState(
   lastMessage: ChatMessage | undefined,

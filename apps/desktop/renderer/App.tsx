@@ -233,20 +233,37 @@ function DesktopOverlays() {
       >
         <button
           type="button"
-          data-session-action="batch-ops"
+          data-session-action="hide-messages"
           onClick={() => {
             closeMenus();
             if (projectId && sessionId) {
               void runSessionAction(
-                "batch-ops",
+                "hide-messages",
                 projectId,
                 sessionId,
-                messageBatch.enter,
+                messageBatch,
               );
             }
           }}
         >
-          批量操作
+          隐藏消息
+        </button>
+        <button
+          type="button"
+          data-session-action="restore-messages"
+          onClick={() => {
+            closeMenus();
+            if (projectId && sessionId) {
+              void runSessionAction(
+                "restore-messages",
+                projectId,
+                sessionId,
+                messageBatch,
+              );
+            }
+          }}
+        >
+          恢复消息
         </button>
         <button
           type="button"

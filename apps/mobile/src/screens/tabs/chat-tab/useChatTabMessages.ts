@@ -13,7 +13,10 @@ import {
   applyTextEditToMessage,
   editableTextFromMessage,
 } from '../../../components/chat/message-edit';
-import {deriveComposerSendState} from '../../../components/chat/composer-send-state';
+import {
+  deriveComposerSendState,
+  findLastVisibleMessage,
+} from '../../../components/chat/composer-send-state';
 import {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
@@ -53,7 +56,7 @@ export function useChatTabMessages({
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
 
   const composerSendState = deriveComposerSendState(
-    chatMessages[chatMessages.length - 1],
+    findLastVisibleMessage(chatMessages),
   );
 
   const canResumeWithoutInput = composerSendState.canResumeWithoutInput;

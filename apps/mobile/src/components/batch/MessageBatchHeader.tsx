@@ -1,28 +1,31 @@
 /**
- * Message batch header: cancel, selection count, and delete/hide/restore actions.
- * Used only in ChatTabScreen message multi-select mode (not ManageHeader VFS batch).
+ * 消息可见性多选顶栏：取消、计数、确认（隐藏或恢复专用）。
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useTheme} from '../../theme/ThemeProvider';
+import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
 
 type Props = {
+  mode: MessageVisibilityBatchMode;
   selectedCount: number;
   onCancel: () => void;
-  onDelete: () => void;
-  onHide: () => void;
-  onRestore: () => void;
+  onConfirm: () => void;
 };
 
 export function MessageBatchHeader({
+  mode,
   selectedCount,
   onCancel,
-  onDelete,
-  onHide,
-  onRestore,
+  onConfirm,
 }: Props) {
   const {tokens} = useTheme();
   const actionsEnabled = selectedCount > 0;
+  const title = mode === 'hide' ? '隐藏消息' : '恢复消息';
+  const hint =
+    mode === 'hide'
+      ? '勾选 assistant 消息以确定隐藏范围'
+      : '勾选 user 消息以确定恢复范围';
 
   return (
     <View style={[styles.wrap, {borderBottomColor: tokens.border}]}>
@@ -31,47 +34,21 @@ export function MessageBatchHeader({
           <Text style={{color: tokens.text}}>取消</Text>
         </Pressable>
         <Text style={[styles.count, {color: tokens.textSecondary}]}>
-          已选 {selectedCount} 项
+          {title} · 已选 {selectedCount} 项
         </Text>
-        <View style={styles.actions}>
-          <Pressable onPress={onDelete} disabled={!actionsEnabled}>
-            <Text
-              style={[
-                styles.actionLabel,
-                {
-                  color: actionsEnabled ? tokens.danger : tokens.textTertiary,
-                },
-              ]}>
-              删除
-            </Text>
-          </Pressable>
-          <Pressable onPress={onHide} disabled={!actionsEnabled}>
-            <Text
-              style={[
-                styles.actionLabel,
-                {
-                  color: actionsEnabled ? tokens.primary : tokens.textTertiary,
-                },
-              ]}>
-              隐藏
-            </Text>
-          </Pressable>
-          <Pressable onPress={onRestore} disabled={!actionsEnabled}>
-            <Text
-              style={[
-                styles.actionLabel,
-                {
-                  color: actionsEnabled ? tokens.primary : tokens.textTertiary,
-                },
-              ]}>
-              恢复
-            </Text>
-          </Pressable>
-        </View>
+        <Pressable onPress={onConfirm} disabled={!actionsEnabled}>
+          <Text
+            style={[
+              styles.actionLabel,
+              {
+                color: actionsEnabled ? tokens.primary : tokens.textTertiary,
+              },
+            ]}>
+            确认
+          </Text>
+        </Pressable>
       </View>
-      <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-        选择要操作的消息
-      </Text>
+      <Text style={[styles.hint, {color: tokens.textSecondary}]}>{hint}</Text>
     </View>
   );
 }
@@ -93,12 +70,6 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'center',
     fontSize: 14,
-  },
-  actions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flexShrink: 1,
   },
   actionLabel: {
     fontSize: 13,

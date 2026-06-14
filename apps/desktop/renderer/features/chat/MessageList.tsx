@@ -3,6 +3,11 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
 import { ToolCallGroupCard } from "./ToolCallGroupCard";
+import type { MessageVisibilityBatchMode } from "./transcript-selectable-role";
+import {
+  isTranscriptRowSelectable,
+  transcriptSelectableRole,
+} from "./transcript-selectable-role";
 
 const ROLE_LABELS: Record<string, string> = {
   user: "用户",
@@ -16,7 +21,7 @@ interface MessageListProps {
   streamingThinking?: string;
   toolInvoking?: boolean;
   agentRunning?: boolean;
-  batchMode?: boolean;
+  batchMode?: MessageVisibilityBatchMode | null;
   selectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
   onToggleSelect?: (messageId: string) => void;
@@ -51,7 +56,7 @@ export function MessageList({
   streamingThinking,
   toolInvoking = false,
   agentRunning = false,
-  batchMode = false,
+  batchMode = null,
   selectedIds,
   chatRichText = false,
   onToggleSelect,
@@ -81,13 +86,17 @@ export function MessageList({
         const selected = selectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
 
+        const selectableRole = transcriptSelectableRole(msg.role, batchMode);
+        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+
         return (
           <div
             key={msg.id}
             className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}`}
             data-message-id={msg.id}
+            data-selectable-role={selectableRole}
             onClick={() => {
-              if (batchMode) {
+              if (batchMode && rowSelectable) {
                 onToggleSelect?.(msg.id);
               }
             }}
@@ -98,7 +107,7 @@ export function MessageList({
               openMenu(msg, e);
             }}
           >
-            {batchMode ? (
+            {batchMode && rowSelectable ? (
               <label className="chat-message__check" aria-label="选择消息">
                 <input type="checkbox" checked={selected} readOnly />
               </label>

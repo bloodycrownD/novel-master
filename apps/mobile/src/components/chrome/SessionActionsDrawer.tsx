@@ -1,5 +1,5 @@
 /**
- * Session actions drawer: rename, prompt preview, compaction, batch ops.
+ * Session actions drawer: rename, prompt preview, compaction, message visibility.
  * Agent/model selection lives under Profile → 我的.
  */
 import React from 'react';
@@ -13,7 +13,8 @@ type Props = {
   onRename?: () => void;
   onCompact?: () => void;
   onRealPrompt?: () => void;
-  onBatchMessages?: () => void;
+  onHideMessages?: () => void;
+  onRestoreMessages?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -22,7 +23,8 @@ export function SessionActionsDrawer({
   onRename,
   onCompact,
   onRealPrompt,
-  onBatchMessages,
+  onHideMessages,
+  onRestoreMessages,
 }: Props) {
   const {tokens} = useTheme();
 
@@ -30,7 +32,8 @@ export function SessionActionsDrawer({
     {label: '聊天重命名', action: onRename},
     {label: '查看提示词', action: onRealPrompt},
     {label: '压缩上下文', action: onCompact},
-    {label: '批量操作', action: onBatchMessages},
+    {label: '隐藏消息', action: onHideMessages},
+    {label: '恢复消息', action: onRestoreMessages},
   ];
 
   return (

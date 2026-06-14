@@ -16,6 +16,11 @@ import {
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import type {ChatMessage} from '@novel-master/core';
+import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
+import {
+  isTranscriptRowSelectable,
+  transcriptSelectableRole,
+} from '../chat/transcript-selectable-role';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
@@ -37,7 +42,7 @@ type Props = {
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
   richRenderEpoch?: number;
-  batchMode?: boolean;
+  batchMode?: MessageVisibilityBatchMode | null;
   selectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (
@@ -116,7 +121,7 @@ export function MessageList({
   agentRunning = false,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
-  batchMode = false,
+  batchMode = null,
   selectedMessageIds,
   onToggleMessageSelect,
   onMessageLongPress,
@@ -534,17 +539,24 @@ export function MessageList({
           )
         );
 
+        const selectableRole = transcriptSelectableRole(row.message.role, batchMode);
+        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+
         if (batchMode) {
           return (
-            <Pressable
-              style={styles.batchRow}
-              onPress={() => onToggleMessageSelect?.(row.message.id)}>
-              <View style={styles.batchCheckboxCol}>
-                <BatchCheckbox
-                  checked={selected}
-                  onToggle={() => onToggleMessageSelect?.(row.message.id)}
-                />
-              </View>
+            <View style={styles.batchRow} accessibilityState={{selected}}>
+              {rowSelectable ? (
+                <Pressable
+                  style={styles.batchCheckboxCol}
+                  onPress={() => onToggleMessageSelect?.(row.message.id)}>
+                  <BatchCheckbox
+                    checked={selected}
+                    onToggle={() => onToggleMessageSelect?.(row.message.id)}
+                  />
+                </Pressable>
+              ) : (
+                <View style={styles.batchCheckboxCol} />
+              )}
               <View
                 style={[
                   styles.batchBubbleCol,
@@ -554,7 +566,7 @@ export function MessageList({
                 ]}>
                 {content}
               </View>
-            </Pressable>
+            </View>
           );
         }
 
