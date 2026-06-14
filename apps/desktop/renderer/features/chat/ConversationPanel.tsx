@@ -41,6 +41,7 @@ import {
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
   isTranscriptRowSelectable,
+  selectVisibilityBatchEligibleIdsFromAnchor,
   transcriptSelectableRole,
 } from "./transcript-selectable-role";
 
@@ -457,22 +458,27 @@ export function ConversationPanel({
 
   const batchHint =
     messageBatch.mode === "hide"
-      ? "勾选 assistant 确定隐藏上界；其之前所有消息将一并隐藏"
+      ? "点击 assistant 将重置并勾选其上界以内全部 assistant"
       : messageBatch.mode === "restore"
-        ? "勾选 user 确定恢复下界；其之后所有消息将一并恢复"
+        ? "点击 user 将重置并勾选其下界及之后全部 user"
         : "";
 
   const handleToggleSelect = useCallback(
     (messageId: string) => {
       const msg = messages.find((m) => m.id === messageId);
-      if (msg == null) {
+      if (msg == null || messageBatch.mode == null) {
         return;
       }
       const role = transcriptSelectableRole(msg.role, messageBatch.mode);
       if (!isTranscriptRowSelectable(role)) {
         return;
       }
-      messageBatch.toggle(messageId);
+      const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
+        messages,
+        messageBatch.mode,
+        messageId,
+      );
+      messageBatch.selectRange(nextIds);
     },
     [messages, messageBatch],
   );

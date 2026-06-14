@@ -317,6 +317,7 @@ export function ChatConversationPanel({
             ) : null}
             {messageBatchActive && messageBatchMode != null ? (
               <MessageBatchHeader
+                tokens={tokens}
                 mode={messageBatchMode}
                 selectedCount={messageBatchSelectedCount}
                 affectedCount={visibilityBatchPreview.affectedCount}

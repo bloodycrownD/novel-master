@@ -299,6 +299,7 @@ export {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
+  selectVisibilityBatchEligibleIdsFromAnchor,
 } from "./domain/chat/logic/visibility-batch-range.js";
 export {
   createProjectService,

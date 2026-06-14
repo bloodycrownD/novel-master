@@ -3,10 +3,11 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import type {ThemeTokens} from '../../theme/tokens';
 import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
 
 type Props = {
+  tokens: ThemeTokens;
   mode: MessageVisibilityBatchMode;
   selectedCount: number;
   affectedCount: number;
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function MessageBatchHeader({
+  tokens,
   mode,
   selectedCount,
   affectedCount,
@@ -23,7 +25,6 @@ export function MessageBatchHeader({
   onCancel,
   onConfirm,
 }: Props) {
-  const {tokens} = useTheme();
   const actionsEnabled = selectedCount > 0;
   const title = mode === 'hide' ? '隐藏消息' : '恢复消息';
   const summary =
@@ -32,8 +33,8 @@ export function MessageBatchHeader({
       : title;
   const hint =
     mode === 'hide'
-      ? '勾选 assistant 确定隐藏上界；其之前所有消息将一并隐藏'
-      : '勾选 user 确定恢复下界；其之后所有消息将一并恢复';
+      ? '点击 assistant 将重置并勾选其上界以内全部 assistant'
+      : '点击 user 将重置并勾选其下界及之后全部 user';
 
   return (
     <View style={[styles.wrap, {borderBottomColor: tokens.border}]}>

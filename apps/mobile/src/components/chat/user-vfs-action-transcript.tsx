@@ -3,7 +3,6 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
 
 export type ParsedUserVfsEditHunk = {
   readonly index: string;
@@ -51,12 +50,18 @@ export function parseUserVfsActionFromText(
 type UserVfsActionBodyProps = {
   readonly action: ParsedUserVfsAction;
   readonly bodyColor: string;
+  /** 非白字气泡时的次要文字色（由父级传入 tokens.textSecondary）。 */
+  readonly textSecondary: string;
 };
 
 /** user 气泡内 VFS 操作卡片（可折叠 edit-hunk）。 */
-export function UserVfsActionBody({action, bodyColor}: UserVfsActionBodyProps) {
-  const {tokens} = useTheme();
-  const labelColor = bodyColor === '#fff' ? 'rgba(255,255,255,0.75)' : tokens.textSecondary;
+export function UserVfsActionBody({
+  action,
+  bodyColor,
+  textSecondary,
+}: UserVfsActionBodyProps) {
+  const labelColor =
+    bodyColor === '#fff' ? 'rgba(255,255,255,0.75)' : textSecondary;
 
   return (
     <View style={styles.card}>

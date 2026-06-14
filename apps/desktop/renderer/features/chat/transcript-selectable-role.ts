@@ -9,4 +9,5 @@ export {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
+  selectVisibilityBatchEligibleIdsFromAnchor,
 } from "@novel-master/core";

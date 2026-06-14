@@ -26,6 +26,7 @@ import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {
   isTranscriptRowSelectable,
+  selectVisibilityBatchEligibleIdsFromAnchor,
   transcriptSelectableRole,
 } from '../../components/chat/transcript-selectable-role';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
@@ -154,14 +155,19 @@ export function ChatTabScreen() {
   const handleToggleMessageSelect = useCallback(
     (messageId: string) => {
       const target = messages.chatMessages.find(m => m.id === messageId);
-      if (target == null) {
+      if (target == null || messageBatch.mode == null) {
         return;
       }
       const role = transcriptSelectableRole(target.role, messageBatch.mode);
       if (!isTranscriptRowSelectable(role)) {
         return;
       }
-      messageBatch.toggle(messageId);
+      const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
+        messages.chatMessages,
+        messageBatch.mode,
+        messageId,
+      );
+      messageBatch.selectRange(nextIds);
     },
     [messages.chatMessages, messageBatch],
   );

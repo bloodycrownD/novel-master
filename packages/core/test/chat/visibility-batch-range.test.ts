@@ -8,6 +8,7 @@ import {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
+  selectVisibilityBatchEligibleIdsFromAnchor,
 } from "../../src/domain/chat/logic/visibility-batch-range.js";
 
 const messages = [
@@ -50,6 +51,24 @@ describe("computeVisibilityBatchAffectedIds", () => {
     assert.ok(!affected.has("u1"));
     const range = computeShowRangeFromSelection(messages, selectedIds, 5);
     assert.deepEqual(range, { fromSeq: 3, toSeq: 5 });
+  });
+
+  it("hide 锚点：重置并勾选 seq 上界以内全部 assistant", () => {
+    const ids = selectVisibilityBatchEligibleIdsFromAnchor(
+      messages,
+      "hide",
+      "a2",
+    );
+    assert.deepEqual([...ids].sort(), ["a1", "a2"]);
+  });
+
+  it("restore 锚点：重置并勾选 seq 下界及之后全部 user", () => {
+    const ids = selectVisibilityBatchEligibleIdsFromAnchor(
+      messages,
+      "restore",
+      "u2",
+    );
+    assert.deepEqual([...ids].sort(), ["u2", "u3"]);
   });
 
   it("无有效选中时返回空集合", () => {

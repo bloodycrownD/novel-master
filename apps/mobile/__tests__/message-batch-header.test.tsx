@@ -2,19 +2,7 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {MessageBatchHeader} from '../src/components/batch/MessageBatchHeader';
-
-jest.mock('../src/theme/ThemeProvider', () => ({
-  useTheme: () => ({
-    tokens: {
-      text: '#111',
-      textSecondary: '#666',
-      textTertiary: '#999',
-      primary: '#007aff',
-      danger: '#ff3b30',
-      border: '#ccc',
-    },
-  }),
-}));
+import {lightTheme} from '../src/theme/tokens';
 
 jest.mock('react-native', () => {
   const mockReact = require('react');
@@ -64,6 +52,7 @@ describe('MessageBatchHeader', () => {
     act(() => {
       tree = TestRenderer.create(
         <MessageBatchHeader
+          tokens={lightTheme}
           mode="hide"
           selectedCount={0}
           affectedCount={0}
@@ -83,6 +72,7 @@ describe('MessageBatchHeader', () => {
     act(() => {
       tree = TestRenderer.create(
         <MessageBatchHeader
+          tokens={lightTheme}
           mode="hide"
           selectedCount={1}
           affectedCount={3}

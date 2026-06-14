@@ -38,6 +38,11 @@ export function useBatchSelection() {
     });
   }, []);
 
+  /** 重置并设置勾选集合（可见性批量范围全选）。 */
+  const selectRange = useCallback((ids: Iterable<string>) => {
+    setSelectedIds(new Set(ids));
+  }, []);
+
   const isSelected = useCallback(
     (id: string) => selectedIds.has(id),
     [selectedIds],
@@ -53,8 +58,9 @@ export function useBatchSelection() {
       enterRestore,
       exit,
       toggle,
+      selectRange,
       isSelected,
     }),
-    [active, mode, selectedIds, enterHide, enterRestore, exit, toggle, isSelected],
+    [active, mode, selectedIds, enterHide, enterRestore, exit, toggle, selectRange, isSelected],
   );
 }

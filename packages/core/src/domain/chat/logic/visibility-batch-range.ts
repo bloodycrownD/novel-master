@@ -98,3 +98,38 @@ export function computeVisibilityBatchAffectedIds(
     messages.filter((m) => m.seq >= range.fromSeq).map((m) => m.id),
   );
 }
+
+/**
+ * 以锚点消息为界，计算可见性批量应勾选的可选行 id（先重置再范围全选）。
+ *
+ * - **hide**：锚点为 assistant → 勾选所有 `seq <= anchor.seq` 的 assistant
+ * - **restore**：锚点为 user → 勾选所有 `seq >= anchor.seq` 的 user
+ */
+export function selectVisibilityBatchEligibleIdsFromAnchor(
+  messages: readonly VisibilityBatchMessage[],
+  mode: MessageVisibilityBatchMode,
+  anchorId: string,
+): ReadonlySet<string> {
+  const anchor = messages.find((m) => m.id === anchorId);
+  if (anchor == null) {
+    return new Set();
+  }
+  if (mode === "hide") {
+    if (anchor.role !== "assistant") {
+      return new Set();
+    }
+    return new Set(
+      messages
+        .filter((m) => m.role === "assistant" && m.seq <= anchor.seq)
+        .map((m) => m.id),
+    );
+  }
+  if (anchor.role !== "user") {
+    return new Set();
+  }
+  return new Set(
+    messages
+      .filter((m) => m.role === "user" && m.seq >= anchor.seq)
+      .map((m) => m.id),
+  );
+}
