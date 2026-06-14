@@ -636,9 +636,7 @@ export function buildTranscriptBootScript(): string {
     var hasText = !!(text && String(text).trim());
     var hasThinking = !!(thinking && String(thinking).trim());
     var hasTools = !!(tools && tools.length > 0);
-    if (state.flags.richText && textHtml) {
-      extra += ' rich bubble--wide';
-    } else if (!hasText && (hasThinking || hasTools)) {
+    if (!hasText && (hasThinking || hasTools)) {
       extra += ' bubble--fill-width';
     }
     return extra;

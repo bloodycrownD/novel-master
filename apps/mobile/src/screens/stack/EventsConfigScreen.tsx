@@ -276,7 +276,7 @@ export function EventsConfigScreen() {
         <FormSectionCard
           title="事件"
           tokens={tokens}
-          hint="定义「发生什么事后执行哪些动作」。自动压缩的触发条件请在「压缩条件」里设置。重复的事件或动作在保存时会提示；有 2 个及以上事件时，点卡片右上角 × 可移除。"
+          hint="定义「发生什么事后执行哪些动作」。自动压缩的触发条件请在「压缩配置」里设置。重复的事件或动作在保存时会提示；有 2 个及以上事件时，点卡片右上角 × 可移除。"
           rightAction={
             <View style={styles.rightActions}>
               <Pressable onPress={() => handleImportYaml()}>

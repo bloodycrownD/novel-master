@@ -52,10 +52,6 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     ${CHAT_TRANSCRIPT_RICH_CSS}
     .bubble-body.rich { white-space: normal; }
     .row.assistant .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
-    .row.assistant .bubble.rich,
-    .row.assistant .bubble.bubble--wide { width: 92%; max-width: 92%; box-sizing: border-box; }
-    .row.user .bubble.rich,
-    .row.user .bubble.bubble--wide { width: 92%; max-width: 92%; box-sizing: border-box; }
     .empty-state { align-self: center; margin-top: 32px; padding: 0 24px; text-align: center; color: var(--text-secondary, #666); font-size: 14px; }
     /* Visual size reduced; row tap target via .batch-row toggle-select */
     .batch-row { display: flex; flex-direction: row; align-items: flex-start; width: 100%; gap: 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }

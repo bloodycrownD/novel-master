@@ -130,7 +130,7 @@ nm vfs list / -r
 
 ## Rich text (chat + `.md` preview)
 
-- **我的 → 工作区 → 富文本消息** (`chatRichText` KKV, default **off**): when on, **user and assistant** chat bubbles render Markdown/HTML via `RichContentBody`; the **streaming tail** stays plain `Text`.
+- **我的 → 配置 → 聊天配置** (`chatRichText` KKV, default **off**): when on, **user and assistant** chat bubbles render Markdown/HTML via `RichContentBody`; the **streaming tail** stays plain `Text`.
 - **工作区 `.md` / `.markdown` 预览** (`FileMarkdownPreview`): body renders in `RichDocumentWebView` when `vfsMarkdownPreviewEngine` is `webview` (default); Front Matter card HTML is injected into the same WebView. In preview mode, a **Markdown / 文本** segmented control toggles rendered preview vs full raw source (monospace, includes Front Matter).
 - Acceptance fixtures: `apps/mobile/__fixtures__/rich-content/` (`sample-assistant.md`, `sample-assistant.html-snippet.md`).
 - Manual check (Android/iOS): toggle off → assistant HTML shows raw characters; toggle on → re-enter chat → styled; open `.md` preview → WebView body with shared rich CSS.

@@ -10,7 +10,6 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
-  WORKTREE_BLOCK_WIRE_NAME,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -49,7 +48,7 @@ import {
   ipcProvidersList,
 } from "../../ipc/client";
 import { AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
-import type { SettingsNavState } from "./settings-nav";
+import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsField,
   SettingsFormSection,
@@ -64,11 +63,7 @@ const DYNAMIC_MACROS = [
   { label: "$filetree", token: "{{$filetree}}" },
 ] as const;
 
-type Nav = {
-  push: (viewId: string) => void;
-  pop: () => void;
-  navState: SettingsNavState;
-};
+type Nav = SettingsNavHandle;
 
 type AddMenuTarget = "persist" | null;
 
@@ -426,6 +421,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
   const displayName = name.trim() || "未命名 Agent";
 
+  useEffect(() => {
+    nav.navState.editingAgentDisplayName = displayName;
+    nav.setAgentEditorTitle?.(displayName);
+  }, [displayName, nav]);
+
   const renderBlockActions = (
     index: number,
     total: number,
@@ -554,6 +554,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             {PROMPT_REGION_LABELS.layoutOrder}。
           </p>
 
+          <div className="config-block-card__section-head">
+            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.systemBlocks}</span>
+          </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
               <span className="config-block-card__badge">{PROMPT_REGION_LABELS.system}</span>
@@ -614,7 +617,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   <div key={`persist-wt-${index}`} className="config-block-card config-block-card--prompt">
                     <div className="config-block-card__header">
                       <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
-                      <span className="config-block-card__meta">{WORKTREE_BLOCK_LABEL}</span>
                       {renderBlockActions(
                         index,
                         persistBlocks.length,
@@ -623,9 +625,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       )}
                     </div>
                     <div className="config-block-card__body">
-                      <SettingsField label="名称">
-                        <input value={WORKTREE_BLOCK_WIRE_NAME} readOnly disabled />
-                      </SettingsField>
                       <SettingsField label="角色">
                         <select
                           value={block.role ?? "user"}
@@ -722,6 +721,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             })}
           </div>
 
+          <div className="config-block-card__section-head">
+            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.chatBlocks}</span>
+          </div>
           <div className="config-block-card config-block-card--prompt config-block-card--readonly">
             <div className="config-block-card__header">
               <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chat}</span>
@@ -864,7 +866,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         items={[
           { label: "文本块", action: "persist-text" },
           ...(persistWorktree
-            ? [{ label: "移除工作树", action: "persist-worktree-remove" }]
+            ? [{ label: `移除${WORKTREE_BLOCK_LABEL}`, action: "persist-worktree-remove" }]
             : [{ label: WORKTREE_BLOCK_LABEL, action: "persist-worktree-add" }]),
         ]}
         onSelect={(action) => {

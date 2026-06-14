@@ -56,7 +56,7 @@ import {
   ipcRegexUpdateGroup,
   ipcRegexUpdateRule,
 } from "../../ipc/client";
-import type { SettingsNavState } from "./settings-nav";
+import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsActionSection,
   SettingsField,
@@ -82,11 +82,7 @@ import {
 import { REGEX_UI_LABELS, AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
 import type { AgentRegistryListItemDto } from "../../../shared/ipc-types";
 
-type Nav = {
-  push: (viewId: string) => void;
-  pop: () => void;
-  navState: SettingsNavState;
-};
+type Nav = SettingsNavHandle;
 
 /** 列表 meta 中截断解码错误摘要。 */
 function truncateDecodeError(message: string, max = 80): string {
@@ -576,11 +572,17 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     reload().catch(() => undefined);
   }, [reload]);
 
+  const openAgentEditor = (agentId: string, displayName?: string) => {
+    nav.navState.editingAgentId = agentId;
+    nav.navState.editingAgentDisplayName = displayName;
+    nav.setAgentEditorTitle?.(displayName);
+    nav.push("agentEditor");
+  };
+
   const createAgent = async () => {
     const res = await ipcAgentRegistryCreateBlank();
     if (res.ok) {
-      nav.navState.editingAgentId = res.data.agentId;
-      nav.push("agentEditor");
+      openAgentEditor(res.data.agentId);
       await reload();
     }
   };
@@ -611,8 +613,8 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
         definition: { ...def, name: `${def.name ?? row.name}-copy` },
       });
       if (saveRes.ok) {
-        nav.navState.editingAgentId = copyId;
-        nav.push("agentEditor");
+        const copyName = `${def.name ?? row.name}-copy`;
+        openAgentEditor(copyId, copyName);
         await reload();
       }
       return;
@@ -622,8 +624,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       return;
     }
     if (action === "edit") {
-      nav.navState.editingAgentId = row.agentId;
-      nav.push("agentEditor");
+      openAgentEditor(row.agentId, row.name);
     }
   };
 
@@ -692,7 +693,7 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       <SettingsListSection
         header={
           <ManageHeader
-            title="Agent"
+            title="智能体配置"
             batchMode={batch.active}
             selectedCount={batch.selectedCount}
             onEnterBatch={batch.enter}
@@ -733,16 +734,13 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
                     {truncateDecodeError(row.decodeError)}
                   </span>
                 </span>
-              ) : (
-                row.agentId
-              )
+              ) : undefined
             }
             batchMode={batch.active}
             selected={batch.isSelected(row.agentId)}
             onToggleSelect={() => batch.toggle(row.agentId)}
             onClick={() => {
-              nav.navState.editingAgentId = row.agentId;
-              nav.push("agentEditor");
+              openAgentEditor(row.agentId, row.name);
             }}
             onMenu={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();

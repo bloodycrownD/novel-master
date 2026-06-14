@@ -7,21 +7,13 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {AgentPickerModal} from '../../components/agent/AgentPickerModal';
 import {ModelPickerModal} from '../../components/provider/ModelPickerModal';
-import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {ListSectionTitle} from '../../components/ui/ListSectionTitle';
 import {ProfileMenuItem} from '../../components/ui/ProfileMenuItem';
-import {ProfileSwitchItem} from '../../components/ui/ProfileSwitchItem';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
-import {useNovelMaster} from '../../runtime/novel-master-context';
-import {
-  readChatRichTextEnabled,
-  writeChatRichTextEnabled,
-} from '../../storage/chat-rich-text-pref';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {resolveCurrentAgentDisplayLabel} from '../../services/agent-display-label';
-import {SESSION_FS_LABELS} from '@novel-master/core/config-forms/shared';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -34,45 +26,38 @@ const WORKSPACE_MODEL_MENU = {
 
 const WORKSPACE_AGENT_MENU = {
   icon: '🧠',
-  label: '当前 agent',
+  label: '当前智能体',
 } as const;
 
-const WORKSPACE_REGEX_GROUP_MENU = {
-  icon: '🛡️',
-  label: '当前正则组',
+const WORKSPACE_GLOBAL_MENU = {
+  icon: '🌐',
+  label: '全局工作区',
+  route: 'GlobalTemplate',
 } as const;
 
 const CONFIG_MENU: Array<{icon: string; label: string; route: keyof RootStackParamList}> =
   [
-    {icon: '🤖', label: 'agent管理', route: 'AgentsSettings'},
-    {icon: '🔌', label: '服务商管理', route: 'Providers'},
+    {icon: '🤖', label: '智能体配置', route: 'AgentsSettings'},
+    {icon: '🔌', label: '服务商配置', route: 'Providers'},
+    {icon: '💬', label: '聊天配置', route: 'ChatConfig'},
     {icon: '💾', label: '存储配置', route: 'StorageConfig'},
-    {icon: '🗜️', label: '压缩条件', route: 'CompactionConditions'},
+    {icon: '🗜️', label: '压缩配置', route: 'CompactionConditions'},
     {icon: '⚡', label: '事件配置', route: 'EventsConfig'},
     {icon: '🛡️', label: '正则配置', route: 'RegexGroups'},
-    {icon: '🌐', label: '全局工作区', route: 'GlobalTemplate'},
   ];
 
 export function ProfileTabScreen() {
   const {tokens} = useTheme();
   const runtime = useRuntime();
-  const {appUi} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [modelLabel, setModelLabel] = useState('—');
   const [agentLabel, setAgentLabel] = useState('—');
-  const [regexGroupLabel, setRegexGroupLabel] = useState('不启用');
-  const [llmStreamEnabled, setLlmStreamEnabled] = useState(true);
-  const [sessionFsVersionCheck, setSessionFsVersionCheck] = useState(true);
-  const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
   const [modelPickerVisible, setModelPickerVisible] = useState(false);
   const [agentPickerVisible, setAgentPickerVisible] = useState(false);
-  const [regexGroupPickerVisible, setRegexGroupPickerVisible] =
-    useState(false);
 
   const dismissAllOverlays = useCallback(() => {
     setModelPickerVisible(false);
     setAgentPickerVisible(false);
-    setRegexGroupPickerVisible(false);
   }, []);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
@@ -98,53 +83,11 @@ export function ProfileTabScreen() {
     }
   }, [runtime]);
 
-  const refreshRegexGroupLabel = useCallback(async () => {
-    const currentId = await runtime.state.getCurrentRegexGroupId();
-    if (!currentId) {
-      setRegexGroupLabel('不启用');
-      return;
-    }
-    try {
-      const group = await runtime.regexConfig.getGroup(currentId);
-      setRegexGroupLabel(group.displayName?.trim() || group.groupId);
-    } catch {
-      setRegexGroupLabel('不启用');
-    }
-  }, [runtime]);
-
-  const refreshStreamPref = useCallback(async () => {
-    setLlmStreamEnabled(await runtime.preferences.getLlmStreamEnabled());
-  }, [runtime]);
-
-  const refreshSessionFsVersionCheckPref = useCallback(async () => {
-    setSessionFsVersionCheck(
-      await runtime.preferences.getSessionFsVersionCheck(),
-    );
-  }, [runtime]);
-
-  const refreshChatRichTextPref = useCallback(async () => {
-    if (appUi == null) {
-      return;
-    }
-    setChatRichTextEnabled(await readChatRichTextEnabled(appUi));
-  }, [appUi]);
-
   useFocusEffect(
     useCallback(() => {
       refreshModelLabel().catch(() => setModelLabel('—'));
       refreshAgentLabel().catch(() => setAgentLabel('—'));
-      refreshRegexGroupLabel().catch(() => setRegexGroupLabel('不启用'));
-      refreshStreamPref().catch(() => undefined);
-      refreshSessionFsVersionCheckPref().catch(() => undefined);
-      refreshChatRichTextPref().catch(() => undefined);
-    }, [
-      refreshModelLabel,
-      refreshAgentLabel,
-      refreshRegexGroupLabel,
-      refreshStreamPref,
-      refreshSessionFsVersionCheckPref,
-      refreshChatRichTextPref,
-    ]),
+    }, [refreshModelLabel, refreshAgentLabel]),
   );
 
   const navigateTo = (route: keyof RootStackParamList) => {
@@ -177,62 +120,10 @@ export function ProfileTabScreen() {
           onPress={() => setAgentPickerVisible(true)}
         />
         <ProfileMenuItem
-          icon={WORKSPACE_REGEX_GROUP_MENU.icon}
-          label={WORKSPACE_REGEX_GROUP_MENU.label}
-          value={regexGroupLabel}
+          icon={WORKSPACE_GLOBAL_MENU.icon}
+          label={WORKSPACE_GLOBAL_MENU.label}
           tokens={tokens}
-          onPress={() => setRegexGroupPickerVisible(true)}
-        />
-        <ProfileSwitchItem
-          icon="⚡"
-          label="流式输出"
-          subtitle={
-            llmStreamEnabled
-              ? '边生成边显示（推荐）'
-              : '完成后一次性显示回复'
-          }
-          value={llmStreamEnabled}
-          tokens={tokens}
-          onValueChange={enabled => {
-            setLlmStreamEnabled(enabled);
-            runtime.preferences
-              .setLlmStreamEnabled(enabled)
-              .catch(() => undefined);
-          }}
-        />
-        <ProfileSwitchItem
-          icon="🛡️"
-          label={SESSION_FS_LABELS.title}
-          subtitle={
-            sessionFsVersionCheck
-              ? SESSION_FS_LABELS.enabledHint
-              : SESSION_FS_LABELS.disabledHint
-          }
-          value={sessionFsVersionCheck}
-          tokens={tokens}
-          onValueChange={enabled => {
-            setSessionFsVersionCheck(enabled);
-            runtime.preferences
-              .setSessionFsVersionCheck(enabled)
-              .catch(() => undefined);
-          }}
-        />
-        <ProfileSwitchItem
-          icon="📝"
-          label="富文本消息"
-          subtitle={
-            chatRichTextEnabled
-              ? '用户与助手消息解析 Markdown/HTML'
-              : '聊天消息显示为纯文本'
-          }
-          value={chatRichTextEnabled}
-          tokens={tokens}
-          onValueChange={enabled => {
-            setChatRichTextEnabled(enabled);
-            if (appUi) {
-              writeChatRichTextEnabled(appUi, enabled).catch(() => undefined);
-            }
-          }}
+          onPress={() => navigateTo(WORKSPACE_GLOBAL_MENU.route)}
         />
         <ListSectionTitle title="配置" tokens={tokens} />
         {CONFIG_MENU.map(item => (
@@ -261,11 +152,6 @@ export function ProfileTabScreen() {
         visible={agentPickerVisible}
         onClose={() => setAgentPickerVisible(false)}
         onSelected={() => refreshAgentLabel().catch(() => undefined)}
-      />
-      <RegexGroupPickerModal
-        visible={regexGroupPickerVisible}
-        onClose={() => setRegexGroupPickerVisible(false)}
-        onSelected={() => refreshRegexGroupLabel().catch(() => undefined)}
       />
     </View>
   );

@@ -16,7 +16,6 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
-  WORKTREE_BLOCK_WIRE_NAME,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -450,6 +449,29 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     );
   }
 
+  /** 四区小标题；旧 core 包缺键时用本地兜底，避免标题空白。 */
+  const promptSectionLabels = {
+    system: PROMPT_REGION_LABELS.systemBlocks ?? '系统区',
+    persist: PROMPT_REGION_LABELS.persistBlocks,
+    chat: PROMPT_REGION_LABELS.chatBlocks ?? '会话区',
+    dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
+  };
+
+  /** 工作树块菜单/徽章文案；旧 core 包可能仍为 worktree / 权威块。 */
+  const worktreeBlockLabel =
+    WORKTREE_BLOCK_LABEL === '工作树' ? WORKTREE_BLOCK_LABEL : '工作树';
+
+  const renderPromptSectionHead = (label: string, onAdd?: () => void) => (
+    <View style={styles.sectionHead}>
+      <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
+      {onAdd != null ? (
+        <Pressable onPress={onAdd}>
+          <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
   const renderBlockActions = (
     index: number,
     total: number,
@@ -603,6 +625,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             {PROMPT_REGION_LABELS.layoutOrder}。
           </Text>
 
+          {renderPromptSectionHead(promptSectionLabels.system)}
           <View
             style={[
               styles.blockCard,
@@ -640,24 +663,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             )}
           </View>
 
-          <View
-            style={[
-              styles.sectionHead,
-              {
-                borderTopColor: tokens.borderLight,
-                backgroundColor: tokens.bgSecondary,
-              },
-            ]}>
-            <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-              {PROMPT_REGION_LABELS.persistBlocks}
-            </Text>
-            <Pressable
-              onPress={() => {
-                setAddBlockVisible(true);
-              }}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
-            </Pressable>
-          </View>
+          {renderPromptSectionHead(promptSectionLabels.persist, () => setAddBlockVisible(true))}
           <View style={styles.blockList}>
             {persistBlocks.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
@@ -676,12 +682,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                     <View style={styles.blockHeader}>
                       <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
                         <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                          {WORKTREE_BLOCK_LABEL}
+                          {worktreeBlockLabel}
                         </Text>
                       </View>
-                      <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                        {WORKTREE_BLOCK_LABEL}
-                      </Text>
+                      <View style={styles.blockHeaderSpacer} />
                       {renderBlockActions(
                         index,
                         persistBlocks.length,
@@ -689,13 +693,6 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                         deletePersist,
                       )}
                     </View>
-                    <FormField label="名称" tokens={tokens}>
-                      <FormTextInput
-                        tokens={tokens}
-                        value={WORKTREE_BLOCK_WIRE_NAME}
-                        editable={false}
-                      />
-                    </FormField>
                     <FormField label="角色" tokens={tokens}>
                       <FormSelectField
                         tokens={tokens}
@@ -792,6 +789,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             })}
           </View>
 
+          {renderPromptSectionHead(promptSectionLabels.chat)}
           <View
             style={[
               styles.blockCard,
@@ -813,21 +811,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Text>
           </View>
 
-          <View
-            style={[
-              styles.sectionHead,
-              {
-                borderTopColor: tokens.borderLight,
-                backgroundColor: tokens.bgSecondary,
-              },
-            ]}>
-            <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-              {PROMPT_REGION_LABELS.dynamicBlocks}
-            </Text>
-            <Pressable onPress={() => addDynamicBlock()}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
-            </Pressable>
-          </View>
+          {renderPromptSectionHead(promptSectionLabels.dynamic, () => addDynamicBlock())}
           <View style={styles.blockList}>
             {dynamic.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
@@ -919,8 +903,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         items={[
           {label: '文本块', action: 'persist-text'},
           ...(persistWorktree
-            ? [{label: '移除工作树', action: 'persist-worktree-remove'}]
-            : [{label: WORKTREE_BLOCK_LABEL, action: 'persist-worktree-add'}]),
+            ? [{label: `移除${worktreeBlockLabel}`, action: 'persist-worktree-remove'}]
+            : [{label: worktreeBlockLabel, action: 'persist-worktree-add'}]),
         ]}
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {
@@ -947,20 +931,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 40,
-    marginTop: 12,
+    marginTop: 10,
     marginBottom: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderRadius: 8,
+    paddingTop: 2,
     gap: 8,
   },
   sectionLabel: {
     fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontWeight: '700',
   },
   blockList: {gap: 12},
   blockCard: {
@@ -992,6 +970,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  blockHeaderSpacer: {flex: 1},
   blockActions: {flexDirection: 'row', gap: 4},
   emptyHint: {
     fontSize: 12,

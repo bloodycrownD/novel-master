@@ -180,7 +180,7 @@ export function WorkspaceSettingsView() {
             onClick={() => void openPicker("model")}
           />
           <SettingsRow
-            label="当前 Agent"
+            label="当前智能体"
             value={agentLabel}
             onClick={() => void openPicker("agent")}
           />

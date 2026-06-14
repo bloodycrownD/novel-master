@@ -26,6 +26,7 @@ import {CompactionConditionsScreen} from '../screens/stack/CompactionConditionsS
 import {EventsConfigScreen} from '../screens/stack/EventsConfigScreen';
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
+import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
 import {RegexRulesScreen} from '../screens/stack/RegexRulesScreen';
@@ -173,6 +174,10 @@ export function RootNavigator() {
           <Stack.Screen
             name="StorageConfig"
             component={withStackLayout('StorageConfig', StorageConfigScreen)}
+          />
+          <Stack.Screen
+            name="ChatConfig"
+            component={withStackLayout('ChatConfig', ChatConfigScreen)}
           />
           <Stack.Screen
             name="CloudSyncConfig"

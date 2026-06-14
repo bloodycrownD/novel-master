@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getSettingsNavHighlightId,
   isSettingsTopLevelView,
   SETTINGS_NAV,
   SETTINGS_TOP_LEVEL,
+  type SettingsNavHandle,
   type SettingsNavState,
   type SettingsViewId,
 } from "../features/settings/settings-nav";
@@ -28,9 +29,13 @@ interface SettingsOverlayProps {
   onClose: () => void;
 }
 
-function getSettingsMainTitle(viewId: SettingsViewId, navState: SettingsNavState): string {
+function getSettingsMainTitle(
+  viewId: SettingsViewId,
+  navState: SettingsNavState,
+  agentEditorTitle?: string,
+): string {
   if (viewId === "agentEditor") {
-    return navState.editingAgentId ? `Agent · ${navState.editingAgentId}` : "Agent 配置";
+    return agentEditorTitle ?? navState.editingAgentDisplayName ?? "Agent 配置";
   }
   if (viewId === "providerDetail") return "模型管理";
   if (viewId === "providerCreate") return "新建服务商";
@@ -44,9 +49,16 @@ function getSettingsMainTitle(viewId: SettingsViewId, navState: SettingsNavState
 export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
   const [viewId, setViewId] = useState<SettingsViewId>("workspace");
   const [pageStack, setPageStack] = useState<SettingsViewId[]>([]);
+  const [agentEditorTitle, setAgentEditorTitle] = useState<string | undefined>();
   const navStateRef = useRef<SettingsNavState>({});
 
   const navState = navStateRef.current;
+
+  useEffect(() => {
+    if (viewId !== "agentEditor") {
+      setAgentEditorTitle(undefined);
+    }
+  }, [viewId]);
 
   const showView = useCallback((next: SettingsViewId) => {
     setViewId(next);
@@ -71,11 +83,12 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
     setViewId(next);
   }, []);
 
-  const nav = useMemo(
+  const nav = useMemo<SettingsNavHandle>(
     () => ({
       push: pushView,
       pop: popView,
       navState: navStateRef.current,
+      setAgentEditorTitle: setAgentEditorTitle,
     }),
     [pushView, popView],
   );
@@ -168,7 +181,7 @@ export function SettingsOverlay({ open, onClose }: SettingsOverlayProps) {
               ‹
             </button>
             <h2 className="settings-main__title" id="settings-main-title">
-              {getSettingsMainTitle(viewId, navState)}
+              {getSettingsMainTitle(viewId, navState, agentEditorTitle)}
             </h2>
             <button type="button" className="settings-main__close" onClick={handleClose} aria-label="关闭设置">
               ×

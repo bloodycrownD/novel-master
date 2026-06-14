@@ -21,6 +21,7 @@ export type RootStackParamList = {
   CompactionConditions: undefined;
   EventsConfig: undefined;
   StorageConfig: undefined;
+  ChatConfig: undefined;
   CloudSyncConfig: undefined;
   GlobalTemplate: undefined;
   RegexGroups: undefined;

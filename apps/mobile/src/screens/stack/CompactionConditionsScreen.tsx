@@ -74,7 +74,7 @@ export function CompactionConditionsScreen() {
     setSaving(true);
     try {
       await runtime.compactionConditions.setConditions(conditions);
-      showToast('已保存压缩条件');
+      showToast('已保存压缩配置');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
@@ -98,7 +98,7 @@ export function CompactionConditionsScreen() {
         />
       }>
       <FormSectionCard
-        title="压缩条件"
+        title="压缩配置"
         tokens={tokens}
         hint="满足任一条件时自动发出压缩事件；具体 hide 动作见「事件配置」。">
         <FormSwitchRow

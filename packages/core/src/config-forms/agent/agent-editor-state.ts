@@ -80,13 +80,14 @@ export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 /** 工作树块在 wire 中的固定键名（UI 不暴露、不可改）。 */
 export const WORKTREE_BLOCK_WIRE_NAME = "canon";
 
-/** 工作树块在编辑器中的固定展示名。 */
+/** 工作树块在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKTREE_BLOCK_LABEL = "工作树";
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
   layoutTitle: "提示词模版",
   system: "系统",
+  systemBlocks: "系统区",
   systemContent: "系统内容",
   enableSystem: "启用系统",
   apiSystemField: "系统提示词",
@@ -104,6 +105,7 @@ export const PROMPT_REGION_LABELS = {
   emptyPersistHint: "暂无块，点击添加",
   emptyDynamicHint: "暂无块，点击添加",
   chat: "会话历史",
+  chatBlocks: "会话区",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 

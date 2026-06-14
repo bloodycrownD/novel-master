@@ -32,7 +32,7 @@ describe('AgentPickerModal (picker service)', () => {
   });
 
   it('T-P2: empty registry shows empty-state copy', () => {
-    expect(AGENT_PICKER_EMPTY_MESSAGE).toContain('agent管理');
+    expect(AGENT_PICKER_EMPTY_MESSAGE).toContain('智能体配置');
   });
 
   it('T-P2: loadAgentPickerRows returns no rows when registry empty', async () => {

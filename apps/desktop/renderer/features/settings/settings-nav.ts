@@ -24,8 +24,8 @@ export const SETTINGS_NAV = [
   {
     label: "AI",
     items: [
-      { id: "agentsSettings" as const, label: "Agent", icon: "🧠" },
-      { id: "providers" as const, label: "服务商与模型", icon: "🔌" },
+      { id: "agentsSettings" as const, label: "智能体配置", icon: "🧠" },
+      { id: "providers" as const, label: "服务商配置", icon: "🔌" },
     ],
   },
   {
@@ -49,8 +49,8 @@ export const SETTINGS_TOP_LEVEL: Partial<Record<SettingsViewId, string>> = {
   workspace: "常规",
   about: "关于",
   dataManagement: "备份与恢复",
-  agentsSettings: "Agent",
-  providers: "服务商与模型",
+  agentsSettings: "智能体配置",
+  providers: "服务商配置",
   eventsConfig: "事件配置",
   regexGroups: "正则过滤",
 };
@@ -73,8 +73,18 @@ export function isSettingsTopLevelView(viewId: SettingsViewId): boolean {
   return Object.prototype.hasOwnProperty.call(SETTINGS_TOP_LEVEL, viewId);
 }
 
+export interface SettingsNavHandle {
+  push: (viewId: SettingsViewId) => void;
+  pop: () => void;
+  navState: SettingsNavState;
+  /** Agent 编辑页顶栏标题（展示名称，非 agentId） */
+  setAgentEditorTitle?: (title: string | undefined) => void;
+}
+
 export interface SettingsNavState {
   readonly editingAgentId?: string;
+  /** Agent 编辑页顶栏展示用名称（非 agentId） */
+  editingAgentDisplayName?: string;
   readonly editingProviderId?: string;
   readonly editingVendorModelId?: string;
   readonly editingApplicationModelId?: string;

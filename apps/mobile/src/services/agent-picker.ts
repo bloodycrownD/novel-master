@@ -4,7 +4,7 @@
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export const AGENT_PICKER_EMPTY_MESSAGE =
-  '暂无 Agent。请先在「agent管理」中创建。';
+  '暂无智能体。请先在「智能体配置」中创建。';
 
 export interface AgentPickerRow {
   readonly agentId: string;
