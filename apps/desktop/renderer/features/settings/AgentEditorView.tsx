@@ -425,6 +425,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   };
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
+  const displayName = name.trim() || "未命名 Agent";
 
   const renderBlockActions = (
     index: number,
@@ -454,7 +455,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       {loading ? <p className="settings-hint">加载中…</p> : null}
       <SettingsFormSection
         title="Agent 配置"
-        desc={`\u7f16\u8f91 ${agentId}${dirty ? " · 未保存" : ""}`}
+        desc={`编辑 ${displayName}${dirty ? " · 未保存" : ""}`}
         toolbar={
           <div className="settings-yaml-links">
             <Button variant="secondary" onClick={() => setConfirmImport(true)}>
@@ -564,18 +565,20 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 aria-label={PROMPT_REGION_LABELS.enableSystem}
               />
             </div>
-            {systemEnabled ? (
-              <SettingsField label={PROMPT_REGION_LABELS.systemContent}>
-                <textarea
-                  rows={4}
-                  value={systemContent}
-                  onChange={(e) => setSystemContent(e.target.value)}
-                  placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
-                />
-              </SettingsField>
-            ) : (
-              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.systemDisabledHint}</p>
-            )}
+            <div className="config-block-card__body">
+              {systemEnabled ? (
+                <SettingsField label={PROMPT_REGION_LABELS.systemContent}>
+                  <textarea
+                    rows={4}
+                    value={systemContent}
+                    onChange={(e) => setSystemContent(e.target.value)}
+                    placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
+                  />
+                </SettingsField>
+              ) : (
+                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.systemDisabledHint}</p>
+              )}
+            </div>
           </div>
 
           <div className="config-block-card__section-head">
@@ -676,9 +679,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 <span className="config-block-card__badge">{WORKTREE_BLOCK_LABEL}</span>
                 <span className="config-block-card__meta">{WORKTREE_BLOCK_LABEL}</span>
               </div>
-              <p className="config-block-card__hint">
-                运行时注入 materialize 后的会话工作树，不可配置、不可排序。
-              </p>
+              <div className="config-block-card__body">
+                <p className="config-block-card__hint">
+                  运行时注入 materialize 后的会话工作树，不可配置、不可排序。
+                </p>
+              </div>
             </div>
           ) : null}
 
@@ -687,9 +692,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chat}</span>
               <span className="config-block-card__meta">{PROMPT_REGION_LABELS.chat}</span>
             </div>
-            <p className="config-block-card__hint">
-              运行时注入当前会话可见消息，不可配置、不可排序。
-            </p>
+            <div className="config-block-card__body">
+              <p className="config-block-card__hint">
+                运行时注入当前会话可见消息，不可配置、不可排序。
+              </p>
+            </div>
           </div>
 
           <div className="config-block-card__section-head">

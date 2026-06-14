@@ -1582,6 +1582,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
   const [testText, setTestText] = useState("mysecret@email.com");
   const [testChannel, setTestChannel] = useState<RegexChannel>("display");
   const [preview, setPreview] = useState("");
+  const [previewError, setPreviewError] = useState(false);
 
   useEffect(() => {
     if (!groupId || !ruleId) return;
@@ -1613,11 +1614,20 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
     displayReplace: displayOn ? draft.displayReplace ?? "" : null,
   });
 
-  const runPreview = () => {
+  const updatePreview = useCallback(() => {
     const result = previewRegexReplacementOnly(testText, fieldsForSave(), testChannel);
-    if (result.ok) setPreview(result.text);
-    else setPreview(result.message);
-  };
+    if (result.ok) {
+      setPreview(result.text);
+      setPreviewError(false);
+    } else {
+      setPreview(result.message);
+      setPreviewError(true);
+    }
+  }, [testText, testChannel, draft, llmOn, displayOn]);
+
+  useEffect(() => {
+    updatePreview();
+  }, [updatePreview]);
 
   const save = async () => {
     const fields = regexRuleForIpc(fieldsForSave());
@@ -1654,7 +1664,7 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
         desc={ruleDesc}
         footer={
           <>
-            <Button variant="secondary" onClick={runPreview}>
+            <Button variant="secondary" onClick={updatePreview}>
               测试预览
             </Button>
             <Button variant="primary" onClick={() => void save()}>
@@ -1763,7 +1773,11 @@ export function RegexRuleEditorView({ nav }: { nav: Nav }) {
               aria-label="预览通道"
             />
           </SettingsField>
-          {preview ? <pre className="settings-preview-box">{preview}</pre> : null}
+          <pre
+            className={`settings-preview-box${previewError ? " settings-preview-box--error" : ""}`}
+          >
+            {preview}
+          </pre>
         </SettingsSection>
       </SettingsFormSection>
     </SettingsPanel>

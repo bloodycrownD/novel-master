@@ -681,10 +681,17 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 
 .segmented-control {
   display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
   padding: 2px;
   border-radius: var(--radius-sm);
   background: var(--surface-inset);
   border: 1px solid var(--border-light);
+}
+
+.settings-field > .segmented-control {
+  align-self: flex-start;
 }
 
 .segmented-control__btn {
@@ -2047,6 +2054,10 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   background: var(--surface-inset);
 }
 
+.settings-preview-box--error {
+  color: var(--text-secondary);
+}
+
 .settings-list {
   display: flex;
   flex-direction: column;
@@ -2571,7 +2582,13 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px 22px;
+  padding: 10px 14px 12px;
+}
+
+/* 仅一行 hint（如系统区关闭说明）收紧留白 */
+.config-block-card__body:has(> .config-block-card__hint:only-child) {
+  gap: 0;
+  padding: 8px 14px 10px;
 }
 
 .config-block-card__meta {
@@ -2587,10 +2604,13 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 
 .config-block-card__hint {
   margin: 0;
-  padding-bottom: 10px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
+}
+
+.config-block-card__body .config-block-card__hint {
+  padding: 0;
 }
 
 .config-block-card__hint--subtle {
