@@ -26,6 +26,8 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止宏与生命周期。");
+  assert.equal(PROMPT_REGION_LABELS.dynamicLifecycleOnceHint, "仅首轮请求带入。");
 
   const values = Object.values(PROMPT_REGION_LABELS).filter(
     (value): value is string => typeof value === "string",
@@ -35,6 +37,8 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
     assert.doesNotMatch(value, /Prompt 布局/i);
     assert.doesNotMatch(value, /prompts\.system/i);
     assert.doesNotMatch(value, /LLM system/i);
+    assert.doesNotMatch(value, /lifecycle/i);
+    assert.doesNotMatch(value, /agent step/i);
   }
 });
 

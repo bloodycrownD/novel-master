@@ -93,7 +93,7 @@ export const PROMPT_REGION_LABELS = {
   systemPromptTitle: "系统提示词",
   persistBlocks: "持久区",
   dynamicBlocks: "动态区",
-  persistRegionHint: "持久区禁止宏与 lifecycle。",
+  persistRegionHint: "持久区禁止宏与生命周期。",
   layoutOrder: "系统 → 持久区 → 会话历史 → 动态区",
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",
@@ -104,7 +104,7 @@ export const PROMPT_REGION_LABELS = {
   emptyPersistHint: "暂无块，点击添加",
   emptyDynamicHint: "暂无块，点击添加",
   chat: "会话历史",
-  dynamicLifecycleOnceHint: "仅首轮 agent step 带入。",
+  dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
 export function blockTypeLabel(
