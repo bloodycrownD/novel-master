@@ -2517,7 +2517,11 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 }
 
 .config-block-card--readonly {
-  margin-top: 10px;
+  margin-top: 0;
+}
+
+.config-block-list + .config-block-card--readonly {
+  margin-top: 8px;
 }
 
 .config-block-list {
@@ -2573,6 +2577,8 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 40px;
+  box-sizing: border-box;
   padding: 10px 14px;
   border-bottom: 1px solid var(--border-light);
   background: var(--surface);
@@ -2622,9 +2628,14 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-top: 10px;
+  min-height: 40px;
+  box-sizing: border-box;
+  margin-top: 12px;
   margin-bottom: 8px;
-  padding-top: 2px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-light);
+  border-radius: 8px;
+  background: var(--surface-muted);
 }
 
 .config-block-card__section-label {
