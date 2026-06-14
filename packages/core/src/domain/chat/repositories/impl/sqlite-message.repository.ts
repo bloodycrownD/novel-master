@@ -198,6 +198,7 @@ export class SqliteMessageRepository implements MessageRepository {
     toSeq: number,
     hidden: boolean,
   ): Promise<number> {
+    const hiddenFilter = hidden ? "AND hidden = 0" : "AND hidden = 1";
     const result = await executeTemplate(
       this.conn,
       this.parser,
@@ -205,7 +206,8 @@ export class SqliteMessageRepository implements MessageRepository {
        SET hidden = #{hidden} 
        WHERE session_id = #{sessionId} 
          AND seq >= #{fromSeq} 
-         AND seq <= #{toSeq}`,
+         AND seq <= #{toSeq}
+         ${hiddenFilter}`,
       { sessionId, fromSeq, toSeq, hidden: hidden ? 1 : 0 },
     );
     return result.changes;

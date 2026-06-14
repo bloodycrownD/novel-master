@@ -43,6 +43,10 @@ export type DynamicPromptBlock = {
 export interface AgentPromptLayout {
   /** 可选单段 system；映射到 API `system` 字段。 */
   readonly system?: string;
+  /** 持久区开关；缺省视为 `false`（组装跳过 persist）。 */
+  readonly persistEnabled?: boolean;
+  /** 动态区开关；缺省视为 `false`（组装跳过 dynamic）。 */
+  readonly dynamicEnabled?: boolean;
   readonly persist: readonly PersistPromptBlock[];
   readonly dynamic: readonly DynamicPromptBlock[];
 }

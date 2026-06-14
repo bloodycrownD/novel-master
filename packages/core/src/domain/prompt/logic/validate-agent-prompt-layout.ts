@@ -189,6 +189,10 @@ export function validateAgentPromptLayoutFromMaps(
   persistRaw: unknown,
   dynamicRaw: unknown,
   system?: string,
+  options?: {
+    readonly persistEnabled?: boolean;
+    readonly dynamicEnabled?: boolean;
+  },
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
     throw new PromptError(
@@ -230,8 +234,52 @@ export function validateAgentPromptLayoutFromMaps(
     dynamic.push(parseDynamicBlock(name, item));
   }
 
+  const persistEnabled = options?.persistEnabled === true;
+  const dynamicEnabled = options?.dynamicEnabled === true;
+
+  if (persistEnabled) {
+    if (persist.length < 1) {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.persist must contain at least one block when persistEnabled is true",
+      );
+    }
+    const last = persist[persist.length - 1]!;
+    if (last.type !== "text" || last.role !== "assistant") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.persist last block must be assistant text when persistEnabled is true",
+      );
+    }
+  }
+
+  if (dynamicEnabled) {
+    if (dynamic.length < 2) {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.dynamic must contain at least two blocks when dynamicEnabled is true",
+      );
+    }
+    const first = dynamic[0]!;
+    const last = dynamic[dynamic.length - 1]!;
+    if (first.role !== "assistant") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.dynamic first block must be assistant when dynamicEnabled is true",
+      );
+    }
+    if (last.role !== "user") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "prompts.dynamic last block must be user when dynamicEnabled is true",
+      );
+    }
+  }
+
   return {
     ...(system != null && system.trim() !== "" ? { system } : {}),
+    ...(persistEnabled ? { persistEnabled: true } : {}),
+    ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
     persist,
     dynamic,
   };
@@ -291,5 +339,9 @@ export function validateAgentPromptLayout(
     persistMap,
     dynamicMap,
     layout.system,
+    {
+      persistEnabled: layout.persistEnabled,
+      dynamicEnabled: layout.dynamicEnabled,
+    },
   );
 }

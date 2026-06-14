@@ -72,6 +72,8 @@ const promptsDocumentSchema = z.preprocess(
       system: z.string().optional(),
       persist: z.record(z.string().min(1), persistBlockValueSchema).default({}),
       dynamic: z.record(z.string().min(1), dynamicTextBlockValueSchema).default({}),
+      persistEnabled: z.boolean().default(false),
+      dynamicEnabled: z.boolean().default(false),
     })
     .strict(),
 );
@@ -165,6 +167,10 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
     doc.prompts.persist,
     doc.prompts.dynamic,
     doc.prompts.system,
+    {
+      persistEnabled: doc.prompts.persistEnabled,
+      dynamicEnabled: doc.prompts.dynamicEnabled,
+    },
   );
   const tools = wireToolsToDomain(doc.tools);
   return {
@@ -190,6 +196,8 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
     name: def.name,
     prompts: {
       ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
+      persistEnabled: def.prompts.persistEnabled ?? false,
+      dynamicEnabled: def.prompts.dynamicEnabled ?? false,
       persist,
       dynamic,
     },

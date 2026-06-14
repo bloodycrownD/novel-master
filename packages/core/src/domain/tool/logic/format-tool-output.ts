@@ -100,8 +100,7 @@ export function formatToolOutputForLlm(out: unknown): string {
       typeof rec.version === "number" &&
       typeof rec.replacements === "number"
     ) {
-      const n = rec.replacements;
-      return n === 1 ? "ok" : `ok (${n} replacements)`;
+      return "ok";
     }
     if (keys.length === 1 && rec.ok === true) {
       return "ok";

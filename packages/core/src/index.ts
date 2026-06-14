@@ -259,6 +259,27 @@ export {
   assertMessageContent,
 } from "./domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "./domain/chat/content/format-message-cli.js";
+export type {
+  MessageMetadata,
+  MessageMetadataKind,
+} from "./domain/chat/model/message-metadata.js";
+export { readMessageMetadata } from "./domain/chat/model/message-metadata.js";
+export {
+  userVfsPendingEntrySchema,
+  userVfsPendingQueueSchema,
+  userVfsPendingToolSchema,
+} from "./domain/chat/model/user-vfs-pending.schema.js";
+export type {
+  UserVfsPendingEntry,
+  UserVfsPendingQueue,
+  UserVfsPendingTool,
+} from "./domain/chat/model/user-vfs-pending.schema.js";
+export { mergePendingVfsTurns } from "./domain/chat/logic/merge-pending-vfs-turns.js";
+export type { MergedPendingVfsTurn } from "./domain/chat/logic/merge-pending-vfs-turns.js";
+export {
+  hasToolResult,
+  isPlainUserText,
+} from "./domain/chat/logic/message-content-helpers.js";
 export {
   createProjectService,
   createSessionService,
@@ -362,6 +383,20 @@ export { validateDynamicMacros } from "./domain/prompt/logic/validate-dynamic-ma
 export { expandDynamicMacros } from "./domain/prompt/logic/expand-dynamic-macros.js";
 export { renderSessionVfsTree } from "./domain/vfs/logic/render-session-vfs-tree.js";
 export {
+  mapUserSaveToToolUses,
+  buildUserVfsSaveEditActionXml,
+  buildUserVfsSaveWriteActionXml,
+  buildUserVfsSimpleActionXml,
+} from "./domain/vfs/logic/user-vfs-save-mapping.js";
+export type {
+  UserVfsSaveMappingOptions,
+  UserVfsEditHunk,
+  UserVfsSaveMappingResult,
+} from "./domain/vfs/logic/user-vfs-save-mapping.js";
+export { actionXmlToToolUses } from "./domain/vfs/logic/action-xml-to-tool-uses.js";
+export type { DerivedToolUseInput } from "./domain/vfs/logic/action-xml-to-tool-uses.js";
+export { compressUserVfsToolUses } from "./domain/tool/logic/compress-user-vfs-tool-uses.js";
+export {
   buildPromptAssemblyFromLayout,
   buildPromptLlmInputFromLayout,
   formatPromptLlmInputForCliFromLayout,
@@ -426,6 +461,10 @@ export type {
 export type { DepthSlice } from "./domain/depth/logic/depth-slice.js";
 export { matchDepth, validateDepthSlice, messageIdsInSlice } from "./domain/depth/logic/depth-slice.js";
 export { depthByMessageId, listVisibleForDepth } from "./domain/depth/logic/depth-from-tail.js";
+export {
+  resolveHideMessageRange,
+} from "./domain/depth/logic/resolve-hide-message-range.js";
+export type { HideMessageSeqRange } from "./domain/depth/logic/resolve-hide-message-range.js";
 export type {
   EventsConfig,
   EventAction,
