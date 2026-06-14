@@ -23,6 +23,7 @@ import {
   createSessionFsService,
   createSessionService,
   createSessionWorktreeSnapshotStore,
+  createUserVfsTurnServiceBundle,
   createWorktreeService,
   SimpleEventBus,
   type VfsScope,
@@ -58,6 +59,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const compactionConditions = createCompactionConditionsStore(conn);
   const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
+  const {userVfsTurn, appendToolTurnBridge} = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
@@ -104,6 +106,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages,
+    appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, {kind: 'global'}),
@@ -117,5 +120,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     providerModels: providerBundle.providerModels,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
+    userVfsTurn,
   };
 }

@@ -1,19 +1,33 @@
 /**
- * Shared multi-select state for list batch management (prototype list-batch-active).
+ * 消息可见性多选状态（隐藏 / 恢复专用，非通用批量）。
  */
 import {useCallback, useMemo, useState} from 'react';
+import type {MessageVisibilityBatchMode} from '../components/chat/transcript-selectable-role';
 
 export function useBatchSelection() {
-  const [active, setActive] = useState(false);
+  const [mode, setMode] = useState<MessageVisibilityBatchMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  const active = mode != null;
+
+  const enterHide = useCallback(() => {
+    setMode('hide');
+    setSelectedIds(new Set());
+  }, []);
+
+  const enterRestore = useCallback(() => {
+    setMode('restore');
+    setSelectedIds(new Set());
+  }, []);
+
+  /** 通用批量入口（会话/VFS/Provider 等非消息可见性场景）。 */
   const enter = useCallback(() => {
-    setActive(true);
+    setMode('hide');
     setSelectedIds(new Set());
   }, []);
 
   const exit = useCallback(() => {
-    setActive(prev => (prev ? false : prev));
+    setMode(prev => (prev != null ? null : prev));
     setSelectedIds(prev => (prev.size === 0 ? prev : new Set()));
   }, []);
 
@@ -37,14 +51,26 @@ export function useBatchSelection() {
   return useMemo(
     () => ({
       active,
+      mode,
       selectedIds,
       selectedCount: selectedIds.size,
+      enterHide,
+      enterRestore,
       enter,
       exit,
       toggle,
       isSelected,
-      setSelectedIds,
     }),
-    [active, selectedIds, enter, exit, toggle, isSelected, setSelectedIds],
+    [
+      active,
+      mode,
+      selectedIds,
+      enterHide,
+      enterRestore,
+      enter,
+      exit,
+      toggle,
+      isSelected,
+    ],
   );
 }

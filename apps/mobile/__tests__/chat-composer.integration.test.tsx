@@ -56,7 +56,11 @@ jest.mock('../src/services/agent-run.service', () => ({
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {ThemeProvider} from '../src/theme/ThemeProvider';
 
-function Harness(props: {canResumeWithoutInput: boolean}) {
+function Harness(props: {
+  canResumeWithoutInput: boolean;
+  lastMessageHasToolResult?: boolean;
+  lastMessageIsPlainUserText?: boolean;
+}) {
   const [running, setRunning] = React.useState(false);
   return (
     <ThemeProvider>
@@ -71,6 +75,8 @@ function Harness(props: {canResumeWithoutInput: boolean}) {
         onMessagesChanged={() => undefined}
         onNeedModel={() => undefined}
         canResumeWithoutInput={props.canResumeWithoutInput}
+        lastMessageHasToolResult={props.lastMessageHasToolResult ?? false}
+        lastMessageIsPlainUserText={props.lastMessageIsPlainUserText ?? false}
       />
     </ThemeProvider>
   );

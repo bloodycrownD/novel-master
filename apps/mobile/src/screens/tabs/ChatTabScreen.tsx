@@ -24,6 +24,10 @@ import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
 import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '../../hooks/useBatchSelection';
+import {
+  isTranscriptRowSelectable,
+  transcriptSelectableRole,
+} from '../../components/chat/transcript-selectable-role';
 import {TextPromptModal} from '../../components/ui/TextPromptModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useMobileScope} from '../../hooks/useMobileScope';
@@ -142,8 +146,24 @@ export function ChatTabScreen() {
     () => ({
       richText: chatRichTextEnabled,
       batchMode: messageBatch.active,
+      batchModeKind: messageBatch.mode,
     }),
-    [chatRichTextEnabled, messageBatch.active],
+    [chatRichTextEnabled, messageBatch.active, messageBatch.mode],
+  );
+
+  const handleToggleMessageSelect = useCallback(
+    (messageId: string) => {
+      const target = messages.chatMessages.find(m => m.id === messageId);
+      if (target == null) {
+        return;
+      }
+      const role = transcriptSelectableRole(target.role, messageBatch.mode);
+      if (!isTranscriptRowSelectable(role)) {
+        return;
+      }
+      messageBatch.toggle(messageId);
+    },
+    [messages.chatMessages, messageBatch],
   );
 
   const closeMessageMenu = useCallback(() => {
@@ -348,12 +368,11 @@ export function ChatTabScreen() {
         streamMetrics={stream.streamMetrics}
         toolInvoking={stream.toolInvoking}
         messageBatchActive={messageBatch.active}
+        messageBatchMode={messageBatch.mode}
         messageBatchSelectedCount={messageBatch.selectedCount}
         messageBatchSelectedIds={messageBatch.selectedIds}
         onExitMessageBatch={messageActions.exitMessageBatch}
-        onConfirmMessageBatchDelete={messageActions.confirmMessageBatchDelete}
-        onConfirmBatchHideMessages={messageActions.confirmBatchHideMessages}
-        onConfirmBatchUnhideMessages={messageActions.confirmBatchUnhideMessages}
+        onConfirmVisibilityBatch={messageActions.confirmVisibilityBatch}
         useWebviewTranscript={useWebviewTranscript}
         transcriptWebRef={transcriptWebRef}
         chatScrollKey={scroll.chatScrollKey}
@@ -372,6 +391,8 @@ export function ChatTabScreen() {
         loadingMoreMessages={messages.loadingMoreMessages}
         hasWorkspaceModel={scope.hasWorkspaceModel}
         canResumeWithoutInput={messages.canResumeWithoutInput}
+        lastMessageHasToolResult={messages.lastMessageHasToolResult}
+        lastMessageIsPlainUserText={messages.lastMessageIsPlainUserText}
         vfsRefreshKey={scope.vfsRefreshKey}
         sessionVfs={scope.sessionVfs}
         sessionWorktree={scope.sessionWorktree}
@@ -388,9 +409,13 @@ export function ChatTabScreen() {
           messageActions.handleCompactSession();
         }}
         onNavigateRealPrompt={() => navigation.navigate('RealPrompt')}
-        onEnterMessageBatch={() => {
+        onEnterHideMessageBatch={() => {
           scope.setSessionDrawerOpen(false);
-          messageActions.enterMessageBatch();
+          messageActions.enterHideMessageBatch();
+        }}
+        onEnterRestoreMessageBatch={() => {
+          scope.setSessionDrawerOpen(false);
+          messageActions.enterRestoreMessageBatch();
         }}
         modelPickerOpen={modelPickerOpen}
         agentPickerOpen={agentPickerOpen}
@@ -434,7 +459,7 @@ export function ChatTabScreen() {
           }
           messageActions.handleMessageMenuAction(target, action);
         }}
-        onToggleMessageSelect={messageBatch.toggle}
+        onToggleMessageSelect={handleToggleMessageSelect}
         onMessageLongPress={(msg, anchor) => {
           if (stream.agentRunning) {
             return;

@@ -53,19 +53,22 @@ export type ChatConversationPanelProps = {
   streamMetrics: AgentStreamMetricsView | null;
   toolInvoking: boolean;
   messageBatchActive: boolean;
+  messageBatchMode: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
   messageBatchSelectedCount: number;
   messageBatchSelectedIds: ReadonlySet<string>;
   onExitMessageBatch: () => void;
-  onConfirmMessageBatchDelete: () => void;
-  onConfirmBatchHideMessages: () => void;
-  onConfirmBatchUnhideMessages: () => void;
+  onConfirmVisibilityBatch: () => void;
   useWebviewTranscript: boolean;
   transcriptWebRef: React.RefObject<ChatTranscriptWebViewHandle | null>;
   chatScrollKey: string | null;
   chatMessages: ChatMessage[];
   hasMoreMessages: boolean;
   agentRunning: boolean;
-  transcriptFlags: {richText: boolean; batchMode: boolean};
+  transcriptFlags: {
+    richText: boolean;
+    batchMode: boolean;
+    batchModeKind: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
+  };
   webMenuCloseSignal: number;
   restoredTranscriptScroll: ChatTranscriptScrollSnapshot | undefined;
   defaultChatScrollToBottom: boolean;
@@ -77,6 +80,8 @@ export type ChatConversationPanelProps = {
   loadingMoreMessages: boolean;
   hasWorkspaceModel: boolean;
   canResumeWithoutInput: boolean;
+  lastMessageHasToolResult: boolean;
+  lastMessageIsPlainUserText: boolean;
   vfsRefreshKey: number;
   sessionVfs: VfsService | null;
   sessionWorktree: WorktreeService | null;
@@ -85,7 +90,8 @@ export type ChatConversationPanelProps = {
   onOpenSessionRename: () => void;
   onCompactSession: () => void;
   onNavigateRealPrompt: () => void;
-  onEnterMessageBatch: () => void;
+  onEnterHideMessageBatch: () => void;
+  onEnterRestoreMessageBatch: () => void;
   modelPickerOpen: boolean;
   agentPickerOpen: boolean;
   onCloseModelPicker: () => void;
@@ -136,12 +142,11 @@ export function ChatConversationPanel({
   streamMetrics,
   toolInvoking,
   messageBatchActive,
+  messageBatchMode,
   messageBatchSelectedCount,
   messageBatchSelectedIds,
   onExitMessageBatch,
-  onConfirmMessageBatchDelete,
-  onConfirmBatchHideMessages,
-  onConfirmBatchUnhideMessages,
+  onConfirmVisibilityBatch,
   useWebviewTranscript,
   transcriptWebRef,
   chatScrollKey,
@@ -160,6 +165,8 @@ export function ChatConversationPanel({
   loadingMoreMessages,
   hasWorkspaceModel,
   canResumeWithoutInput,
+  lastMessageHasToolResult,
+  lastMessageIsPlainUserText,
   vfsRefreshKey,
   sessionVfs,
   sessionWorktree,
@@ -168,7 +175,8 @@ export function ChatConversationPanel({
   onOpenSessionRename,
   onCompactSession,
   onNavigateRealPrompt,
-  onEnterMessageBatch,
+  onEnterHideMessageBatch,
+  onEnterRestoreMessageBatch,
   modelPickerOpen,
   agentPickerOpen,
   onCloseModelPicker,
@@ -258,13 +266,12 @@ export function ChatConversationPanel({
             {streamMetrics != null ? (
               <ChatStreamMetricsBar metrics={streamMetrics} />
             ) : null}
-            {messageBatchActive ? (
+            {messageBatchActive && messageBatchMode != null ? (
               <MessageBatchHeader
+                mode={messageBatchMode}
                 selectedCount={messageBatchSelectedCount}
                 onCancel={onExitMessageBatch}
-                onDelete={onConfirmMessageBatchDelete}
-                onHide={onConfirmBatchHideMessages}
-                onRestore={onConfirmBatchUnhideMessages}
+                onConfirm={onConfirmVisibilityBatch}
               />
             ) : null}
             {useWebviewTranscript ? (
@@ -302,7 +309,7 @@ export function ChatConversationPanel({
                 initialScroll={cachedChatScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
                 onScrollSnapshot={onChatScrollSnapshot}
-                batchMode={messageBatchActive}
+                batchMode={messageBatchActive ? messageBatchMode : null}
                 selectedMessageIds={messageBatchSelectedIds}
                 onToggleMessageSelect={onToggleMessageSelect}
                 onMessageLongPress={onMessageLongPress}
@@ -336,6 +343,8 @@ export function ChatConversationPanel({
               onRunFinished={onRunFinished}
               onNeedModel={onNeedModel}
               canResumeWithoutInput={canResumeWithoutInput}
+              lastMessageHasToolResult={lastMessageHasToolResult}
+              lastMessageIsPlainUserText={lastMessageIsPlainUserText}
             />
           </View>
           {sessionVfs && sessionWorktree ? (
@@ -381,7 +390,8 @@ export function ChatConversationPanel({
         onRename={onOpenSessionRename}
         onCompact={onCompactSession}
         onRealPrompt={onNavigateRealPrompt}
-        onBatchMessages={onEnterMessageBatch}
+        onHideMessages={onEnterHideMessageBatch}
+        onRestoreMessages={onEnterRestoreMessageBatch}
       />
       <MessageActionMenu
         visible={useWebviewMessageMenu && messageMenuTarget != null}

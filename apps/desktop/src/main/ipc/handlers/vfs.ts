@@ -17,6 +17,12 @@ import type {
   VfsZipImportResult,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
+import {
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+} from "@novel-master/core";
 import { BrowserWindow } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
@@ -24,6 +30,10 @@ import {
   renameVfsDirectory,
   renameVfsFile,
 } from "../../services/vfs-operations.service.js";
+import {
+  executeSessionUserVfsOp,
+  isSessionVfsScope,
+} from "../../services/user-vfs-turn-execute.service.js";
 import {
   exportVfsZipWithDialog,
   importVfsZipWithDialog,
@@ -43,6 +53,18 @@ function formatError(err: unknown): { code: string; message: string } {
 
 function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
+}
+
+async function readBaselineContent(
+  vfs: Awaited<ReturnType<typeof getVfsForScope>>,
+  path: string,
+): Promise<string | null> {
+  try {
+    const result = await vfs.read(path);
+    return result.content;
+  } catch {
+    return null;
+  }
 }
 
 export async function handleVfsList(
@@ -93,6 +115,25 @@ export async function handleVfsWrite(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
     const vfs = getVfsForScope(rt, scope);
+
+    if (isSessionVfsScope(scope)) {
+      const baseline = await readBaselineContent(vfs, req.path);
+      const op = buildUserVfsSaveOp(
+        baseline,
+        req.content,
+        req.path,
+        req.content,
+        {
+          expectedVersion: req.expectedVersion,
+          versionCheck: req.versionCheck,
+        },
+      );
+      if (op != null) {
+        await executeSessionUserVfsOp(rt, scope.sessionId, op);
+      }
+      return { ok: true, data: undefined };
+    }
+
     if (req.expectedVersion != null) {
       await vfs.write(req.path, req.content, {
         expectedVersion: req.expectedVersion,
@@ -116,6 +157,16 @@ export async function handleVfsMkdir(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
+
+    if (isSessionVfsScope(scope)) {
+      await executeSessionUserVfsOp(
+        rt,
+        scope.sessionId,
+        buildUserVfsMkdirOp(req.path),
+      );
+      return { ok: true, data: undefined };
+    }
+
     const vfs = getVfsForScope(rt, scope);
     await vfs.mkdir(req.path);
     invalidateSessionWorktreeSnapshot(rt, scope);
@@ -131,6 +182,16 @@ export async function handleVfsDelete(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
+
+    if (isSessionVfsScope(scope)) {
+      await executeSessionUserVfsOp(
+        rt,
+        scope.sessionId,
+        buildUserVfsDeleteOp(req.path, req.recursive ?? true),
+      );
+      return { ok: true, data: undefined };
+    }
+
     const vfs = getVfsForScope(rt, scope);
     await deleteVfsEntry(vfs, req.path, { recursive: req.recursive });
     invalidateSessionWorktreeSnapshot(rt, scope);
@@ -146,6 +207,16 @@ export async function handleVfsRename(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
+
+    if (isSessionVfsScope(scope)) {
+      await executeSessionUserVfsOp(
+        rt,
+        scope.sessionId,
+        buildUserVfsRenameOp(req.oldPath, req.newPath),
+      );
+      return { ok: true, data: undefined };
+    }
+
     const vfs = getVfsForScope(rt, scope);
     const parentPath =
       req.oldPath.lastIndexOf("/") > 0

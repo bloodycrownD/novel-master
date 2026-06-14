@@ -5,6 +5,7 @@
  */
 
 import type {
+  AppendToolTurnBridgeFn,
   AgentRegistryService,
   CompactionConditionEvaluator,
   CompactionConditionsStore,
@@ -26,6 +27,7 @@ import type {
   SimpleEventBus,
   TdbcConnection,
   TokenCounterRegistry,
+  UserVfsTurnService,
   VfsScope,
   VfsService,
   WorktreeService,
@@ -42,6 +44,8 @@ export interface MobileNovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
+  /** maxSteps 截断后用户确认的 tool turn 桥接 assistant 追加。 */
+  readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly eventBus: SimpleEventBus;
@@ -61,4 +65,5 @@ export interface MobileNovelMasterRuntime {
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;
+  readonly userVfsTurn: UserVfsTurnService;
 }

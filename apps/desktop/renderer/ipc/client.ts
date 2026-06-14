@@ -18,12 +18,15 @@ import {
   type CompactionManualRequest,
   type IpcResult,
   type MessagesAppendRequest,
+  type MessagesAppendToolTurnBridgeRequest,
   type MessagesDeleteRequest,
   type MessagesEditRequest,
   type MessagesForkRequest,
   type MessagesHideRequest,
+  type MessagesHideRangeRequest,
   type MessagesListRequest,
   type MessagesShowRequest,
+  type MessagesShowRangeRequest,
   type ModelListPickerResponse,
   type ModelSetCurrentRequest,
   type ProjectCreateRequest,
@@ -287,6 +290,12 @@ export async function ipcMessagesAppend(
   return bridge().invoke(IPC_CHANNELS.MESSAGES_APPEND, req);
 }
 
+export async function ipcMessagesAppendToolTurnBridge(
+  req: MessagesAppendToolTurnBridgeRequest,
+): Promise<IpcResult<ChatMessageDto>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE, req);
+}
+
 export async function ipcMessagesEdit(
   req: MessagesEditRequest,
 ): Promise<IpcResult<ChatMessageDto>> {
@@ -303,6 +312,18 @@ export async function ipcMessagesShow(
   req: MessagesShowRequest,
 ): Promise<IpcResult<void>> {
   return bridge().invoke(IPC_CHANNELS.MESSAGES_SHOW, req);
+}
+
+export async function ipcMessagesHideRange(
+  req: MessagesHideRangeRequest,
+): Promise<IpcResult<{ count: number }>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_HIDE_RANGE, req);
+}
+
+export async function ipcMessagesShowRange(
+  req: MessagesShowRangeRequest,
+): Promise<IpcResult<{ count: number }>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_SHOW_RANGE, req);
 }
 
 export async function ipcMessagesDelete(
