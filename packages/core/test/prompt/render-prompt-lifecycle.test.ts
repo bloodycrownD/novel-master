@@ -13,6 +13,7 @@ const ctx = {
 
 describe("buildPromptLlmInputFromLayout lifecycle", () => {
   const layout: AgentPromptLayout = {
+    dynamicEnabled: true,
     persist: [],
     dynamic: [
       { name: "kick", type: "text", role: "user", content: "go", lifecycle: "once" },
@@ -30,6 +31,7 @@ describe("buildPromptLlmInputFromLayout lifecycle", () => {
 
   it("always block included on every step", async () => {
     const alwaysLayout: AgentPromptLayout = {
+      dynamicEnabled: true,
       persist: [],
       dynamic: [
         { name: "ctx", type: "text", role: "user", content: "prefix" },
@@ -52,6 +54,7 @@ describe("buildPromptLlmInputFromLayout lifecycle", () => {
   it("system field unaffected by dynamic lifecycle", async () => {
     const systemLayout: AgentPromptLayout = {
       system: "sys",
+      dynamicEnabled: true,
       persist: [],
       dynamic: [
         { name: "kick", type: "text", role: "user", content: "x", lifecycle: "once" },
@@ -62,5 +65,19 @@ describe("buildPromptLlmInputFromLayout lifecycle", () => {
     });
     assert.equal(step1.system, "sys");
     assert.equal(step1.messages.length, 0);
+  });
+
+  it("dynamicEnabled=false 时 lifecycle 块不出现", async () => {
+    const disabledLayout: AgentPromptLayout = {
+      dynamicEnabled: false,
+      persist: [],
+      dynamic: [
+        { name: "kick", type: "text", role: "user", content: "go", lifecycle: "once" },
+      ],
+    };
+    const step0 = await buildPromptLlmInputFromLayout(disabledLayout, ctx, {
+      agentStepIndex: 0,
+    });
+    assert.equal(step0.messages.length, 0);
   });
 });

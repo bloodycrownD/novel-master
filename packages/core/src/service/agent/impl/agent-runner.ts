@@ -202,6 +202,7 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const llmInput = promptInput;
+        // TODO(impl-agent): 接入 normalizeForLlmExport（区内 merge + zones 边界）后再送 provider
         const llmMessages = normalizeOrphanToolResultsForLlm(llmInput.messages);
 
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;

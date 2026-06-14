@@ -33,6 +33,7 @@ function message(
 
 const sampleLayout: AgentPromptLayout = {
   system: "ctx",
+  persistEnabled: true,
   persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
   dynamic: [],
 };
@@ -54,6 +55,7 @@ describe("buildPromptLlmInputFromLayout", () => {
 
   it("worktree persist block becomes synthetic user message", async () => {
     const layout: AgentPromptLayout = {
+      persistEnabled: true,
       persist: [
         { name: "canon", type: "worktree" },
       ],
@@ -113,5 +115,63 @@ describe("buildPromptAssemblyFromLayout", () => {
       messages: [],
     });
     assert.equal(segments[0]!.source, "system");
+  });
+});
+
+describe("persistEnabled / dynamicEnabled 开关", () => {
+  it("persistEnabled=false 跳过 persist 区", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
+      dynamic: [],
+    };
+    const ctx = {
+      worktreeDisplay: "WT",
+      messages: [message("user", "hi", 1)],
+      now: fixedNow,
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages.length, 1);
+    assert.equal(input.messages[0]!.id, "m1");
+
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
+  });
+
+  it("dynamicEnabled=false 跳过 dynamic 区", async () => {
+    const layout: AgentPromptLayout = {
+      dynamicEnabled: false,
+      persist: [],
+      dynamic: [
+        { name: "kick", type: "text", role: "user", content: "go", lifecycle: "once" },
+      ],
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, {
+      worktreeDisplay: "",
+      messages: [],
+      now: fixedNow,
+    }, { agentStepIndex: 0 });
+    assert.equal(input.messages.length, 0);
+
+    const segments = await buildPromptAssemblyFromLayout(layout, {
+      worktreeDisplay: "",
+      messages: [],
+    }, { agentStepIndex: 0 });
+    assert.ok(segments.every((s) => !s.id.startsWith("dynamic-")));
+  });
+
+  it("worktree 块读取 block.role（缺省 user）", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: true,
+      persist: [{ name: "canon", type: "worktree", role: "assistant" }],
+      dynamic: [],
+    };
+    const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages[0]!.role, "assistant");
+
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const wt = segments.find((s) => s.id === "persist-worktree-canon");
+    assert.equal(wt?.role, "assistant");
   });
 });

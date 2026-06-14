@@ -379,6 +379,13 @@ export {
   validateAgentPromptLayoutFromMaps,
   validateAgentPromptLayout,
 } from "./domain/prompt/logic/validate-agent-prompt-layout.js";
+export {
+  normalizeForLlmExport,
+} from "./domain/prompt/logic/normalize-for-llm-export.js";
+export type {
+  LlmExportZones,
+  LlmExportZone,
+} from "./domain/prompt/logic/normalize-for-llm-export.js";
 export { validateDynamicMacros } from "./domain/prompt/logic/validate-dynamic-macros.js";
 export { expandDynamicMacros } from "./domain/prompt/logic/expand-dynamic-macros.js";
 export { renderSessionVfsTree } from "./domain/vfs/logic/render-session-vfs-tree.js";
