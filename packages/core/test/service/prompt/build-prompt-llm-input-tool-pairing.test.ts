@@ -53,6 +53,7 @@ describe("buildPromptLlmInputFromLayout tool pairing", () => {
 
     const input = await buildPromptLlmInputFromLayout(
       {
+        persistEnabled: true,
         persist: [{ name: "ctx", type: "text", role: "user", content: "context" }],
         dynamic: [],
       },

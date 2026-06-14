@@ -196,6 +196,12 @@ export async function moveVfsPath(
   // WHY: fail before write/delete so a rename conflict cannot overwrite the target.
   await assertMoveTargetAvailable(vfs, from, to);
 
+  const normalizedFrom = normalizeDirPath(from);
+  const normalizedTo = normalizeDirPath(to);
+  if (normalizedFrom === normalizedTo) {
+    return;
+  }
+
   let isFile = false;
   try {
     await vfs.read(from);

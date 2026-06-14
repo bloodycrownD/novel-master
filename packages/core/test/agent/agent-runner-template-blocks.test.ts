@@ -87,6 +87,7 @@ describe("AgentRunner template blocks", () => {
     const definition: AgentDefinition = {
       name: "ctx-agent",
       prompts: {
+        persistEnabled: true,
         persist: [{ name: "canon", type: "worktree" }],
         dynamic: [],
       },
@@ -139,6 +140,7 @@ describe("AgentRunner template blocks", () => {
     const definition: AgentDefinition = {
       name: "ctx-agent",
       prompts: {
+        persistEnabled: true,
         persist: [{ name: "canon", type: "worktree" }],
         dynamic: [],
       },

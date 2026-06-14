@@ -86,6 +86,7 @@ describe("AgentRunner prompt block lifecycle", () => {
       name: "kick-agent",
       prompts: {
         persist: [],
+        dynamicEnabled: true,
         dynamic: [
           { name: "kick", type: "text", role: "user", content: "继续", lifecycle: "once" },
         ],
