@@ -288,6 +288,18 @@ export {
   hasToolResult,
   isPlainUserText,
 } from "./domain/chat/logic/message-content-helpers.js";
+export type {
+  MessageVisibilityBatchMode,
+  TranscriptSelectableRole,
+  VisibilityBatchMessage,
+} from "./domain/chat/logic/visibility-batch-range.js";
+export {
+  transcriptSelectableRole,
+  isTranscriptRowSelectable,
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+} from "./domain/chat/logic/visibility-batch-range.js";
 export {
   createProjectService,
   createSessionService,
