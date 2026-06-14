@@ -116,30 +116,49 @@ export function blockTypeLabel(
   return "文本";
 }
 
-/** 将 persist 拆为可编辑文本块与至多一个固定工作树块（编辑器 UI 用）。 */
+/** 规范化单个 persist 块（工作树固定 name，缺省 role 为 user）。 */
+export function normalizePersistBlock(block: PersistPromptBlock): PersistPromptBlock {
+  if (block.type === "worktree") {
+    return {
+      name: WORKTREE_BLOCK_WIRE_NAME,
+      type: "worktree",
+      role: block.role ?? "user",
+    };
+  }
+  return block;
+}
+
+/** 将 persist 拆为有序块列表与编辑器辅助视图（保留混排顺序）。 */
 export function splitPersistBlocksForEditor(persist: readonly PersistPromptBlock[]): {
+  readonly blocks: readonly PersistPromptBlock[];
   readonly textBlocks: readonly PersistTextPromptBlock[];
   readonly worktree: PersistWorktreePromptBlock | null;
 } {
-  const textBlocks: PersistTextPromptBlock[] = [];
-  let worktree: PersistWorktreePromptBlock | null = null;
-  for (const block of persist) {
-    if (block.type === "worktree") {
-      worktree = { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" };
-    } else {
-      textBlocks.push(block);
-    }
-  }
-  return { textBlocks, worktree };
+  const blocks = persist.map(normalizePersistBlock);
+  const textBlocks = blocks.filter((b): b is PersistTextPromptBlock => b.type === "text");
+  const worktree = blocks.find((b): b is PersistWorktreePromptBlock => b.type === "worktree") ?? null;
+  return { blocks, textBlocks, worktree };
 }
 
-/** 合并文本块与工作树块为 persist 数组（工作树固定置于文本块之后）。 */
+/** 合并有序 persist 块（保留传入顺序）。 */
+export function joinPersistBlocksForLayout(
+  blocks: readonly PersistPromptBlock[],
+): PersistPromptBlock[];
+/** @deprecated 请直接传入完整有序 persist 数组。 */
 export function joinPersistBlocksForLayout(
   textBlocks: readonly PersistTextPromptBlock[],
   worktree: PersistWorktreePromptBlock | null,
+): PersistPromptBlock[];
+export function joinPersistBlocksForLayout(
+  blocksOrText: readonly PersistPromptBlock[] | readonly PersistTextPromptBlock[],
+  worktree?: PersistWorktreePromptBlock | null,
 ): PersistPromptBlock[] {
-  return worktree
-    ? [...textBlocks, { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" }]
+  if (worktree === undefined) {
+    return (blocksOrText as readonly PersistPromptBlock[]).map(normalizePersistBlock);
+  }
+  const textBlocks = blocksOrText as readonly PersistTextPromptBlock[];
+  return worktree != null
+    ? [...textBlocks, normalizePersistBlock(worktree)]
     : [...textBlocks];
 }
 
@@ -147,11 +166,32 @@ export function mapPersistTextBlocks(
   persist: readonly PersistPromptBlock[],
   mapper: (block: PersistTextPromptBlock, index: number) => PersistTextPromptBlock,
 ): PersistPromptBlock[] {
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
-  return joinPersistBlocksForLayout(
-    textBlocks.map((block, index) => mapper(block, index)),
-    worktree,
-  );
+  const { blocks } = splitPersistBlocksForEditor(persist);
+  let textIndex = 0;
+  return blocks.map((block) => {
+    if (block.type === "text") {
+      const mapped = mapper(block, textIndex);
+      textIndex += 1;
+      return mapped;
+    }
+    return block;
+  });
+}
+
+export function movePersistBlock(
+  persist: readonly PersistPromptBlock[],
+  index: number,
+  direction: -1 | 1,
+): PersistPromptBlock[] {
+  const blocks = [...splitPersistBlocksForEditor(persist).blocks];
+  const target = index + direction;
+  if (target < 0 || target >= blocks.length) {
+    return [...persist];
+  }
+  const tmp = blocks[target]!;
+  blocks[target] = blocks[index]!;
+  blocks[index] = tmp;
+  return blocks;
 }
 
 export function movePersistTextBlock(
@@ -159,46 +199,66 @@ export function movePersistTextBlock(
   textIndex: number,
   direction: -1 | 1,
 ): PersistPromptBlock[] {
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
-  const next = [...textBlocks];
-  const target = textIndex + direction;
-  if (target < 0 || target >= next.length) {
+  const { blocks } = splitPersistBlocksForEditor(persist);
+  const textIndices = blocks
+    .map((block, index) => (block.type === "text" ? index : -1))
+    .filter((index) => index >= 0);
+  const persistIndex = textIndices[textIndex];
+  const targetTextIndex = textIndex + direction;
+  if (
+    persistIndex == null ||
+    targetTextIndex < 0 ||
+    targetTextIndex >= textIndices.length
+  ) {
     return [...persist];
   }
-  const tmp = next[target]!;
-  next[target] = next[textIndex]!;
-  next[textIndex] = tmp;
-  return joinPersistBlocksForLayout(next, worktree);
+  const targetPersistIndex = textIndices[targetTextIndex]!;
+  const next = [...blocks];
+  const tmp = next[targetPersistIndex]!;
+  next[targetPersistIndex] = next[persistIndex]!;
+  next[persistIndex] = tmp;
+  return next;
 }
 
 export function deletePersistTextBlock(
   persist: readonly PersistPromptBlock[],
   textIndex: number,
 ): PersistPromptBlock[] {
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
-  return joinPersistBlocksForLayout(
-    textBlocks.filter((_, index) => index !== textIndex),
-    worktree,
-  );
+  const { blocks } = splitPersistBlocksForEditor(persist);
+  let currentTextIndex = 0;
+  return blocks.filter((block) => {
+    if (block.type === "text") {
+      const keep = currentTextIndex !== textIndex;
+      currentTextIndex += 1;
+      return keep;
+    }
+    return true;
+  });
 }
 
 export function addPersistWorktreeBlock(
   persist: readonly PersistPromptBlock[],
 ): PersistPromptBlock[] {
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(persist);
-  if (worktree != null) {
+  const { blocks } = splitPersistBlocksForEditor(persist);
+  if (blocks.some((block) => block.type === "worktree")) {
     return [...persist];
   }
-  return joinPersistBlocksForLayout(textBlocks, {
-    name: WORKTREE_BLOCK_WIRE_NAME,
-    type: "worktree",
-  });
+  return [...blocks, createDefaultWorktreeBlock()];
 }
 
 export function removePersistWorktreeBlock(
   persist: readonly PersistPromptBlock[],
 ): PersistPromptBlock[] {
-  return joinPersistBlocksForLayout(splitPersistBlocksForEditor(persist).textBlocks, null);
+  return splitPersistBlocksForEditor(persist).blocks.filter((block) => block.type !== "worktree");
+}
+
+export function updatePersistWorktreeRole(
+  persist: readonly PersistPromptBlock[],
+  role: "user" | "assistant",
+): PersistPromptBlock[] {
+  return splitPersistBlocksForEditor(persist).blocks.map((block) =>
+    block.type === "worktree" ? { ...block, role } : block,
+  );
 }
 
 type DynamicTextBlock = DynamicPromptBlock;
@@ -284,6 +344,7 @@ export function createDefaultWorktreeBlock(): PersistWorktreePromptBlock {
   return {
     name: WORKTREE_BLOCK_WIRE_NAME,
     type: "worktree",
+    role: "user",
   };
 }
 
@@ -323,10 +384,9 @@ export function layoutFromFormInput(
     input.systemEnabled && input.systemContent.trim() !== ""
       ? input.systemContent
       : undefined;
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(input.persist);
   return {
     ...(system != null ? { system } : {}),
-    persist: joinPersistBlocksForLayout(textBlocks, worktree),
+    persist: [...splitPersistBlocksForEditor(input.persist).blocks],
     dynamic: [...input.dynamic],
   };
 }

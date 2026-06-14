@@ -347,6 +347,11 @@ export type {
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "./domain/prompt/model/agent-prompt-layout.js";
+export {
+  movePersistBlock,
+  updatePersistWorktreeRole,
+  normalizePersistBlock,
+} from "./config-forms/agent/agent-editor-state.js";
 export { shouldIncludeDynamicBlock } from "./domain/prompt/logic/should-include-dynamic-block.js";
 export { messageBodyText } from "./domain/prompt/logic/message-body.js";
 export {
