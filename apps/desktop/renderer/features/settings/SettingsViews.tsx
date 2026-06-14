@@ -618,10 +618,6 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       return;
     }
     if (action === "delete") {
-      if (rows.length <= 1) {
-        showToast("至少保留一个 Agent");
-        return;
-      }
       setDeleteConfirm({ kind: "single", agentId: row.agentId, name: row.name });
       return;
     }
@@ -632,10 +628,6 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
   };
 
   const confirmDeleteAgents = async (agentIds: readonly string[]) => {
-    if (rows.length - agentIds.length < 1) {
-      showToast("至少保留一个 Agent");
-      return;
-    }
     const currentRes = await ipcAgentResolveCurrent();
     for (const agentId of agentIds) {
       const res = await ipcAgentRegistryDelete({ agentId });

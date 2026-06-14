@@ -161,18 +161,13 @@ body {
   flex-shrink: 0;
 }
 
-.app-chrome--custom-titlebar {
+#app-chrome.app-chrome--custom-titlebar {
   border-bottom-color: var(--settings-item-border);
-  background: var(--titlebar-chrome-bg, #f4f5f7);
+  background: var(--chrome-bg);
 }
 
-html:not([data-theme="dark"]) .app-chrome--custom-titlebar {
-  --titlebar-chrome-bg: linear-gradient(180deg, #eef3fb 0%, #f8fafd 100%);
+html:not([data-theme="dark"]) #app-chrome.app-chrome--custom-titlebar {
   border-bottom-color: var(--accent-blue-border);
-}
-
-html[data-theme="dark"] .app-chrome--custom-titlebar {
-  --titlebar-chrome-bg: #14161a;
 }
 
 .app-chrome__leading {
@@ -2576,7 +2571,7 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px 14px 14px;
+  padding: 12px 14px 22px;
 }
 
 .config-block-card__meta {
@@ -2592,6 +2587,7 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 
 .config-block-card__hint {
   margin: 0;
+  padding-bottom: 10px;
   font-size: 12px;
   line-height: 1.45;
   color: var(--text-secondary);
