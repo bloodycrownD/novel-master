@@ -16,20 +16,21 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
+  WORKTREE_BLOCK_WIRE_NAME,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
   definitionToForm,
-  deletePersistTextBlock,
   formSnapshotJson,
   joinPersistBlocksForLayout,
   mapPersistTextBlocks,
-  movePersistTextBlock,
+  movePersistBlock,
   removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
+  updatePersistWorktreeRole,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   type ToolsMode,
@@ -350,13 +351,13 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
-  const {textBlocks: persistTextBlocks, worktree: persistWorktree} = useMemo(
+  const {blocks: persistBlocks, worktree: persistWorktree} = useMemo(
     () => splitPersistBlocksForEditor(persist),
     [persist],
   );
 
-  const movePersist = (textIndex: number, dir: -1 | 1) => {
-    setPersist(prev => movePersistTextBlock(prev, textIndex, dir));
+  const movePersist = (index: number, dir: -1 | 1) => {
+    setPersist(prev => movePersistBlock(prev, index, dir));
   };
 
   const moveDynamic = (index: number, dir: -1 | 1) => {
@@ -373,9 +374,15 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     });
   };
 
-  const deletePersist = (textIndex: number) => {
-    setPersist(prev => deletePersistTextBlock(prev, textIndex));
+  const deletePersist = (index: number) => {
+    setPersist(prev => {
+      const {blocks} = splitPersistBlocksForEditor(prev);
+      return blocks.filter((_, i) => i !== index);
+    });
   };
+
+  const persistTextIndex = (persistIndex: number) =>
+    persistBlocks.slice(0, persistIndex).filter(b => b.type === 'text').length;
 
   const deleteDynamic = (index: number) => {
     setDynamic(prev => prev.filter((_, i) => i !== index));
@@ -637,7 +644,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           </View>
 
           <View style={styles.sectionHead}>
-            <Text style={[styles.sectionLabel, {color: tokens.text}]}>
+            <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
               {PROMPT_REGION_LABELS.persistBlocks}
             </Text>
             <Pressable
@@ -648,107 +655,138 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Pressable>
           </View>
           <View style={styles.blockList}>
-            {persistTextBlocks.length === 0 ? (
-              <Text style={[styles.emptyHint, {color: tokens.textSecondary}]}>
+            {persistBlocks.length === 0 ? (
+              <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyPersistHint}
               </Text>
             ) : null}
-            {persistTextBlocks.map((block, index) => (
-              <View
-                key={`persist-block-${index}`}
-                style={[
-                  styles.blockCard,
-                  {backgroundColor: tokens.surface, borderColor: tokens.border},
-                ]}>
-                <View style={styles.blockHeader}>
-                  <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                    <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                      {blockTypeLabel(block.type)}
+            {persistBlocks.map((block, index) => {
+              if (block.type === 'worktree') {
+                return (
+                  <View
+                    key={`persist-worktree-${index}`}
+                    style={[
+                      styles.blockCard,
+                      {backgroundColor: tokens.surface, borderColor: tokens.border},
+                    ]}>
+                    <View style={styles.blockHeader}>
+                      <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                        <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                          {WORKTREE_BLOCK_LABEL}
+                        </Text>
+                      </View>
+                      <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
+                        {WORKTREE_BLOCK_LABEL}
+                      </Text>
+                      {renderBlockActions(
+                        index,
+                        persistBlocks.length,
+                        movePersist,
+                        deletePersist,
+                      )}
+                    </View>
+                    <FormField label="名称" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={WORKTREE_BLOCK_WIRE_NAME}
+                        editable={false}
+                      />
+                    </FormField>
+                    <FormField label="角色" tokens={tokens}>
+                      <FormSelectField
+                        tokens={tokens}
+                        value={block.role ?? 'user'}
+                        onChange={role =>
+                          setPersist(prev =>
+                            updatePersistWorktreeRole(prev, role as 'user' | 'assistant'),
+                          )
+                        }
+                        options={ROLE_OPTIONS}
+                        sheetTitle="选择角色"
+                      />
+                    </FormField>
+                    <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                      运行时注入 materialize 后的会话工作树。
                     </Text>
                   </View>
-                  <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                    {block.name}
-                  </Text>
-                  {renderBlockActions(
-                    index,
-                    persistTextBlocks.length,
-                    movePersist,
-                    deletePersist,
-                  )}
-                </View>
-                <FormField label="名称" tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
-                    value={block.name}
-                    onChangeText={v =>
-                      setPersist(prev =>
-                        mapPersistTextBlocks(prev, (b, i) =>
-                          i === index ? {...b, name: v} : b,
-                        ),
-                      )
-                    }
-                  />
-                </FormField>
-                <FormField label="角色" tokens={tokens}>
-                  <FormSelectField
-                    tokens={tokens}
-                    value={block.role}
-                    onChange={role =>
-                      setPersist(prev =>
-                        mapPersistTextBlocks(prev, (b, i) =>
-                          i === index
-                            ? {...b, role: role as PersistTextPromptBlock['role']}
-                            : b,
-                        ),
-                      )
-                    }
-                    options={ROLE_OPTIONS}
-                    sheetTitle="选择角色"
-                  />
-                </FormField>
-                <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                  {PROMPT_REGION_LABELS.persistRegionHint}
-                </Text>
-                <FormField label="内容" tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
-                    value={block.content}
-                    onChangeText={v =>
-                      setPersist(prev =>
-                        mapPersistTextBlocks(prev, (b, i) =>
-                          i === index ? {...b, content: v} : b,
-                        ),
-                      )
-                    }
-                    multiline
-                  />
-                </FormField>
-              </View>
-            ))}
-          </View>
+                );
+              }
 
-          {persistWorktree != null ? (
-            <View
-              style={[
-                styles.blockCard,
-                styles.readonlyCard,
-                {backgroundColor: tokens.surface, borderColor: tokens.border},
-              ]}>
-              <View style={styles.blockHeader}>
-                <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                  <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                    {WORKTREE_BLOCK_LABEL}
+              const textIndex = persistTextIndex(index);
+              return (
+                <View
+                  key={`persist-block-${index}`}
+                  style={[
+                    styles.blockCard,
+                    {backgroundColor: tokens.surface, borderColor: tokens.border},
+                  ]}>
+                  <View style={styles.blockHeader}>
+                    <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                      <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                        {blockTypeLabel(block.type)}
+                      </Text>
+                    </View>
+                    <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
+                      {block.name}
+                    </Text>
+                    {renderBlockActions(
+                      index,
+                      persistBlocks.length,
+                      movePersist,
+                      deletePersist,
+                    )}
+                  </View>
+                  <FormField label="名称" tokens={tokens}>
+                    <FormTextInput
+                      tokens={tokens}
+                      value={block.name}
+                      onChangeText={v =>
+                        setPersist(prev =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === textIndex ? {...b, name: v} : b,
+                          ),
+                        )
+                      }
+                    />
+                  </FormField>
+                  <FormField label="角色" tokens={tokens}>
+                    <FormSelectField
+                      tokens={tokens}
+                      value={block.role}
+                      onChange={role =>
+                        setPersist(prev =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === textIndex
+                              ? {...b, role: role as PersistTextPromptBlock['role']}
+                              : b,
+                          ),
+                        )
+                      }
+                      options={ROLE_OPTIONS}
+                      sheetTitle="选择角色"
+                    />
+                  </FormField>
+                  <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                    {PROMPT_REGION_LABELS.persistRegionHint}
                   </Text>
+                  <FormField label="内容" tokens={tokens}>
+                    <FormTextInput
+                      tokens={tokens}
+                      value={block.content}
+                      onChangeText={v =>
+                        setPersist(prev =>
+                          mapPersistTextBlocks(prev, (b, i) =>
+                            i === textIndex ? {...b, content: v} : b,
+                          ),
+                        )
+                      }
+                      multiline
+                    />
+                  </FormField>
                 </View>
-                <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                  {WORKTREE_BLOCK_LABEL}
-                </Text>
-              </View>
-              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                运行时注入 materialize 后的会话工作树，不可配置、不可排序。
-              </Text>
-            </View>
-          ) : null}
+              );
+            })}
+          </View>
 
           <View
             style={[
@@ -772,7 +810,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           </View>
 
           <View style={styles.sectionHead}>
-            <Text style={[styles.sectionLabel, {color: tokens.text}]}>
+            <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
               {PROMPT_REGION_LABELS.dynamicBlocks}
             </Text>
             <Pressable onPress={() => addDynamicBlock()}>
@@ -781,7 +819,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           </View>
           <View style={styles.blockList}>
             {dynamic.length === 0 ? (
-              <Text style={[styles.emptyHint, {color: tokens.textSecondary}]}>
+              <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyDynamicHint}
               </Text>
             ) : null}
@@ -898,9 +936,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 8,
+    marginTop: 10,
+    marginBottom: 8,
+    paddingTop: 2,
+    gap: 8,
   },
-  sectionLabel: {fontSize: 14, fontWeight: '600'},
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   blockList: {gap: 12},
   blockCard: {
     borderWidth: 1,
