@@ -372,13 +372,13 @@ export function MessageList({
             opacity: hidden ? 0.55 : 1,
           },
           batchMode && selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 2,
           },
           batchMode && inRange && !selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 1,
-            opacity: hidden ? 0.55 : 0.92,
+            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         {trimmedThinking ? (
@@ -440,13 +440,13 @@ export function MessageList({
             opacity: hidden ? 0.55 : 1,
           },
           batchMode && selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 2,
           },
           batchMode && inRange && !selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 1,
-            opacity: hidden ? 0.55 : 0.92,
+            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         <ChatMessageBody
@@ -569,6 +569,7 @@ export function MessageList({
                   onPress={() => onToggleMessageSelect?.(row.message.id)}>
                   <BatchCheckbox
                     checked={selected}
+                    accentColor={tokens.danger}
                     onToggle={() => onToggleMessageSelect?.(row.message.id)}
                   />
                 </Pressable>

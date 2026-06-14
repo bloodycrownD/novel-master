@@ -628,6 +628,7 @@ export function buildTranscriptBootScript(): string {
     root.style.setProperty('--text', theme.text || '#111');
     root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
     root.style.setProperty('--primary', theme.primary || '#007aff');
+    root.style.setProperty('--danger', theme.danger || '#d92d20');
     root.style.setProperty('--surface', theme.surface || '#f2f2f7');
     root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
   }

@@ -49,6 +49,12 @@
   --success: #22a06b;
   --warning: #e06c00;
   --danger: #d92d20;
+  /* 消息可见性批量多选：与 primary 蓝区分的醒目色 */
+  --batch-select: var(--danger);
+  --batch-select-ring: rgba(217, 45, 32, 0.48);
+  --batch-select-bg: rgba(217, 45, 32, 0.14);
+  --batch-range-border: rgba(217, 45, 32, 0.42);
+  --batch-range-bg: rgba(217, 45, 32, 0.07);
   --overlay: rgba(16, 20, 28, 0.42);
   --shadow-elevated: 0 10px 32px rgba(16, 20, 28, 0.12);
   --shadow-card: 0 1px 2px rgba(16, 20, 28, 0.05), 0 4px 12px rgba(16, 20, 28, 0.04);
@@ -102,6 +108,11 @@ html[data-theme="dark"] {
   --success: #3ecf8e;
   --warning: #ffb020;
   --danger: #ff6b6b;
+  --batch-select: var(--danger);
+  --batch-select-ring: rgba(255, 107, 107, 0.55);
+  --batch-select-bg: rgba(255, 107, 107, 0.18);
+  --batch-range-border: rgba(255, 107, 107, 0.45);
+  --batch-range-bg: rgba(255, 107, 107, 0.1);
   --overlay: rgba(0, 0, 0, 0.58);
   --shadow-elevated: 0 12px 36px rgba(0, 0, 0, 0.48);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.22);
@@ -3525,27 +3536,40 @@ html[data-theme="dark"] .chat-message {
 }
 
 .chat-message.is-selected {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary-ring);
+  border-color: var(--batch-select);
+  border-left-color: var(--batch-select);
+  box-shadow: 0 0 0 2px var(--batch-select-ring);
+  background: color-mix(in srgb, var(--batch-select-bg) 100%, var(--surface));
 }
 
 .chat-message.is-in-range:not(.is-selected) {
-  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
-  border-left-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background: color-mix(in srgb, var(--batch-range-bg) 100%, var(--surface));
+  border-left-color: var(--batch-range-border);
+  box-shadow: inset 3px 0 0 var(--batch-range-border);
 }
 
 .chat-message--user.is-in-range:not(.is-selected) {
-  background: color-mix(in srgb, var(--primary) 10%, var(--accent-user));
-  border-left-color: color-mix(in srgb, var(--primary) 70%, var(--primary));
+  background: color-mix(in srgb, var(--batch-range-bg) 100%, var(--accent-user));
+  border-left-color: var(--batch-range-border);
 }
 
 .chat-message--assistant.is-in-range:not(.is-selected) {
-  background: color-mix(in srgb, var(--primary) 6%, var(--accent-assistant));
-  border-left-color: color-mix(in srgb, var(--primary) 45%, var(--text-tertiary));
+  background: color-mix(in srgb, var(--batch-range-bg) 100%, var(--accent-assistant));
+  border-left-color: var(--batch-range-border);
 }
 
 .chat-message.is-in-range.is-selected {
-  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  background: color-mix(in srgb, var(--batch-select-bg) 100%, var(--surface));
+  box-shadow: 0 0 0 2px var(--batch-select-ring);
+}
+
+.chat-messages--batch .chat-message--user.is-selected,
+.chat-messages--batch .chat-message--assistant.is-selected {
+  border-left-color: var(--batch-select);
+}
+
+.chat-messages--batch .chat-message--user.is-selected {
+  border-left-width: 3px;
 }
 
 .chat-message--hidden {
@@ -3581,7 +3605,7 @@ html[data-theme="dark"] .chat-message {
 .chat-message__check input {
   width: 16px;
   height: 16px;
-  accent-color: var(--primary);
+  accent-color: var(--batch-select);
   cursor: pointer;
 }
 

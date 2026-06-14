@@ -9,10 +9,13 @@ import {useTheme} from '../../theme/ThemeProvider';
 type Props = {
   checked: boolean;
   onToggle: () => void;
+  /** 勾选强调色；消息可见性批量用 danger，列表批量默认 primary */
+  accentColor?: string;
 };
 
-export function BatchCheckbox({checked, onToggle}: Props) {
+export function BatchCheckbox({checked, onToggle, accentColor}: Props) {
   const {tokens} = useTheme();
+  const accent = accentColor ?? tokens.primary;
 
   return (
     <Pressable
@@ -21,8 +24,8 @@ export function BatchCheckbox({checked, onToggle}: Props) {
       style={[
         styles.box,
         {
-          borderColor: checked ? tokens.primary : tokens.border,
-          backgroundColor: checked ? tokens.primary : 'transparent',
+          borderColor: checked ? accent : tokens.border,
+          backgroundColor: checked ? accent : 'transparent',
         },
       ]}>
       {checked ? <Text style={styles.mark}>✓</Text> : null}

@@ -79,6 +79,7 @@ function themeFromTokens(tokens: {
   text: string;
   textSecondary: string;
   primary: string;
+  danger: string;
   surface: string;
   borderLight: string;
 }): TranscriptTheme {
@@ -87,6 +88,7 @@ function themeFromTokens(tokens: {
     text: tokens.text,
     textSecondary: tokens.textSecondary,
     primary: tokens.primary,
+    danger: tokens.danger,
     surface: tokens.surface,
     borderLight: tokens.borderLight,
   };

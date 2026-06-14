@@ -44,6 +44,7 @@ export type TranscriptTheme = {
   readonly text: string;
   readonly textSecondary: string;
   readonly primary: string;
+  readonly danger: string;
   readonly surface: string;
   readonly borderLight: string;
 };
