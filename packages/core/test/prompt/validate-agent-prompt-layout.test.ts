@@ -78,6 +78,66 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       (e: unknown) => e instanceof PromptError && e.message.includes("at most one worktree"),
     );
   });
+
+  it("worktree 缺省 role 时 normalize 为 user", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      { canon: { type: "worktree" } },
+      {},
+    );
+    assert.equal(layout.persist.length, 1);
+    assert.equal(layout.persist[0]?.type, "worktree");
+    assert.equal(
+      layout.persist[0]?.type === "worktree" ? layout.persist[0].role : undefined,
+      "user",
+    );
+  });
+
+  it("接受 worktree role assistant", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      { canon: { type: "worktree", role: "assistant" } },
+      {},
+    );
+    assert.equal(
+      layout.persist[0]?.type === "worktree" ? layout.persist[0].role : undefined,
+      "assistant",
+    );
+  });
+
+  it("拒绝 worktree 含 content", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          { canon: { type: "worktree", content: "x" } },
+          {},
+        ),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("worktree block must not include content"),
+    );
+  });
+
+  it("拒绝 worktree 含 lifecycle", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          { canon: { type: "worktree", lifecycle: "once" } },
+          {},
+        ),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("worktree block must not include"),
+    );
+  });
+
+  it("拒绝 worktree 无效 role", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          { canon: { type: "worktree", role: "system" } },
+          {},
+        ),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("worktree block requires role user|assistant"),
+    );
+  });
 });
 
 describe("agentDefinitionSchema wire", () => {

@@ -11,12 +11,15 @@ import {
   formSnapshotJson,
   isDynamicBlockPersistent,
   layoutFromFormInput,
+  movePersistBlock,
   PROMPT_REGION_LABELS,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
+  updatePersistWorktreeRole,
   withDynamicBlockPersistence,
   WORKTREE_BLOCK_WIRE_NAME,
 } from "../../src/config-forms/agent/agent-editor-state.js";
+import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
 test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签", () => {
   assert.equal(PROMPT_REGION_LABELS.layoutTitle, "提示词模版");
@@ -116,36 +119,116 @@ test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
   assert.equal(again.lifecycle, undefined);
 });
 
-test("createDefaultWorktreeBlock uses stable name", () => {
+test("createDefaultWorktreeBlock uses stable name and default role", () => {
   assert.deepEqual(createDefaultWorktreeBlock(), {
     name: WORKTREE_BLOCK_WIRE_NAME,
     type: "worktree",
+    role: "user",
   });
 });
 
-test("splitPersistBlocksForEditor normalizes worktree wire name", () => {
+test("splitPersistBlocksForEditor normalizes worktree wire name and role", () => {
   const split = splitPersistBlocksForEditor([
     { name: "persona", type: "text", role: "user", content: "x" },
     { name: "custom", type: "worktree" },
   ]);
   assert.equal(split.textBlocks.length, 1);
-  assert.deepEqual(split.worktree, { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" });
+  assert.deepEqual(split.worktree, {
+    name: WORKTREE_BLOCK_WIRE_NAME,
+    type: "worktree",
+    role: "user",
+  });
+  assert.deepEqual(split.blocks, [
+    { name: "persona", type: "text", role: "user", content: "x" },
+    { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree", role: "user" },
+  ]);
 });
 
-test("layoutFromFormInput places worktree after text blocks with fixed name", () => {
+test("layoutFromFormInput preserves mixed persist order", () => {
   const layout = layoutFromFormInput({
     systemEnabled: false,
     systemContent: "",
     persist: [
-      { name: "custom", type: "worktree" },
+      { name: "custom", type: "worktree", role: "assistant" },
       { name: "persona", type: "text", role: "user", content: "x" },
     ],
     dynamic: [],
   });
   assert.deepEqual(layout.persist, [
+    { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree", role: "assistant" },
     { name: "persona", type: "text", role: "user", content: "x" },
-    { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" },
   ]);
+});
+
+test("movePersistBlock reorders worktree-only persist", () => {
+  const only = [createDefaultWorktreeBlock()];
+  assert.deepEqual(movePersistBlock(only, 0, -1), only);
+  assert.deepEqual(movePersistBlock(only, 0, 1), only);
+});
+
+test("movePersistBlock swaps text and worktree in mixed persist", () => {
+  const mixed = [
+    { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
+    createDefaultWorktreeBlock(),
+    { name: "p2", type: "text" as const, role: "assistant" as const, content: "b" },
+  ];
+  const movedUp = movePersistBlock(mixed, 1, -1);
+  assert.deepEqual(
+    movedUp.map((block) => block.type),
+    ["worktree", "text", "text"],
+  );
+  const movedDown = movePersistBlock(mixed, 0, 1);
+  assert.deepEqual(
+    movedDown.map((block) => block.type),
+    ["worktree", "text", "text"],
+  );
+});
+
+test("updatePersistWorktreeRole updates worktree role only", () => {
+  const persist = [
+    { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
+    createDefaultWorktreeBlock(),
+  ];
+  const updated = updatePersistWorktreeRole(persist, "assistant");
+  assert.equal(updated[0]?.type, "text");
+  assert.equal(updated[0]?.type === "text" ? updated[0].role : undefined, "user");
+  assert.deepEqual(updated[1], {
+    name: WORKTREE_BLOCK_WIRE_NAME,
+    type: "worktree",
+    role: "assistant",
+  });
+});
+
+test("buildAgentDefinitionFromForm wire order matches mixed persist editor order", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persist: [
+      createDefaultWorktreeBlock(),
+      { name: "p1", type: "text", role: "user", content: "after tree" },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(
+      result.definition.prompts.persist.map((block) => block.type),
+      ["worktree", "text"],
+    );
+    const validated = validateAgentPromptLayout(result.definition.prompts);
+    assert.equal(validated.persist[0]?.type, "worktree");
+    assert.equal(
+      validated.persist[0]?.type === "worktree" ? validated.persist[0].role : undefined,
+      "user",
+    );
+  }
 });
 
 test("createDefaultAgentEditorPrompts starts with empty persist", () => {
