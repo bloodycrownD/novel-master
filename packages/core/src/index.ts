@@ -285,6 +285,20 @@ export {
   createSessionService,
   createMessageService,
 } from "./service/chat/create-chat-services.js";
+export {
+  createUserVfsTurnService,
+  createUserVfsTurnServiceBundle,
+} from "./service/chat/create-user-vfs-turn-service.js";
+export type { UserVfsTurnServiceBundle } from "./service/chat/create-user-vfs-turn-service.js";
+export { TOOL_TURN_BRIDGE_TEXT } from "./service/chat/impl/append-tool-turn-bridge.js";
+export type {
+  UserVfsTurnService,
+  UserVfsTurnOp,
+  UserVfsTurnToolSpec,
+  UserVfsTurnExecuteResult,
+  UserVfsFlushResult,
+  AppendToolTurnBridgeFn,
+} from "./service/chat/user-vfs-turn.port.js";
 export type { ProjectService } from "./service/chat/project.port.js";
 export type { SessionService } from "./service/chat/session.port.js";
 export type { MessageService } from "./service/chat/message.port.js";
