@@ -41,7 +41,6 @@ import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-f
 import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
-  ipcAgentRegistryList,
   ipcAgentRegistryUpsert,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
@@ -242,11 +241,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }
 
   const handleDeleteBrokenAgent = async () => {
-    const listRes = await ipcAgentRegistryList();
-    if (listRes.ok && listRes.data.length <= 1) {
-      showToast("至少保留一个 Agent");
-      return;
-    }
     const res = await ipcAgentRegistryDelete({ agentId });
     if (res.ok) {
       toastSettingsSuccess("已删除 Agent");
