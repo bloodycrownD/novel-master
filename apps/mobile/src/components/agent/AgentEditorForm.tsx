@@ -79,6 +79,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [vendorModelId, setVendorModelId] = useState('');
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState('');
+  const [persistEnabled, setPersistEnabled] = useState(false);
+  const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -113,6 +115,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         toolsSelected,
         systemEnabled,
         systemContent,
+        persistEnabled,
+        dynamicEnabled,
         persist,
         dynamic,
       }),
@@ -126,6 +130,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     ],
@@ -170,6 +176,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
     setSystemEnabled(promptForm.systemEnabled);
     setSystemContent(promptForm.systemContent);
+    setPersistEnabled(promptForm.persistEnabled);
+    setDynamicEnabled(promptForm.dynamicEnabled);
     setPersist([...promptForm.persist]);
     setDynamic([...promptForm.dynamic]);
 
@@ -293,6 +301,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     });
@@ -663,8 +673,29 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.persist, () => setAddBlockVisible(true))}
-          <View style={styles.blockList}>
+          {renderPromptSectionHead(promptSectionLabels.persist)}
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            <View style={styles.blockHeader}>
+              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                  {PROMPT_REGION_LABELS.persistBlocks}
+                </Text>
+              </View>
+              <View style={styles.blockHeaderSpacer} />
+              <Switch
+                value={persistEnabled}
+                onValueChange={setPersistEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
+            </View>
+            {persistEnabled ? (
+              <>
+                {renderPromptSectionHead(promptSectionLabels.persist, () => setAddBlockVisible(true))}
+                <View style={styles.blockList}>
             {persistBlocks.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyPersistHint}
@@ -787,6 +818,13 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </View>
               );
             })}
+                </View>
+              </>
+            ) : (
+              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.persistDisabledHint}
+              </Text>
+            )}
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.chat)}
@@ -811,8 +849,29 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Text>
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.dynamic, () => addDynamicBlock())}
-          <View style={styles.blockList}>
+          {renderPromptSectionHead(promptSectionLabels.dynamic)}
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            <View style={styles.blockHeader}>
+              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                  {PROMPT_REGION_LABELS.dynamicBlocks}
+                </Text>
+              </View>
+              <View style={styles.blockHeaderSpacer} />
+              <Switch
+                value={dynamicEnabled}
+                onValueChange={setDynamicEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
+            </View>
+            {dynamicEnabled ? (
+              <>
+                {renderPromptSectionHead(promptSectionLabels.dynamic, () => addDynamicBlock())}
+                <View style={styles.blockList}>
             {dynamic.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyDynamicHint}
@@ -895,6 +954,13 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </FormField>
               </View>
             ))}
+                </View>
+              </>
+            ) : (
+              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.dynamicDisabledHint}
+              </Text>
+            )}
           </View>
         </FormSectionCard>
       </ScreenFormLayout>
