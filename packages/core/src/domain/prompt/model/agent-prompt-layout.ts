@@ -18,6 +18,8 @@ export type PersistTextPromptBlock = {
 export type PersistWorktreePromptBlock = {
   readonly name: string;
   readonly type: "worktree";
+  /** wire 缺省时视为 user。 */
+  readonly role?: "user" | "assistant";
 };
 
 /** persist 区块：text 或 worktree。 */

@@ -21,6 +21,7 @@ const persistTextBlockValueSchema = z
 const persistWorktreeBlockValueSchema = z
   .object({
     type: z.literal("worktree"),
+    role: z.enum(["user", "assistant"]).optional(),
   })
   .strict();
 
@@ -127,7 +128,7 @@ function persistBlockToWire(
   block: AgentPromptLayout["persist"][number],
 ): AgentDefinitionDocument["prompts"]["persist"][string] {
   if (block.type === "worktree") {
-    return { type: "worktree" };
+    return { type: "worktree", role: block.role ?? "user" };
   }
   return {
     type: "text",

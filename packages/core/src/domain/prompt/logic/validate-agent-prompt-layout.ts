@@ -48,13 +48,24 @@ function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
   rejectWhen(label, record);
 
   if (type === "worktree") {
-    if ("role" in record || "content" in record || "lifecycle" in record) {
+    if ("content" in record || "lifecycle" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: worktree block must only have type: worktree`,
+        `${label}: worktree block must not include content or lifecycle`,
       );
     }
-    return { name, type: "worktree" };
+    let role: "user" | "assistant" = "user";
+    if ("role" in record && record.role != null) {
+      const wireRole = record.role;
+      if (wireRole !== "user" && wireRole !== "assistant") {
+        throw new PromptError(
+          "INVALID_BLOCK",
+          `${label}: worktree block requires role user|assistant`,
+        );
+      }
+      role = wireRole;
+    }
+    return { name, type: "worktree", role };
   }
 
   if (type === "text") {
@@ -244,7 +255,7 @@ function assertUniqueBlockNames(
 
 function persistBlockToWire(block: PersistPromptBlock): Record<string, unknown> {
   if (block.type === "worktree") {
-    return { type: "worktree" };
+    return { type: "worktree", role: block.role ?? "user" };
   }
   return { type: "text", role: block.role, content: block.content };
 }
