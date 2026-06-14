@@ -15,6 +15,7 @@ import type {
 } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
+import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
@@ -43,6 +44,29 @@ export interface PromptPreviewSegment {
 export interface PromptAssemblyOptions {
   /** Agent run step index; 0 = first LLM round after user action. */
   readonly agentStepIndex?: number;
+}
+
+/**
+ * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
+ */
+export function computeLlmExportZonesFromLayout(
+  layout: AgentPromptLayout,
+  options?: PromptAssemblyOptions,
+): LlmExportZones {
+  const agentStepIndex = resolveAgentStepIndex(options);
+  let persistCount = 0;
+  if (layout.persistEnabled === true) {
+    persistCount = layout.persist.length;
+  }
+  let dynamicCount = 0;
+  if (layout.dynamicEnabled === true) {
+    for (const block of layout.dynamic) {
+      if (shouldIncludeDynamicBlock(block, agentStepIndex)) {
+        dynamicCount += 1;
+      }
+    }
+  }
+  return { persistCount, dynamicCount };
 }
 
 function resolveAgentStepIndex(options?: PromptAssemblyOptions): number {

@@ -121,6 +121,14 @@ export type {
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
+export {
+  buildUserVfsCreateFileOp,
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+} from "./service/vfs/build-user-vfs-turn-op.js";
+export type { UserVfsSaveVersionOptions } from "./service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "./domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "./domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "./errors/vfs-zip-errors.js";
@@ -420,6 +428,7 @@ export { compressUserVfsToolUses } from "./domain/tool/logic/compress-user-vfs-t
 export {
   buildPromptAssemblyFromLayout,
   buildPromptLlmInputFromLayout,
+  computeLlmExportZonesFromLayout,
   formatPromptLlmInputForCliFromLayout,
   buildPromptPreviewSegmentsFromLayout,
 } from "./service/prompt/render-prompt.js";
@@ -573,6 +582,11 @@ export {
   formatApplicationModelId,
   normalizeVendorModelId,
 } from "./domain/provider/logic/application-model-id.js";
+export { inferLlmProtocolFromApplicationModelId } from "./domain/provider/logic/infer-llm-protocol-from-model-id.js";
+export {
+  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
+  isUserVfsUnifiedToolTurnEnabled,
+} from "./domain/feature-flags/user-vfs-unified-tool-turn.js";
 export type { LlmProvider } from "./domain/provider/model/provider.js";
 export { providerApiKeyRef } from "./domain/provider/model/provider.js";
 export type {

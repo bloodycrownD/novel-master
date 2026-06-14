@@ -26,9 +26,11 @@ import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-cont
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
-import { buildPromptLlmInputFromLayout } from "../../prompt/render-prompt.js";
+import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "../../prompt/render-prompt.js";
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
+import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
+import { inferLlmProtocolFromApplicationModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
@@ -202,8 +204,18 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const llmInput = promptInput;
-        // TODO(impl-agent): 接入 normalizeForLlmExport（区内 merge + zones 边界）后再送 provider
-        const llmMessages = normalizeOrphanToolResultsForLlm(llmInput.messages);
+        const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
+          agentStepIndex: step,
+        });
+        const protocol = inferLlmProtocolFromApplicationModelId(
+          options.applicationModelId,
+        );
+        const exportMessages = normalizeForLlmExport(
+          llmInput.messages,
+          protocol,
+          zones,
+        );
+        const llmMessages = normalizeOrphanToolResultsForLlm(exportMessages);
 
         let toolUseLookupMessages: readonly ChatMessage[] | undefined;
         if (this.deps.listAllSessionMessages != null) {
@@ -270,15 +282,6 @@ export class DefaultAgentRunner implements AgentRunner {
         );
 
         if (toolUses.length === 0) {
-          if (
-            persistMessages &&
-            assistantMessage != null &&
-            this.deps.messageCheckpoint != null
-          ) {
-            void this.deps.messageCheckpoint
-              .capture(sessionId, projectId, assistantMessage.id)
-              .catch(() => undefined);
-          }
           finished = true;
           stopReason = "completed";
           rounds.push({
@@ -319,14 +322,12 @@ export class DefaultAgentRunner implements AgentRunner {
         );
         const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
-        if (vfsMutated) {
-          this.deps.worktreeSnapshot.markDirty(projectId, sessionId);
-        }
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
           buildToolResultBlock(tu.id, parallelOutcomes[i]!, { toolName: tu.name }),
         );
 
         if (
+          vfsMutated &&
           persistMessages &&
           assistantMessage != null &&
           this.deps.messageCheckpoint != null
