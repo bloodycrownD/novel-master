@@ -10,6 +10,7 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
+  WORKTREE_BLOCK_WIRE_NAME,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -21,12 +22,12 @@ import {
   deletePersistTextBlock,
   formatApplicationModelId,
   formSnapshotJson,
-  joinPersistBlocksForLayout,
   mapPersistTextBlocks,
-  movePersistTextBlock,
+  movePersistBlock,
   parseApplicationModelId,
   removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
+  updatePersistWorktreeRole,
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
@@ -314,13 +315,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
+  const { blocks: persistBlocks, worktree: persistWorktree } = useMemo(
     () => splitPersistBlocksForEditor(persist),
     [persist],
   );
 
-  const movePersist = (textIndex: number, dir: -1 | 1) => {
-    setPersist((prev) => movePersistTextBlock(prev, textIndex, dir));
+  const movePersist = (blockIndex: number, dir: -1 | 1) => {
+    setPersist((prev) => movePersistBlock(prev, blockIndex, dir));
   };
 
   const moveDynamic = (index: number, dir: -1 | 1) => {
@@ -368,11 +369,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const addPersistTextBlock = () => {
     setPersist((prev) => {
-      const { textBlocks, worktree } = splitPersistBlocksForEditor(prev);
-      return joinPersistBlocksForLayout(
-        [...textBlocks, createDefaultPersistTextBlock(textBlocks.length)],
-        worktree,
-      );
+      const { blocks } = splitPersistBlocksForEditor(prev);
+      const textCount = blocks.filter((block) => block.type === "text").length;
+      return [...blocks, createDefaultPersistTextBlock(textCount)];
     });
     setAddBlockMenu(null);
   };
@@ -601,91 +600,127 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
           <div
             className={
-              persistTextBlocks.length === 0
+              persistBlocks.length === 0
                 ? "config-block-list config-block-list--empty"
                 : "config-block-list"
             }
           >
-            {persistTextBlocks.length === 0 ? (
+            {persistBlocks.length === 0 ? (
               <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyPersistHint}</p>
             ) : null}
-            {persistTextBlocks.map((block, index) => (
-              <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
-                <div className="config-block-card__header">
-                  <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
-                  <span className="config-block-card__meta">{block.name}</span>
-                  {renderBlockActions(
-                    index,
-                    persistTextBlocks.length,
-                    movePersist,
-                    deletePersist,
-                  )}
-                </div>
-                <div className="config-block-card__body">
-                  <SettingsField label="名称">
-                    <input
-                      value={block.name}
-                      onChange={(e) =>
-                        setPersist((prev) =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? { ...b, name: e.target.value } : b,
-                          ),
-                        )
-                      }
-                    />
-                  </SettingsField>
-                  <SettingsField label="角色">
-                    <select
-                      value={block.role}
-                      onChange={(e) =>
-                        setPersist((prev) =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index
-                              ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
-                              : b,
-                          ),
-                        )
-                      }
-                    >
-                      {ROLE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </SettingsField>
-                  <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistRegionHint}</p>
-                  <SettingsField label="内容">
-                    <textarea
-                      rows={4}
-                      value={block.content}
-                      onChange={(e) =>
-                        setPersist((prev) =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? { ...b, content: e.target.value } : b,
-                          ),
-                        )
-                      }
-                    />
-                  </SettingsField>
-                </div>
-              </div>
-            ))}
-          </div>
+            {persistBlocks.map((block, index) => {
+              if (block.type === "worktree") {
+                return (
+                  <div key={`persist-wt-${index}`} className="config-block-card config-block-card--prompt">
+                    <div className="config-block-card__header">
+                      <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
+                      <span className="config-block-card__meta">{WORKTREE_BLOCK_LABEL}</span>
+                      {renderBlockActions(
+                        index,
+                        persistBlocks.length,
+                        movePersist,
+                        () => removePersistWorktree(),
+                      )}
+                    </div>
+                    <div className="config-block-card__body">
+                      <SettingsField label="名称">
+                        <input value={WORKTREE_BLOCK_WIRE_NAME} readOnly disabled />
+                      </SettingsField>
+                      <SettingsField label="角色">
+                        <select
+                          value={block.role ?? "user"}
+                          onChange={(e) =>
+                            setPersist((prev) =>
+                              updatePersistWorktreeRole(
+                                prev,
+                                e.target.value as "user" | "assistant",
+                              ),
+                            )
+                          }
+                        >
+                          {ROLE_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </SettingsField>
+                      <p className="config-block-card__hint">
+                        运行时注入 materialize 后的会话工作树。
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
 
-          {persistWorktree != null ? (
-            <div className="config-block-card config-block-card--prompt config-block-card--readonly">
-              <div className="config-block-card__header">
-                <span className="config-block-card__badge">{WORKTREE_BLOCK_LABEL}</span>
-                <span className="config-block-card__meta">{WORKTREE_BLOCK_LABEL}</span>
-              </div>
-              <div className="config-block-card__body">
-                <p className="config-block-card__hint">
-                  运行时注入 materialize 后的会话工作树，不可配置、不可排序。
-                </p>
-              </div>
-            </div>
-          ) : null}
+              const textIndex = persistBlocks
+                .slice(0, index)
+                .filter((item) => item.type === "text").length;
+
+              return (
+                <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
+                  <div className="config-block-card__header">
+                    <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
+                    <span className="config-block-card__meta">{block.name}</span>
+                    {renderBlockActions(
+                      index,
+                      persistBlocks.length,
+                      movePersist,
+                      () => deletePersist(textIndex),
+                    )}
+                  </div>
+                  <div className="config-block-card__body">
+                    <SettingsField label="名称">
+                      <input
+                        value={block.name}
+                        onChange={(e) =>
+                          setPersist((prev) =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === textIndex ? { ...b, name: e.target.value } : b,
+                            ),
+                          )
+                        }
+                      />
+                    </SettingsField>
+                    <SettingsField label="角色">
+                      <select
+                        value={block.role}
+                        onChange={(e) =>
+                          setPersist((prev) =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === textIndex
+                                ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
+                                : b,
+                            ),
+                          )
+                        }
+                      >
+                        {ROLE_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </SettingsField>
+                    <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistRegionHint}</p>
+                    <SettingsField label="内容">
+                      <textarea
+                        rows={4}
+                        value={block.content}
+                        onChange={(e) =>
+                          setPersist((prev) =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === textIndex ? { ...b, content: e.target.value } : b,
+                            ),
+                          )
+                        }
+                      />
+                    </SettingsField>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="config-block-card config-block-card--prompt config-block-card--readonly">
             <div className="config-block-card__header">
