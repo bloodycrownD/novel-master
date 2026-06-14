@@ -3,6 +3,10 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
 import { ToolCallGroupCard } from "./ToolCallGroupCard";
+import {
+  parseUserVfsActionFromText,
+  UserVfsActionBody,
+} from "./user-vfs-action-transcript";
 import type { MessageVisibilityBatchMode } from "./transcript-selectable-role";
 import {
   isTranscriptRowSelectable,
@@ -88,6 +92,8 @@ export function MessageList({
 
         const selectableRole = transcriptSelectableRole(msg.role, batchMode);
         const rowSelectable = isTranscriptRowSelectable(selectableRole);
+        const userVfsAction =
+          msg.role === "user" ? parseUserVfsActionFromText(text) : null;
 
         return (
           <div
@@ -137,11 +143,15 @@ export function MessageList({
                 </details>
               ) : null}
               {text ? (
-                <MessageBody
-                  text={text}
-                  richText={chatRichText}
-                  alwaysRichText={msg.role === "assistant"}
-                />
+                userVfsAction != null ? (
+                  <UserVfsActionBody action={userVfsAction} />
+                ) : (
+                  <MessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === "assistant"}
+                  />
+                )
               ) : null}
               {item.tools.length > 0 ? (
                 <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
