@@ -127,16 +127,78 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     );
   });
 
-  it("拒绝 worktree 无效 role", () => {
+  it("persist 开：末块非 assistant 失败", () => {
     assert.throws(
       () =>
         validateAgentPromptLayoutFromMaps(
-          { canon: { type: "worktree", role: "system" } },
+          { tail: { type: "text", role: "user", content: "x" } },
           {},
+          undefined,
+          { persistEnabled: true },
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree block requires role user|assistant"),
+        e instanceof PromptError &&
+        e.message.includes("last block must be assistant text"),
     );
+  });
+
+  it("dynamic 开：仅 1 块失败", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          {},
+          { only: { type: "text", role: "assistant", content: "x" } },
+          undefined,
+          { dynamicEnabled: true },
+        ),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("at least two blocks"),
+    );
+  });
+
+  it("dynamic 开：首非 assistant 失败", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          {},
+          {
+            a: { type: "text", role: "user", content: "x" },
+            b: { type: "text", role: "user", content: "y" },
+          },
+          undefined,
+          { dynamicEnabled: true },
+        ),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("first block must be assistant"),
+    );
+  });
+
+  it("dynamic 开：末非 user 失败", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          {},
+          {
+            a: { type: "text", role: "assistant", content: "x" },
+            b: { type: "text", role: "assistant", content: "y" },
+          },
+          undefined,
+          { dynamicEnabled: true },
+        ),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("last block must be user"),
+    );
+  });
+
+  it("开关关时不校验末块", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      { tail: { type: "text", role: "user", content: "x" } },
+      { only: { type: "text", role: "assistant", content: "y" } },
+    );
+    assert.equal(layout.persist.length, 1);
+    assert.equal(layout.dynamic.length, 1);
   });
 });
 

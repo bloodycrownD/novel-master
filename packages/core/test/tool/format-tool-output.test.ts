@@ -20,10 +20,10 @@ describe("formatToolOutputForLlm", () => {
     );
   });
 
-  it("T10: summarizes multi replacement edit result", () => {
+  it("T10: multi replacement edit result returns ok", () => {
     assert.equal(
       formatToolOutputForLlm({ version: 2, replacements: 3 }),
-      "ok (3 replacements)",
+      "ok",
     );
   });
 

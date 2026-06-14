@@ -120,6 +120,20 @@ describe("Message visibility", () => {
     assert.equal(count, 2); // Only 2 messages exist
   });
 
+  it("hideRange returns 0 when hiding already hidden messages", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "S");
+    await ctx.messages.append(session.id, "user", textBlocks("1"));
+    await ctx.messages.append(session.id, "assistant", textBlocks("2"));
+
+    const first = await ctx.messages.hideRange(session.id, 1, 2);
+    assert.equal(first, 2);
+
+    const second = await ctx.messages.hideRange(session.id, 1, 2);
+    assert.equal(second, 0);
+  });
+
   it("new messages are visible by default", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
