@@ -24,7 +24,6 @@ import {
   createDefaultPersistTextBlock,
   definitionToForm,
   formSnapshotJson,
-  joinPersistBlocksForLayout,
   mapPersistTextBlocks,
   movePersistBlock,
   removePersistWorktreeBlock,
@@ -390,11 +389,9 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
   const addPersistTextBlock = () => {
     setPersist(prev => {
-      const {textBlocks, worktree} = splitPersistBlocksForEditor(prev);
-      return joinPersistBlocksForLayout(
-        [...textBlocks, createDefaultPersistTextBlock(textBlocks.length)],
-        worktree,
-      );
+      const {blocks} = splitPersistBlocksForEditor(prev);
+      const textCount = blocks.filter(block => block.type === 'text').length;
+      return [...blocks, createDefaultPersistTextBlock(textCount)];
     });
     setAddBlockVisible(false);
   };
@@ -643,7 +640,14 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             )}
           </View>
 
-          <View style={styles.sectionHead}>
+          <View
+            style={[
+              styles.sectionHead,
+              {
+                borderTopColor: tokens.borderLight,
+                backgroundColor: tokens.bgSecondary,
+              },
+            ]}>
             <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
               {PROMPT_REGION_LABELS.persistBlocks}
             </Text>
@@ -809,7 +813,14 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             </Text>
           </View>
 
-          <View style={styles.sectionHead}>
+          <View
+            style={[
+              styles.sectionHead,
+              {
+                borderTopColor: tokens.borderLight,
+                backgroundColor: tokens.bgSecondary,
+              },
+            ]}>
             <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
               {PROMPT_REGION_LABELS.dynamicBlocks}
             </Text>
@@ -936,9 +947,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 10,
+    minHeight: 40,
+    marginTop: 12,
     marginBottom: 8,
-    paddingTop: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
     gap: 8,
   },
   sectionLabel: {
@@ -958,6 +973,7 @@ const styles = StyleSheet.create({
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    minHeight: 40,
     gap: 8,
     marginBottom: 2,
   },
