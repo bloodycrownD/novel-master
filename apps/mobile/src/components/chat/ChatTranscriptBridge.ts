@@ -106,7 +106,10 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
-  | BridgeEnvelope<'selectionUpdate', {selectedMessageIds: readonly string[]}>
+  | BridgeEnvelope<'selectionUpdate', {
+      selectedMessageIds: readonly string[];
+      affectedMessageIds?: readonly string[];
+    }>
   | BridgeEnvelope<'closeMenu', Record<string, never>>;
 
 /** Transcript → host */

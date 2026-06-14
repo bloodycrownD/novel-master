@@ -52,53 +52,57 @@ function findAllPressables(root: TestRenderer.ReactTestInstance) {
 describe('MessageBatchHeader', () => {
   const handlers = {
     onCancel: jest.fn(),
-    onDelete: jest.fn(),
-    onHide: jest.fn(),
-    onRestore: jest.fn(),
+    onConfirm: jest.fn(),
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  it('disables delete/hide/restore when selectedCount is 0', () => {
+  it('确认按钮在无选中时禁用', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
-        <MessageBatchHeader selectedCount={0} {...handlers} />,
+        <MessageBatchHeader
+          mode="hide"
+          selectedCount={0}
+          affectedCount={0}
+          rangeLabel={null}
+          {...handlers}
+        />,
       );
     });
     const pressables = findAllPressables(tree.root);
-    // cancel + three action buttons
-    expect(pressables).toHaveLength(4);
-    const actionButtons = pressables.slice(1);
-    for (const button of actionButtons) {
-      expect(button.props.disabled).toBe(true);
-    }
+    expect(pressables).toHaveLength(2);
+    const confirm = pressables[1];
+    expect(confirm.props.disabled).toBe(true);
   });
 
-  it('enables delete/hide/restore when selectedCount is greater than 0', () => {
+  it('有选中且存在范围预览时展示将影响条数', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
-        <MessageBatchHeader selectedCount={2} {...handlers} />,
+        <MessageBatchHeader
+          mode="hide"
+          selectedCount={1}
+          affectedCount={3}
+          rangeLabel="seq 1–2"
+          {...handlers}
+        />,
       );
     });
+    const texts = tree.root.findAll(node => node.type === 'Text');
+    const summary = texts.find(
+      node =>
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('将影响 3 条'),
+    );
+    expect(summary).toBeDefined();
     const pressables = findAllPressables(tree.root);
-    expect(pressables).toHaveLength(4);
-    const [cancel, deleteBtn, hideBtn, restoreBtn] = pressables;
-    expect(cancel.props.disabled).toBeFalsy();
-    for (const button of [deleteBtn, hideBtn, restoreBtn]) {
-      expect(button.props.disabled).toBe(false);
-      expect(typeof button.props.onPress).toBe('function');
-    }
+    expect(pressables[1].props.disabled).toBe(false);
     act(() => {
-      deleteBtn.props.onPress?.();
-      hideBtn.props.onPress?.();
-      restoreBtn.props.onPress?.();
+      pressables[1].props.onPress?.();
     });
-    expect(handlers.onDelete).toHaveBeenCalledTimes(1);
-    expect(handlers.onHide).toHaveBeenCalledTimes(1);
-    expect(handlers.onRestore).toHaveBeenCalledTimes(1);
+    expect(handlers.onConfirm).toHaveBeenCalledTimes(1);
   });
 });

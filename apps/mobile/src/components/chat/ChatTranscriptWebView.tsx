@@ -58,6 +58,7 @@ export type ChatTranscriptWebViewProps = {
   readonly agentRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly selectedMessageIds?: ReadonlySet<string>;
+  readonly affectedMessageIds?: ReadonlySet<string>;
   readonly menuCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
@@ -150,6 +151,7 @@ export const ChatTranscriptWebView = forwardRef<
     agentRunning = false,
     toolInvoking = false,
     selectedMessageIds,
+    affectedMessageIds,
     menuCloseSignal = 0,
     onScrollSnapshot,
     onReady,
@@ -565,9 +567,12 @@ export const ChatTranscriptWebView = forwardRef<
         selectedMessageIds: selectedMessageIds
           ? [...selectedMessageIds]
           : [],
+        affectedMessageIds: affectedMessageIds
+          ? [...affectedMessageIds]
+          : [],
       },
     });
-  }, [webReady, selectedMessageIds, postToWeb]);
+  }, [webReady, selectedMessageIds, affectedMessageIds, postToWeb]);
 
   useEffect(() => {
     if (!webReady || menuCloseSignal === 0) {

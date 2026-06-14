@@ -9,6 +9,8 @@ import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-rol
 type Props = {
   mode: MessageVisibilityBatchMode;
   selectedCount: number;
+  affectedCount: number;
+  rangeLabel: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -16,16 +18,22 @@ type Props = {
 export function MessageBatchHeader({
   mode,
   selectedCount,
+  affectedCount,
+  rangeLabel,
   onCancel,
   onConfirm,
 }: Props) {
   const {tokens} = useTheme();
   const actionsEnabled = selectedCount > 0;
   const title = mode === 'hide' ? '隐藏消息' : '恢复消息';
+  const summary =
+    affectedCount > 0 && rangeLabel != null
+      ? `${title} · 将影响 ${affectedCount} 条（${rangeLabel}）`
+      : title;
   const hint =
     mode === 'hide'
-      ? '勾选 assistant 消息以确定隐藏范围'
-      : '勾选 user 消息以确定恢复范围';
+      ? '勾选 assistant 确定隐藏上界；其之前所有消息将一并隐藏'
+      : '勾选 user 确定恢复下界；其之后所有消息将一并恢复';
 
   return (
     <View style={[styles.wrap, {borderBottomColor: tokens.border}]}>
@@ -33,8 +41,8 @@ export function MessageBatchHeader({
         <Pressable onPress={onCancel}>
           <Text style={{color: tokens.text}}>取消</Text>
         </Pressable>
-        <Text style={[styles.count, {color: tokens.textSecondary}]}>
-          {title} · 已选 {selectedCount} 项
+        <Text style={[styles.count, {color: tokens.text}]}>
+          {summary}
         </Text>
         <Pressable onPress={onConfirm} disabled={!actionsEnabled}>
           <Text

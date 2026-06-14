@@ -27,6 +27,11 @@ import {
 import {MessageEditModal} from '../../../components/chat/MessageEditModal';
 import {MessageList} from '../../../components/chat/MessageList';
 import {MessageBatchHeader} from '../../../components/batch/MessageBatchHeader';
+import {
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+} from '../../../components/chat/transcript-selectable-role';
 import {ModelPickerModal} from '../../../components/provider/ModelPickerModal';
 import {SessionActionsDrawer} from '../../../components/chrome/SessionActionsDrawer';
 import {
@@ -218,6 +223,50 @@ export function ChatConversationPanel({
     return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
 
+  const visibilityBatchPreview = useMemo(() => {
+    if (messageBatchMode == null) {
+      return {
+        affectedIds: new Set<string>() as ReadonlySet<string>,
+        affectedCount: 0,
+        rangeLabel: null as string | null,
+      };
+    }
+    const sessionMaxSeq =
+      chatMessages.length > 0
+        ? Math.max(...chatMessages.map(m => m.seq))
+        : 0;
+    const affectedIds = computeVisibilityBatchAffectedIds(
+      chatMessages,
+      messageBatchMode,
+      messageBatchSelectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return {affectedIds, affectedCount: 0, rangeLabel: null};
+    }
+    if (messageBatchMode === 'hide') {
+      const range = computeHideRangeFromSelection(
+        chatMessages,
+        messageBatchSelectedIds,
+      );
+      return {
+        affectedIds,
+        affectedCount: affectedIds.size,
+        rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
+      };
+    }
+    const range = computeShowRangeFromSelection(
+      chatMessages,
+      messageBatchSelectedIds,
+      sessionMaxSeq,
+    );
+    return {
+      affectedIds,
+      affectedCount: affectedIds.size,
+      rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
+    };
+  }, [chatMessages, messageBatchMode, messageBatchSelectedIds]);
+
   const emitWorkspaceBackState = useCallback(() => {
     if (!onWorkspaceBackStateChange) {
       return;
@@ -270,6 +319,8 @@ export function ChatConversationPanel({
               <MessageBatchHeader
                 mode={messageBatchMode}
                 selectedCount={messageBatchSelectedCount}
+                affectedCount={visibilityBatchPreview.affectedCount}
+                rangeLabel={visibilityBatchPreview.rangeLabel}
                 onCancel={onExitMessageBatch}
                 onConfirm={onConfirmVisibilityBatch}
               />
@@ -285,6 +336,7 @@ export function ChatConversationPanel({
                 toolInvoking={toolInvoking}
                 flags={transcriptFlags}
                 selectedMessageIds={messageBatchSelectedIds}
+                affectedMessageIds={visibilityBatchPreview.affectedIds}
                 menuCloseSignal={webMenuCloseSignal}
                 initialScroll={restoredTranscriptScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
@@ -311,6 +363,7 @@ export function ChatConversationPanel({
                 onScrollSnapshot={onChatScrollSnapshot}
                 batchMode={messageBatchActive ? messageBatchMode : null}
                 selectedMessageIds={messageBatchSelectedIds}
+                affectedMessageIds={visibilityBatchPreview.affectedIds}
                 onToggleMessageSelect={onToggleMessageSelect}
                 onMessageLongPress={onMessageLongPress}
                 onOpenToolFile={onOpenSessionFilePreview}

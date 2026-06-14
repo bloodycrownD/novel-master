@@ -44,6 +44,8 @@ type Props = {
   richRenderEpoch?: number;
   batchMode?: MessageVisibilityBatchMode | null;
   selectedMessageIds?: ReadonlySet<string>;
+  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
+  affectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (
     message: ChatMessage,
@@ -123,6 +125,7 @@ export function MessageList({
   richRenderEpoch = 0,
   batchMode = null,
   selectedMessageIds,
+  affectedMessageIds,
   onToggleMessageSelect,
   onMessageLongPress,
   listHeaderComponent,
@@ -340,6 +343,7 @@ export function MessageList({
     thinking: string,
     tools: readonly import('./message-blocks').ToolCallView[],
     selected: boolean,
+    inRange: boolean,
     hidden: boolean,
     messageId: string,
     options?: {
@@ -370,6 +374,11 @@ export function MessageList({
           batchMode && selected && {
             borderColor: tokens.primary,
             borderWidth: 2,
+          },
+          batchMode && inRange && !selected && {
+            borderColor: tokens.primary,
+            borderWidth: 1,
+            opacity: hidden ? 0.55 : 0.92,
           },
         ]}>
         {trimmedThinking ? (
@@ -417,6 +426,7 @@ export function MessageList({
   const renderUserBubble = (
     body: string,
     selected: boolean,
+    inRange: boolean,
     hidden: boolean,
     messageId: string,
   ) => {
@@ -432,6 +442,11 @@ export function MessageList({
           batchMode && selected && {
             borderColor: tokens.primary,
             borderWidth: 2,
+          },
+          batchMode && inRange && !selected && {
+            borderColor: tokens.primary,
+            borderWidth: 1,
+            opacity: hidden ? 0.55 : 0.92,
           },
         ]}>
         <ChatMessageBody
@@ -507,6 +522,7 @@ export function MessageList({
                 [],
                 false,
                 false,
+                false,
                 'stream',
                 {
                   defaultExpandedThinking: true,
@@ -526,14 +542,16 @@ export function MessageList({
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
+        const inRange = affectedMessageIds?.has(row.message.id) ?? false;
         const content = isUser ? (
-          renderUserBubble(body, selected, hidden, row.message.id)
+          renderUserBubble(body, selected, inRange, hidden, row.message.id)
         ) : (
           renderAssistantBubble(
             body,
             thinking,
             row.tools,
             selected,
+            inRange,
             hidden,
             row.message.id,
           )

@@ -41,6 +41,7 @@ export function buildTranscriptBootScript(): string {
     stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
     flags: { richText: false, batchMode: false, batchModeKind: null, menuDisabled: false },
     selectedIds: [],
+    affectedIds: [],
     menu: null,
     menuOverlayHandler: null,
     menuNativeTextBlockHandler: null,
@@ -359,6 +360,10 @@ export function buildTranscriptBootScript(): string {
     return state.selectedIds.indexOf(messageId) >= 0;
   }
 
+  function isInRange(messageId) {
+    return state.affectedIds.indexOf(messageId) >= 0;
+  }
+
   function transcriptSelectableRole(messageRole, batchModeKind) {
     if (!batchModeKind) return 'none';
     if (batchModeKind === 'hide') return messageRole === 'assistant' ? 'assistant' : 'none';
@@ -633,7 +638,9 @@ export function buildTranscriptBootScript(): string {
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
     var selected = isSelected(row.id);
+    var inRange = isInRange(row.id);
     var selectedClass = selected ? ' selected' : '';
+    var inRangeClass = inRange ? ' in-range' : '';
     var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
     var rowSelectable = selectableRole !== 'none';
     var html = '';
@@ -644,7 +651,7 @@ export function buildTranscriptBootScript(): string {
     } else if (state.flags.batchMode) {
       html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
     }
-    html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
+    html += '<div class="row message ' + role + hidden + selectedClass + inRangeClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
     if (role === 'user') {
       if (row.text) {
         html += '<div class="bubble">' + renderUserBubbleContent(row.text) + '</div>';
@@ -1106,6 +1113,7 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'selectionUpdate':
         state.selectedIds = (p.selectedMessageIds || []).slice();
+        state.affectedIds = (p.affectedMessageIds || []).slice();
         renderRows();
         break;
       case 'closeMenu':
