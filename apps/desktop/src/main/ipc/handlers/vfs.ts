@@ -22,6 +22,7 @@ import {
   buildUserVfsMkdirOp,
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
+  isUserVfsUnifiedToolTurnEnabled,
 } from "@novel-master/core";
 import { BrowserWindow } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
@@ -116,7 +117,7 @@ export async function handleVfsWrite(
     const scope = resolveVfsScopeFromRequest(req);
     const vfs = getVfsForScope(rt, scope);
 
-    if (isSessionVfsScope(scope)) {
+    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       const baseline = await readBaselineContent(vfs, req.path);
       const op = buildUserVfsSaveOp(
         baseline,
@@ -158,7 +159,7 @@ export async function handleVfsMkdir(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
 
-    if (isSessionVfsScope(scope)) {
+    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
@@ -183,7 +184,7 @@ export async function handleVfsDelete(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
 
-    if (isSessionVfsScope(scope)) {
+    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
@@ -208,7 +209,7 @@ export async function handleVfsRename(
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
 
-    if (isSessionVfsScope(scope)) {
+    if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,

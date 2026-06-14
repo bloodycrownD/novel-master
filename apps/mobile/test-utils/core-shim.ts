@@ -10,7 +10,7 @@
  * Mobile unit tests only need error classes, so we re-export just those.
  */
 
-export { VfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
+export { VfsError, isVfsError } from "../../../packages/core/dist/errors/vfs-errors.js";
 export { VfsZipError } from "../../../packages/core/dist/errors/vfs-zip-errors.js";
 export { buildVfsZip } from "../../../packages/core/dist/domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "../../../packages/core/dist/domain/vfs/logic/vfs-zip-parse.js";
@@ -67,3 +67,7 @@ export {
 } from "../../../packages/core/dist/service/agent/logic/run-agent-turn.js";
 export type { AgentDefinition } from "../../../packages/core/dist/domain/agent/model/agent-definition.js";
 export type { AgentRunResult } from "../../../packages/core/dist/domain/agent/model/agent-run-result.js";
+export {
+  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
+  isUserVfsUnifiedToolTurnEnabled,
+} from "../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js";

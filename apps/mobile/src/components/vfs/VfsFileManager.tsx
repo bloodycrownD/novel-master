@@ -47,7 +47,7 @@ import {
   type MappedVfsRow,
 } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import {isVfsError} from '@novel-master/core';
+import {isUserVfsUnifiedToolTurnEnabled, isVfsError} from '@novel-master/core';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -55,6 +55,11 @@ import {
   remapPathUnderDir,
   renameVfsDirectory,
   renameVfsFile,
+  sessionCreateVfsDirectory,
+  sessionCreateVfsFile,
+  sessionDeleteVfsEntry,
+  sessionRenameVfsDirectory,
+  sessionRenameVfsFile,
 } from '../../services/vfs-operations.service';
 import {
   batchSetDirRulesDisabled,
@@ -67,7 +72,6 @@ import {
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
 import {toastMessage} from '../../errors/toast-message';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
 import {
@@ -128,6 +132,9 @@ export const VfsFileManager = forwardRef<
   const {showToast} = useToast();
   const runtime = useRuntime();
   const root = rootPath ?? vfsScopeRootPath(scope);
+  const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
+  const useUserVfsTurn =
+    sessionId != null && isUserVfsUnifiedToolTurnEnabled();
   const [currentPath, setCurrentPath] = useState(root);
   const [rows, setRows] = useState<MappedVfsRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,16 +146,60 @@ export const VfsFileManager = forwardRef<
   >();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
   const [promptValue, setPromptValue] = useState('');
-  const batch = useBatchSelection();
+  const [vfsBatchActive, setVfsBatchActive] = useState(false);
+  const [vfsBatchSelected, setVfsBatchSelected] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [exportingZip, setExportingZip] = useState(false);
+
+  const vfsBatchEnter = useCallback(() => {
+    setVfsBatchActive(true);
+    setVfsBatchSelected(new Set());
+  }, []);
+
+  const vfsBatchExit = useCallback(() => {
+    setVfsBatchActive(prev => (prev ? false : prev));
+    setVfsBatchSelected(prev => (prev.size === 0 ? prev : new Set()));
+  }, []);
+
+  const vfsBatchToggle = useCallback((id: string) => {
+    setVfsBatchSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const vfsBatch = useMemo(
+    () => ({
+      active: vfsBatchActive,
+      selectedIds: vfsBatchSelected,
+      selectedCount: vfsBatchSelected.size,
+      enter: vfsBatchEnter,
+      exit: vfsBatchExit,
+      toggle: vfsBatchToggle,
+      isSelected: (id: string) => vfsBatchSelected.has(id),
+    }),
+    [
+      vfsBatchActive,
+      vfsBatchSelected,
+      vfsBatchEnter,
+      vfsBatchExit,
+      vfsBatchToggle,
+    ],
+  );
 
   const dismissAllOverlays = useCallback(() => {
     setMenuPath(null);
     setMoreOpen(false);
     setDirRuleOpen(false);
     setPrompt(null);
-    batch.exit();
-  }, [batch.exit]);
+    vfsBatchExit();
+  }, [vfsBatchExit]);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
@@ -294,17 +345,19 @@ export const VfsFileManager = forwardRef<
   }, [currentPath, fetchWorktreeRows, showToast]);
 
   const reloadAfterMutation = useCallback(async () => {
-    invalidateSessionSnapshot();
+    if (scope.kind !== 'session' || !isUserVfsUnifiedToolTurnEnabled()) {
+      invalidateSessionSnapshot();
+    }
     await reload();
-  }, [invalidateSessionSnapshot, reload]);
+  }, [invalidateSessionSnapshot, reload, scope.kind]);
 
   useEffect(() => {
     reload().catch(() => undefined);
   }, [reload]);
 
   useEffect(() => {
-    batch.exit();
-  }, [currentPath, batch.exit]);
+    vfsBatchExit();
+  }, [currentPath, vfsBatchExit]);
 
   const dirPathSet = useMemo(
     () => new Set(rows.filter(r => r.kind === 'dir').map(r => r.path)),
@@ -312,7 +365,7 @@ export const VfsFileManager = forwardRef<
   );
 
   const confirmBatchDelete = useCallback(() => {
-    const paths = [...batch.selectedIds];
+    const paths = [...vfsBatch.selectedIds];
     if (paths.length === 0) {
       return;
     }
@@ -328,9 +381,15 @@ export const VfsFileManager = forwardRef<
             void (async () => {
               try {
                 for (const path of paths) {
-                  await deleteVfsEntry(vfs, path, {recursive: true});
+                  if (useUserVfsTurn) {
+                    await sessionDeleteVfsEntry(runtime, sessionId!, path, {
+                      recursive: true,
+                    });
+                  } else {
+                    await deleteVfsEntry(vfs, path, {recursive: true});
+                  }
                 }
-                batch.exit();
+                vfsBatch.exit();
                 await reloadAfterMutation();
               } catch (err) {
                 showToast(toastMessage('删除失败', err));
@@ -340,11 +399,11 @@ export const VfsFileManager = forwardRef<
         },
       ],
     );
-  }, [batch, vfs, reloadAfterMutation, showToast]);
+  }, [vfsBatch, vfs, reloadAfterMutation, showToast, runtime, useUserVfsTurn, sessionId]);
 
   const runBatchSetRules = useCallback(
     async (enabled: boolean) => {
-      const paths = [...batch.selectedIds];
+      const paths = [...vfsBatch.selectedIds];
       if (paths.length === 0) {
         return;
       }
@@ -352,7 +411,7 @@ export const VfsFileManager = forwardRef<
         const result = enabled
           ? await batchSetDirRulesEnabled(worktree, paths, dirPathSet)
           : await batchSetDirRulesDisabled(worktree, paths, dirPathSet);
-        batch.exit();
+        vfsBatch.exit();
         await reloadAfterMutation();
         if (result.skipped > 0) {
           showToast(
@@ -367,7 +426,7 @@ export const VfsFileManager = forwardRef<
         showToast(toastMessage('操作失败', error));
       }
     },
-    [batch, worktree, dirPathSet, reloadAfterMutation, showToast],
+    [vfsBatch, worktree, dirPathSet, reloadAfterMutation, showToast],
   );
 
   const canGoUp = currentPath !== root;
@@ -477,9 +536,27 @@ export const VfsFileManager = forwardRef<
               parent === '/' ? `/${trimmed}` : `${parent}/${trimmed}`;
             try {
               if (menuRow.kind === 'file') {
-                await renameVfsFile(vfs, menuPath, newPath);
+                if (useUserVfsTurn) {
+                  await sessionRenameVfsFile(
+                    runtime,
+                    sessionId!,
+                    menuPath,
+                    newPath,
+                  );
+                } else {
+                  await renameVfsFile(vfs, menuPath, newPath);
+                }
               } else {
-                await renameVfsDirectory(vfs, menuPath, newPath);
+                if (useUserVfsTurn) {
+                  await sessionRenameVfsDirectory(
+                    runtime,
+                    sessionId!,
+                    menuPath,
+                    newPath,
+                  );
+                } else {
+                  await renameVfsDirectory(vfs, menuPath, newPath);
+                }
                 await migrateWorktreeDirRename(worktree, menuPath, newPath);
                 if (
                   currentPath === menuPath ||
@@ -513,11 +590,19 @@ export const VfsFileManager = forwardRef<
               text: '删除',
               style: 'destructive',
               onPress: () => {
-                deleteVfsEntry(vfs, menuPath, {recursive: true})
-                  .then(() => reloadAfterMutation())
-                  .catch(err =>
-                    showToast(toastMessage('删除失败', err)),
-                  );
+                const runDelete = async () => {
+                  if (useUserVfsTurn) {
+                    await sessionDeleteVfsEntry(runtime, sessionId!, menuPath, {
+                      recursive: true,
+                    });
+                  } else {
+                    await deleteVfsEntry(vfs, menuPath, {recursive: true});
+                  }
+                  await reloadAfterMutation();
+                };
+                runDelete().catch(err =>
+                  showToast(toastMessage('删除失败', err)),
+                );
               },
             },
           ],
@@ -575,7 +660,11 @@ export const VfsFileManager = forwardRef<
             currentPath === '/'
               ? `/${trimmed}`
               : `${currentPath}/${trimmed}`;
-          await createVfsFile(vfs, path);
+          if (useUserVfsTurn) {
+            await sessionCreateVfsFile(runtime, sessionId!, path);
+          } else {
+            await createVfsFile(vfs, path);
+          }
         },
       });
       return;
@@ -594,7 +683,11 @@ export const VfsFileManager = forwardRef<
             currentPath === '/'
               ? `/${trimmed}`
               : `${currentPath}/${trimmed}`;
-          await createVfsDirectory(vfs, path);
+          if (useUserVfsTurn) {
+            await sessionCreateVfsDirectory(runtime, sessionId!, path);
+          } else {
+            await createVfsDirectory(vfs, path);
+          }
           await worktree.setDirRule(defaultDirRuleForm(path));
         },
       });
@@ -617,7 +710,7 @@ export const VfsFileManager = forwardRef<
       return;
     }
     if (action === 'batch') {
-      batch.enter();
+      vfsBatch.enter();
       return;
     }
   };
@@ -690,10 +783,10 @@ export const VfsFileManager = forwardRef<
         </View>
       </View>
 
-      {batch.active ? (
+      {vfsBatch.active ? (
         <VfsBatchHeader
-          selectedCount={batch.selectedCount}
-          onCancel={() => batch.exit()}
+          selectedCount={vfsBatch.selectedCount}
+          onCancel={() => vfsBatch.exit()}
           onDelete={confirmBatchDelete}
           onEnable={() => runBatchSetRules(true).catch(() => undefined)}
           onDisable={() => runBatchSetRules(false).catch(() => undefined)}
@@ -714,24 +807,24 @@ export const VfsFileManager = forwardRef<
             </Text>
           }
           renderItem={({item}) => {
-            const selected = batch.isSelected(item.path);
+            const selected = vfsBatch.isSelected(item.path);
             return (
             <View
               testID={`vfs-row-${item.name}`}
               style={[styles.row, {borderBottomColor: tokens.border}]}>
-              {batch.active ? (
+              {vfsBatch.active ? (
                 <View style={styles.batchCheckCol}>
                   <BatchCheckbox
                     checked={selected}
-                    onToggle={() => batch.toggle(item.path)}
+                    onToggle={() => vfsBatch.toggle(item.path)}
                   />
                 </View>
               ) : null}
               <Pressable
                 style={styles.item}
                 onPress={() => {
-                  if (batch.active) {
-                    batch.toggle(item.path);
+                  if (vfsBatch.active) {
+                    vfsBatch.toggle(item.path);
                     return;
                   }
                   if (item.kind === 'dir') {
@@ -770,7 +863,7 @@ export const VfsFileManager = forwardRef<
                   </View>
                 ) : null}
               </Pressable>
-              {batch.active ? null : (
+              {vfsBatch.active ? null : (
               <Pressable
                 testID={`vfs-row-menu-${item.name}`}
                 onPress={() => setMenuPath(item.path)}
