@@ -39,6 +39,7 @@ import { AgentStreamMetricsBar } from "./AgentStreamMetricsBar";
 import {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
   isTranscriptRowSelectable,
   transcriptSelectableRole,
 } from "./transcript-selectable-role";
@@ -104,6 +105,46 @@ export function ConversationPanel({
         : 0,
     [messages],
   );
+
+  const visibilityBatchPreview = useMemo(() => {
+    if (messageBatch.mode == null) {
+      return {
+        affectedIds: new Set<string>() as ReadonlySet<string>,
+        affectedCount: 0,
+        rangeLabel: null as string | null,
+      };
+    }
+    const affectedIds = computeVisibilityBatchAffectedIds(
+      messages,
+      messageBatch.mode,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return { affectedIds, affectedCount: 0, rangeLabel: null };
+    }
+    if (messageBatch.mode === "hide") {
+      const range = computeHideRangeFromSelection(
+        messages,
+        messageBatch.selectedIds,
+      );
+      return {
+        affectedIds,
+        affectedCount: affectedIds.size,
+        rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
+      };
+    }
+    const range = computeShowRangeFromSelection(
+      messages,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    return {
+      affectedIds,
+      affectedCount: affectedIds.size,
+      rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
+    };
+  }, [messages, messageBatch.mode, messageBatch.selectedIds, sessionMaxSeq]);
 
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
@@ -401,18 +442,24 @@ export function ConversationPanel({
     return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
   })();
 
-  const batchBarLabel =
+  const batchBarTitle =
     messageBatch.mode === "hide"
       ? "隐藏消息"
       : messageBatch.mode === "restore"
         ? "恢复消息"
         : "";
 
+  const batchBarSummary =
+    visibilityBatchPreview.affectedCount > 0 &&
+    visibilityBatchPreview.rangeLabel != null
+      ? `${batchBarTitle} · 将影响 ${visibilityBatchPreview.affectedCount} 条（${visibilityBatchPreview.rangeLabel}）`
+      : batchBarTitle;
+
   const batchHint =
     messageBatch.mode === "hide"
-      ? "勾选 assistant 消息以确定隐藏范围"
+      ? "勾选 assistant 确定隐藏上界；其之前所有消息将一并隐藏"
       : messageBatch.mode === "restore"
-        ? "勾选 user 消息以确定恢复范围"
+        ? "勾选 user 确定恢复下界；其之后所有消息将一并恢复"
         : "";
 
   const handleToggleSelect = useCallback(
@@ -474,6 +521,7 @@ export function ConversationPanel({
             agentRunning={running}
             batchMode={messageBatch.mode}
             selectedIds={messageBatch.selectedIds}
+            affectedIds={visibilityBatchPreview.affectedIds}
             chatRichText={chatRichText}
             onToggleSelect={handleToggleSelect}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
@@ -528,21 +576,32 @@ export function ConversationPanel({
           className={`chat-batch-bar${messageBatch.active ? "" : " hidden"}`}
           hidden={!messageBatch.active}
         >
-          <span id="chat-batch-count">
-            {batchBarLabel} · 已选 {messageBatch.selectedCount} 项
-          </span>
-          <span className="chat-batch-hint">{batchHint}</span>
-          <button
-            type="button"
-            data-action="batch-confirm"
-            disabled={messageBatch.selectedCount === 0}
-            onClick={() => requestBatchConfirm()}
-          >
-            确认
-          </button>
-          <button type="button" onClick={messageBatch.exit}>
-            取消
-          </button>
+          <div className="chat-batch-bar__main">
+            <button
+              type="button"
+              className="chat-batch-bar__cancel"
+              onClick={messageBatch.exit}
+            >
+              取消
+            </button>
+            <div className="chat-batch-bar__info">
+              <span id="chat-batch-count" className="chat-batch-bar__title">
+                {batchBarSummary}
+              </span>
+              <span className="chat-batch-bar__hint">{batchHint}</span>
+            </div>
+            <div className="chat-batch-bar__actions">
+              <button
+                type="button"
+                className="chat-batch-bar__btn chat-batch-bar__btn--primary"
+                data-action="batch-confirm"
+                disabled={messageBatch.selectedCount === 0}
+                onClick={() => requestBatchConfirm()}
+              >
+                确认
+              </button>
+            </div>
+          </div>
         </div>
         {!messageBatch.active ? (
           <ChatComposer

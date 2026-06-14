@@ -27,6 +27,8 @@ interface MessageListProps {
   agentRunning?: boolean;
   batchMode?: MessageVisibilityBatchMode | null;
   selectedIds?: ReadonlySet<string>;
+  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
+  affectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
   onToggleSelect?: (messageId: string) => void;
   onOpenMessageMenu?: (
@@ -62,6 +64,7 @@ export function MessageList({
   agentRunning = false,
   batchMode = null,
   selectedIds,
+  affectedIds,
   chatRichText = false,
   onToggleSelect,
   onOpenMessageMenu,
@@ -88,6 +91,7 @@ export function MessageList({
       {listItems.map((item) => {
         const msg = item.message;
         const selected = selectedIds?.has(msg.id) ?? false;
+        const inRange = affectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
 
         const selectableRole = transcriptSelectableRole(msg.role, batchMode);
@@ -98,7 +102,7 @@ export function MessageList({
         return (
           <div
             key={msg.id}
-            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}`}
+            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}${inRange ? " is-in-range" : ""}`}
             data-message-id={msg.id}
             data-selectable-role={selectableRole}
             onClick={() => {
@@ -117,6 +121,8 @@ export function MessageList({
               <label className="chat-message__check" aria-label="选择消息">
                 <input type="checkbox" checked={selected} readOnly />
               </label>
+            ) : batchMode ? (
+              <span className="chat-message__check-spacer" aria-hidden="true" />
             ) : null}
             <div className="chat-message__body">
               <span className="chat-message__role">
