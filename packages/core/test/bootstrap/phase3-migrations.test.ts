@@ -9,6 +9,40 @@ import {
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 
 describe("Phase 3 bootstrap migrations", () => {
+  it("adds user_vfs_pending_json on legacy chat_session without the column", async () => {
+    registerBetterSqlite3Driver();
+    const conn = await open("tdbc:sqlite:file::memory:", {
+      driver: BETTER_SQLITE3_DRIVER_NAME,
+      filename: ":memory:",
+    });
+    await conn.execute(`
+      CREATE TABLE chat_session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    await conn.execute(
+      `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
+       VALUES ('sess-1', 'proj-1', 'legacy', 1, 1)`,
+    );
+
+    await bootstrapNovelMaster(conn);
+    await bootstrapNovelMaster(conn);
+
+    const cols = await conn.query<{ name: string }>(
+      "SELECT name FROM pragma_table_info('chat_session')",
+    );
+    assert.ok(cols.some((c) => c.name === "user_vfs_pending_json"));
+    const rows = await conn.query<{ user_vfs_pending_json: string | null }>(
+      "SELECT user_vfs_pending_json FROM chat_session WHERE id = 'sess-1'",
+    );
+    assert.equal(rows[0]?.user_vfs_pending_json, null);
+    await conn.close();
+  });
+
   it("adds vfs_entry.entry_kind on legacy table without the column", async () => {
     registerBetterSqlite3Driver();
     const conn = await open("tdbc:sqlite:file::memory:", {
