@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as core from "@novel-master/core";
+import * as provider from "@novel-master/core/provider";
 import * as tokenizer from "../../../src/infra/tokenizer/index.js";
 import * as readPref from "../../../src/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 
@@ -45,9 +46,16 @@ describe("T9 tokenCounter.mode no public read path", () => {
     });
   }
 
-  it("saved-model validation helpers remain exported for per-model settings", () => {
-    assert.equal(typeof core.parseTokenCounterModePref, "function");
-    assert.equal(typeof core.isValidTokenCounterModePref, "function");
-    assert.equal(core.TOKEN_COUNTER_MODE_PREF_KEY, "tokenCounter.mode");
+  it("saved-model validation helpers are not exported from main entry", () => {
+    const mainEntry = core as Record<string, unknown>;
+    assert.equal(mainEntry.parseTokenCounterModePref, undefined);
+    assert.equal(mainEntry.isValidTokenCounterModePref, undefined);
+    assert.equal(mainEntry.TOKEN_COUNTER_MODE_PREF_KEY, undefined);
+  });
+
+  it("saved-model validation helpers remain exported from @novel-master/core/provider", () => {
+    assert.equal(typeof provider.parseTokenCounterModePref, "function");
+    assert.equal(typeof provider.isValidTokenCounterModePref, "function");
+    assert.equal(provider.TOKEN_COUNTER_MODE_PREF_KEY, "tokenCounter.mode");
   });
 });

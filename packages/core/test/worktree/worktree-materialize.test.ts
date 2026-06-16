@@ -181,7 +181,7 @@ describe("worktree materialize", () => {
     await svfs.write("/note.md", "hello");
 
     const { createSessionWorktreeSnapshotStore, createWorktreeService } = await import(
-      "@novel-master/core"
+      "@novel-master/core/worktree"
     );
     const store = createSessionWorktreeSnapshotStore();
     const wt = createWorktreeService(ctx.conn, {

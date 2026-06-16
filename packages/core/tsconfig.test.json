@@ -5,7 +5,26 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@novel-master/core": ["./src/index.ts"]
+      "@novel-master/core": ["./src/index.ts"],
+      "@novel-master/core/agent": ["./src/public/agent.ts"],
+      "@novel-master/core/chat": ["./src/public/chat.ts"],
+      "@novel-master/core/compaction": ["./src/public/compaction.ts"],
+      "@novel-master/core/events": ["./src/public/events.ts"],
+      "@novel-master/core/prompt": ["./src/public/prompt.ts"],
+      "@novel-master/core/provider": ["./src/public/provider.ts"],
+      "@novel-master/core/regex": ["./src/public/regex.ts"],
+      "@novel-master/core/session-fs": ["./src/public/session-fs.ts"],
+      "@novel-master/core/vfs": ["./src/public/vfs.ts"],
+      "@novel-master/core/worktree": ["./src/public/worktree.ts"],
+      "@novel-master/core/tdbc": ["./src/infra/tdbc/index.ts"],
+      "@novel-master/core/sksp": ["./src/infra/sksp/index.ts"],
+      "@novel-master/core/nmtp": ["./src/infra/nmtp/index.ts"],
+      "@novel-master/core/front-matter": ["./src/domain/worktree/logic/front-matter.ts"],
+      "@novel-master/core/kkv": ["./src/service/kkv/index.ts"],
+      "@novel-master/core/config-forms": ["./src/config-forms/index.ts"],
+      "@novel-master/core/config-forms/agent": ["./src/config-forms/agent/index.ts"],
+      "@novel-master/core/config-forms/events": ["./src/config-forms/events/index.ts"],
+      "@novel-master/core/config-forms/shared": ["./src/config-forms/shared/index.ts"]
     }
   },
   "include": ["src/**/*", "test/**/*"]

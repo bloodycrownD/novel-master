@@ -4,11 +4,11 @@ import {
   ChatAgentSession,
   createAgentRunner,
   InMemoryAgentSession,
-  textBlocks,
   AgentError,
   type AgentDefinition,
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
+import { textBlocks } from "@novel-master/core/chat";
 import { EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
