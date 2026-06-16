@@ -15,7 +15,7 @@ import {
   type PromptTokenCountResult,
   type TokenCounterKind,
   type TokenizerFamily,
-} from "@novel-master/core";
+} from "@novel-master/core/provider";
 import {
   countPromptViaNative,
   isNativeTokenizerAvailable,

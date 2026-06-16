@@ -11,6 +11,8 @@ const coreSrcRoot = path.resolve(monorepoRoot, 'packages/core/src');
 /** Metro resolves `@novel-master/core` to dist; stale dist misses new domain modules. */
 const coreDistSmokeFiles = [
   'index.js',
+  'public/chat.js',
+  'public/provider.js',
   'domain/events-config/model/events-config.schema.js',
   'domain/compaction-conditions/model/compaction-conditions.schema.js',
   'domain/worktree/logic/default-dir-rule.js',
@@ -29,11 +31,11 @@ for (const rel of coreDistSmokeFiles) {
     );
   }
 }
-const coreIndexJs = path.join(coreDistRoot, 'index.js');
-const coreIndexSource = fs.readFileSync(coreIndexJs, 'utf8');
-if (!coreIndexSource.includes('matchUserVfsTurnAt')) {
+const coreChatJs = path.join(coreDistRoot, 'public/chat.js');
+const coreChatSource = fs.readFileSync(coreChatJs, 'utf8');
+if (!coreChatSource.includes('matchUserVfsTurnAt')) {
   throw new Error(
-    '[metro] Stale @novel-master/core barrel (missing matchUserVfsTurnAt). ' +
+    '[metro] Stale @novel-master/core chat sub-entry (missing matchUserVfsTurnAt). ' +
       'Run: npm run rebuild -w @novel-master/core',
   );
 }
