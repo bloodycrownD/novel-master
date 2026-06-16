@@ -498,12 +498,14 @@ export function MessageList({
           applyPendingScrollRestore();
         }
       }}
-      keyExtractor={(item, index) => {
+      keyExtractor={item => {
         if ('kind' in item && item.kind === 'stream') {
           return 'stream';
         }
-        const row = item as ChatListItem;
-        return `msg-${row.message.id}`;
+        if (item.kind === 'user_vfs_turn') {
+          return `vfs-turn-${item.id}`;
+        }
+        return `msg-${item.message.id}`;
       }}
       ListEmptyComponent={
         !streamingText && !streamingThinking && !toolInvoking ? (
@@ -533,7 +535,71 @@ export function MessageList({
             </View>
           );
         }
-        const row = item as ChatListItem;
+        if (item.kind === 'user_vfs_turn') {
+          if (item.tools.length === 0) {
+            return null;
+          }
+          const hidden = item.hidden;
+          const selected = selectedMessageIds?.has(item.id) ?? false;
+          const inRange = affectedMessageIds?.has(item.id) ?? false;
+          const colors = chatBubbleColors(tokens, true);
+          const content = (
+            <View
+              style={[
+                styles.bubble,
+                styles.bubbleFillWidth,
+                {
+                  backgroundColor: colors.backgroundColor,
+                  opacity: hidden ? 0.55 : 1,
+                },
+                batchMode && selected && {
+                  borderColor: tokens.danger,
+                  borderWidth: 2,
+                },
+                batchMode && inRange && !selected && {
+                  borderColor: tokens.danger,
+                  borderWidth: 1,
+                  opacity: hidden ? 0.55 : 0.95,
+                },
+              ]}>
+              <ToolCallGroupCard
+                tools={item.tools}
+                dimmed={hidden}
+                onOpenFile={onOpenToolFile}
+                embedded
+              />
+            </View>
+          );
+          const selectableRole = transcriptSelectableRole('user', batchMode);
+          const rowSelectable = isTranscriptRowSelectable(selectableRole);
+          if (batchMode) {
+            return (
+              <View style={styles.batchRow} accessibilityState={{selected}}>
+                {rowSelectable ? (
+                  <Pressable
+                    style={styles.batchCheckboxCol}
+                    onPress={() => onToggleMessageSelect?.(item.id)}>
+                    <BatchCheckbox
+                      checked={selected}
+                      accentColor={tokens.danger}
+                      onToggle={() => onToggleMessageSelect?.(item.id)}
+                    />
+                  </Pressable>
+                ) : (
+                  <View style={styles.batchCheckboxCol} />
+                )}
+                <View style={[styles.batchBubbleCol, styles.batchBubbleColUser]}>
+                  {content}
+                </View>
+              </View>
+            );
+          }
+          return (
+            <View style={[styles.rowAlign, styles.rowAlignUser]}>{content}</View>
+          );
+        }
+
+        const row = item;
         const isUser = row.message.role === 'user';
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
