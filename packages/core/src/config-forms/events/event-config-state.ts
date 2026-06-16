@@ -1,29 +1,27 @@
 /**
- * Draft state for events config UI (array of blocks ↔ KKV document).
+ * 事件配置 UI 草稿状态（块数组 ↔ KKV 文档）。
  */
 import type {
   EventActionNode,
   EventsConfig,
 } from "@/domain/events-config/model/events-config.js";
-import {
-  isUnknownActionDraft,
-  type EventActionDraft,
-} from "./event-config-editor-load.js";
-import { normalizeHideMessageAction } from "./event-config-editor-load.js";
 import { newEventBlockId } from "./event-block-id.js";
-export type { EventActionDraft, UnknownActionDraft, EventsEditorLoadResult } from "./event-config-editor-load.js";
-export {
-  isUnknownActionDraft,
-  isEventActionNode,
-  loadEventsConfigForEditor,
-  normalizeHideMessageAction,
-} from "./event-config-editor-load.js";
+
 export { newEventBlockId } from "./event-block-id.js";
+
+/** 事件配置 UI 仅编辑 startDepth；加载/保存时丢弃 endDepth。 */
+export function normalizeHideMessageAction(action: EventActionNode): EventActionNode {
+  if (action.type !== "hide-message") {
+    return action;
+  }
+  const { endDepth: _end, ...params } = action.params;
+  return { ...action, params };
+}
 
 export type EventBlockDraft = {
   readonly id: string;
   eventType: string;
-  actions: EventActionDraft[];
+  actions: EventActionNode[];
 };
 
 export function configToEventBlocks(config: EventsConfig): EventBlockDraft[] {
@@ -44,9 +42,7 @@ export function eventBlocksToConfig(
     if (key === "") {
       continue;
     }
-    events[key] = block.actions
-      .filter((action): action is EventActionNode => !isUnknownActionDraft(action))
-      .map(normalizeHideMessageAction);
+    events[key] = block.actions.map(normalizeHideMessageAction);
   }
   return { schemaVersion, events };
 }

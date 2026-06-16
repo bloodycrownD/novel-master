@@ -1,10 +1,8 @@
 /**
- * Save-time validation for events config UI drafts.
+ * 事件配置 UI 草稿保存前校验。
  */
-import type { EventActionNode } from "@/domain/events-config/model/events-config.js";
 import { validateDepthSlice } from "../shared/depth-slice.js";
 import type { EventBlockDraft } from "./event-config-state.js";
-import { isUnknownActionDraft } from "./event-config-editor-load.js";
 import { actionTypeLabel, eventTypeLabel } from "./event-config-labels.js";
 
 function validateDag(
@@ -84,10 +82,6 @@ export function validateEventConfigBlocks(
 
     const seenActions = new Set<string>();
     for (const action of block.actions) {
-      if (isUnknownActionDraft(action)) {
-        return "存在未知 action，请移除后保存";
-      }
-
       if (seenActions.has(action.type)) {
         return `「${eventLabel}」中动作「${actionTypeLabel(action.type)}」重复，请删除多余项后再保存`;
       }
@@ -115,10 +109,7 @@ export function validateEventConfigBlocks(
       }
     }
 
-    const knownActions = block.actions.filter(
-      (action): action is EventActionNode => !isUnknownActionDraft(action),
-    );
-    const dagErr = validateDag(knownActions);
+    const dagErr = validateDag(block.actions);
     if (dagErr != null) {
       return `「${eventLabel}」· ${dagErr}`;
     }

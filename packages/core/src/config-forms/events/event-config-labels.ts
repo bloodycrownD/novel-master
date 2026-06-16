@@ -101,13 +101,6 @@ export function actionTypeLabel(type: EventActionType): string {
   }
 }
 
-/** 未知 wire action 卡片 badge。 */
-export const UNKNOWN_ACTION_BADGE = "未知动作";
-
-export function unknownActionHint(wireKey: string): string {
-  return `旧版或不受支持的 action「${wireKey}」；请删除后再保存。`;
-}
-
 export function actionTypeHint(type: EventActionType): string {
   switch (type) {
     case "hide-message":
