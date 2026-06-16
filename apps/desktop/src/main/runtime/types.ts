@@ -4,33 +4,38 @@
  * @module runtime/types
  */
 import type {
-  AppendToolTurnBridgeFn,
-  AgentRegistryService,
-  CompactionConditionEvaluator,
-  CompactionConditionsStore,
-  EventOrchestrator,
-  EventsConfigStore,
-  MessageCheckpointService,
-  MessageService,
-  ModelRequestService,
   PersistentPreferences,
   PersistentState,
+  TdbcConnection,
+} from "@novel-master/core";
+import type { AgentRegistryService } from "@novel-master/core/agent";
+import type {
+  MessageService,
   ProjectService,
+  SessionService,
+  UserVfsTurnService,
+  AppendToolTurnBridgeFn,
+} from "@novel-master/core/chat";
+import type {
+  CompactionConditionEvaluator,
+  CompactionConditionsStore,
+} from "@novel-master/core/compaction";
+import type {
+  EventOrchestrator,
+  EventsConfigStore,
+  SimpleEventBus,
+} from "@novel-master/core/events";
+import type {
+  SecretStore,
+  ModelRequestService,
   ProviderModelService,
   ProviderService,
-  RegexConfigService,
-  SecretStore,
-  SessionFsService,
-  SessionWorktreeSnapshotStore,
-  SessionService,
-  SimpleEventBus,
-  TdbcConnection,
   TokenCounterRegistry,
-  UserVfsTurnService,
-  VfsScope,
-  VfsService,
-  WorktreeService,
-} from "@novel-master/core";
+} from "@novel-master/core/provider";
+import type { MessageCheckpointService, SessionFsService } from "@novel-master/core/session-fs";
+import type { RegexConfigService } from "@novel-master/core/regex";
+import type { VfsScope, VfsService } from "@novel-master/core/vfs";
+import type { SessionWorktreeSnapshotStore, WorktreeService } from "@novel-master/core/worktree";
 import type { KkvService } from "@novel-master/core/kkv";
 
 /** Open connection with domain services (main-process singleton host). */

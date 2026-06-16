@@ -10,6 +10,46 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./agent": {
+      "types": "./dist/public/agent.d.ts",
+      "import": "./dist/public/agent.js"
+    },
+    "./chat": {
+      "types": "./dist/public/chat.d.ts",
+      "import": "./dist/public/chat.js"
+    },
+    "./compaction": {
+      "types": "./dist/public/compaction.d.ts",
+      "import": "./dist/public/compaction.js"
+    },
+    "./events": {
+      "types": "./dist/public/events.d.ts",
+      "import": "./dist/public/events.js"
+    },
+    "./prompt": {
+      "types": "./dist/public/prompt.d.ts",
+      "import": "./dist/public/prompt.js"
+    },
+    "./provider": {
+      "types": "./dist/public/provider.d.ts",
+      "import": "./dist/public/provider.js"
+    },
+    "./regex": {
+      "types": "./dist/public/regex.d.ts",
+      "import": "./dist/public/regex.js"
+    },
+    "./session-fs": {
+      "types": "./dist/public/session-fs.d.ts",
+      "import": "./dist/public/session-fs.js"
+    },
+    "./vfs": {
+      "types": "./dist/public/vfs.d.ts",
+      "import": "./dist/public/vfs.js"
+    },
+    "./worktree": {
+      "types": "./dist/public/worktree.d.ts",
+      "import": "./dist/public/worktree.js"
+    },
     "./tdbc": {
       "types": "./dist/infra/tdbc/index.d.ts",
       "import": "./dist/infra/tdbc/index.js"

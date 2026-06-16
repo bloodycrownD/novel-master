@@ -10,50 +10,63 @@ import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node
 import {
   bootstrapNovelMaster,
   createAgentRegistryService,
+  createPersistentPreferences,
+  createPersistentState,
+  open,
+  type PersistentPreferences,
+  type PersistentState,
+  type TdbcConnection,
+} from "@novel-master/core";
+import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
-  createDefaultTokenCounterRegistry,
+  type CompactionConditionEvaluator,
+  type CompactionConditionsStore,
+} from "@novel-master/core/compaction";
+import {
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
-  createMessageService,
-  createPersistentPreferences,
-  createPersistentState,
-  createProjectService,
-  createMessageCheckpointService,
-  createScopedVfsService,
-  createSessionFsService,
-  createSessionService,
-  createProviderServices,
-  createRegexConfigService,
-  createSessionWorktreeSnapshotStore,
-  createWorktreeService,
-  open,
   SimpleEventBus,
-  type AgentRegistryService,
-  type CompactionConditionEvaluator,
-  type CompactionConditionsStore,
   type EventOrchestrator,
   type EventsConfigStore,
-  type ModelRequestService,
-  type PersistentPreferences,
-  type PersistentState,
-  type ProviderModelService,
-  type ProviderService,
-  type RegexConfigService,
-  type SecretStore,
-  type MessageCheckpointService,
+} from "@novel-master/core/events";
+import {
+  createMessageService,
+  createProjectService,
+  createSessionService,
   type MessageService,
   type ProjectService,
-  type SessionFsService,
   type SessionService,
-  type SessionWorktreeSnapshotStore,
-  type TdbcConnection,
+} from "@novel-master/core/chat";
+import {
+  createProviderServices,
+  createDefaultTokenCounterRegistry,
+  type ModelRequestService,
+  type ProviderModelService,
+  type ProviderService,
+  type SecretStore,
+  type TokenCounterRegistry,
+} from "@novel-master/core/provider";
+import { createRegexConfigService, type RegexConfigService } from "@novel-master/core/regex";
+import {
+  createMessageCheckpointService,
+  createSessionFsService,
+  type MessageCheckpointService,
+  type SessionFsService,
+} from "@novel-master/core/session-fs";
+import {
+  createScopedVfsService,
   type VfsScope,
   type VfsService,
+} from "@novel-master/core/vfs";
+import {
+  createSessionWorktreeSnapshotStore,
+  createWorktreeService,
+  type SessionWorktreeSnapshotStore,
   type WorktreeService,
-  type TokenCounterRegistry,
-} from "@novel-master/core";
+} from "@novel-master/core/worktree";
+import type { AgentRegistryService } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
   createCompositeSecretStore,

@@ -6,28 +6,44 @@
  */
 import {
   createAgentRegistryService,
+} from "@novel-master/core/agent";
+import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
+} from "@novel-master/core/compaction";
+import {
   createDefaultTokenCounterRegistry,
+  createProviderServices,
+} from "@novel-master/core/provider";
+import {
   createEventOrchestrator,
   createEventsConfigStore,
-  createMessageService,
-  createPersistentPreferences,
-  createPersistentState,
-  createProjectService,
-  createProviderServices,
-  createRegexConfigService,
-  createMessageCheckpointService,
   createRunAgentHandlerDeps,
-  createScopedVfsService,
-  createSessionFsService,
-  createSessionWorktreeSnapshotStore,
+  SimpleEventBus,
+} from "@novel-master/core/events";
+import {
+  createMessageService,
+  createProjectService,
   createSessionService,
   createUserVfsTurnServiceBundle,
-  createWorktreeService,
-  SimpleEventBus,
-  type VfsScope,
+} from "@novel-master/core/chat";
+import {
+  createPersistentPreferences,
+  createPersistentState,
 } from "@novel-master/core";
+import { createRegexConfigService } from "@novel-master/core/regex";
+import {
+  createMessageCheckpointService,
+  createSessionFsService,
+} from "@novel-master/core/session-fs";
+import {
+  createScopedVfsService,
+  type VfsScope,
+} from "@novel-master/core/vfs";
+import {
+  createSessionWorktreeSnapshotStore,
+  createWorktreeService,
+} from "@novel-master/core/worktree";
 import { createKkvService } from "@novel-master/core/kkv";
 import {
   createCompositeSecretStore,

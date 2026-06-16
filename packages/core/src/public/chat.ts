@@ -1,0 +1,97 @@
+export { ChatError } from "../errors/chat-errors.js";
+export type { ChatErrorCode } from "../errors/chat-errors.js";
+export type { ChatProject } from "../domain/chat/model/project.js";
+export type { ChatSession } from "../domain/chat/model/session.js";
+export type {
+  ChatMessage,
+  MessageContent,
+} from "../domain/chat/model/message.js";
+export type {
+  ContentBlock,
+  TextBlock,
+  ImageBlock,
+  ImageSource,
+  ToolUseBlock,
+  ToolResultBlock,
+  ThinkingBlock,
+  RedactedThinkingBlock,
+} from "../domain/chat/model/content-block.js";
+export { textBlocks } from "../domain/chat/content/text-blocks.js";
+export {
+  parseMessageContent,
+  assertMessageContent,
+} from "../domain/chat/content/parse-message-content.js";
+export { formatMessageForCli } from "../domain/chat/content/format-message-cli.js";
+export type {
+  MessageMetadata,
+  MessageMetadataKind,
+} from "../domain/chat/model/message-metadata.js";
+export { readMessageMetadata } from "../domain/chat/model/message-metadata.js";
+export {
+  userVfsPendingEntrySchema,
+  userVfsPendingQueueSchema,
+  userVfsPendingToolSchema,
+} from "../domain/chat/model/user-vfs-pending.schema.js";
+export type {
+  UserVfsPendingEntry,
+  UserVfsPendingQueue,
+  UserVfsPendingTool,
+} from "../domain/chat/model/user-vfs-pending.schema.js";
+export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
+export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
+export {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  formatUserVfsTurnPreviewBody,
+  matchUserVfsTurnAt,
+  parseAllUserVfsActionsFromText,
+  USER_VFS_TURN_SPAN,
+} from "../domain/chat/logic/user-vfs-turn-view.js";
+export type {
+  ParsedUserVfsAction,
+  ParsedUserVfsEditHunk,
+  UserVfsTurnView,
+} from "../domain/chat/logic/user-vfs-turn-view.js";
+export {
+  hasToolResult,
+  isPlainUserText,
+} from "../domain/chat/logic/message-content-helpers.js";
+export type {
+  MessageVisibilityBatchMode,
+  TranscriptSelectableRole,
+  VisibilityBatchMessage,
+} from "../domain/chat/logic/visibility-batch-range.js";
+export {
+  transcriptSelectableRole,
+  isTranscriptRowSelectable,
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+  selectVisibilityBatchEligibleIdsFromAnchor,
+} from "../domain/chat/logic/visibility-batch-range.js";
+export {
+  listVisibleSorted,
+  visibleFloorByMessageId,
+} from "../domain/chat/logic/message-visible-floor.js";
+export {
+  createProjectService,
+  createSessionService,
+  createMessageService,
+} from "../service/chat/create-chat-services.js";
+export {
+  createUserVfsTurnService,
+  createUserVfsTurnServiceBundle,
+} from "../service/chat/create-user-vfs-turn-service.js";
+export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
+export { TOOL_TURN_BRIDGE_TEXT } from "../service/chat/impl/append-tool-turn-bridge.js";
+export type {
+  UserVfsTurnService,
+  UserVfsTurnOp,
+  UserVfsTurnToolSpec,
+  UserVfsTurnExecuteResult,
+  UserVfsFlushResult,
+  AppendToolTurnBridgeFn,
+} from "../service/chat/user-vfs-turn.port.js";
+export type { ProjectService } from "../service/chat/project.port.js";
+export type { SessionService } from "../service/chat/session.port.js";
+export type { MessageService } from "../service/chat/message.port.js";

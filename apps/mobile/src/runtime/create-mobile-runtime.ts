@@ -4,30 +4,44 @@
  * @module runtime/create-mobile-runtime
  */
 
+import { createAgentRegistryService } from '@novel-master/core/agent';
 import {
-  createDefaultTokenCounterRegistry,
-  createAgentRegistryService,
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,
+} from '@novel-master/core/compaction';
+import {
   createEventOrchestrator,
   createRunAgentHandlerDeps,
   createEventsConfigStore,
+  SimpleEventBus,
+} from '@novel-master/core/events';
+import {
   createMessageService,
+  createProjectService,
+  createSessionService,
+  createUserVfsTurnServiceBundle,
+} from '@novel-master/core/chat';
+import {
   createPersistentPreferences,
   createPersistentState,
-  createProjectService,
-  createProviderServices,
-  createRegexConfigService,
-  createMessageCheckpointService,
-  createScopedVfsService,
-  createSessionFsService,
-  createSessionService,
-  createSessionWorktreeSnapshotStore,
-  createUserVfsTurnServiceBundle,
-  createWorktreeService,
-  SimpleEventBus,
-  type VfsScope,
 } from '@novel-master/core';
+import {
+  createProviderServices,
+  createDefaultTokenCounterRegistry,
+} from '@novel-master/core/provider';
+import { createRegexConfigService } from '@novel-master/core/regex';
+import {
+  createMessageCheckpointService,
+  createSessionFsService,
+} from '@novel-master/core/session-fs';
+import {
+  createScopedVfsService,
+  type VfsScope,
+} from '@novel-master/core/vfs';
+import {
+  createSessionWorktreeSnapshotStore,
+  createWorktreeService,
+} from '@novel-master/core/worktree';
 import {createKkvService} from '@novel-master/core/kkv';
 import {createCompositeSecretStore} from '@novel-master/core/sksp';
 import {createAndroidSecretStore} from '@novel-master/sksp-android';
