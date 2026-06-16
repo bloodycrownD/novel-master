@@ -4,6 +4,8 @@
  * @module service/events-config/impl/events-config-store.service
  */
 
+import { assessEventsConfigWire } from "@/config-forms/stored-config-validity/assess-events-config-wire.js";
+import type { StoredConfigHealth } from "@/config-forms/stored-config-validity/types.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";
 import { eventsConfigSchema } from "@/domain/events-config/model/events-config.schema.js";
@@ -33,6 +35,11 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
       return encode(DEFAULT_EVENTS_CONFIG, eventsConfigSchema);
     }
     return JSON.parse(raw) as unknown;
+  }
+
+  async assessStored(): Promise<StoredConfigHealth<EventsConfig>> {
+    const wire = await this.getRawWire();
+    return assessEventsConfigWire(wire);
   }
 
   async setConfig(config: EventsConfig): Promise<void> {

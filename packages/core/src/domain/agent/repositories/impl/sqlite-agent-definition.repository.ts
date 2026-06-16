@@ -52,6 +52,19 @@ export class SqliteAgentDefinitionRepository implements AgentDefinitionRepositor
     return rowToDefinition(rows[0]!);
   }
 
+  async getRawWire(agentId: string): Promise<unknown | null> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT prompts_json FROM agent_definition WHERE agent_id = #{agentId}`,
+      { agentId },
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    return JSON.parse(String(rows[0]!.prompts_json)) as unknown;
+  }
+
   async exists(agentId: string): Promise<boolean> {
     const rows = await queryTemplate(
       this.conn,
