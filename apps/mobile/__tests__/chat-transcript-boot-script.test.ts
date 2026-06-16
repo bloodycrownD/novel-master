@@ -34,6 +34,14 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('hasTools');
   });
 
+  it('pre-seeds empty bubble body for thinking/tool-invoking only stream bubbles', () => {
+    const script = buildTranscriptBootScript();
+    // 守护 spec：当仅有 thinking/toolInvoking、正文为空时，也要预置 .bubble-body，避免后续 text 增量时退回整泡重建。
+    expect(script).toContain('} else if (hasThinking || hasInvoking) {');
+    expect(script).toContain("html += '<div class=\"bubble-body' + richBubble + '\"></div>';");
+    expect(script).toContain("var hasInvoking = !!showToolInvoking;");
+  });
+
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {
     const script = buildTranscriptBootScript();
     expect(script).toContain('renderStreamBubbleInner');
@@ -49,5 +57,15 @@ describe('chat-transcript boot script', () => {
     const script = buildTranscriptBootScript();
     expect(script).toContain('body.innerHTML = html');
     expect(script).toContain('appendStreamDeltaIncremental');
+  });
+
+  it('does not rebuild whole bubble when text incremental update fails', () => {
+    const script = buildTranscriptBootScript();
+    // 守护 spec：text 路径 incremental===false 时不能调用 updateStreamBubble，防回归到“text 首包失败整泡重建”旧逻辑。
+    expect(script).toContain("if (!incremental && kind !== 'text') {");
+    expect(script).toContain('updateStreamBubble(tail);');
+    // 守护 spec：仅在 stream tail 不存在时，允许 fallback 到 renderRows。
+    expect(script).toContain('if (!tail) {');
+    expect(script).toContain('renderRows();');
   });
 });
