@@ -4,17 +4,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
-import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_STEP_COMMITTED,
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_AGENT_STREAM_THINKING_DELTA,
-  TOOL_TURN_BRIDGE_TEXT,
-  type AgentRunFinishedPayload,
-  type AgentStepCommittedPayload,
-  type AgentStreamTextDeltaPayload,
-  type AgentStreamThinkingDeltaPayload,
-} from '@novel-master/core';
+import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+
+import { EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, type AgentRunFinishedPayload, type AgentStepCommittedPayload, type AgentStreamTextDeltaPayload, type AgentStreamThinkingDeltaPayload } from "@novel-master/core/events";
 import {useTheme} from '../../theme/ThemeProvider';
 import {formatError} from '../../errors/format-error';
 import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';

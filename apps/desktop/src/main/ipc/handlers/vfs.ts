@@ -17,13 +17,9 @@ import type {
   VfsZipImportResult,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
-import {
-  buildUserVfsDeleteOp,
-  buildUserVfsMkdirOp,
-  buildUserVfsRenameOp,
-  buildUserVfsSaveOp,
-  isUserVfsUnifiedToolTurnEnabled,
-} from "@novel-master/core";
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/provider";
+
+import { buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp } from "@novel-master/core/vfs";
 import { BrowserWindow } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {

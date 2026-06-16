@@ -4,7 +4,7 @@
  * @module regex-group/commands
  */
 
-import { RegexError } from "@novel-master/core";
+import { RegexError } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 

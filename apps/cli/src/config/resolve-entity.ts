@@ -4,7 +4,7 @@
  * @module config/resolve-entity
  */
 
-import type { ProjectService, SessionService } from "@novel-master/core";
+import { type ProjectService, type SessionService } from "@novel-master/core/chat";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,

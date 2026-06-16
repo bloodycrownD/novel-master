@@ -4,10 +4,9 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Alert} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import {
-  EVENT_SESSION_COMPACTION_REQUESTED,
-  type ChatMessage,
-} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
+
+import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
 import {toastMessage} from '../../../errors/toast-message';
 import {
   applyTextEditToMessage,

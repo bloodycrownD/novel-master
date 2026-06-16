@@ -13,11 +13,9 @@ import {
 } from "../../../tokenizer-driver-node/src/node-tokenizer-loader.js";
 import { NODE_DRIVER_NAME } from "../../../tokenizer-driver-node/src/register.js";
 import { TokenRatioConditionTrigger } from "../../src/domain/compaction-conditions/triggers/token-ratio.trigger.js";
-import {
-  InMemoryAgentSession,
-  countPromptLlmInput,
-  createDefaultTokenCounterRegistry,
-} from "@novel-master/core";
+import { InMemoryAgentSession } from "@novel-master/core/agent";
+
+import { countPromptLlmInput, createDefaultTokenCounterRegistry } from "@novel-master/core/provider";
 import type { AgentPromptLayout } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "../../src/domain/prompt/model/prompt-render-context.js";
 import { emptyRegistryDeps } from "../infra/tokenizer/registry-test-helpers.js";

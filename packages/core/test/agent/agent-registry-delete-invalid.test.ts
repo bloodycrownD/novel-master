@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  AgentConfigError,
-  createAgentRegistryService,
-} from "@novel-master/core";
+import { AgentConfigError, createAgentRegistryService } from "@novel-master/core/agent";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import {
   getNovelMasterTestContext,

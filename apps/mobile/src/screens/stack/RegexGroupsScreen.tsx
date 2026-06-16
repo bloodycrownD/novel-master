@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {RegexGroup} from '@novel-master/core';
+import { type RegexGroup } from "@novel-master/core/regex";
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {RegexGroupPickerModal} from '../../components/regex/RegexGroupPickerModal';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, encode, agentDefinitionSchema } from "@novel-master/core";
+import { decode, encode } from "@novel-master/core";
+
+import { agentDefinitionSchema } from "@novel-master/core/agent";
 import { SqliteAgentDefinitionRepository } from "../../src/domain/agent/repositories/impl/sqlite-agent-definition.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

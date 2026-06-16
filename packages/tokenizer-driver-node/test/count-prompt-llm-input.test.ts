@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { before, describe, it } from "node:test";
-import {
-  countPromptLlmInput,
-  createDefaultTokenCounterRegistry,
-  resolveContextWindowTokens,
-  type AgentPromptLayout,
-  type ChatMessage,
-  type PromptRenderContext,
-} from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
+
+import { type AgentPromptLayout, type PromptRenderContext } from "@novel-master/core/prompt";
+
+import { countPromptLlmInput, createDefaultTokenCounterRegistry, resolveContextWindowTokens } from "@novel-master/core/provider";
 import { registerTokenizerNodeDriverForTests } from "../src/register-for-tests.js";
 
 function emptyRegistryDeps(): Record<string, never> {

@@ -4,17 +4,13 @@
  * @module model/commands
  */
 
-import {
-  parseApplicationModelId,
-  ProviderError,
-  textBlocks,
-} from "@novel-master/core";
-import {
-  applyRegexChannelToMessages,
-  depthByMessageId,
-  listVisibleForDepth,
-  resolveActiveCompiledRules,
-} from "@novel-master/core";
+import { textBlocks } from "@novel-master/core/chat";
+
+
+import { parseApplicationModelId, ProviderError } from "@novel-master/core/provider";
+import { depthByMessageId, listVisibleForDepth } from "@novel-master/core/compaction";
+
+import { applyRegexChannelToMessages, resolveActiveCompiledRules } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveModelId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";

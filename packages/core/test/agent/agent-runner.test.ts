@@ -3,24 +3,17 @@ import { describe, it, mock } from "node:test";
 import {
   ChatAgentSession,
   createAgentRunner,
-  createSessionWorktreeSnapshotStore,
-  EVENT_AGENT_STEP_COMMITTED,
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_SESSION_MESSAGE_RECEIVED,
   InMemoryAgentSession,
-  registerBuiltinTools,
-  SimpleEventBus,
   textBlocks,
-  ToolRegistry,
+  AgentError,
   type AgentDefinition,
-  type AgentStepCommittedPayload,
-  type AgentRunFinishedPayload,
   type CreateAgentRunnerDeps,
-  type LlmChatResult,
-  type ModelRequestService,
-} from "@novel-master/core";
-import { AgentError } from "../../src/errors/agent-runtime-errors.js";
-import type { BuiltinToolContext, VfsService } from "@novel-master/core";
+} from "@novel-master/core/agent";
+import { EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload } from "@novel-master/core/events";
+import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
+import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
+import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

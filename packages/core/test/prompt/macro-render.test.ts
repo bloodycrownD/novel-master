@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatLocalDateTime } from "@novel-master/core";
+import { formatLocalDateTime } from "@novel-master/core/provider";
 import { PromptError } from "../../src/errors/prompt-errors.js";
 import { renderMacro } from "../../src/infra/prompt-template/macro-render.js";
 

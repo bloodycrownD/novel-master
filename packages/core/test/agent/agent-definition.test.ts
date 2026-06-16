@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  agentDefinitionSchema,
-  decode,
-  encode,
-  AgentConfigError,
-  ConfigDecodeError,
-  PromptError,
-} from "@novel-master/core";
+import { decode, encode, ConfigDecodeError } from "@novel-master/core";
+
+import { agentDefinitionSchema, AgentConfigError } from "@novel-master/core/agent";
+
+import { PromptError } from "@novel-master/core/prompt";
 
 const emptyPrompts = { persist: {}, dynamic: {} };
 

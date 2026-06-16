@@ -1,4 +1,4 @@
-import type { VfsService } from "@novel-master/core";
+import { type VfsService } from "@novel-master/core/vfs";
 import { parseCliArgs } from "../parse-args.js";
 
 export async function runList(vfs: VfsService, args: readonly string[]): Promise<void> {

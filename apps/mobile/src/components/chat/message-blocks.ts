@@ -1,20 +1,10 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import type {
-  ChatMessage,
-  ContentBlock,
-  ParsedUserVfsAction,
-  ToolResultBlock,
-  ToolUseBlock,
-} from '@novel-master/core';
-import {
-  buildUserVfsTurnView,
-  deriveToolUsesFromVfsActions,
-  matchUserVfsTurnAt,
-  resolveToolResultOk,
-  USER_VFS_TURN_SPAN,
-} from '@novel-master/core';
+import { type ChatMessage, type ContentBlock, type ParsedUserVfsAction, type ToolResultBlock, type ToolUseBlock } from "@novel-master/core/chat";
+import { resolveToolResultOk } from "@novel-master/core";
+
+import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAt, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 

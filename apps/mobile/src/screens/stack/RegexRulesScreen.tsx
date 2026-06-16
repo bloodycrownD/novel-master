@@ -15,7 +15,7 @@ import {
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import type {RegexGroup, RegexRule} from '@novel-master/core';
+import { type RegexGroup, type RegexRule } from "@novel-master/core/regex";
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';

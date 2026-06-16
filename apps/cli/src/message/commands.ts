@@ -5,13 +5,8 @@
  */
 
 import { readFile } from "node:fs/promises";
-import {
-  assertMessageContent,
-  formatMessageForCli,
-  parseMessageContent,
-  textBlocks,
-} from "@novel-master/core";
-import type { ChatMessage } from "@novel-master/core";
+import { assertMessageContent, formatMessageForCli, parseMessageContent, textBlocks } from "@novel-master/core/chat";
+import { type ChatMessage } from "@novel-master/core/chat";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 import { applyActiveRegexChannel } from "../regex/apply-channel.js";

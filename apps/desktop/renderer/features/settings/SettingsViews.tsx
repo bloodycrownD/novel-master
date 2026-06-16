@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { AgentDefinition } from "@novel-master/core";
+import { type AgentDefinition } from "@novel-master/core/agent";
 export { AgentEditorView } from "./AgentEditorView";
 export { EventsConfigView } from "./EventsConfigView";
 export { ModelSamplingView } from "./ModelSamplingView";

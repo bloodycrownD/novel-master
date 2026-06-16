@@ -6,13 +6,9 @@
 
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import {
-  compactionConditionsSchema,
-  decode,
-  parseText,
-  CompactionConditionsError,
-  type CompactionConditionsStore,
-} from "@novel-master/core";
+import { decode, parseText } from "@novel-master/core";
+
+import { compactionConditionsSchema, CompactionConditionsError, type CompactionConditionsStore } from "@novel-master/core/compaction";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 

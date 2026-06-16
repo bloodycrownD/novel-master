@@ -5,7 +5,7 @@
  * @module agent/mock-llm
  */
 
-import type { LlmStreamEvent, ModelRequestService } from "@novel-master/core";
+import { type LlmStreamEvent, type ModelRequestService } from "@novel-master/core/provider";
 
 type LlmChatResult = Awaited<ReturnType<ModelRequestService["request"]>>;
 type RequestOptions = NonNullable<

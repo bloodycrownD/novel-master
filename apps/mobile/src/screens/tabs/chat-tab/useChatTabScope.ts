@@ -4,7 +4,7 @@
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {ChatProject, ChatSession} from '@novel-master/core';
+import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
 import {toastMessage} from '../../../errors/toast-message';
 import {
   loadChatAgentMeta,

@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  agentDefinitionSchema,
-  decode,
-  validateAgentDefinition,
-} from "@novel-master/core";
+import { decode } from "@novel-master/core";
+
+import { agentDefinitionSchema, validateAgentDefinition } from "@novel-master/core/agent";
 
 describe("validateAgentDefinition", () => {
   it("D2: assertSavedModel runs for valid model pin", async () => {

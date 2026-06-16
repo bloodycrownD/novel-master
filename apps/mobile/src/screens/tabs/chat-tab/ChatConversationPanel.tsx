@@ -3,14 +3,13 @@
  */
 import React, {useCallback, useEffect, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {
-  AgentRunFinishedPayload,
-  AgentStepCommittedPayload,
-  ChatMessage,
-  VfsScope,
-  VfsService,
-  WorktreeService,
-} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
+
+import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@novel-master/core/events";
+
+import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
+
+import { type WorktreeService } from "@novel-master/core/worktree";
 import {AgentPickerModal} from '../../../components/agent/AgentPickerModal';
 import {ChatComposer} from '../../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../../components/chat/ChatMetaBar';

@@ -1,7 +1,7 @@
 /**
  * In-memory per-session message tail + paging flag (survives list ↔ conversation).
  */
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 
 export type SessionViewCache = {
   readonly messages: readonly ChatMessage[];

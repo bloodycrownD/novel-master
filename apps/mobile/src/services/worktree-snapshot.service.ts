@@ -3,7 +3,7 @@
  *
  * @module services/worktree-snapshot.service
  */
-import type {SessionWorktreeSnapshot} from '@novel-master/core';
+import { type SessionWorktreeSnapshot } from "@novel-master/core/worktree";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export interface SessionWorktreeSnapshotScope {

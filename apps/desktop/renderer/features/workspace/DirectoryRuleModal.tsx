@@ -1,4 +1,4 @@
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core";
+import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
 import { useEffect, useState } from "react";
 import type { WorktreeSetDirRuleRequest } from "../../../shared/ipc-types";
 import { Button } from "../../components/ui/Button";

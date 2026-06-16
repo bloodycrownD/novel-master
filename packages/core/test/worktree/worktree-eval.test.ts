@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  computeHeadTailIndices,
-  evaluateFileDisplay,
-} from "@novel-master/core";
+import { computeHeadTailIndices, evaluateFileDisplay } from "@novel-master/core/worktree";
 
 describe("worktree eval", () => {
   it("hide and show take priority", () => {

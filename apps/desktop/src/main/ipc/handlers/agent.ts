@@ -3,10 +3,9 @@
  *
  * @module ipc/handlers/agent
  */
-import {
-  formatApplicationModelId,
-  resolveApplicationModelId,
-} from "@novel-master/core";
+import { resolveApplicationModelId } from "@novel-master/core/agent";
+
+import { formatApplicationModelId } from "@novel-master/core/provider";
 import type {
   AgentAbortRequest,
   AgentListPickerResponse,

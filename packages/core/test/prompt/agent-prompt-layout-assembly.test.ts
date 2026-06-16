@@ -1,15 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import {
-  buildPromptLlmInputFromLayout,
-  formatPromptLlmInputForCliFromLayout,
-  messageBodyText,
-  textBlocks,
-  type AgentPromptLayout,
-  type ChatMessage,
-  type VfsListEntry,
-  type VfsService,
-} from "@novel-master/core";
+import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+
+import { buildPromptLlmInputFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
+
+import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 

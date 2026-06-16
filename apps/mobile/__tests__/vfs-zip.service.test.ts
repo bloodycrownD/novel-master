@@ -1,6 +1,6 @@
 import {Platform} from 'react-native';
 import {exportVfsZip, importVfsZip} from '../src/services/vfs-zip.service';
-import {VfsZipError} from '@novel-master/core';
+import { VfsZipError } from "@novel-master/core/vfs";
 
 const mockExport = jest.fn();
 const mockImport = jest.fn();

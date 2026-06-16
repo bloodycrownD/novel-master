@@ -1,7 +1,7 @@
 /**
  * Helpers for in-app message edit (text-only content) and long-press menu items.
  */
-import type {ChatMessage, ContentBlock, MessageContent} from '@novel-master/core';
+import { type ChatMessage, type ContentBlock, type MessageContent } from "@novel-master/core/chat";
 
 export interface MessageActionMenuItem {
   readonly label: string;

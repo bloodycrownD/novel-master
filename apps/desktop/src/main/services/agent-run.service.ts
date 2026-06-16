@@ -3,18 +3,9 @@
  *
  * @module services/agent-run
  */
-import {
-  AgentRunResolveError,
-  AgentTurnError,
-  parseApplicationModelId,
-  resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition as resolveCoreAgentDefinition,
-  resolveCurrentAgentId as resolveCoreAgentId,
-  runAgentTurn as coreRunAgentTurn,
-  type AgentDefinition,
-  type AgentRunResult,
-  type AgentTurnScope,
-} from "@novel-master/core";
+import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
+
+import { parseApplicationModelId } from "@novel-master/core/provider";
 import {
   desktopLog,
   desktopLogError,

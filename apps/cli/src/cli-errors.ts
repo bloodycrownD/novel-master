@@ -4,20 +4,31 @@
  * @module cli-errors
  */
 
-import {
-  AgentConfigError,
-  AgentError,
-  ChatError,
-  CompactionConditionsError,
-  EventsError,
-  PreferencesError,
-  PromptError,
-  ProviderError,
-  SessionFsError,
-  TdbcError,
-  VfsError,
-  VfsZipError,
-} from "@novel-master/core";
+import { PreferencesError, TdbcError } from "@novel-master/core";
+
+
+import { AgentConfigError, AgentError } from "@novel-master/core/agent";
+
+
+import { ChatError } from "@novel-master/core/chat";
+
+
+import { CompactionConditionsError } from "@novel-master/core/compaction";
+
+
+import { EventsError } from "@novel-master/core/events";
+
+
+import { PromptError } from "@novel-master/core/prompt";
+
+
+import { ProviderError } from "@novel-master/core/provider";
+
+
+import { SessionFsError } from "@novel-master/core/session-fs";
+
+
+import { VfsError, VfsZipError } from "@novel-master/core/vfs";
 import { SkspError } from "@novel-master/core/sksp";
 
 export const EXIT_USAGE = 1;

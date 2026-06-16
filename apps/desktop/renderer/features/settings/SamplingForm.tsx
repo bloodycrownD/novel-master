@@ -1,9 +1,5 @@
 import { useMemo } from "react";
-import {
-  mergeSamplingWithDefaults,
-  type LlmProtocolKind,
-  type ModelSamplingParams,
-} from "@novel-master/core";
+import { mergeSamplingWithDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@novel-master/core/provider";
 import { SettingsField } from "./settings-ui";
 
 type SamplingFormProps = {

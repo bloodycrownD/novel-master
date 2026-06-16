@@ -1,7 +1,7 @@
 /**
  * Prompt IPC handlers — real prompt preview segments, chat token label, agent meta.
  */
-import { resolveApplicationModelId } from "@novel-master/core";
+import { resolveApplicationModelId } from "@novel-master/core/agent";
 import type {
   IpcResult,
   PromptAgentMetaResponse,

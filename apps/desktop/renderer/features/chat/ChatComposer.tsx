@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core";
+import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { Tooltip } from "../../components/ui/Tooltip";
 import {

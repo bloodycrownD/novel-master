@@ -1,7 +1,9 @@
 /**
  * Maps {@link WorktreeListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import type {VfsListEntry, WorktreeListRow} from '@novel-master/core';
+import { type VfsListEntry } from "@novel-master/core/vfs";
+
+import { type WorktreeListRow } from "@novel-master/core/worktree";
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 

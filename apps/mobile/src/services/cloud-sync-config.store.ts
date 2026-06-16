@@ -5,7 +5,7 @@
  */
 import {KkvError, normalizePrefix} from '@novel-master/core';
 import type {KkvService} from '@novel-master/core/kkv';
-import type {SecretStore} from '@novel-master/core';
+import { type SecretStore } from "@novel-master/core/provider";
 import type {S3StorageConfig} from '@novel-master/cloud-sync-driver-s3';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 

@@ -5,18 +5,13 @@
  */
 
 import { readFile } from "node:fs/promises";
-import {
-  ChatAgentSession,
-  createAgentRunner,
-  parseApplicationModelId,
-  registerBuiltinTools,
-  resolveAgentToolRegistry,
-  textBlocks,
-  ToolRegistry,
-  validateAgentDefinition,
-  type AgentDefinition,
-  type LlmStreamEvent,
-} from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+
+import { ChatAgentSession, createAgentRunner, resolveAgentToolRegistry, validateAgentDefinition, type AgentDefinition } from "@novel-master/core/agent";
+
+import { textBlocks } from "@novel-master/core/chat";
+
+import { parseApplicationModelId, type LlmStreamEvent } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
@@ -27,7 +22,7 @@ import {
   runAgentRegistryCommand,
 } from "./registry-commands.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { AgentConfigError } from "@novel-master/core";
+import { AgentConfigError } from "@novel-master/core/agent";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,

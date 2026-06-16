@@ -1,11 +1,7 @@
 /**
  * Agent runner 测试用 worktree 快照 mock。
  */
-import {
-  createSessionWorktreeSnapshotStore,
-  type SessionWorktreeSnapshotStore,
-  type WorktreeService,
-} from "@novel-master/core";
+import { createSessionWorktreeSnapshotStore, type SessionWorktreeSnapshotStore, type WorktreeService } from "@novel-master/core/worktree";
 
 /** 固定 display 的内存 worktree 快照存储。 */
 export function mockWorktreeSnapshot(

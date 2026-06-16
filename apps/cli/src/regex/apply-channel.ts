@@ -4,16 +4,13 @@
  * @module regex/apply-channel
  */
 
-import {
-  applyRegexChannelForLlm,
-  applyRegexChannelToMessages,
-  depthByMessageId,
-  listVisibleForDepth,
-  resolveActiveCompiledRules,
-  type ChatMessage,
-  type RegexChannel,
-  type RegexConfigService,
-} from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
+
+
+import { depthByMessageId, listVisibleForDepth } from "@novel-master/core/compaction";
+
+
+import { applyRegexChannelForLlm, applyRegexChannelToMessages, resolveActiveCompiledRules, type RegexChannel, type RegexConfigService } from "@novel-master/core/regex";
 
 /**
  * View-time message transform for llm or display channel.

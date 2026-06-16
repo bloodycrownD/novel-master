@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decode, agentDefinitionSchema } from "@novel-master/core";
+import { decode } from "@novel-master/core";
+
+import { agentDefinitionSchema } from "@novel-master/core/agent";
 
 /** 与 handleAgentRegistryList 中单条 get 失败分支一致。 */
 function buildBrokenListItem(

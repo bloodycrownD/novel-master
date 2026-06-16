@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { renderSessionVfsTree } from "../../src/domain/vfs/logic/render-session-vfs-tree.js";
-import type { VfsListEntry, VfsService } from "@novel-master/core";
+import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
 
 function mockVfs(entries: readonly VfsListEntry[]): VfsService {
   return {

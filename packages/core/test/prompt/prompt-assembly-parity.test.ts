@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  formatPromptLlmInputForCliFromLayout,
-  serializePromptLlmInput,
-  textBlocks,
-  type AgentPromptLayout,
-  type ChatMessage,
-} from "@novel-master/core";
+import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+
+import { formatPromptLlmInputForCliFromLayout, type AgentPromptLayout } from "@novel-master/core/prompt";
+
+import { serializePromptLlmInput } from "@novel-master/core/provider";
 
 const layout: AgentPromptLayout = {
   system: "ctx",

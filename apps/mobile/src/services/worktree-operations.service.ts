@@ -1,14 +1,10 @@
 /**
  * Worktree rule toggles for VFS file manager row actions.
  */
-import type {
-  InclusionMode,
-  SetDirRuleInput,
-  VfsScope,
-  WorktreeDirRule,
-  WorktreeService,
-} from '@novel-master/core';
-import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core';
+import { type VfsScope } from "@novel-master/core/vfs";
+
+import { type InclusionMode, type SetDirRuleInput, type WorktreeDirRule, type WorktreeService } from "@novel-master/core/worktree";
+import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
 import { normalizeFillPolicyForMobile } from '../storage/fill-policy-mobile';
 
 function worktreeRootLogicalPath(_scope: VfsScope): string {

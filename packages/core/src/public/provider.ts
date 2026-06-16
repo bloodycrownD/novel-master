@@ -57,13 +57,14 @@ export type {
   EditProviderPatch,
 } from "../service/provider/provider.port.js";
 export type { ProviderModelService } from "../service/provider/provider-model.port.js";
-export type { ModelRequestService } from "../service/provider/model-request.port.js";
+export type { ModelRequestService, ModelRequestOptions } from "../service/provider/model-request.port.js";
 export { formatLocalDateTime } from "../infra/date-format.js";
 export type {
   LlmProtocolKind,
   LlmToolDefinition,
   LlmStreamEvent,
   LlmTokenUsage,
+  LlmChatResult,
 } from "../infra/llm-protocol/ports/adapter.port.js";
 export { toolsFromRegistry } from "../infra/llm-protocol/logic/tool-definitions.js";
 export { zodToJsonSchema } from "../infra/serialization/zod-to-json-schema.js";

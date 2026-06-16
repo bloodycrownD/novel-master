@@ -1,9 +1,7 @@
 import { writeFile } from "node:fs/promises";
-import {
-  createVfsZipIoService,
-  type TdbcConnection,
-  type VfsScope,
-} from "@novel-master/core";
+import { type TdbcConnection } from "@novel-master/core";
+
+import { createVfsZipIoService, type VfsScope } from "@novel-master/core/vfs";
 import { parseCliArgs } from "../parse-args.js";
 
 export async function runExportZip(

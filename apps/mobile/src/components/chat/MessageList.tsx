@@ -15,7 +15,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
 import {
   isTranscriptRowSelectable,

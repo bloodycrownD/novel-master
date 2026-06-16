@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createVfsService,
-  createWorktreeService,
-  isVfsError,
-} from "@novel-master/core";
+import { createVfsService, isVfsError } from "@novel-master/core/vfs";
+
+import { createWorktreeService } from "@novel-master/core/worktree";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,

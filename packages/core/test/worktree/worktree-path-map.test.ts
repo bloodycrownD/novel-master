@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  mapProjectWorktreePathToSession,
-  mapSessionWorktreePathToProject,
-} from "@novel-master/core";
+import { mapProjectWorktreePathToSession, mapSessionWorktreePathToProject } from "@novel-master/core/worktree";
 
 describe("worktree path map", () => {
   it("maps project logical path to session unchanged", () => {

@@ -1,4 +1,4 @@
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 
 jest.mock('@novel-master/core', () => {
   const actual = jest.requireActual('@novel-master/core');

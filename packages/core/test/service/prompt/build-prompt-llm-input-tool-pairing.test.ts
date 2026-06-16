@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildPromptLlmInputFromLayout,
-  textBlocks,
-  type ChatMessage,
-} from "@novel-master/core";
+import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+
+import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
 import { normalizeOrphanToolResultsForLlm } from "../../../src/service/prompt/normalize-orphan-tool-results-for-llm.js";
 
 describe("buildPromptLlmInputFromLayout tool pairing", () => {

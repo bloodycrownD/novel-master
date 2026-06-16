@@ -8,13 +8,11 @@
  * {@link loadChatPromptTokenLabelResilient} falls back to visible-message heuristic
  * (`counterKind: "heuristic"`) when {@link buildSessionPromptInput} throws.
  */
-import {
-  countPromptLlmInput,
-  messageBodyText,
-  resolveApplicationModelId,
-  resolveTokenCounterModeForModel,
-  serializePromptLlmInput,
-} from '@novel-master/core';
+import { resolveApplicationModelId } from "@novel-master/core/agent";
+
+import { messageBodyText } from "@novel-master/core/prompt";
+
+import { countPromptLlmInput, resolveTokenCounterModeForModel, serializePromptLlmInput } from "@novel-master/core/provider";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {formatPromptTokenUsageLabel} from '../utils/format-token-count';
 import {buildSessionPromptInput, type SessionPromptScope} from './session-prompt-input.service';

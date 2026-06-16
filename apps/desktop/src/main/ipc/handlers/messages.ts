@@ -1,8 +1,10 @@
 /**
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
-import { messageBodyText, textBlocks, type MessageContent } from "@novel-master/core";
-import type { ContentBlock } from "@novel-master/core";
+import { textBlocks, type MessageContent } from "@novel-master/core/chat";
+
+import { messageBodyText } from "@novel-master/core/prompt";
+import { type ContentBlock } from "@novel-master/core/chat";
 import type {
   ChatMessageDto,
   ContentBlockDto,

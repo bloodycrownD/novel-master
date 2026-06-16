@@ -1,7 +1,7 @@
 /**
  * Provider model IPC handlers — fetch, save, sampling settings.
  */
-import { formatApplicationModelId } from "@novel-master/core";
+import { formatApplicationModelId } from "@novel-master/core/provider";
 import type {
   IpcResult,
   ProviderModelSavedDto,

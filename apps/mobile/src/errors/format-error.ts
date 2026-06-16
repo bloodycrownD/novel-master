@@ -1,17 +1,17 @@
 /**
  * User-visible error messages for Core domain errors (VFS, chat, provider, tools, agent).
  */
-import {
-  AgentError,
-  ChatError,
-  CloudSyncError,
-  ProviderError,
-  SessionFsError,
-  TdbcError,
-  ToolError,
-  VfsError,
-  VfsZipError,
-} from '@novel-master/core';
+import { CloudSyncError, TdbcError, ToolError } from "@novel-master/core";
+
+import { AgentError } from "@novel-master/core/agent";
+
+import { ChatError } from "@novel-master/core/chat";
+
+import { ProviderError } from "@novel-master/core/provider";
+
+import { SessionFsError } from "@novel-master/core/session-fs";
+
+import { VfsError, VfsZipError } from "@novel-master/core/vfs";
 
 function formatCause(cause: unknown): string | undefined {
   if (cause instanceof Error && cause.message) {

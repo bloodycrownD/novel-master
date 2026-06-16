@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  AgentDefinition,
-  DynamicPromptBlock,
-  PersistPromptBlock,
-  PersistTextPromptBlock,
-} from "@novel-master/core";
+import { type AgentDefinition } from "@novel-master/core/agent";
+
+import { type DynamicPromptBlock, type PersistPromptBlock, type PersistTextPromptBlock } from "@novel-master/core/prompt";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,

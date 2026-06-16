@@ -1,17 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  AgentConfigError,
-  registerBuiltinTools,
-  resolveAgentToolRegistry,
-  toolsFromRegistry,
-  ToolError,
-  ToolRegistry,
-  ToolRunner,
-  validateAgentDefinition,
-  validateAgentToolPolicy,
-  type AgentDefinition,
-} from "@novel-master/core";
+import { registerBuiltinTools, ToolError, ToolRegistry, ToolRunner } from "@novel-master/core";
+
+import { AgentConfigError, resolveAgentToolRegistry, validateAgentDefinition, validateAgentToolPolicy, type AgentDefinition } from "@novel-master/core/agent";
+
+import { toolsFromRegistry } from "@novel-master/core/provider";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 
 const BASE_DEF: AgentDefinition = {

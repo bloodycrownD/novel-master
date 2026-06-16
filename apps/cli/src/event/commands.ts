@@ -4,10 +4,7 @@
  * @module event/commands
  */
 
-import {
-  EVENT_SESSION_COMPACTION_REQUESTED,
-  type EventOrchestrator,
-} from "@novel-master/core";
+import { EVENT_SESSION_COMPACTION_REQUESTED, type EventOrchestrator } from "@novel-master/core/events";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 

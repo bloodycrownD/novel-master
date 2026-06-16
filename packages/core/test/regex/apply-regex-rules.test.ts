@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  applyRegexRules,
-  applyRegexToMessageContent,
-  textBlocks,
-} from "@novel-master/core";
+import { textBlocks } from "@novel-master/core/chat";
+
+import { applyRegexRules, applyRegexToMessageContent } from "@novel-master/core/regex";
 import type { CompiledRegexRule } from "../../src/domain/regex/logic/compile-regex-rule.js";
 
 function rule(

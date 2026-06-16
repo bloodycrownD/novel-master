@@ -1,8 +1,8 @@
 /**
  * VFS mutations for desktop file manager (ported from mobile).
  */
-import type { VfsListEntry, VfsService } from "@novel-master/core";
-import { moveVfsPath, remapPathUnderDir } from "@novel-master/core";
+import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
+import { moveVfsPath, remapPathUnderDir } from "@novel-master/core/vfs";
 
 export async function createVfsFile(
   vfs: VfsService,

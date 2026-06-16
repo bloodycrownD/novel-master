@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isVfsError } from "@novel-master/core";
+import { isVfsError } from "@novel-master/core/vfs";
 import { restorePathToRevision } from "../../src/domain/message-checkpoint/logic/restore-path.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";

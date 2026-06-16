@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { stdin } from "node:process";
-import type { VfsService, WriteOptions } from "@novel-master/core";
-import { VfsError } from "@novel-master/core";
+import { type VfsService, type WriteOptions } from "@novel-master/core/vfs";
+import { VfsError } from "@novel-master/core/vfs";
 import { parseCliArgs } from "../parse-args.js";
 
 async function readStdin(): Promise<string> {

@@ -8,7 +8,7 @@ import {
   remapDirectChildRows,
   type MappedVfsRow,
 } from '../src/components/vfs/vfs-row-mapper';
-import type {WorktreeListRow} from '@novel-master/core';
+import { type WorktreeListRow } from "@novel-master/core/worktree";
 
 describe('vfs-row-mapper', () => {
   const dirRow: WorktreeListRow = {

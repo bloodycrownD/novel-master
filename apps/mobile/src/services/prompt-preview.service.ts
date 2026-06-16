@@ -1,10 +1,7 @@
 /**
  * Real prompt preview: agent prompts + llm-channel regex + structured segments.
  */
-import {
-  buildPromptPreviewSegmentsFromLayout,
-  type PromptPreviewSegment,
-} from '@novel-master/core';
+import { buildPromptPreviewSegmentsFromLayout, type PromptPreviewSegment } from "@novel-master/core/prompt";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {buildSessionPromptInput} from './session-prompt-input.service';
 import {resolveCurrentAgentDefinition} from './agent-run.service';

@@ -1,8 +1,8 @@
-/** Desktop 薄 re-export：可见性批量范围逻辑见 @novel-master/core。 */
+/** Desktop 薄 re-export：可见性批量范围逻辑见 @novel-master/core/chat。 */
 export type {
   MessageVisibilityBatchMode,
   TranscriptSelectableRole,
-} from "@novel-master/core";
+} from "@novel-master/core/chat";
 export {
   transcriptSelectableRole,
   isTranscriptRowSelectable,
@@ -10,4 +10,4 @@ export {
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
   selectVisibilityBatchEligibleIdsFromAnchor,
-} from "@novel-master/core";
+} from "@novel-master/core/chat";

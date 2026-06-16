@@ -4,12 +4,7 @@
  * Import: document picker + keepLocalCopy + confirmed full replace.
  */
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {
-  createVfsZipIoService,
-  type VfsScope,
-  type VfsZipImportOptions,
-  VfsZipError,
-} from '@novel-master/core';
+import { createVfsZipIoService, type VfsScope, type VfsZipImportOptions, VfsZipError } from "@novel-master/core/vfs";
 import {
   errorCodes,
   isErrorWithCode,

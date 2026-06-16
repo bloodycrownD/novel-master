@@ -1,4 +1,4 @@
-import { createVfsService } from "@novel-master/core";
+import { createVfsService } from "@novel-master/core/vfs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isVfsError } from "@/errors/vfs-errors.js";

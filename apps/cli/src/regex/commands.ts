@@ -4,11 +4,7 @@
  * @module regex/commands
  */
 
-import {
-  applyRegexRules,
-  compileRegexRule,
-  type UpdateRegexRuleInput,
-} from "@novel-master/core";
+import { applyRegexRules, compileRegexRule, type UpdateRegexRuleInput } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 

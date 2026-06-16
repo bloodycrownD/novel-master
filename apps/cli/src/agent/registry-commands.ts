@@ -6,14 +6,11 @@
 
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  encode,
-  agentDefinitionSchema,
-  parseApplicationModelId,
-  registerBuiltinTools,
-  ToolRegistry,
-  type AgentRegistryService,
-} from "@novel-master/core";
+import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+
+import { agentDefinitionSchema, type AgentRegistryService } from "@novel-master/core/agent";
+
+import { parseApplicationModelId } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveNovelMasterHome } from "../compaction/novel-master-home.js";
 import { parseCliArgs } from "../vfs/parse-args.js";

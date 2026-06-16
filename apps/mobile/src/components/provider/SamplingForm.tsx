@@ -3,11 +3,7 @@
  */
 import React, {useMemo} from 'react';
 import {StyleSheet, View} from 'react-native';
-import {
-  mergeSamplingWithDefaults,
-  type LlmProtocolKind,
-  type ModelSamplingParams,
-} from '@novel-master/core';
+import { mergeSamplingWithDefaults, type LlmProtocolKind, type ModelSamplingParams } from "@novel-master/core/provider";
 import {FormField} from '../form/FormField';
 import {FormTextInput} from '../form/FormTextInput';
 import type {ThemeTokens} from '../../theme/tokens';

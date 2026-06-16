@@ -1,15 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  buildPromptAssemblyFromLayout,
-  buildPromptLlmInputFromLayout,
-  buildPromptPreviewSegmentsFromLayout,
-  formatPromptLlmInputForCliFromLayout,
-  messageBodyText,
-  textBlocks,
-  type AgentPromptLayout,
-  type ChatMessage,
-} from "@novel-master/core";
+import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
+
+import { buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, buildPromptPreviewSegmentsFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 

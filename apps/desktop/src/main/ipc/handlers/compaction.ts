@@ -1,7 +1,7 @@
 /**
  * Manual compaction IPC — emits session.compaction.requested via event orchestrator.
  */
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core";
+import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
 import type {
   CompactionManualRequest,
   IpcResult,

@@ -1,11 +1,8 @@
-import {
-  AgentError,
-  ChatError,
-  ProviderError,
-  TdbcError,
-  ToolError,
-  VfsError,
-} from '@novel-master/core';
+import { TdbcError, ToolError } from "@novel-master/core";
+import { AgentError } from "@novel-master/core/agent";
+import { ChatError } from "@novel-master/core/chat";
+import { ProviderError } from "@novel-master/core/provider";
+import { VfsError } from "@novel-master/core/vfs";
 import {formatError} from '../src/errors/format-error';
 
 describe('formatError (T4)', () => {

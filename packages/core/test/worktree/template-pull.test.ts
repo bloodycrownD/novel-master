@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  createTemplatePullService,
-  createWorktreeService,
-  textBlocks,
-} from "@novel-master/core";
+import { textBlocks } from "@novel-master/core/chat";
+
+import { createTemplatePullService, createWorktreeService } from "@novel-master/core/worktree";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

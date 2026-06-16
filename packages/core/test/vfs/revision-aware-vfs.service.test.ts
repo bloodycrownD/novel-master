@@ -1,4 +1,4 @@
-import { createVfsService } from "@novel-master/core";
+import { createVfsService } from "@novel-master/core/vfs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { migrateVfsRevisionBaseline } from "@/bootstrap/vfs/migrate-vfs-revision.js";

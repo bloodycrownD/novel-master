@@ -3,17 +3,9 @@
  *
  * @module services/agent-yaml
  */
-import {
-  agentDefinitionSchema,
-  decode,
-  encode,
-  parseText,
-  registerBuiltinTools,
-  stringifyText,
-  ToolRegistry,
-  validateAgentDefinition,
-  type AgentDefinition,
-} from "@novel-master/core";
+import { decode, encode, parseText, registerBuiltinTools, stringifyText, ToolRegistry } from "@novel-master/core";
+
+import { agentDefinitionSchema, validateAgentDefinition, type AgentDefinition } from "@novel-master/core/agent";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

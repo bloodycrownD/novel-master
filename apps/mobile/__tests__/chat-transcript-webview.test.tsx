@@ -1,7 +1,7 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import {
   CHAT_TRANSCRIPT_BRIDGE_VERSION,
   decodeHostToTranscript,

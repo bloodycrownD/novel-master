@@ -3,16 +3,7 @@
  * Agent stream + step events are relayed on `nm:agent-stream`.
  */
 import type { WebContents } from "electron";
-import {
-  EVENT_AGENT_RUN_FAILED,
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_RUN_STARTED,
-  EVENT_AGENT_STEP_COMMITTED,
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  EVENT_AGENT_STREAM_THINKING_DELTA,
-  EVENT_AGENT_STREAM_TOOL_USE,
-  type SimpleEventBus,
-} from "@novel-master/core";
+import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, EVENT_AGENT_STREAM_TOOL_USE, type SimpleEventBus } from "@novel-master/core/events";
 import type { AgentRunFailedPayload } from "../../../shared/agent-event-types.js";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
 import { desktopLogError } from "../log/desktop-log.js";

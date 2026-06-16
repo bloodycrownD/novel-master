@@ -3,13 +3,11 @@
  *
  * @module services/chat-prompt-tokens
  */
-import {
-  countPromptLlmInput,
-  messageBodyText,
-  resolveApplicationModelId,
-  resolveTokenCounterModeForModel,
-  serializePromptLlmInput,
-} from "@novel-master/core";
+import { resolveApplicationModelId } from "@novel-master/core/agent";
+
+import { messageBodyText } from "@novel-master/core/prompt";
+
+import { countPromptLlmInput, resolveTokenCounterModeForModel, serializePromptLlmInput } from "@novel-master/core/provider";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { formatTokenCount } from "../utils/format-token-count.js";

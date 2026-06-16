@@ -4,11 +4,10 @@
  * @module agent/resolve-application-model-id
  */
 
-import {
-  resolveApplicationModelId,
-  type AgentDefinition,
-  type PersistentState,
-} from "@novel-master/core";
+import { type PersistentState } from "@novel-master/core";
+
+
+import { resolveApplicationModelId, type AgentDefinition } from "@novel-master/core/agent";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,

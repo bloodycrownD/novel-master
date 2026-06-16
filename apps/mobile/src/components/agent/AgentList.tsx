@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {AgentDefinition} from '@novel-master/core';
+import { type AgentDefinition } from "@novel-master/core/agent";
 import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';

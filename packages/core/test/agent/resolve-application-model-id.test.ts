@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  resolveApplicationModelId,
-  resolveSummaryApplicationModelId,
-} from "@novel-master/core";
+import { resolveApplicationModelId, resolveSummaryApplicationModelId } from "@novel-master/core/agent";
 
 describe("resolveApplicationModelId", () => {
   it("R1: prefers CLI flag over pin and workspace", () => {

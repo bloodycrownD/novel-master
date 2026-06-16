@@ -5,15 +5,8 @@ import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import type {
-  LlmProtocolKind,
-  ModelSamplingParams,
-  TokenizerOverride,
-} from '@novel-master/core';
-import {
-  parseApplicationModelId,
-  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
-} from '@novel-master/core';
+import { type LlmProtocolKind, type ModelSamplingParams, type TokenizerOverride } from "@novel-master/core/provider";
+import { parseApplicationModelId, TOKEN_COUNTER_MODE_SELECT_OPTIONS } from "@novel-master/core/provider";
 import {FormField} from '../../components/form/FormField';
 import {FormSelectField} from '../../components/form/FormSelectField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';

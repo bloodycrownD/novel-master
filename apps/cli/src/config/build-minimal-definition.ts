@@ -4,7 +4,10 @@
  * @module config/build-minimal-definition
  */
 
-import type { AgentDefinition, AgentPromptLayout } from "@novel-master/core";
+import { type AgentDefinition } from "@novel-master/core/agent";
+
+
+import { type AgentPromptLayout } from "@novel-master/core/prompt";
 
 export interface BuildMinimalDefinitionInput {
   readonly name?: string;

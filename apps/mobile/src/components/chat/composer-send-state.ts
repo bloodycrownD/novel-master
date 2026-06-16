@@ -1,11 +1,7 @@
 /**
  * Composer 三分支发送状态（基于 core message-content-helpers）。
  */
-import {
-  hasToolResult,
-  isPlainUserText,
-  type ChatMessage,
-} from '@novel-master/core';
+import { hasToolResult, isPlainUserText, type ChatMessage } from "@novel-master/core/chat";
 
 export type ComposerSendState = {
   /** 末条为 user 时可空发续跑。 */

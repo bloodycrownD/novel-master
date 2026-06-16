@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  AgentConfigError,
-  createAgentRegistryService,
-  decode,
-  agentDefinitionSchema,
-} from "@novel-master/core";
+import { decode } from "@novel-master/core";
+
+import { AgentConfigError, createAgentRegistryService, agentDefinitionSchema } from "@novel-master/core/agent";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();

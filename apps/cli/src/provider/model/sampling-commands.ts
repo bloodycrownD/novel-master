@@ -5,11 +5,7 @@
  */
 
 import { readFile } from "node:fs/promises";
-import {
-  parseApplicationModelId,
-  savedModelSettingsFromJson,
-  savedModelSettingsToJson,
-} from "@novel-master/core";
+import { parseApplicationModelId, savedModelSettingsFromJson, savedModelSettingsToJson } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 

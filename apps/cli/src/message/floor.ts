@@ -7,7 +7,7 @@
  * @module message/floor
  */
 
-import type { ChatMessage } from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
 
 /**
  * Maps inclusive floor range to internal `seq` for repository range updates.

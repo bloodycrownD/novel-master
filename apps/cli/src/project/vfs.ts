@@ -4,7 +4,10 @@
  * @module project/vfs
  */
 
-import type { TdbcConnection, VfsService } from "@novel-master/core";
+import { type TdbcConnection } from "@novel-master/core";
+
+
+import { type VfsService } from "@novel-master/core/vfs";
 import { runDelete } from "../vfs/commands/delete.js";
 import { runExportZip } from "../vfs/commands/export-zip.js";
 import { runImportZip } from "../vfs/commands/import-zip.js";

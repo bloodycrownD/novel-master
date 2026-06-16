@@ -11,7 +11,7 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import type {ChatProject} from '@novel-master/core';
+import { type ChatProject } from "@novel-master/core/chat";
 import {AppModal} from '../ui/AppModal';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';

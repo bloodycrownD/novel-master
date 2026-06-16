@@ -3,7 +3,9 @@
  *
  * @module services/user-vfs-turn-execute.service
  */
-import type {UserVfsTurnOp, VfsScope} from '@novel-master/core';
+import { type UserVfsTurnOp } from "@novel-master/core/chat";
+
+import { type VfsScope } from "@novel-master/core/vfs";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */

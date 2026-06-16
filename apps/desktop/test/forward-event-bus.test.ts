@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  EVENT_AGENT_STREAM_TEXT_DELTA,
-  SimpleEventBus,
-} from "@novel-master/core";
+import { EVENT_AGENT_STREAM_TEXT_DELTA, SimpleEventBus } from "@novel-master/core/events";
 import {
   attachEventBusForwarder,
   setEventBusForwardTarget,

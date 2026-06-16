@@ -1,15 +1,7 @@
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {
-  agentDefinitionSchema,
-  decode,
-  encode,
-  parseText,
-  registerBuiltinTools,
-  stringifyText,
-  ToolRegistry,
-  validateAgentDefinition,
-  type AgentDefinition,
-} from '@novel-master/core';
+import { decode, encode, parseText, registerBuiltinTools, stringifyText, ToolRegistry } from "@novel-master/core";
+
+import { agentDefinitionSchema, validateAgentDefinition, type AgentDefinition } from "@novel-master/core/agent";
 import {
   errorCodes,
   isErrorWithCode,

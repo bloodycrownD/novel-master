@@ -4,13 +4,7 @@
  * @module worktree/run-worktree
  */
 
-import type {
-  FillPolicy,
-  InclusionMode,
-  SortField,
-  SortOrder,
-  WorktreeService,
-} from "@novel-master/core";
+import { type FillPolicy, type InclusionMode, type SortField, type SortOrder, type WorktreeService } from "@novel-master/core/worktree";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 export async function runWorktree(

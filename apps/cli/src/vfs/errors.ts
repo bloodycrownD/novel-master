@@ -1,4 +1,5 @@
-import { TdbcError, VfsError } from "@novel-master/core";
+import { TdbcError } from "@novel-master/core";
+import { VfsError } from "@novel-master/core/vfs";
 
 export const EXIT_USAGE = 1;
 export const EXIT_RUNTIME = 2;

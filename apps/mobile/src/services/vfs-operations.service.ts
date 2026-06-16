@@ -1,17 +1,8 @@
 /**
  * VFS mutations for the file manager (create / delete / rename).
  */
-import type {VfsListEntry, VfsService} from '@novel-master/core';
-import {
-  buildUserVfsCreateFileOp,
-  buildUserVfsDeleteOp,
-  buildUserVfsMkdirOp,
-  buildUserVfsRenameOp,
-  buildUserVfsSaveOp,
-  moveVfsPath,
-  remapPathUnderDir,
-  type UserVfsSaveVersionOptions,
-} from '@novel-master/core';
+import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
+import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {executeSessionUserVfsOp} from './user-vfs-turn-execute.service';
 

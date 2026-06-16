@@ -4,7 +4,7 @@
  * @module provider/commands
  */
 
-import { ProviderError } from "@novel-master/core";
+import { ProviderError } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { requireProviderId } from "../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../vfs/parse-args.js";

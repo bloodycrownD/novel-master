@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { encoding_for_model } from "tiktoken";
-import { HeuristicTokenCounter, type ChatMessage } from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
+import { HeuristicTokenCounter } from "@novel-master/core/provider";
 import { TiktokenTokenCounter } from "../src/impl/tiktoken-token-counter.js";
 
 function msg(text: string): ChatMessage {

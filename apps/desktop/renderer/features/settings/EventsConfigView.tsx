@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { EventActionNode, EventActionType, EventsConfig } from "@novel-master/core";
+import { type EventActionNode, type EventActionType, type EventsConfig } from "@novel-master/core/events";
 import {
   ACTION_ADD_OPTIONS,
   DEFAULT_EVENTS_CONFIG,

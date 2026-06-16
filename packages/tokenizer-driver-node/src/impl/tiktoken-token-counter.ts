@@ -4,8 +4,11 @@
  * @module impl/tiktoken-token-counter
  */
 
-import type { ChatMessage, TokenCounter } from "@novel-master/core";
-import { mapVendorModelIdToTiktokenModel } from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
+
+
+import { type TokenCounter } from "@novel-master/core/provider";
+import { mapVendorModelIdToTiktokenModel } from "@novel-master/core/provider";
 import { encoding_for_model, type Tiktoken } from "tiktoken";
 import { countOpenAiMessages } from "../logic/openai-message-token-count.js";
 

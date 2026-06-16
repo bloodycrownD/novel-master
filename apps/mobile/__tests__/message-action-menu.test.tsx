@@ -7,7 +7,7 @@ import {
   layoutAnchoredMenu,
 } from '../src/components/chat/MessageActionMenu';
 import {buildMessageActionItems} from '../src/components/chat/message-edit';
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({

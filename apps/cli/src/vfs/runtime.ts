@@ -4,7 +4,10 @@
  * @module vfs/runtime
  */
 
-import type { TdbcConnection, VfsService } from "@novel-master/core";
+import { type TdbcConnection } from "@novel-master/core";
+
+
+import { type VfsService } from "@novel-master/core/vfs";
 import { createNovelMasterRuntime } from "../runtime.js";
 
 export { resolveDbPath } from "../runtime.js";

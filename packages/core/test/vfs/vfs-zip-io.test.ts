@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { unzipSync, zipSync } from "fflate";
-import {
-  createVfsZipIoService,
-  VfsZipError,
-} from "@novel-master/core";
-import type { VfsService } from "@novel-master/core";
+import { createVfsZipIoService, VfsZipError } from "@novel-master/core/vfs";
+import { type VfsService } from "@novel-master/core/vfs";
 import { buildVfsZip } from "../../src/domain/vfs/logic/vfs-zip-build.js";
 import { decodeUtf8Entry } from "../../src/domain/vfs/logic/vfs-zip-validate.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";

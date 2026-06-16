@@ -4,7 +4,7 @@
  * @module logic/count-openai-style-message
  */
 
-import { isGpt0301TiktokenModel } from "@novel-master/core";
+import { isGpt0301TiktokenModel } from "@novel-master/core/provider";
 import type { Tiktoken } from "tiktoken";
 
 export interface OpenAiStyleMessage {

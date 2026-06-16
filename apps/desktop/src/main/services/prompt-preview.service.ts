@@ -1,10 +1,7 @@
 /**
  * Real prompt preview segments for desktop conversation tab.
  */
-import {
-  buildPromptPreviewSegmentsFromLayout,
-  type PromptPreviewSegment,
-} from "@novel-master/core";
+import { buildPromptPreviewSegmentsFromLayout, type PromptPreviewSegment } from "@novel-master/core/prompt";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { resolveCurrentAgentDefinition } from "./agent-run.service.js";
 import { buildSessionPromptInput } from "./session-prompt-input.service.js";

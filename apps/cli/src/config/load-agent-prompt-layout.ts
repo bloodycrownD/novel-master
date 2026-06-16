@@ -4,14 +4,14 @@
  * @module config/load-agent-prompt-layout
  */
 
-import {
-  decode,
-  parseText,
-  promptsDocumentSchema,
-  validateAgentPromptLayoutFromMaps,
-  type AgentPromptLayout,
-} from "@novel-master/core";
-import { PromptError } from "@novel-master/core";
+import { decode, parseText } from "@novel-master/core";
+
+
+import { promptsDocumentSchema } from "@novel-master/core/agent";
+
+
+import { validateAgentPromptLayoutFromMaps, type AgentPromptLayout } from "@novel-master/core/prompt";
+import { PromptError } from "@novel-master/core/prompt";
 
 function extractPromptsRecord(parsed: unknown): unknown {
   if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) {

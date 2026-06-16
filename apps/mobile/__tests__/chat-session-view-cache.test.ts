@@ -1,5 +1,5 @@
 import {describe, expect, it, beforeEach} from '@jest/globals';
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import {
   clearAllSessionViewCaches,
   getSessionViewCache,

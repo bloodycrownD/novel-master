@@ -11,13 +11,7 @@ import {
   View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {
-  DEFAULT_WORKTREE_DIR_RULE,
-  type FillPolicy,
-  type SetDirRuleInput,
-  type SortField,
-  type SortOrder,
-} from '@novel-master/core';
+import { DEFAULT_WORKTREE_DIR_RULE, type FillPolicy, type SetDirRuleInput, type SortField, type SortOrder } from "@novel-master/core/worktree";
 import {AppModal} from '../ui/AppModal';
 import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';

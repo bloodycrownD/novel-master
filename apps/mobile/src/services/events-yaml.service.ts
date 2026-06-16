@@ -1,12 +1,7 @@
 import ReactNativeBlobUtil from 'react-native-blob-util';
-import {
-  decode,
-  encode,
-  eventsConfigSchema,
-  parseText,
-  stringifyText,
-  type EventsConfig,
-} from '@novel-master/core';
+import { decode, encode, parseText, stringifyText } from "@novel-master/core";
+
+import { eventsConfigSchema, type EventsConfig } from "@novel-master/core/events";
 import {
   errorCodes,
   isErrorWithCode,

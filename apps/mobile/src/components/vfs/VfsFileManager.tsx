@@ -22,14 +22,9 @@ import {
 } from 'react-native';
 import {AppModal} from '../ui/AppModal';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
-import type {
-  SetDirRuleInput,
-  VfsListEntry,
-  VfsScope,
-  VfsService,
-  WorktreeListRow,
-  WorktreeService,
-} from '@novel-master/core';
+import { type VfsListEntry, type VfsScope, type VfsService } from "@novel-master/core/vfs";
+
+import { type SetDirRuleInput, type WorktreeListRow, type WorktreeService } from "@novel-master/core/worktree";
 import {ParentDirIcon, ZipExportIcon, ZipImportIcon} from '../icons/TabIcons';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {VfsBatchHeader} from '../batch/VfsBatchHeader';
@@ -47,7 +42,9 @@ import {
   type MappedVfsRow,
 } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import {isUserVfsUnifiedToolTurnEnabled, isVfsError} from '@novel-master/core';
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/provider";
+
+import { isVfsError } from "@novel-master/core/vfs";
 import {
   createVfsDirectory,
   createVfsFile,

@@ -3,7 +3,7 @@
  *
  * @module ipc/resolve-vfs-scope
  */
-import type { VfsScope, VfsService } from "@novel-master/core";
+import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 import type { VfsScopeRequest } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 

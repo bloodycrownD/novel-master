@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  agentDefinitionSchema,
-  decode,
-  encode,
-  parseText,
-  stringifyText,
-} from "@novel-master/core";
+import { decode, encode, parseText, stringifyText } from "@novel-master/core";
+
+import { agentDefinitionSchema } from "@novel-master/core/agent";
 
 describe("agent definition serialization", () => {
   it("round-trips YAML with persist + dynamic map", () => {

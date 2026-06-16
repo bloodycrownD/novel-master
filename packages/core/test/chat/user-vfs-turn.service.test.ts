@@ -5,14 +5,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
-import {
-  createUserVfsTurnServiceBundle,
-  readMessageMetadata,
-  TOOL_TURN_BRIDGE_TEXT,
-  type BuiltinToolContext,
-  type MessageCheckpointService,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
+
+import { createUserVfsTurnServiceBundle, readMessageMetadata, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+
+import { type MessageCheckpointService } from "@novel-master/core/session-fs";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";

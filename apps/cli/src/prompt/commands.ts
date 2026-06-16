@@ -5,13 +5,11 @@
  */
 
 import { readFile } from "node:fs/promises";
-import {
-  applyRegexChannelForLlm,
-  countPromptLlmInput,
-  formatPromptLlmInputForCliFromLayout,
-  parseApplicationModelId,
-  serializePromptLlmInput,
-} from "@novel-master/core";
+import { formatPromptLlmInputForCliFromLayout } from "@novel-master/core/prompt";
+
+import { countPromptLlmInput, parseApplicationModelId, serializePromptLlmInput } from "@novel-master/core/provider";
+
+import { applyRegexChannelForLlm } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";

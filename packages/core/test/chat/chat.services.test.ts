@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { MessageContent, TdbcConnection } from "@novel-master/core";
-import { textBlocks } from "@novel-master/core";
+import { type TdbcConnection } from "@novel-master/core";
+
+import { type MessageContent } from "@novel-master/core/chat";
+import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

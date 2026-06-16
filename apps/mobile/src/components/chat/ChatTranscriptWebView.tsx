@@ -12,7 +12,7 @@ import React, {
 } from 'react';
 import {StyleSheet, View} from 'react-native';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import {
   encodeHostToTranscript,
   decodeTranscriptToHost,

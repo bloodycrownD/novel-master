@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  compactionConditionsSchema,
-  createCompactionConditionsStore,
-  decode,
-} from "@novel-master/core";
+import { decode } from "@novel-master/core";
+
+import { compactionConditionsSchema, createCompactionConditionsStore } from "@novel-master/core/compaction";
 import { openNovelMasterTestConnection } from "../helpers/novel-master.js";
 import { createKkvService } from "../../src/service/kkv/create-kkv-service.js";
 

@@ -1,4 +1,4 @@
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import {buildMessageActionItems} from '../src/components/chat/message-edit';
 
 function msg(

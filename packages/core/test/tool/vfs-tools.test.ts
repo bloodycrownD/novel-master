@@ -9,7 +9,7 @@ import {
 import { registerBuiltinTools } from "../../src/domain/tool/builtin/register-builtin-tools.js";
 import type { BuiltinToolContext } from "../../src/domain/tool/builtin/builtin-tool-context.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
-import { isVfsError } from "@novel-master/core";
+import { isVfsError } from "@novel-master/core/vfs";
 import { TOOL_OUTPUT_MAX_LINES, TOOL_OUTPUT_MAX_MATCHES } from "../../src/domain/tool/logic/tool-output-limits.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 

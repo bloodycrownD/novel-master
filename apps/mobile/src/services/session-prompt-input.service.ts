@@ -1,13 +1,9 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import {
-  buildPromptLlmInputFromLayout,
-  type AgentDefinition,
-  type AgentPromptLayout,
-  type PromptLlmInput,
-  type PromptRenderContext,
-} from '@novel-master/core';
+import { type AgentDefinition } from "@novel-master/core/agent";
+
+import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {applyActiveRegexChannel} from './regex-apply-channel';
 import {resolveCurrentAgentDefinition} from './agent-run.service';

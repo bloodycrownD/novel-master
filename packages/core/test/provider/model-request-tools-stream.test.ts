@@ -3,7 +3,9 @@ import { describe, it, mock } from "node:test";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 import { OpenAiProtocolAdapter } from "../../src/infra/llm-protocol/impl/openai.adapter.js";
 import { GeminiProtocolAdapter } from "../../src/infra/llm-protocol/impl/gemini.adapter.js";
-import { toolsFromRegistry, ToolRegistry, registerBuiltinTools } from "@novel-master/core";
+import { ToolRegistry, registerBuiltinTools } from "@novel-master/core";
+
+import { toolsFromRegistry } from "@novel-master/core/provider";
 
 describe("ModelRequest tools + stream (adapters)", () => {
   it("Anthropic chat sends tools in request body", async () => {

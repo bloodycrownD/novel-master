@@ -1,7 +1,7 @@
 /**
  * Paired hide/delete for assistant tool_use turns and their tool_results user message.
  */
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import type {MobileNovelMasterRuntime} from '../../runtime/types';
 import {messageHasToolUse, resolveToolResultsMessageId} from './message-blocks';
 

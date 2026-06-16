@@ -5,7 +5,7 @@
  * @module test/e2e-llm-fetch
  */
 
-import { clearProtocolAdapters, getProtocolAdapter } from "@novel-master/core";
+import { clearProtocolAdapters, getProtocolAdapter } from "@novel-master/core/provider";
 
 const BODY_PREFIX = "NM_LLM_E2E_BODY:";
 

@@ -9,13 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {
-  ChatProject,
-  ChatSession,
-  VfsScope,
-  VfsService,
-  WorktreeService,
-} from '@novel-master/core';
+import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
+
+import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
+
+import { type WorktreeService } from "@novel-master/core/worktree";
 import {BottomSheetMenu} from '../../../components/sheet/BottomSheetMenu';
 import {ManageHeader} from '../../../components/batch/ManageHeader';
 import {BatchCheckbox} from '../../../components/batch/BatchCheckbox';

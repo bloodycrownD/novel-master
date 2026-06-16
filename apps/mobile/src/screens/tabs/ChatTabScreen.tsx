@@ -5,11 +5,8 @@ import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Alert, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {ChatMessage} from '@novel-master/core';
-import type {
-  AgentRunFinishedPayload,
-  AgentStepCommittedPayload,
-} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
+import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@novel-master/core/events";
 import {AppHeader} from '../../components/chrome/AppHeader';
 import {useToast} from '../../components/chrome/ToastHost';
 import {

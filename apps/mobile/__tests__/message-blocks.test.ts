@@ -1,4 +1,4 @@
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 import {
   buildChatListItems,
   buildToolResultByUseId,

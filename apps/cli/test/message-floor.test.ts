@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { ChatMessage } from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
 import { seqRangeFromFloors } from "../src/message/floor.js";
 
 function msg(seq: number): ChatMessage {

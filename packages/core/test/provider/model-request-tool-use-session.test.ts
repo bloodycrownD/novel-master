@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { textBlocks } from "@novel-master/core";
+import { textBlocks } from "@novel-master/core/chat";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {

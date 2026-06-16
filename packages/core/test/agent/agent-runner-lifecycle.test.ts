@@ -2,21 +2,17 @@
 import { describe, it } from "node:test";
 import {
   createAgentRunner,
-  createSessionWorktreeSnapshotStore,
   InMemoryAgentSession,
-  messageBodyText,
-  registerBuiltinTools,
-  SimpleEventBus,
-  textBlocks,
-  ToolRegistry,
   type AgentDefinition,
   type BuiltinToolContext,
   type CreateAgentRunnerDeps,
-  type LlmChatResult,
-  type ModelRequestOptions,
-  type ModelRequestService,
-  type VfsService,
-} from "@novel-master/core";
+} from "@novel-master/core/agent";
+import { messageBodyText, textBlocks } from "@novel-master/core/prompt";
+import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
+import { SimpleEventBus } from "@novel-master/core/events";
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { type VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p1";

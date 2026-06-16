@@ -6,13 +6,9 @@
 
 import { readFile } from "node:fs/promises";
 import { extname } from "node:path";
-import {
-  decode,
-  encode,
-  eventsConfigSchema,
-  parseText,
-  type EventsConfigStore,
-} from "@novel-master/core";
+import { decode, encode, parseText } from "@novel-master/core";
+
+import { eventsConfigSchema, type EventsConfigStore } from "@novel-master/core/events";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 

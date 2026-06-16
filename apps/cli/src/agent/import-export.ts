@@ -6,17 +6,11 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { extname } from "node:path";
-import {
-  agentDefinitionSchema,
-  decode,
-  encode,
-  parseText,
-  stringifyText,
-  validateAgentPromptLayoutFromMaps,
-  type AgentDefinition,
-  type AgentRegistryService,
-  type ValidateAgentDefinitionOptions,
-} from "@novel-master/core";
+import { decode, encode, parseText, stringifyText } from "@novel-master/core";
+
+import { agentDefinitionSchema, type AgentDefinition, type AgentRegistryService, type ValidateAgentDefinitionOptions } from "@novel-master/core/agent";
+
+import { validateAgentPromptLayoutFromMaps } from "@novel-master/core/prompt";
 import {
   agentsBundleDocumentSchema,
   type AgentsBundleDocument,

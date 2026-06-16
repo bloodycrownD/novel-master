@@ -4,7 +4,7 @@
  * Unpackaged dev enables {@link createLoggingFetch} automatically; production uses
  * default adapters unless `NM_DEBUG_LLM_FETCH=1`.
  */
-import { configureLlmFetch, createLoggingFetch } from "@novel-master/core";
+import { configureLlmFetch, createLoggingFetch } from "@novel-master/core/provider";
 import { desktopLog, isDesktopLlmDebug } from "../log/desktop-log.js";
 
 let configured = false;

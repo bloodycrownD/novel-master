@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core";
+import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
 
 describe("DEFAULT_WORKTREE_DIR_RULE", () => {
   it("默认 fillPolicy 为 header", () => {

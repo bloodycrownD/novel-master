@@ -1,13 +1,7 @@
 /**
  * Invalidate session worktree snapshot after agent VFS tool rounds.
  */
-import {
-  EVENT_AGENT_RUN_FINISHED,
-  EVENT_AGENT_STEP_COMMITTED,
-  type AgentRunFinishedPayload,
-  type AgentStepCommittedPayload,
-  type SimpleEventBus,
-} from "@novel-master/core";
+import { EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STEP_COMMITTED, type AgentRunFinishedPayload, type AgentStepCommittedPayload, type SimpleEventBus } from "@novel-master/core/events";
 import { invalidateSessionWorktreeSnapshot } from "./ipc/resolve-vfs-scope.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 

@@ -7,16 +7,9 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
-import {
-  bootstrapNovelMaster,
-  createAgentRegistryService,
-  createPersistentPreferences,
-  createPersistentState,
-  open,
-  type PersistentPreferences,
-  type PersistentState,
-  type TdbcConnection,
-} from "@novel-master/core";
+import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+
+import { createAgentRegistryService } from "@novel-master/core/agent";
 import {
   createCompactionConditionEvaluator,
   createCompactionConditionsStore,

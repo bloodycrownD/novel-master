@@ -1,4 +1,4 @@
-import type {ChatMessage} from '@novel-master/core';
+import { type ChatMessage } from "@novel-master/core/chat";
 
 /**
  * Merge "older" messages before the currently displayed list.

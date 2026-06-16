@@ -1,12 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  assertLogicalPathAllowed,
-  resolveLogicalPath,
-  toLogicalPath,
-  toPhysicalPath,
-  isVfsError,
-} from "@novel-master/core";
+import { assertLogicalPathAllowed, resolveLogicalPath, toLogicalPath, toPhysicalPath, isVfsError } from "@novel-master/core/vfs";
 
 describe("vfs-path-mapper", () => {
   it("resolveLogicalPath normalizes relative input", () => {

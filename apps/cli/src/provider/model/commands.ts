@@ -4,16 +4,12 @@
  * @module provider/model/commands
  */
 
-import {
-  formatApplicationModelId,
-  isValidTokenCounterModePref,
-  type TokenizerOverride,
-} from "@novel-master/core";
-import type { SavedModelSettingsPatch } from "@novel-master/core";
+import { formatApplicationModelId, isValidTokenCounterModePref, type TokenizerOverride } from "@novel-master/core/provider";
+import { type SavedModelSettingsPatch } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
-import { parseApplicationModelId } from "@novel-master/core";
+import { parseApplicationModelId } from "@novel-master/core/provider";
 import { runProviderModelSampling } from "./sampling-commands.js";
 
 function flagString(

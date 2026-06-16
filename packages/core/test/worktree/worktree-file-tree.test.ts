@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  renderWorktreeFileTree,
-  worktreeFileTreeRootLabel,
-} from "@novel-master/core";
+import { renderWorktreeFileTree, worktreeFileTreeRootLabel } from "@novel-master/core/worktree";
 
 describe("worktree file tree", () => {
   it("renders nested dirs and files", () => {

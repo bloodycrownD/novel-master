@@ -4,7 +4,10 @@
  * @module main
  */
 
-import { PACKAGE_NAME, type VfsService } from "@novel-master/core";
+import { PACKAGE_NAME } from "@novel-master/core";
+
+
+import { type VfsService } from "@novel-master/core/vfs";
 import { runPreferences } from "./preferences-cmd/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";

@@ -3,7 +3,7 @@
  *
  * @module services/vfs-zip
  */
-import { createVfsZipIoService, VfsZipError, type VfsScope } from "@novel-master/core";
+import { createVfsZipIoService, VfsZipError, type VfsScope } from "@novel-master/core/vfs";
 import { dialog, type BrowserWindow } from "electron";
 import { readFile, writeFile } from "node:fs/promises";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";

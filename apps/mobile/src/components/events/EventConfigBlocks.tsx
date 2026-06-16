@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import type {EventActionNode, EventActionType} from '@novel-master/core';
+import { type EventActionNode, type EventActionType } from "@novel-master/core/events";
 import {FormField} from '../form/FormField';
 import {FormTextInput} from '../form/FormTextInput';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';

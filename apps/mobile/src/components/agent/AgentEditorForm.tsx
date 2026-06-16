@@ -5,12 +5,9 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import type {
-  AgentDefinition,
-  DynamicPromptBlock,
-  PersistPromptBlock,
-  PersistTextPromptBlock,
-} from '@novel-master/core';
+import { type AgentDefinition } from "@novel-master/core/agent";
+
+import { type DynamicPromptBlock, type PersistPromptBlock, type PersistTextPromptBlock } from "@novel-master/core/prompt";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
@@ -35,12 +32,9 @@ import {
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
 import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
-import {
-  formatApplicationModelId,
-  parseApplicationModelId,
-  registerBuiltinTools,
-  ToolRegistry,
-} from '@novel-master/core';
+import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+
+import { formatApplicationModelId, parseApplicationModelId } from "@novel-master/core/provider";
 import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
 import {FormErrorCard} from '../form/FormErrorCard';

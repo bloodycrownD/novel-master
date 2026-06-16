@@ -4,8 +4,10 @@
  * @module logic/openai-message-token-count
  */
 
-import type { ChatMessage } from "@novel-master/core";
-import { isGpt0301TiktokenModel, messageBodyText } from "@novel-master/core";
+import { type ChatMessage } from "@novel-master/core/chat";
+import { messageBodyText } from "@novel-master/core/prompt";
+
+import { isGpt0301TiktokenModel } from "@novel-master/core/provider";
 import type { Tiktoken } from "tiktoken";
 
 /**

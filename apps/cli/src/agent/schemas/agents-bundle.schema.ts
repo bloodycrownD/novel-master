@@ -5,7 +5,7 @@
  */
 
 import { z } from "zod";
-import { promptsDocumentSchema } from "@novel-master/core";
+import { promptsDocumentSchema } from "@novel-master/core/agent";
 
 const agentBundleEntrySchema = z
   .object({
