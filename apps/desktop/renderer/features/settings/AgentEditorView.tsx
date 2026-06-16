@@ -10,6 +10,7 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
+  WORKTREE_BLOCK_HINT,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -89,6 +90,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [vendorModelId, setVendorModelId] = useState("");
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState("");
+  const [persistEnabled, setPersistEnabled] = useState(false);
+  const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -122,6 +125,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         toolsSelected,
         systemEnabled,
         systemContent,
+        persistEnabled,
+        dynamicEnabled,
         persist,
         dynamic,
       }),
@@ -135,6 +140,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     ],
@@ -171,6 +178,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
       setSystemEnabled(promptForm.systemEnabled);
       setSystemContent(promptForm.systemContent);
+      setPersistEnabled(promptForm.persistEnabled);
+      setDynamicEnabled(promptForm.dynamicEnabled);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -286,6 +295,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     });
@@ -525,6 +536,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <SettingsField label={PROMPT_REGION_LABELS.maxStepsLabel}>
             <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
           </SettingsField>
+          <p className="settings-hint">{PROMPT_REGION_LABELS.maxStepsHint}</p>
         </SettingsSection>
 
         <SettingsSection title="工具策略">
@@ -549,11 +561,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title={PROMPT_REGION_LABELS.layoutTitle}>
-          <p className="settings-hint">
-            {PROMPT_REGION_LABELS.layoutOrderPrefix}
-            {PROMPT_REGION_LABELS.layoutOrder}。
-          </p>
-
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.systemBlocks}</span>
           </div>
@@ -585,33 +592,48 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.persistBlocks}</span>
-            <button
-              type="button"
-              className="settings-link-btn"
-              onClick={(e) => {
-                e.stopPropagation();
-                const rect = e.currentTarget.getBoundingClientRect();
-                setAddBlockMenu({
-                  x: Math.max(8, rect.right - 140),
-                  y: Math.max(8, rect.bottom + 4),
-                  target: "persist",
-                });
-              }}
-            >
-              添加
-            </button>
           </div>
-          <div
-            className={
-              persistBlocks.length === 0
-                ? "config-block-list config-block-list--empty"
-                : "config-block-list"
-            }
-          >
-            {persistBlocks.length === 0 ? (
-              <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyPersistHint}</p>
-            ) : null}
-            {persistBlocks.map((block, index) => {
+          <div className="config-block-card config-block-card--prompt">
+            <div className="config-block-card__header">
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.persistBlocks}</span>
+              <Switch
+                checked={persistEnabled}
+                onChange={setPersistEnabled}
+                aria-label={PROMPT_REGION_LABELS.enablePersist}
+              />
+            </div>
+            <div className="config-block-card__body">
+              {persistEnabled ? (
+                <>
+                  <div className="config-block-card__section-head">
+                    <span className="config-block-card__section-label">块列表</span>
+                    <button
+                      type="button"
+                      className="settings-link-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setAddBlockMenu({
+                          x: Math.max(8, rect.right - 140),
+                          y: Math.max(8, rect.bottom + 4),
+                          target: "persist",
+                        });
+                      }}
+                    >
+                      添加
+                    </button>
+                  </div>
+                  <div
+                    className={
+                      persistBlocks.length === 0
+                        ? "config-block-list config-block-list--empty"
+                        : "config-block-list"
+                    }
+                  >
+                    {persistBlocks.length === 0 ? (
+                      <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyPersistHint}</p>
+                    ) : null}
+                    {persistBlocks.map((block, index) => {
               if (block.type === "worktree") {
                 return (
                   <div key={`persist-wt-${index}`} className="config-block-card config-block-card--prompt">
@@ -645,7 +667,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         </select>
                       </SettingsField>
                       <p className="config-block-card__hint">
-                        运行时注入 materialize 后的会话工作树。
+                      <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
                       </p>
                     </div>
                   </div>
@@ -719,38 +741,60 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 </div>
               );
             })}
+                  </div>
+                </>
+              ) : (
+                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistDisabledHint}</p>
+              )}
+            </div>
           </div>
 
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.chatBlocks}</span>
           </div>
-          <div className="config-block-card config-block-card--prompt config-block-card--readonly">
-            <div className="config-block-card__header">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chat}</span>
-              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.chat}</span>
+          <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
+            <div className="config-block-card__header config-block-card__header--chat-slot">
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chatTag}</span>
+              <span className="config-block-card__readonly-pill">只读</span>
             </div>
             <div className="config-block-card__body">
-              <p className="config-block-card__hint">
-                运行时注入当前会话可见消息，不可配置、不可排序。
+              <p className="config-block-card__meta config-block-card__meta--chat-title">
+                {PROMPT_REGION_LABELS.chat}
               </p>
+              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.chatReadonlyHint}</p>
             </div>
           </div>
 
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
-            <button type="button" className="settings-link-btn" onClick={() => addDynamicBlock()}>
-              添加
-            </button>
           </div>
-          <div
-            className={
-              dynamic.length === 0 ? "config-block-list config-block-list--empty" : "config-block-list"
-            }
-          >
-            {dynamic.length === 0 ? (
-              <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyDynamicHint}</p>
-            ) : null}
-            {dynamic.map((block, index) => (
+          <div className="config-block-card config-block-card--prompt">
+            <div className="config-block-card__header">
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
+              <Switch
+                checked={dynamicEnabled}
+                onChange={setDynamicEnabled}
+                aria-label={PROMPT_REGION_LABELS.enableDynamic}
+              />
+            </div>
+            <div className="config-block-card__body">
+              {dynamicEnabled ? (
+                <>
+                  <div className="config-block-card__section-head">
+                    <span className="config-block-card__section-label">块列表</span>
+                    <button type="button" className="settings-link-btn" onClick={() => addDynamicBlock()}>
+                      添加
+                    </button>
+                  </div>
+                  <div
+                    className={
+                      dynamic.length === 0 ? "config-block-list config-block-list--empty" : "config-block-list"
+                    }
+                  >
+                    {dynamic.length === 0 ? (
+                      <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyDynamicHint}</p>
+                    ) : null}
+                    {dynamic.map((block, index) => (
               <div key={`dynamic-${index}`} className="config-block-card config-block-card--prompt">
                 <div className="config-block-card__header">
                   <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
@@ -856,6 +900,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                 </div>
               </div>
             ))}
+                  </div>
+                </>
+              ) : (
+                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.dynamicDisabledHint}</p>
+              )}
+            </div>
           </div>
         </SettingsSection>
       </SettingsFormSection>

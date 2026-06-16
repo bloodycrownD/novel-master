@@ -14,7 +14,11 @@ import type {
 import {AgentPickerModal} from '../../../components/agent/AgentPickerModal';
 import {ChatComposer} from '../../../components/chat/ChatComposer';
 import {ChatMetaBar} from '../../../components/chat/ChatMetaBar';
-import {ChatStreamMetricsBar} from '../../../components/chat/ChatStreamMetricsBar';
+import {ChatStreamMetricsBarLive} from '../../../components/chat/ChatStreamMetricsBarLive';
+import type {
+  AgentStreamMetricsSnapshot,
+  StreamMetricsAccRef,
+} from '../../../hooks/useAgentStreamMetrics';
 import {
   ChatTranscriptWebView,
   type ChatTranscriptWebViewHandle,
@@ -27,6 +31,11 @@ import {
 import {MessageEditModal} from '../../../components/chat/MessageEditModal';
 import {MessageList} from '../../../components/chat/MessageList';
 import {MessageBatchHeader} from '../../../components/batch/MessageBatchHeader';
+import {
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+} from '../../../components/chat/transcript-selectable-role';
 import {ModelPickerModal} from '../../../components/provider/ModelPickerModal';
 import {SessionActionsDrawer} from '../../../components/chrome/SessionActionsDrawer';
 import {
@@ -37,7 +46,6 @@ import {SegmentedControl} from '../../../components/ui/SegmentedControl';
 import type {MessageMenuAnchor} from '../../../components/chat/MessageActionMenu';
 import type {ChatListScrollSnapshot} from '../../../services/chat-list-scroll-cache';
 import type {ChatAgentMeta} from '../../../services/chat-agent-meta';
-import type {AgentStreamMetricsView} from '../../../hooks/useAgentStreamMetrics';
 import {setMobileAgentActive} from '../../../runtime/agent-activity';
 import type {ThemeTokens} from '../../../theme/tokens';
 import type {ConversationPanel} from './useChatTabScope';
@@ -50,22 +58,26 @@ export type ChatConversationPanelProps = {
   projectId: string | undefined;
   sessionId: string | undefined;
   agentMeta: ChatAgentMeta;
-  streamMetrics: AgentStreamMetricsView | null;
+  streamMetricsAccRef: StreamMetricsAccRef;
+  streamMetricsLastRun: AgentStreamMetricsSnapshot | null;
   toolInvoking: boolean;
   messageBatchActive: boolean;
+  messageBatchMode: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
   messageBatchSelectedCount: number;
   messageBatchSelectedIds: ReadonlySet<string>;
   onExitMessageBatch: () => void;
-  onConfirmMessageBatchDelete: () => void;
-  onConfirmBatchHideMessages: () => void;
-  onConfirmBatchUnhideMessages: () => void;
+  onConfirmVisibilityBatch: () => void;
   useWebviewTranscript: boolean;
   transcriptWebRef: React.RefObject<ChatTranscriptWebViewHandle | null>;
   chatScrollKey: string | null;
   chatMessages: ChatMessage[];
   hasMoreMessages: boolean;
   agentRunning: boolean;
-  transcriptFlags: {richText: boolean; batchMode: boolean};
+  transcriptFlags: {
+    richText: boolean;
+    batchMode: boolean;
+    batchModeKind: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
+  };
   webMenuCloseSignal: number;
   restoredTranscriptScroll: ChatTranscriptScrollSnapshot | undefined;
   defaultChatScrollToBottom: boolean;
@@ -77,6 +89,8 @@ export type ChatConversationPanelProps = {
   loadingMoreMessages: boolean;
   hasWorkspaceModel: boolean;
   canResumeWithoutInput: boolean;
+  lastMessageHasToolResult: boolean;
+  lastMessageIsPlainUserText: boolean;
   vfsRefreshKey: number;
   sessionVfs: VfsService | null;
   sessionWorktree: WorktreeService | null;
@@ -85,7 +99,8 @@ export type ChatConversationPanelProps = {
   onOpenSessionRename: () => void;
   onCompactSession: () => void;
   onNavigateRealPrompt: () => void;
-  onEnterMessageBatch: () => void;
+  onEnterHideMessageBatch: () => void;
+  onEnterRestoreMessageBatch: () => void;
   modelPickerOpen: boolean;
   agentPickerOpen: boolean;
   onCloseModelPicker: () => void;
@@ -133,15 +148,15 @@ export function ChatConversationPanel({
   projectId,
   sessionId,
   agentMeta,
-  streamMetrics,
+  streamMetricsAccRef,
+  streamMetricsLastRun,
   toolInvoking,
   messageBatchActive,
+  messageBatchMode,
   messageBatchSelectedCount,
   messageBatchSelectedIds,
   onExitMessageBatch,
-  onConfirmMessageBatchDelete,
-  onConfirmBatchHideMessages,
-  onConfirmBatchUnhideMessages,
+  onConfirmVisibilityBatch,
   useWebviewTranscript,
   transcriptWebRef,
   chatScrollKey,
@@ -160,6 +175,8 @@ export function ChatConversationPanel({
   loadingMoreMessages,
   hasWorkspaceModel,
   canResumeWithoutInput,
+  lastMessageHasToolResult,
+  lastMessageIsPlainUserText,
   vfsRefreshKey,
   sessionVfs,
   sessionWorktree,
@@ -168,7 +185,8 @@ export function ChatConversationPanel({
   onOpenSessionRename,
   onCompactSession,
   onNavigateRealPrompt,
-  onEnterMessageBatch,
+  onEnterHideMessageBatch,
+  onEnterRestoreMessageBatch,
   modelPickerOpen,
   agentPickerOpen,
   onCloseModelPicker,
@@ -209,6 +227,50 @@ export function ChatConversationPanel({
     }
     return {kind: 'session', projectId, sessionId};
   }, [projectId, sessionId]);
+
+  const visibilityBatchPreview = useMemo(() => {
+    if (messageBatchMode == null) {
+      return {
+        affectedIds: new Set<string>() as ReadonlySet<string>,
+        affectedCount: 0,
+        rangeLabel: null as string | null,
+      };
+    }
+    const sessionMaxSeq =
+      chatMessages.length > 0
+        ? Math.max(...chatMessages.map(m => m.seq))
+        : 0;
+    const affectedIds = computeVisibilityBatchAffectedIds(
+      chatMessages,
+      messageBatchMode,
+      messageBatchSelectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return {affectedIds, affectedCount: 0, rangeLabel: null};
+    }
+    if (messageBatchMode === 'hide') {
+      const range = computeHideRangeFromSelection(
+        chatMessages,
+        messageBatchSelectedIds,
+      );
+      return {
+        affectedIds,
+        affectedCount: affectedIds.size,
+        rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
+      };
+    }
+    const range = computeShowRangeFromSelection(
+      chatMessages,
+      messageBatchSelectedIds,
+      sessionMaxSeq,
+    );
+    return {
+      affectedIds,
+      affectedCount: affectedIds.size,
+      rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
+    };
+  }, [chatMessages, messageBatchMode, messageBatchSelectedIds]);
 
   const emitWorkspaceBackState = useCallback(() => {
     if (!onWorkspaceBackStateChange) {
@@ -255,16 +317,20 @@ export function ChatConversationPanel({
             ]}
             pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
             <ChatMetaBar meta={agentMeta} />
-            {streamMetrics != null ? (
-              <ChatStreamMetricsBar metrics={streamMetrics} />
-            ) : null}
-            {messageBatchActive ? (
+            <ChatStreamMetricsBarLive
+              agentRunning={agentRunning}
+              accRef={streamMetricsAccRef}
+              lastRun={streamMetricsLastRun}
+            />
+            {messageBatchActive && messageBatchMode != null ? (
               <MessageBatchHeader
+                tokens={tokens}
+                mode={messageBatchMode}
                 selectedCount={messageBatchSelectedCount}
+                affectedCount={visibilityBatchPreview.affectedCount}
+                rangeLabel={visibilityBatchPreview.rangeLabel}
                 onCancel={onExitMessageBatch}
-                onDelete={onConfirmMessageBatchDelete}
-                onHide={onConfirmBatchHideMessages}
-                onRestore={onConfirmBatchUnhideMessages}
+                onConfirm={onConfirmVisibilityBatch}
               />
             ) : null}
             {useWebviewTranscript ? (
@@ -278,6 +344,7 @@ export function ChatConversationPanel({
                 toolInvoking={toolInvoking}
                 flags={transcriptFlags}
                 selectedMessageIds={messageBatchSelectedIds}
+                affectedMessageIds={visibilityBatchPreview.affectedIds}
                 menuCloseSignal={webMenuCloseSignal}
                 initialScroll={restoredTranscriptScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
@@ -302,8 +369,9 @@ export function ChatConversationPanel({
                 initialScroll={cachedChatScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
                 onScrollSnapshot={onChatScrollSnapshot}
-                batchMode={messageBatchActive}
+                batchMode={messageBatchActive ? messageBatchMode : null}
                 selectedMessageIds={messageBatchSelectedIds}
+                affectedMessageIds={visibilityBatchPreview.affectedIds}
                 onToggleMessageSelect={onToggleMessageSelect}
                 onMessageLongPress={onMessageLongPress}
                 onOpenToolFile={onOpenSessionFilePreview}
@@ -336,6 +404,8 @@ export function ChatConversationPanel({
               onRunFinished={onRunFinished}
               onNeedModel={onNeedModel}
               canResumeWithoutInput={canResumeWithoutInput}
+              lastMessageHasToolResult={lastMessageHasToolResult}
+              lastMessageIsPlainUserText={lastMessageIsPlainUserText}
             />
           </View>
           {sessionVfs && sessionWorktree ? (
@@ -381,7 +451,8 @@ export function ChatConversationPanel({
         onRename={onOpenSessionRename}
         onCompact={onCompactSession}
         onRealPrompt={onNavigateRealPrompt}
-        onBatchMessages={onEnterMessageBatch}
+        onHideMessages={onEnterHideMessageBatch}
+        onRestoreMessages={onEnterRestoreMessageBatch}
       />
       <MessageActionMenu
         visible={useWebviewMessageMenu && messageMenuTarget != null}

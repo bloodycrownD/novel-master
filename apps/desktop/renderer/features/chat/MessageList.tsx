@@ -3,6 +3,15 @@ import remarkGfm from "remark-gfm";
 import type { ChatMessageDto } from "../../../shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
 import { ToolCallGroupCard } from "./ToolCallGroupCard";
+import {
+  parseUserVfsActionFromText,
+  UserVfsActionBody,
+} from "./user-vfs-action-transcript";
+import type { MessageVisibilityBatchMode } from "./transcript-selectable-role";
+import {
+  isTranscriptRowSelectable,
+  transcriptSelectableRole,
+} from "./transcript-selectable-role";
 
 const ROLE_LABELS: Record<string, string> = {
   user: "用户",
@@ -16,8 +25,10 @@ interface MessageListProps {
   streamingThinking?: string;
   toolInvoking?: boolean;
   agentRunning?: boolean;
-  batchMode?: boolean;
+  batchMode?: MessageVisibilityBatchMode | null;
   selectedIds?: ReadonlySet<string>;
+  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
+  affectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
   onToggleSelect?: (messageId: string) => void;
   onOpenMessageMenu?: (
@@ -51,8 +62,9 @@ export function MessageList({
   streamingThinking,
   toolInvoking = false,
   agentRunning = false,
-  batchMode = false,
+  batchMode = null,
   selectedIds,
+  affectedIds,
   chatRichText = false,
   onToggleSelect,
   onOpenMessageMenu,
@@ -79,15 +91,22 @@ export function MessageList({
       {listItems.map((item) => {
         const msg = item.message;
         const selected = selectedIds?.has(msg.id) ?? false;
+        const inRange = affectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
+
+        const selectableRole = transcriptSelectableRole(msg.role, batchMode);
+        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+        const userVfsAction =
+          msg.role === "user" ? parseUserVfsActionFromText(text) : null;
 
         return (
           <div
             key={msg.id}
-            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}`}
+            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}${inRange ? " is-in-range" : ""}`}
             data-message-id={msg.id}
+            data-selectable-role={selectableRole}
             onClick={() => {
-              if (batchMode) {
+              if (batchMode && rowSelectable) {
                 onToggleSelect?.(msg.id);
               }
             }}
@@ -98,10 +117,12 @@ export function MessageList({
               openMenu(msg, e);
             }}
           >
-            {batchMode ? (
+            {batchMode && rowSelectable ? (
               <label className="chat-message__check" aria-label="选择消息">
                 <input type="checkbox" checked={selected} readOnly />
               </label>
+            ) : batchMode ? (
+              <span className="chat-message__check-spacer" aria-hidden="true" />
             ) : null}
             <div className="chat-message__body">
               <span className="chat-message__role">
@@ -128,11 +149,15 @@ export function MessageList({
                 </details>
               ) : null}
               {text ? (
-                <MessageBody
-                  text={text}
-                  richText={chatRichText}
-                  alwaysRichText={msg.role === "assistant"}
-                />
+                userVfsAction != null ? (
+                  <UserVfsActionBody action={userVfsAction} />
+                ) : (
+                  <MessageBody
+                    text={text}
+                    richText={chatRichText}
+                    alwaysRichText={msg.role === "assistant"}
+                  />
+                )
               ) : null}
               {item.tools.length > 0 ? (
                 <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />

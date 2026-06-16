@@ -15,6 +15,7 @@ import type {
 } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
 import { shouldIncludeDynamicBlock } from "../../domain/prompt/logic/should-include-dynamic-block.js";
+import type { LlmExportZones } from "../../domain/prompt/logic/normalize-for-llm-export.js";
 import type {
   PromptLlmInput,
   PromptRenderContext,
@@ -43,6 +44,29 @@ export interface PromptPreviewSegment {
 export interface PromptAssemblyOptions {
   /** Agent run step index; 0 = first LLM round after user action. */
   readonly agentStepIndex?: number;
+}
+
+/**
+ * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
+ */
+export function computeLlmExportZonesFromLayout(
+  layout: AgentPromptLayout,
+  options?: PromptAssemblyOptions,
+): LlmExportZones {
+  const agentStepIndex = resolveAgentStepIndex(options);
+  let persistCount = 0;
+  if (layout.persistEnabled === true) {
+    persistCount = layout.persist.length;
+  }
+  let dynamicCount = 0;
+  if (layout.dynamicEnabled === true) {
+    for (const block of layout.dynamic) {
+      if (shouldIncludeDynamicBlock(block, agentStepIndex)) {
+        dynamicCount += 1;
+      }
+    }
+  }
+  return { persistCount, dynamicCount };
 }
 
 function resolveAgentStepIndex(options?: PromptAssemblyOptions): number {
@@ -88,7 +112,7 @@ function syntheticWorktreeMessage(
     id: `prompt:worktree:${block.name}`,
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
-    role: "user",
+    role: block.role ?? "user",
     content: textBlocks(worktreeDisplay),
     provider: null,
     raw: null,
@@ -119,27 +143,30 @@ export async function buildPromptAssemblyFromLayout(
     });
   }
 
-  for (const block of layout.persist) {
-    if (block.type === "text") {
-      segments.push({
-        id: `persist-${block.name}`,
-        role: block.role,
-        title: block.name,
-        body: block.content,
-        source: "template",
-      });
-    } else {
-      segments.push({
-        id: `persist-worktree-${block.name}`,
-        role: "user",
-        title: block.name,
-        body: ctx.worktreeDisplay,
-        source: "template",
-      });
+  if (layout.persistEnabled === true) {
+    for (const block of layout.persist) {
+      if (block.type === "text") {
+        segments.push({
+          id: `persist-${block.name}`,
+          role: block.role,
+          title: block.name,
+          body: block.content,
+          source: "template",
+        });
+      } else {
+        segments.push({
+          id: `persist-worktree-${block.name}`,
+          role: block.role ?? "user",
+          title: block.name,
+          body: ctx.worktreeDisplay,
+          source: "template",
+        });
+      }
     }
   }
 
-  for (const message of ctx.messages) {
+  for (let messageIndex = 0; messageIndex < ctx.messages.length; messageIndex++) {
+    const message = ctx.messages[messageIndex]!;
     if (message.hidden) {
       continue;
     }
@@ -157,21 +184,23 @@ export async function buildPromptAssemblyFromLayout(
     }
   }
 
-  for (const block of layout.dynamic) {
-    if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
-      continue;
+  if (layout.dynamicEnabled === true) {
+    for (const block of layout.dynamic) {
+      if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
+        continue;
+      }
+      const expanded = await expandDynamicMacros(block.content, {
+        now: ctx.now,
+        vfs: ctx.vfs,
+      });
+      segments.push({
+        id: `dynamic-${block.name}`,
+        role: block.role,
+        title: block.name,
+        body: expanded,
+        source: "template",
+      });
     }
-    const expanded = await expandDynamicMacros(block.content, {
-      now: ctx.now,
-      vfs: ctx.vfs,
-    });
-    segments.push({
-      id: `dynamic-${block.name}`,
-      role: block.role,
-      title: block.name,
-      body: expanded,
-      source: "template",
-    });
   }
 
   return segments;
@@ -188,27 +217,31 @@ export async function buildPromptLlmInputFromLayout(
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
 
-  for (const block of layout.persist) {
-    if (block.type === "text") {
-      messages.push(syntheticTemplateMessage(block, block.content, ctx));
-    } else {
-      messages.push(
-        syntheticWorktreeMessage(block, ctx.worktreeDisplay, ctx),
-      );
+  if (layout.persistEnabled === true) {
+    for (const block of layout.persist) {
+      if (block.type === "text") {
+        messages.push(syntheticTemplateMessage(block, block.content, ctx));
+      } else {
+        messages.push(
+          syntheticWorktreeMessage(block, ctx.worktreeDisplay, ctx),
+        );
+      }
     }
   }
 
   messages.push(...ctx.messages.filter((m) => !m.hidden));
 
-  for (const block of layout.dynamic) {
-    if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
-      continue;
+  if (layout.dynamicEnabled === true) {
+    for (const block of layout.dynamic) {
+      if (!shouldIncludeDynamicBlock(block, agentStepIndex)) {
+        continue;
+      }
+      const expanded = await expandDynamicMacros(block.content, {
+        now: ctx.now,
+        vfs: ctx.vfs,
+      });
+      messages.push(syntheticTemplateMessage(block, expanded, ctx));
     }
-    const expanded = await expandDynamicMacros(block.content, {
-      now: ctx.now,
-      vfs: ctx.vfs,
-    });
-    messages.push(syntheticTemplateMessage(block, expanded, ctx));
   }
 
   const system =

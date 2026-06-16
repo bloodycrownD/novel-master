@@ -57,12 +57,12 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     return () => clearInterval(id);
   }, [agentRunning, reset]);
 
+  // Delta handlers update refs only; 100ms interval re-reads for toolInvoking (no per-delta setState).
   const noteTextDelta = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
     textRef.current += delta;
-    setTick((t) => t + 1);
   }, []);
 
   const noteThinkingDelta = useCallback((delta: string) => {
@@ -71,7 +71,6 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     }
     thinkingRef.current += delta;
     lastThinkingAtRef.current = Date.now();
-    setTick((t) => t + 1);
   }, []);
 
   void tick;

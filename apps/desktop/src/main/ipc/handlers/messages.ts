@@ -8,12 +8,15 @@ import type {
   ContentBlockDto,
   IpcResult,
   MessagesAppendRequest,
+  MessagesAppendToolTurnBridgeRequest,
   MessagesDeleteRequest,
   MessagesEditRequest,
   MessagesForkRequest,
   MessagesHideRequest,
+  MessagesHideRangeRequest,
   MessagesListRequest,
   MessagesShowRequest,
+  MessagesShowRangeRequest,
   SessionDto,
   SessionFsRollbackRequest,
 } from "../../../../shared/ipc-types.js";
@@ -78,6 +81,18 @@ export async function handleMessagesList(
     const rt = await getDesktopRuntime();
     const messages = await loadSessionMessagesForDisplay(rt, req.sessionId);
     return { ok: true, data: messages.map(toDto) };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleMessagesAppendToolTurnBridge(
+  req: MessagesAppendToolTurnBridgeRequest,
+): Promise<IpcResult<ChatMessageDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const msg = await rt.appendToolTurnBridge(req.sessionId);
+    return { ok: true, data: toDto(msg) };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -155,6 +170,38 @@ export async function handleMessagesShow(
     const rt = await getDesktopRuntime();
     await rt.messages.show(req.messageId);
     return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleMessagesHideRange(
+  req: MessagesHideRangeRequest,
+): Promise<IpcResult<{ count: number }>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const count = await rt.messages.hideRange(
+      req.sessionId,
+      req.fromSeq,
+      req.toSeq,
+    );
+    return { ok: true, data: { count } };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleMessagesShowRange(
+  req: MessagesShowRangeRequest,
+): Promise<IpcResult<{ count: number }>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const count = await rt.messages.showRange(
+      req.sessionId,
+      req.fromSeq,
+      req.toSeq,
+    );
+    return { ok: true, data: { count } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

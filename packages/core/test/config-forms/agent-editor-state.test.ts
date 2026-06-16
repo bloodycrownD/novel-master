@@ -18,6 +18,7 @@ import {
   updatePersistWorktreeRole,
   withDynamicBlockPersistence,
   WORKTREE_BLOCK_WIRE_NAME,
+  WORKTREE_BLOCK_HINT,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
@@ -26,9 +27,26 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.apiSystemField, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.systemPromptTitle, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
+  assert.equal(
+    PROMPT_REGION_LABELS.maxStepsHint,
+    "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。",
+  );
   assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(
+    PROMPT_REGION_LABELS.persistDisabledHint,
+    "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。",
+  );
+  assert.equal(
+    PROMPT_REGION_LABELS.dynamicDisabledHint,
+    "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。",
+  );
+  assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
+  assert.equal(
+    WORKTREE_BLOCK_HINT,
+    "运行时自动注入当前会话的项目文件树，供模型了解可访问的文件。角色决定注入消息在模型侧显示为用户或助手；启用持久区时若工作树作为末块，请设为助手。",
+  );
   assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止宏与生命周期。");
   assert.equal(PROMPT_REGION_LABELS.dynamicLifecycleOnceHint, "仅首轮请求带入。");
 
@@ -42,6 +60,10 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
     assert.doesNotMatch(value, /LLM system/i);
     assert.doesNotMatch(value, /lifecycle/i);
     assert.doesNotMatch(value, /agent step/i);
+    assert.doesNotMatch(value, /\bwire\b/i);
+    assert.doesNotMatch(value, /materialize/i);
+    assert.doesNotMatch(value, /\bCore\b/);
+    assert.doesNotMatch(value, /\brun\b/i);
   }
 });
 
@@ -81,6 +103,8 @@ test("definitionToForm maps system toggle and three regions", () => {
     name: "writer",
     prompts: {
       system: "sys",
+      persistEnabled: true,
+      dynamicEnabled: true,
       persist: [{ name: "canon", type: "worktree" }],
       dynamic: [
         {
@@ -95,18 +119,52 @@ test("definitionToForm maps system toggle and three regions", () => {
   });
   assert.equal(form.systemEnabled, true);
   assert.equal(form.systemContent, "sys");
+  assert.equal(form.persistEnabled, true);
+  assert.equal(form.dynamicEnabled, true);
   assert.equal(form.persist.length, 1);
   assert.equal(form.dynamic[0]?.lifecycle, "once");
+});
+
+test("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [],
+    },
+  });
+  assert.equal(form.persistEnabled, false);
+  assert.equal(form.dynamicEnabled, false);
 });
 
 test("layoutFromFormInput omits system when switch off", () => {
   const layout = layoutFromFormInput({
     systemEnabled: false,
     systemContent: "ignored",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
     dynamic: [],
   });
   assert.equal(layout.system, undefined);
+  assert.equal(layout.persistEnabled, undefined);
+  assert.equal(layout.dynamicEnabled, undefined);
+});
+
+test("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
+    dynamic: [
+      { name: "d1", type: "text", role: "assistant", content: "a" },
+      { name: "d2", type: "text", role: "user", content: "b" },
+    ],
+  });
+  assert.equal(layout.persistEnabled, true);
+  assert.equal(layout.dynamicEnabled, true);
 });
 
 test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
@@ -148,6 +206,8 @@ test("layoutFromFormInput preserves mixed persist order", () => {
   const layout = layoutFromFormInput({
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [
       { name: "custom", type: "worktree", role: "assistant" },
       { name: "persona", type: "text", role: "user", content: "x" },
@@ -210,6 +270,8 @@ test("buildAgentDefinitionFromForm wire order matches mixed persist editor order
     toolsSelected: [],
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [
       createDefaultWorktreeBlock(),
       { name: "p1", type: "text", role: "user", content: "after tree" },
@@ -234,8 +296,28 @@ test("buildAgentDefinitionFromForm wire order matches mixed persist editor order
 test("createDefaultAgentEditorPrompts starts with empty persist", () => {
   const defaults = createDefaultAgentEditorPrompts();
   assert.equal(defaults.systemEnabled, false);
+  assert.equal(defaults.persistEnabled, false);
+  assert.equal(defaults.dynamicEnabled, false);
   assert.equal(defaults.persist.length, 0);
   assert.equal(defaults.dynamic.length, 0);
+});
+
+test("formSnapshotJson includes persistEnabled/dynamicEnabled", () => {
+  const json = formSnapshotJson({
+    name: "agent",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "p",
+    vendorModelId: "m",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...createDefaultAgentEditorPrompts(),
+    persistEnabled: true,
+    dynamicEnabled: false,
+  });
+  const parsed = JSON.parse(json) as Record<string, unknown>;
+  assert.equal(parsed.persistEnabled, true);
+  assert.equal(parsed.dynamicEnabled, false);
 });
 
 test("formSnapshotJson omits model fields when disabled", () => {
@@ -294,6 +376,8 @@ test("buildAgentDefinitionFromForm allows empty persist with system content", ()
     toolsSelected: [],
     systemEnabled: true,
     systemContent: "你是写作助手",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [],
     dynamic: [],
   });
@@ -315,6 +399,8 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
     toolsSelected: [],
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [],
     dynamic: [{ name: "state", type: "text", role: "user", content: "{{$time}}" }],
   });
@@ -332,6 +418,8 @@ test("buildAgentDefinitionFromForm allows worktree-only persist", () => {
     toolsSelected: [],
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [createDefaultWorktreeBlock()],
     dynamic: [],
   });
@@ -421,6 +509,146 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
   );
 });
 
+test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", () => {
+  const input = {
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default" as const,
+    toolsSelected: [] as string[],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    persist: [
+      { name: "p1", type: "text" as const, role: "assistant" as const, content: "我将遵守" },
+    ],
+    dynamic: [
+      { name: "d1", type: "text" as const, role: "assistant" as const, content: "a" },
+      { name: "d2", type: "text" as const, role: "user" as const, content: "b" },
+    ],
+  };
+  const result = buildAgentDefinitionFromForm(input);
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.persistEnabled, true);
+    assert.equal(result.definition.prompts.dynamicEnabled, true);
+    const form = definitionToForm(result.definition);
+    assert.equal(form.persistEnabled, true);
+    assert.equal(form.dynamicEnabled, true);
+  }
+});
+
+test("buildAgentDefinitionFromForm 开关关时省略 wire 布尔", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.persistEnabled, undefined);
+    assert.equal(result.definition.prompts.dynamicEnabled, undefined);
+  }
+});
+
+test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: false,
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /助手/);
+  }
+});
+
+test("buildAgentDefinitionFromForm persistEnabled 开且 worktree assistant 末块可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: false,
+    persist: [
+      { name: "p1", type: "text", role: "user", content: "x" },
+      { name: "canon", type: "worktree", role: "assistant" },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
+});
+
+test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: true,
+    persist: [],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.message, /两个块/);
+  }
+});
+
+test("buildAgentDefinitionFromForm 开关关时跳过启用后校验", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+    dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+  });
+  assert.equal(result.ok, true);
+});
+
 test("buildAgentDefinitionFromForm rejects persist macros", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
@@ -432,6 +660,8 @@ test("buildAgentDefinitionFromForm rejects persist macros", () => {
     toolsSelected: [],
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [
       {
         name: "bad",
@@ -459,6 +689,8 @@ test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
     toolsSelected: [],
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [{ name: "p1", type: "text", role: "user", content: "ok" }],
     dynamic: [
       {

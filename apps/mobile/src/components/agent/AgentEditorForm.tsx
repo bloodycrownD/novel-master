@@ -16,6 +16,7 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
+  WORKTREE_BLOCK_HINT,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -79,6 +80,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [vendorModelId, setVendorModelId] = useState('');
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState('');
+  const [persistEnabled, setPersistEnabled] = useState(false);
+  const [dynamicEnabled, setDynamicEnabled] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -113,6 +116,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         toolsSelected,
         systemEnabled,
         systemContent,
+        persistEnabled,
+        dynamicEnabled,
         persist,
         dynamic,
       }),
@@ -126,6 +131,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     ],
@@ -170,6 +177,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
     setSystemEnabled(promptForm.systemEnabled);
     setSystemContent(promptForm.systemContent);
+    setPersistEnabled(promptForm.persistEnabled);
+    setDynamicEnabled(promptForm.dynamicEnabled);
     setPersist([...promptForm.persist]);
     setDynamic([...promptForm.dynamic]);
 
@@ -293,6 +302,8 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       toolsSelected,
       systemEnabled,
       systemContent,
+      persistEnabled,
+      dynamicEnabled,
       persist,
       dynamic,
     });
@@ -461,14 +472,30 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const worktreeBlockLabel =
     WORKTREE_BLOCK_LABEL === '工作树' ? WORKTREE_BLOCK_LABEL : '工作树';
 
-  const renderPromptSectionHead = (label: string, onAdd?: () => void) => (
+  const renderPromptSectionHead = (
+    label: string,
+    opts?: {
+      onAdd?: () => void;
+      switchValue?: boolean;
+      onSwitchChange?: (value: boolean) => void;
+    },
+  ) => (
     <View style={styles.sectionHead}>
       <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
-      {onAdd != null ? (
-        <Pressable onPress={onAdd}>
-          <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
-        </Pressable>
-      ) : null}
+      <View style={styles.sectionHeadActions}>
+        {opts?.onAdd != null ? (
+          <Pressable onPress={opts.onAdd}>
+            <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
+          </Pressable>
+        ) : null}
+        {opts?.switchValue !== undefined && opts.onSwitchChange != null ? (
+          <Switch
+            value={opts.switchValue}
+            onValueChange={opts.onSwitchChange}
+            trackColor={{false: tokens.border, true: tokens.primary}}
+          />
+        ) : null}
+      </View>
     </View>
   );
 
@@ -582,7 +609,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           <FormField
             label={PROMPT_REGION_LABELS.maxStepsLabel}
             tokens={tokens}
-            hint="每轮 run 的模型往返上限；省略时 Core 默认 20。">
+            hint={PROMPT_REGION_LABELS.maxStepsHint}>
             <FormTextInput
               tokens={tokens}
               value={maxSteps}
@@ -620,32 +647,15 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         </FormSectionCard>
 
         <FormSectionCard title={PROMPT_REGION_LABELS.layoutTitle} tokens={tokens}>
-          <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-            {PROMPT_REGION_LABELS.layoutOrderPrefixShort}
-            {PROMPT_REGION_LABELS.layoutOrder}。
-          </Text>
-
-          {renderPromptSectionHead(promptSectionLabels.system)}
+          {renderPromptSectionHead(promptSectionLabels.system, {
+            switchValue: systemEnabled,
+            onSwitchChange: setSystemEnabled,
+          })}
           <View
             style={[
               styles.blockCard,
               {backgroundColor: tokens.surface, borderColor: tokens.border},
             ]}>
-            <View style={styles.blockHeader}>
-              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                  {PROMPT_REGION_LABELS.system}
-                </Text>
-              </View>
-              <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                {PROMPT_REGION_LABELS.systemPromptTitle}
-              </Text>
-              <Switch
-                value={systemEnabled}
-                onValueChange={setSystemEnabled}
-                trackColor={{false: tokens.border, true: tokens.primary}}
-              />
-            </View>
             {systemEnabled ? (
               <FormField label={PROMPT_REGION_LABELS.systemContent} tokens={tokens}>
                 <FormTextInput
@@ -663,8 +673,18 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.persist, () => setAddBlockVisible(true))}
-          <View style={styles.blockList}>
+          {renderPromptSectionHead(promptSectionLabels.persist, {
+            switchValue: persistEnabled,
+            onSwitchChange: setPersistEnabled,
+            ...(persistEnabled ? {onAdd: () => setAddBlockVisible(true)} : {}),
+          })}
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            {persistEnabled ? (
+              <View style={styles.blockList}>
             {persistBlocks.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyPersistHint}
@@ -707,7 +727,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                       />
                     </FormField>
                     <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      运行时注入 materialize 后的会话工作树。
+                      {WORKTREE_BLOCK_HINT}
                     </Text>
                   </View>
                 );
@@ -787,32 +807,67 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </View>
               );
             })}
+              </View>
+            ) : (
+              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.persistDisabledHint}
+              </Text>
+            )}
           </View>
 
           {renderPromptSectionHead(promptSectionLabels.chat)}
           <View
             style={[
-              styles.blockCard,
-              styles.readonlyCard,
-              {backgroundColor: tokens.surface, borderColor: tokens.border},
+              styles.chatSlotCard,
+              {
+                backgroundColor: tokens.background,
+                borderColor: tokens.borderLight,
+                borderLeftColor: tokens.primary,
+              },
             ]}>
-            <View style={styles.blockHeader}>
-              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                  {PROMPT_REGION_LABELS.chat}
+            <View style={styles.chatSlotHeader}>
+              <View
+                style={[
+                  styles.chatSlotTag,
+                  {backgroundColor: `${tokens.primary}18`},
+                ]}>
+                <Text style={[styles.chatSlotTagText, {color: tokens.primary}]}>
+                  {PROMPT_REGION_LABELS.chatTag}
                 </Text>
               </View>
-              <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                {PROMPT_REGION_LABELS.chat}
-              </Text>
+              <View
+                style={[
+                  styles.readonlyPill,
+                  {
+                    backgroundColor: tokens.surface,
+                    borderColor: tokens.borderLight,
+                  },
+                ]}>
+                <Text style={[styles.readonlyPillText, {color: tokens.textSecondary}]}>
+                  只读
+                </Text>
+              </View>
             </View>
-            <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-              运行时注入可见会话消息，不可配置。
+            <Text style={[styles.chatSlotTitle, {color: tokens.text}]}>
+              {PROMPT_REGION_LABELS.chat}
+            </Text>
+            <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
+              {PROMPT_REGION_LABELS.chatReadonlyHint}
             </Text>
           </View>
 
-          {renderPromptSectionHead(promptSectionLabels.dynamic, () => addDynamicBlock())}
-          <View style={styles.blockList}>
+          {renderPromptSectionHead(promptSectionLabels.dynamic, {
+            switchValue: dynamicEnabled,
+            onSwitchChange: setDynamicEnabled,
+            ...(dynamicEnabled ? {onAdd: addDynamicBlock} : {}),
+          })}
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            {dynamicEnabled ? (
+              <View style={styles.blockList}>
             {dynamic.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyDynamicHint}
@@ -895,6 +950,12 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </FormField>
               </View>
             ))}
+              </View>
+            ) : (
+              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+                {PROMPT_REGION_LABELS.dynamicDisabledHint}
+              </Text>
+            )}
           </View>
         </FormSectionCard>
       </ScreenFormLayout>
@@ -940,12 +1001,58 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  sectionHeadActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
   blockList: {gap: 12},
   blockCard: {
     borderWidth: 1,
     borderRadius: 10,
     padding: 12,
     gap: 10,
+  },
+  chatSlotCard: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderLeftWidth: 3,
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+  },
+  chatSlotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  chatSlotTag: {
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  chatSlotTagText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  readonlyPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  readonlyPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  chatSlotTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  chatSlotHint: {
+    fontSize: 13,
+    lineHeight: 20,
   },
   readonlyCard: {opacity: 0.85},
   blockHeader: {

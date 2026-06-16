@@ -608,7 +608,7 @@ describe("AgentRunner", () => {
     );
   });
 
-  it("captures checkpoint after read-only tool round when session has files", async () => {
+  it("does not capture checkpoint after read-only tool round", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -671,12 +671,8 @@ describe("AgentRunner", () => {
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
     assert.equal(
       await repo.hasCheckpoint(session.id, firstAssistant.id),
-      true,
+      false,
     );
-    const tree = await repo.loadFileTree(session.id, firstAssistant.id);
-    assert.ok(tree);
-    assert.equal(tree.size, 1);
-    assert.equal(tree.get("/seed.md"), (await vfs.read("/seed.md")).version);
   });
 
   it("tool_result content includes VfsError path from formatToolErrorForLlm", async () => {

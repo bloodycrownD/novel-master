@@ -46,6 +46,8 @@ export type AgentEditorFormInput = {
   toolsSelected: readonly string[];
   systemEnabled: boolean;
   systemContent: string;
+  persistEnabled: boolean;
+  dynamicEnabled: boolean;
   persist: readonly PersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
@@ -82,6 +84,9 @@ export const WORKTREE_BLOCK_WIRE_NAME = "canon";
 
 /** 工作树块在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKTREE_BLOCK_LABEL = "工作树";
+/** 持久区工作树块说明（用户可见，避免技术术语）。 */
+export const WORKTREE_BLOCK_HINT =
+  "运行时自动注入当前会话的项目文件树，供模型了解可访问的文件。角色决定注入消息在模型侧显示为用户或助手；启用持久区时若工作树作为末块，请设为助手。";
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
@@ -90,6 +95,8 @@ export const PROMPT_REGION_LABELS = {
   systemBlocks: "系统区",
   systemContent: "系统内容",
   enableSystem: "启用系统",
+  enablePersist: "启用持久区",
+  enableDynamic: "启用动态区",
   apiSystemField: "系统提示词",
   systemPromptTitle: "系统提示词",
   persistBlocks: "持久区",
@@ -99,13 +106,19 @@ export const PROMPT_REGION_LABELS = {
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",
   systemDisabledHint: "关闭时不写入系统提示词。",
+  persistDisabledHint: "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。",
+  dynamicDisabledHint: "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。",
   systemPlaceholder: "单段系统级指令…",
   systemPlaceholderShort: "单段系统级指令…",
   maxStepsLabel: "最大步数",
+  maxStepsHint: "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。",
   emptyPersistHint: "暂无块，点击添加",
   emptyDynamicHint: "暂无块，点击添加",
   chat: "会话历史",
+  chatTag: "会话消息",
   chatBlocks: "会话区",
+  chatReadonlyHint:
+    "运行时自动注入当前会话的可见消息，固定位于持久区与动态区之间。不可编辑、不可关闭，始终会发送给 AI。",
   dynamicLifecycleOnceHint: "仅首轮请求带入。",
 } as const;
 
@@ -285,11 +298,18 @@ export function withDynamicBlockPersistence(
 /** 新建 Agent 默认 Prompt 表单片段。 */
 export function createDefaultAgentEditorPrompts(): Pick<
   AgentEditorFormInput,
-  "systemEnabled" | "systemContent" | "persist" | "dynamic"
+  | "systemEnabled"
+  | "systemContent"
+  | "persistEnabled"
+  | "dynamicEnabled"
+  | "persist"
+  | "dynamic"
 > {
   return {
     systemEnabled: false,
     systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
     persist: [],
     dynamic: [],
   };
@@ -364,12 +384,19 @@ export function definitionToForm(
   def: AgentDefinition,
 ): Pick<
   AgentEditorFormInput,
-  "systemEnabled" | "systemContent" | "persist" | "dynamic"
+  | "systemEnabled"
+  | "systemContent"
+  | "persistEnabled"
+  | "dynamicEnabled"
+  | "persist"
+  | "dynamic"
 > {
   const system = def.prompts.system?.trim() ?? "";
   return {
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
+    persistEnabled: def.prompts.persistEnabled ?? false,
+    dynamicEnabled: def.prompts.dynamicEnabled ?? false,
     persist: [...def.prompts.persist],
     dynamic: [...def.prompts.dynamic],
   };
@@ -379,7 +406,12 @@ export function definitionToForm(
 export function layoutFromFormInput(
   input: Pick<
     AgentEditorFormInput,
-    "systemEnabled" | "systemContent" | "persist" | "dynamic"
+    | "systemEnabled"
+    | "systemContent"
+    | "persistEnabled"
+    | "dynamicEnabled"
+    | "persist"
+    | "dynamic"
   >,
 ): AgentPromptLayout {
   const system =
@@ -388,6 +420,8 @@ export function layoutFromFormInput(
       : undefined;
   return {
     ...(system != null ? { system } : {}),
+    ...(input.persistEnabled ? { persistEnabled: true } : {}),
+    ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
     persist: [...splitPersistBlocksForEditor(input.persist).blocks],
     dynamic: [...input.dynamic],
   };
@@ -409,6 +443,8 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
       : {}),
     systemEnabled: input.systemEnabled,
     systemContent: input.systemContent,
+    persistEnabled: input.persistEnabled,
+    dynamicEnabled: input.dynamicEnabled,
     persist: input.persist,
     dynamic: input.dynamic,
   });

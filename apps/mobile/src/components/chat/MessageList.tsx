@@ -16,6 +16,11 @@ import {
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import type {ChatMessage} from '@novel-master/core';
+import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
+import {
+  isTranscriptRowSelectable,
+  transcriptSelectableRole,
+} from '../chat/transcript-selectable-role';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
@@ -37,8 +42,10 @@ type Props = {
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
   richRenderEpoch?: number;
-  batchMode?: boolean;
+  batchMode?: MessageVisibilityBatchMode | null;
   selectedMessageIds?: ReadonlySet<string>;
+  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
+  affectedMessageIds?: ReadonlySet<string>;
   onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (
     message: ChatMessage,
@@ -116,8 +123,9 @@ export function MessageList({
   agentRunning = false,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
-  batchMode = false,
+  batchMode = null,
   selectedMessageIds,
+  affectedMessageIds,
   onToggleMessageSelect,
   onMessageLongPress,
   listHeaderComponent,
@@ -335,6 +343,7 @@ export function MessageList({
     thinking: string,
     tools: readonly import('./message-blocks').ToolCallView[],
     selected: boolean,
+    inRange: boolean,
     hidden: boolean,
     messageId: string,
     options?: {
@@ -363,8 +372,13 @@ export function MessageList({
             opacity: hidden ? 0.55 : 1,
           },
           batchMode && selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 2,
+          },
+          batchMode && inRange && !selected && {
+            borderColor: tokens.danger,
+            borderWidth: 1,
+            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         {trimmedThinking ? (
@@ -412,6 +426,7 @@ export function MessageList({
   const renderUserBubble = (
     body: string,
     selected: boolean,
+    inRange: boolean,
     hidden: boolean,
     messageId: string,
   ) => {
@@ -425,8 +440,13 @@ export function MessageList({
             opacity: hidden ? 0.55 : 1,
           },
           batchMode && selected && {
-            borderColor: tokens.primary,
+            borderColor: tokens.danger,
             borderWidth: 2,
+          },
+          batchMode && inRange && !selected && {
+            borderColor: tokens.danger,
+            borderWidth: 1,
+            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         <ChatMessageBody
@@ -502,6 +522,7 @@ export function MessageList({
                 [],
                 false,
                 false,
+                false,
                 'stream',
                 {
                   defaultExpandedThinking: true,
@@ -521,30 +542,40 @@ export function MessageList({
           return null;
         }
         const selected = selectedMessageIds?.has(row.message.id) ?? false;
+        const inRange = affectedMessageIds?.has(row.message.id) ?? false;
         const content = isUser ? (
-          renderUserBubble(body, selected, hidden, row.message.id)
+          renderUserBubble(body, selected, inRange, hidden, row.message.id)
         ) : (
           renderAssistantBubble(
             body,
             thinking,
             row.tools,
             selected,
+            inRange,
             hidden,
             row.message.id,
           )
         );
 
+        const selectableRole = transcriptSelectableRole(row.message.role, batchMode);
+        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+
         if (batchMode) {
           return (
-            <Pressable
-              style={styles.batchRow}
-              onPress={() => onToggleMessageSelect?.(row.message.id)}>
-              <View style={styles.batchCheckboxCol}>
-                <BatchCheckbox
-                  checked={selected}
-                  onToggle={() => onToggleMessageSelect?.(row.message.id)}
-                />
-              </View>
+            <View style={styles.batchRow} accessibilityState={{selected}}>
+              {rowSelectable ? (
+                <Pressable
+                  style={styles.batchCheckboxCol}
+                  onPress={() => onToggleMessageSelect?.(row.message.id)}>
+                  <BatchCheckbox
+                    checked={selected}
+                    accentColor={tokens.danger}
+                    onToggle={() => onToggleMessageSelect?.(row.message.id)}
+                  />
+                </Pressable>
+              ) : (
+                <View style={styles.batchCheckboxCol} />
+              )}
               <View
                 style={[
                   styles.batchBubbleCol,
@@ -554,7 +585,7 @@ export function MessageList({
                 ]}>
                 {content}
               </View>
-            </Pressable>
+            </View>
           );
         }
 

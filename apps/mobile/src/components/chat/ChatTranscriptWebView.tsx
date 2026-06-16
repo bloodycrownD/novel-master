@@ -3,6 +3,7 @@
  */
 import React, {
   forwardRef,
+  memo,
   useCallback,
   useEffect,
   useImperativeHandle,
@@ -58,6 +59,7 @@ export type ChatTranscriptWebViewProps = {
   readonly agentRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly selectedMessageIds?: ReadonlySet<string>;
+  readonly affectedMessageIds?: ReadonlySet<string>;
   readonly menuCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
@@ -73,11 +75,45 @@ export type ChatTranscriptWebViewProps = {
   readonly onToggleMessageSelect?: (messageId: string) => void;
 };
 
+function transcriptFlagsEqual(
+  a: Partial<TranscriptFlags> | undefined,
+  b: Partial<TranscriptFlags> | undefined,
+): boolean {
+  return (
+    (a?.richText ?? false) === (b?.richText ?? false) &&
+    (a?.batchMode ?? false) === (b?.batchMode ?? false) &&
+    (a?.batchModeKind ?? null) === (b?.batchModeKind ?? null) &&
+    (a?.menuDisabled ?? false) === (b?.menuDisabled ?? false)
+  );
+}
+
+function chatTranscriptWebViewPropsEqual(
+  prev: ChatTranscriptWebViewProps,
+  next: ChatTranscriptWebViewProps,
+): boolean {
+  return (
+    prev.sessionKey === next.sessionKey &&
+    prev.messages === next.messages &&
+    prev.streamingText === next.streamingText &&
+    prev.streamingThinking === next.streamingThinking &&
+    prev.hasMore === next.hasMore &&
+    prev.agentRunning === next.agentRunning &&
+    prev.toolInvoking === next.toolInvoking &&
+    prev.defaultScrollToBottom === next.defaultScrollToBottom &&
+    prev.menuCloseSignal === next.menuCloseSignal &&
+    prev.initialScroll === next.initialScroll &&
+    prev.selectedMessageIds === next.selectedMessageIds &&
+    prev.affectedMessageIds === next.affectedMessageIds &&
+    transcriptFlagsEqual(prev.flags, next.flags)
+  );
+}
+
 function themeFromTokens(tokens: {
   background: string;
   text: string;
   textSecondary: string;
   primary: string;
+  danger: string;
   surface: string;
   borderLight: string;
 }): TranscriptTheme {
@@ -86,6 +122,7 @@ function themeFromTokens(tokens: {
     text: tokens.text,
     textSecondary: tokens.textSecondary,
     primary: tokens.primary,
+    danger: tokens.danger,
     surface: tokens.surface,
     borderLight: tokens.borderLight,
   };
@@ -134,10 +171,9 @@ function emitScrollRestoreTelemetry(
   }
 }
 
-export const ChatTranscriptWebView = forwardRef<
-  ChatTranscriptWebViewHandle,
-  ChatTranscriptWebViewProps
->(function ChatTranscriptWebView(
+export const ChatTranscriptWebView = memo(
+  forwardRef<ChatTranscriptWebViewHandle, ChatTranscriptWebViewProps>(
+    function ChatTranscriptWebView(
   {
     sessionKey,
     messages,
@@ -150,6 +186,7 @@ export const ChatTranscriptWebView = forwardRef<
     agentRunning = false,
     toolInvoking = false,
     selectedMessageIds,
+    affectedMessageIds,
     menuCloseSignal = 0,
     onScrollSnapshot,
     onReady,
@@ -215,35 +252,37 @@ export const ChatTranscriptWebView = forwardRef<
       streamRafRef.current = null;
       const batch = pendingStreamDeltasRef.current;
       pendingStreamDeltasRef.current = {text: '', thinking: ''};
+      // WHY（中文）：
+      // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
+      // - Web 侧在 richText 开启时会优先用 html 走 `innerHTML` 路径，以保证 text/thinking 的流式 rich 行为一致。
       const richText = richTextRef.current;
-      if (batch.text.length > 0) {
-        streamTextAccumRef.current += batch.text;
-        const html = prepareStreamTailHtml(streamTextAccumRef.current, richText);
+      const textHtml = prepareStreamTailHtml(streamTextAccumRef.current, richText);
+      const thinkingHtml = prepareStreamTailHtml(
+        streamThinkingAccumRef.current,
+        richText,
+      );
+
+      const postStreamDelta = (
+        kind: 'text' | 'thinking',
+        delta: string,
+        html: string | undefined,
+      ) => {
         postToWeb({
           v: 1,
           type: 'streamDelta',
           payload: {
-            kind: 'text',
-            delta: batch.text,
-            ...(html != null ? {html} : {}),
+            kind,
+            delta,
+            html,
           },
         });
+      };
+
+      if (batch.text.length > 0) {
+        postStreamDelta('text', batch.text, textHtml);
       }
       if (batch.thinking.length > 0) {
-        streamThinkingAccumRef.current += batch.thinking;
-        const html = prepareStreamTailHtml(
-          streamThinkingAccumRef.current,
-          richText,
-        );
-        postToWeb({
-          v: 1,
-          type: 'streamDelta',
-          payload: {
-            kind: 'thinking',
-            delta: batch.thinking,
-            ...(html != null ? {html} : {}),
-          },
-        });
+        postStreamDelta('thinking', batch.thinking, thinkingHtml);
       }
     });
   }, [postToWeb]);
@@ -254,6 +293,11 @@ export const ChatTranscriptWebView = forwardRef<
         return;
       }
       streamActiveRef.current = true;
+      if (kind === 'text') {
+        streamTextAccumRef.current += delta;
+      } else {
+        streamThinkingAccumRef.current += delta;
+      }
       const pending = pendingStreamDeltasRef.current;
       if (kind === 'text') {
         pending.text += delta;
@@ -269,6 +313,7 @@ export const ChatTranscriptWebView = forwardRef<
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
+      batchModeKind: flags?.batchModeKind ?? null,
       menuDisabled: agentRunning,
     };
     postToWeb({
@@ -279,6 +324,7 @@ export const ChatTranscriptWebView = forwardRef<
   }, [
     flags?.richText,
     flags?.batchMode,
+    flags?.batchModeKind,
     postToWeb,
     tokens,
     agentRunning,
@@ -513,6 +559,7 @@ export const ChatTranscriptWebView = forwardRef<
     const resolvedFlags: TranscriptFlags = {
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
+      batchModeKind: flags?.batchModeKind ?? null,
       menuDisabled: agentRunning,
     };
     const prev = prevSentFlagsRef.current;
@@ -520,6 +567,7 @@ export const ChatTranscriptWebView = forwardRef<
       prev != null &&
       prev.richText === resolvedFlags.richText &&
       prev.batchMode === resolvedFlags.batchMode &&
+      prev.batchModeKind === resolvedFlags.batchModeKind &&
       prev.menuDisabled === resolvedFlags.menuDisabled
     ) {
       return;
@@ -534,6 +582,7 @@ export const ChatTranscriptWebView = forwardRef<
     webReady,
     flags?.richText,
     flags?.batchMode,
+    flags?.batchModeKind,
     agentRunning,
     postToWeb,
   ]);
@@ -560,9 +609,12 @@ export const ChatTranscriptWebView = forwardRef<
         selectedMessageIds: selectedMessageIds
           ? [...selectedMessageIds]
           : [],
+        affectedMessageIds: affectedMessageIds
+          ? [...affectedMessageIds]
+          : [],
       },
     });
-  }, [webReady, selectedMessageIds, postToWeb]);
+  }, [webReady, selectedMessageIds, affectedMessageIds, postToWeb]);
 
   useEffect(() => {
     if (!webReady || menuCloseSignal === 0) {
@@ -730,7 +782,9 @@ export const ChatTranscriptWebView = forwardRef<
       />
     </View>
   );
-});
+}),
+  chatTranscriptWebViewPropsEqual,
+);
 
 const styles = StyleSheet.create({
   fill: {flex: 1, minHeight: 0},

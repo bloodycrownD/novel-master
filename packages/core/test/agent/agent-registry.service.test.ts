@@ -52,10 +52,11 @@ describe("AgentRegistryService", () => {
   it("upsert 拒绝与其他 Agent 重名的显示名", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
+    const displayName = `写作助手-${testIsolationSuffix()}`;
     const def = decode(
       {
         schemaVersion: 1,
-        name: "写作助手",
+        name: displayName,
         prompts: { persist: {}, dynamic: {} },
       },
       agentDefinitionSchema,
@@ -91,12 +92,13 @@ describe("AgentRegistryService", () => {
   it("upsert 保存前 trim 显示名并参与重名校验", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn);
+    const displayName = `写作助手-${testIsolationSuffix()}`;
     await registry.upsert(
       "writer-a",
       decode(
         {
           schemaVersion: 1,
-          name: "  写作助手  ",
+          name: `  ${displayName}  `,
           prompts: { persist: {}, dynamic: {} },
         },
         agentDefinitionSchema,
@@ -109,7 +111,7 @@ describe("AgentRegistryService", () => {
           decode(
             {
               schemaVersion: 1,
-              name: "写作助手",
+              name: displayName,
               prompts: { persist: {}, dynamic: {} },
             },
             agentDefinitionSchema,

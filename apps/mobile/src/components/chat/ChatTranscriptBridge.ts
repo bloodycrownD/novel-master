@@ -18,6 +18,17 @@ export type TranscriptToolView = {
   readonly resultContent?: string;
 };
 
+export type TranscriptUserVfsAction = {
+  readonly kind: string;
+  readonly path: string;
+  readonly method?: string;
+  readonly hunks: readonly {
+    readonly index: string;
+    readonly old: string;
+    readonly new: string;
+  }[];
+};
+
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
 export type TranscriptRow =
   | {
@@ -34,6 +45,14 @@ export type TranscriptRow =
       readonly thinkingHtml?: string;
     }
   | {
+      readonly kind: 'user_vfs_turn';
+      readonly id: string;
+      readonly hidden: boolean;
+      readonly actions: readonly TranscriptUserVfsAction[];
+      readonly tools: readonly TranscriptToolView[];
+      readonly bridgeText: string;
+    }
+  | {
       readonly kind: 'stream';
       readonly text: string;
       readonly thinking: string;
@@ -44,6 +63,7 @@ export type TranscriptTheme = {
   readonly text: string;
   readonly textSecondary: string;
   readonly primary: string;
+  readonly danger: string;
   readonly surface: string;
   readonly borderLight: string;
 };
@@ -51,6 +71,8 @@ export type TranscriptTheme = {
 export type TranscriptFlags = {
   readonly richText: boolean;
   readonly batchMode: boolean;
+  /** 隐藏 / 恢复专用多选；与 batchMode 同时为 true 时生效。 */
+  readonly batchModeKind?: 'hide' | 'restore' | null;
   /** When true, long-press menu is suppressed (e.g. agent running). */
   readonly menuDisabled?: boolean;
 };
@@ -104,7 +126,10 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
-  | BridgeEnvelope<'selectionUpdate', {selectedMessageIds: readonly string[]}>
+  | BridgeEnvelope<'selectionUpdate', {
+      selectedMessageIds: readonly string[];
+      affectedMessageIds?: readonly string[];
+    }>
   | BridgeEnvelope<'closeMenu', Record<string, never>>;
 
 /** Transcript → host */

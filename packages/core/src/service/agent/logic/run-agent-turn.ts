@@ -24,6 +24,8 @@ import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-work
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import {
@@ -48,6 +50,8 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   readonly eventOrchestrator: EventOrchestrator;
+  /** 用户 VFS U-A-U-A 落库；发送成功路径 flush 前置。 */
+  readonly userVfsTurn?: UserVfsTurnService;
   readonly state: AgentRunRuntimePort["state"] & {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
   };
@@ -75,7 +79,7 @@ export interface RunAgentTurnOptions {
   readonly allowResumeWithoutInput?: boolean;
   readonly signal?: AbortSignal;
   readonly onUserMessageAppended?: () => void | Promise<void>;
-  /** When true, await checkpoint capture after user message (desktop). */
+  /** @deprecated 用户 plain 文本不再 capture；保留兼容旧调用方。 */
   readonly awaitMessageCheckpoint?: boolean;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
@@ -142,24 +146,21 @@ export async function runAgentTurn(
     stream,
   });
 
+  if (
+    isUserVfsUnifiedToolTurnEnabled() &&
+    runtime.userVfsTurn != null
+  ) {
+    stage = "flush-pending-user-vfs-turns";
+    await runtime.userVfsTurn.flushPendingUserVfsTurns(scope.sessionId);
+  }
+
   if (trimmed !== "") {
     stage = "append-user-message";
-    const userMessage = await runtime.messages.append(
+    await runtime.messages.append(
       scope.sessionId,
       "user",
       textBlocks(trimmed),
     );
-    // WHY: user send is a rollback anchor for manual VFS edits made before the message.
-    const capture = runtime.messageCheckpoint.capture(
-      scope.sessionId,
-      scope.projectId,
-      userMessage.id,
-    );
-    if (options?.awaitMessageCheckpoint === true) {
-      await capture;
-    } else {
-      void capture.catch(() => undefined);
-    }
     await options?.onUserMessageAppended?.();
   }
 

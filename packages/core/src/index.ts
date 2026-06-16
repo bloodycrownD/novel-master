@@ -121,6 +121,14 @@ export type {
 export { createVfsService } from "./service/vfs/create-vfs-service.js";
 export { createScopedVfsService } from "./service/vfs/create-scoped-vfs-service.js";
 export { createVfsZipIoService } from "./service/vfs/create-vfs-zip-io-service.js";
+export {
+  buildUserVfsCreateFileOp,
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+} from "./service/vfs/build-user-vfs-turn-op.js";
+export type { UserVfsSaveVersionOptions } from "./service/vfs/build-user-vfs-turn-op.js";
 export { buildVfsZip } from "./domain/vfs/logic/vfs-zip-build.js";
 export { parseVfsZip } from "./domain/vfs/logic/vfs-zip-parse.js";
 export { VfsZipError } from "./errors/vfs-zip-errors.js";
@@ -259,11 +267,72 @@ export {
   assertMessageContent,
 } from "./domain/chat/content/parse-message-content.js";
 export { formatMessageForCli } from "./domain/chat/content/format-message-cli.js";
+export type {
+  MessageMetadata,
+  MessageMetadataKind,
+} from "./domain/chat/model/message-metadata.js";
+export { readMessageMetadata } from "./domain/chat/model/message-metadata.js";
+export {
+  userVfsPendingEntrySchema,
+  userVfsPendingQueueSchema,
+  userVfsPendingToolSchema,
+} from "./domain/chat/model/user-vfs-pending.schema.js";
+export type {
+  UserVfsPendingEntry,
+  UserVfsPendingQueue,
+  UserVfsPendingTool,
+} from "./domain/chat/model/user-vfs-pending.schema.js";
+export { mergePendingVfsTurns } from "./domain/chat/logic/merge-pending-vfs-turns.js";
+export type { MergedPendingVfsTurn } from "./domain/chat/logic/merge-pending-vfs-turns.js";
+export {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  formatUserVfsTurnPreviewBody,
+  matchUserVfsTurnAt,
+  parseAllUserVfsActionsFromText,
+  USER_VFS_TURN_SPAN,
+} from "./domain/chat/logic/user-vfs-turn-view.js";
+export type {
+  ParsedUserVfsAction,
+  ParsedUserVfsEditHunk,
+  UserVfsTurnView,
+} from "./domain/chat/logic/user-vfs-turn-view.js";
+export {
+  hasToolResult,
+  isPlainUserText,
+} from "./domain/chat/logic/message-content-helpers.js";
+export type {
+  MessageVisibilityBatchMode,
+  TranscriptSelectableRole,
+  VisibilityBatchMessage,
+} from "./domain/chat/logic/visibility-batch-range.js";
+export {
+  transcriptSelectableRole,
+  isTranscriptRowSelectable,
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+  selectVisibilityBatchEligibleIdsFromAnchor,
+} from "./domain/chat/logic/visibility-batch-range.js";
 export {
   createProjectService,
   createSessionService,
   createMessageService,
 } from "./service/chat/create-chat-services.js";
+export {
+  createUserVfsTurnService,
+  createUserVfsTurnServiceBundle,
+} from "./service/chat/create-user-vfs-turn-service.js";
+export type { UserVfsTurnServiceBundle } from "./service/chat/create-user-vfs-turn-service.js";
+export { TOOL_TURN_BRIDGE_TEXT } from "./service/chat/impl/append-tool-turn-bridge.js";
+export type {
+  UserVfsTurnService,
+  UserVfsTurnOp,
+  UserVfsTurnToolSpec,
+  UserVfsTurnExecuteResult,
+  UserVfsFlushResult,
+  AppendToolTurnBridgeFn,
+} from "./service/chat/user-vfs-turn.port.js";
 export type { ProjectService } from "./service/chat/project.port.js";
 export type { SessionService } from "./service/chat/session.port.js";
 export type { MessageService } from "./service/chat/message.port.js";
@@ -358,12 +427,34 @@ export {
   validateAgentPromptLayoutFromMaps,
   validateAgentPromptLayout,
 } from "./domain/prompt/logic/validate-agent-prompt-layout.js";
+export {
+  normalizeForLlmExport,
+} from "./domain/prompt/logic/normalize-for-llm-export.js";
+export type {
+  LlmExportZones,
+  LlmExportZone,
+} from "./domain/prompt/logic/normalize-for-llm-export.js";
 export { validateDynamicMacros } from "./domain/prompt/logic/validate-dynamic-macros.js";
 export { expandDynamicMacros } from "./domain/prompt/logic/expand-dynamic-macros.js";
 export { renderSessionVfsTree } from "./domain/vfs/logic/render-session-vfs-tree.js";
 export {
+  mapUserSaveToToolUses,
+  buildUserVfsSaveEditActionXml,
+  buildUserVfsSaveWriteActionXml,
+  buildUserVfsSimpleActionXml,
+} from "./domain/vfs/logic/user-vfs-save-mapping.js";
+export type {
+  UserVfsSaveMappingOptions,
+  UserVfsEditHunk,
+  UserVfsSaveMappingResult,
+} from "./domain/vfs/logic/user-vfs-save-mapping.js";
+export { actionXmlToToolUses } from "./domain/vfs/logic/action-xml-to-tool-uses.js";
+export type { DerivedToolUseInput } from "./domain/vfs/logic/action-xml-to-tool-uses.js";
+export { compressUserVfsToolUses } from "./domain/tool/logic/compress-user-vfs-tool-uses.js";
+export {
   buildPromptAssemblyFromLayout,
   buildPromptLlmInputFromLayout,
+  computeLlmExportZonesFromLayout,
   formatPromptLlmInputForCliFromLayout,
   buildPromptPreviewSegmentsFromLayout,
 } from "./service/prompt/render-prompt.js";
@@ -426,6 +517,10 @@ export type {
 export type { DepthSlice } from "./domain/depth/logic/depth-slice.js";
 export { matchDepth, validateDepthSlice, messageIdsInSlice } from "./domain/depth/logic/depth-slice.js";
 export { depthByMessageId, listVisibleForDepth } from "./domain/depth/logic/depth-from-tail.js";
+export {
+  resolveHideMessageRange,
+} from "./domain/depth/logic/resolve-hide-message-range.js";
+export type { HideMessageSeqRange } from "./domain/depth/logic/resolve-hide-message-range.js";
 export type {
   EventsConfig,
   EventAction,
@@ -513,6 +608,11 @@ export {
   formatApplicationModelId,
   normalizeVendorModelId,
 } from "./domain/provider/logic/application-model-id.js";
+export { inferLlmProtocolFromApplicationModelId } from "./domain/provider/logic/infer-llm-protocol-from-model-id.js";
+export {
+  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
+  isUserVfsUnifiedToolTurnEnabled,
+} from "./domain/feature-flags/user-vfs-unified-tool-turn.js";
 export type { LlmProvider } from "./domain/provider/model/provider.js";
 export { providerApiKeyRef } from "./domain/provider/model/provider.js";
 export type {

@@ -2,7 +2,6 @@ import type {ChatMessage} from '@novel-master/core';
 import {buildMessageActionItems} from '../src/components/chat/message-edit';
 
 function msg(
-  hidden: boolean,
   blocks: ChatMessage['content']['blocks'],
   role: ChatMessage['role'] = 'user',
 ): ChatMessage {
@@ -15,29 +14,21 @@ function msg(
     provider: null,
     raw: null,
     createdAtMs: 1,
-    hidden,
+    hidden: false,
   };
 }
 
 describe('buildMessageActionItems', () => {
-  it('includes edit, hide, and delete for editable visible messages', () => {
+  it('includes edit, copy, fork, rollback for editable messages', () => {
     const actions = buildMessageActionItems(
-      msg(false, [{type: 'text', text: 'hi'}]),
+      msg([{type: 'text', text: 'hi'}]),
     ).map(i => i.action);
-    expect(actions).toEqual(['edit', 'hide', 'copy', 'fork', 'rollback', 'delete']);
-  });
-
-  it('shows unhide instead of hide for hidden messages', () => {
-    const actions = buildMessageActionItems(
-      msg(true, [{type: 'text', text: 'hi'}]),
-    ).map(i => i.action);
-    expect(actions).toEqual(['edit', 'unhide', 'copy', 'fork', 'rollback', 'delete']);
+    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
   });
 
   it('includes edit for assistant messages with text and tool_use', () => {
     const actions = buildMessageActionItems(
       msg(
-        false,
         [
           {type: 'text', text: 'reply'},
           {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
@@ -45,17 +36,16 @@ describe('buildMessageActionItems', () => {
         'assistant',
       ),
     ).map(i => i.action);
-    expect(actions[0]).toBe('edit');
+    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
   });
 
   it('omits edit when message has only tool_use blocks', () => {
     const actions = buildMessageActionItems(
       msg(
-        false,
         [{type: 'tool_use', id: 't1', name: 'vfs.read', input: {}}],
         'assistant',
       ),
     ).map(i => i.action);
-    expect(actions).toEqual(['hide', 'copy', 'fork', 'rollback', 'delete']);
+    expect(actions).toEqual(['copy', 'fork', 'rollback']);
   });
 });

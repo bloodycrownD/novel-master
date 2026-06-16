@@ -1,19 +1,28 @@
 /**
- * Shared multi-select state for list batch management (prototype list-batch-active).
+ * 消息可见性多选状态（隐藏 / 恢复专用，非通用批量）。
  */
 import { useCallback, useMemo, useState } from "react";
 
+export type MessageVisibilityBatchMode = "hide" | "restore";
+
 export function useBatchSelection() {
-  const [active, setActive] = useState(false);
+  const [mode, setMode] = useState<MessageVisibilityBatchMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-  const enter = useCallback(() => {
-    setActive(true);
+  const active = mode != null;
+
+  const enterHide = useCallback(() => {
+    setMode("hide");
+    setSelectedIds(new Set());
+  }, []);
+
+  const enterRestore = useCallback(() => {
+    setMode("restore");
     setSelectedIds(new Set());
   }, []);
 
   const exit = useCallback(() => {
-    setActive((prev) => (prev ? false : prev));
+    setMode((prev) => (prev != null ? null : prev));
     setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
 
@@ -29,6 +38,11 @@ export function useBatchSelection() {
     });
   }, []);
 
+  /** 重置并设置勾选集合（可见性批量范围全选）。 */
+  const selectRange = useCallback((ids: Iterable<string>) => {
+    setSelectedIds(new Set(ids));
+  }, []);
+
   const isSelected = useCallback(
     (id: string) => selectedIds.has(id),
     [selectedIds],
@@ -37,13 +51,16 @@ export function useBatchSelection() {
   return useMemo(
     () => ({
       active,
+      mode,
       selectedIds,
       selectedCount: selectedIds.size,
-      enter,
+      enterHide,
+      enterRestore,
       exit,
       toggle,
+      selectRange,
       isSelected,
     }),
-    [active, selectedIds, enter, exit, toggle, isSelected],
+    [active, mode, selectedIds, enterHide, enterRestore, exit, toggle, selectRange, isSelected],
   );
 }

@@ -10,6 +10,7 @@ import {
 
 const layout: AgentPromptLayout = {
   system: "ctx",
+  persistEnabled: true,
   persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
   dynamic: [],
 };

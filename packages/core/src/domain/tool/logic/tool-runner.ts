@@ -11,6 +11,7 @@ import {
   toolNotFound,
   type ToolError,
 } from "@/errors/tool-errors.js";
+import { parseFsCommand } from "./fs-command.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
 /** A single tool invocation for parallel dispatch. */
@@ -52,6 +53,44 @@ async function mapWithConcurrency<T, R>(
   });
   await Promise.all(workers);
   return results;
+}
+
+/** 提取突变 tool 调用涉及的路径，用于同 path 串行化。 */
+function extractMutatingPaths(call: ToolCall): readonly string[] | null {
+  if (call.name === "write" || call.name === "edit") {
+    const path =
+      typeof (call.input as { path?: unknown }).path === "string"
+        ? (call.input as { path: string }).path
+        : "";
+    return path.length > 0 ? [path] : null;
+  }
+  if (call.name === "fs") {
+    const command =
+      typeof (call.input as { command?: unknown }).command === "string"
+        ? (call.input as { command: string }).command
+        : "";
+    if (command === "") {
+      return null;
+    }
+    try {
+      const parsed = parseFsCommand(command);
+      switch (parsed.kind) {
+        case "ls":
+          return null;
+        case "rm":
+        case "rmdir":
+        case "mkdir":
+          return [parsed.path];
+        case "mv":
+          return [parsed.from, parsed.to];
+        case "cp":
+          return [parsed.from, parsed.to];
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 /**
@@ -121,12 +160,35 @@ export class ToolRunner<Ctx = unknown> {
     options?: { concurrency?: number },
   ): Promise<ParallelToolOutcome[]> {
     const concurrency = options?.concurrency ?? DEFAULT_PARALLEL_CONCURRENCY;
+    const pathTail = new Map<string, Promise<void>>();
+
     return mapWithConcurrency(calls, concurrency, async (call) => {
+      const paths = extractMutatingPaths(call);
+      let release: (() => void) | undefined;
+
+      if (paths != null && paths.length > 0) {
+        const prevTails = paths.map(
+          (path) => pathTail.get(path) ?? Promise.resolve(),
+        );
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const myTail = Promise.all(prevTails).then(() => gate);
+        for (const path of paths) {
+          pathTail.set(path, myTail);
+        }
+        await Promise.all(prevTails);
+      }
+
       try {
-        const output = await this.call(call.name, call.input, ctx);
-        return { ok: true as const, output };
-      } catch (error: unknown) {
-        return { ok: false as const, error };
+        try {
+          const output = await this.call(call.name, call.input, ctx);
+          return { ok: true as const, output };
+        } catch (error: unknown) {
+          return { ok: false as const, error };
+        }
+      } finally {
+        release?.();
       }
     });
   }

@@ -9,9 +9,15 @@ import {
   isUnknownActionDraft,
   type EventActionDraft,
 } from "./event-config-editor-load.js";
+import { normalizeHideMessageAction } from "./event-config-editor-load.js";
 import { newEventBlockId } from "./event-block-id.js";
 export type { EventActionDraft, UnknownActionDraft, EventsEditorLoadResult } from "./event-config-editor-load.js";
-export { isUnknownActionDraft, isEventActionNode, loadEventsConfigForEditor } from "./event-config-editor-load.js";
+export {
+  isUnknownActionDraft,
+  isEventActionNode,
+  loadEventsConfigForEditor,
+  normalizeHideMessageAction,
+} from "./event-config-editor-load.js";
 export { newEventBlockId } from "./event-block-id.js";
 
 export type EventBlockDraft = {
@@ -24,7 +30,7 @@ export function configToEventBlocks(config: EventsConfig): EventBlockDraft[] {
   return Object.entries(config.events).map(([eventType, actions]) => ({
     id: newEventBlockId(),
     eventType,
-    actions: [...actions],
+    actions: actions.map(normalizeHideMessageAction),
   }));
 }
 
@@ -38,9 +44,9 @@ export function eventBlocksToConfig(
     if (key === "") {
       continue;
     }
-    events[key] = block.actions.filter(
-      (action): action is EventActionNode => !isUnknownActionDraft(action),
-    );
+    events[key] = block.actions
+      .filter((action): action is EventActionNode => !isUnknownActionDraft(action))
+      .map(normalizeHideMessageAction);
   }
   return { schemaVersion, events };
 }

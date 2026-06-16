@@ -23,26 +23,26 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 function blockLabel(name: string): string {
-  return `block "${name}"`;
+  return `块「${name}」`;
 }
 
 function rejectWhen(label: string, record: Record<string, unknown>): void {
   if ("when" in record) {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: when is no longer supported; remove the when field`,
+      `${label}：不再支持 when 字段，请删除`,
     );
   }
 }
 
 function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
   if (item == null || typeof item !== "object" || Array.isArray(item)) {
-    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)} must be an object`);
+    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须为对象`);
   }
   const record = item as Record<string, unknown>;
   const type = record.type;
   if (!isNonEmptyString(type)) {
-    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)} requires type`);
+    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须指定 type`);
   }
   const label = blockLabel(name);
   rejectWhen(label, record);
@@ -51,7 +51,7 @@ function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
     if ("content" in record || "lifecycle" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: worktree block must not include content or lifecycle`,
+        `${label}：worktree 块不得包含 content 或 lifecycle`,
       );
     }
     let role: "user" | "assistant" = "user";
@@ -60,7 +60,7 @@ function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
       if (wireRole !== "user" && wireRole !== "assistant") {
         throw new PromptError(
           "INVALID_BLOCK",
-          `${label}: worktree block requires role user|assistant`,
+          `${label}：worktree 块的 role 须为 user 或 assistant`,
         );
       }
       role = wireRole;
@@ -73,25 +73,25 @@ function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
     if (role === "system") {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: persist text must not use role system; use prompts.system instead`,
+        `${label}：持久区文本块不得使用 system 角色，请改用 prompts.system`,
       );
     }
     if (role !== "user" && role !== "assistant") {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: persist text requires role user|assistant`,
+        `${label}：持久区文本块的 role 须为 user 或 assistant`,
       );
     }
     if (typeof record.content !== "string") {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: text block requires string content`,
+        `${label}：文本块须为字符串 content`,
       );
     }
     if ("lifecycle" in record) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: persist text must not include lifecycle`,
+        `${label}：持久区文本块不得包含 lifecycle`,
       );
     }
     rejectPersistMacros(record.content, label);
@@ -103,19 +103,19 @@ function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
     };
   }
 
-  throw new PromptError("INVALID_BLOCK", `${label}: unknown type "${type}"`);
+  throw new PromptError("INVALID_BLOCK", `${label}：未知类型「${type}」`);
 }
 
 function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
   if (item == null || typeof item !== "object" || Array.isArray(item)) {
-    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)} must be an object`);
+    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须为对象`);
   }
   const record = item as Record<string, unknown>;
   const type = record.type;
   if (type !== "text") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${blockLabel(name)}: dynamic blocks must be type text`,
+      `${blockLabel(name)}：动态区块须为 text 类型`,
     );
   }
   const label = blockLabel(name);
@@ -125,19 +125,19 @@ function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
   if (role === "system") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: dynamic text must not use role system`,
+      `${label}：动态区文本块不得使用 system 角色`,
     );
   }
   if (role !== "user" && role !== "assistant") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: dynamic text requires role user|assistant`,
+      `${label}：动态区文本块的 role 须为 user 或 assistant`,
     );
   }
   if (typeof record.content !== "string") {
     throw new PromptError(
       "INVALID_BLOCK",
-      `${label}: text block requires string content`,
+      `${label}：文本块须为字符串 content`,
     );
   }
 
@@ -147,7 +147,7 @@ function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
     if (typeof lc !== "string" || !LIFECYCLES.has(lc as PromptBlockLifecycle)) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${label}: lifecycle must be always or once`,
+        `${label}：lifecycle 须为 always 或 once`,
       );
     }
     if (lc === "once") {
@@ -170,13 +170,13 @@ function validateBlockMap(raw: unknown, region: "persist" | "dynamic"): unknown 
   if (Array.isArray(raw)) {
     throw new PromptError(
       "INVALID_YAML",
-      `prompts.${region} must be a mapping (object), not an array`,
+      `prompts.${region} 须为对象映射，不能是数组`,
     );
   }
   if (raw == null || typeof raw !== "object") {
     throw new PromptError(
       "INVALID_YAML",
-      `prompts.${region} must be a mapping (object)`,
+      `prompts.${region} 须为对象映射`,
     );
   }
   return raw;
@@ -189,11 +189,15 @@ export function validateAgentPromptLayoutFromMaps(
   persistRaw: unknown,
   dynamicRaw: unknown,
   system?: string,
+  options?: {
+    readonly persistEnabled?: boolean;
+    readonly dynamicEnabled?: boolean;
+  },
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
     throw new PromptError(
       "INVALID_BLOCK",
-      "prompts.system must be a non-empty string when present",
+      "prompts.system 如填写则须为非空字符串",
     );
   }
 
@@ -209,7 +213,7 @@ export function validateAgentPromptLayoutFromMaps(
   const persist: PersistPromptBlock[] = [];
   for (const [name, item] of Object.entries(persistMap)) {
     if (!isNonEmptyString(name)) {
-      throw new PromptError("INVALID_BLOCK", "block map keys must be non-empty strings");
+      throw new PromptError("INVALID_BLOCK", "块名称须为非空字符串");
     }
     persist.push(parsePersistBlock(name, item));
   }
@@ -218,23 +222,74 @@ export function validateAgentPromptLayoutFromMaps(
   if (worktreeBlocks.length > 1) {
     throw new PromptError(
       "INVALID_YAML",
-      "prompts.persist must contain at most one worktree block",
+      "prompts.persist 最多只能有一个 worktree 块",
     );
   }
 
   const dynamic: DynamicPromptBlock[] = [];
   for (const [name, item] of Object.entries(dynamicMap)) {
     if (!isNonEmptyString(name)) {
-      throw new PromptError("INVALID_BLOCK", "block map keys must be non-empty strings");
+      throw new PromptError("INVALID_BLOCK", "块名称须为非空字符串");
     }
     dynamic.push(parseDynamicBlock(name, item));
   }
 
+  const persistEnabled = options?.persistEnabled === true;
+  const dynamicEnabled = options?.dynamicEnabled === true;
+
+  if (persistEnabled) {
+    if (persist.length < 1) {
+      throw new PromptError(
+        "INVALID_YAML",
+        "启用持久区时至少需要一个块",
+      );
+    }
+    const last = persist[persist.length - 1]!;
+    if (persistBlockRole(last) !== "assistant") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "启用持久区时最后一个块须为助手角色",
+      );
+    }
+  }
+
+  if (dynamicEnabled) {
+    if (dynamic.length < 2) {
+      throw new PromptError(
+        "INVALID_YAML",
+        "启用动态区时至少需要两个块",
+      );
+    }
+    const first = dynamic[0]!;
+    const last = dynamic[dynamic.length - 1]!;
+    if (first.role !== "assistant") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "启用动态区时第一个块须为助手角色",
+      );
+    }
+    if (last.role !== "user") {
+      throw new PromptError(
+        "INVALID_YAML",
+        "启用动态区时最后一个块须为用户角色",
+      );
+    }
+  }
+
   return {
     ...(system != null && system.trim() !== "" ? { system } : {}),
+    ...(persistEnabled ? { persistEnabled: true } : {}),
+    ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
     persist,
     dynamic,
   };
+}
+
+function persistBlockRole(block: PersistPromptBlock): "user" | "assistant" {
+  if (block.type === "worktree") {
+    return block.role ?? "user";
+  }
+  return block.role;
 }
 
 function assertUniqueBlockNames(
@@ -246,7 +301,7 @@ function assertUniqueBlockNames(
     if (seen.has(block.name)) {
       throw new PromptError(
         "INVALID_BLOCK",
-        `prompts.${region}: duplicate block name "${block.name}"`,
+        `prompts.${region}：重复的块名「${block.name}」`,
       );
     }
     seen.add(block.name);
@@ -291,5 +346,9 @@ export function validateAgentPromptLayout(
     persistMap,
     dynamicMap,
     layout.system,
+    {
+      persistEnabled: layout.persistEnabled,
+      dynamicEnabled: layout.dynamicEnabled,
+    },
   );
 }

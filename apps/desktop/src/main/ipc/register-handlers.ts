@@ -96,13 +96,16 @@ import {
 } from "./handlers/regex.js";
 import {
   handleMessagesAppend,
+  handleMessagesAppendToolTurnBridge,
   handleMessagesDelete,
   handleMessagesEdit,
   handleMessagesFork,
   handleMessagesHide,
+  handleMessagesHideRange,
   handleMessagesList,
   handleMessagesRollback,
   handleMessagesShow,
+  handleMessagesShowRange,
 } from "./handlers/messages.js";
 import {
   handlePromptAgentMeta,
@@ -237,6 +240,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.MESSAGES_SHOW, (_event, req) =>
     handleMessagesShow(req),
   );
+  ipcMain.handle(IPC_CHANNELS.MESSAGES_HIDE_RANGE, (_event, req) =>
+    handleMessagesHideRange(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.MESSAGES_SHOW_RANGE, (_event, req) =>
+    handleMessagesShowRange(req),
+  );
   ipcMain.handle(IPC_CHANNELS.MESSAGES_DELETE, (_event, req) =>
     handleMessagesDelete(req),
   );
@@ -245,6 +254,9 @@ export function registerIpcHandlers(): void {
   );
   ipcMain.handle(IPC_CHANNELS.MESSAGES_ROLLBACK, (_event, req) =>
     handleMessagesRollback(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE, (_event, req) =>
+    handleMessagesAppendToolTurnBridge(req),
   );
 
   ipcMain.handle(IPC_CHANNELS.AGENT_RUN, (_event, req) => handleAgentRun(req));

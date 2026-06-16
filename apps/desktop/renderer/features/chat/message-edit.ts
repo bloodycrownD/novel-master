@@ -42,6 +42,7 @@ export function applyTextEditToContentBlocks(
   return result;
 }
 
+/** 长按菜单：编辑、复制、Fork、回滚（无 hide/unhide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessageDto,
 ): MessageActionMenuItem[] {
@@ -49,14 +50,8 @@ export function buildMessageActionItems(
   if (editableTextFromMessage(message) != null) {
     items.push({ label: "编辑", action: "edit" });
   }
-  if (message.hidden) {
-    items.push({ label: "取消隐藏", action: "unhide" });
-  } else {
-    items.push({ label: "隐藏", action: "hide" });
-  }
   items.push({ label: "复制", action: "copy" });
   items.push({ label: "分叉", action: "fork" });
   items.push({ label: "回滚到此", action: "rollback", danger: true });
-  items.push({ label: "删除", action: "delete", danger: true });
   return items;
 }

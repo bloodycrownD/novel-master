@@ -75,9 +75,9 @@ describe('MessageActionMenu', () => {
     jest.clearAllMocks();
   });
 
-  it('does not use ScrollView for six action items when there is room', () => {
+  it('does not use ScrollView for four action items when there is room', () => {
     const items = buildMessageActionItems(sampleMessage());
-    expect(items).toHaveLength(6);
+    expect(items).toHaveLength(4);
 
     let tree: TestRenderer.ReactTestRenderer;
     act(() => {

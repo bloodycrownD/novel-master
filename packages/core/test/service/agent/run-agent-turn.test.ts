@@ -6,6 +6,7 @@ import {
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
+import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 
 const sampleDefinition: AgentDefinition = {
   name: "Test",
@@ -18,6 +19,7 @@ function makeRuntime(overrides: {
     ReadonlyArray<{ role: string; content: unknown }>
   >;
   readonly append?: () => Promise<{ id: string }>;
+  readonly userVfsTurn?: UserVfsTurnService;
 }): AgentTurnRuntimePort {
   return {
     state: {
@@ -66,6 +68,9 @@ function makeRuntime(overrides: {
         renderDisplay: async () => "",
         buildListRows: async () => [],
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+    ...(overrides.userVfsTurn != null
+      ? { userVfsTurn: overrides.userVfsTurn }
+      : {}),
   };
 }
 
@@ -126,5 +131,59 @@ describe("runAgentTurn", () => {
         return true;
       },
     );
+  });
+
+  it("flushPendingUserVfsTurns 在 append user 之前调用", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      userVfsTurn: {
+        executeOp: async () => ({ ok: true }),
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: false };
+        },
+      } as UserVfsTurnService,
+      append: async () => {
+        order.push("append");
+        return { id: "m-new" };
+      },
+    });
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "hello");
+    } catch {
+      // runner deps stubbed
+    }
+    assert.deepEqual(order, ["flush", "append"]);
+  });
+
+  it("空请求续跑时 flush 在跑 Agent 之前、不 append", async () => {
+    const order: string[] = [];
+    let appended = false;
+    const runtime = makeRuntime({
+      listBySession: async () => [{ role: "user", content: { blocks: [] } }],
+      userVfsTurn: {
+        executeOp: async () => ({ ok: true }),
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: true };
+        },
+      } as UserVfsTurnService,
+      append: async () => {
+        appended = true;
+        return { id: "m-new" };
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "",
+        { allowResumeWithoutInput: true },
+      );
+    } catch {
+      // runner deps stubbed
+    }
+    assert.deepEqual(order, ["flush"]);
+    assert.equal(appended, false);
   });
 });

@@ -73,6 +73,7 @@ export class DefaultSessionService implements SessionService {
         id: randomUUID(),
         projectId,
         title: title ?? null,
+        userVfsPendingJson: null,
         createdAtMs: now,
         updatedAtMs: now,
       };
@@ -147,6 +148,7 @@ export class DefaultSessionService implements SessionService {
         id: randomUUID(),
         projectId: source.projectId,
         title: source.title == null ? null : `${source.title} (copy)`,
+        userVfsPendingJson: source.userVfsPendingJson,
         createdAtMs: now,
         updatedAtMs: now,
       };

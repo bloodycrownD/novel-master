@@ -74,13 +74,19 @@ export function formatChatMessageForCliPreview(
 
   const segments: Array<{ role: string; body: string }> = [];
 
-  for (const tr of toolResults) {
-    if (tr.type !== "tool_result") {
-      continue;
+  if (toolResults.length > 0) {
+    const bodies: string[] = [];
+    for (const tr of toolResults) {
+      if (tr.type !== "tool_result") {
+        continue;
+      }
+      const body = formatToolResultContentForDisplay(tr.content);
+      if (body !== "") {
+        bodies.push(body);
+      }
     }
-    const body = formatToolResultContentForDisplay(tr.content);
-    if (body !== "") {
-      segments.push({ role: "tool", body });
+    if (bodies.length > 0) {
+      segments.push({ role: "tool", body: bodies.join("\n\n") });
     }
   }
 

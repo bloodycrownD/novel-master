@@ -22,6 +22,7 @@ import {
   ANCHORED_MENU_SCREEN_MARGIN,
 } from '../../components/chat/anchored-menu-layout';
 import {DECODE_LITERAL_HTML_ENTITIES_BOOT} from '../../components/rich-content/decode-literal-html-entities';
+import {STREAM_MARKDOWN_BOOT} from './stream-markdown.boot';
 
 export function buildTranscriptBootScript(): string {
   return `
@@ -39,8 +40,9 @@ export function buildTranscriptBootScript(): string {
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
-    flags: { richText: false, batchMode: false, menuDisabled: false },
+    flags: { richText: false, batchMode: false, batchModeKind: null, menuDisabled: false },
     selectedIds: [],
+    affectedIds: [],
     menu: null,
     menuOverlayHandler: null,
     menuNativeTextBlockHandler: null,
@@ -142,6 +144,8 @@ export function buildTranscriptBootScript(): string {
 
   ${DECODE_LITERAL_HTML_ENTITIES_BOOT}
 
+  ${STREAM_MARKDOWN_BOOT}
+
   function vfsToolFilePath(name, input) {
     if (name.indexOf('vfs.') === 0) name = name.slice(4);
     if (!VFS_FILE_TOOLS[name]) return null;
@@ -220,7 +224,7 @@ export function buildTranscriptBootScript(): string {
   function renderToolGroupItem(tool) {
     var filePath = vfsToolFilePath(tool.name, tool.input || {});
     var canOpen = filePath != null;
-    var summary = escapeHtml(toolCallSummary(tool));
+    var summary = toolCallSummary(tool);
     var statusClass = tool.status === 'error' ? 'error' : (tool.status === 'pending' ? 'pending' : 'success');
     var statusInner = toolStatusLabel(tool.status);
     var html =
@@ -232,7 +236,7 @@ export function buildTranscriptBootScript(): string {
       '<span class="tool-status ' + statusClass + '">' + statusInner + '</span>' +
       '</div>';
     if (summary) {
-      html += '<div class="tool-summary">' + summary + '</div>';
+      html += '<div class="tool-summary">' + escapeHtml(summary) + '</div>';
     }
     if (canOpen) {
       html += '<div class="tool-open-hint">点击查看 · 聊天工作区</div>';
@@ -241,15 +245,19 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
-  function renderToolGroupSection(tools, key, expanded, showDividerBelow) {
+  function renderToolGroupSection(tools, key, expanded, showDividerBelow, options) {
     if (!tools || tools.length === 0) return '';
     var isExpanded = expanded;
     var chevron = isExpanded ? '▼' : '▶';
     var divided = isExpanded && showDividerBelow ? ' tool-group-divided' : '';
+    var groupTitle =
+      options && options.groupTitle
+        ? options.groupTitle
+        : '工具调用 (' + tools.length + ')';
     var html =
       '<div class="tool-group-section' + divided + '" data-tool-group-key="' + escapeHtml(key) + '">' +
       '<div class="tool-group-header" data-action="toggle-tool-group" data-tool-group-key="' + escapeHtml(key) + '">' +
-      '<span class="tool-group-title">工具调用 (' + tools.length + ')</span>' +
+      '<span class="tool-group-title">' + escapeHtml(groupTitle) + '</span>' +
       '<span class="tool-group-chevron">' + chevron + '</span></div>';
     if (isExpanded) {
       html += '<div class="tool-group-items">';
@@ -262,7 +270,18 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
-  function renderAssistantBubbleInner(text, textHtml, thinking, thinkingKey, thinkingExpanded, thinkingHtml, tools, toolGroupKey, toolGroupExpanded, showToolInvoking) {
+  function renderAssistantBubbleInner(
+    text,
+    textHtml,
+    thinking,
+    thinkingKey,
+    thinkingExpanded,
+    thinkingHtml,
+    tools,
+    toolGroupKey,
+    toolGroupExpanded,
+    showToolInvoking
+  ) {
     var html = '';
     var hasThinking = !!(thinking && String(thinking).trim());
     var hasTools = !!(tools && tools.length > 0);
@@ -281,6 +300,11 @@ export function buildTranscriptBootScript(): string {
       var richBubble = state.flags.richText && textHtml ? ' rich' : '';
       var inner = textHtml || escapeHtml(text || '');
       html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
+    } else if (hasThinking || hasInvoking) {
+      // WHY: thinking / toolInvoking 阶段可能没有正文文本，此时也要预置空 .bubble-body，
+      // 让后续 streamDelta(kind === 'text') 的增量路径拥有稳定容器，同时保留 data-text-shell 方便 UAUA 调试与语义标记。
+      var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';
+      html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';
     }
     if (hasInvoking) {
       html += renderToolInvokingBar();
@@ -350,7 +374,9 @@ export function buildTranscriptBootScript(): string {
   function findMessageRow(messageId) {
     for (var i = 0; i < state.rows.length; i++) {
       var row = state.rows[i];
-      if (row.kind === 'message' && row.id === messageId) return row;
+      if ((row.kind === 'message' || row.kind === 'user_vfs_turn') && row.id === messageId) {
+        return row;
+      }
     }
     return null;
   }
@@ -359,15 +385,135 @@ export function buildTranscriptBootScript(): string {
     return state.selectedIds.indexOf(messageId) >= 0;
   }
 
+  function isInRange(messageId) {
+    return state.affectedIds.indexOf(messageId) >= 0;
+  }
+
+  function transcriptSelectableRole(messageRole, batchModeKind) {
+    if (!batchModeKind) return 'none';
+    if (batchModeKind === 'hide') return messageRole === 'assistant' ? 'assistant' : 'none';
+    return messageRole === 'user' ? 'user' : 'none';
+  }
+
+  function parseUserVfsAction(text) {
+    if (!text || text.indexOf('<user-vfs-action') < 0) return null;
+    var match = text.match(/<user-vfs-action\\s+([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/user-vfs-action>)/);
+    if (!match) return null;
+    var attrs = match[1];
+    var inner = match[2] || '';
+    var kind = (attrs.match(/kind="([^"]+)"/) || [])[1] || '';
+    var path = (attrs.match(/path="([^"]+)"/) || [])[1] || '';
+    var method = (attrs.match(/method="([^"]+)"/) || [])[1] || '';
+    var hunks = [];
+    var hunkRe = /<edit-hunk[^>]*index="(\\d+)"[^>]*>[\\s\\S]*?<old>([\\s\\S]*?)<\\/old>[\\s\\S]*?<new>([\\s\\S]*?)<\\/new>[\\s\\S]*?<\\/edit-hunk>/g;
+    var hm;
+    while ((hm = hunkRe.exec(inner)) !== null) {
+      hunks.push({ index: hm[1], old: hm[2], new: hm[3] });
+    }
+    return { kind: kind, path: path, method: method, hunks: hunks };
+  }
+
+  function renderUserVfsActions(actions) {
+    var html = '';
+    for (var ai = 0; ai < actions.length; ai++) {
+      var action = actions[ai];
+      html += '<div class="vfs-action-card">';
+      html += '<div class="vfs-action-title">' + escapeHtml(action.kind) + ' · ' + escapeHtml(action.path) + '</div>';
+      if (action.method) {
+        html += '<div class="vfs-action-meta">method: ' + escapeHtml(action.method) + '</div>';
+      }
+      var hunks = action.hunks || [];
+      for (var hi = 0; hi < hunks.length; hi++) {
+        var h = hunks[hi];
+        html += '<details class="edit-hunk"><summary>edit-hunk #' + escapeHtml(h.index) + '</summary>';
+        html += '<div class="edit-hunk-old"><span class="edit-hunk-label">old</span><pre>' + escapeHtml(h.old) + '</pre></div>';
+        html += '<div class="edit-hunk-new"><span class="edit-hunk-label">new</span><pre>' + escapeHtml(h.new) + '</pre></div>';
+        html += '</details>';
+      }
+      html += '</div>';
+    }
+    return html;
+  }
+
+  function renderToolOnlyBubble(tools, toolGroupKey, toolGroupExpanded, options) {
+    var bubbleClass = 'bubble bubble--fill-width';
+    if (options && options.bubbleExtraClass) {
+      bubbleClass += ' ' + options.bubbleExtraClass;
+    }
+    var sectionOpts = options && options.groupTitle
+      ? { groupTitle: options.groupTitle }
+      : undefined;
+    return '<div class="' + bubbleClass + '">' +
+      renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false, sectionOpts) +
+      '</div>';
+  }
+
+  function renderUserVfsTurnRow(row) {
+    if (!row.tools || row.tools.length === 0) {
+      return '';
+    }
+    var hidden = row.hidden ? ' hidden' : '';
+    var selected = isSelected(row.id);
+    var inRange = isInRange(row.id);
+    var selectedClass = selected ? ' selected' : '';
+    var inRangeClass = inRange ? ' in-range' : '';
+    var selectableRole = transcriptSelectableRole('user', state.flags.batchMode ? state.flags.batchModeKind : null);
+    var rowSelectable = selectableRole !== 'none';
+    var html = '';
+    if (state.flags.batchMode && rowSelectable) {
+      html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
+        '" aria-hidden="true">' +
+        (selected ? '✓' : '') + '</div><div class="batch-content">';
+    } else if (state.flags.batchMode) {
+      html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
+    }
+    html += '<div class="row message user vfs-turn-row' + hidden + selectedClass + inRangeClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
+    var toolGroupKey = 'vfs-turn:' + row.id;
+    var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+    html += renderToolOnlyBubble(
+      row.tools,
+      toolGroupKey,
+      toolGroupExpanded,
+      {
+        groupTitle: '用户操作 (' + row.tools.length + ')',
+        bubbleExtraClass: 'vfs-turn-bubble',
+      },
+    );
+    html += '</div>';
+    if (state.flags.batchMode) {
+      html += '</div></div>';
+    }
+    return html;
+  }
+
+  function renderRow(row) {
+    if (row.kind === 'user_vfs_turn') {
+      return renderUserVfsTurnRow(row);
+    }
+    if (row.kind === 'message') {
+      return renderMessageRow(row);
+    }
+    return '';
+  }
+
+  function renderUserVfsActionCard(action) {
+    return renderUserVfsActions([action]);
+  }
+
+  function renderUserBubbleContent(text) {
+    var action = parseUserVfsAction(text);
+    if (action != null) {
+      return renderUserVfsActionCard(action);
+    }
+    return escapeHtml(text);
+  }
+
   function buildMenuItems(row) {
     var items = [];
     if (row.text) items.push({ label: '编辑', action: 'edit' });
-    if (row.hidden) items.push({ label: '取消隐藏', action: 'unhide' });
-    else items.push({ label: '隐藏', action: 'hide' });
     items.push({ label: '复制', action: 'copy' });
     items.push({ label: 'Fork', action: 'fork' });
     items.push({ label: '回滚', action: 'rollback', danger: true });
-    items.push({ label: '删除', action: 'delete', danger: true });
     return items;
   }
 
@@ -577,6 +723,7 @@ export function buildTranscriptBootScript(): string {
     root.style.setProperty('--text', theme.text || '#111');
     root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
     root.style.setProperty('--primary', theme.primary || '#007aff');
+    root.style.setProperty('--danger', theme.danger || '#d92d20');
     root.style.setProperty('--surface', theme.surface || '#f2f2f7');
     root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
   }
@@ -587,17 +734,23 @@ export function buildTranscriptBootScript(): string {
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
     var selected = isSelected(row.id);
+    var inRange = isInRange(row.id);
     var selectedClass = selected ? ' selected' : '';
+    var inRangeClass = inRange ? ' in-range' : '';
+    var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
+    var rowSelectable = selectableRole !== 'none';
     var html = '';
-    if (state.flags.batchMode) {
+    if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
         '" aria-hidden="true">' +
         (selected ? '✓' : '') + '</div><div class="batch-content">';
+    } else if (state.flags.batchMode) {
+      html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
     }
-    html += '<div class="row message ' + role + hidden + selectedClass + '" data-id="' + escapeHtml(row.id) + '">';
+    html += '<div class="row message ' + role + hidden + selectedClass + inRangeClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
     if (role === 'user') {
       if (row.text) {
-        html += '<div class="bubble">' + escapeHtml(row.text) + '</div>';
+        html += '<div class="bubble">' + renderUserBubbleContent(row.text) + '</div>';
       }
     } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
       var toolGroupKey = 'msg:' + row.id;
@@ -693,6 +846,7 @@ export function buildTranscriptBootScript(): string {
     return (
       a.richText === b.richText &&
       a.batchMode === b.batchMode &&
+      a.batchModeKind === b.batchModeKind &&
       a.menuDisabled === b.menuDisabled
     );
   }
@@ -703,8 +857,8 @@ export function buildTranscriptBootScript(): string {
     var html = renderLoadOlder();
     for (var i = 0; i < state.rows.length; i++) {
       var row = state.rows[i];
-      if (row.kind === 'message') {
-        html += renderMessageRow(row);
+      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
+        html += renderRow(row);
       }
     }
     if (state.stream.thinking || state.stream.text || state.stream.toolInvoking) {
@@ -791,8 +945,8 @@ export function buildTranscriptBootScript(): string {
     var html = '';
     for (var i = 0; i < newRows.length; i++) {
       var row = newRows[i];
-      if (row.kind === 'message') {
-        html += renderMessageRow(row);
+      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
+        html += renderRow(row);
       }
     }
     var list = document.getElementById('rows');
@@ -845,13 +999,81 @@ export function buildTranscriptBootScript(): string {
     emitScrollSnapshot();
   }
 
+  function ensureStreamTextBody(bubble) {
+    var textBody = bubble.querySelector('.bubble-body');
+    if (textBody) {
+      return textBody;
+    }
+    textBody = document.createElement('div');
+    textBody.className = 'bubble-body';
+    textBody.setAttribute('data-text-shell', '1');
+    bubble.appendChild(textBody);
+    var thinkingBody = bubble.querySelector('[data-thinking-key="stream:thinking"] .thinking-body');
+    if (thinkingBody) {
+      thinkingBody.classList.add('thinking-body-divided');
+    }
+    return textBody;
+  }
+
+  function setStreamBodyRichClass(el, rich) {
+    if (!el) return;
+    if (rich) {
+      el.classList.add('rich');
+    } else {
+      el.classList.remove('rich');
+    }
+  }
+
+  function streamRichDomReady(bubble, kind) {
+    if (kind === 'thinking') {
+      var section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
+      var body = section ? section.querySelector('.thinking-body') : null;
+      return !!(body && (body.innerHTML.length > 0 || (body.textContent && body.textContent.length > 0)));
+    }
+    var textBody = bubble.querySelector('.bubble-body');
+    return !!(textBody && (textBody.innerHTML.length > 0 || (textBody.textContent && textBody.textContent.length > 0)));
+  }
+
   function appendStreamDeltaIncremental(tail, kind, delta, html) {
+    // 主线程卡顿验证：增量 DOM 更新路径；耗时由 appendStreamDelta 外层 delta_trace 汇总
     if (!delta && !html) {
       return false;
     }
     var bubble = tail.querySelector('.bubble');
     if (!bubble) {
       return false;
+    }
+    // richText + 无 html：走 UAUA plain-mode 增量路径；有 html 时交由后续分支做 DOM 替换。
+    if (state.flags.richText && !html) {
+      if (!delta) {
+        return false;
+      }
+      if (kind === 'thinking') {
+        if (!streamRichDomReady(bubble, kind)) {
+          return false;
+        }
+        if (!streamRichUpgrade.plainMode.thinking) {
+          scheduleStreamRichUpgrade(kind);
+          return true;
+        }
+        var thinkSection = bubble.querySelector('[data-thinking-key="stream:thinking"]');
+        var thinkBody = thinkSection ? thinkSection.querySelector('.thinking-body') : null;
+        if (!thinkBody) {
+          return false;
+        }
+        thinkBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
+        setStreamBodyRichClass(thinkBody, false);
+      } else if (kind === 'text') {
+        // WHY: richText=true 且 html 缺失时，text 首包必须稳定走 delta append，
+        // 不能被 DOM-ready 门槛拦截，否则 appendStreamDeltaIncremental 会返回 false 且 text 分支禁止整泡重建。
+        var streamTextBody = ensureStreamTextBody(bubble);
+        streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
+        setStreamBodyRichClass(streamTextBody, false);
+      } else {
+        return false;
+      }
+      scheduleStreamRichUpgrade(kind);
+      return true;
     }
     if (kind === 'thinking') {
       var section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
@@ -861,6 +1083,7 @@ export function buildTranscriptBootScript(): string {
       }
       if (html && state.flags.richText) {
         body.innerHTML = html;
+        setStreamBodyRichClass(body, true);
         bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
           state.stream.textHtml,
           [],
@@ -874,15 +1097,16 @@ export function buildTranscriptBootScript(): string {
         return false;
       }
       body.insertAdjacentHTML('beforeend', escapeHtml(delta));
+      setStreamBodyRichClass(body, false);
       return true;
     }
     if (kind === 'text') {
-      var textBody = bubble.querySelector('.bubble-body');
-      if (!textBody) {
-        return false;
-      }
+      var textBody = ensureStreamTextBody(bubble);
       if (html && state.flags.richText) {
+        // WHY: 保持与 RN prepareStreamTailHtml 的 rich 复用语义一致：
+        // 有 html 且 rich 打开时直接 innerHTML 替换；否则走 delta 增量追加，避免整泡 updateStreamBubble 重建。
         textBody.innerHTML = html;
+        setStreamBodyRichClass(textBody, true);
         bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
           state.stream.textHtml,
           [],
@@ -895,10 +1119,50 @@ export function buildTranscriptBootScript(): string {
       if (!delta) {
         return false;
       }
+      // WHY: text 从 0->1 仅更新 class/展示，不触发 thinking 重建。
       textBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
+      setStreamBodyRichClass(textBody, false);
+      bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
+        state.stream.textHtml,
+        [],
+        state.stream.text,
+        state.stream.thinking
+      );
       return true;
     }
     return false;
+  }
+
+  function setStreamToolInvokingDom(active) {
+    var tail = document.getElementById('stream-tail');
+    if (!tail) {
+      state.stream.toolInvoking = !!active;
+      return;
+    }
+    var bubble = tail.querySelector('.bubble');
+    if (!bubble) {
+      state.stream.toolInvoking = !!active;
+      return;
+    }
+    var existing = bubble.querySelector('.tool-invoking-bar');
+    if (active) {
+      if (!existing) {
+        var holder = document.createElement('div');
+        holder.innerHTML = renderToolInvokingBar();
+        var bar = holder.firstElementChild;
+        if (bar) {
+          var textBody = bubble.querySelector('.bubble-body');
+          if (textBody) {
+            textBody.insertAdjacentElement('afterend', bar);
+          } else {
+            bubble.appendChild(bar);
+          }
+        }
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+    state.stream.toolInvoking = !!active;
   }
 
   function appendStreamDelta(kind, delta, html) {
@@ -924,8 +1188,13 @@ export function buildTranscriptBootScript(): string {
       return;
     }
     var incremental = appendStreamDeltaIncremental(tail, kind, delta, html);
-    if (!incremental) {
+    if (!incremental && kind !== 'text') {
+      // WHY: 正文 text 不能在增量失败时整泡重建（会触发 thinking DOM 相关副作用）。
+      // 只有在不存在 #stream-tail 时，我们才允许一次性 fallback 到 renderRows()。
       updateStreamBubble(tail);
+      if (state.flags.richText) {
+        scheduleStreamRichUpgrade(kind);
+      }
     }
     scheduleStickIfNearBottom();
   }
@@ -996,6 +1265,7 @@ export function buildTranscriptBootScript(): string {
           state.flags = {
             richText: !!p.flags.richText,
             batchMode: !!p.flags.batchMode,
+            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
         }
@@ -1009,29 +1279,24 @@ export function buildTranscriptBootScript(): string {
       case 'appendTailRows':
         applyAppendTailRows(p);
         break;
-      case 'streamDelta':
+      case 'streamDelta': {
         appendStreamDelta(p.kind, p.delta || '', p.html || '');
         break;
+      }
       case 'streamReset':
+        clearStreamRichUpgrade();
         state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
         renderRows();
         break;
       case 'streamToolInvoking':
-        state.stream.toolInvoking = !!p.active;
-        {
-          var invokingTail = document.getElementById('stream-tail');
-          if (invokingTail) {
-            updateStreamBubble(invokingTail);
-          } else if (state.stream.toolInvoking || state.stream.text || state.stream.thinking) {
-            renderRows();
-          }
-        }
+        setStreamToolInvokingDom(!!p.active);
         break;
       case 'flagsUpdate':
         if (p.flags) {
           var nextFlags = {
             richText: !!p.flags.richText,
             batchMode: !!p.flags.batchMode,
+            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
           if (flagsEqual(state.flags, nextFlags)) {
@@ -1053,6 +1318,7 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'selectionUpdate':
         state.selectedIds = (p.selectedMessageIds || []).slice();
+        state.affectedIds = (p.affectedMessageIds || []).slice();
         renderRows();
         break;
       case 'closeMenu':

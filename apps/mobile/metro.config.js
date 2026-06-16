@@ -29,6 +29,14 @@ for (const rel of coreDistSmokeFiles) {
     );
   }
 }
+const coreIndexJs = path.join(coreDistRoot, 'index.js');
+const coreIndexSource = fs.readFileSync(coreIndexJs, 'utf8');
+if (!coreIndexSource.includes('matchUserVfsTurnAt')) {
+  throw new Error(
+    '[metro] Stale @novel-master/core barrel (missing matchUserVfsTurnAt). ' +
+      'Run: npm run rebuild -w @novel-master/core',
+  );
+}
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
 const nodeFsShim = path.resolve(__dirname, 'src/shims/node-fs.js');

@@ -4,8 +4,8 @@
  * Runs idempotent DDL (`CREATE IF NOT EXISTS`), pragma-guarded column migrations,
  * KKV purges/moves, and provider seeding inside a single transaction.
  *
- * **Column migrations** (legacy DBs): `chat_message.hidden`, `vfs_entry.entry_kind`,
- * `vfs_entry.head_version`, regex depth rename, `llm_saved_model.settings_json`,
+ * **Column migrations** (legacy DBs): `chat_message.hidden`, `chat_session.user_vfs_pending_json`,
+ * `vfs_entry.entry_kind`, `vfs_entry.head_version`, regex depth rename, `llm_saved_model.settings_json`,
  * `llm_provider.default_model_id` drop, `agent_definition` legacy column drop.
  *
  * **KKV migrations**: purge `nm-model-sampling` + `global-config`; move Client UI
@@ -33,6 +33,7 @@ import { migrateDropLegacySessionFs } from "./session-fs/migrate-drop-legacy-ses
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
 import { createKkvService } from "@/service/kkv/create-kkv-service.js";
 import { migrateChatMessageHidden } from "./chat/migrate-chat-message-hidden.js";
+import { migrateChatSessionUserVfsPending } from "./chat/migrate-chat-session-user-vfs-pending.js";
 import { migrateVfsEntryKind } from "./vfs/migrate-vfs-entry-kind.js";
 import { migrateVfsHeadVersion } from "./vfs/migrate-vfs-head-version.js";
 import { migrateVfsRevisionBaseline } from "./vfs/migrate-vfs-revision.js";
@@ -101,6 +102,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     }
     await migrateRegexRuleDepthColumns(tx);
     await migrateChatMessageHidden(tx);
+    await migrateChatSessionUserVfsPending(tx);
     await migrateVfsEntryKind(tx);
     await migrateVfsHeadVersion(tx);
     await migrateVfsRevisionBaseline(tx);

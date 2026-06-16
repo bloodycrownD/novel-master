@@ -7,6 +7,7 @@
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { messageIdsInSlice } from "@/domain/depth/logic/depth-slice.js";
 import { listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
+import { resolveHideMessageRange } from "@/domain/depth/logic/resolve-hide-message-range.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 
@@ -27,10 +28,9 @@ export async function runHideMessageAction(
     return;
   }
 
-  const idSet = new Set(ids);
-  const toHide = visible.filter((m) => idSet.has(m.id));
-  const seqs = toHide.map((m) => m.seq).sort((a, b) => a - b);
-  const fromSeq = seqs[0]!;
-  const toSeq = seqs[seqs.length - 1]!;
-  await session.hideRange(fromSeq, toSeq);
+  const range = resolveHideMessageRange(visible, slice, ids);
+  if (range == null) {
+    return;
+  }
+  await session.hideRange(range.fromSeq, range.toSeq);
 }

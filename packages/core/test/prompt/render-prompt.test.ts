@@ -33,6 +33,7 @@ function message(
 
 const sampleLayout: AgentPromptLayout = {
   system: "ctx",
+  persistEnabled: true,
   persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
   dynamic: [],
 };
@@ -54,6 +55,7 @@ describe("buildPromptLlmInputFromLayout", () => {
 
   it("worktree persist block becomes synthetic user message", async () => {
     const layout: AgentPromptLayout = {
+      persistEnabled: true,
       persist: [
         { name: "canon", type: "worktree" },
       ],
@@ -113,5 +115,149 @@ describe("buildPromptAssemblyFromLayout", () => {
       messages: [],
     });
     assert.equal(segments[0]!.source, "system");
+  });
+
+  it("U-A-U-A 按四条普通 message 展示（不合并摘要）", async () => {
+    const actionXml =
+      '<user-vfs-action kind="delete" path="/test.md" />';
+    const messages: ChatMessage[] = [
+      {
+        id: "u1",
+        sessionId: "s1",
+        seq: 10,
+        role: "user",
+        content: textBlocks(actionXml),
+        provider: null,
+        raw: { metadata: { kind: "user_vfs_action" } },
+        createdAtMs: 10,
+        hidden: false,
+      },
+      {
+        id: "a1",
+        sessionId: "s1",
+        seq: 11,
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "tu1",
+              name: "fs",
+              input: { command: "…" },
+            },
+          ],
+        },
+        provider: null,
+        raw: { metadata: { toolInputCompressed: true } },
+        createdAtMs: 11,
+        hidden: false,
+      },
+      {
+        id: "u2",
+        sessionId: "s1",
+        seq: 12,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "tu1",
+              content: "ok",
+              ok: true,
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 12,
+        hidden: false,
+      },
+      {
+        id: "a2",
+        sessionId: "s1",
+        seq: 13,
+        role: "assistant",
+        content: textBlocks("【done】"),
+        provider: null,
+        raw: { metadata: { kind: "tool_turn_bridge" } },
+        createdAtMs: 13,
+        hidden: false,
+      },
+    ];
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [],
+      dynamic: [],
+    };
+    const segments = await buildPromptAssemblyFromLayout(layout, {
+      worktreeDisplay: "",
+      messages,
+    });
+    const chat = segments.filter((s) => s.source === "message");
+    assert.equal(chat.length, 4);
+    assert.match(chat[0]!.body, /<user-vfs-action/);
+    assert.match(chat[1]!.body, /\[tool_use name=fs/);
+    assert.match(chat[1]!.body, /"…"/);
+    assert.equal(chat[2]!.role, "tool");
+    assert.equal(chat[3]!.body, "【done】");
+    assert.ok(chat.every((s) => !s.body.includes("【用户 VFS 操作】")));
+  });
+});
+
+describe("persistEnabled / dynamicEnabled 开关", () => {
+  it("persistEnabled=false 跳过 persist 区", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [{ name: "u", type: "text", role: "user", content: "ask" }],
+      dynamic: [],
+    };
+    const ctx = {
+      worktreeDisplay: "WT",
+      messages: [message("user", "hi", 1)],
+      now: fixedNow,
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages.length, 1);
+    assert.equal(input.messages[0]!.id, "m1");
+
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
+  });
+
+  it("dynamicEnabled=false 跳过 dynamic 区", async () => {
+    const layout: AgentPromptLayout = {
+      dynamicEnabled: false,
+      persist: [],
+      dynamic: [
+        { name: "kick", type: "text", role: "user", content: "go", lifecycle: "once" },
+      ],
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, {
+      worktreeDisplay: "",
+      messages: [],
+      now: fixedNow,
+    }, { agentStepIndex: 0 });
+    assert.equal(input.messages.length, 0);
+
+    const segments = await buildPromptAssemblyFromLayout(layout, {
+      worktreeDisplay: "",
+      messages: [],
+    }, { agentStepIndex: 0 });
+    assert.ok(segments.every((s) => !s.id.startsWith("dynamic-")));
+  });
+
+  it("worktree 块读取 block.role（缺省 user）", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: true,
+      persist: [{ name: "canon", type: "worktree", role: "assistant" }],
+      dynamic: [],
+    };
+    const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages[0]!.role, "assistant");
+
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const wt = segments.find((s) => s.id === "persist-worktree-canon");
+    assert.equal(wt?.role, "assistant");
   });
 });

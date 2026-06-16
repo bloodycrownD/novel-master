@@ -18,7 +18,8 @@ import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
-import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
+import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
+import {isUserVfsUnifiedToolTurnEnabled} from '@novel-master/core';
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
@@ -123,6 +124,24 @@ export function FileEditorScreen() {
     setSaving(true);
     try {
       const vfs = resolveVfs();
+      if (
+        scopeKind === 'session' &&
+        sessionId &&
+        isUserVfsUnifiedToolTurnEnabled()
+      ) {
+        await sessionSaveVfsFile(runtime, sessionId, savedContent, path, content, {
+          expectedVersion: version,
+          versionCheck: version != null,
+        });
+        setSavedContent(content);
+        const refreshed = await vfs.read(path);
+        setVersion(refreshed.version);
+        setMtimeMs(refreshed.mtimeMs);
+        onSessionVfsSaved?.();
+        showToast('已保存');
+        return;
+      }
+
       if (version == null) {
         await vfs.write(path, content, {versionCheck: false});
       } else {
@@ -135,10 +154,6 @@ export function FileEditorScreen() {
       const refreshed = await vfs.read(path);
       setVersion(refreshed.version);
       setMtimeMs(refreshed.mtimeMs);
-      if (scopeKind === 'session' && projectId && sessionId) {
-        invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
-        onSessionVfsSaved?.();
-      }
       showToast('已保存');
     } catch (error) {
       showToast(toastMessage('保存失败', error));

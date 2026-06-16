@@ -1,8 +1,9 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach} from '@jest/globals';
+import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
 const mockGetOrRefresh = jest.fn();
+const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: () => undefined,
@@ -31,7 +32,7 @@ jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
 }));
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: jest.fn()}),
+  useToast: () => ({showToast: mockShowToast}),
 }));
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
@@ -120,11 +121,14 @@ function renderSessionVfm(rootPath = '/') {
 }
 
 describe('VfsFileManager session worktree snapshot', () => {
+  let tree: TestRenderer.ReactTestRenderer | undefined;
+
   beforeEach(() => {
     buildListRows.mockClear();
     list.mockClear();
     getDirRule.mockClear();
     markDirty.mockClear();
+    mockShowToast.mockClear();
     mockGetOrRefresh.mockReset();
     mockGetOrRefresh.mockImplementation(async (_runtime, _scope) => ({
       worktreeDisplay: 'wt',
@@ -133,9 +137,18 @@ describe('VfsFileManager session worktree snapshot', () => {
     }));
   });
 
+  afterEach(() => {
+    if (tree != null) {
+      act(() => {
+        tree!.unmount();
+      });
+    }
+    tree = undefined;
+  });
+
   it('session reload uses snapshot listRows and never buildListRows', async () => {
     await act(async () => {
-      TestRenderer.create(renderSessionVfm());
+      tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
     });
 
@@ -147,7 +160,6 @@ describe('VfsFileManager session worktree snapshot', () => {
   });
 
   it('invalidate marks snapshot dirty and reload re-fetches snapshot', async () => {
-    let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();

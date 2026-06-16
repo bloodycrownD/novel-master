@@ -7,6 +7,15 @@ import { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-even
 import { newEventBlockId } from "./event-block-id.js";
 import type { EventBlockDraft } from "./event-config-state.js";
 
+/** 事件配置 UI 仅编辑 startDepth；加载/保存时丢弃 endDepth。 */
+export function normalizeHideMessageAction(action: EventActionNode): EventActionNode {
+  if (action.type !== "hide-message") {
+    return action;
+  }
+  const { endDepth: _end, ...params } = action.params;
+  return { ...action, params };
+}
+
 export type UnknownActionDraft = {
   readonly kind: "unknown";
   readonly wireKey: string;
@@ -84,7 +93,7 @@ export function loadEventsConfigForEditor(raw: unknown): EventsEditorLoadResult 
     const actions: EventActionDraft[] = [];
     for (const actionRaw of actionsRaw) {
       try {
-        actions.push(parseActionNode(actionRaw));
+        actions.push(normalizeHideMessageAction(parseActionNode(actionRaw)));
       } catch {
         const wireKey = extractWireKey(actionRaw);
         unknownKeys.add(wireKey);

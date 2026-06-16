@@ -38,6 +38,8 @@ function mockVfs(entries: readonly VfsListEntry[]): VfsService {
 describe("buildPromptLlmInputFromLayout assembly order", () => {
   const layout: AgentPromptLayout = {
     system: "sys",
+    persistEnabled: true,
+    dynamicEnabled: true,
     persist: [
       { name: "persona", type: "text", role: "user", content: "人设" },
       { name: "canon", type: "worktree" },
@@ -89,6 +91,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     const vfs = { list } as unknown as VfsService;
     const input = await buildPromptLlmInputFromLayout(
       {
+        dynamicEnabled: true,
         persist: [],
         dynamic: [
           { name: "d", type: "text", role: "user", content: "{{$filetree}}" },

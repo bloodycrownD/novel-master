@@ -11,13 +11,12 @@ import { useStreamToolInvoking } from "../../hooks/useStreamToolInvoking";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
-  ipcMessagesDelete,
   ipcMessagesEdit,
   ipcMessagesFork,
-  ipcMessagesHide,
+  ipcMessagesHideRange,
   ipcMessagesList,
   ipcMessagesRollback,
-  ipcMessagesShow,
+  ipcMessagesShowRange,
 } from "../../ipc/client";
 import { useBatchSelection } from "../../hooks/useBatchSelection";
 import { useShellNav } from "../../providers/ShellNavProvider";
@@ -25,16 +24,26 @@ import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";
 import { ChatComposer } from "./ChatComposer";
 import {
+  deriveComposerSendState,
+  findLastVisibleMessageDto,
+} from "./composer-send-state";
+import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from "./message-edit";
-import { messageHasToolUse } from "./message-blocks";
-import { deleteToolTurn, hideToolTurn } from "./tool-turn-actions";
 import { MessageEditModal } from "./MessageEditModal";
 import { flushAgentStepUi } from "./flush-run-ui";
 import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
 import { AgentStreamMetricsBar } from "./AgentStreamMetricsBar";
+import {
+  computeHideRangeFromSelection,
+  computeShowRangeFromSelection,
+  computeVisibilityBatchAffectedIds,
+  isTranscriptRowSelectable,
+  selectVisibilityBatchEligibleIdsFromAnchor,
+  transcriptSelectableRole,
+} from "./transcript-selectable-role";
 
 interface ConversationPanelProps {
   projectId: string;
@@ -77,9 +86,9 @@ export function ConversationPanel({
     initialText: string;
   } | null>(null);
   const [confirmState, setConfirmState] = useState<
-    | { kind: "batch-delete"; count: number }
+    | { kind: "hide-messages"; toSeq: number }
+    | { kind: "restore-messages"; fromSeq: number; toSeq: number }
     | { kind: "rollback"; messageId: string }
-    | { kind: "delete-message"; messageId: string }
     | null
   >(null);
 
@@ -90,8 +99,58 @@ export function ConversationPanel({
     }
   }, [sessionId]);
 
-  const canResumeWithoutInput =
-    messages.length > 0 && messages[messages.length - 1]?.role === "user";
+  const sessionMaxSeq = useMemo(
+    () =>
+      messages.length > 0
+        ? Math.max(...messages.map((m) => m.seq))
+        : 0,
+    [messages],
+  );
+
+  const visibilityBatchPreview = useMemo(() => {
+    if (messageBatch.mode == null) {
+      return {
+        affectedIds: new Set<string>() as ReadonlySet<string>,
+        affectedCount: 0,
+        rangeLabel: null as string | null,
+      };
+    }
+    const affectedIds = computeVisibilityBatchAffectedIds(
+      messages,
+      messageBatch.mode,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return { affectedIds, affectedCount: 0, rangeLabel: null };
+    }
+    if (messageBatch.mode === "hide") {
+      const range = computeHideRangeFromSelection(
+        messages,
+        messageBatch.selectedIds,
+      );
+      return {
+        affectedIds,
+        affectedCount: affectedIds.size,
+        rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
+      };
+    }
+    const range = computeShowRangeFromSelection(
+      messages,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    return {
+      affectedIds,
+      affectedCount: affectedIds.size,
+      rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
+    };
+  }, [messages, messageBatch.mode, messageBatch.selectedIds, sessionMaxSeq]);
+
+  const composerSendState = useMemo(
+    () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
+    [messages],
+  );
 
   useEffect(() => {
     void reloadMessages();
@@ -180,40 +239,35 @@ export function ConversationPanel({
     return () => document.removeEventListener("click", handler);
   }, [onOpenSessionActions]);
 
-  const batchDelete = () => {
-    if (messageBatch.selectedCount === 0) return;
-    setConfirmState({ kind: "batch-delete", count: messageBatch.selectedCount });
-  };
-
-  const runBatchDelete = async () => {
-    for (const id of messageBatch.selectedIds) {
-      const target = messages.find((m) => m.id === id);
-      if (target != null && messageHasToolUse(target)) {
-        await deleteToolTurn(messages, id);
-      } else {
-        await ipcMessagesDelete({ messageId: id });
-      }
-    }
-    messageBatch.exit();
-    await reloadMessages();
-  };
-
-  const batchHide = async () => {
-    const ids = [...messageBatch.selectedIds];
-    if (ids.length === 0) {
+  const requestBatchConfirm = useCallback(() => {
+    if (messageBatch.selectedCount === 0 || messageBatch.mode == null) {
       return;
     }
-    for (const id of ids) {
-      const target = messages.find((m) => m.id === id);
-      if (target != null && messageHasToolUse(target)) {
-        await hideToolTurn(messages, id, true);
-      } else {
-        await ipcMessagesHide({ messageId: id });
+    if (messageBatch.mode === "hide") {
+      const range = computeHideRangeFromSelection(
+        messages,
+        messageBatch.selectedIds,
+      );
+      if (range == null) {
+        return;
       }
+      setConfirmState({ kind: "hide-messages", toSeq: range.toSeq });
+      return;
     }
-    messageBatch.exit();
-    await reloadMessages();
-  };
+    const range = computeShowRangeFromSelection(
+      messages,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    if (range == null) {
+      return;
+    }
+    setConfirmState({
+      kind: "restore-messages",
+      fromSeq: range.fromSeq,
+      toSeq: range.toSeq,
+    });
+  }, [messageBatch, messages, sessionMaxSeq]);
 
   const closeMessageMenu = useCallback(() => {
     setMessageMenu(null);
@@ -295,24 +349,6 @@ export function ConversationPanel({
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }
-      if (action === "hide") {
-        if (messageHasToolUse(message)) {
-          await hideToolTurn(messages, message.id, true);
-        } else {
-          await ipcMessagesHide({ messageId: message.id });
-        }
-        await reloadMessages();
-        return;
-      }
-      if (action === "unhide") {
-        if (messageHasToolUse(message)) {
-          await hideToolTurn(messages, message.id, false);
-        } else {
-          await ipcMessagesShow({ messageId: message.id });
-        }
-        await reloadMessages();
-        return;
-      }
       if (action === "copy") {
         await copyMessage(message);
         return;
@@ -337,16 +373,11 @@ export function ConversationPanel({
       }
       if (action === "rollback") {
         await rollbackToMessage(message.id);
-        return;
-      }
-      if (action === "delete") {
-        setConfirmState({ kind: "delete-message", messageId: message.id });
       }
     },
     [
       running,
       sessionId,
-      messages,
       reloadMessages,
       copyMessage,
       rollbackToMessage,
@@ -368,39 +399,89 @@ export function ConversationPanel({
     [reloadMessages],
   );
 
-  const deleteSingleMessage = useCallback(
-    async (messageId: string) => {
-      const target = messages.find((m) => m.id === messageId);
-      if (target != null && messageHasToolUse(target)) {
-        await deleteToolTurn(messages, messageId);
-      } else {
-        await ipcMessagesDelete({ messageId });
-      }
-      setStreamingText("");
-      await reloadMessages();
-    },
-    [messages, reloadMessages],
-  );
-
   const handleConfirm = useCallback(async () => {
     const state = confirmState;
     setConfirmState(null);
     if (!state) return;
-    if (state.kind === "batch-delete") await runBatchDelete();
-    else if (state.kind === "rollback") await executeRollback(state.messageId);
-    else if (state.kind === "delete-message") await deleteSingleMessage(state.messageId);
-  }, [confirmState, runBatchDelete, executeRollback, deleteSingleMessage]);
+    if (state.kind === "rollback") {
+      await executeRollback(state.messageId);
+    } else {
+      if (state.kind === "hide-messages") {
+        const result = await ipcMessagesHideRange({
+          sessionId,
+          fromSeq: 1,
+          toSeq: state.toSeq,
+        });
+        if (!result.ok) {
+          showToast(result.error.message);
+          return;
+        }
+      } else if (state.kind === "restore-messages") {
+        const result = await ipcMessagesShowRange({
+          sessionId,
+          fromSeq: state.fromSeq,
+          toSeq: state.toSeq,
+        });
+        if (!result.ok) {
+          showToast(result.error.message);
+          return;
+        }
+      }
+      messageBatch.exit();
+      await reloadMessages();
+    }
+  }, [confirmState, sessionId, messageBatch, executeRollback, reloadMessages]);
 
   const confirmMessage = (() => {
     if (!confirmState) return "";
-    if (confirmState.kind === "batch-delete") {
-      return `确定删除选中的 ${confirmState.count} 条消息？`;
+    if (confirmState.kind === "hide-messages") {
+      return `将隐藏所选 assistant 消息（seq ≤ ${confirmState.toSeq}）及其之前的所有消息。是否继续？`;
     }
-    if (confirmState.kind === "rollback") {
-      return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
+    if (confirmState.kind === "restore-messages") {
+      return `将恢复所选 user 消息（seq ≥ ${confirmState.fromSeq}）及其之后的所有消息。是否继续？`;
     }
-    return "确定删除这条消息？";
+    return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
   })();
+
+  const batchBarTitle =
+    messageBatch.mode === "hide"
+      ? "隐藏消息"
+      : messageBatch.mode === "restore"
+        ? "恢复消息"
+        : "";
+
+  const batchBarSummary =
+    visibilityBatchPreview.affectedCount > 0 &&
+    visibilityBatchPreview.rangeLabel != null
+      ? `${batchBarTitle} · 将影响 ${visibilityBatchPreview.affectedCount} 条（${visibilityBatchPreview.rangeLabel}）`
+      : batchBarTitle;
+
+  const batchHint =
+    messageBatch.mode === "hide"
+      ? "点击 assistant 将重置并勾选其上界以内全部 assistant"
+      : messageBatch.mode === "restore"
+        ? "点击 user 将重置并勾选其下界及之后全部 user"
+        : "";
+
+  const handleToggleSelect = useCallback(
+    (messageId: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      if (msg == null || messageBatch.mode == null) {
+        return;
+      }
+      const role = transcriptSelectableRole(msg.role, messageBatch.mode);
+      if (!isTranscriptRowSelectable(role)) {
+        return;
+      }
+      const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
+        messages,
+        messageBatch.mode,
+        messageId,
+      );
+      messageBatch.selectRange(nextIds);
+    },
+    [messages, messageBatch],
+  );
 
   return (
     <>
@@ -444,10 +525,11 @@ export function ConversationPanel({
             streamingThinking={running ? streamingThinking : undefined}
             toolInvoking={running ? toolInvoking : false}
             agentRunning={running}
-            batchMode={messageBatch.active}
+            batchMode={messageBatch.mode}
             selectedIds={messageBatch.selectedIds}
+            affectedIds={visibilityBatchPreview.affectedIds}
             chatRichText={chatRichText}
-            onToggleSelect={messageBatch.toggle}
+            onToggleSelect={handleToggleSelect}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
           />
         </div>
@@ -500,25 +582,43 @@ export function ConversationPanel({
           className={`chat-batch-bar${messageBatch.active ? "" : " hidden"}`}
           hidden={!messageBatch.active}
         >
-          <span id="chat-batch-count">
-            已选 {messageBatch.selectedCount} 项
-          </span>
-          <button type="button" data-action="batch-delete" onClick={() => void batchDelete()}>
-            删除
-          </button>
-          <button type="button" data-action="batch-hide" onClick={() => void batchHide()}>
-            隐藏
-          </button>
-          <button type="button" onClick={messageBatch.exit}>
-            取消
-          </button>
+          <div className="chat-batch-bar__main">
+            <button
+              type="button"
+              className="chat-batch-bar__cancel"
+              onClick={messageBatch.exit}
+            >
+              取消
+            </button>
+            <div className="chat-batch-bar__info">
+              <span id="chat-batch-count" className="chat-batch-bar__title">
+                {batchBarSummary}
+              </span>
+              <span className="chat-batch-bar__hint">{batchHint}</span>
+            </div>
+            <div className="chat-batch-bar__actions">
+              <button
+                type="button"
+                className="chat-batch-bar__btn chat-batch-bar__btn--primary"
+                data-action="batch-confirm"
+                disabled={messageBatch.selectedCount === 0}
+                onClick={() => requestBatchConfirm()}
+              >
+                确认
+              </button>
+            </div>
+          </div>
         </div>
         {!messageBatch.active ? (
           <ChatComposer
             projectId={projectId}
             sessionId={sessionId}
             running={running}
-            canResumeWithoutInput={canResumeWithoutInput}
+            canResumeWithoutInput={composerSendState.canResumeWithoutInput}
+            lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
+            lastMessageIsPlainUserText={
+              composerSendState.lastMessageIsPlainUserText
+            }
             onRunningChange={setRunning}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}
@@ -540,10 +640,7 @@ export function ConversationPanel({
         open={confirmState != null}
         title="确认操作"
         message={confirmMessage}
-        danger={
-          confirmState?.kind === "batch-delete" ||
-          confirmState?.kind === "delete-message"
-        }
+        danger={confirmState?.kind === "rollback"}
         onConfirm={() => void handleConfirm()}
         onCancel={() => setConfirmState(null)}
       />
@@ -555,10 +652,12 @@ export async function runSessionAction(
   action: string,
   _projectId: string,
   _sessionId: string,
-  enterBatch: () => void,
+  batch: ReturnType<typeof useBatchSelection>,
 ): Promise<void> {
-  if (action === "batch-ops") {
-    enterBatch();
+  if (action === "hide-messages") {
+    batch.enterHide();
+  } else if (action === "restore-messages") {
+    batch.enterRestore();
   }
 }
 

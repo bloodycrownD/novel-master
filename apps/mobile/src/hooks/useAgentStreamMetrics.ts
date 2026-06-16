@@ -1,7 +1,7 @@
 /**
  * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
  */
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type MutableRefObject} from 'react';
 
 export type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
@@ -21,7 +21,13 @@ type MetricsAcc = {
   startedAtMs: number;
 };
 
-function snapshotFromAcc(
+export type StreamMetricsAccRef = MutableRefObject<MetricsAcc>;
+
+export function emptyMetricsAcc(): MetricsAcc {
+  return {textChars: 0, thinkingChars: 0, startedAtMs: 0};
+}
+
+export function snapshotMetricsAcc(
   acc: MetricsAcc,
   elapsedMs: number,
 ): AgentStreamMetricsSnapshot {
@@ -32,7 +38,7 @@ function snapshotFromAcc(
   };
 }
 
-function toView(
+export function toAgentStreamMetricsView(
   running: boolean,
   snap: AgentStreamMetricsSnapshot,
 ): AgentStreamMetricsView {
@@ -42,8 +48,67 @@ function toView(
   return {...snap, running, totalChars, charsPerSecond};
 }
 
+/** Acc + notifiers only; display tick lives in ChatStreamMetricsBarLive. */
+export function useStreamMetricsAcc(running: boolean): {
+  readonly accRef: StreamMetricsAccRef;
+  readonly lastRun: AgentStreamMetricsSnapshot | null;
+  readonly noteTextDelta: (delta: string) => void;
+  readonly noteThinkingDelta: (delta: string) => void;
+} {
+  const accRef = useRef<MetricsAcc>(emptyMetricsAcc());
+  const [lastRun, setLastRun] = useState<AgentStreamMetricsSnapshot | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (running) {
+      accRef.current = {...emptyMetricsAcc(), startedAtMs: Date.now()};
+      setLastRun(null);
+      return undefined;
+    }
+    const acc = accRef.current;
+    if (acc.startedAtMs > 0) {
+      setLastRun(
+        snapshotMetricsAcc(acc, Math.max(0, Date.now() - acc.startedAtMs)),
+      );
+      accRef.current = emptyMetricsAcc();
+    }
+    return undefined;
+  }, [running]);
+
+  const noteTextDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    accRef.current.textChars += delta.length;
+  }, []);
+
+  const noteThinkingDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    accRef.current.thinkingChars += delta.length;
+  }, []);
+
+  return {accRef, lastRun, noteTextDelta, noteThinkingDelta};
+}
+
+function snapshotFromAcc(
+  acc: MetricsAcc,
+  elapsedMs: number,
+): AgentStreamMetricsSnapshot {
+  return snapshotMetricsAcc(acc, elapsedMs);
+}
+
+function toView(
+  running: boolean,
+  snap: AgentStreamMetricsSnapshot,
+): AgentStreamMetricsView {
+  return toAgentStreamMetricsView(running, snap);
+}
+
 function emptyAcc(): MetricsAcc {
-  return {textChars: 0, thinkingChars: 0, startedAtMs: 0};
+  return emptyMetricsAcc();
 }
 
 /** 格式化秒数（60s 内一位小数，否则整数）。 */
@@ -100,7 +165,9 @@ export function useAgentStreamMetrics(running: boolean): {
     if (running) {
       accRef.current = {...emptyAcc(), startedAtMs: Date.now()};
       setLastRun(null);
-      const id = setInterval(() => setTick(t => t + 1), 250);
+      const id = setInterval(() => {
+        setTick(t => t + 1);
+      }, 250);
       return () => clearInterval(id);
     }
     const acc = accRef.current;

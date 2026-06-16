@@ -48,9 +48,12 @@ export const IPC_CHANNELS = {
   MESSAGES_EDIT: "nm:messages/edit",
   MESSAGES_HIDE: "nm:messages/hide",
   MESSAGES_SHOW: "nm:messages/show",
+  MESSAGES_HIDE_RANGE: "nm:messages/hideRange",
+  MESSAGES_SHOW_RANGE: "nm:messages/showRange",
   MESSAGES_DELETE: "nm:messages/delete",
   MESSAGES_FORK: "nm:messages/fork",
   MESSAGES_ROLLBACK: "nm:messages/rollback",
+  MESSAGES_APPEND_TOOL_TURN_BRIDGE: "nm:messages/appendToolTurnBridge",
 
   AGENT_RUN: "nm:agent/run",
   AGENT_ABORT: "nm:agent/abort",
@@ -419,6 +422,18 @@ export type MessagesShowRequest = {
   readonly messageId: string;
 };
 
+export type MessagesHideRangeRequest = {
+  readonly sessionId: string;
+  readonly fromSeq: number;
+  readonly toSeq: number;
+};
+
+export type MessagesShowRangeRequest = {
+  readonly sessionId: string;
+  readonly fromSeq: number;
+  readonly toSeq: number;
+};
+
 export type MessagesDeleteRequest = {
   readonly messageId: string;
 };
@@ -426,6 +441,10 @@ export type MessagesDeleteRequest = {
 export type MessagesForkRequest = {
   readonly sessionId: string;
   readonly messageId: string;
+};
+
+export type MessagesAppendToolTurnBridgeRequest = {
+  readonly sessionId: string;
 };
 
 export type AgentRunRequest = {

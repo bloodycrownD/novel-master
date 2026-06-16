@@ -2,13 +2,14 @@
  * Chat input: disabled without workspace model; send → user append + agent run.
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Alert, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import Svg, {Path, Rect} from 'react-native-svg';
 import {
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
+  TOOL_TURN_BRIDGE_TEXT,
   type AgentRunFinishedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
@@ -36,7 +37,12 @@ type Props = {
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onNeedModel: () => void;
+  /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
+  /** 末条 user 含 tool_result。 */
+  lastMessageHasToolResult: boolean;
+  /** 末条为 plain user 文本时禁用输入。 */
+  lastMessageIsPlainUserText: boolean;
 };
 
 export function ChatComposer({
@@ -52,6 +58,8 @@ export function ChatComposer({
   onRunFinished,
   onNeedModel,
   canResumeWithoutInput,
+  lastMessageHasToolResult,
+  lastMessageIsPlainUserText,
 }: Props) {
   const {tokens} = useTheme();
   const runtime = useRuntime();
@@ -140,6 +148,102 @@ export function ChatComposer({
     };
   }, [runtime.eventBus, scope.sessionId]);
 
+  const executeRun = useCallback(
+    async (content: string, allowResumeWithoutInput: boolean) => {
+      const controller = new AbortController();
+      setError(undefined);
+      onStreamReset();
+      onRunningChange(true);
+      if (content) {
+        writeChatComposerDraft(sessionId, '');
+        setText('');
+      }
+      setRunAbortController(controller);
+      try {
+        const stream = await runtime.preferences.getLlmStreamEnabled();
+        await runAgentTurn(runtime, scope, content, {
+          stream,
+          allowResumeWithoutInput,
+          signal: controller.signal,
+          onUserMessageAppended: () => {
+            void Promise.resolve(streamHandlersRef.current.onMessagesChanged()).catch(
+              () => undefined,
+            );
+          },
+        });
+      } catch (err) {
+        if (typeof __DEV__ !== 'undefined' && __DEV__) {
+          const detail =
+            err instanceof Error
+              ? {
+                  name: err.name,
+                  message: err.message,
+                  stack: err.stack,
+                  cause: String((err as Error & {cause?: unknown}).cause ?? ''),
+                }
+              : {name: typeof err, message: String(err)};
+          console.error('[novel-master/chat] run failed', detail);
+        }
+        setError(formatError(err));
+        await flushRunUi(onMessagesChanged, onStreamReset);
+      } finally {
+        setRunAbortController(null);
+        onRunningChange(false);
+      }
+    },
+    [
+      runtime,
+      scope,
+      sessionId,
+      onRunningChange,
+      onStreamReset,
+      onMessagesChanged,
+    ],
+  );
+
+  const sendWithBridgeIfNeeded = useCallback(
+    async (content: string, allowResumeWithoutInput: boolean) => {
+      if (content && lastMessageHasToolResult) {
+        return new Promise<void>(resolve => {
+          Alert.alert(
+            '插入桥接消息',
+            `为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`,
+            [
+              {
+                text: '取消',
+                style: 'cancel',
+                onPress: () => resolve(),
+              },
+              {
+                text: '确认并发送',
+                onPress: () => {
+                  void (async () => {
+                    try {
+                      await runtime.appendToolTurnBridge(sessionId);
+                      await streamHandlersRef.current.onMessagesChanged();
+                      await executeRun(content, false);
+                    } catch (err) {
+                      setError(formatError(err));
+                    } finally {
+                      resolve();
+                    }
+                  })();
+                },
+              },
+            ],
+          );
+        });
+      }
+      await executeRun(content, allowResumeWithoutInput);
+    },
+    [
+      lastMessageHasToolResult,
+      runtime,
+      sessionId,
+      executeRun,
+    ],
+  );
+
   const send = useCallback(async () => {
     if (!hasModel) {
       onNeedModel();
@@ -155,65 +259,26 @@ export function ChatComposer({
     if (!content && !allowResumeWithoutInput) {
       return;
     }
-    const controller = new AbortController();
-    setError(undefined);
-    onStreamReset();
-    onRunningChange(true);
-    if (content) {
-      writeChatComposerDraft(sessionId, '');
-      setText('');
+    if (content && lastMessageIsPlainUserText) {
+      return;
     }
-    setRunAbortController(controller);
-    try {
-      const stream = await runtime.preferences.getLlmStreamEnabled();
-      await runAgentTurn(runtime, scope, content, {
-        stream,
-        allowResumeWithoutInput,
-        signal: controller.signal,
-        onUserMessageAppended: () => {
-          void Promise.resolve(streamHandlersRef.current.onMessagesChanged()).catch(
-            () => undefined,
-          );
-        },
-      });
-    } catch (err) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        const detail =
-          err instanceof Error
-            ? {
-                name: err.name,
-                message: err.message,
-                stack: err.stack,
-                cause: String((err as Error & {cause?: unknown}).cause ?? ''),
-              }
-            : {name: typeof err, message: String(err)};
-        console.error('[novel-master/chat] run failed', detail);
-      }
-      setError(formatError(err));
-      await flushRunUi(onMessagesChanged, onStreamReset);
-    } finally {
-      setRunAbortController(null);
-      onRunningChange(false);
-    }
+    await sendWithBridgeIfNeeded(content, allowResumeWithoutInput);
   }, [
     hasModel,
     running,
     text,
     canResumeWithoutInput,
+    lastMessageIsPlainUserText,
     runAbortController,
-    runtime,
-    scope,
     onNeedModel,
-    onRunningChange,
-    onStreamReset,
-    onMessagesChanged,
+    sendWithBridgeIfNeeded,
   ]);
 
-  // Input should remain editable whenever the user can type (model selected and not running).
-  // Send button can be disabled separately when there is nothing to send/resume.
-  const inputDisabled = !hasModel || running;
+  const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
   const sendDisabled =
     !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
+
+  const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
     <View style={[styles.dock, {borderTopColor: tokens.border}]}>
@@ -236,7 +301,7 @@ export function ChatComposer({
               borderColor: tokens.border,
             },
           ]}
-          placeholder={hasModel ? '输入消息…' : '选择模型后可发送'}
+          placeholder={inputPlaceholder}
           placeholderTextColor={tokens.textSecondary}
           value={text}
           onChangeText={next => {
