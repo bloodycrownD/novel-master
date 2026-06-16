@@ -1,7 +1,6 @@
 import { createVfsService } from "@novel-master/core/vfs";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { migrateVfsRevisionBaseline } from "@/bootstrap/vfs/migrate-vfs-revision.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -61,22 +60,6 @@ describe("RevisionAwareVfsService (integration)", () => {
 
     const head = await vfs.read("/history.txt");
     assert.equal(head.content, "v2");
-  });
-
-  it("seeds baseline revision for pre-existing vfs_entry on bootstrap", async () => {
-    const ctx = getNovelMasterTestContext();
-    const conn = ctx.conn;
-    const revisions = new SqliteVfsRevisionRepository(conn);
-
-    await conn.execute(
-      `INSERT INTO vfs_entry (path, content, version, head_version, mtime_ms, storage_kind, entry_kind)
-       VALUES ('/legacy.txt', 'legacy', 3, 3, 1000, 'inline', 'file')`,
-    );
-    await migrateVfsRevisionBaseline(conn);
-
-    const baseline = await revisions.findByPathAndVersion("/legacy.txt", 3);
-    assert.ok(baseline);
-    assert.equal(baseline.content, "legacy");
   });
 
   it("delete appends deleted revision at head+1 and removes entry", async () => {

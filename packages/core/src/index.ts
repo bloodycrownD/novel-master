@@ -120,12 +120,6 @@ export {
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
 } from "./service/persistent-preferences/impl/preference-keys.js";
-export {
-  migrateClientUiBehaviorPrefsToPreferences,
-  CLIENT_UI_BEHAVIOR_PREF_MIGRATIONS,
-} from "./bootstrap/preferences/migrate-client-ui-behavior-prefs.js";
-export type { ClientUiPrefMigration } from "./bootstrap/preferences/migrate-client-ui-behavior-prefs.js";
-
 /**
  * Tool 运行时：注册表、执行器与内置 `vfs.*` 工具。
  */

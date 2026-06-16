@@ -4,12 +4,7 @@
  * @module bootstrap/vfs/vfs-schema
  */
 
-/**
- * Creates vfs_entry table if missing.
- *
- * @remarks `CREATE IF NOT EXISTS` does not add columns to an existing table.
- * Legacy DBs missing `entry_kind` are upgraded via {@link migrateVfsEntryKind}.
- */
+/** 若不存在则创建 vfs_entry 表。 */
 export const VFS_ENTRY_TABLE_DDL = `
 CREATE TABLE IF NOT EXISTS vfs_entry (
   path TEXT PRIMARY KEY,
