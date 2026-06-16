@@ -3,7 +3,7 @@
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Text} from 'react-native';
-import type {CompactionConditions} from '@novel-master/core';
+import type {CompactionConditions} from '@novel-master/core/compaction';
 import {FormField} from '../../components/form/FormField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {FormSwitchRow} from '../../components/form/FormSwitchRow';

@@ -1,24 +1,27 @@
 import {
   bootstrapNovelMaster,
-  createMessageService,
   createPersistentPreferences,
   createPersistentState,
-  createProjectService,
-  createScopedVfsService,
-  createMessageCheckpointService,
-  createSessionFsService,
-  createSessionService,
   open,
-  type MessageCheckpointService,
-  type MessageService,
   type PersistentPreferences,
   type PersistentState,
-  type ProjectService,
-  type SessionFsService,
-  type SessionService,
   type TdbcConnection,
-  type VfsService,
 } from "@novel-master/core";
+import {
+  createMessageService,
+  createProjectService,
+  createSessionService,
+  type MessageService,
+  type ProjectService,
+  type SessionService,
+} from "@novel-master/core/chat";
+import {
+  createMessageCheckpointService,
+  createSessionFsService,
+  type MessageCheckpointService,
+  type SessionFsService,
+} from "@novel-master/core/session-fs";
+import { createScopedVfsService, type VfsService } from "@novel-master/core/vfs";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,

@@ -25,6 +25,20 @@ describe("T0 package exports (@novel-master/core entry)", () => {
     );
   });
 
+  it("does not leak public sub-entry symbols from main entry", () => {
+    const mainEntry = coreMain as Record<string, unknown>;
+    assert.equal(mainEntry.createAgentRegistryService, undefined);
+    assert.equal(mainEntry.createMessageService, undefined);
+    assert.equal(mainEntry.createCompactionConditionsStore, undefined);
+    assert.equal(mainEntry.createEventsConfigStore, undefined);
+    assert.equal(mainEntry.buildPromptAssemblyFromLayout, undefined);
+    assert.equal(mainEntry.createProviderServices, undefined);
+    assert.equal(mainEntry.createRegexConfigService, undefined);
+    assert.equal(mainEntry.createSessionFsService, undefined);
+    assert.equal(mainEntry.createScopedVfsService, undefined);
+    assert.equal(mainEntry.createWorktreeService, undefined);
+  });
+
   it("exports createKkvService and KkvError from @novel-master/core/kkv", async () => {
     assert.equal(typeof createKkvService, "function");
     assert.equal(KkvError.name, "KkvError");

@@ -2,7 +2,7 @@
  * Regex rule draft validation and single-rule preview (aligned with Core applyRegexRules).
  */
 
-import {matchDepth, validateDepthSlice} from '@novel-master/core';
+import {matchDepth, validateDepthSlice} from '@novel-master/core/compaction';
 
 export type RegexChannel = 'llm' | 'display';
 

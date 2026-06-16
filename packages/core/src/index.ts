@@ -183,16 +183,3 @@ export { encode, type EncodableSchema } from "./infra/serialization/encode.js";
 export { ConfigDecodeError } from "./errors/config-decode-errors.js";
 export type { ConfigDecodeErrorCode } from "./errors/config-decode-errors.js";
 
-/**
- * 高频跨域聚合：保留核心运行时常用能力，低频场景建议迁移到对应子入口。
- */
-export * from "./public/agent.js";
-export * from "./public/chat.js";
-export * from "./public/compaction.js";
-export * from "./public/events.js";
-export * from "./public/prompt.js";
-export * from "./public/provider.js";
-export * from "./public/regex.js";
-export * from "./public/session-fs.js";
-export * from "./public/vfs.js";
-export * from "./public/worktree.js";

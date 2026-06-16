@@ -1,7 +1,7 @@
 /**
  * Chat header meta: current agent name + resolved model label (PRD D4).
  */
-import {resolveApplicationModelId} from '@novel-master/core';
+import {resolveApplicationModelId} from '@novel-master/core/agent';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
 import {

@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import {formatApplicationModelId} from '@novel-master/core';
+import {formatApplicationModelId} from '@novel-master/core/provider';
 import {AppModal} from '../ui/AppModal';
 import {useRuntime} from '../../hooks/useRuntime';
 import {resolveModelDisplayLabel} from '../../provider/model-display-label';

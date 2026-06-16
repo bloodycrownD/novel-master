@@ -1,8 +1,8 @@
 /**
  * Order direct children of a VFS directory to match worktree DFS list semantics.
  */
-import type {WorktreeDirRule, WorktreeListRow} from '@novel-master/core';
-import {sortDirPaths, sortFilesForDir} from '@novel-master/core';
+import type {WorktreeDirRule, WorktreeListRow} from '@novel-master/core/worktree';
+import {sortDirPaths, sortFilesForDir} from '@novel-master/core/worktree';
 import {isDirectChild} from './vfs-row-mapper';
 
 export type OrderedDirectChildPathsParams = {

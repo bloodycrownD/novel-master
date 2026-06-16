@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {PromptPreviewSegment} from '@novel-master/core';
+import type {PromptPreviewSegment} from '@novel-master/core/prompt';
 import {PromptPreviewSegmentCard} from '../../components/prompt/PromptPreviewSegmentCard';
 import {useMobileScope} from '../../hooks/useMobileScope';
 import {useRuntime} from '../../hooks/useRuntime';

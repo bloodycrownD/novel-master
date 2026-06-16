@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import type {RegexGroup} from '@novel-master/core';
+import type {RegexGroup} from '@novel-master/core/regex';
 import {useRuntime} from '../../hooks/useRuntime';
 import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';

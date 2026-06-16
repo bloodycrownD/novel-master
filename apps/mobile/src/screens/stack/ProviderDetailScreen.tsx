@@ -15,7 +15,7 @@ import {
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import {formatApplicationModelId} from '@novel-master/core';
+import {formatApplicationModelId} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {AddModelModal} from '../../components/provider/AddModelModal';

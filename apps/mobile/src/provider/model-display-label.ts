@@ -1,7 +1,7 @@
 /**
  * Model id / label helpers for workspace applicationModelId.
  */
-import {parseApplicationModelId} from '@novel-master/core';
+import {parseApplicationModelId} from '@novel-master/core/provider';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 /** Canonical model id for display: `providerId/vendorModelId`. */

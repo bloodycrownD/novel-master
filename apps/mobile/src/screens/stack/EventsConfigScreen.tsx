@@ -3,7 +3,7 @@
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {ActivityIndicator, Alert, Pressable, StyleSheet, Text, View} from 'react-native';
-import {DEFAULT_EVENTS_CONFIG, type EventsConfig} from '@novel-master/core';
+import {DEFAULT_EVENTS_CONFIG, type EventsConfig} from '@novel-master/core/events';
 import {EventBlockEditor} from '../../components/events/EventConfigBlocks';
 import {
   ACTION_ADD_OPTIONS,
