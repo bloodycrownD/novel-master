@@ -611,15 +611,31 @@ export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {
   readonly vendorModelId: string;
 };
 
+/** 存储配置失效摘要（列表/编辑 assess 结果）。 */
+export type StoredConfigInvalidDto = {
+  readonly code: "outdated_version" | "broken_wire" | "removed_feature";
+  readonly message: string;
+  readonly storedSchemaVersion?: number;
+};
+
 export type AgentRegistryListItemDto = {
   readonly agentId: string;
   readonly name: string;
-  /** 解码失败时的错误摘要；有值表示该 Agent 需修复。 */
+  /**
+   * 配置失效详情；有值表示该 Agent 须修复或删除。
+   * @deprecated 兼容旧 UI，请改用 `invalid`
+   */
   readonly decodeError?: string;
+  readonly invalid?: StoredConfigInvalidDto;
 };
 
 export type AgentRegistryGetRequest = {
   readonly agentId: string;
+};
+
+/** Agent 原始 wire（供 renderer assess，不做 strict decode）。 */
+export type AgentRegistryGetResponse = {
+  readonly wire: unknown;
 };
 
 export type AgentRegistryUpsertRequest = {

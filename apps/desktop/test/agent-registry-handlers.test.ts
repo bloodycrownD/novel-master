@@ -36,7 +36,7 @@ describe("agent-registry IPC handlers", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  it("list 对单条 decode 失败返回 decodeError 且保留其余行", async () => {
+  it("list 对单条失效 wire 返回 invalid 且保留其余行", async () => {
     const created = await handleAgentRegistryCreateBlank();
     assert.equal(created.ok, true);
     if (!created.ok) {
@@ -66,12 +66,15 @@ describe("agent-registry IPC handlers", () => {
 
     const broken = listed.data.find((row) => row.agentId === "broken-agent");
     assert.ok(broken);
-    assert.equal(broken!.name, "broken-agent");
-    assert.ok(broken!.decodeError);
-    assert.match(broken!.decodeError!, /prompts\.blocks/);
+    assert.equal(broken!.name, "broken");
+    assert.ok(broken!.invalid);
+    assert.equal(broken!.invalid!.code, "removed_feature");
+    assert.match(broken!.invalid!.message, /prompts\.blocks/);
+    assert.equal(broken!.decodeError, broken!.invalid!.message);
 
     const healthy = listed.data.find((row) => row.agentId === created.data.agentId);
     assert.ok(healthy);
+    assert.equal(healthy!.invalid, undefined);
     assert.equal(healthy!.decodeError, undefined);
     assert.equal(listed.data.length, 2);
   });

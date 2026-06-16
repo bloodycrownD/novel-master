@@ -1,15 +1,17 @@
 /**
  * Agent registry CRUD IPC handlers.
  */
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry, type TdbcConnection } from "@novel-master/core";
 import {
   allocateAgentDisplayName,
   createDefaultAgentEditorPrompts,
   layoutFromFormInput,
 } from "@novel-master/core/config-forms/agent";
+import { assessAgentDefinitionWire } from "@novel-master/core/config-forms/stored-config-validity";
 import type {
   AgentRegistryDeleteRequest,
   AgentRegistryGetRequest,
+  AgentRegistryGetResponse,
   AgentRegistryListItemDto,
   AgentRegistryUpsertRequest,
   AgentYamlExportRequest,
@@ -28,6 +30,35 @@ function parentWindow(): BrowserWindow | null {
   return BrowserWindow.getFocusedWindow();
 }
 
+/** 从库读取智能体原始 wire（不解码）。 */
+async function getAgentRawWire(
+  conn: TdbcConnection,
+  agentId: string,
+): Promise<unknown | null> {
+  const rows = await conn.query<{ prompts_json: string }>(
+    `SELECT prompts_json FROM agent_definition WHERE agent_id = ?`,
+    [agentId],
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  return JSON.parse(String(rows[0]!.prompts_json)) as unknown;
+}
+
+/** 从 wire 尽力读取显示名称。 */
+function readAgentNameFromWire(raw: unknown, fallback: string): string {
+  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
+    const name = (raw as Record<string, unknown>).name;
+    if (typeof name === "string") {
+      const trimmed = name.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return fallback;
+}
+
 export async function handleAgentRegistryList(): Promise<
   IpcResult<AgentRegistryListItemDto[]>
 > {
@@ -36,15 +67,31 @@ export async function handleAgentRegistryList(): Promise<
     const ids = await rt.agentRegistry.listAgentIds();
     const rows: AgentRegistryListItemDto[] = [];
     for (const agentId of ids) {
-      let name = agentId;
-      let decodeError: string | undefined;
-      try {
-        const def = await rt.agentRegistry.get(agentId);
-        name = def.name?.trim() || agentId;
-      } catch (err) {
-        decodeError = formatIpcError(err).message;
+      const raw = await getAgentRawWire(rt.conn, agentId);
+      if (raw == null) {
+        continue;
       }
-      rows.push(decodeError != null ? { agentId, name, decodeError } : { agentId, name });
+      const health = assessAgentDefinitionWire(raw);
+      const name =
+        health.status === "valid"
+          ? health.value.name?.trim() || agentId
+          : readAgentNameFromWire(raw, agentId);
+      if (health.status === "invalid") {
+        rows.push({
+          agentId,
+          name,
+          invalid: {
+            code: health.code,
+            message: health.message,
+            ...(health.storedSchemaVersion != null
+              ? { storedSchemaVersion: health.storedSchemaVersion }
+              : {}),
+          },
+          decodeError: health.message,
+        });
+      } else {
+        rows.push({ agentId, name });
+      }
     }
     return { ok: true, data: rows };
   } catch (err) {
@@ -54,11 +101,20 @@ export async function handleAgentRegistryList(): Promise<
 
 export async function handleAgentRegistryGet(
   req: AgentRegistryGetRequest,
-): Promise<IpcResult<unknown>> {
+): Promise<IpcResult<AgentRegistryGetResponse>> {
   try {
     const rt = await getDesktopRuntime();
-    const def = await rt.agentRegistry.get(req.agentId);
-    return { ok: true, data: def };
+    const raw = await getAgentRawWire(rt.conn, req.agentId);
+    if (raw == null) {
+      return {
+        ok: false,
+        error: {
+          code: "AGENT_NOT_FOUND",
+          message: `agent not found: ${req.agentId}`,
+        },
+      };
+    }
+    return { ok: true, data: { wire: raw } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -109,12 +165,17 @@ export async function handleAgentRegistryCreateBlank(): Promise<
     const defaultPrompts = createDefaultAgentEditorPrompts();
     const slots = [];
     for (const id of await rt.agentRegistry.listAgentIds()) {
-      try {
-        const def = await rt.agentRegistry.get(id);
-        slots.push({ id, name: def.name });
-      } catch {
+      const raw = await getAgentRawWire(rt.conn, id);
+      if (raw == null) {
         slots.push({ id, name: id });
+        continue;
       }
+      const health = assessAgentDefinitionWire(raw);
+      const name =
+        health.status === "valid"
+          ? health.value.name
+          : readAgentNameFromWire(raw, id);
+      slots.push({ id, name });
     }
     const name = allocateAgentDisplayName(slots);
     await rt.agentRegistry.upsert(

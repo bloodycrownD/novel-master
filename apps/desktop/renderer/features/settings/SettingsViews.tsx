@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { type AgentDefinition } from "@novel-master/core/agent";
 export { AgentEditorView } from "./AgentEditorView";
 export { EventsConfigView } from "./EventsConfigView";
 export { ModelSamplingView } from "./ModelSamplingView";
@@ -79,13 +78,18 @@ import {
   type RegexChannel,
   type RegexRuleDraftFields,
 } from "../../services/regex-test.service";
-import { REGEX_UI_LABELS, AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
+import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
+import {
+  AGENT_LIST_LABELS,
+  assessAgentDefinitionWire,
+  storedConfigInvalidReason,
+} from "@novel-master/core/config-forms/stored-config-validity";
 import type { AgentRegistryListItemDto } from "../../../shared/ipc-types";
 
 type Nav = SettingsNavHandle;
 
-/** 列表 meta 中截断解码错误摘要。 */
-function truncateDecodeError(message: string, max = 80): string {
+/** 列表 meta 中截断失效说明。 */
+function truncateInvalidMessage(message: string, max = 80): string {
   return message.length <= max ? message : `${message.slice(0, max)}…`;
 }
 
@@ -604,10 +608,16 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
     if (action === "duplicate") {
       const getRes = await ipcAgentRegistryGet({ agentId: row.agentId });
       if (!getRes.ok) {
+        toastSettingsError(getRes.error.message);
+        return;
+      }
+      const health = assessAgentDefinitionWire(getRes.data.wire);
+      if (health.status !== "valid") {
+        toastSettingsError("配置已失效，请先修复后再复制");
         return;
       }
       const copyId = `agent-${Date.now()}`;
-      const def = getRes.data as AgentDefinition;
+      const def = health.value;
       const saveRes = await ipcAgentRegistryUpsert({
         agentId: copyId,
         definition: { ...def, name: `${def.name ?? row.name}-copy` },
@@ -680,7 +690,12 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
       toastSettingsError(getRes.error.message);
       return;
     }
-    const def = getRes.data as AgentDefinition;
+    const health = assessAgentDefinitionWire(getRes.data.wire);
+    if (health.status !== "valid") {
+      toastSettingsError("配置已失效，请先修复后再重命名");
+      return;
+    }
+    const def = health.value;
     await ipcAgentRegistryUpsert({
       agentId: prompt.agentId,
       definition: { ...def, name },
@@ -722,16 +737,18 @@ export function AgentsSettingsView({ nav }: { nav: Nav }) {
             key={row.agentId}
             title={row.name}
             meta={
-              row.decodeError != null ? (
+              row.invalid != null ? (
                 <span className="settings-list-item__meta-row">
                   <span className="settings-tag settings-tag--warn">
-                    {AGENT_LIST_LABELS.needsRepair}
+                    {AGENT_LIST_LABELS.configInvalid}
                   </span>
                   <span
                     className="settings-list-item__meta-error"
-                    title={row.decodeError}
+                    title={row.invalid.message}
                   >
-                    {truncateDecodeError(row.decodeError)}
+                    {truncateInvalidMessage(
+                      storedConfigInvalidReason(row.invalid.code),
+                    )}
                   </span>
                 </span>
               ) : undefined

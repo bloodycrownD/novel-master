@@ -4,7 +4,6 @@ import {
   ACTION_ADD_OPTIONS,
   DEFAULT_EVENTS_CONFIG,
   EVENT_ADD_OPTIONS,
-  UNKNOWN_ACTION_BADGE,
   actionTypeHint,
   actionTypeLabel,
   configToEventBlocks,
@@ -13,21 +12,23 @@ import {
   eventBlocksToConfig,
   eventTypeHint,
   eventTypeLabel,
-  isEventActionNode,
-  isUnknownActionDraft,
-  loadEventsConfigForEditor,
   newEventBlockId,
-  unknownActionHint,
   validateEventConfigBlocks,
-  type EventActionDraft,
   type EventBlockDraft,
 } from "@novel-master/core/config-forms/events";
+import {
+  assessEventsConfigWire,
+  STORED_CONFIG_LABELS,
+  storedConfigInvalidReason,
+  type StoredConfigHealth,
+} from "@novel-master/core/config-forms/stored-config-validity";
 import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
 import { Button } from "../../components/ui/Button";
 import { ConfirmModal } from "../../components/ui/ConfirmModal";
 import { showToast } from "../../components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
 import {
+  ipcEventsClearConfig,
   ipcEventsExportYaml,
   ipcEventsGetConfig,
   ipcEventsImportYaml,
@@ -39,45 +40,6 @@ import {
   SettingsFormSection,
   SettingsPanel,
 } from "./settings-ui";
-
-function collectUnknownWireKeys(blocks: readonly EventBlockDraft[]): string[] {
-  const keys = new Set<string>();
-  for (const block of blocks) {
-    for (const action of block.actions) {
-      if (isUnknownActionDraft(action)) {
-        keys.add(action.wireKey);
-      }
-    }
-  }
-  return [...keys];
-}
-
-function UnknownActionBlockEditor({
-  action,
-  index,
-  onDelete,
-}: {
-  action: Extract<EventActionDraft, { kind: "unknown" }>;
-  index: number;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="config-block-card config-block-card--action config-block-card--unknown">
-      <div className="config-block-card__header">
-        <span className="config-block-card__badge">{UNKNOWN_ACTION_BADGE}</span>
-        <span className="config-block-card__meta">{action.wireKey} · 动作 {index + 1}</span>
-        <div className="config-block-card__actions">
-          <button type="button" className="icon-btn" onClick={onDelete} aria-label="删除">
-            ×
-          </button>
-        </div>
-      </div>
-      <div className="config-block-card__body">
-        <p className="config-block-card__hint">{unknownActionHint(action.wireKey)}</p>
-      </div>
-    </div>
-  );
-}
 
 function ActionBlockEditor({
   action,
@@ -195,13 +157,12 @@ function EventBlockEditor({
 }) {
   const [addActionOpen, setAddActionOpen] = useState(false);
 
-  const updateAction = (actionIndex: number, action: EventActionDraft) => {
+  const updateAction = (actionIndex: number, action: EventActionNode) => {
     onChange({ actions: block.actions.map((a, i) => (i === actionIndex ? action : a)) });
   };
 
   const deleteAction = (actionIndex: number) => {
-    const action = block.actions[actionIndex];
-    if (block.actions.length <= 1 && action != null && !isUnknownActionDraft(action)) {
+    if (block.actions.length <= 1) {
       showToast("至少保留一个动作");
       return;
     }
@@ -274,22 +235,9 @@ function EventBlockEditor({
         ) : null}
         <div className="config-block-list config-block-list--nested">
           {block.actions.map((action, actionIndex) => {
-            if (isUnknownActionDraft(action)) {
-              return (
-                <UnknownActionBlockEditor
-                  key={`${block.id}-${actionIndex}`}
-                  action={action}
-                  index={actionIndex}
-                  onDelete={() => deleteAction(actionIndex)}
-                />
-              );
-            }
             const availableDependencies = [
               ...new Set(
-                block.actions
-                  .filter(isEventActionNode)
-                  .map((a) => a.type)
-                  .filter((t) => t !== action.type),
+                block.actions.map((a) => a.type).filter((t) => t !== action.type),
               ),
             ] as EventActionType[];
             return (
@@ -317,32 +265,42 @@ function EventBlockEditor({
 export function EventsConfigView() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
+  const [storedHealth, setStoredHealth] = useState<StoredConfigHealth<EventsConfig> | null>(
+    null,
+  );
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
+
+  const applyValidConfig = useCallback((config: EventsConfig) => {
+    setSchemaVersion(config.schemaVersion);
+    setBlocks(configToEventBlocks(config));
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const res = await ipcEventsGetConfig();
-      if (res.ok) {
-        const loaded = loadEventsConfigForEditor(res.data.wire);
-        setSchemaVersion(loaded.schemaVersion);
-        setBlocks(loaded.blocks);
-        if (loaded.unknownActions.length > 0) {
-          showToast(`未知 action：${loaded.unknownActions.join("、")}，请移除后保存`);
+      if (!res.ok) {
+        const health = assessEventsConfigWire(null);
+        setStoredHealth(health);
+        if (health.status === "valid") {
+          applyValidConfig(health.value);
         }
-      } else {
-        const loaded = loadEventsConfigForEditor(null);
-        setSchemaVersion(loaded.schemaVersion);
-        setBlocks(loaded.blocks);
         toastSettingsError(res.error.message);
+        return;
+      }
+      const health = assessEventsConfigWire(res.data.wire);
+      setStoredHealth(health);
+      if (health.status === "valid") {
+        applyValidConfig(health.value);
       }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyValidConfig]);
 
   useEffect(() => {
     void load();
@@ -395,34 +353,44 @@ export function EventsConfigView() {
     );
   };
 
-  const removeAllUnknownActions = () => {
-    setBlocks((prev) =>
-      prev.map((block) => ({
-        ...block,
-        actions: block.actions.filter((action) => !isUnknownActionDraft(action)),
-      })),
-    );
-    showToast("已移除全部未知动作");
-  };
-
   const restoreDefaultAndSave = async () => {
-    setSaving(true);
+    setRecovering(true);
     try {
       const res = await ipcEventsSetConfig({ config: DEFAULT_EVENTS_CONFIG });
       if (res.ok) {
-        setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
-        setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
+        const health = assessEventsConfigWire(DEFAULT_EVENTS_CONFIG);
+        setStoredHealth(health);
+        applyValidConfig(DEFAULT_EVENTS_CONFIG);
         toastSettingsSuccess("已恢复默认并保存");
       } else {
         toastSettingsError(res.error.message);
       }
     } finally {
-      setSaving(false);
+      setRecovering(false);
     }
   };
 
-  const unknownWireKeys = collectUnknownWireKeys(blocks);
-  const hasUnknownActions = unknownWireKeys.length > 0;
+  const clearAndSaveDefault = async () => {
+    setRecovering(true);
+    try {
+      const clearRes = await ipcEventsClearConfig();
+      if (!clearRes.ok) {
+        toastSettingsError(clearRes.error.message);
+        return;
+      }
+      const saveRes = await ipcEventsSetConfig({ config: DEFAULT_EVENTS_CONFIG });
+      if (saveRes.ok) {
+        const health = assessEventsConfigWire(DEFAULT_EVENTS_CONFIG);
+        setStoredHealth(health);
+        applyValidConfig(DEFAULT_EVENTS_CONFIG);
+        toastSettingsSuccess("已清空旧配置并保存默认");
+      } else {
+        toastSettingsError(saveRes.error.message);
+      }
+    } finally {
+      setRecovering(false);
+    }
+  };
 
   const save = async () => {
     if (blocks.some((block) => block.actions.length === 0)) {
@@ -458,6 +426,38 @@ export function EventsConfigView() {
     );
   }
 
+  if (storedHealth?.status === "invalid") {
+    return (
+      <SettingsPanel>
+        <div className="settings-error-panel">
+          <p className="settings-error-panel__title">
+            <span className="settings-tag settings-tag--warn">
+              {STORED_CONFIG_LABELS.invalidTitle}
+            </span>
+            {storedConfigInvalidReason(storedHealth.code)}
+          </p>
+          <p className="settings-error-panel__message">{storedHealth.message}</p>
+          <div className="settings-error-panel__actions">
+            <Button
+              variant="secondary"
+              disabled={recovering}
+              onClick={() => void restoreDefaultAndSave()}
+            >
+              {STORED_CONFIG_LABELS.eventsRestoreAndSave}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={recovering}
+              onClick={() => void clearAndSaveDefault()}
+            >
+              {STORED_CONFIG_LABELS.eventsClearAndSave}
+            </Button>
+          </div>
+        </div>
+      </SettingsPanel>
+    );
+  }
+
   return (
     <SettingsPanel>
       <SettingsFormSection
@@ -487,25 +487,6 @@ export function EventsConfigView() {
           </Button>
         }
       >
-        {hasUnknownActions ? (
-          <div className="settings-error-panel">
-            <p className="settings-error-panel__title">
-              <span className="settings-tag settings-tag--warn">已废弃动作</span>
-              配置含已废弃动作
-            </p>
-            <p className="settings-error-panel__message">
-              {unknownWireKeys.join("、")} 等，请删除后保存
-            </p>
-            <div className="settings-error-panel__actions">
-              <Button variant="secondary" disabled={saving} onClick={removeAllUnknownActions}>
-                移除全部未知动作
-              </Button>
-              <Button variant="secondary" disabled={saving} onClick={() => void restoreDefaultAndSave()}>
-                恢复默认并保存
-              </Button>
-            </div>
-          </div>
-        ) : null}
         <div className="config-events-toolbar">
           <span className="config-events-toolbar__label">事件链</span>
           <button

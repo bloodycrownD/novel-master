@@ -45,7 +45,14 @@ import {
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "../../ipc/client";
-import { AGENT_LIST_LABELS } from "@novel-master/core/config-forms/shared";
+import {
+  AGENT_LIST_LABELS,
+  assessAgentDefinitionWire,
+  buildDefaultAgentDefinitionPreservingName,
+  STORED_CONFIG_LABELS,
+  storedConfigInvalidReason,
+  type StoredConfigHealth,
+} from "@novel-master/core/config-forms/stored-config-validity";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsField,
@@ -64,6 +71,20 @@ const DYNAMIC_MACROS = [
 type Nav = SettingsNavHandle;
 
 type AddMenuTarget = "persist" | null;
+
+/** 从 wire 尽力读取显示名称。 */
+function readAgentNameFromWire(raw: unknown, fallback: string): string {
+  if (raw != null && typeof raw === "object" && !Array.isArray(raw)) {
+    const name = (raw as Record<string, unknown>).name;
+    if (typeof name === "string") {
+      const trimmed = name.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
+    }
+  }
+  return fallback;
+}
 
 function insertAtCursor(
   value: string,
@@ -100,6 +121,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [invalidHealth, setInvalidHealth] = useState<
+    Extract<StoredConfigHealth<AgentDefinition>, { status: "invalid" }> | null
+  >(null);
+  const [storedWire, setStoredWire] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
   const [addBlockMenu, setAddBlockMenu] = useState<{
@@ -160,6 +185,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     if (!agentId) return;
     setLoading(true);
     setLoadError(null);
+    setInvalidHealth(null);
+    setStoredWire(null);
     try {
       const [agentRes, providerRes] = await Promise.all([
         ipcAgentRegistryGet({ agentId }),
@@ -169,7 +196,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         setLoadError(agentRes.error.message);
         return;
       }
-      const def = agentRes.data as AgentDefinition;
+      setStoredWire(agentRes.data.wire);
+      const health = assessAgentDefinitionWire(agentRes.data.wire);
+      if (health.status === "invalid") {
+        setInvalidHealth(health);
+        return;
+      }
+      const def = health.value;
       const promptForm = definitionToForm(def);
       setName(def.name ?? "");
       setMaxSteps(String(def.runtime?.maxSteps ?? 20));
@@ -252,13 +285,70 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
+  const handleOverwriteWithDefault = async () => {
+    const wire = storedWire;
+    if (wire == null) {
+      return;
+    }
+    const preservedName = readAgentNameFromWire(wire, agentId);
+    const def = buildDefaultAgentDefinitionPreservingName(preservedName || agentId);
+    setSaving(true);
+    try {
+      const saveRes = await ipcAgentRegistryUpsert({ agentId, definition: def });
+      if (saveRes.ok) {
+        toastSettingsSuccess("已用默认模板覆盖并保存");
+        await loadAgent();
+      } else {
+        toastSettingsError(saveRes.error.message);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (invalidHealth != null) {
+    return (
+      <SettingsPanel>
+        <div className="settings-error-panel">
+          <p className="settings-error-panel__title">
+            <span className="settings-tag settings-tag--warn">
+              {AGENT_LIST_LABELS.configInvalid}
+            </span>
+            {STORED_CONFIG_LABELS.invalidTitle}
+          </p>
+          <p className="settings-error-panel__message">
+            {storedConfigInvalidReason(invalidHealth.code)}
+          </p>
+          <p className="settings-error-panel__message settings-error-panel__message--subtle">
+            {invalidHealth.message}
+          </p>
+          <div className="settings-error-panel__actions">
+            <Button variant="secondary" onClick={() => nav.pop()}>
+              {STORED_CONFIG_LABELS.agentBack}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={saving}
+              onClick={() => void handleOverwriteWithDefault()}
+            >
+              {STORED_CONFIG_LABELS.agentOverwriteDefault}
+            </Button>
+            <Button variant="danger" onClick={() => void handleDeleteBrokenAgent()}>
+              {STORED_CONFIG_LABELS.agentDelete}
+            </Button>
+          </div>
+        </div>
+      </SettingsPanel>
+    );
+  }
+
   if (loadError != null) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
           <p className="settings-error-panel__title">
             <span className="settings-tag settings-tag--warn">
-              {AGENT_LIST_LABELS.needsRepair}
+              {AGENT_LIST_LABELS.configInvalid}
             </span>
             无法加载 Agent 配置
           </p>
