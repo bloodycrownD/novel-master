@@ -1,15 +1,11 @@
 ---
 createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-06-14 00:30:00'
+updatedAt: '2026-06-15 14:00:00'
 ---
-# chat-workspace-agent-sync — 已合并 fix 分支，真机验收通过
+# bug: message-batch-header-use-theme
 
-**分支**：`feature/chat-workspace-agent-sync`（已 merge `fix/glm-tool-stream-stalled-metrics`）
-
-**UX 终态**：
-- 两事件：stream「工具调用中」+ assistant 落库 pending 工具卡
-- metrics 条：计时 + 正文/思考字数（无 tool 计数）
-
-**真机**：用户确认无 bug（2026-06-14）
-
-**未纳入本次 merge**：`scripts/release.mjs`、`prompt-engine-three-regions` 文档（无关）
+- **现象**: Toast/错误条 `useTheme must be used within ThemeProvider`
+- **触发**: 进入【隐藏/恢复消息】批量模式（MessageBatchHeader 挂载）
+- **根因**: MessageBatchHeader 内部 useTheme()；父级 ChatConversationPanel 已有 tokens 却未传入
+- **修复**: MessageBatchHeader 改 tokens prop；顺带提交 selectRange 范围全选未 commit 改动
+- **分支**: fix/message-batch-header-use-theme

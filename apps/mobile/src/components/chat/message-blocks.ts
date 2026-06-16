@@ -4,10 +4,17 @@
 import type {
   ChatMessage,
   ContentBlock,
+  ParsedUserVfsAction,
   ToolResultBlock,
   ToolUseBlock,
 } from '@novel-master/core';
-import {resolveToolResultOk} from '@novel-master/core';
+import {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  matchUserVfsTurnAt,
+  resolveToolResultOk,
+  USER_VFS_TURN_SPAN,
+} from '@novel-master/core';
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
 
@@ -32,7 +39,16 @@ export interface MessageListItem {
   readonly tools: readonly ToolCallView[];
 }
 
-export type ChatListItem = MessageListItem;
+export interface UserVfsTurnListItem {
+  readonly kind: 'user_vfs_turn';
+  readonly id: string;
+  readonly hidden: boolean;
+  readonly actions: readonly ParsedUserVfsAction[];
+  readonly tools: readonly ToolCallView[];
+  readonly bridgeText: string;
+}
+
+export type ChatListItem = MessageListItem | UserVfsTurnListItem;
 
 export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
@@ -233,7 +249,23 @@ export function buildChatListItems(
   const results = buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
 
-  for (const message of messages) {
+  for (let index = 0; index < messages.length; ) {
+    const vfsTurn = matchUserVfsTurnAt(messages, index);
+    if (vfsTurn != null) {
+      const view = buildUserVfsTurnView(vfsTurn);
+      items.push({
+        kind: 'user_vfs_turn',
+        id: view.id,
+        hidden: view.hidden,
+        actions: view.actions,
+        tools: view.toolUses.map(use => toolCallViewFromUse(use, results)),
+        bridgeText: view.bridgeText,
+      });
+      index += USER_VFS_TURN_SPAN;
+      continue;
+    }
+
+    const message = messages[index]!;
     const blocks = blocksForMessage(message);
     const textParts: string[] = [];
     const thinkingParts: string[] = [];
@@ -268,6 +300,7 @@ export function buildChatListItems(
 
     // tool_results-only user rows are paired with assistant; never shown as bubbles.
     if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
+      index += 1;
       continue;
     }
 
@@ -287,6 +320,8 @@ export function buildChatListItems(
         tools,
       });
     }
+
+    index += 1;
   }
 
   return items;
@@ -325,6 +360,33 @@ export function buildTranscriptRows(
   const rows: TranscriptRow[] = [];
 
   for (const item of items) {
+    if (item.kind === 'user_vfs_turn') {
+      const derivedTools = deriveToolUsesFromVfsActions(item.actions);
+      rows.push({
+        kind: 'user_vfs_turn',
+        id: item.id,
+        hidden: item.hidden,
+        actions: item.actions.map(action => ({
+          kind: action.kind,
+          path: action.path,
+          method: action.method,
+          hunks: action.hunks.map(hunk => ({
+            index: hunk.index,
+            old: hunk.old,
+            new: hunk.new,
+          })),
+        })),
+        tools: item.tools.map((t, index) => ({
+          toolUseId: t.toolUseId,
+          name: t.name,
+          input: derivedTools[index]?.input ?? t.input,
+          status: t.status,
+          resultContent: t.resultContent,
+        })),
+        bridgeText: item.bridgeText,
+      });
+      continue;
+    }
     rows.push({
       kind: 'message',
       id: item.message.id,

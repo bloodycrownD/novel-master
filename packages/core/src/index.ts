@@ -285,6 +285,19 @@ export type {
 export { mergePendingVfsTurns } from "./domain/chat/logic/merge-pending-vfs-turns.js";
 export type { MergedPendingVfsTurn } from "./domain/chat/logic/merge-pending-vfs-turns.js";
 export {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  formatUserVfsTurnPreviewBody,
+  matchUserVfsTurnAt,
+  parseAllUserVfsActionsFromText,
+  USER_VFS_TURN_SPAN,
+} from "./domain/chat/logic/user-vfs-turn-view.js";
+export type {
+  ParsedUserVfsAction,
+  ParsedUserVfsEditHunk,
+  UserVfsTurnView,
+} from "./domain/chat/logic/user-vfs-turn-view.js";
+export {
   hasToolResult,
   isPlainUserText,
 } from "./domain/chat/logic/message-content-helpers.js";

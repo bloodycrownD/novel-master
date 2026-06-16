@@ -116,6 +116,92 @@ describe("buildPromptAssemblyFromLayout", () => {
     });
     assert.equal(segments[0]!.source, "system");
   });
+
+  it("U-A-U-A 按四条普通 message 展示（不合并摘要）", async () => {
+    const actionXml =
+      '<user-vfs-action kind="delete" path="/test.md" />';
+    const messages: ChatMessage[] = [
+      {
+        id: "u1",
+        sessionId: "s1",
+        seq: 10,
+        role: "user",
+        content: textBlocks(actionXml),
+        provider: null,
+        raw: { metadata: { kind: "user_vfs_action" } },
+        createdAtMs: 10,
+        hidden: false,
+      },
+      {
+        id: "a1",
+        sessionId: "s1",
+        seq: 11,
+        role: "assistant",
+        content: {
+          blocks: [
+            {
+              type: "tool_use",
+              id: "tu1",
+              name: "fs",
+              input: { command: "…" },
+            },
+          ],
+        },
+        provider: null,
+        raw: { metadata: { toolInputCompressed: true } },
+        createdAtMs: 11,
+        hidden: false,
+      },
+      {
+        id: "u2",
+        sessionId: "s1",
+        seq: 12,
+        role: "user",
+        content: {
+          blocks: [
+            {
+              type: "tool_result",
+              toolUseId: "tu1",
+              content: "ok",
+              ok: true,
+            },
+          ],
+        },
+        provider: null,
+        raw: null,
+        createdAtMs: 12,
+        hidden: false,
+      },
+      {
+        id: "a2",
+        sessionId: "s1",
+        seq: 13,
+        role: "assistant",
+        content: textBlocks("【done】"),
+        provider: null,
+        raw: { metadata: { kind: "tool_turn_bridge" } },
+        createdAtMs: 13,
+        hidden: false,
+      },
+    ];
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [],
+      dynamic: [],
+    };
+    const segments = await buildPromptAssemblyFromLayout(layout, {
+      worktreeDisplay: "",
+      messages,
+    });
+    const chat = segments.filter((s) => s.source === "message");
+    assert.equal(chat.length, 4);
+    assert.match(chat[0]!.body, /<user-vfs-action/);
+    assert.match(chat[1]!.body, /\[tool_use name=fs/);
+    assert.match(chat[1]!.body, /"…"/);
+    assert.equal(chat[2]!.role, "tool");
+    assert.equal(chat[3]!.body, "【done】");
+    assert.ok(chat.every((s) => !s.body.includes("【用户 VFS 操作】")));
+  });
 });
 
 describe("persistEnabled / dynamicEnabled 开关", () => {

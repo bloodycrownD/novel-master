@@ -71,3 +71,16 @@ export {
   DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
   isUserVfsUnifiedToolTurnEnabled,
 } from "../../../packages/core/dist/domain/feature-flags/user-vfs-unified-tool-turn.js";
+export {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  formatUserVfsTurnPreviewBody,
+  matchUserVfsTurnAt,
+  parseAllUserVfsActionsFromText,
+  USER_VFS_TURN_SPAN,
+} from "../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js";
+export type {
+  ParsedUserVfsAction,
+  ParsedUserVfsEditHunk,
+  UserVfsTurnView,
+} from "../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js";

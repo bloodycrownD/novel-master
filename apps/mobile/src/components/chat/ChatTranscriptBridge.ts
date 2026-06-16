@@ -18,6 +18,17 @@ export type TranscriptToolView = {
   readonly resultContent?: string;
 };
 
+export type TranscriptUserVfsAction = {
+  readonly kind: string;
+  readonly path: string;
+  readonly method?: string;
+  readonly hunks: readonly {
+    readonly index: string;
+    readonly old: string;
+    readonly new: string;
+  }[];
+};
+
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
 export type TranscriptRow =
   | {
@@ -32,6 +43,14 @@ export type TranscriptRow =
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
       readonly textHtml?: string;
       readonly thinkingHtml?: string;
+    }
+  | {
+      readonly kind: 'user_vfs_turn';
+      readonly id: string;
+      readonly hidden: boolean;
+      readonly actions: readonly TranscriptUserVfsAction[];
+      readonly tools: readonly TranscriptToolView[];
+      readonly bridgeText: string;
     }
   | {
       readonly kind: 'stream';

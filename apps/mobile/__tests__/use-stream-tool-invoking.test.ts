@@ -1,4 +1,9 @@
-import {computeToolInvoking} from '../src/hooks/useStreamToolInvoking';
+import React from 'react';
+import TestRenderer, {act} from 'react-test-renderer';
+import {
+  computeToolInvoking,
+  useStreamToolInvoking,
+} from '../src/hooks/useStreamToolInvoking';
 
 describe('computeToolInvoking', () => {
   it('agent 未运行时为 false', () => {
@@ -55,5 +60,45 @@ describe('computeToolInvoking', () => {
         msSinceLastThinkingDelta: 300,
       }),
     ).toBe(true);
+  });
+});
+
+describe('useStreamToolInvoking', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('burst noteThinkingDelta does not setState until idle threshold crossed', () => {
+    let renderCount = 0;
+
+    function Harness() {
+      const {noteThinkingDelta} = useStreamToolInvoking(true);
+      renderCount += 1;
+      React.useEffect(() => {
+        noteThinkingDelta('a');
+        noteThinkingDelta('b');
+        noteThinkingDelta('c');
+      }, [noteThinkingDelta]);
+      return null;
+    }
+
+    act(() => {
+      TestRenderer.create(React.createElement(Harness));
+    });
+    expect(renderCount).toBe(1);
+
+    act(() => {
+      jest.advanceTimersByTime(250);
+    });
+    expect(renderCount).toBe(1);
+
+    act(() => {
+      jest.advanceTimersByTime(50);
+    });
+    expect(renderCount).toBe(2);
   });
 });

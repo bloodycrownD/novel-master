@@ -185,7 +185,7 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterMoreStream.filter(t => t === 'streamDelta').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('includes stream tail html in streamDelta when richText is enabled', async () => {
+  it('richText 开启时 text streamDelta 应包含 RN html（与 spec 契约一致）', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;
 
@@ -232,12 +232,13 @@ describe('ChatTranscriptWebView', () => {
     );
     expect(textDelta?.type).toBe('streamDelta');
     if (textDelta?.type === 'streamDelta') {
-      expect(textDelta.payload.html).toBeDefined();
-      expect(textDelta.payload.html).toContain('<strong>');
+      expect(textDelta.payload.delta).toContain('**bold**');
+      expect(typeof textDelta.payload.html).toBe('string');
+      expect(textDelta.payload.html?.length).toBeGreaterThan(0);
     }
   });
 
-  it('includes thinking stream html in streamDelta when richText is enabled', async () => {
+  it('richText 开启时 thinking streamDelta 应包含 RN html（与 spec 契约一致）', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;
 
@@ -281,8 +282,9 @@ describe('ChatTranscriptWebView', () => {
       );
     expect(thinkingDelta?.type).toBe('streamDelta');
     if (thinkingDelta?.type === 'streamDelta') {
-      expect(thinkingDelta.payload.html).toBeDefined();
-      expect(thinkingDelta.payload.html).toContain('<em>');
+      expect(thinkingDelta.payload.delta).toContain('*reason*');
+      expect(typeof thinkingDelta.payload.html).toBe('string');
+      expect(thinkingDelta.payload.html?.length).toBeGreaterThan(0);
     }
   });
 

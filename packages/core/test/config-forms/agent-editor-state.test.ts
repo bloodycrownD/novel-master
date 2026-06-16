@@ -18,6 +18,7 @@ import {
   updatePersistWorktreeRole,
   withDynamicBlockPersistence,
   WORKTREE_BLOCK_WIRE_NAME,
+  WORKTREE_BLOCK_HINT,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
@@ -26,9 +27,26 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.apiSystemField, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.systemPromptTitle, "系统提示词");
   assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
+  assert.equal(
+    PROMPT_REGION_LABELS.maxStepsHint,
+    "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。",
+  );
   assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(
+    PROMPT_REGION_LABELS.persistDisabledHint,
+    "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。",
+  );
+  assert.equal(
+    PROMPT_REGION_LABELS.dynamicDisabledHint,
+    "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。",
+  );
+  assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
+  assert.equal(
+    WORKTREE_BLOCK_HINT,
+    "运行时自动注入当前会话的项目文件树，供模型了解可访问的文件。角色决定注入消息在模型侧显示为用户或助手；启用持久区时若工作树作为末块，请设为助手。",
+  );
   assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止宏与生命周期。");
   assert.equal(PROMPT_REGION_LABELS.dynamicLifecycleOnceHint, "仅首轮请求带入。");
 
@@ -42,6 +60,10 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
     assert.doesNotMatch(value, /LLM system/i);
     assert.doesNotMatch(value, /lifecycle/i);
     assert.doesNotMatch(value, /agent step/i);
+    assert.doesNotMatch(value, /\bwire\b/i);
+    assert.doesNotMatch(value, /materialize/i);
+    assert.doesNotMatch(value, /\bCore\b/);
+    assert.doesNotMatch(value, /\brun\b/i);
   }
 });
 
@@ -560,8 +582,30 @@ test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.message, /assistant/i);
+    assert.match(result.message, /助手/);
   }
+});
+
+test("buildAgentDefinitionFromForm persistEnabled 开且 worktree assistant 末块可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: false,
+    systemContent: "",
+    persistEnabled: true,
+    dynamicEnabled: false,
+    persist: [
+      { name: "p1", type: "text", role: "user", content: "x" },
+      { name: "canon", type: "worktree", role: "assistant" },
+    ],
+    dynamic: [],
+  });
+  assert.equal(result.ok, true);
 });
 
 test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", () => {
@@ -582,7 +626,7 @@ test("buildAgentDefinitionFromForm dynamicEnabled 开且块数不足时失败", 
   });
   assert.equal(result.ok, false);
   if (!result.ok) {
-    assert.match(result.message, /two blocks/i);
+    assert.match(result.message, /两个块/);
   }
 });
 

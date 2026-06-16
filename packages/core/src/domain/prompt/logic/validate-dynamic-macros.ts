@@ -25,23 +25,23 @@ export function validateDynamicMacros(content: string, blockLabel: string): void
       if (LEGACY_DOT_MACROS.has(top)) {
         const hint =
           top === "worktree"
-            ? "use persist worktree block instead of {{.worktree}}"
-            : "use {{$filetree}} instead of {{.filetree}}";
+            ? "请改用持久区 worktree 块，不要使用 {{.worktree}}"
+            : "请使用 {{$filetree}} 替代 {{.filetree}}";
         throw new PromptError(
           "UNSUPPORTED_SYNTAX",
-          `${blockLabel}: {{.${top}}} is not allowed in dynamic; ${hint}`,
+          `${blockLabel}：动态区不允许 {{.${top}}}；${hint}`,
         );
       }
       throw new PromptError(
         "UNSUPPORTED_SYNTAX",
-        `${blockLabel}: dot macros ({{.${action.path.join(".")}}}) are not supported in dynamic`,
+        `${blockLabel}：动态区不支持点号宏（{{.${action.path.join(".")}}}）`,
       );
     }
     const key = action.path[0] ?? "";
     if (!ALLOWED_ROOT_MACROS.has(key)) {
       throw new PromptError(
         "UNKNOWN_FIELD",
-        `${blockLabel}: unknown dynamic macro {{$${key}}}; allowed: $time, $week_cn, $filetree`,
+        `${blockLabel}：未知的动态宏 {{$${key}}}；允许：$time、$week_cn、$filetree`,
       );
     }
   }
@@ -54,7 +54,7 @@ export function rejectPersistMacros(content: string, blockLabel: string): void {
   if (content.includes("{{")) {
     throw new PromptError(
       "UNSUPPORTED_SYNTAX",
-      `${blockLabel}: persist text blocks must not contain macros ({{...}})`,
+      `${blockLabel}：持久区文本块不得包含宏（{{...}}）`,
     );
   }
 }

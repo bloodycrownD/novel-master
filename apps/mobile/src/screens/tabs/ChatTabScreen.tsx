@@ -371,7 +371,8 @@ export function ChatTabScreen() {
         projectId={projectId}
         sessionId={sessionId}
         agentMeta={scope.agentMeta}
-        streamMetrics={stream.streamMetrics}
+        streamMetricsAccRef={stream.streamMetricsAccRef}
+        streamMetricsLastRun={stream.streamMetricsLastRun}
         toolInvoking={stream.toolInvoking}
         messageBatchActive={messageBatch.active}
         messageBatchMode={messageBatch.mode}
@@ -478,7 +479,10 @@ export function ChatTabScreen() {
         onStreamThinking={stream.handleStreamThinking}
         onStreamReset={stream.handleStreamReset}
         onMessagesChanged={() =>
-          messages.handleMessagesChanged(scope.refreshChatTokenLabel).catch(() => undefined)
+          messages.handleMessagesChanged(
+            scope.refreshChatTokenLabel,
+            stream.agentRunning,
+          ).catch(() => undefined)
         }
         onStepCommitted={handleStepCommitted}
         onRunFinished={handleRunFinished}

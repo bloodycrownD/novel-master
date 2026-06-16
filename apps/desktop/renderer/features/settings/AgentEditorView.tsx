@@ -10,6 +10,7 @@ import {
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
   WORKTREE_BLOCK_LABEL,
+  WORKTREE_BLOCK_HINT,
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
@@ -535,6 +536,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <SettingsField label={PROMPT_REGION_LABELS.maxStepsLabel}>
             <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
           </SettingsField>
+          <p className="settings-hint">{PROMPT_REGION_LABELS.maxStepsHint}</p>
         </SettingsSection>
 
         <SettingsSection title="工具策略">
@@ -559,11 +561,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         </SettingsSection>
 
         <SettingsSection title={PROMPT_REGION_LABELS.layoutTitle}>
-          <p className="settings-hint">
-            {PROMPT_REGION_LABELS.layoutOrderPrefix}
-            {PROMPT_REGION_LABELS.layoutOrder}。
-          </p>
-
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.systemBlocks}</span>
           </div>
@@ -670,7 +667,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         </select>
                       </SettingsField>
                       <p className="config-block-card__hint">
-                        运行时注入 materialize 后的会话工作树。
+                      <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
                       </p>
                     </div>
                   </div>
@@ -755,15 +752,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.chatBlocks}</span>
           </div>
-          <div className="config-block-card config-block-card--prompt config-block-card--readonly">
-            <div className="config-block-card__header">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chat}</span>
-              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.chat}</span>
+          <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
+            <div className="config-block-card__header config-block-card__header--chat-slot">
+              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chatTag}</span>
+              <span className="config-block-card__readonly-pill">只读</span>
             </div>
             <div className="config-block-card__body">
-              <p className="config-block-card__hint">
-                运行时注入当前会话可见消息，不可配置、不可排序。
+              <p className="config-block-card__meta config-block-card__meta--chat-title">
+                {PROMPT_REGION_LABELS.chat}
               </p>
+              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.chatReadonlyHint}</p>
             </div>
           </div>
 

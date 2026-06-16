@@ -100,7 +100,7 @@ export function CompactionConditionsScreen() {
       <FormSectionCard
         title="压缩配置"
         tokens={tokens}
-        hint="满足任一条件时自动发出压缩事件；具体 hide 动作见「事件配置」。">
+        hint="满足任一条件时自动发出压缩事件；具体消息隐藏动作见「事件配置」。">
         <FormSwitchRow
           label="启用自动压缩"
           tokens={tokens}

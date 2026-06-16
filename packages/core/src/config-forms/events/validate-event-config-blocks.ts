@@ -108,7 +108,6 @@ export function validateEventConfigBlocks(
       try {
         validateDepthSlice({
           startDepth: action.params.startDepth ?? undefined,
-          endDepth: action.params.endDepth ?? undefined,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);

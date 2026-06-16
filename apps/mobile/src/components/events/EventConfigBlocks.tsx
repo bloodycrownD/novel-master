@@ -242,22 +242,6 @@ function ActionBlockCard({
               keyboardType="number-pad"
             />
           </FormField>
-          <FormField label={REGEX_UI_LABELS.endDepth} tokens={tokens} hint="留空表示不限制">
-            <FormTextInput
-              tokens={tokens}
-              value={
-                action.params.endDepth != null ? String(action.params.endDepth) : ''
-              }
-              onChangeText={v =>
-                onChange({
-                  ...action,
-                  params: {...action.params, endDepth: parseOptionalDepthInput(v) ?? undefined},
-                })
-              }
-              placeholder="留空"
-              keyboardType="number-pad"
-            />
-          </FormField>
         </View>
       ) : null}
       {action.type === 'run-agent' ? (

@@ -75,6 +75,10 @@ export function useChatTabMessages({
   );
 
   const reloadInFlightRef = useRef<Promise<void> | null>(null);
+  const reloadCoalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingForceReloadRef = useRef(false);
 
   const reloadMessages = useCallback(
     async (force = false) => {
@@ -185,7 +189,25 @@ export function useChatTabMessages({
   ]);
 
   const handleMessagesChanged = useCallback(
-    async (refreshChatTokenLabel: () => Promise<void>) => {
+    async (
+      refreshChatTokenLabel: () => Promise<void>,
+      agentRunning = false,
+    ) => {
+      if (agentRunning) {
+        pendingForceReloadRef.current = true;
+        if (reloadCoalesceTimerRef.current != null) {
+          void refreshChatTokenLabel();
+          return;
+        }
+        reloadCoalesceTimerRef.current = setTimeout(() => {
+          reloadCoalesceTimerRef.current = null;
+          const force = pendingForceReloadRef.current;
+          pendingForceReloadRef.current = false;
+          void reloadMessages(force).then(() => refreshChatTokenLabel());
+        }, 200);
+        void refreshChatTokenLabel();
+        return;
+      }
       await reloadMessages(true);
       void refreshChatTokenLabel();
     },

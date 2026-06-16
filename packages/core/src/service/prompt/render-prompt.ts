@@ -165,7 +165,8 @@ export async function buildPromptAssemblyFromLayout(
     }
   }
 
-  for (const message of ctx.messages) {
+  for (let messageIndex = 0; messageIndex < ctx.messages.length; messageIndex++) {
+    const message = ctx.messages[messageIndex]!;
     if (message.hidden) {
       continue;
     }

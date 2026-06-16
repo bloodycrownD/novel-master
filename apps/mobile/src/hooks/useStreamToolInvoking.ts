@@ -27,6 +27,24 @@ export function computeToolInvoking(input: {
   return input.msSinceLastThinkingDelta >= threshold;
 }
 
+function readToolInvoking(
+  agentRunning: boolean,
+  textRef: {current: string},
+  thinkingRef: {current: string},
+  lastThinkingAtRef: {current: number},
+): boolean {
+  const msSinceLastThinking =
+    lastThinkingAtRef.current > 0
+      ? Date.now() - lastThinkingAtRef.current
+      : Number.POSITIVE_INFINITY;
+  return computeToolInvoking({
+    agentRunning,
+    thinkingContent: thinkingRef.current,
+    textContent: textRef.current,
+    msSinceLastThinkingDelta: msSinceLastThinking,
+  });
+}
+
 export function useStreamToolInvoking(agentRunning: boolean): {
   readonly toolInvoking: boolean;
   readonly noteTextDelta: (delta: string) => void;
@@ -36,13 +54,13 @@ export function useStreamToolInvoking(agentRunning: boolean): {
   const textRef = useRef('');
   const thinkingRef = useRef('');
   const lastThinkingAtRef = useRef(0);
-  const [tick, setTick] = useState(0);
+  const [toolInvoking, setToolInvoking] = useState(false);
 
   const reset = useCallback(() => {
     textRef.current = '';
     thinkingRef.current = '';
     lastThinkingAtRef.current = 0;
-    setTick(t => t + 1);
+    setToolInvoking(false);
   }, []);
 
   useEffect(() => {
@@ -53,7 +71,25 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     textRef.current = '';
     thinkingRef.current = '';
     lastThinkingAtRef.current = 0;
-    const id = setInterval(() => setTick(t => t + 1), 100);
+    setToolInvoking(false);
+    const id = setInterval(() => {
+      if (thinkingRef.current.length === 0 || textRef.current.length > 0) {
+        setToolInvoking(prev => (prev ? false : prev));
+        return;
+      }
+      const next = readToolInvoking(
+        true,
+        textRef,
+        thinkingRef,
+        lastThinkingAtRef,
+      );
+      setToolInvoking(prev => {
+        if (prev === next) {
+          return prev;
+        }
+        return next;
+      });
+    }, DEFAULT_IDLE_MS);
     return () => clearInterval(id);
   }, [agentRunning, reset]);
 
@@ -62,7 +98,12 @@ export function useStreamToolInvoking(agentRunning: boolean): {
       return;
     }
     textRef.current += delta;
-    setTick(t => t + 1);
+    setToolInvoking(prev => {
+      if (!prev) {
+        return prev;
+      }
+      return readToolInvoking(true, textRef, thinkingRef, lastThinkingAtRef);
+    });
   }, []);
 
   const noteThinkingDelta = useCallback((delta: string) => {
@@ -71,22 +112,13 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     }
     thinkingRef.current += delta;
     lastThinkingAtRef.current = Date.now();
-    setTick(t => t + 1);
+    setToolInvoking(prev => {
+      if (!prev) {
+        return prev;
+      }
+      return readToolInvoking(true, textRef, thinkingRef, lastThinkingAtRef);
+    });
   }, []);
-
-  void tick;
-
-  const msSinceLastThinking =
-    lastThinkingAtRef.current > 0
-      ? Date.now() - lastThinkingAtRef.current
-      : Number.POSITIVE_INFINITY;
-
-  const toolInvoking = computeToolInvoking({
-    agentRunning,
-    thinkingContent: thinkingRef.current,
-    textContent: textRef.current,
-    msSinceLastThinkingDelta: msSinceLastThinking,
-  });
 
   return {toolInvoking, noteTextDelta, noteThinkingDelta, reset};
 }

@@ -16,7 +16,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           {},
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("persist text blocks must not contain macros"),
+        e instanceof PromptError && e.message.includes("持久区文本块不得包含宏"),
     );
   });
 
@@ -34,7 +34,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           },
           {},
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("persist text must not include lifecycle"),
+      (e: unknown) => e instanceof PromptError && e.message.includes("持久区文本块不得包含 lifecycle"),
     );
   });
 
@@ -75,7 +75,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           { a: { type: "worktree" }, b: { type: "worktree" } },
           {},
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("at most one worktree"),
+      (e: unknown) => e instanceof PromptError && e.message.includes("最多只能有一个 worktree"),
     );
   });
 
@@ -111,7 +111,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           {},
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree block must not include content"),
+        e instanceof PromptError && e.message.includes("worktree 块不得包含 content"),
     );
   });
 
@@ -123,7 +123,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           {},
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree block must not include"),
+        e instanceof PromptError && e.message.includes("worktree 块不得包含"),
     );
   });
 
@@ -138,7 +138,36 @@ describe("validateAgentPromptLayoutFromMaps", () => {
         ),
       (e: unknown) =>
         e instanceof PromptError &&
-        e.message.includes("last block must be assistant text"),
+        e.message.includes("最后一个块须为助手"),
+    );
+  });
+
+  it("persist 开：worktree assistant 可作为末块", () => {
+    const layout = validateAgentPromptLayoutFromMaps(
+      {
+        head: { type: "text", role: "user", content: "x" },
+        canon: { type: "worktree", role: "assistant" },
+      },
+      {},
+      undefined,
+      { persistEnabled: true },
+    );
+    assert.equal(layout.persist.length, 2);
+    assert.equal(layout.persist[1]?.type, "worktree");
+  });
+
+  it("persist 开：worktree 缺省 role 作末块失败", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          { canon: { type: "worktree" } },
+          {},
+          undefined,
+          { persistEnabled: true },
+        ),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("最后一个块须为助手"),
     );
   });
 
@@ -153,7 +182,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
         ),
       (e: unknown) =>
         e instanceof PromptError &&
-        e.message.includes("at least two blocks"),
+        e.message.includes("至少需要两个块"),
     );
   });
 
@@ -171,7 +200,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
         ),
       (e: unknown) =>
         e instanceof PromptError &&
-        e.message.includes("first block must be assistant"),
+        e.message.includes("第一个块须为助手"),
     );
   });
 
@@ -188,7 +217,7 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           { dynamicEnabled: true },
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("last block must be user"),
+        e instanceof PromptError && e.message.includes("最后一个块须为用户"),
     );
   });
 

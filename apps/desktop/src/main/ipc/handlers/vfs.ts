@@ -132,6 +132,7 @@ export async function handleVfsWrite(
       if (op != null) {
         await executeSessionUserVfsOp(rt, scope.sessionId, op);
       }
+      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
@@ -165,6 +166,7 @@ export async function handleVfsMkdir(
         scope.sessionId,
         buildUserVfsMkdirOp(req.path),
       );
+      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
@@ -190,6 +192,7 @@ export async function handleVfsDelete(
         scope.sessionId,
         buildUserVfsDeleteOp(req.path, req.recursive ?? true),
       );
+      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
@@ -215,6 +218,7 @@ export async function handleVfsRename(
         scope.sessionId,
         buildUserVfsRenameOp(req.oldPath, req.newPath),
       );
+      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 

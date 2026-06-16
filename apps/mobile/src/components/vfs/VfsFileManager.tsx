@@ -345,11 +345,9 @@ export const VfsFileManager = forwardRef<
   }, [currentPath, fetchWorktreeRows, showToast]);
 
   const reloadAfterMutation = useCallback(async () => {
-    if (scope.kind !== 'session' || !isUserVfsUnifiedToolTurnEnabled()) {
-      invalidateSessionSnapshot();
-    }
+    invalidateSessionSnapshot();
     await reload();
-  }, [invalidateSessionSnapshot, reload, scope.kind]);
+  }, [invalidateSessionSnapshot, reload]);
 
   useEffect(() => {
     reload().catch(() => undefined);

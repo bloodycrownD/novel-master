@@ -158,11 +158,9 @@ export function ChatComposer({
   const sendDisabled =
     !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
 
-  const inputPlaceholder = lastMessageIsPlainUserText
-    ? "上一条为用户消息，仅可空发续跑 Agent…"
-    : hasModel
-      ? "输入消息…"
-      : "请先配置模型（设置 → Provider）";
+  const inputPlaceholder = hasModel
+    ? "输入消息…"
+    : "请先配置模型（设置 → Provider）";
 
   return (
     <>

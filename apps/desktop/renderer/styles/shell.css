@@ -2531,6 +2531,33 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   margin-top: 0;
 }
 
+.config-block-card--chat-slot {
+  margin-top: 0;
+  border-left: 3px solid var(--primary);
+  background: var(--background);
+}
+
+.config-block-card__header--chat-slot {
+  justify-content: space-between;
+}
+
+.config-block-card__readonly-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
+  background: var(--surface);
+}
+
+.config-block-card__meta--chat-title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .config-block-list + .config-block-card--readonly {
   margin-top: 8px;
 }

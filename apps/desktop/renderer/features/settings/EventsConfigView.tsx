@@ -143,42 +143,23 @@ function ActionBlockEditor({
           </div>
         </SettingsField>
         {action.type === "hide-message" ? (
-          <div className="settings-field-grid">
-            <SettingsField label={REGEX_UI_LABELS.startDepth}>
-              <input
-                type="number"
-                className="settings-field__input--compact"
-                placeholder="可选"
-                value={action.params.startDepth ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...action,
-                    params: {
-                      ...action.params,
-                      startDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
-                    },
-                  })
-                }
-              />
-            </SettingsField>
-            <SettingsField label={REGEX_UI_LABELS.endDepth}>
-              <input
-                type="number"
-                className="settings-field__input--compact"
-                placeholder="可选"
-                value={action.params.endDepth ?? ""}
-                onChange={(e) =>
-                  onChange({
-                    ...action,
-                    params: {
-                      ...action.params,
-                      endDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
-                    },
-                  })
-                }
-              />
-            </SettingsField>
-          </div>
+          <SettingsField label={REGEX_UI_LABELS.startDepth}>
+            <input
+              type="number"
+              className="settings-field__input--compact"
+              placeholder="可选"
+              value={action.params.startDepth ?? ""}
+              onChange={(e) =>
+                onChange({
+                  ...action,
+                  params: {
+                    ...action.params,
+                    startDepth: parseOptionalDepthInput(e.target.value) ?? undefined,
+                  },
+                })
+              }
+            />
+          </SettingsField>
         ) : null}
         {action.type === "run-agent" ? (
           <SettingsField label="Agent ID">
