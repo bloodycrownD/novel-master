@@ -15,7 +15,10 @@ import {
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import { type AgentDefinition } from "@novel-master/core/agent";
-import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
+import {
+  AGENT_LIST_LABELS,
+  assessAgentDefinitionWire,
+} from '@novel-master/core/config-forms/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
@@ -38,8 +41,23 @@ interface AgentRow {
   id: string;
   name: string;
   def?: AgentDefinition;
-  decodeError?: string;
+  configInvalid?: boolean;
   meta: string;
+}
+
+function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
+  if (
+    raw != null &&
+    typeof raw === 'object' &&
+    'name' in raw &&
+    typeof (raw as {name: unknown}).name === 'string'
+  ) {
+    const trimmed = (raw as {name: string}).name.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return agentId;
 }
 
 const AGENT_ICONS = ['🤖', '⚡', '📝', '🎯', '✨', '🚀'];
@@ -92,8 +110,10 @@ export function AgentList({onCreate}: Props) {
       }
       const enriched: AgentRow[] = [];
       for (const id of ids) {
-        try {
-          const def = await runtime.agentRegistry.get(id);
+        const raw = await runtime.agentRegistry.getRawWire(id);
+        const health = assessAgentDefinitionWire(raw);
+        if (health.status === 'valid') {
+          const def = health.value;
           let meta: string;
           if (def.model) {
             let label = def.model;
@@ -112,13 +132,12 @@ export function AgentList({onCreate}: Props) {
             def,
             meta,
           });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
+        } else {
           enriched.push({
             id,
-            name: id,
-            decodeError: message,
-            meta: AGENT_LIST_LABELS.needsRepair,
+            name: agentDisplayNameFromWire(raw, id),
+            configInvalid: true,
+            meta: AGENT_LIST_LABELS.configInvalid,
           });
         }
       }

@@ -20,6 +20,10 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     return this.repository.listIds();
   }
 
+  async getRawWire(agentId: string): Promise<unknown | null> {
+    return this.repository.getRawWire(agentId);
+  }
+
   async get(agentId: string): Promise<AgentDefinition> {
     const def = await this.repository.get(agentId);
     if (def == null) {

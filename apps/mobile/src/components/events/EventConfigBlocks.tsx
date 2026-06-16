@@ -9,17 +9,13 @@ import {FormTextInput} from '../form/FormTextInput';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import type {ThemeTokens} from '../../theme/tokens';
 import {parseOptionalDepthInput} from '../../services/regex-test.service';
-import type {EventActionDraft, EventBlockDraft} from '@novel-master/core/config-forms/events';
+import type {EventBlockDraft} from '@novel-master/core/config-forms/events';
 import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
 import {
-  UNKNOWN_ACTION_BADGE,
   actionTypeHint,
   actionTypeLabel,
   eventTypeHint,
   eventTypeLabel,
-  isEventActionNode,
-  isUnknownActionDraft,
-  unknownActionHint,
 } from '@novel-master/core/config-forms/events';
 import {REGEX_UI_LABELS} from '@novel-master/core/config-forms/shared';
 
@@ -46,43 +42,6 @@ function BlockIconButton({
         {label}
       </Text>
     </Pressable>
-  );
-}
-
-function UnknownActionBlockCard({
-  action,
-  index,
-  tokens,
-  onDelete,
-}: {
-  action: Extract<EventActionDraft, {kind: 'unknown'}>;
-  index: number;
-  tokens: ThemeTokens;
-  onDelete: () => void;
-}) {
-  return (
-    <View
-      style={[
-        styles.blockCard,
-        {backgroundColor: tokens.surface, borderColor: tokens.border},
-      ]}>
-      <View style={styles.blockHeader}>
-        <View style={[styles.typeBadge, {backgroundColor: `${tokens.danger}1A`}]}>
-          <Text style={[styles.typeBadgeText, {color: tokens.danger}]}>
-            {UNKNOWN_ACTION_BADGE}
-          </Text>
-        </View>
-        <Text style={[styles.blockIndex, {color: tokens.textSecondary}]}>
-          {action.wireKey} · 动作 {index + 1}
-        </Text>
-        <View style={styles.blockActions}>
-          <BlockIconButton label="×" tokens={tokens} danger onPress={onDelete} />
-        </View>
-      </View>
-      <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-        {unknownActionHint(action.wireKey)}
-      </Text>
-    </View>
   );
 }
 
@@ -295,14 +254,13 @@ export function EventBlockEditor({
 }: EventBlockEditorProps) {
   const displayType = block.eventType.trim();
 
-  const updateAction = (actionIndex: number, action: EventActionDraft) => {
+  const updateAction = (actionIndex: number, action: EventActionNode) => {
     const actions = block.actions.map((a, i) => (i === actionIndex ? action : a));
     onChange({actions});
   };
 
   const deleteAction = (actionIndex: number) => {
-    const action = block.actions[actionIndex];
-    if (block.actions.length <= 1 && action != null && !isUnknownActionDraft(action)) {
+    if (block.actions.length <= 1) {
       return false;
     }
     onChange({actions: block.actions.filter((_, i) => i !== actionIndex)});
@@ -369,25 +327,9 @@ export function EventBlockEditor({
 
       <View style={styles.blockList}>
         {block.actions.map((action, actionIndex) => {
-          if (isUnknownActionDraft(action)) {
-            return (
-              <UnknownActionBlockCard
-                key={`${block.id}-action-${actionIndex}`}
-                action={action}
-                index={actionIndex}
-                tokens={tokens}
-                onDelete={() => {
-                  if (!deleteAction(actionIndex)) {
-                    onMinActions();
-                  }
-                }}
-              />
-            );
-          }
           const availableDependencies = [
             ...new Set(
               block.actions
-                .filter(isEventActionNode)
                 .map(a => a.type)
                 .filter(type => type !== action.type),
             ),
@@ -487,6 +429,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  warn: {fontSize: 12, lineHeight: 17},
   emptyActionsHint: {fontSize: 12, lineHeight: 17, textAlign: 'center', paddingVertical: 8},
 });

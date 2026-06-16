@@ -10,6 +10,8 @@ import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/valida
 /** Workspace agent registry (SQL-backed). */
 export interface AgentRegistryService {
   listAgentIds(): Promise<readonly string[]>;
+  /** 读取 prompts_json 解析后的 wire，行不存在返回 null（不解码）。 */
+  getRawWire(agentId: string): Promise<unknown | null>;
   get(agentId: string): Promise<AgentDefinition>;
   upsert(
     agentId: string,

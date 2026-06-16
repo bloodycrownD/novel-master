@@ -12,12 +12,15 @@ import {
   createDefaultAction,
   defaultDagForEvent,
   eventBlocksToConfig,
-  isUnknownActionDraft,
-  loadEventsConfigForEditor,
   newEventBlockId,
   validateEventConfigBlocks,
   type EventBlockDraft,
 } from '@novel-master/core/config-forms/events';
+import {
+  STORED_CONFIG_LABELS,
+  storedConfigInvalidReason,
+  type StoredConfigHealth,
+} from '@novel-master/core/config-forms/stored-config-validity';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
@@ -29,18 +32,6 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 import {exportEventsYaml, importEventsYaml} from '../../services/events-yaml.service';
 
-function collectUnknownWireKeys(blocks: readonly EventBlockDraft[]): string[] {
-  const keys = new Set<string>();
-  for (const block of blocks) {
-    for (const action of block.actions) {
-      if (isUnknownActionDraft(action)) {
-        keys.add(action.wireKey);
-      }
-    }
-  }
-  return [...keys];
-}
-
 export function EventsConfigScreen() {
   const {tokens} = useTheme();
   const {showToast} = useToast();
@@ -50,11 +41,15 @@ export function EventsConfigScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [recovering, setRecovering] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [storedHealth, setStoredHealth] = useState<
+    StoredConfigHealth<EventsConfig> | null
+  >(null);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
   const [addEventVisible, setAddEventVisible] = useState(false);
   const [addActionEventId, setAddActionEventId] = useState<string | null>(null);
+
+  const configInvalid = storedHealth?.status === 'invalid';
 
   const dismissAllOverlays = useCallback(() => {
     setAddEventVisible(false);
@@ -66,21 +61,19 @@ export function EventsConfigScreen() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const wire = await runtime.eventsConfig.getRawWire();
-      const loaded = loadEventsConfigForEditor(wire);
-      setSchemaVersion(loaded.schemaVersion);
-      setBlocks(loaded.blocks);
-      setLoadError(null);
-      if (loaded.unknownActions.length > 0) {
-        showToastRef.current(
-          `未知 action：${loaded.unknownActions.join('、')}，请移除后保存`,
-        );
+      const health = await runtime.eventsConfig.assessStored();
+      setStoredHealth(health);
+      if (health.status === 'valid') {
+        setSchemaVersion(health.value.schemaVersion);
+        setBlocks(configToEventBlocks(health.value));
       }
     } catch (error) {
       const message = toastMessage('加载事件配置失败', error);
-      setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
-      setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
-      setLoadError(message);
+      setStoredHealth({
+        status: 'invalid',
+        code: 'broken_wire',
+        message,
+      });
       showToastRef.current(message);
     } finally {
       setLoading(false);
@@ -151,19 +144,6 @@ export function EventsConfigScreen() {
     setAddActionEventId(null);
   };
 
-  const removeAllUnknownActions = () => {
-    setBlocks(prev =>
-      prev.map(block => ({
-        ...block,
-        actions: block.actions.filter(action => !isUnknownActionDraft(action)),
-      })),
-    );
-    showToast('已移除全部未知动作');
-  };
-
-  const unknownWireKeys = collectUnknownWireKeys(blocks);
-  const hasUnknownActions = unknownWireKeys.length > 0;
-
   const handleSave = async () => {
     if (blocks.some(block => block.actions.length === 0)) {
       showToast('请为每个事件至少保留一个有效动作');
@@ -196,9 +176,9 @@ export function EventsConfigScreen() {
     setRecovering(true);
     try {
       await runtime.eventsConfig.setConfig(DEFAULT_EVENTS_CONFIG);
+      setStoredHealth({status: 'valid', value: DEFAULT_EVENTS_CONFIG});
       setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
       setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
-      setLoadError(null);
       showToast('已恢复默认并保存');
     } catch (error) {
       showToast(toastMessage('恢复默认并保存失败', error));
@@ -212,9 +192,9 @@ export function EventsConfigScreen() {
     try {
       await runtime.eventsConfig.clearConfig();
       await runtime.eventsConfig.setConfig(DEFAULT_EVENTS_CONFIG);
+      setStoredHealth({status: 'valid', value: DEFAULT_EVENTS_CONFIG});
       setSchemaVersion(DEFAULT_EVENTS_CONFIG.schemaVersion);
       setBlocks(configToEventBlocks(DEFAULT_EVENTS_CONFIG));
-      setLoadError(null);
       showToast('已清空旧配置并保存默认配置');
     } catch (error) {
       showToast(toastMessage('清空并保存失败', error));
@@ -255,16 +235,22 @@ export function EventsConfigScreen() {
   }, [runtime, load, showToast]);
 
   const usingDefault =
+    !configInvalid &&
     JSON.stringify(eventBlocksToConfig(blocks, schemaVersion).events) ===
-    JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
+      JSON.stringify(DEFAULT_EVENTS_CONFIG.events);
+
+  const invalidHealth =
+    storedHealth?.status === 'invalid' ? storedHealth : null;
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
       <ScreenFormLayout
         tokens={tokens}
-        scrollEnabled={!addEventVisible && addActionEventId == null}
+        scrollEnabled={
+          !configInvalid && !addEventVisible && addActionEventId == null
+        }
         footer={
-          addEventVisible || addActionEventId != null ? null : (
+          configInvalid || addEventVisible || addActionEventId != null ? null : (
             <StickyFormFooter
               tokens={tokens}
               label="保存"
@@ -273,145 +259,133 @@ export function EventsConfigScreen() {
             />
           )
         }>
-        <FormSectionCard
-          title="事件"
-          tokens={tokens}
-          hint="定义「发生什么事后执行哪些动作」。自动压缩的触发条件请在「压缩配置」里设置。重复的事件或动作在保存时会提示；有 2 个及以上事件时，点卡片右上角 × 可移除。"
-          rightAction={
-            <View style={styles.rightActions}>
-              <Pressable onPress={() => handleImportYaml()}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  导入 YAML
-                </Text>
-              </Pressable>
-              <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  导出 YAML
-                </Text>
-              </Pressable>
-              <Pressable onPress={() => setAddEventVisible(true)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                  添加
-                </Text>
-              </Pressable>
-            </View>
-          }>
-          {loadError != null ? (
+        {configInvalid && invalidHealth != null ? (
+          <FormSectionCard title="事件" tokens={tokens}>
             <View
               style={[
                 styles.recoveryCard,
                 {borderColor: tokens.border, backgroundColor: tokens.surface},
               ]}>
               <Text style={[styles.recoveryTitle, {color: tokens.text}]}>
-                检测到旧版/无效事件配置，已无法按 DAG 规则解析
+                {STORED_CONFIG_LABELS.invalidTitle}
               </Text>
               <Text style={[styles.recoveryText, {color: tokens.textSecondary}]}>
-                {loadError}
+                {storedConfigInvalidReason(invalidHealth.code)}
+              </Text>
+              <Text style={[styles.recoveryDetail, {color: tokens.textTertiary}]}>
+                {invalidHealth.message}
               </Text>
               <View style={styles.recoveryActions}>
-                <Pressable disabled={recovering || saving} onPress={() => handleRecoverRestoreAndSave()}>
+                <Pressable
+                  disabled={recovering || saving}
+                  onPress={() => handleRecoverRestoreAndSave()}>
                   <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
-                    恢复默认并保存
-                  </Text>
-                </Pressable>
-                <Pressable disabled={recovering || saving} onPress={() => handleRecoverClearAndSave()}>
-                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
-                    清空旧配置并保存
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : null}
-          {hasUnknownActions ? (
-            <View
-              style={[
-                styles.unknownBanner,
-                {
-                  borderColor: tokens.danger,
-                  backgroundColor: `${tokens.danger}14`,
-                },
-              ]}>
-              <Text style={[styles.unknownBannerTitle, {color: tokens.text}]}>
-                配置含已废弃动作
-              </Text>
-              <Text style={[styles.unknownBannerText, {color: tokens.textSecondary}]}>
-                {unknownWireKeys.join('、')} 等，请删除后保存
-              </Text>
-              <View style={styles.unknownBannerActions}>
-                <Pressable disabled={saving || recovering} onPress={removeAllUnknownActions}>
-                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
-                    移除全部未知动作
+                    {STORED_CONFIG_LABELS.eventsRestoreAndSave}
                   </Text>
                 </Pressable>
                 <Pressable
-                  disabled={saving || recovering}
-                  onPress={() => handleRecoverRestoreAndSave()}>
+                  disabled={recovering || saving}
+                  onPress={() => handleRecoverClearAndSave()}>
                   <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
-                    恢复默认并保存
+                    {STORED_CONFIG_LABELS.eventsClearAndSave}
                   </Text>
                 </Pressable>
               </View>
             </View>
-          ) : null}
-          <View style={styles.toolbar}>
-            <Text style={[styles.status, {color: tokens.textSecondary}]}>
-              {usingDefault ? '当前为默认配置。' : '已修改，保存后生效。'}
-            </Text>
-            <Pressable onPress={handleRestoreDefault}>
-              <Text style={{color: tokens.primary, fontSize: 14}}>恢复默认</Text>
-            </Pressable>
-          </View>
-        </FormSectionCard>
-
-        <View style={styles.blockList}>
-          {blocks.map((block, index) => (
-            <EventBlockEditor
-              key={block.id}
+          </FormSectionCard>
+        ) : (
+          <>
+            <FormSectionCard
+              title="事件"
               tokens={tokens}
-              block={block}
-              index={index}
-              total={blocks.length}
-              onChange={patch => updateBlock(block.id, patch)}
-              onDelete={() => deleteBlock(block.id)}
-              onMove={dir => moveBlock(block.id, dir)}
-              onAddAction={() => setAddActionEventId(block.id)}
-              onMinActions={() => showToast('至少保留一个动作')}
-            />
-          ))}
-        </View>
+              hint="定义「发生什么事后执行哪些动作」。自动压缩的触发条件请在「压缩配置」里设置。重复的事件或动作在保存时会提示；有 2 个及以上事件时，点卡片右上角 × 可移除。"
+              rightAction={
+                <View style={styles.rightActions}>
+                  <Pressable onPress={() => handleImportYaml()}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                      导入 YAML
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                      导出 YAML
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={() => setAddEventVisible(true)}>
+                    <Text style={{color: tokens.primary, fontWeight: '600'}}>
+                      添加
+                    </Text>
+                  </Pressable>
+                </View>
+              }>
+              <View style={styles.toolbar}>
+                <Text style={[styles.status, {color: tokens.textSecondary}]}>
+                  {usingDefault ? '当前为默认配置。' : '已修改，保存后生效。'}
+                </Text>
+                <Pressable onPress={handleRestoreDefault}>
+                  <Text style={{color: tokens.primary, fontSize: 14}}>恢复默认</Text>
+                </Pressable>
+              </View>
+            </FormSectionCard>
 
-        {blocks.length === 0 ? (
-          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
-            点击「添加」创建第一个事件。
-          </Text>
-        ) : null}
+            <View style={styles.blockList}>
+              {blocks.map((block, index) => (
+                <EventBlockEditor
+                  key={block.id}
+                  tokens={tokens}
+                  block={block}
+                  index={index}
+                  total={blocks.length}
+                  onChange={patch => updateBlock(block.id, patch)}
+                  onDelete={() => deleteBlock(block.id)}
+                  onMove={dir => moveBlock(block.id, dir)}
+                  onAddAction={() => setAddActionEventId(block.id)}
+                  onMinActions={() => showToast('至少保留一个动作')}
+                />
+              ))}
+            </View>
+
+            {blocks.length === 0 ? (
+              <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+                点击「添加」创建第一个事件。
+              </Text>
+            ) : null}
+          </>
+        )}
       </ScreenFormLayout>
 
-      <BottomSheetMenu
-        visible={addEventVisible}
-        title="添加事件"
-        items={EVENT_ADD_OPTIONS.map(o => ({
-          label: o.label,
-          action: o.eventType,
-        }))}
-        onClose={() => setAddEventVisible(false)}
-        onSelect={addEvent}
-      />
+      {!configInvalid ? (
+        <>
+          <BottomSheetMenu
+            visible={addEventVisible}
+            title="添加事件"
+            items={EVENT_ADD_OPTIONS.map(o => ({
+              label: o.label,
+              action: o.eventType,
+            }))}
+            onClose={() => setAddEventVisible(false)}
+            onSelect={addEvent}
+          />
 
-      <BottomSheetMenu
-        visible={addActionEventId != null}
-        title="添加动作"
-        items={ACTION_ADD_OPTIONS.map(o => ({
-          label: o.label,
-          action: o.type,
-        }))}
-        onClose={() => setAddActionEventId(null)}
-        onSelect={action => {
-          if (addActionEventId != null) {
-            addAction(addActionEventId, action as (typeof ACTION_ADD_OPTIONS)[number]['type']);
-          }
-        }}
-      />
+          <BottomSheetMenu
+            visible={addActionEventId != null}
+            title="添加动作"
+            items={ACTION_ADD_OPTIONS.map(o => ({
+              label: o.label,
+              action: o.type,
+            }))}
+            onClose={() => setAddActionEventId(null)}
+            onSelect={action => {
+              if (addActionEventId != null) {
+                addAction(
+                  addActionEventId,
+                  action as (typeof ACTION_ADD_OPTIONS)[number]['type'],
+                );
+              }
+            }}
+          />
+        </>
+      ) : null}
 
       {loading ? (
         <View style={styles.loadingOverlay} pointerEvents="none">
@@ -444,19 +418,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
-    marginBottom: 12,
   },
   recoveryTitle: {fontSize: 13, fontWeight: '600', lineHeight: 18},
   recoveryText: {fontSize: 12, lineHeight: 17},
+  recoveryDetail: {fontSize: 11, lineHeight: 16},
   recoveryActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
-  unknownBanner: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    gap: 8,
-    marginBottom: 12,
-  },
-  unknownBannerTitle: {fontSize: 13, fontWeight: '600', lineHeight: 18},
-  unknownBannerText: {fontSize: 12, lineHeight: 17},
-  unknownBannerActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
 });

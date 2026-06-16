@@ -31,13 +31,18 @@ import {
   withDynamicBlockPersistence,
   type ToolsMode,
 } from '@novel-master/core/config-forms/agent';
-import {AGENT_LIST_LABELS} from '@novel-master/core/config-forms/shared';
+import {
+  STORED_CONFIG_LABELS,
+  assessAgentDefinitionWire,
+  buildDefaultAgentDefinitionPreservingName,
+  storedConfigInvalidReason,
+  type StoredConfigInvalidCode,
+} from '@novel-master/core/config-forms/stored-config-validity';
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import { formatApplicationModelId, parseApplicationModelId } from "@novel-master/core/provider";
 import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
-import {FormErrorCard} from '../form/FormErrorCard';
 import {FormSwitchRow} from '../form/FormSwitchRow';
 import {FormSectionCard} from '../form/FormSectionCard';
 import {FormSelectField} from '../form/FormSelectField';
@@ -55,6 +60,26 @@ import {exportAgentYaml, importAgentYaml} from '../../services/agent-yaml.servic
 import type {RootStackParamList} from '../../navigation/types';
 
 type StackNav = NativeStackNavigationProp<RootStackParamList>;
+
+type InvalidAgentConfig = {
+  code: StoredConfigInvalidCode;
+  message: string;
+};
+
+function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
+  if (
+    raw != null &&
+    typeof raw === 'object' &&
+    'name' in raw &&
+    typeof (raw as {name: unknown}).name === 'string'
+  ) {
+    const trimmed = (raw as {name: string}).name.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+  return agentId;
+}
 
 type Props = {
   agentId: string;
@@ -89,6 +114,10 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [invalidConfig, setInvalidConfig] = useState<InvalidAgentConfig | null>(
+    null,
+  );
+  const [recovering, setRecovering] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
 
@@ -164,8 +193,19 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   const loadAgent = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
+    setInvalidConfig(null);
     try {
-      const def = await runtime.agentRegistry.get(agentId);
+      const raw = await runtime.agentRegistry.getRawWire(agentId);
+      if (raw === null) {
+        setLoadError(`未找到 Agent：${agentId}`);
+        return;
+      }
+      const health = assessAgentDefinitionWire(raw);
+      if (health.status === 'invalid') {
+        setInvalidConfig({code: health.code, message: health.message});
+        return;
+      }
+      const def = health.value;
     const promptForm = definitionToForm(def);
     setName(def.name);
     setMaxSteps(String(def.runtime?.maxSteps ?? 20));
@@ -280,6 +320,42 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
       },
     ]);
   }, [agentId, navigation, runtime, showToast]);
+
+  const handleOverwriteDefault = useCallback(() => {
+    Alert.alert(
+      '覆盖为默认模板',
+      '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
+      [
+        {text: '取消', style: 'cancel'},
+        {
+          text: '覆盖并保存',
+          onPress: () => {
+            void (async () => {
+              setRecovering(true);
+              try {
+                const raw = await runtime.agentRegistry.getRawWire(agentId);
+                const displayName = agentDisplayNameFromWire(raw, agentId);
+                const def = buildDefaultAgentDefinitionPreservingName(
+                  displayName.trim() || agentId,
+                );
+                const probe = new ToolRegistry();
+                registerBuiltinTools(probe);
+                await runtime.agentRegistry.upsert(agentId, def, {
+                  registeredToolNames: probe.list(),
+                });
+                await loadAgent();
+                showToast('已用默认模板覆盖并保存');
+              } catch (error) {
+                showToast(toastMessage('覆盖默认失败', error));
+              } finally {
+                setRecovering(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  }, [agentId, loadAgent, runtime, showToast]);
 
   const preferredModelId = modelEnabled
     ? formatApplicationModelId(providerId, vendorModelId)
@@ -438,19 +514,59 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     );
   }
 
-  if (loadError != null) {
+  if (loadError != null || invalidConfig != null) {
+    const title =
+      invalidConfig != null
+        ? STORED_CONFIG_LABELS.invalidTitle
+        : '加载失败';
+    const reason =
+      invalidConfig != null
+        ? storedConfigInvalidReason(invalidConfig.code)
+        : loadError ?? '';
+    const detail = invalidConfig?.message ?? '';
     return (
-      <FormErrorCard
-        tokens={tokens}
-        title={`${AGENT_LIST_LABELS.needsRepair} · 无法加载 Agent 配置`}
-        message={loadError}
-        secondaryAction={{label: '返回', onPress: () => navigation.goBack()}}
-        primaryAction={{
-          label: '删除 Agent',
-          danger: true,
-          onPress: handleDeleteBrokenAgent,
-        }}
-      />
+      <View style={styles.invalidWrap}>
+        <View
+          style={[
+            styles.invalidCard,
+            {borderColor: tokens.border, backgroundColor: tokens.surface},
+          ]}>
+          <Text style={[styles.invalidTitle, {color: tokens.text}]}>{title}</Text>
+          <Text style={[styles.invalidReason, {color: tokens.textSecondary}]}>
+            {reason}
+          </Text>
+          {detail.length > 0 ? (
+            <Text style={[styles.invalidDetail, {color: tokens.textTertiary}]}>
+              {detail}
+            </Text>
+          ) : null}
+          <View style={styles.invalidActions}>
+            <Pressable
+              disabled={recovering}
+              onPress={() => navigation.goBack()}>
+              <Text style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}>
+                {STORED_CONFIG_LABELS.agentBack}
+              </Text>
+            </Pressable>
+            {invalidConfig != null ? (
+              <Pressable
+                disabled={recovering}
+                onPress={handleOverwriteDefault}>
+                <Text style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}>
+                  {STORED_CONFIG_LABELS.agentOverwriteDefault}
+                </Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              disabled={recovering}
+              onPress={handleDeleteBrokenAgent}>
+              <Text style={{color: tokens.danger, fontSize: 14, fontWeight: '600'}}>
+                {STORED_CONFIG_LABELS.agentDelete}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
     );
   }
 
@@ -978,6 +1094,17 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
 
 const styles = StyleSheet.create({
   loadingWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
+  invalidWrap: {flex: 1, padding: 16, justifyContent: 'center'},
+  invalidCard: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 16,
+    gap: 10,
+  },
+  invalidTitle: {fontSize: 15, fontWeight: '600', lineHeight: 21},
+  invalidReason: {fontSize: 13, lineHeight: 19},
+  invalidDetail: {fontSize: 11, lineHeight: 16},
+  invalidActions: {flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginTop: 4},
   hint: {fontSize: 13, lineHeight: 18},
   fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
   switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
