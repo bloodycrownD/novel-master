@@ -85,6 +85,10 @@
     "./config-forms/shared": {
       "types": "./dist/config-forms/shared/index.d.ts",
       "import": "./dist/config-forms/shared/index.js"
+    },
+    "./config-forms/stored-config-validity": {
+      "types": "./dist/config-forms/stored-config-validity/index.d.ts",
+      "import": "./dist/config-forms/stored-config-validity/index.js"
     }
   },
   "scripts": {
