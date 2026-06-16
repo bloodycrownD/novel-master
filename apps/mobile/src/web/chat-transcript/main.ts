@@ -282,6 +282,11 @@ export function buildTranscriptBootScript(): string {
       var richBubble = state.flags.richText && textHtml ? ' rich' : '';
       var inner = textHtml || escapeHtml(text || '');
       html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
+    } else if (hasThinking || hasInvoking) {
+      // WHY: thinking/toolInvoking 阶段可能没有正文文本，此时也要预置空 .bubble-body，
+      // 让后续 streamDelta(kind === 'text') 的增量路径拥有稳定容器，避免回退整泡重建破坏 thinking DOM 结构。
+      var richBubble = state.flags.richText && textHtml ? ' rich' : '';
+      html += '<div class="bubble-body' + richBubble + '"></div>';
     }
     if (hasInvoking) {
       html += renderToolInvokingBar();
@@ -941,6 +946,8 @@ export function buildTranscriptBootScript(): string {
         return false;
       }
       if (html && state.flags.richText) {
+        // WHY: 保持与 RN prepareStreamTailHtml 的 rich 复用语义一致：
+        // 有 html 且 rich 打开时直接 innerHTML 替换；否则走 delta 增量追加，避免整泡 updateStreamBubble 重建。
         textBody.innerHTML = html;
         bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
           state.stream.textHtml,
@@ -954,7 +961,14 @@ export function buildTranscriptBootScript(): string {
       if (!delta) {
         return false;
       }
+      // WHY: text 从 0->1 仅更新 class/展示，不触发 thinking 重建。
       textBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
+      bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
+        state.stream.textHtml,
+        [],
+        state.stream.text,
+        state.stream.thinking
+      );
       return true;
     }
     return false;
@@ -983,7 +997,9 @@ export function buildTranscriptBootScript(): string {
       return;
     }
     var incremental = appendStreamDeltaIncremental(tail, kind, delta, html);
-    if (!incremental) {
+    if (!incremental && kind !== 'text') {
+      // WHY: 正文 text 不能在增量失败时整泡重建（会触发 thinking DOM 相关副作用）。
+      // 只有在不存在 #stream-tail 时，我们才允许一次性 fallback 到 renderRows()。
       updateStreamBubble(tail);
     }
     scheduleStickIfNearBottom();
