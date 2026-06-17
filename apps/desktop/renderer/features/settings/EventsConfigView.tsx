@@ -271,6 +271,7 @@ export function EventsConfigView() {
   const [storedHealth, setStoredHealth] = useState<StoredConfigHealth<EventsConfig> | null>(
     null,
   );
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [addEventOpen, setAddEventOpen] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
 
@@ -281,14 +282,12 @@ export function EventsConfigView() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await ipcEventsGetConfig();
       if (!res.ok) {
-        const health = assessEventsConfigWire(null);
-        setStoredHealth(health);
-        if (health.status === "valid") {
-          applyValidConfig(health.value);
-        }
+        setStoredHealth(null);
+        setLoadError(res.error.message);
         toastSettingsError(res.error.message);
         return;
       }
@@ -426,17 +425,35 @@ export function EventsConfigView() {
     );
   }
 
+  if (loadError != null) {
+    return (
+      <SettingsPanel>
+        <div className="settings-error-panel">
+          <p className="settings-error-panel__title">无法加载事件配置</p>
+          <p className="settings-error-panel__message">{loadError}</p>
+          <div className="settings-error-panel__actions">
+            <Button variant="secondary" onClick={() => void load()}>
+              重试
+            </Button>
+          </div>
+        </div>
+      </SettingsPanel>
+    );
+  }
+
   if (storedHealth?.status === "invalid") {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
           <p className="settings-error-panel__title">
-            <span className="settings-tag settings-tag--warn">
-              {STORED_CONFIG_LABELS.invalidTitle}
-            </span>
+            {STORED_CONFIG_LABELS.invalidTitle}
+          </p>
+          <p className="settings-error-panel__message">
             {storedConfigInvalidReason(storedHealth.code)}
           </p>
-          <p className="settings-error-panel__message">{storedHealth.message}</p>
+          <p className="settings-error-panel__message settings-error-panel__message--subtle">
+            {storedHealth.message}
+          </p>
           <div className="settings-error-panel__actions">
             <Button
               variant="secondary"

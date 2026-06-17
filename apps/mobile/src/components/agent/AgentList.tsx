@@ -18,6 +18,7 @@ import { type AgentDefinition } from "@novel-master/core/agent";
 import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
+  storedConfigInvalidReason,
 } from '@novel-master/core/config-forms/stored-config-validity';
 import {BatchCheckbox} from '../batch/BatchCheckbox';
 import {ManageHeader} from '../batch/ManageHeader';
@@ -137,7 +138,7 @@ export function AgentList({onCreate}: Props) {
             id,
             name: agentDisplayNameFromWire(raw, id),
             configInvalid: true,
-            meta: AGENT_LIST_LABELS.configInvalid,
+            meta: storedConfigInvalidReason(health.code),
           });
         }
       }
@@ -317,11 +318,31 @@ export function AgentList({onCreate}: Props) {
                   numberOfLines={1}>
                   {item.name}
                 </Text>
-                <Text
-                  style={[styles.meta, {color: tokens.textSecondary}]}
-                  numberOfLines={2}>
-                  {item.meta}
-                </Text>
+                {item.configInvalid ? (
+                  <View style={styles.metaRow}>
+                    <View
+                      style={[
+                        styles.invalidBadge,
+                        {backgroundColor: tokens.warningMuted},
+                      ]}>
+                      <Text
+                        style={[styles.invalidBadgeText, {color: tokens.warning}]}>
+                        {AGENT_LIST_LABELS.configInvalid}
+                      </Text>
+                    </View>
+                    <Text
+                      style={[styles.meta, {color: tokens.textSecondary, flex: 1}]}
+                      numberOfLines={1}>
+                      {item.meta}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text
+                    style={[styles.meta, {color: tokens.textSecondary}]}
+                    numberOfLines={2}>
+                    {item.meta}
+                  </Text>
+                )}
               </View>
               {!batch.active ? (
                 <>
@@ -402,6 +423,13 @@ const styles = StyleSheet.create({
   avatarIcon: {fontSize: 22},
   info: {flex: 1, minWidth: 0, gap: 4},
   name: {fontSize: 16, fontWeight: '600'},
+  metaRow: {flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0},
+  invalidBadge: {
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  invalidBadgeText: {fontSize: 11, fontWeight: '600'},
   meta: {fontSize: 13, lineHeight: 18},
   menuDots: {fontSize: 18, paddingHorizontal: 4},
   chevron: {fontSize: 22, fontWeight: '300'},

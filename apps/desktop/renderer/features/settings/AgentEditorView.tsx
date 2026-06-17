@@ -46,7 +46,6 @@ import {
   ipcProvidersList,
 } from "../../ipc/client";
 import {
-  AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
   STORED_CONFIG_LABELS,
@@ -311,9 +310,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       <SettingsPanel>
         <div className="settings-error-panel">
           <p className="settings-error-panel__title">
-            <span className="settings-tag settings-tag--warn">
-              {AGENT_LIST_LABELS.configInvalid}
-            </span>
             {STORED_CONFIG_LABELS.invalidTitle}
           </p>
           <p className="settings-error-panel__message">
@@ -346,12 +342,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     return (
       <SettingsPanel>
         <div className="settings-error-panel">
-          <p className="settings-error-panel__title">
-            <span className="settings-tag settings-tag--warn">
-              {AGENT_LIST_LABELS.configInvalid}
-            </span>
-            无法加载 Agent 配置
-          </p>
+          <p className="settings-error-panel__title">无法加载 Agent 配置</p>
           <p className="settings-error-panel__message">{loadError}</p>
           <div className="settings-error-panel__actions">
             <Button variant="secondary" onClick={() => nav.pop()}>

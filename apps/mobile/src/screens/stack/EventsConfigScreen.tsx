@@ -44,6 +44,7 @@ export function EventsConfigScreen() {
   const [storedHealth, setStoredHealth] = useState<
     StoredConfigHealth<EventsConfig> | null
   >(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [schemaVersion, setSchemaVersion] = useState<2>(2);
   const [blocks, setBlocks] = useState<EventBlockDraft[]>([]);
   const [addEventVisible, setAddEventVisible] = useState(false);
@@ -60,6 +61,7 @@ export function EventsConfigScreen() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const health = await runtime.eventsConfig.assessStored();
       setStoredHealth(health);
@@ -69,11 +71,8 @@ export function EventsConfigScreen() {
       }
     } catch (error) {
       const message = toastMessage('加载事件配置失败', error);
-      setStoredHealth({
-        status: 'invalid',
-        code: 'broken_wire',
-        message,
-      });
+      setStoredHealth(null);
+      setLoadError(message);
       showToastRef.current(message);
     } finally {
       setLoading(false);
@@ -247,10 +246,18 @@ export function EventsConfigScreen() {
       <ScreenFormLayout
         tokens={tokens}
         scrollEnabled={
-          !configInvalid && !addEventVisible && addActionEventId == null
+          loadError == null &&
+          !configInvalid &&
+          !addEventVisible &&
+          addActionEventId == null
         }
         footer={
-          configInvalid || addEventVisible || addActionEventId != null ? null : (
+          loadError != null ||
+          configInvalid ||
+          addEventVisible ||
+          addActionEventId != null
+            ? null
+            : (
             <StickyFormFooter
               tokens={tokens}
               label="保存"
@@ -259,7 +266,29 @@ export function EventsConfigScreen() {
             />
           )
         }>
-        {configInvalid && invalidHealth != null ? (
+        {loadError != null ? (
+          <FormSectionCard title="事件" tokens={tokens}>
+            <View
+              style={[
+                styles.recoveryCard,
+                {borderColor: tokens.border, backgroundColor: tokens.surface},
+              ]}>
+              <Text style={[styles.recoveryTitle, {color: tokens.text}]}>
+                无法加载事件配置
+              </Text>
+              <Text style={[styles.recoveryText, {color: tokens.textSecondary}]}>
+                {loadError}
+              </Text>
+              <View style={styles.recoveryActions}>
+                <Pressable disabled={loading} onPress={() => load().catch(() => undefined)}>
+                  <Text style={{color: tokens.primary, fontSize: 13, fontWeight: '600'}}>
+                    重试
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </FormSectionCard>
+        ) : configInvalid && invalidHealth != null ? (
           <FormSectionCard title="事件" tokens={tokens}>
             <View
               style={[
