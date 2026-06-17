@@ -240,11 +240,18 @@ export function AgentList({onCreate}: Props) {
     ]);
   };
 
-  const menuItems = () => [
-    {label: '重命名', action: 'rename'},
-    {label: '复制', action: 'duplicate'},
-    {label: '删除', action: 'delete', danger: true},
-  ];
+  /** 失效配置行仅允许删除，避免 strict get() 在重命名/复制时失败。 */
+  const menuItemsFor = (agentId: string) => {
+    const row = rows.find(r => r.id === agentId);
+    if (row?.configInvalid) {
+      return [{label: '删除', action: 'delete', danger: true}];
+    }
+    return [
+      {label: '重命名', action: 'rename'},
+      {label: '复制', action: 'duplicate'},
+      {label: '删除', action: 'delete', danger: true},
+    ];
+  };
 
   return (
     <View style={styles.root}>
@@ -340,7 +347,7 @@ export function AgentList({onCreate}: Props) {
       )}
       <BottomSheetMenu
         visible={menuAgentId != null}
-        items={menuAgentId ? menuItems() : []}
+        items={menuAgentId ? menuItemsFor(menuAgentId) : []}
         onClose={() => setMenuAgentId(undefined)}
         onSelect={action => {
           const id = menuAgentId;
