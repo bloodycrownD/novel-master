@@ -1,8 +1,15 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
+import {
+  buildUserVfsTurnView,
+  matchUserVfsTurnAt,
+  USER_VFS_TURN_SPAN,
+  type ParsedUserVfsAction,
+} from "@novel-master/core/chat";
 import { resolveToolResultOk } from "@novel-master/core";
 import type { ChatMessageDto, ContentBlockDto } from "../../../shared/ipc-types";
+import { chatMessageFromDto } from "./composer-send-state";
 
 export type ToolCallStatus = "success" | "error" | "pending";
 
@@ -23,7 +30,16 @@ export interface MessageListItem {
   readonly tools: readonly ToolCallView[];
 }
 
-export type ChatListItem = MessageListItem;
+export interface UserVfsTurnListItem {
+  readonly kind: "user_vfs_turn";
+  readonly id: string;
+  readonly hidden: boolean;
+  readonly actions: readonly ParsedUserVfsAction[];
+  readonly tools: readonly ToolCallView[];
+  readonly bridgeText: string;
+}
+
+export type ChatListItem = MessageListItem | UserVfsTurnListItem;
 
 export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
@@ -193,9 +209,26 @@ export function buildChatListItems(
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
   const results = buildToolResultByUseId(messages);
+  const coreMessages = messages.map(chatMessageFromDto);
   const items: ChatListItem[] = [];
 
-  for (const message of messages) {
+  for (let index = 0; index < messages.length; ) {
+    const vfsTurn = matchUserVfsTurnAt(coreMessages, index);
+    if (vfsTurn != null) {
+      const view = buildUserVfsTurnView(vfsTurn);
+      items.push({
+        kind: "user_vfs_turn",
+        id: view.id,
+        hidden: view.hidden,
+        actions: view.actions,
+        tools: view.toolUses.map((use) => toolCallViewFromUse(use, results)),
+        bridgeText: view.bridgeText,
+      });
+      index += USER_VFS_TURN_SPAN;
+      continue;
+    }
+
+    const message = messages[index]!;
     const blocks = blocksForMessage(message);
     const textParts: string[] = [];
     const thinkingParts: string[] = [];
@@ -226,6 +259,7 @@ export function buildChatListItems(
     }
 
     if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
+      index += 1;
       continue;
     }
 
@@ -245,6 +279,8 @@ export function buildChatListItems(
         tools,
       });
     }
+
+    index += 1;
   }
 
   return items;

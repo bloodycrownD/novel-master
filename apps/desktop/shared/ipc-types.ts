@@ -392,6 +392,15 @@ export type ContentBlockDto =
       readonly summary?: string;
     };
 
+/** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
+export type MessageMetadataDto = {
+  readonly source?: "user";
+  readonly actor?: "user";
+  readonly synthetic?: boolean;
+  readonly kind?: string;
+  readonly toolInputCompressed?: boolean;
+};
+
 export type ChatMessageDto = {
   readonly id: string;
   readonly sessionId: string;
@@ -401,6 +410,8 @@ export type ChatMessageDto = {
   readonly createdAtMs: number;
   readonly bodyText: string;
   readonly contentBlocks: readonly ContentBlockDto[];
+  /** synthetic 识别（VFS UA 折叠等）；无则 undefined。 */
+  readonly metadata?: MessageMetadataDto;
 };
 
 export type MessagesAppendRequest = {

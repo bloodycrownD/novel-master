@@ -1,4 +1,8 @@
-import { type ChatMessage } from "@novel-master/core/chat";
+import {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+  type ChatMessage,
+} from "@novel-master/core/chat";
 import {
   buildChatListItems,
   buildToolResultByUseId,
@@ -17,6 +21,7 @@ function msg(
   blocks: ChatMessage['content']['blocks'],
   seq: number,
   hidden = false,
+  raw: ChatMessage['raw'] = null,
 ): ChatMessage {
   return {
     id,
@@ -25,7 +30,7 @@ function msg(
     role,
     content: {blocks},
     provider: null,
-    raw: null,
+    raw,
     createdAtMs: seq,
     hidden,
   };
@@ -407,5 +412,74 @@ describe('message-blocks', () => {
         status: 'success',
       }),
     ).toBeUndefined();
+  });
+
+  it('B2-4: UA 两段折叠为单个 user_vfs_turn', () => {
+    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const messages = [
+      msg(
+        'u1',
+        'user',
+        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        1,
+        false,
+        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+      ),
+      msg(
+        'a1',
+        'assistant',
+        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
+        2,
+        false,
+        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
+      ),
+    ];
+    const items = buildChatListItems(messages);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe('user_vfs_turn');
+    if (items[0]?.kind === 'user_vfs_turn') {
+      expect(items[0].id).toBe('u1');
+      expect(items[0].tools.length).toBe(1);
+    }
+  });
+
+  it('B2-5: 旧四段 fixture 不产出 user_vfs_turn', () => {
+    const messages = [
+      msg(
+        'u1',
+        'user',
+        [{type: 'text', text: '<user-vfs-action kind="delete" path="/a.md" />'}],
+        1,
+        false,
+        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+      ),
+      msg(
+        'a1',
+        'assistant',
+        [{type: 'tool_use', id: 'tu1', name: 'fs', input: {command: '…'}}],
+        2,
+        false,
+        {metadata: {synthetic: true, actor: 'user', toolInputCompressed: true}},
+      ),
+      msg(
+        'u2',
+        'user',
+        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok', ok: true}],
+        3,
+        false,
+        {metadata: {source: 'user', synthetic: true}},
+      ),
+      msg(
+        'a2',
+        'assistant',
+        [{type: 'text', text: '【done】'}],
+        4,
+        false,
+        {metadata: {kind: 'tool_turn_bridge', synthetic: true}},
+      ),
+    ];
+    const items = buildChatListItems(messages);
+    expect(items.every(i => i.kind !== 'user_vfs_turn')).toBe(true);
+    expect(items.length).toBeGreaterThan(1);
   });
 });

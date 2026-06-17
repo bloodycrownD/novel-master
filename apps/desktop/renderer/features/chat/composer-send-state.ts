@@ -40,7 +40,7 @@ export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
     hidden: dto.hidden,
     createdAtMs: dto.createdAtMs,
     provider: null,
-    raw: null,
+    raw: dto.metadata != null ? { metadata: dto.metadata } : null,
     content: {
       blocks: dto.contentBlocks
         .map(blockFromDto)

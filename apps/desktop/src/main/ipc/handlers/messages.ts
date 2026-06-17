@@ -1,7 +1,12 @@
 /**
  * Messages IPC handlers — list (display regex), append, edit, hide, delete, rollback.
  */
-import { textBlocks, type MessageContent } from "@novel-master/core/chat";
+import {
+  readMessageMetadata,
+  textBlocks,
+  type ChatMessage,
+  type MessageContent,
+} from "@novel-master/core/chat";
 
 import { messageBodyText } from "@novel-master/core/prompt";
 import { type ContentBlock } from "@novel-master/core/chat";
@@ -52,16 +57,9 @@ function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   }
 }
 
-function toDto(msg: {
-  id: string;
-  sessionId: string;
-  role: string;
-  hidden: boolean;
-  seq: number;
-  createdAtMs: number;
-  content: { blocks?: readonly ContentBlock[] };
-}): ChatMessageDto {
+function toDto(msg: ChatMessage): ChatMessageDto {
   const blocks = msg.content.blocks ?? [];
+  const metadata = readMessageMetadata(msg.raw);
   return {
     id: msg.id,
     sessionId: msg.sessionId,
@@ -69,10 +67,11 @@ function toDto(msg: {
     hidden: msg.hidden,
     seq: msg.seq,
     createdAtMs: msg.createdAtMs,
-    bodyText: messageBodyText(msg as Parameters<typeof messageBodyText>[0]),
+    bodyText: messageBodyText(msg),
     contentBlocks: blocks
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),
+    ...(metadata != null ? { metadata } : {}),
   };
 }
 

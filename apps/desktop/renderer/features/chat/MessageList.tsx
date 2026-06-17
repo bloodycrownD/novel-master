@@ -89,6 +89,47 @@ export function MessageList({
   return (
     <>
       {listItems.map((item) => {
+        if (item.kind === "user_vfs_turn") {
+          if (item.tools.length === 0) {
+            return null;
+          }
+          const selected = selectedIds?.has(item.id) ?? false;
+          const inRange = affectedIds?.has(item.id) ?? false;
+          const selectableRole = transcriptSelectableRole("user", batchMode);
+          const rowSelectable = isTranscriptRowSelectable(selectableRole);
+
+          return (
+            <div
+              key={item.id}
+              className={`chat-message chat-message--user${item.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}${inRange ? " is-in-range" : ""}`}
+              data-message-id={item.id}
+              data-selectable-role={selectableRole}
+              onClick={() => {
+                if (batchMode && rowSelectable) {
+                  onToggleSelect?.(item.id);
+                }
+              }}
+            >
+              {batchMode && rowSelectable ? (
+                <label className="chat-message__check" aria-label="选择消息">
+                  <input type="checkbox" checked={selected} readOnly />
+                </label>
+              ) : batchMode ? (
+                <span className="chat-message__check-spacer" aria-hidden="true" />
+              ) : null}
+              <div className="chat-message__body">
+                <span className="chat-message__role">
+                  用户
+                  {item.hidden ? (
+                    <span className="chat-message__hidden-tag">已隐藏</span>
+                  ) : null}
+                </span>
+                <ToolCallGroupCard tools={item.tools} dimmed={item.hidden} />
+              </div>
+            </div>
+          );
+        }
+
         const msg = item.message;
         const selected = selectedIds?.has(msg.id) ?? false;
         const inRange = affectedIds?.has(msg.id) ?? false;
