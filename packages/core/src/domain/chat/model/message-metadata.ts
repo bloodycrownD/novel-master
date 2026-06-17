@@ -8,6 +8,7 @@
 export type MessageMetadataKind =
   | "tool_turn_bridge"
   | "user_vfs_action"
+  | "user_vfs_ack"
   | (string & {});
 
 /** 写入 `ChatMessage.raw.metadata` 的键结构。 */
@@ -20,7 +21,7 @@ export interface MessageMetadata {
   readonly synthetic?: boolean;
   /** synthetic 子类型。 */
   readonly kind?: MessageMetadataKind;
-  /** 用户 VFS U-A-U-A 中 assistant tool_use 是否已压缩 input。 */
+  /** 历史 U-A-U-A 中 assistant tool_use 是否已压缩 input（旧会话）。 */
   readonly toolInputCompressed?: boolean;
 }
 

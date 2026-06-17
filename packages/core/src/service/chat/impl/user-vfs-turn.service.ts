@@ -1,10 +1,14 @@
 /**
- * 用户 VFS U-A-U-A 用例默认实现。
+ * 用户 VFS UA 两段用例默认实现。
  *
  * @module service/chat/impl/user-vfs-turn.service
  */
 
 import { mergePendingVfsTurns } from "@/domain/chat/logic/merge-pending-vfs-turns.js";
+import {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+} from "@/domain/chat/logic/user-vfs-turn-constants.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -22,7 +26,6 @@ import type {
   UserVfsTurnOp,
   UserVfsTurnService,
 } from "../user-vfs-turn.port.js";
-import { TOOL_TURN_BRIDGE_TEXT } from "./append-tool-turn-bridge.js";
 
 /** {@link DefaultUserVfsTurnService} 依赖。 */
 export interface UserVfsTurnServiceDeps {
@@ -60,7 +63,7 @@ async function savePendingQueue(
 }
 
 /**
- * 编排 execute → pending、flush → U-A-U-A + checkpoint。
+ * 编排 execute → pending、flush → UA 两段 + checkpoint。
  */
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
@@ -116,12 +119,13 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { flushed: false };
     }
 
-    const merged = mergePendingVfsTurns(pending);
+    const { actionsXml } = mergePendingVfsTurns(pending);
+    const text = wrapUserVfsActionsForStorage(actionsXml);
 
-    await this.deps.messages.append(
+    const actionUser = await this.deps.messages.append(
       sessionId,
       "user",
-      { blocks: [{ type: "text", text: merged.actionsXml }] },
+      { blocks: [{ type: "text", text }] },
       {
         raw: {
           metadata: {
@@ -136,41 +140,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     await this.deps.messages.append(
       sessionId,
       "assistant",
-      { blocks: [...merged.toolUses] },
+      { blocks: [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }] },
       {
         raw: {
           metadata: {
             synthetic: true,
-            actor: "user",
-            toolInputCompressed: true,
-          },
-        },
-      },
-    );
-
-    const toolResultUser = await this.deps.messages.append(
-      sessionId,
-      "user",
-      { blocks: [...merged.toolResults] },
-      {
-        raw: {
-          metadata: {
-            source: "user",
-            synthetic: true,
-          },
-        },
-      },
-    );
-
-    await this.deps.messages.append(
-      sessionId,
-      "assistant",
-      { blocks: [{ type: "text", text: TOOL_TURN_BRIDGE_TEXT }] },
-      {
-        raw: {
-          metadata: {
-            synthetic: true,
-            kind: "tool_turn_bridge",
+            kind: "user_vfs_ack",
           },
         },
       },
@@ -180,7 +155,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     await this.deps.messageCheckpoint.capture(
       sessionId,
       session.projectId,
-      toolResultUser.id,
+      actionUser.id,
     );
 
     return { flushed: true };

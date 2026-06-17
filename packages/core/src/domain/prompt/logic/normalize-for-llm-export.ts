@@ -20,7 +20,11 @@ export interface LlmExportZones {
 
 export type LlmExportZone = "persist" | "chat" | "dynamic";
 
-const VFS_SEMANTIC_KINDS = new Set(["user_vfs_action", "tool_turn_bridge"]);
+const VFS_SEMANTIC_KINDS = new Set([
+  "user_vfs_action",
+  "user_vfs_ack",
+  "tool_turn_bridge",
+]);
 
 function resolveZone(
   index: number,
@@ -141,7 +145,7 @@ function applyProviderPostProcess(
 
 /**
  * 在 zone 内 merge 连续同 role 纯文本；跨区、VFS 段、含 tool 块均不 merge。
- * 不拆分 U-A-U-A 四条（各条不满足 merge 条件时原样保留）。
+ * 不拆分 VFS 语义段（各条不满足 merge 条件时原样保留）。
  *
  * @param messages `buildPromptLlmInputFromLayout` 输出（未 merge）
  * @param provider LLM 协议种类（per-provider 后处理）

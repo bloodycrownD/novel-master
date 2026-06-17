@@ -40,6 +40,10 @@ export type {
 export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+} from "../domain/chat/logic/user-vfs-turn-constants.js";
+export {
   buildUserVfsTurnView,
   deriveToolUsesFromVfsActions,
   formatUserVfsTurnPreviewBody,

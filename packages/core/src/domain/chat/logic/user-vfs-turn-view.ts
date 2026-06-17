@@ -1,5 +1,5 @@
 /**
- * 用户 VFS U-A-U-A 四段消息的识别与 UI 预览格式化。
+ * 用户 VFS UA 两段消息的识别与 UI 预览格式化。
  *
  * @module domain/chat/logic/user-vfs-turn-view
  */
@@ -12,6 +12,9 @@ import {
   actionXmlToToolUses,
   type DerivedToolUseInput,
 } from "../../vfs/logic/action-xml-to-tool-uses.js";
+import { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
+
+export { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
 
 export type ParsedUserVfsEditHunk = {
   readonly index: string;
@@ -106,7 +109,6 @@ function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
 
 /**
  * 从已解析的 user-vfs-action 还原 flush 前的完整 tool input（用于 UI 展示）。
- * 落库 assistant tool_use 经 {@link compressUserVfsToolUses} 压缩后字符串为 `"…"`。
  */
 export function deriveToolUsesFromVfsActions(
   actions: readonly ParsedUserVfsAction[],
@@ -118,62 +120,73 @@ export function deriveToolUsesFromVfsActions(
   return actionXmlToToolUses(xml);
 }
 
-function messageIsToolResultsOnly(message: ChatMessage): boolean {
-  if (message.role !== "user") {
-    return false;
-  }
+function derivedToToolUseBlocks(
+  derived: readonly DerivedToolUseInput[],
+): ToolUseBlock[] {
+  return derived.map((tu, index) => ({
+    type: "tool_use" as const,
+    id: `vfs-tu-${index}`,
+    name: tu.name,
+    input: tu.input,
+  }));
+}
+
+function syntheticToolResults(toolUses: readonly ToolUseBlock[]): ToolResultBlock[] {
+  return toolUses.map((tu) => ({
+    type: "tool_result" as const,
+    toolUseId: tu.id,
+    content: "ok",
+    ok: true,
+  }));
+}
+
+function messageIsPlainTextOnly(message: ChatMessage): boolean {
   const blocks = message.content.blocks ?? [];
-  return blocks.length > 0 && blocks.every((b) => b.type === "tool_result");
+  return blocks.length > 0 && blocks.every((b) => b.type === "text");
 }
 
-function toolUsesFromMessage(message: ChatMessage): ToolUseBlock[] {
-  return (message.content.blocks ?? []).filter(
-    (b): b is ToolUseBlock => b.type === "tool_use",
-  );
+function messageHasToolUse(message: ChatMessage): boolean {
+  return (message.content.blocks ?? []).some((b) => b.type === "tool_use");
 }
 
-function toolResultsFromMessage(message: ChatMessage): ToolResultBlock[] {
-  return (message.content.blocks ?? []).filter(
-    (b): b is ToolResultBlock => b.type === "tool_result",
-  );
-}
-
-/** U-A-U-A 四段在 messages 中的跨度（含首尾 message）。 */
-export const USER_VFS_TURN_SPAN = 4 as const;
+/** UA 两段在 messages 中的跨度（含首尾 message）。 */
+export const USER_VFS_TURN_SPAN = 2 as const;
 
 /**
- * 从 `startIndex` 起是否为完整的用户 VFS U-A-U-A 四段（均未 hidden）。
+ * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。
  */
 export function matchUserVfsTurnAt(
   messages: readonly ChatMessage[],
   startIndex: number,
-): readonly [ChatMessage, ChatMessage, ChatMessage, ChatMessage] | null {
+): readonly [ChatMessage, ChatMessage] | null {
   const m0 = messages[startIndex];
   const m1 = messages[startIndex + 1];
-  const m2 = messages[startIndex + 2];
-  const m3 = messages[startIndex + 3];
-  if (m0 == null || m1 == null || m2 == null || m3 == null) {
+  if (m0 == null || m1 == null) {
     return null;
   }
-  if (m0.hidden || m1.hidden || m2.hidden || m3.hidden) {
+  if (m0.hidden || m1.hidden) {
     return null;
   }
   if (readMessageMetadata(m0.raw)?.kind !== "user_vfs_action") {
     return null;
   }
-  if (
-    m1.role !== "assistant" ||
-    readMessageMetadata(m1.raw)?.toolInputCompressed !== true
-  ) {
+  const actionText = messageBodyTextFromContent(m0.content);
+  if (!actionText.includes("<user-vfs-action")) {
     return null;
   }
-  if (!messageIsToolResultsOnly(m2)) {
+  if (m1.role !== "assistant") {
     return null;
   }
-  if (readMessageMetadata(m3.raw)?.kind !== "tool_turn_bridge") {
+  if (readMessageMetadata(m1.raw)?.kind !== "user_vfs_ack") {
     return null;
   }
-  return [m0, m1, m2, m3];
+  if (!messageIsPlainTextOnly(m1) || messageHasToolUse(m1)) {
+    return null;
+  }
+  if (messageBodyTextFromContent(m1.content) !== USER_VFS_TURN_ACK_TEXT) {
+    return null;
+  }
+  return [m0, m1];
 }
 
 export type UserVfsTurnView = {
@@ -185,19 +198,21 @@ export type UserVfsTurnView = {
   readonly bridgeText: string;
 };
 
-/** 从已匹配的 U-A-U-A 四段构建 UI 视图。 */
+/** 从已匹配的 UA 两段构建 UI 视图。 */
 export function buildUserVfsTurnView(
-  turn: readonly [ChatMessage, ChatMessage, ChatMessage, ChatMessage],
+  turn: readonly [ChatMessage, ChatMessage],
 ): UserVfsTurnView {
-  const [actionMsg, toolUseMsg, toolResultMsg, bridgeMsg] = turn;
+  const [actionMsg, ackMsg] = turn;
   const actionText = messageBodyTextFromContent(actionMsg.content);
+  const actions = parseAllUserVfsActionsFromText(actionText);
+  const toolUses = derivedToToolUseBlocks(deriveToolUsesFromVfsActions(actions));
   return {
     id: actionMsg.id,
     hidden: actionMsg.hidden,
-    actions: parseAllUserVfsActionsFromText(actionText),
-    toolUses: toolUsesFromMessage(toolUseMsg),
-    toolResults: toolResultsFromMessage(toolResultMsg),
-    bridgeText: messageBodyTextFromContent(bridgeMsg.content),
+    actions,
+    toolUses,
+    toolResults: syntheticToolResults(toolUses),
+    bridgeText: messageBodyTextFromContent(ackMsg.content),
   };
 }
 
