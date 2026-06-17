@@ -315,6 +315,53 @@ export function createDefaultAgentEditorPrompts(): Pick<
   };
 }
 
+/** 是否启用了任一 Prompt 区域（system / persist / dynamic）。 */
+export function hasAnyPromptRegionEnabled(
+  input: Pick<AgentEditorFormInput, "systemEnabled" | "persistEnabled" | "dynamicEnabled">,
+): boolean {
+  return input.systemEnabled || input.persistEnabled || input.dynamicEnabled;
+}
+
+/** 是否存在与区域开关绑定的有效 Prompt 来源。 */
+export function hasEffectivePromptSource(
+  input: Pick<
+    AgentEditorFormInput,
+    | "systemEnabled"
+    | "systemContent"
+    | "persistEnabled"
+    | "dynamicEnabled"
+    | "persist"
+    | "dynamic"
+  >,
+): boolean {
+  return countEffectiveFormPromptSources(input) > 0;
+}
+
+/** 统计与区域开关绑定的有效 Prompt 来源数量（每区至多计 1）。 */
+export function countEffectiveFormPromptSources(
+  input: Pick<
+    AgentEditorFormInput,
+    | "systemEnabled"
+    | "systemContent"
+    | "persistEnabled"
+    | "dynamicEnabled"
+    | "persist"
+    | "dynamic"
+  >,
+): number {
+  let count = 0;
+  if (input.systemEnabled && input.systemContent.trim() !== "") {
+    count += 1;
+  }
+  if (input.persistEnabled && input.persist.length > 0) {
+    count += 1;
+  }
+  if (input.dynamicEnabled && input.dynamic.length > 0) {
+    count += 1;
+  }
+  return count;
+}
+
 /** 统计 system + dynamic 有效 Prompt 来源（删除持久区块时允许 persist 全空）。 */
 export function countMinimumPromptSources(
   input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "dynamic">,
@@ -456,14 +503,10 @@ export function buildAgentDefinitionFromForm(
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
   }
-  const layout = layoutFromFormInput(input);
-  if (
-    layout.system == null &&
-    layout.persist.length === 0 &&
-    layout.dynamic.length === 0
-  ) {
+  if (hasAnyPromptRegionEnabled(input) && !hasEffectivePromptSource(input)) {
     return { ok: false, message: "至少保留一个 Prompt 块" };
   }
+  const layout = layoutFromFormInput(input);
   let validatedLayout: AgentPromptLayout;
   try {
     validatedLayout = validateAgentPromptLayout(layout);

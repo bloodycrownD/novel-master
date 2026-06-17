@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
+  countEffectiveFormPromptSources,
   countFormPromptSources,
   countMinimumPromptSources,
   createDefaultAgentEditorPrompts,
@@ -361,7 +362,95 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       toolsSelected: [],
       ...createDefaultAgentEditorPrompts(),
     }).ok,
-    false,
+    true,
+  );
+});
+
+test("buildAgentDefinitionFromForm 三区全关空 layout 可保存", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    ...createDefaultAgentEditorPrompts(),
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.definition.prompts.system, undefined);
+    assert.deepEqual(result.definition.prompts.persist, []);
+    assert.deepEqual(result.definition.prompts.dynamic, []);
+  }
+});
+
+test("buildAgentDefinitionFromForm system 开但内容空时失败", () => {
+  const result = buildAgentDefinitionFromForm({
+    name: "writer",
+    maxSteps: "20",
+    modelEnabled: false,
+    providerId: "",
+    vendorModelId: "",
+    toolsMode: "default",
+    toolsSelected: [],
+    systemEnabled: true,
+    systemContent: "",
+    persistEnabled: false,
+    dynamicEnabled: false,
+    persist: [],
+    dynamic: [],
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.message, "至少保留一个 Prompt 块");
+  }
+});
+
+test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => {
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      persist: [],
+      dynamic: [],
+    }),
+    0,
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: true,
+      systemContent: "sys",
+      persistEnabled: true,
+      dynamicEnabled: true,
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+    }),
+    3,
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: true,
+      systemContent: "   ",
+      persistEnabled: true,
+      dynamicEnabled: false,
+      persist: [],
+      dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
+    }),
+    0,
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "ignored",
+      persistEnabled: true,
+      dynamicEnabled: false,
+      persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [],
+    }),
+    1,
   );
 });
 
