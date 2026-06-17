@@ -90,41 +90,22 @@ describe("normalizeForLlmExport", () => {
     assert.equal(out.length, 2);
   });
 
-  it("U-A-U-A 四条不拆分（条数保持）", () => {
-    const uaUa = [
-      msg("user", "<user-vfs-action/>", {
+  it("UA 两条不拆分（条数保持）", () => {
+    const ua = [
+      msg("user", "<system-message>\n<user-vfs-action/>\n</system-message>", {
         id: "u1",
         raw: { metadata: { kind: "user_vfs_action", source: "user" } },
       }),
-      msg("assistant", "", {
+      msg("assistant", "收到通知", {
         id: "a1",
-        blocks: [
-          {
-            type: "tool_use",
-            id: "tu_1",
-            name: "write",
-            input: { path: "/a.md", content: "x" },
-          },
-        ],
-        raw: { metadata: { synthetic: true, actor: "user" } },
-      }),
-      msg("user", "", {
-        id: "u2",
-        blocks: [
-          { type: "tool_result", toolUseId: "tu_1", content: "ok" },
-        ],
-        raw: { metadata: { source: "user" } },
-      }),
-      msg("assistant", "【done】", {
-        id: "a2",
-        raw: { metadata: { kind: "tool_turn_bridge", synthetic: true } },
+        raw: { metadata: { kind: "user_vfs_ack", synthetic: true } },
       }),
     ];
-    const out = normalizeForLlmExport(uaUa, "anthropic", {
+    const out = normalizeForLlmExport(ua, "anthropic", {
       persistCount: 0,
       dynamicCount: 0,
     });
-    assert.equal(out.length, 4);
+    assert.equal(out.length, 2);
   });
 
   it("OpenAI 剔除空 tool_turn_bridge", () => {

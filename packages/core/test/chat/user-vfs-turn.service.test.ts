@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
-import { createUserVfsTurnServiceBundle, readMessageMetadata, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { createUserVfsTurnServiceBundle, readMessageMetadata, TOOL_TURN_BRIDGE_TEXT, USER_VFS_TURN_ACK_TEXT } from "@novel-master/core/chat";
 
 import { type MessageCheckpointService } from "@novel-master/core/session-fs";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -95,7 +95,7 @@ describe("UserVfsTurnService", () => {
     assert.equal((pending[0] as { tools: { id: string }[] }).tools[0]?.id, "tu_ok");
   });
 
-  it("flush 落库 4 条消息且 metadata 符合 spec", async () => {
+  it("flush 落库 2 条消息且 metadata 符合 spec", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -106,25 +106,32 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.flushed, true);
 
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 4);
+    assert.equal(messages.length, 2);
 
-    const [m1, m2, m3, m4] = messages;
+    const [m1, m2] = messages;
     assert.equal(m1!.role, "user");
     assert.equal(m2!.role, "assistant");
-    assert.equal(m3!.role, "user");
-    assert.equal(m4!.role, "assistant");
 
     assert.equal(readMessageMetadata(m1!.raw)?.source, "user");
     assert.equal(readMessageMetadata(m1!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(m2!.raw)?.actor, "user");
-    assert.equal(readMessageMetadata(m2!.raw)?.toolInputCompressed, true);
-    assert.equal(readMessageMetadata(m3!.raw)?.source, "user");
-    assert.equal(m3!.content.blocks[0]?.type, "tool_result");
-    assert.equal(readMessageMetadata(m4!.raw)?.kind, "tool_turn_bridge");
-    assert.equal(m4!.content.blocks[0]?.type, "text");
-    if (m4!.content.blocks[0]?.type === "text") {
-      assert.equal(m4!.content.blocks[0].text, TOOL_TURN_BRIDGE_TEXT);
+    assert.match(
+      m1!.content.blocks[0]?.type === "text" ? m1!.content.blocks[0].text : "",
+      /<system-message>/,
+    );
+    assert.match(
+      m1!.content.blocks[0]?.type === "text" ? m1!.content.blocks[0].text : "",
+      /<user-vfs-action/,
+    );
+
+    assert.equal(readMessageMetadata(m2!.raw)?.kind, "user_vfs_ack");
+    assert.equal(m2!.content.blocks[0]?.type, "text");
+    if (m2!.content.blocks[0]?.type === "text") {
+      assert.equal(m2!.content.blocks[0].text, USER_VFS_TURN_ACK_TEXT);
     }
+    assert.equal(
+      m2!.content.blocks.some((b) => b.type === "tool_use"),
+      false,
+    );
   });
 
   it("flush 空 pending 跳过", async () => {
@@ -187,7 +194,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(runParallelCalls, 1);
   });
 
-  it("burst 3 次 pending flush 为 1×U-A-U-A（4 条消息）", async () => {
+  it("burst 3 次 pending flush 为 1×UA（2 条消息）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -199,16 +206,24 @@ describe("UserVfsTurnService", () => {
 
     await userVfsTurn.flushPendingUserVfsTurns(session.id);
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 4);
+    assert.equal(messages.length, 2);
 
-    const assistant = messages[1]!;
-    const toolUses = assistant.content.blocks.filter((b) => b.type === "tool_use");
-    assert.equal(toolUses.length, 3);
-    assert.equal(toolUses[0]?.type === "tool_use" && toolUses[0].id, "tu_1");
-    assert.equal(toolUses[2]?.type === "tool_use" && toolUses[2].id, "tu_3");
+    const userMsg = messages[0]!;
+    assert.equal(userMsg.role, "user");
+    const text =
+      userMsg.content.blocks[0]?.type === "text"
+        ? userMsg.content.blocks[0].text
+        : "";
+    assert.ok(text.includes("/1.md"));
+    assert.ok(text.includes("/2.md"));
+    assert.ok(text.includes("/3.md"));
+    assert.equal(
+      messages[1]!.content.blocks.some((b) => b.type === "tool_use"),
+      false,
+    );
   });
 
-  it("flush 后 checkpoint 锚定第 3 条 tool_result message", async () => {
+  it("flush 后 checkpoint 锚定 U 条 user_vfs_action message", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -251,21 +266,21 @@ describe("UserVfsTurnService", () => {
     await userVfsTurn.flushPendingUserVfsTurns(session.id);
 
     const listed = await messages.listBySession(session.id);
-    const toolResultMsg = listed[2]!;
-    assert.equal(toolResultMsg.role, "user");
-    assert.equal(toolResultMsg.content.blocks[0]?.type, "tool_result");
+    const actionUser = listed[0]!;
+    assert.equal(actionUser.role, "user");
+    assert.equal(readMessageMetadata(actionUser.raw)?.kind, "user_vfs_action");
 
     assert.equal(captureCalls.length, 1);
-    assert.equal(captureCalls[0]!.messageId, toolResultMsg.id);
+    assert.equal(captureCalls[0]!.messageId, actionUser.id);
 
     await svfs.write("/extra.md", "x", { versionCheck: false });
     await ctx.messageCheckpoint.capture(
       session.id,
       project.id,
-      toolResultMsg.id,
+      actionUser.id,
     );
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
-    const tree = await repo.loadFileTree(session.id, toolResultMsg.id);
+    const tree = await repo.loadFileTree(session.id, actionUser.id);
     assert.ok(tree);
     assert.equal(tree.has("/cp.md"), true);
   });

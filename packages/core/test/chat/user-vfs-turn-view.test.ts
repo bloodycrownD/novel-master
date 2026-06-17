@@ -7,7 +7,9 @@ import {
   formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
   parseAllUserVfsActionsFromText,
+  USER_VFS_TURN_ACK_TEXT,
 } from "../../src/domain/chat/logic/user-vfs-turn-view.js";
+import { wrapUserVfsActionsForStorage } from "../../src/domain/chat/logic/user-vfs-turn-constants.js";
 import type { ChatMessage } from "../../src/domain/chat/model/message.js";
 
 function msg(
@@ -45,7 +47,7 @@ describe("parseAllUserVfsActionsFromText", () => {
 });
 
 describe("deriveToolUsesFromVfsActions", () => {
-  it("从 action XML 还原完整 tool input（非压缩 …）", () => {
+  it("从 action XML 还原完整 tool input", () => {
     const actions = parseAllUserVfsActionsFromText(
       '<user-vfs-action kind="delete" path="/test.md" />\n' +
         '<user-vfs-action kind="save" path="/b.md" method="edit">' +
@@ -63,7 +65,27 @@ describe("deriveToolUsesFromVfsActions", () => {
 });
 
 describe("matchUserVfsTurnAt", () => {
-  it("识别完整 U-A-U-A 四段", () => {
+  it("识别完整 UA 两段", () => {
+    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const messages: ChatMessage[] = [
+      msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }], {
+        metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
+      }),
+      msg("a1", 2, "assistant", [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }], {
+        metadata: { kind: "user_vfs_ack", synthetic: true },
+      }),
+    ];
+    const turn = matchUserVfsTurnAt(messages, 0);
+    assert.ok(turn != null);
+    const view = buildUserVfsTurnView(turn);
+    assert.equal(view.actions.length, 1);
+    assert.equal(view.toolUses.length, 1);
+    assert.equal(view.toolResults.length, 1);
+    assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
+    assert.match(formatUserVfsTurnPreviewBody(view), /用户 VFS 操作/);
+  });
+
+  it("旧 U-A-U-A 四段不匹配", () => {
     const messages: ChatMessage[] = [
       msg("u1", 1, "user", [{ type: "text", text: "<user-vfs-action kind=\"delete\" path=\"/a.md\" />" }], {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
@@ -78,12 +100,7 @@ describe("matchUserVfsTurnAt", () => {
         metadata: { kind: "tool_turn_bridge", synthetic: true },
       }),
     ];
-    const turn = matchUserVfsTurnAt(messages, 0);
-    assert.ok(turn != null);
-    const view = buildUserVfsTurnView(turn);
-    assert.equal(view.actions.length, 1);
-    assert.equal(view.toolUses.length, 1);
-    assert.match(formatUserVfsTurnPreviewBody(view), /用户 VFS 操作/);
+    assert.equal(matchUserVfsTurnAt(messages, 0), null);
   });
 });
 

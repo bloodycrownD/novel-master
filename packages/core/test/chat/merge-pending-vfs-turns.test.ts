@@ -7,14 +7,12 @@ import { describe, it } from "node:test";
 import { mergePendingVfsTurns } from "../../src/domain/chat/logic/merge-pending-vfs-turns.js";
 
 describe("mergePendingVfsTurns", () => {
-  it("空队列返回空结果", () => {
+  it("空队列返回空 actionsXml", () => {
     const merged = mergePendingVfsTurns([]);
     assert.equal(merged.actionsXml, "");
-    assert.equal(merged.toolUses.length, 0);
-    assert.equal(merged.toolResults.length, 0);
   });
 
-  it("3 次 pending FIFO 合并为有序 tool_use 与 ok result", () => {
+  it("3 次 pending FIFO 合并为有序 actionsXml", () => {
     const pending = [
       {
         actionXml: '<user-vfs-action kind="delete" path="a.md" />',
@@ -35,15 +33,9 @@ describe("mergePendingVfsTurns", () => {
       },
     ];
     const merged = mergePendingVfsTurns(pending);
-    assert.equal(merged.toolUses.length, 3);
-    assert.equal(merged.toolResults.length, 3);
-    assert.equal(merged.toolUses[0]?.id, "tu_1");
-    assert.equal(merged.toolUses[1]?.id, "tu_2");
-    assert.equal(merged.toolUses[2]?.id, "tu_3");
-    assert.equal(merged.toolResults[0]?.content, "ok");
-    assert.equal(merged.toolResults[1]?.toolUseId, "tu_2");
     assert.ok(merged.actionsXml.includes("delete"));
     assert.ok(merged.actionsXml.includes("mkdir"));
-    assert.ok(merged.toolUses[2]?.input.oldString, "…");
+    assert.ok(merged.actionsXml.includes("edit"));
+    assert.equal(merged.actionsXml.split("\n").length, 3);
   });
 });
