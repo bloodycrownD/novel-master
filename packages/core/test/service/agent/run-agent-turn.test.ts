@@ -9,6 +9,20 @@ import {
 } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 
+function mockUserVfsTurn(overrides: {
+  readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
+  readonly hasPendingTurns?: UserVfsTurnService["hasPendingTurns"];
+}): UserVfsTurnService {
+  return {
+    executeOp: async () => ({ ok: true }),
+    flushPendingUserVfsTurns:
+      overrides.flushPendingUserVfsTurns ??
+      (async () => ({ flushed: false })),
+    hasPendingTurns:
+      overrides.hasPendingTurns ?? (async () => false),
+  };
+}
+
 const sampleDefinition: AgentDefinition = {
   name: "Test",
   prompts: { persist: [], dynamic: [] },
@@ -139,13 +153,12 @@ describe("runAgentTurn", () => {
   it("flushPendingUserVfsTurns 在 append user 之前调用", async () => {
     const order: string[] = [];
     const runtime = makeRuntime({
-      userVfsTurn: {
-        executeOp: async () => ({ ok: true }),
+      userVfsTurn: mockUserVfsTurn({
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
           return { flushed: false };
         },
-      } as UserVfsTurnService,
+      }),
       append: async () => {
         order.push("append");
         return { id: "m-new" };
@@ -169,13 +182,13 @@ describe("runAgentTurn", () => {
       delete: async (id) => {
         order.push(`delete:${id}`);
       },
-      userVfsTurn: {
-        executeOp: async () => ({ ok: true }),
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
           return { flushed: true };
         },
-      } as UserVfsTurnService,
+      }),
       append: async () => {
         appended = true;
         order.push("append");
@@ -212,13 +225,13 @@ describe("runAgentTurn", () => {
       delete: async (id) => {
         order.push(`delete:${id}`);
       },
-      userVfsTurn: {
-        executeOp: async () => ({ ok: true }),
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
           return { flushed: true };
         },
-      } as UserVfsTurnService,
+      }),
       append: async () => {
         order.push("append");
         return { id: "u-reappended" };
@@ -234,7 +247,7 @@ describe("runAgentTurn", () => {
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
 
-  it("pending 为空时空续跑仍写回已删末条 user", async () => {
+  it("pending 为空时空续跑不重排末条 user", async () => {
     const order: string[] = [];
     const runtime = makeRuntime({
       listBySession: async () => [
@@ -243,13 +256,13 @@ describe("runAgentTurn", () => {
       delete: async (id) => {
         order.push(`delete:${id}`);
       },
-      userVfsTurn: {
-        executeOp: async () => ({ ok: true }),
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => false,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
           return { flushed: false };
         },
-      } as UserVfsTurnService,
+      }),
       append: async () => {
         order.push("append");
         return { id: "u-reappended" };
@@ -260,6 +273,40 @@ describe("runAgentTurn", () => {
       runtime,
       "s",
       "",
+    );
+
+    assert.deepEqual(order, ["flush"]);
+  });
+
+  it("flush 失败时仍写回已删末条 user", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      listBySession: async () => [
+        {
+          id: "u-trail",
+          role: "user",
+          content: { blocks: [{ type: "text", text: "续跑" }] },
+        },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => true,
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          throw new Error("flush failed");
+        },
+      }),
+      append: async () => {
+        order.push("append");
+        return { id: "u-reappended" };
+      },
+    });
+
+    await assert.rejects(
+      () => flushPendingUserVfsTurnsWithTrailingUserReorder(runtime, "s", ""),
+      /flush failed/,
     );
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);

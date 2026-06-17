@@ -92,6 +92,56 @@ describe("UserVfsTurnService", () => {
     assert.equal(tailText?.type === "text" ? tailText.text : "", "用户续跑");
   });
 
+  it("F2：A + pending 发送 hi 后顺序为 A, U_vfs, A_ack, U(hi)", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
+    await userVfsTurn.executeOp(session.id, writeOp("/f2.md", "content"));
+
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(
+      { messages: ctx.messages, userVfsTurn },
+      session.id,
+      "hi",
+    );
+    await ctx.messages.append(session.id, "user", textBlocks("hi"));
+
+    const listed = await ctx.messages.listBySession(session.id);
+    assert.equal(listed.length, 4);
+    assert.equal(listed[0]!.role, "assistant");
+    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_action");
+    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_ack");
+    assert.equal(listed[3]!.role, "user");
+    const tailText = listed[3]!.content.blocks[0];
+    assert.equal(tailText?.type === "text" ? tailText.text : "", "hi");
+  });
+
+  it("F3：仅 U + pending 空续跑 flush 后顺序为 U_vfs, A_ack, U", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await ctx.messages.append(session.id, "user", textBlocks("用户续跑"));
+    await userVfsTurn.executeOp(session.id, writeOp("/f3.md", "content"));
+
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(
+      { messages: ctx.messages, userVfsTurn },
+      session.id,
+      "",
+    );
+
+    const listed = await ctx.messages.listBySession(session.id);
+    assert.equal(listed.length, 3);
+    assert.equal(readMessageMetadata(listed[0]!.raw)?.kind, "user_vfs_action");
+    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_ack");
+    assert.equal(listed[2]!.role, "user");
+    const tailText = listed[2]!.content.blocks[0];
+    assert.equal(tailText?.type === "text" ? tailText.text : "", "用户续跑");
+  });
+
   it("F4：pending 空时空续跑不写 UA、末条 user 保留", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
@@ -117,8 +167,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(listed[1]!.role, "user");
     const tailText = listed[1]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "续跑");
-    // 删后重写会换新 id，但内容与顺序不变
-    assert.notEqual(listed[1]!.id, originalUser.id);
+    assert.equal(listed[1]!.id, originalUser.id);
   });
 
   it("execute 失败不写 pending；成功写入 pending", async () => {
