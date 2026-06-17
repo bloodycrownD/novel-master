@@ -114,8 +114,8 @@ export interface TrailingUserSnapshot {
 }
 
 /**
- * flush 前若末条为 user 且空续跑，暂存并删除该条；flush 后再 append 写回。
- * pending 为空时 flush 不落库，但仍须写回已删除的末条 user。
+ * flush 前若 pending 非空、空续跑且末条为 user，暂存并删除该条；flush 后再 append 写回。
+ * pending 为空时 flush 为 no-op，不重排末条 user。
  */
 export async function flushPendingUserVfsTurnsWithTrailingUserReorder(
   runtime: Pick<AgentTurnRuntimePort, "messages" | "userVfsTurn">,
@@ -129,8 +129,8 @@ export async function flushPendingUserVfsTurnsWithTrailingUserReorder(
 
   let trailingUser: TrailingUserSnapshot | null = null;
 
-  // 仅空续跑：末条 user 是待续跑气泡，须在 flush UA 之后重挂。
-  if (trimmed === "") {
+  // 仅 pending 非空且空续跑：末条 user 须在 flush UA 之后重挂，避免 UUA。
+  if (trimmed === "" && (await userVfsTurn.hasPendingTurns(sessionId))) {
     const list = await runtime.messages.listBySession(sessionId);
     const last = list[list.length - 1];
     if (last?.role === "user") {
@@ -139,12 +139,14 @@ export async function flushPendingUserVfsTurnsWithTrailingUserReorder(
     }
   }
 
-  await userVfsTurn.flushPendingUserVfsTurns(sessionId);
-
-  if (trailingUser != null) {
-    await runtime.messages.append(sessionId, "user", trailingUser.content, {
-      raw: trailingUser.raw,
-    });
+  try {
+    await userVfsTurn.flushPendingUserVfsTurns(sessionId);
+  } finally {
+    if (trailingUser != null) {
+      await runtime.messages.append(sessionId, "user", trailingUser.content, {
+        raw: trailingUser.raw,
+      });
+    }
   }
 }
 

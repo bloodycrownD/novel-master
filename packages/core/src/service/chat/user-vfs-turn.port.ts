@@ -48,6 +48,9 @@ export interface UserVfsTurnService {
    * @remarks flush 禁止再次调用 ToolRunner。
    */
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;
+
+  /** 会话是否存在待 flush 的 VFS pending 条目。 */
+  hasPendingTurns(sessionId: string): Promise<boolean>;
 }
 
 /** 桥接 assistant 追加函数（maxSteps 弹窗场景；deps 由工厂绑定）。 */

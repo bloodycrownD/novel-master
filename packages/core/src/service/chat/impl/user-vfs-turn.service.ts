@@ -160,4 +160,9 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
 
     return { flushed: true };
   }
+
+  async hasPendingTurns(sessionId: string): Promise<boolean> {
+    const pending = await loadPendingQueue(this.deps.sessions, sessionId);
+    return pending.length > 0;
+  }
 }
