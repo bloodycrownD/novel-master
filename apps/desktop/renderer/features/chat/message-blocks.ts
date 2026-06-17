@@ -216,12 +216,16 @@ export function buildChatListItems(
     const vfsTurn = matchUserVfsTurnAt(coreMessages, index);
     if (vfsTurn != null) {
       const view = buildUserVfsTurnView(vfsTurn);
+      // UA flush 后会话内无 tool_result，用 view 内已执行成功的合成结果判定卡片状态。
+      const vfsResults = new Map(
+        view.toolResults.map((result) => [result.toolUseId, result]),
+      );
       items.push({
         kind: "user_vfs_turn",
         id: view.id,
         hidden: view.hidden,
         actions: view.actions,
-        tools: view.toolUses.map((use) => toolCallViewFromUse(use, results)),
+        tools: view.toolUses.map((use) => toolCallViewFromUse(use, vfsResults)),
         bridgeText: view.bridgeText,
       });
       index += USER_VFS_TURN_SPAN;

@@ -440,6 +440,7 @@ describe('message-blocks', () => {
     if (items[0]?.kind === 'user_vfs_turn') {
       expect(items[0].id).toBe('u1');
       expect(items[0].tools.length).toBe(1);
+      expect(items[0].tools[0]?.status).toBe('success');
     }
   });
 
