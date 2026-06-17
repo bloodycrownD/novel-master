@@ -12,7 +12,10 @@ import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-too
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageContent,
+} from "@/domain/chat/model/message.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -104,6 +107,47 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** 空续跑时暂存的末条 user，flush 后写回以免 UUA。 */
+export interface TrailingUserSnapshot {
+  readonly content: MessageContent;
+  readonly raw: ChatMessage["raw"];
+}
+
+/**
+ * flush 前若末条为 user 且空续跑，暂存并删除该条；flush 后再 append 写回。
+ * pending 为空时 flush 不落库，但仍须写回已删除的末条 user。
+ */
+export async function flushPendingUserVfsTurnsWithTrailingUserReorder(
+  runtime: Pick<AgentTurnRuntimePort, "messages" | "userVfsTurn">,
+  sessionId: string,
+  trimmed: string,
+): Promise<void> {
+  const userVfsTurn = runtime.userVfsTurn;
+  if (userVfsTurn == null) {
+    return;
+  }
+
+  let trailingUser: TrailingUserSnapshot | null = null;
+
+  // 仅空续跑：末条 user 是待续跑气泡，须在 flush UA 之后重挂。
+  if (trimmed === "") {
+    const list = await runtime.messages.listBySession(sessionId);
+    const last = list[list.length - 1];
+    if (last?.role === "user") {
+      trailingUser = { content: last.content, raw: last.raw };
+      await runtime.messages.delete(last.id);
+    }
+  }
+
+  await userVfsTurn.flushPendingUserVfsTurns(sessionId);
+
+  if (trailingUser != null) {
+    await runtime.messages.append(sessionId, "user", trailingUser.content, {
+      raw: trailingUser.raw,
+    });
+  }
+}
+
 /**
  * Appends a user message (optional) and runs the agent loop (streaming via event bus).
  */
@@ -146,12 +190,13 @@ export async function runAgentTurn(
     stream,
   });
 
-  if (
-    isUserVfsUnifiedToolTurnEnabled() &&
-    runtime.userVfsTurn != null
-  ) {
+  if (isUserVfsUnifiedToolTurnEnabled() && runtime.userVfsTurn != null) {
     stage = "flush-pending-user-vfs-turns";
-    await runtime.userVfsTurn.flushPendingUserVfsTurns(scope.sessionId);
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(
+      runtime,
+      scope.sessionId,
+      trimmed,
+    );
   }
 
   if (trimmed !== "") {

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import {
   AgentTurnError,
+  flushPendingUserVfsTurnsWithTrailingUserReorder,
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
@@ -16,9 +17,10 @@ const sampleDefinition: AgentDefinition = {
 
 function makeRuntime(overrides: {
   readonly listBySession?: () => Promise<
-    ReadonlyArray<{ role: string; content: unknown }>
+    ReadonlyArray<{ id?: string; role: string; content: unknown; raw?: unknown }>
   >;
   readonly append?: () => Promise<{ id: string }>;
+  readonly delete?: (id: string) => Promise<void>;
   readonly userVfsTurn?: UserVfsTurnService;
 }): AgentTurnRuntimePort {
   return {
@@ -37,6 +39,7 @@ function makeRuntime(overrides: {
       append:
         overrides.append ??
         (async () => ({ id: "m1", role: "user", content: { blocks: [] } })),
+      delete: overrides.delete ?? (async () => undefined),
     } as AgentTurnRuntimePort["messages"],
     messageCheckpoint: {
       capture: async () => undefined,
@@ -156,11 +159,16 @@ describe("runAgentTurn", () => {
     assert.deepEqual(order, ["flush", "append"]);
   });
 
-  it("空请求续跑时 flush 在跑 Agent 之前、不 append", async () => {
+  it("空请求续跑时 flush 在跑 Agent 之前、不 append 新 user", async () => {
     const order: string[] = [];
     let appended = false;
     const runtime = makeRuntime({
-      listBySession: async () => [{ role: "user", content: { blocks: [] } }],
+      listBySession: async () => [
+        { id: "u-trail", role: "user", content: { blocks: [] } },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
       userVfsTurn: {
         executeOp: async () => ({ ok: true }),
         flushPendingUserVfsTurns: async () => {
@@ -170,6 +178,7 @@ describe("runAgentTurn", () => {
       } as UserVfsTurnService,
       append: async () => {
         appended = true;
+        order.push("append");
         return { id: "m-new" };
       },
     });
@@ -183,7 +192,76 @@ describe("runAgentTurn", () => {
     } catch {
       // runner deps stubbed
     }
-    assert.deepEqual(order, ["flush"]);
-    assert.equal(appended, false);
+    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
+    // append 仅用于写回末条 user，非新正文
+    assert.equal(appended, true);
+  });
+
+  it("空续跑且末条 user 时 delete→flush→reappend 顺序", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      listBySession: async () => [
+        { id: "a1", role: "assistant", content: { blocks: [] } },
+        {
+          id: "u-trail",
+          role: "user",
+          content: { blocks: [{ type: "text", text: "续跑" }] },
+          raw: { marker: 1 },
+        },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
+      userVfsTurn: {
+        executeOp: async () => ({ ok: true }),
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: true };
+        },
+      } as UserVfsTurnService,
+      append: async () => {
+        order.push("append");
+        return { id: "u-reappended" };
+      },
+    });
+
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(
+      runtime,
+      "s",
+      "",
+    );
+
+    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
+  });
+
+  it("pending 为空时空续跑仍写回已删末条 user", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      listBySession: async () => [
+        { id: "u-trail", role: "user", content: { blocks: [] } },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
+      userVfsTurn: {
+        executeOp: async () => ({ ok: true }),
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: false };
+        },
+      } as UserVfsTurnService,
+      append: async () => {
+        order.push("append");
+        return { id: "u-reappended" };
+      },
+    });
+
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(
+      runtime,
+      "s",
+      "",
+    );
+
+    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
 });
