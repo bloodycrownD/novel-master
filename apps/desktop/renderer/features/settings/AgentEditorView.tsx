@@ -11,14 +11,14 @@ import {
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
-  countFormPromptSources,
-  countMinimumPromptSources,
+  countEffectiveFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
   definitionToForm,
   deletePersistTextBlock,
   formatApplicationModelId,
   formSnapshotJson,
+  hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistBlock,
   parseApplicationModelId,
@@ -420,35 +420,43 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     });
   };
 
-  const deletePersist = (textIndex: number) => {
-    const minimum = countMinimumPromptSources({
-      systemEnabled,
-      systemContent,
-      dynamic,
-    });
-    if (minimum < 1) {
-      const remaining = countFormPromptSources(
-        { systemEnabled, systemContent, persist, dynamic },
-        { excludePersistTextIndex: textIndex },
-      );
-      if (remaining < 1) {
-        showToast("至少保留一个 Prompt 块");
-        return;
-      }
-    }
-    setPersist((prev) => deletePersistTextBlock(prev, textIndex));
-  };
+  const promptRegionForm = () => ({
+    systemEnabled,
+    systemContent,
+    persistEnabled,
+    dynamicEnabled,
+    persist,
+    dynamic,
+  });
 
-  const deleteDynamic = (index: number) => {
-    const remaining = countFormPromptSources(
-      { systemEnabled, systemContent, persist, dynamic },
-      { excludeDynamicIndex: index },
-    );
-    if (remaining < 1) {
+  /** 删除 Prompt 块前校验：三区全关则放行，否则删除后须至少保留一个有效来源。 */
+  const guardPromptBlockDeletion = (
+    nextForm: ReturnType<typeof promptRegionForm>,
+    proceed: () => void,
+  ) => {
+    if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
+      proceed();
+      return;
+    }
+    if (countEffectiveFormPromptSources(nextForm) < 1) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
-    setDynamic((prev) => prev.filter((_, i) => i !== index));
+    proceed();
+  };
+
+  const deletePersist = (textIndex: number) => {
+    const nextPersist = deletePersistTextBlock(persist, textIndex);
+    guardPromptBlockDeletion({ ...promptRegionForm(), persist: nextPersist }, () =>
+      setPersist(nextPersist),
+    );
+  };
+
+  const deleteDynamic = (index: number) => {
+    const nextDynamic = dynamic.filter((_, i) => i !== index);
+    guardPromptBlockDeletion({ ...promptRegionForm(), dynamic: nextDynamic }, () =>
+      setDynamic(nextDynamic),
+    );
   };
 
   const addPersistTextBlock = () => {
@@ -466,23 +474,11 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   };
 
   const removePersistWorktree = () => {
-    const minimum = countMinimumPromptSources({
-      systemEnabled,
-      systemContent,
-      dynamic,
+    const nextPersist = removePersistWorktreeBlock(persist);
+    guardPromptBlockDeletion({ ...promptRegionForm(), persist: nextPersist }, () => {
+      setPersist(nextPersist);
+      setAddBlockMenu(null);
     });
-    if (minimum < 1) {
-      const remaining = countFormPromptSources(
-        { systemEnabled, systemContent, persist, dynamic },
-        { excludeWorktree: true },
-      );
-      if (remaining < 1) {
-        showToast("至少保留一个 Prompt 块");
-        return;
-      }
-    }
-    setPersist((prev) => removePersistWorktreeBlock(prev));
-    setAddBlockMenu(null);
   };
 
   const addDynamicBlock = () => {
