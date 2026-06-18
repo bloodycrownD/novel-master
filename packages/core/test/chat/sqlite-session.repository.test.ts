@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
+import { bootstrapNovelMaster, NOVEL_MASTER_SCHEMA_STATEMENTS, open } from "@novel-master/core";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {
+  BETTER_SQLITE3_DRIVER_NAME,
+  registerBetterSqlite3Driver,
+} from "@novel-master/tdbc-driver-better-sqlite3";
+import { execLegacyV107ChatDdl } from "../bootstrap/helpers/legacy-db-fixtures.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -60,5 +66,39 @@ describe("SqliteSessionRepository user_vfs_pending_json", () => {
     const loaded = await repo.findById(sessionId);
     assert.ok(loaded);
     assert.equal(loaded.userVfsPendingJson, null);
+  });
+});
+
+describe("SqliteSessionRepository legacy 库 bootstrap 后 pending", () => {
+  it("v1.0.7 风格缺列库 bootstrap 后可读写 user_vfs_pending_json", async () => {
+    registerBetterSqlite3Driver();
+    const conn = await open("tdbc:sqlite:file::memory:", {
+      driver: BETTER_SQLITE3_DRIVER_NAME,
+      filename: ":memory:",
+    });
+    const sessionId = randomUUID();
+    const projectId = randomUUID();
+    const now = Date.now();
+
+    await execLegacyV107ChatDdl(conn);
+    for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
+      await conn.execute(sql);
+    }
+    await conn.execute(
+      `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
+       VALUES ('${sessionId}', '${projectId}', 'legacy-bootstrap', ${now}, ${now})`,
+    );
+    await bootstrapNovelMaster(conn);
+
+    const repo = new SqliteSessionRepository(conn);
+    const pendingJson = '[{"actionXml":"<a/>","tools":[],"createdAtMs":1}]';
+    assert.equal(await repo.setUserVfsPendingJson(sessionId, pendingJson), true);
+    assert.equal(await repo.getUserVfsPendingJson(sessionId), pendingJson);
+
+    const sessions = await repo.listByProject(projectId);
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0]!.userVfsPendingJson, pendingJson);
+
+    await conn.close();
   });
 });
