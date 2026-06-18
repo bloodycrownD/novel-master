@@ -1,8 +1,9 @@
 /**
  * Novel Master SQLite 聚合 schema 引导。
  *
- * 在单次事务内执行幂等 DDL（`CREATE IF NOT EXISTS`）与内置 provider 种子数据。
- * 不再包含历史一次性列迁移或 KKV 回填；极旧未升级库需用户自行处理。
+ * 在单次事务内执行幂等 DDL（`CREATE IF NOT EXISTS`）、声明式 legacy 列对齐
+ * 与内置 provider 种子数据。不执行 DROP 列、KKV 搬迁、wire 迁移；
+ * 极旧未升级库（缺表、缺 RENAME 前列等）仍不在支持范围。
  *
  * @module bootstrap/novel-master-bootstrap
  */
@@ -20,6 +21,7 @@ import { PROVIDER_SCHEMA_STATEMENTS } from "./provider/provider-schema.js";
 import { REGEX_SCHEMA_STATEMENTS } from "./regex/regex-schema.js";
 import { AGENT_SCHEMA_STATEMENTS } from "./agent/agent-schema.js";
 import { seedBuiltinProviders } from "./provider/seed-builtin-providers.js";
+import { alignSchemaColumns } from "./schema-align/align-schema-columns.js";
 
 /** 各模块 DDL 语句，按依赖安全顺序排列。 */
 export const NOVEL_MASTER_SCHEMA_STATEMENTS: readonly string[] = [
@@ -46,6 +48,7 @@ export async function bootstrapNovelMaster(conn: TdbcConnection): Promise<void> 
     for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
       await tx.execute(sql);
     }
+    await alignSchemaColumns(tx);
     await seedBuiltinProviders(tx);
   });
 }
