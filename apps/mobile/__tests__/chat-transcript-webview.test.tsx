@@ -452,6 +452,56 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterToggle).toContain('sessionSnapshot');
   });
 
+  it('T-kkv-batch-off: pushStreamDelta 同一 RAF 内按到达序 post streamDelta', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    // think A → text B → think C，须与 runtime FIFO 一致
+    await act(async () => {
+      ref.current?.pushStreamDelta('thinking', 'A');
+      ref.current?.pushStreamDelta('text', 'B');
+      ref.current?.pushStreamDelta('thinking', 'C');
+    });
+    await flushAnimationFrame();
+
+    const streamDeltas = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .filter(msg => msg.type === 'streamDelta');
+
+    expect(streamDeltas).toHaveLength(3);
+    expect(
+      streamDeltas.map(msg => {
+        if (msg.type !== 'streamDelta') {
+          return null;
+        }
+        return {kind: msg.payload.kind, delta: msg.payload.delta};
+      }),
+    ).toEqual([
+      {kind: 'thinking', delta: 'A'},
+      {kind: 'text', delta: 'B'},
+      {kind: 'thinking', delta: 'C'},
+    ]);
+  });
+
   it('imperative pushStreamBatch 发送 streamBatch 且 rich 含 html', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

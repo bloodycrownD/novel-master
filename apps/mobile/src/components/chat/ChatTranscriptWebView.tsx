@@ -225,7 +225,8 @@ export const ChatTranscriptWebView = memo(
     restoreScroll?: TranscriptRestoreScroll;
   } | null>(null);
   const streamRafRef = useRef<number | null>(null);
-  const pendingStreamDeltasRef = useRef({text: '', thinking: ''});
+  /** batch-off 回滚路径：按到达序排队，RAF 内逐条 post streamDelta（禁止 text/thinking 分区重排）。 */
+  const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
   const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
   const streamTextAccumRef = useRef('');
   const streamThinkingAccumRef = useRef('');
@@ -254,8 +255,11 @@ export const ChatTranscriptWebView = memo(
     }
     streamRafRef.current = requestAnimationFrame(() => {
       streamRafRef.current = null;
-      const batch = pendingStreamDeltasRef.current;
-      pendingStreamDeltasRef.current = {text: '', thinking: ''};
+      const segments = pendingStreamDeltaSegmentsRef.current;
+      if (segments.length === 0) {
+        return;
+      }
+      pendingStreamDeltaSegmentsRef.current = [];
       // WHY（中文）：
       // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
       // - Web 侧在 richText 开启时会优先用 html 走 `innerHTML` 路径，以保证 text/thinking 的流式 rich 行为一致。
@@ -266,27 +270,16 @@ export const ChatTranscriptWebView = memo(
         richText,
       );
 
-      const postStreamDelta = (
-        kind: 'text' | 'thinking',
-        delta: string,
-        html: string | undefined,
-      ) => {
+      for (const seg of segments) {
         postToWeb({
           v: 1,
           type: 'streamDelta',
           payload: {
-            kind,
-            delta,
-            html,
+            kind: seg.kind,
+            delta: seg.delta,
+            html: seg.kind === 'text' ? textHtml : thinkingHtml,
           },
         });
-      };
-
-      if (batch.text.length > 0) {
-        postStreamDelta('text', batch.text, textHtml);
-      }
-      if (batch.thinking.length > 0) {
-        postStreamDelta('thinking', batch.thinking, thinkingHtml);
       }
     });
   }, [postToWeb]);
@@ -338,12 +331,7 @@ export const ChatTranscriptWebView = memo(
       } else {
         streamThinkingAccumRef.current += delta;
       }
-      const pending = pendingStreamDeltasRef.current;
-      if (kind === 'text') {
-        pending.text += delta;
-      } else {
-        pending.thinking += delta;
-      }
+      appendWireChunk(pendingStreamDeltaSegmentsRef.current, {kind, delta});
       flushPendingStreamDeltas();
     },
     [webReady, flushPendingStreamDeltas],
@@ -485,7 +473,7 @@ export const ChatTranscriptWebView = memo(
       cancelAnimationFrame(streamRafRef.current);
       streamRafRef.current = null;
     }
-    pendingStreamDeltasRef.current = {text: '', thinking: ''};
+    pendingStreamDeltaSegmentsRef.current = [];
     pendingStreamSegmentsRef.current = [];
     streamTextAccumRef.current = '';
     streamThinkingAccumRef.current = '';
