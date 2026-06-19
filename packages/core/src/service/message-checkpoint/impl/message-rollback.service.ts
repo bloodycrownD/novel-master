@@ -4,6 +4,7 @@
  * @module service/message-checkpoint/impl/message-rollback.service
  */
 
+import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
@@ -21,12 +22,17 @@ import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqli
 import {
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
+  sessionFsRollbackVfsRestoreFailed,
+  isSessionFsError,
 } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import type { MessageRollbackService } from "../message-rollback.port.js";
+import type {
+  MessageRollbackService,
+  RollbackOptions,
+} from "../message-rollback.port.js";
 
 /** Dependencies for {@link DefaultMessageRollbackService}. */
 export interface MessageRollbackServiceDeps {
@@ -35,6 +41,29 @@ export interface MessageRollbackServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly checkpoints: MessageCheckpointRepository;
+}
+
+/** 回滚计划：anchor、tail、待 reconcile 路径与目标树。 */
+type RollbackPlan = {
+  anchor: ChatMessage;
+  tailMessageIds: string[];
+  pathsToReconcile: Set<string>;
+  targetTree: Map<string, number>;
+  projectId: string;
+  sessionId: string;
+  scope: VfsScope;
+};
+
+function formatDegradableMessage(cause: unknown): string {
+  let detail: string;
+  if (isSessionFsError(cause) || isVfsError(cause)) {
+    detail = cause.message;
+  } else if (cause instanceof Error) {
+    detail = cause.message;
+  } else {
+    detail = String(cause);
+  }
+  return `工作区无法恢复：${detail}`;
 }
 
 /**
@@ -47,7 +76,34 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     sessionId: string,
     projectId: string,
     anchorMessageId: string,
+    options?: RollbackOptions,
   ): Promise<void> {
+    const plan = await this.resolveRollbackPlan(
+      sessionId,
+      projectId,
+      anchorMessageId,
+    );
+
+    await this.deps.conn.transaction(async (tx) => {
+      if (!options?.skipVfsReconcile) {
+        try {
+          await this.reconcileVfsPaths(tx, plan);
+        } catch (cause) {
+          throw sessionFsRollbackVfsRestoreFailed(
+            formatDegradableMessage(cause),
+            { sessionId, messageId: anchorMessageId },
+          );
+        }
+      }
+      await this.truncateTailState(tx, sessionId, plan);
+    });
+  }
+
+  private async resolveRollbackPlan(
+    sessionId: string,
+    projectId: string,
+    anchorMessageId: string,
+  ): Promise<RollbackPlan> {
     const clicked = await this.deps.messages.findById(anchorMessageId);
     if (clicked == null) {
       throw sessionFsRollbackMessageNotFound(anchorMessageId);
@@ -57,14 +113,11 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     }
 
     const allMessages = await this.deps.messages.listBySession(sessionId);
-    // Turn boundary: assistant tool bubble → effective anchor at paired tool_result.
     const anchor =
       resolveRollbackAnchorMessage(allMessages, anchorMessageId) ?? clicked;
     const tail = allMessages.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
-    // Rollback is composite: always truncate tail messages; restore workspace when a
-    // checkpoint tree exists (direct, prior, or empty baseline when none).
     const directTargetTree = await this.deps.checkpoints.loadFileTree(
       sessionId,
       anchor.id,
@@ -83,9 +136,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     );
     const tailLogicalPaths = tailPointers.map((p) => p.logicalPath);
 
-    // Boundary: reconcile tail-touched paths and target tree; when anchor has a direct
-    // checkpoint snapshot, also drop files created after that snapshot (R2).
-    // Pre-anchor manual files stay put when anchor has no direct checkpoint (R3).
     const pathsToReconcile = new Set<string>([
       ...tailLogicalPaths,
       ...targetTree.keys(),
@@ -103,40 +153,64 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       }
     }
 
-    await this.deps.conn.transaction(async (tx) => {
-      const vfs = this.scopedVfs(projectId, sessionId, tx);
-      const revisions = new SqliteVfsRevisionRepository(tx);
-      const checkpoints = new SqliteMessageCheckpointRepository(tx);
-      const messages = new SqliteMessageRepository(tx);
-      const entries = new SqliteVfsEntryRepository(tx);
+    return {
+      anchor,
+      tailMessageIds,
+      pathsToReconcile,
+      targetTree,
+      projectId,
+      sessionId,
+      scope,
+    };
+  }
 
-      for (const logicalPath of pathsToReconcile) {
-        const version = targetTree.get(logicalPath);
-        if (version != null) {
-          await restorePathToRevision(
-            vfs,
-            revisions,
-            scope,
-            logicalPath,
-            version,
-          );
-        } else {
-          await this.deletePathIfExists(vfs, logicalPath);
-        }
+  private async reconcileVfsPaths(
+    tx: TdbcConnection,
+    plan: RollbackPlan,
+  ): Promise<void> {
+    const { scope, pathsToReconcile, targetTree, projectId, sessionId } = plan;
+    const vfs = this.scopedVfs(projectId, sessionId, tx);
+    const revisions = new SqliteVfsRevisionRepository(tx);
+
+    for (const logicalPath of pathsToReconcile) {
+      const version = targetTree.get(logicalPath);
+      if (version != null) {
+        await restorePathToRevision(
+          vfs,
+          revisions,
+          scope,
+          logicalPath,
+          version,
+        );
+      } else {
+        await this.deletePathIfExists(vfs, logicalPath);
       }
+    }
+  }
 
-      await checkpoints.deleteCheckpointsForMessages(sessionId, tailMessageIds);
-      await messages.deleteAfterSeq(sessionId, anchor.seq);
+  private async truncateTailState(
+    tx: TdbcConnection,
+    sessionId: string,
+    plan: RollbackPlan,
+  ): Promise<void> {
+    const revisions = new SqliteVfsRevisionRepository(tx);
+    const checkpoints = new SqliteMessageCheckpointRepository(tx);
+    const messages = new SqliteMessageRepository(tx);
+    const entries = new SqliteVfsEntryRepository(tx);
 
-      // Boundary: GC runs after tail checkpoints are removed so unreachable revisions can be dropped.
-      await sweepSessionRevisions(
-        revisions,
-        entries,
-        checkpoints,
-        projectId,
-        sessionId,
-      );
-    });
+    await checkpoints.deleteCheckpointsForMessages(
+      sessionId,
+      plan.tailMessageIds,
+    );
+    await messages.deleteAfterSeq(sessionId, plan.anchor.seq);
+
+    await sweepSessionRevisions(
+      revisions,
+      entries,
+      checkpoints,
+      plan.projectId,
+      sessionId,
+    );
   }
 
   private scopedVfs(
