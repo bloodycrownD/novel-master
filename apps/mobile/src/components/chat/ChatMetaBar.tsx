@@ -3,8 +3,8 @@
  */
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import type {ChatAgentMeta} from '../../services/chat-agent-meta';
-import {useTheme} from '../../theme/ThemeProvider';
+import type {ChatAgentMeta} from '@/services/chat-agent-meta';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   meta: ChatAgentMeta;

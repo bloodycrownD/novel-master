@@ -10,8 +10,8 @@ import {
   Text,
   View,
 } from 'react-native';
-import {AppModal} from '../ui/AppModal';
-import {useTheme} from '../../theme/ThemeProvider';
+import {AppModal} from '@/components/ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
 import {
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
   ANCHORED_MENU_SCREEN_MARGIN,

@@ -14,8 +14,8 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
-import {AppModal} from '../ui/AppModal';
+import {useTheme} from '@/theme/ThemeProvider';
+import {AppModal} from '@/components/ui/AppModal';
 
 const INPUT_MIN_HEIGHT = 120;
 

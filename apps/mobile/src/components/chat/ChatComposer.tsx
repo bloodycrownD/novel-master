@@ -7,14 +7,14 @@ import Svg, {Path, Rect} from 'react-native-svg';
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 
 import { EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, type AgentRunFinishedPayload, type AgentStepCommittedPayload, type AgentStreamTextDeltaPayload, type AgentStreamThinkingDeltaPayload } from "@novel-master/core/events";
-import {useTheme} from '../../theme/ThemeProvider';
-import {formatError} from '../../errors/format-error';
-import {runAgentTurn, type AgentRunScope} from '../../services/agent-run.service';
-import {useRuntime} from '../../hooks/useRuntime';
+import {useTheme} from '@/theme/ThemeProvider';
+import {formatError} from '@/errors/format-error';
+import {runAgentTurn, type AgentRunScope} from '@/services/agent-run.service';
+import {useRuntime} from '@/hooks/useRuntime';
 import {
   readChatComposerDraft,
   writeChatComposerDraft,
-} from '../../storage/chat-composer-draft';
+} from '@/storage/chat-composer-draft';
 import {flushAgentStepUi, flushRunUi} from './flush-run-ui';
 
 type Props = {

@@ -3,7 +3,7 @@
  */
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 import type {ToolCallView} from './message-blocks';
 import {ToolCallCard} from './ToolCallCard';
 

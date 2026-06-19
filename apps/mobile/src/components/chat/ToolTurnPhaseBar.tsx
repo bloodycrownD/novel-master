@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '../../theme/ThemeProvider';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   embedded?: boolean;

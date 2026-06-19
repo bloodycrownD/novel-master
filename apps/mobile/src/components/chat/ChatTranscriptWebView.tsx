@@ -34,11 +34,11 @@ import {
 import {
   CHAT_TRANSCRIPT_BASE_URL,
   CHAT_TRANSCRIPT_HTML,
-} from '../../web/chat-transcript/transcript-html';
+} from '@/web/chat-transcript/transcript-html';
 import {
   emitChatTranscriptTelemetry,
-} from '../../services/chat-transcript-telemetry';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/services/chat-transcript-telemetry';
+import {useTheme} from '@/theme/ThemeProvider';
 import {prepareStreamTailHtml} from './prepare-stream-tail-html';
 
 export type ChatTranscriptWebViewHandle = {

@@ -10,43 +10,43 @@ import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@n
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 
 import { type WorktreeService } from "@novel-master/core/worktree";
-import {AgentPickerModal} from '../../../components/agent/AgentPickerModal';
-import {ChatComposer} from '../../../components/chat/ChatComposer';
-import {ChatMetaBar} from '../../../components/chat/ChatMetaBar';
-import {ChatStreamMetricsBarLive} from '../../../components/chat/ChatStreamMetricsBarLive';
+import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
+import {ChatComposer} from '@/components/chat/ChatComposer';
+import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
+import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
 import type {
   AgentStreamMetricsSnapshot,
   StreamMetricsAccRef,
-} from '../../../hooks/useAgentStreamMetrics';
+} from '@/hooks/useAgentStreamMetrics';
 import {
   ChatTranscriptWebView,
   type ChatTranscriptWebViewHandle,
-} from '../../../components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptScrollSnapshot} from '../../../components/chat/ChatTranscriptBridge';
+} from '@/components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import {
   MessageActionMenu,
   type MessageActionMenuItem,
-} from '../../../components/chat/MessageActionMenu';
-import {MessageEditModal} from '../../../components/chat/MessageEditModal';
-import {MessageList} from '../../../components/chat/MessageList';
-import {MessageBatchHeader} from '../../../components/batch/MessageBatchHeader';
+} from '@/components/chat/MessageActionMenu';
+import {MessageEditModal} from '@/components/chat/MessageEditModal';
+import {MessageList} from '@/components/chat/MessageList';
+import {MessageBatchHeader} from '@/components/batch/MessageBatchHeader';
 import {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
-} from '../../../components/chat/transcript-selectable-role';
-import {ModelPickerModal} from '../../../components/provider/ModelPickerModal';
-import {SessionActionsDrawer} from '../../../components/chrome/SessionActionsDrawer';
+} from '@/components/chat/transcript-selectable-role';
+import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
+import {SessionActionsDrawer} from '@/components/chrome/SessionActionsDrawer';
 import {
   VfsFileManager,
   type VfsFileManagerHandle,
-} from '../../../components/vfs/VfsFileManager';
-import {SegmentedControl} from '../../../components/ui/SegmentedControl';
-import type {MessageMenuAnchor} from '../../../components/chat/MessageActionMenu';
-import type {ChatListScrollSnapshot} from '../../../services/chat-list-scroll-cache';
-import type {ChatAgentMeta} from '../../../services/chat-agent-meta';
-import {setMobileAgentActive} from '../../../runtime/agent-activity';
-import type {ThemeTokens} from '../../../theme/tokens';
+} from '@/components/vfs/VfsFileManager';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
+import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
+import type {ChatAgentMeta} from '@/services/chat-agent-meta';
+import {setMobileAgentActive} from '@/runtime/agent-activity';
+import type {ThemeTokens} from '@/theme/tokens';
 import type {ConversationPanel} from './useChatTabScope';
 
 export type ChatConversationPanelProps = {

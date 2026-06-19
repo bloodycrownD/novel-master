@@ -14,14 +14,14 @@ import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 
 import { type WorktreeService } from "@novel-master/core/worktree";
-import {BottomSheetMenu} from '../../../components/sheet/BottomSheetMenu';
-import {ManageHeader} from '../../../components/batch/ManageHeader';
-import {BatchCheckbox} from '../../../components/batch/BatchCheckbox';
-import {SegmentedControl} from '../../../components/ui/SegmentedControl';
-import {PrimaryButton} from '../../../components/ui/PrototypeButtons';
-import {VfsFileManager} from '../../../components/vfs/VfsFileManager';
-import type {ThemeTokens} from '../../../theme/tokens';
-import {formatRelativeTimeMs} from '../../../utils/format-relative-time';
+import {BottomSheetMenu} from '@/components/sheet/BottomSheetMenu';
+import {ManageHeader} from '@/components/batch/ManageHeader';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {SegmentedControl} from '@/components/ui/SegmentedControl';
+import {PrimaryButton} from '@/components/ui/PrototypeButtons';
+import {VfsFileManager} from '@/components/vfs/VfsFileManager';
+import type {ThemeTokens} from '@/theme/tokens';
+import {formatRelativeTimeMs} from '@/utils/format-relative-time';
 import type {SessionListPanel} from './useChatTabScope';
 
 export type ChatSessionListPanelProps = {

@@ -1,5 +1,5 @@
 import type {TranscriptRow} from './ChatTranscriptBridge';
-import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
+import {prepareTranscriptRichHtml} from '@/components/rich-content/prepare-transcript-rich-html';
 
 const richHtmlCache = new Map<string, string | undefined>();
 

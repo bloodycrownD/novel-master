@@ -5,17 +5,17 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {Alert} from 'react-native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
-import {toastMessage} from '../../../errors/toast-message';
+import {toastMessage} from '@/errors/toast-message';
 import {
   loadChatAgentMeta,
   type ChatAgentMeta,
-} from '../../../services/chat-agent-meta';
-import {loadChatPromptTokenLabelResilient} from '../../../services/chat-prompt-tokens.service';
-import type {RootStackParamList} from '../../../navigation/types';
-import type {MobileNovelMasterRuntime} from '../../../runtime/types';
-import {clearSessionViewCache, sessionViewCacheKey} from '../../../services/chat-session-view-cache';
-import {invalidateSessionWorktreeSnapshot} from '../../../services/worktree-snapshot.service';
-import {nextDefaultSessionTitle} from '../../../utils/session-default-title';
+} from '@/services/chat-agent-meta';
+import {loadChatPromptTokenLabelResilient} from '@/services/chat-prompt-tokens.service';
+import type {RootStackParamList} from '@/navigation/types';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
+import {clearSessionViewCache, sessionViewCacheKey} from '@/services/chat-session-view-cache';
+import {invalidateSessionWorktreeSnapshot} from '@/services/worktree-snapshot.service';
+import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 
 export type SessionListPanel = 'sessions' | 'template';
 export type ChatSubview = 'sessions' | 'conversation';

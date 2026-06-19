@@ -98,6 +98,30 @@ function resolveZodModule(moduleName) {
   return null;
 }
 
+const mobileSrcRoot = path.resolve(__dirname, 'src');
+
+/** Mobile `@/` → apps/mobile/src（优先于 core fallback）。 */
+function resolveMobilePathAlias(moduleName) {
+  if (!moduleName.startsWith('@/')) {
+    return null;
+  }
+  const rel = moduleName.slice(2);
+  const withoutExt = rel.replace(/\.(tsx?|jsx?|mjs|cjs)$/, '');
+  const candidates = [
+    path.join(mobileSrcRoot, rel),
+    path.join(mobileSrcRoot, `${withoutExt}.tsx`),
+    path.join(mobileSrcRoot, `${withoutExt}.ts`),
+    path.join(mobileSrcRoot, `${withoutExt}.jsx`),
+    path.join(mobileSrcRoot, `${withoutExt}.js`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 /** Core dist keeps TS `@/*` path aliases; Metro must map them to dist (or src) files. */
 function resolveCorePathAlias(moduleName) {
   if (!moduleName.startsWith('@/')) {
@@ -199,6 +223,11 @@ const config = {
         fs.existsSync(entitiesDecodeCodepoint)
       ) {
         return {type: 'sourceFile', filePath: entitiesDecodeCodepoint};
+      }
+
+      const mobileAliasPath = resolveMobilePathAlias(moduleName);
+      if (mobileAliasPath != null) {
+        return {type: 'sourceFile', filePath: mobileAliasPath};
       }
 
       const coreAliasPath = resolveCorePathAlias(moduleName);

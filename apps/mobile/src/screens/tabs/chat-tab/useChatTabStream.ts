@@ -3,23 +3,23 @@
  */
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import type {RefObject} from 'react';
-import type {ChatTranscriptWebViewHandle} from '../../../components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptScrollSnapshot} from '../../../components/chat/ChatTranscriptBridge';
-import {useStreamToolInvoking} from '../../../hooks/useStreamToolInvoking';
-import {useStreamMetricsAcc} from '../../../hooks/useAgentStreamMetrics';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
+import {useStreamToolInvoking} from '@/hooks/useStreamToolInvoking';
+import {useStreamMetricsAcc} from '@/hooks/useAgentStreamMetrics';
 import {
   getScrollSnapshot,
   scrollCacheKey,
   setScrollSnapshot,
   type ChatListScrollSnapshot,
-} from '../../../services/chat-list-scroll-cache';
+} from '@/services/chat-list-scroll-cache';
 import {
   getTranscriptScrollSnapshot,
   normalizeScrollSnapshot,
   setTranscriptScrollSnapshot,
-} from '../../../services/chat-transcript-scroll-cache';
-import {emitChatTranscriptTelemetry} from '../../../services/chat-transcript-telemetry';
-import {createStreamBuffer} from '../../../services/stream-buffer.service';
+} from '@/services/chat-transcript-scroll-cache';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
+import {createStreamBuffer} from '@/services/stream-buffer.service';
 
 export type UseChatTabStreamParams = {
   useWebviewTranscript: boolean;
