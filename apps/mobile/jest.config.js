@@ -18,6 +18,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/chat.js',
     ),
+    '^@novel-master/core/events$': path.join(
+      repoRoot,
+      'packages/core/dist/public/events.js',
+    ),
   '^@/(.*)$': '<rootDir>/src/$1',
     '^@novel-master/core/front-matter$': '<rootDir>/test-utils/front-matter-shim.ts',
     '^@novel-master/core/nmtp$': path.join(
