@@ -57,3 +57,9 @@ Electron **must** load preload as **CommonJS** (`preload.cjs`). The build script
 - `src/main/` — runtime singleton, IPC handlers, agent run, backup, YAML dialogs
 - `renderer/` — React shell (chat rail, explorer, preview, settings overlay)
 - `shared/ipc-types.ts` — typed IPC channel contract
+
+## Path aliases (`@/` / `@shared/`)
+
+Renderer 源码使用 `@/` 指向 `apps/desktop/renderer/`、`@shared/` 指向 `apps/desktop/shared/`（`tsconfig.renderer.json` paths 与 `vite.config.ts` `resolve.alias` 一致）。示例：`@/features/chat/ChatComposer`、`@shared/ipc-types`。
+
+跨 workspace 包请用包名导入，例如 `@novel-master/core`；**不要**用 `@/` 引用 `packages/` 内代码。仓库根目录静态资源（如应用图标）使用 `@assets/` → `assets/`。
