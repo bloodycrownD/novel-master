@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   flushAgentStepUi,
   flushRunUi,
-} from "../renderer/features/chat/flush-run-ui.js";
+} from "@/features/chat/flush-run-ui";
 
 describe("flush-run-ui (desktop)", () => {
   it("flushAgentStepUi reloads then clears stream only after assistant phase", async () => {

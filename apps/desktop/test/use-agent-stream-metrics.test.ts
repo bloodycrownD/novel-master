@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildAgentStreamMetricsLabel } from "../renderer/features/chat/AgentStreamMetricsBar.js";
+import { buildAgentStreamMetricsLabel } from "@/features/chat/AgentStreamMetricsBar";
 import {
   formatCharCount,
   formatStreamElapsed,
-} from "../renderer/hooks/useAgentStreamMetrics.js";
+} from "@/hooks/useAgentStreamMetrics";
 
 describe("useAgentStreamMetrics formatters", () => {
   it("formatStreamElapsed 在 60s 内保留一位小数", () => {

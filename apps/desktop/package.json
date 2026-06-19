@@ -19,7 +19,7 @@
     "dist": "npm run build && node scripts/rebuild-native.mjs && electron-builder",
     "start": "node scripts/start-electron.mjs",
     "clean": "node --input-type=module --eval \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\"",
-    "test": "tsx --test test/**/*.test.ts test/**/*.test.js"
+    "test": "tsx --tsconfig tsconfig.renderer.json --test test/**/*.test.ts test/**/*.test.js"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",

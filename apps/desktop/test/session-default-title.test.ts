@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { nextDefaultSessionTitle } from "../renderer/utils/session-default-title";
+import { nextDefaultSessionTitle } from "@/utils/session-default-title";
 
 test("nextDefaultSessionTitle assigns 会话1 on empty list", () => {
   assert.equal(nextDefaultSessionTitle([]), "会话1");

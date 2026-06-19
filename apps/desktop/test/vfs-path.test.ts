@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { joinVfsPath } from "../renderer/utils/vfs-path";
+import { joinVfsPath } from "@/utils/vfs-path";
 
 test("joinVfsPath builds paths under root", () => {
   assert.equal(joinVfsPath("/", "a.txt"), "/a.txt");
