@@ -41,6 +41,6 @@ export interface WorktreeService {
   /** Renders `<file>` blocks for visible files. */
   renderDisplay(): Promise<string>;
 
-  /** Renders worktree-filtered ASCII directory tree（非 dynamic `{{$filetree}}`；后者走 VFS）。 */
+  /** 渲染 worktree ASCII 目录树（`{{$filetree}}` 与工作区，含加载状态后缀）。 */
   renderFileTree(): Promise<string>;
 }

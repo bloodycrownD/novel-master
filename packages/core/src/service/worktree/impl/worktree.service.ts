@@ -23,6 +23,7 @@ import {
   buildWorktreeDirSet,
   directChildDirs,
   directChildFiles,
+  parentDirOf,
 } from "@/domain/worktree/logic/worktree-tree.js";
 import {
   evaluateFileDisplay,
@@ -31,7 +32,7 @@ import {
   type WorktreeFileSortMeta,
 } from "@/domain/worktree/logic/worktree-eval.js";
 import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
-import { renderWorktreeFileTree } from "@/domain/worktree/logic/worktree-file-tree.js";
+import { renderWorktreeFileTreeForMacro } from "@/domain/worktree/logic/worktree-file-tree.js";
 import {
   isWorktreeRootPath,
   worktreeRootLogicalPath,
@@ -131,13 +132,7 @@ export class DefaultWorktreeService implements WorktreeService {
     return {
       listRows,
       worktreeDisplay: joinFileBlocks(blocks),
-      filetreeDisplay: renderWorktreeFileTree({
-        scope: this.scope,
-        allDirs: ctx.allDirs,
-        fileSet: ctx.fileSet,
-        dirRuleMap: ctx.dirRuleMap,
-        mtimeByPath: ctx.mtimeByPath,
-      }),
+      filetreeDisplay: await this.renderFileTree(),
     };
   }
 
@@ -155,12 +150,24 @@ export class DefaultWorktreeService implements WorktreeService {
 
   async renderFileTree(): Promise<string> {
     const ctx = await this.loadContextMetadata();
-    return renderWorktreeFileTree({
+    const displayByPath = new Map<string, DisplayState>();
+    for (const filePath of ctx.fileSet) {
+      const parent = parentDirOf(filePath);
+      if (parent == null) {
+        continue;
+      }
+      displayByPath.set(
+        filePath,
+        this.computeDisplay(filePath, parent, ctx),
+      );
+    }
+    return renderWorktreeFileTreeForMacro({
       scope: this.scope,
       allDirs: ctx.allDirs,
       fileSet: ctx.fileSet,
       dirRuleMap: ctx.dirRuleMap,
       mtimeByPath: ctx.mtimeByPath,
+      displayByPath,
     });
   }
 
