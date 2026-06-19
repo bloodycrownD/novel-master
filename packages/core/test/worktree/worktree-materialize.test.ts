@@ -82,7 +82,7 @@ describe("worktree materialize", () => {
     const materialized = await wt.materialize();
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
-    assert.equal(calls.listFileMetaUnderPrefix, 2);
+    assert.equal(calls.listFileMetaUnderPrefix, 3, "materialize 额外调用 renderFileTree 再加载一次 metadata");
   });
 
   it("filename fill display never calls findByPath", async () => {
@@ -171,6 +171,25 @@ describe("worktree materialize", () => {
       rows.map((r) => r.path),
       materialized.listRows.map((r) => r.path),
     );
+  });
+
+  it("materialize filetreeDisplay 与 renderFileTree 一致且含加载后缀", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/a.md", "A");
+    await pvfs.write("/b.md", "B");
+
+    const { wt } = createSpyingWorktreeService(ctx.conn, project.id);
+    await wt.setFileRule({
+      logicalPath: "/a.md",
+      inclusionMode: "show",
+    });
+
+    const materialized = await wt.materialize();
+    const fileTree = await wt.renderFileTree();
+    assert.equal(materialized.filetreeDisplay, fileTree);
+    assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
 
   it("session worktree snapshot getOrRefresh stores listRows", async () => {

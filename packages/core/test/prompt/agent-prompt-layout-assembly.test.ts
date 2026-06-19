@@ -4,7 +4,7 @@ import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
 
 import { buildPromptLlmInputFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
 
-import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
+import type { WorktreeService } from "@novel-master/core/worktree";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -22,12 +22,10 @@ function message(role: string, content: string, seq: number): ChatMessage {
   };
 }
 
-function mockVfs(entries: readonly VfsListEntry[]): VfsService {
+function mockWorktree(fileTree: string): WorktreeService {
   return {
-    async list() {
-      return [...entries];
-    },
-  } as unknown as VfsService;
+    renderFileTree: async () => fileTree,
+  } as unknown as WorktreeService;
 }
 
 describe("buildPromptLlmInputFromLayout assembly order", () => {
@@ -51,14 +49,14 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   };
 
   it("顺序：system 字段 + persist + chat + dynamic", async () => {
-    const vfs = mockVfs([{ path: "/readme.md", kind: "file" }]);
+    const worktree = mockWorktree("/\n└── readme.md 全部加载");
     const input = await buildPromptLlmInputFromLayout(
       layout,
       {
         worktreeDisplay: "WT-BODY",
         messages: [message("user", "hi", 1)],
         now: fixedNow,
-        vfs,
+        worktree,
       },
       { agentStepIndex: 0 },
     );
@@ -73,7 +71,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
   it("dynamic lifecycle once 在 step≥1 跳过", async () => {
     const input = await buildPromptLlmInputFromLayout(
       layout,
-      { worktreeDisplay: "WT", messages: [], vfs: mockVfs([]) },
+      { worktreeDisplay: "WT", messages: [], worktree: mockWorktree("/") },
       { agentStepIndex: 1 },
     );
     assert.equal(input.messages.length, 2);
@@ -81,9 +79,11 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     assert.equal(input.messages[1]!.id, "prompt:worktree:canon");
   });
 
-  it("$filetree 走 VFS list，不调用 WorktreeService", async () => {
-    const list = mock.fn(async () => [{ path: "/x.md", kind: "file" as const }]);
-    const vfs = { list } as unknown as VfsService;
+  it("$filetree 走 WorktreeService.renderFileTree，不调用 vfs.list", async () => {
+    const renderFileTree = mock.fn(async () => "/\n└── x.md 全部加载");
+    const worktree = { renderFileTree } as unknown as WorktreeService;
+    const list = mock.fn(async () => []);
+    const vfs = { list } as unknown as import("@novel-master/core/vfs").VfsService;
     const input = await buildPromptLlmInputFromLayout(
       {
         dynamicEnabled: true,
@@ -92,10 +92,11 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
           { name: "d", type: "text", role: "user", content: "{{$filetree}}" },
         ],
       },
-      { worktreeDisplay: "", messages: [], vfs },
+      { worktreeDisplay: "", messages: [], worktree, vfs },
     );
-    assert.equal(list.mock.callCount(), 1);
-    assert.match(messageBodyText(input.messages[0]!), /x\.md/);
+    assert.equal(renderFileTree.mock.callCount(), 1);
+    assert.equal(list.mock.callCount(), 0);
+    assert.match(messageBodyText(input.messages[0]!), /x\.md 全部加载/);
   });
 });
 
