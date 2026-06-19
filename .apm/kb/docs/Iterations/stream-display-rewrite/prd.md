@@ -1,28 +1,24 @@
 ---
 date: 2026-06-19
+updated: 2026-06-19
 dependency:
-  - Iterations/mobile-stream-display-pacing/prd.md
   - Iterations/mobile-webview-chat-transcript/prd.md
-supersedes:
+supersedes_observation:
   - Iterations/mobile-stream-display-pacing/prd.md
-  - Iterations/mobile-webview-chat-transcript/prd.md
 ---
 
 # Mobile 聊天列表显示重写 — 产品需求（PRD）
 
+> **代码基线**：`main`。  
+> **实现分支**：`feature/stream-display-rewrite`（从 main 拉出）。
+
 ## 背景
 
-Mobile assistant 流式显示在 [`mobile-stream-display-pacing`](../mobile-stream-display-pacing/prd.md) 多轮修复后（留存分支 `feature/mobile-stream-display-pacing`），真机仍出现 **thinking 完整、message 中途停更、RN JS 硬冻结**（见 [research.md](./research.md)）。
+main 现网：WebView transcript + `runAgentTurn(core)` + Composer 订阅 Bus 流式事件 + step commit 后 `reloadMessages(DB)`。
 
-根因判定为 **架构**：RN↔WebView 双 runtime、thinking/text 双 Bus、`useChatTabStream` pacer — **不是** prompt 或单次性能调参。
+pacing 实验（`feature/mobile-stream-display-pacing`，**未合 main**）证明继续 patch WebView/pacer **不能**根治 RN 主线程 freeze；详见 [research.md](./research.md)。
 
-[`mobile-webview-chat-transcript`](../mobile-webview-chat-transcript/prd.md) 解决了滚动/layout，但 **流式 bridge 成为新的 freeze 温床**。用户决策：
-
-1. **重写 chat 列表显示与流式**（普通 AI 聊天 UI）。
-2. **以现成 RN AI chat 库为主体**，自研仅 **core → 库的薄 adapter** 与少量 **自定义 renderer**。
-3. **不再** 在 WebView 流式栈或 `useChatTabStream` 上 patch。
-4. **core agent / VFS / Composer / DB** 不在本迭代重写范围内。
-5. **消息操作菜单** 由长按改为 **气泡右上角「⋯」更多按钮**（降低实现与滚动冲突成本）。
+本迭代：**库渲染 + External Store adapter** 接现有 core agent，**不**引入第二套 chat agent（不用 `ChatModelAdapter.run()` 发请求）。
 
 ---
 
@@ -30,24 +26,16 @@ Mobile assistant 流式显示在 [`mobile-stream-display-pacing`](../mobile-stre
 
 | 维度 | 目标 | 成功指标 |
 |------|------|----------|
-| **正确性** | 长 thinking + 长 text + tool 流式不 freeze | mock SSE 真机 10min 无 RN 硬冻结 |
-| **实现策略** | 库优先 chat 列表 | spike 通过 assistant-ui 或 rn-ai-elements 之一 |
-| **集成** | 薄 adapter 接 core `LlmStreamEvent` | 无 WebView 流式 `postMessage` |
-| **特殊行** | `user_vfs_turn`、Tool 样式覆写 | 列表可见且不影响流式 tail |
-| **消息菜单** | ⋯ 按钮弹出编辑/复制/Fork/回滚 | 无长按；agent 运行中禁用；不引发布局跳变 |
-| **可测** | mock SSE fixture | 不依赖 GLM prompt |
+| **架构** | core agent 不变；库只渲染 | `useExternalStoreRuntime` + 外部 `chatMessages` / tail |
+| **正确性** | 长流式不 freeze | **burst** fixture 真机 10min；停止按钮 100ms 内响应 |
+| **Tool** | 流式 tool-call + commit 后 DB 卡 | 无双气泡；对齐 desktop 订阅 TOOL_USE |
+| **UX** | ⋯ 菜单；Batch/prepend 可用 | M1 允许 prepend  scroll 弱于 WebView（文档化） |
 
 ---
 
 ## 用户与场景
 
-| 场景 | 期望 |
-|------|------|
-| 日常对话 | 流式 thinking + 正文 + tool 卡正常更新、贴底跟随 |
-| 编辑/回滚 | 点消息 ⋯ → 选操作；逻辑与现网一致 |
-| VFS 操作 turn | 仍以专用卡片展示，非流式热点 |
-| Batch 隐藏/恢复 | Header Batch 模式；消息行点选，**不**与 ⋯ 菜单并存 |
-| Agent 运行中 | ⋯ 隐藏或禁用（与现网长按禁用一致） |
+（同前：日常对话、⋯ 编辑/回滚、VFS turn、Batch、agent 运行中无 ⋯）
 
 ---
 
@@ -55,72 +43,73 @@ Mobile assistant 流式显示在 [`mobile-stream-display-pacing`](../mobile-stre
 
 ### 包含
 
-- 选型 spike（见 [spec.md](./spec.md)）：assistant-ui RN **或** rn-ai-elements。
-- `apps/mobile` chat tab **transcript 区**替换为库组件 + adapter。
-- 删除 WebView **流式** bridge（`useChatTabStream` pacer、`pushStreamDeltaBatch` 等）。
-- 自定义 renderer：`user_vfs_turn`、`Tool` 样式覆写。
-- **消息 ⋯ 菜单**：复用 `buildMessageActionItems` / `handleMessageMenuAction`；UI 改为 RN 原生按钮 + `MessageActionMenu`（或 BottomSheet）。
-- 历史 prepend、滚动缓存与列表接线（复用 `useChatTabMessages` 等）。
+- `useExternalStoreRuntime` 集成（见 spec §Runtime）。
+- Bus **方案 A**：library 路径 **`useChatLibraryRuntime` 独占 STREAM + STEP + RUN + RUN_FAILED**（唯一 flush）；Composer 零 Bus。
+- TOOL_USE 流式 + commit 后 DB 展示。
+- RN Display 节流（coalesce + ~20Hz apply）。
+- 从 main spike → **M3 移除 chat WebView transcript + legacy MessageList 全部代码**（清单见 spec §M3 删除清单）。
 
 ### 不包含
 
-- core agent、VFS 协议、Composer 壳、工作区、DB schema。
-- 自研 `packages/stream-rn` UI 包。
-- Stream Chat Cloud / 腾讯云 IM / CopilotKit。
-- Desktop chat 全量迁移（Phase 2）。
-- WebView 流式 hybrid；WebView transcript 在接入完成后整体移除。
-- **长按菜单**（本迭代明确废弃，不追求与 WebView T7 像素级一致）。
+- 合并 pacing feature；patch main webview 流式。
+- `RichDocumentWebView`（VFS 预览）。
+- core agent / Composer 发送逻辑重写。
 
 ---
 
 ## 核心需求
 
-1. **库承担** Conversation / Message / Reasoning / Tool / 流式 markdown。
-2. **adapter** 将 `LlmStreamEvent`（及 `EVENT_AGENT_STREAM_*` Bus）转为库 message parts，单 turn、wire 顺序。
-3. **移除** RN↔WebView 流式 bridge 与 `StreamDisplayPacer` 显示路径。
-4. **`user_vfs_turn`** 用 RN 自定义行或 data part 展示，不走流式。
-5. **消息操作** 通过 ⋯ 按钮触发，复用现有 edit/copy/fork/rollback 业务逻辑。
-6. **Feature flag** 迁移期可切 `webview` / `library`，默认在 spike 通过后切 `library`。
-7. spike **未通过** 不得合主路径或宣称 freeze 已修。
+1. **库 + External Store**：messages 来自 `useChatTabMessages` + 内存 `streamingTurn`；发送仍走 `ChatComposer` → `runAgentTurn`。
+2. **Bus 方案 A**：runtime **独占** STREAM + STEP + RUN + RUN_FAILED；library 下 Composer **零 Bus**；**catch 不调用 flushRunUi**（错误 flush 仅 RUN_FAILED）。
+3. **Tool**：订阅 `EVENT_AGENT_STREAM_TOOL_USE` 流式展示；library 路径移除 `useStreamToolInvoking`。
+4. **Tail 状态机**：runtime 内联 `flushAgentStepUi` / `flushRunUi` 语义；flush 后调 `onStepCommitted` / `onRunFinished`（vfs bump）。
+5. **`agentRunning`**：library 路径由 **`useChatLibraryRuntime` 暴露**；ChatTabScreen 不读旁路 `useChatTabStream`。
+6. **Display 节流**：Ingress 32ms；Apply 默认 **re-render ~20Hz**（Spike 写死；字符配额仅作备选）。
+7. **Batch / prepend**：外层 RN；M1 接受 prepend scroll 弱于 WebView。
+8. ⋯ 菜单；`library` 引擎；spike 用 **burst** fixture。
 
 ---
 
 ## 验收标准
 
-### 流式（G-freeze）
+### 流式（burst）
 
-- **Given** 固定 mock SSE（长 thinking → 长 text → 交错 thinking → tool）
-- **When** 真机连续 replay ≥ 10 分钟
-- **Then** message 持续更新；Metro 无 RN JS 业务断档；无 display freeze
+- **Given** core SSE burst replay fixture（非低速 mock）
+- **When** 真机连续 ≥10min
+- **Then** thinking/text/tool 持续更新；无 RN 业务断档；**停止/Tab 100ms 内响应**
 
-### 功能
+### step handoff
 
-- **Given** 含 thinking、text、tool、markdown 的历史会话
-- **When** 打开会话
-- **Then** 库 UI 正确渲染；`user_vfs_turn` 行可见；step commit 后历史与 DB 一致
+- **Given** assistant step 落库
+- **When** `STEP_COMMITTED` phase=assistant
+- **Then** tail 清空；列表仅显示 DB 消息；**无重复气泡**
 
-### 消息 ⋯ 菜单
+### Tool
 
-- **Given** agent 未运行、非 Batch 模式
-- **When** 用户点击 assistant/user 消息右上角 ⋯
-- **Then** 弹出菜单含：编辑（仅有 text 时）、复制、Fork、回滚；选后行为与现网 `handleMessageMenuAction` 一致
-- **When** agent 运行中
-- **Then** ⋯ 不可见或不可点
-- **When** 打开菜单
-- **Then** 列表 **不** 发生 scroll jump / contentHeight 跳变（相对 WebView 长按 T7 放宽为「无肉眼可见跳动」）
+- **Given** 流式 TOOL_USE
+- **When** tail 展示 tool-call
+- **Then** commit 后 tail 消失，历史 tool 卡来自 DB
 
-### 迁移
+### 功能 / 菜单 / 迁移
 
-- **Given** spike 通过
-- **When** `chatTranscriptEngine = 'library'`
-- **Then** 无 WebView 流式 `postMessage`；`useChatTabStream` 不再驱动 transcript
+（同前 PRD；library 引擎无 WebView 流式 postMessage）
+
+### 错误 flush（RUN_FAILED）
+
+- **Given** `runAgentTurn` 失败（core 先发 RUN_FAILED 再 throw）
+- **When** library 引擎
+- **Then** `reloadMessages` + clear tail **仅一次**；Composer catch 只展示 error，不 second flush
+
+### M1 已知可接受回退
+
+- prepend 后 scroll 锚定可能弱于 WebView（须记录在 release note / 真机清单）
 
 ---
 
 ## 参考
 
-- 调研与库能力：[research.md](./research.md)
-- 技术方案：[spec.md](./spec.md)
-- pacing 留存分支：`feature/mobile-stream-display-pacing`
+- [spec.md](./spec.md) — Runtime、Bus、状态机、Batch、spike 清单
+- [research.md](./research.md)
+- pacing 留存：`feature/mobile-stream-display-pacing`
 
 **生成路径**：`.apm/kb/docs/Iterations/stream-display-rewrite/prd.md`

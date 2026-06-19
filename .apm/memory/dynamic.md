@@ -1,20 +1,20 @@
 ---
-createdAt: '2026-05-25 00:45:47'
-updatedAt: '2026-06-18 00:36:17'
+createdAt: '2026-05-23 17:38:51'
+updatedAt: '2026-06-19 16:00:00'
 ---
-# vfs-flush-insert-after-assistant 轮次 2 完成
+# 动态记忆 — stream-display-rewrite
 
-## 状态
-merge-ready
+## 状态：spec 修订待用户确认（九项风险已写入）
 
-## HEAD
-5953bd38
+## 已定决策
+- Runtime: useExternalStoreRuntime（无 setMessages；Spike 验 warn/workaround）
+- Bus: runtime 独占 STREAM+STEP+RUN+RUN_FAILED；Composer library **零 Bus**
+- agentRunning: useChatLibraryRuntime 暴露（ChatTabScreen 不读旁路 stream）
+- Tool: TOOL_USE 订阅；废弃 useStreamToolInvoking
+- Display: Ingress 32ms；Apply 默认 re-render ~20Hz（Spike 写死；字符配额备选）
 
-## 提交
-- 8e34415e fix(ui): VFS 工具卡片 flush 后显示成功
-- d8dbcc8b fix(core): 空续跑时 VFS flush 插在末条 assistant 之后
-- b27b8662 fix(core): pending 非空才重排末条 user，flush 失败时恢复
-- 5953bd38 test(core): 补充 F2/F3/F4 与 flush 失败恢复用例
+## 文档
+- `.apm/kb/docs/Iterations/stream-display-rewrite/{prd,spec,research}.md`
 
-## 验证
-core run-agent-turn|user-vfs-turn + mobile message-blocks + npm run build
+## 下一步
+- 用户确认 spec → feature/stream-display-rewrite Step 0
