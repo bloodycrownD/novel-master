@@ -1,4 +1,4 @@
-import React from 'react';
+import {SimpleEventBus} from '@novel-master/core/events';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {
@@ -50,6 +50,7 @@ const mockRuntime: any = {
     getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
   eventOrchestrator: {emit: jest.fn()},
+  eventBus: new SimpleEventBus(),
   worktree: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
@@ -121,13 +122,18 @@ jest.mock('../src/services/regex-apply-channel', () => ({
   loadSessionMessagesPageForDisplay: jest.fn(async () => []),
 }));
 
-jest.mock('../src/services/stream-buffer.service', () => ({
-  createStreamBuffer: () => ({
+jest.mock('../src/services/stream-apply-buffer', () => ({
+  createStreamApplyBuffer: () => ({
     push: jest.fn(),
+    pushAll: jest.fn(),
     flush: jest.fn(),
     reset: jest.fn(),
     dispose: jest.fn(),
   }),
+}));
+
+jest.mock('../src/storage/chat-stream-batch-pref', () => ({
+  readChatStreamBatchEnabled: jest.fn(async () => true),
 }));
 
 jest.mock('../src/storage/chat-transcript-engine', () => ({

@@ -5,8 +5,6 @@ import React, {useCallback, useEffect, useMemo} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import { type ChatMessage } from "@novel-master/core/chat";
 
-import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@novel-master/core/events";
-
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 
 import { type WorktreeService } from "@novel-master/core/worktree";
@@ -124,12 +122,8 @@ export type ChatConversationPanelProps = {
   onToggleMessageSelect: (messageId: string) => void;
   onMessageLongPress: (msg: ChatMessage, anchor: MessageMenuAnchor) => void;
   onAgentRunningChange: (running: boolean) => void;
-  onStreamText: (delta: string) => void;
-  onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void;
-  onStepCommitted: (payload: AgentStepCommittedPayload) => void;
-  onRunFinished: (payload: AgentRunFinishedPayload) => void;
   onNeedModel: () => void;
   bumpVfsRefresh: () => void;
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
@@ -208,12 +202,8 @@ export function ChatConversationPanel({
   onToggleMessageSelect,
   onMessageLongPress,
   onAgentRunningChange,
-  onStreamText,
-  onStreamThinking,
   onStreamReset,
   onMessagesChanged,
-  onStepCommitted,
-  onRunFinished,
   onNeedModel,
   bumpVfsRefresh,
   onOpenFileEditor,
@@ -395,12 +385,8 @@ export function ChatConversationPanel({
                 onAgentRunningChange(running);
                 setMobileAgentActive(running);
               }}
-              onStreamText={onStreamText}
-              onStreamThinking={onStreamThinking}
               onStreamReset={onStreamReset}
               onMessagesChanged={onMessagesChanged}
-              onStepCommitted={onStepCommitted}
-              onRunFinished={onRunFinished}
               onNeedModel={onNeedModel}
               canResumeWithoutInput={canResumeWithoutInput}
               lastMessageHasToolResult={lastMessageHasToolResult}

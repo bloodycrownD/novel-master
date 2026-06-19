@@ -69,8 +69,6 @@ function Harness(props: {
         hasModel={true}
         running={running}
         onRunningChange={setRunning}
-        onStreamText={() => undefined}
-        onStreamThinking={() => undefined}
         onStreamReset={() => undefined}
         onMessagesChanged={() => undefined}
         onNeedModel={() => undefined}

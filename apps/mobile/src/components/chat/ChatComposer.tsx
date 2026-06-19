@@ -6,7 +6,6 @@ import {Alert, Pressable, StyleSheet, Text, TextInput, View} from 'react-native'
 import Svg, {Path, Rect} from 'react-native-svg';
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 
-import { EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, type AgentRunFinishedPayload, type AgentStepCommittedPayload, type AgentStreamTextDeltaPayload, type AgentStreamThinkingDeltaPayload } from "@novel-master/core/events";
 import {useTheme} from '@/theme/ThemeProvider';
 import {formatError} from '@/errors/format-error';
 import {runAgentTurn, type AgentRunScope} from '@/services/agent-run.service';
@@ -15,19 +14,14 @@ import {
   readChatComposerDraft,
   writeChatComposerDraft,
 } from '@/storage/chat-composer-draft';
-import {flushAgentStepUi, flushRunUi} from './flush-run-ui';
 
 type Props = {
   scope: AgentRunScope;
   hasModel: boolean;
   running: boolean;
   onRunningChange: (running: boolean) => void;
-  onStreamText: (delta: string) => void;
-  onStreamThinking: (delta: string) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
-  onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
-  onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onNeedModel: () => void;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
@@ -42,12 +36,8 @@ export function ChatComposer({
   hasModel,
   running,
   onRunningChange,
-  onStreamText,
-  onStreamThinking,
   onStreamReset,
   onMessagesChanged,
-  onStepCommitted,
-  onRunFinished,
   onNeedModel,
   canResumeWithoutInput,
   lastMessageHasToolResult,
@@ -63,82 +53,17 @@ export function ChatComposer({
   );
 
   const streamHandlersRef = useRef({
-    onStreamText,
-    onStreamThinking,
     onMessagesChanged,
     onStreamReset,
-    onStepCommitted,
-    onRunFinished,
   });
   streamHandlersRef.current = {
-    onStreamText,
-    onStreamThinking,
     onMessagesChanged,
     onStreamReset,
-    onStepCommitted,
-    onRunFinished,
   };
 
   useEffect(() => {
     setText(readChatComposerDraft(sessionId));
   }, [sessionId]);
-
-  useEffect(() => {
-    const bus = runtime.eventBus;
-    const sid = sessionId;
-    const subText = bus.subscribe(
-      EVENT_AGENT_STREAM_TEXT_DELTA,
-      (payload: AgentStreamTextDeltaPayload) => {
-        if (payload.sessionId === sid) {
-          streamHandlersRef.current.onStreamText(payload.text);
-        }
-      },
-    );
-    const subThinking = bus.subscribe(
-      EVENT_AGENT_STREAM_THINKING_DELTA,
-      (payload: AgentStreamThinkingDeltaPayload) => {
-        if (payload.sessionId === sid) {
-          streamHandlersRef.current.onStreamThinking(payload.text);
-        }
-      },
-    );
-    const subStep = bus.subscribe(
-      EVENT_AGENT_STEP_COMMITTED,
-      (payload: AgentStepCommittedPayload) => {
-        if (payload.sessionId === sid) {
-          const {
-            onMessagesChanged: reload,
-            onStreamReset: reset,
-            onStepCommitted: onCommitted,
-          } = streamHandlersRef.current;
-          flushAgentStepUi(payload.phase, reload, reset)
-            .then(() => onCommitted?.(payload))
-            .catch(() => undefined);
-        }
-      },
-    );
-    const subFinished = bus.subscribe(
-      EVENT_AGENT_RUN_FINISHED,
-      (payload: AgentRunFinishedPayload) => {
-        if (payload.sessionId === sid) {
-          const {
-            onMessagesChanged: reload,
-            onStreamReset: reset,
-            onRunFinished: onFinished,
-          } = streamHandlersRef.current;
-          flushRunUi(reload, reset)
-            .then(() => onFinished?.(payload))
-            .catch(() => undefined);
-        }
-      },
-    );
-    return () => {
-      subText.unsubscribe();
-      subThinking.unsubscribe();
-      subStep.unsubscribe();
-      subFinished.unsubscribe();
-    };
-  }, [runtime.eventBus, scope.sessionId]);
 
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
@@ -164,6 +89,9 @@ export function ChatComposer({
           },
         });
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          return;
+        }
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
@@ -177,7 +105,6 @@ export function ChatComposer({
           console.error('[novel-master/chat] run failed', detail);
         }
         setError(formatError(err));
-        await flushRunUi(onMessagesChanged, onStreamReset);
       } finally {
         setRunAbortController(null);
         onRunningChange(false);

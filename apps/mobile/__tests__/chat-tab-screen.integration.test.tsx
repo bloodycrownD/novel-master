@@ -1,6 +1,8 @@
 import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
+import {SimpleEventBus} from '@novel-master/core/events';
+import {EVENT_AGENT_STREAM_TEXT_DELTA} from '@novel-master/core/events';
 
 const mockLoadTail = jest.fn(async () => [{id: 'm2', seq: 2, role: 'assistant'}]);
 const mockLoadPage = jest.fn(async () => [{id: 'm1', seq: 1, role: 'user'}]);
@@ -37,6 +39,7 @@ const mockRuntime: any = {
     getCurrentRegexGroupId: jest.fn(async () => undefined),
   },
   eventOrchestrator: {emit: jest.fn()},
+  eventBus: new SimpleEventBus(),
   worktree: jest.fn(() => ({})),
   sessionVfs: jest.fn(() => ({})),
   projectVfs: jest.fn(() => ({})),
@@ -124,21 +127,29 @@ jest.mock('../src/services/regex-apply-channel', () => ({
   loadSessionMessagesPageForDisplay: (...args: any[]) => mockLoadPage(...args),
 }));
 
-jest.mock('../src/services/stream-buffer.service', () => ({
-  createStreamBuffer: (callbacks: {
-    onTextFlush: (chunk: string) => void;
-    onThinkingFlush: (chunk: string) => void;
-  }) => ({
-    push: (kind: 'text' | 'thinking', delta: string) => {
-      mockStreamBufferPush(kind, delta);
-      if (kind !== 'text') {
+jest.mock('../src/services/stream-apply-buffer', () => ({
+  createStreamApplyBuffer: (onFlush: (segments: {kind: string; delta: string}[]) => void) => ({
+    push: (chunk: {kind: string; delta: string}) => {
+      mockStreamBufferPush(chunk.kind, chunk.delta);
+      if (chunk.kind !== 'text') {
         return;
       }
-      mockTextBuffer += delta;
+      mockTextBuffer += chunk.delta;
       if (mockStreamFlushTimer == null) {
         mockStreamFlushTimer = setTimeout(() => {
-          callbacks.onTextFlush(mockTextBuffer);
+          onFlush([{kind: 'text', delta: mockTextBuffer}]);
           mockTextBuffer = '';
+          mockStreamFlushTimer = null;
+        }, 40);
+      }
+    },
+    pushAll: (chunks: {kind: string; delta: string}[]) => {
+      for (const chunk of chunks) {
+        mockStreamBufferPush(chunk.kind, chunk.delta);
+      }
+      if (mockStreamFlushTimer == null) {
+        mockStreamFlushTimer = setTimeout(() => {
+          onFlush(chunks);
           mockStreamFlushTimer = null;
         }, 40);
       }
@@ -200,6 +211,10 @@ jest.mock('../src/storage/chat-transcript-engine', () => ({
   readChatTranscriptEngine: jest.fn(async () => 'legacy-rn'),
 }));
 
+jest.mock('../src/storage/chat-stream-batch-pref', () => ({
+  readChatStreamBatchEnabled: jest.fn(async () => true),
+}));
+
 jest.mock('../src/components/chat/MessageList', () => {
   const ReactNative = require('react-native');
   return {
@@ -218,9 +233,19 @@ jest.mock('../src/components/chat/ChatComposer', () => {
         <ReactNative.Pressable
           accessibilityLabel="emit-bursty-stream"
           onPress={() => {
-            props.onStreamText('A');
-            props.onStreamText('B');
-            props.onStreamText('C');
+            const bus = mockRuntime.eventBus;
+            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+              sessionId: 's1',
+              text: 'A',
+            });
+            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+              sessionId: 's1',
+              text: 'B',
+            });
+            bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+              sessionId: 's1',
+              text: 'C',
+            });
           }}
         />
       </ReactNative.View>
@@ -322,11 +347,13 @@ describe('ChatTabScreen integration', () => {
     await act(async () => {
       emit.props.onPress();
     });
-    expect(mockStreamBufferPush).toHaveBeenCalledTimes(3);
+    expect(mockStreamBufferPush).toHaveBeenCalledTimes(1);
+    expect(mockStreamBufferPush).toHaveBeenCalledWith('text', 'ABC');
     expect(mockLatestMessageListProps.streamingText).toBe('');
 
     await act(async () => {
-      jest.advanceTimersByTime(50);
+      jest.advanceTimersByTime(32);
+      jest.advanceTimersByTime(41);
     });
     expect(mockLatestMessageListProps.streamingText).toBe('ABC');
   });

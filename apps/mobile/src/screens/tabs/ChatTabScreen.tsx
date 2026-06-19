@@ -44,10 +44,9 @@ import {
   useChatTabMessages,
 } from './chat-tab/useChatTabMessages';
 import {useChatTabScope} from './chat-tab/useChatTabScope';
-import {
-  useChatTabScrollCache,
-  useChatTabStream,
-} from './chat-tab/useChatTabStream';
+import {useChatTabScrollCache} from './chat-tab/useChatTabStream';
+import {useChatStreamRuntime} from './chat-tab/useChatStreamRuntime';
+import {readChatStreamBatchEnabled} from '@/storage/chat-stream-batch-pref';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function ChatTabScreen() {
@@ -97,8 +96,7 @@ export function ChatTabScreen() {
     goUp: () => void;
   } | null>(null);
   const [chatRichTextEnabled, setChatRichTextEnabled] = useState(false);
-  const [chatTranscriptEngine, setChatTranscriptEngine] =
-    useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
+  const [chatStreamBatchEnabled, setChatStreamBatchEnabled] = useState(true);
   const [messageMenuTarget, setMessageMenuTarget] = useState<
     ChatMessage | undefined
   >();
@@ -111,16 +109,57 @@ export function ChatTabScreen() {
     {messageId: string; initialText: string} | undefined
   >();
 
+  const [chatTranscriptEngine, setChatTranscriptEngine] =
+    useState<ChatTranscriptEngine>(defaultChatTranscriptEngine);
+
   const useWebviewTranscript = chatTranscriptEngine === 'webview';
-  const stream = useChatTabStream({
-    useWebviewTranscript,
-    transcriptWebRef,
-  });
+
   const scroll = useChatTabScrollCache({
     projectId,
     sessionId,
     useWebviewTranscript,
   });
+
+  const agentRunningRef = useRef(false);
+
+  const handleStepCommitted = useCallback(
+    (payload: AgentStepCommittedPayload) => {
+      if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
+        scope.bumpVfsRefresh();
+      }
+    },
+    [scope.bumpVfsRefresh],
+  );
+
+  const handleRunFinished = useCallback(
+    (payload: AgentRunFinishedPayload) => {
+      if (payload.vfsMutated === true) {
+        scope.bumpVfsRefresh();
+      }
+    },
+    [scope.bumpVfsRefresh],
+  );
+
+  const handleMessagesChanged = useCallback(
+    () =>
+      messages.handleMessagesChanged(
+        scope.refreshChatTokenLabel,
+        agentRunningRef.current,
+      ),
+    [messages, scope.refreshChatTokenLabel],
+  );
+
+  const stream = useChatStreamRuntime({
+    sessionId,
+    useWebviewTranscript,
+    chatStreamBatchEnabled,
+    transcriptWebRef,
+    onMessagesChanged: handleMessagesChanged,
+    onStepCommitted: handleStepCommitted,
+    onRunFinished: handleRunFinished,
+  });
+
+  agentRunningRef.current = stream.agentRunning;
 
   const messageActions = useChatTabMessageActions({
     runtime,
@@ -175,24 +214,6 @@ export function ChatTabScreen() {
     setWebMenuOpen(false);
     setWebMenuCloseSignal(signal => signal + 1);
   }, []);
-
-  const handleStepCommitted = useCallback(
-    (payload: AgentStepCommittedPayload) => {
-      if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
-        scope.bumpVfsRefresh();
-      }
-    },
-    [scope.bumpVfsRefresh],
-  );
-
-  const handleRunFinished = useCallback(
-    (payload: AgentRunFinishedPayload) => {
-      if (payload.vfsMutated === true) {
-        scope.bumpVfsRefresh();
-      }
-    },
-    [scope.bumpVfsRefresh],
-  );
 
   const {
     setProjectDrawerOpen,
@@ -328,13 +349,18 @@ export function ChatTabScreen() {
     setChatTranscriptEngine(await readChatTranscriptEngine(appUi));
   }, [appUi]);
 
+  const refreshChatStreamBatchPref = useCallback(async () => {
+    setChatStreamBatchEnabled(await readChatStreamBatchEnabled(appUi));
+  }, [appUi]);
+
   useFocusEffect(
     useCallback(() => {
       refreshChatRichTextPref().catch(() => undefined);
       refreshChatTranscriptEngine().catch(() => undefined);
+      refreshChatStreamBatchPref().catch(() => undefined);
       // Re-read KKV currentModelId when returning from Profile tab.
       refreshChatMeta().catch(() => undefined);
-    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatMeta]),
+    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatStreamBatchPref, refreshChatMeta]),
   );
 
   const sessionRenameModal = (
@@ -472,17 +498,8 @@ export function ChatTabScreen() {
           setMessageMenuAnchor(anchor);
         }}
         onAgentRunningChange={stream.setAgentRunning}
-        onStreamText={stream.handleStreamText}
-        onStreamThinking={stream.handleStreamThinking}
         onStreamReset={stream.handleStreamReset}
-        onMessagesChanged={() =>
-          messages.handleMessagesChanged(
-            scope.refreshChatTokenLabel,
-            stream.agentRunning,
-          ).catch(() => undefined)
-        }
-        onStepCommitted={handleStepCommitted}
-        onRunFinished={handleRunFinished}
+        onMessagesChanged={() => handleMessagesChanged().catch(() => undefined)}
         onNeedModel={() => setModelPickerOpen(true)}
         bumpVfsRefresh={scope.bumpVfsRefresh}
         onOpenFileEditor={scope.openFileEditor}
