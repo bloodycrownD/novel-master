@@ -361,6 +361,8 @@ export type SessionFsRollbackRequest = {
   readonly projectId: string;
   readonly sessionId: string;
   readonly messageId: string;
+  /** 为 true 时仅截断消息，不恢复工作区文件。 */
+  readonly skipVfsReconcile?: boolean;
 };
 
 export type ProjectPullTemplateRequest = {

@@ -89,6 +89,7 @@ export function ConversationPanel({
     | { kind: "hide-messages"; toSeq: number }
     | { kind: "restore-messages"; fromSeq: number; toSeq: number }
     | { kind: "rollback"; messageId: string }
+    | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
     | null
   >(null);
 
@@ -321,19 +322,33 @@ export function ConversationPanel({
   );
 
   const executeRollback = useCallback(
-    async (messageId: string) => {
+    async (messageId: string, skipVfsReconcile?: boolean) => {
       const result = await ipcMessagesRollback({
         projectId,
         sessionId,
         messageId,
+        ...(skipVfsReconcile ? { skipVfsReconcile: true } : {}),
       });
       if (!result.ok) {
+        if (result.error.code === "ROLLBACK_VFS_RESTORE_FAILED") {
+          setConfirmState({
+            kind: "rollback-degraded",
+            messageId,
+            errorMessage: result.error.message,
+          });
+          return;
+        }
         showToast(result.error.message);
         return;
       }
       setStreamingText("");
       await reloadMessages();
-      refreshWorkspaceTrees();
+      if (!skipVfsReconcile) {
+        refreshWorkspaceTrees();
+      }
+      showToast(
+        skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
+      );
     },
     [projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
   );
@@ -405,6 +420,8 @@ export function ConversationPanel({
     if (!state) return;
     if (state.kind === "rollback") {
       await executeRollback(state.messageId);
+    } else if (state.kind === "rollback-degraded") {
+      await executeRollback(state.messageId, true);
     } else {
       if (state.kind === "hide-messages") {
         const result = await ipcMessagesHideRange({
@@ -440,8 +457,17 @@ export function ConversationPanel({
     if (confirmState.kind === "restore-messages") {
       return `将恢复所选 user 消息（seq ≥ ${confirmState.fromSeq}）及其之后的所有消息。是否继续？`;
     }
+    if (confirmState.kind === "rollback-degraded") {
+      return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
+    }
     return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
   })();
+
+  const confirmTitle =
+    confirmState?.kind === "rollback-degraded" ? "无法恢复工作区" : "确认操作";
+
+  const confirmLabel =
+    confirmState?.kind === "rollback-degraded" ? "仅删除后续对话" : "确定";
 
   const batchBarTitle =
     messageBatch.mode === "hide"
@@ -638,9 +664,13 @@ export function ConversationPanel({
       </div>
       <ConfirmModal
         open={confirmState != null}
-        title="确认操作"
+        title={confirmTitle}
         message={confirmMessage}
-        danger={confirmState?.kind === "rollback"}
+        confirmLabel={confirmLabel}
+        danger={
+          confirmState?.kind === "rollback" ||
+          confirmState?.kind === "rollback-degraded"
+        }
         onConfirm={() => void handleConfirm()}
         onCancel={() => setConfirmState(null)}
       />

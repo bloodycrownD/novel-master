@@ -257,8 +257,11 @@ export async function handleMessagesRollback(
       req.sessionId,
       req.projectId,
       req.messageId,
+      req.skipVfsReconcile ? { skipVfsReconcile: true } : undefined,
     );
-    rt.worktreeSnapshot.markDirty(req.projectId, req.sessionId);
+    if (!req.skipVfsReconcile) {
+      rt.worktreeSnapshot.markDirty(req.projectId, req.sessionId);
+    }
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
