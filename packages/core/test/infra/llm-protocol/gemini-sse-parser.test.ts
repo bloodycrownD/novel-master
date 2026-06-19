@@ -37,6 +37,11 @@ describe("gemini-sse-parser", () => {
 
   it("T7b: strips inline >thought leak when structured thought parts exist", () => {
     const state = createGeminiSseParserState();
+    const streamEvents: Array<{ type: string; text?: string }> = [];
+    const onStream = (ev: { type: string; text?: string }) => {
+      streamEvents.push(ev);
+    };
+
     feedGeminiSseChunk(
       state,
       [
@@ -47,7 +52,17 @@ describe("gemini-sse-parser", () => {
         'data: {"candidates":[{"content":{"parts":[{"text":"你好。"}]}}]}',
         "",
       ].join("\n"),
+      onStream,
     );
+
+    const leakDelta = streamEvents.find(
+      (ev) =>
+        ev.type === "text-delta" &&
+        ev.text != null &&
+        ev.text.includes(">thought"),
+    );
+    assert.ok(leakDelta, "默认直通：含 >thought 的 chunk 应以 text-delta 原文流出");
+
     const { blocks } = finishGeminiSse(state);
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]?.type, "thinking");
