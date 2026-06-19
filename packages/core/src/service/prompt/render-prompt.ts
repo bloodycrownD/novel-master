@@ -191,7 +191,7 @@ export async function buildPromptAssemblyFromLayout(
       }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
-        vfs: ctx.vfs,
+        worktree: ctx.worktree,
       });
       segments.push({
         id: `dynamic-${block.name}`,
@@ -238,7 +238,7 @@ export async function buildPromptLlmInputFromLayout(
       }
       const expanded = await expandDynamicMacros(block.content, {
         now: ctx.now,
-        vfs: ctx.vfs,
+        worktree: ctx.worktree,
       });
       messages.push(syntheticTemplateMessage(block, expanded, ctx));
     }

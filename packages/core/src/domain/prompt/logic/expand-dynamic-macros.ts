@@ -4,8 +4,7 @@
  * @module domain/prompt/logic/expand-dynamic-macros
  */
 
-import { renderSessionVfsTree } from "@/domain/vfs/logic/render-session-vfs-tree.js";
-import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import { formatLocalDateTime } from "@/infra/date-format.js";
 import { renderMacro } from "@/infra/prompt-template/macro-render.js";
 import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
@@ -13,7 +12,7 @@ import { formatWeekCn } from "@/infra/prompt-template/week-cn.js";
 /** dynamic 宏展开上下文。 */
 export interface DynamicMacroContext {
   readonly now?: Date;
-  readonly vfs?: VfsService;
+  readonly worktree?: WorktreeService;
 }
 
 /**
@@ -25,8 +24,8 @@ export async function expandDynamicMacros(
 ): Promise<string> {
   const now = ctx.now ?? new Date();
   let filetree = "";
-  if (content.includes("$filetree") && ctx.vfs != null) {
-    filetree = await renderSessionVfsTree(ctx.vfs);
+  if (content.includes("$filetree") && ctx.worktree != null) {
+    filetree = await ctx.worktree.renderFileTree();
   }
   const root = {
     time: formatLocalDateTime(now),
