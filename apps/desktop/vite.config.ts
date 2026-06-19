@@ -12,6 +12,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   root: path.join(__dirname, "renderer"),
   base: "./",
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "renderer"),
+      "@shared": path.resolve(__dirname, "shared"),
+      "@assets": path.resolve(__dirname, "../../assets"),
+    },
+  },
   plugins: [react()],
   build: {
     outDir: path.join(__dirname, "dist/renderer"),
