@@ -429,6 +429,19 @@ function ensureSplitter(
   return state.inlineTextSplitter;
 }
 
+/** 直通正文 delta，不做 per-chunk inline thinking 拆分。 */
+export function emitDirectTextDelta(
+  state: { textParts: string[] },
+  text: string,
+  onStream?: (event: LlmStreamEvent) => void,
+): void {
+  if (text === "") {
+    return;
+  }
+  state.textParts.push(text);
+  onStream?.({ type: "text-delta", text });
+}
+
 /** Route a text delta; inline markers may emit thinking-delta instead of text-delta. */
 export function feedInlineThinkingAwareTextDelta(
   state: InlineThinkingStreamState,
