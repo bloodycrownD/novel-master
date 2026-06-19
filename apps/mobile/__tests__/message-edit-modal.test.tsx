@@ -17,6 +17,10 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
+}));
+
 jest.mock('../src/components/ui/AppModal', () => {
   const mockReact = require('react');
   return {
@@ -99,6 +103,20 @@ function findSavePressable(root: TestRenderer.ReactTestInstance) {
   return node ?? undefined;
 }
 
+/** 检查 TextInput 祖先链中是否存在 ScrollView */
+function hasScrollViewAncestor(
+  node: TestRenderer.ReactTestInstance,
+): boolean {
+  let current: TestRenderer.ReactTestInstance | null = node.parent;
+  while (current) {
+    if (current.type === 'ScrollView') {
+      return true;
+    }
+    current = current.parent;
+  }
+  return false;
+}
+
 describe('MessageEditModal', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -120,10 +138,9 @@ describe('MessageEditModal', () => {
     });
     const input = findTextInput(tree.root);
     expect(input.props.multiline).toBe(true);
-    expect(input.props.blurOnSubmit).toBe(false);
   });
 
-  it('T2: no onSubmitEditing and no returnKeyType done', () => {
+  it('T2: submitBehavior is newline; no onSubmitEditing or returnKeyType done', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
@@ -137,6 +154,7 @@ describe('MessageEditModal', () => {
       );
     });
     const input = findTextInput(tree.root);
+    expect(input.props.submitBehavior).toBe('newline');
     expect(input.props.onSubmitEditing).toBeUndefined();
     expect(input.props.returnKeyType).toBeUndefined();
   });
@@ -190,5 +208,22 @@ describe('MessageEditModal', () => {
       save?.props.onPress?.();
     });
     expect(onConfirm).toHaveBeenCalledWith('line1\nline2');
+  });
+
+  it('T5: no ScrollView wraps TextInput in the tree', () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <MessageEditModal
+          visible
+          title="编辑消息"
+          confirmLabel="保存"
+          onClose={jest.fn()}
+          onConfirm={jest.fn()}
+        />,
+      );
+    });
+    const input = findTextInput(tree.root);
+    expect(hasScrollViewAncestor(input)).toBe(false);
   });
 });
