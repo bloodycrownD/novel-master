@@ -1,5 +1,5 @@
 /** VFS tree row display helpers (aligned with mobile vfs-row-mapper). */
-import type { WorktreeListRowDto } from "../../../shared/ipc-types";
+import type { WorktreeListRowDto } from "@shared/ipc-types";
 
 /** Parent logical path; session root `/` stays `/`. */
 export function parentLogicalPath(path: string): string | null {

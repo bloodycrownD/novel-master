@@ -23,18 +23,18 @@ import {
   type StoredConfigHealth,
 } from "@novel-master/core/config-forms/stored-config-validity";
 import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
-import { Button } from "../../components/ui/Button";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { showToast } from "../../components/ui/show-toast";
-import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
+import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { showToast } from "@/components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
   ipcEventsClearConfig,
   ipcEventsExportYaml,
   ipcEventsGetConfig,
   ipcEventsImportYaml,
   ipcEventsSetConfig,
-} from "../../ipc/client";
-import { parseOptionalDepthInput } from "../../services/regex-test.service";
+} from "@/ipc/client";
+import { parseOptionalDepthInput } from "@/services/regex-test.service";
 import {
   SettingsField,
   SettingsFormSection,

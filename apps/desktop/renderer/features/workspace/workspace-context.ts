@@ -1,4 +1,4 @@
-import type { WorktreeListRowDto, WorkspacePanelScope } from "../../../shared/ipc-types";
+import type { WorktreeListRowDto, WorkspacePanelScope } from "@shared/ipc-types";
 
 export type WorkspaceContextTarget =
   | {

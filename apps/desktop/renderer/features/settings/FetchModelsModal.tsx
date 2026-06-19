@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BatchCheckbox } from "../../components/batch/BatchCheckbox";
-import { Button } from "../../components/ui/Button";
+import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
+import { Button } from "@/components/ui/Button";
 import {
   ipcProviderModelsFetch,
   ipcProviderModelsSave,
   ipcProviderModelsSuggestList,
-} from "../../ipc/client";
-import { useBatchSelection } from "../../hooks/useBatchSelection";
+} from "@/ipc/client";
+import { useBatchSelection } from "@/hooks/useBatchSelection";
 
 type SuggestionRow = {
   vendorModelId: string;

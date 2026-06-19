@@ -8,7 +8,7 @@ import {
   type ParsedUserVfsAction,
 } from "@novel-master/core/chat";
 import { resolveToolResultOk } from "@novel-master/core";
-import type { ChatMessageDto, ContentBlockDto } from "../../../shared/ipc-types";
+import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 import { chatMessageFromDto } from "./composer-send-state";
 
 export type ToolCallStatus = "success" | "error" | "pending";

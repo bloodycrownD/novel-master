@@ -31,11 +31,11 @@ import {
   type ToolsMode,
 } from "@novel-master/core/config-forms/agent";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
-import { Button } from "../../components/ui/Button";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { ContextMenu } from "../../components/ui/ContextMenu";
-import { showToast } from "../../components/ui/show-toast";
-import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
+import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ContextMenu } from "@/components/ui/ContextMenu";
+import { showToast } from "@/components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
@@ -44,7 +44,7 @@ import {
   ipcAgentYamlImport,
   ipcProviderModelsSavedList,
   ipcProvidersList,
-} from "../../ipc/client";
+} from "@/ipc/client";
 import {
   assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
@@ -59,7 +59,7 @@ import {
   SettingsPanel,
   SettingsSection,
 } from "./settings-ui";
-import { Switch } from "../../components/ui/Switch";
+import { Switch } from "@/components/ui/Switch";
 
 const DYNAMIC_MACROS = [
   { label: "$time", token: "{{$time}}" },

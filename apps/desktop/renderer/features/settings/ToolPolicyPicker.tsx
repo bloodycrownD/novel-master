@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { BUILTIN_TOOL_CATALOG } from "@novel-master/core/config-forms/agent";
-import { BatchCheckbox } from "../../components/batch/BatchCheckbox";
+import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 type Props = {
   selected: readonly string[];

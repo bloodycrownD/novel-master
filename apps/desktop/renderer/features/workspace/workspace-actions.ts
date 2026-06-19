@@ -2,7 +2,7 @@ import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
 import type {
   VfsScopeRequest,
   WorktreeSetDirRuleRequest,
-} from "../../../shared/ipc-types";
+} from "@shared/ipc-types";
 import {
   ipcVfsDelete,
   ipcVfsMkdir,
@@ -12,8 +12,8 @@ import {
   ipcWorktreeSetDirRule,
   ipcWorktreeSetFileRule,
   vfsScope,
-} from "../../ipc/client";
-import { joinVfsPath } from "../../utils/vfs-path";
+} from "@/ipc/client";
+import { joinVfsPath } from "@/utils/vfs-path";
 import { entryName } from "./vfs-tree-utils";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import { parentPathForTarget } from "./workspace-context";

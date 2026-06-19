@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { Tooltip } from "../../components/ui/Tooltip";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { Tooltip } from "@/components/ui/Tooltip";
 import {
   ipcAgentAbort,
   ipcAgentRun,
   ipcMessagesAppendToolTurnBridge,
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
-} from "../../ipc/client";
-import { useShellNav } from "../../providers/ShellNavProvider";
+} from "@/ipc/client";
+import { useShellNav } from "@/providers/ShellNavProvider";
 
 interface ChatComposerProps {
   projectId: string;

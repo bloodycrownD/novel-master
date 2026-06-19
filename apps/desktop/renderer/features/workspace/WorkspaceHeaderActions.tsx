@@ -1,16 +1,16 @@
 import { useCallback, useState } from "react";
-import type { WorkspacePanelScope } from "../../../shared/ipc-types";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { IconButton } from "../../components/ui/IconButton";
-import { showToast } from "../../components/ui/show-toast";
+import type { WorkspacePanelScope } from "@shared/ipc-types";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { IconButton } from "@/components/ui/IconButton";
+import { showToast } from "@/components/ui/show-toast";
 import {
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
   ipcVfsZipExport,
   ipcVfsZipImport,
   vfsScope,
-} from "../../ipc/client";
-import { useShellNav } from "../../providers/ShellNavProvider";
+} from "@/ipc/client";
+import { useShellNav } from "@/providers/ShellNavProvider";
 
 type ConfirmKind = "import-zip" | "pull-template";
 

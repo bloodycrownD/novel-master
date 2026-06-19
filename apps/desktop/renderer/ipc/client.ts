@@ -64,7 +64,7 @@ import {
   type WorktreeListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
-} from "../../shared/ipc-types.js";
+} from "@shared/ipc-types";
 
 function bridge() {
   if (!window.novelMasterDesktop) {

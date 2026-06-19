@@ -1,7 +1,7 @@
 /**
  * Helpers for message edit and action menu items.
  */
-import type { ChatMessageDto, ContentBlockDto } from "../../../shared/ipc-types";
+import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 
 export interface MessageActionMenuItem {
   readonly label: string;

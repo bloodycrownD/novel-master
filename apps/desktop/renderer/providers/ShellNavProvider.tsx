@@ -22,7 +22,7 @@ import {
 
 } from "react";
 
-import type { ProjectDto, SessionDto, PreviewFileSelection } from "../../shared/ipc-types";
+import type { ProjectDto, SessionDto, PreviewFileSelection } from "@shared/ipc-types";
 
 import {
 

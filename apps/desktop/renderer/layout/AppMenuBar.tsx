@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { ipcShellMenuPopup } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
-import type { IpcResult, ShellMenuId } from "../../shared/ipc-types";
+import type { IpcResult, ShellMenuId } from "@shared/ipc-types";
 
 const MENU_ITEMS: ReadonlyArray<{ id: ShellMenuId; label: string }> = [
   { id: "file", label: "文件" },

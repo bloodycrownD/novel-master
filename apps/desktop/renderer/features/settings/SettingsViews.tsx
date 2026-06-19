@@ -4,16 +4,16 @@ export { EventsConfigView } from "./EventsConfigView";
 export { ModelSamplingView } from "./ModelSamplingView";
 import { AddModelModal } from "./AddModelModal";
 import { FetchModelsModal } from "./FetchModelsModal";
-import { Button } from "../../components/ui/Button";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { ContextMenu } from "../../components/ui/ContextMenu";
-import { SegmentedControl } from "../../components/ui/SegmentedControl";
-import { ManageHeader } from "../../components/batch/ManageHeader";
-import { TextPromptModal } from "../../components/ui/TextPromptModal";
-import { showToast } from "../../components/ui/show-toast";
-import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
-import { useBatchSelection } from "../../hooks/useBatchSelection";
-import { useNovelMaster } from "../../providers/NovelMasterProvider";
+import { Button } from "@/components/ui/Button";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ContextMenu } from "@/components/ui/ContextMenu";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { ManageHeader } from "@/components/batch/ManageHeader";
+import { TextPromptModal } from "@/components/ui/TextPromptModal";
+import { showToast } from "@/components/ui/show-toast";
+import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import { useBatchSelection } from "@/hooks/useBatchSelection";
+import { useNovelMaster } from "@/providers/NovelMasterProvider";
 import {
   ipcAgentRegistryCreateBlank,
   ipcAgentRegistryDelete,
@@ -54,7 +54,7 @@ import {
   ipcRegexListRules,
   ipcRegexUpdateGroup,
   ipcRegexUpdateRule,
-} from "../../ipc/client";
+} from "@/ipc/client";
 import type { SettingsNavHandle } from "./settings-nav";
 import {
   SettingsActionSection,
@@ -69,7 +69,7 @@ import {
   SettingsPanel,
   SettingsSection,
 } from "./settings-ui";
-import { deriveRegexGroupId } from "../../utils/regex-group-id";
+import { deriveRegexGroupId } from "@/utils/regex-group-id";
 import {
   parseOptionalDepthInput,
   previewRegexReplacementOnly,
@@ -77,14 +77,14 @@ import {
   validateRegexRuleDraft,
   type RegexChannel,
   type RegexRuleDraftFields,
-} from "../../services/regex-test.service";
+} from "@/services/regex-test.service";
 import { REGEX_UI_LABELS } from "@novel-master/core/config-forms/shared";
 import {
   AGENT_LIST_LABELS,
   assessAgentDefinitionWire,
   storedConfigInvalidReason,
 } from "@novel-master/core/config-forms/stored-config-validity";
-import type { AgentRegistryListItemDto } from "../../../shared/ipc-types";
+import type { AgentRegistryListItemDto } from "@shared/ipc-types";
 
 type Nav = SettingsNavHandle;
 

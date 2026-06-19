@@ -16,7 +16,7 @@ import {
   getBootstrapStatus,
   rebootstrap,
 } from "../ipc/client";
-import type { BootstrapStatusResponse } from "../../shared/ipc-types";
+import type { BootstrapStatusResponse } from "@shared/ipc-types";
 
 export type RuntimeStatus = "loading" | "ready" | "error";
 

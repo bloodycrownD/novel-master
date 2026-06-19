@@ -16,11 +16,11 @@ import {
   ipcPreferencesSetSessionFsVersionCheck,
   ipcRegexListPicker,
   ipcRegexSetCurrent,
-} from "../../ipc/client";
-import { Button } from "../../components/ui/Button";
-import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
-import { useShellNav } from "../../providers/ShellNavProvider";
-import { PickerModal } from "../../components/ui/PickerModal";
+} from "@/ipc/client";
+import { Button } from "@/components/ui/Button";
+import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import { useShellNav } from "@/providers/ShellNavProvider";
+import { PickerModal } from "@/components/ui/PickerModal";
 import {
   SettingsField,
   SettingsFormSection,

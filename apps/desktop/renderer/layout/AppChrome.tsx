@@ -3,7 +3,7 @@ import { useTheme } from "../providers/ThemeProvider";
 import type { UseColumnSplittersResult } from "../hooks/useColumnSplitters";
 import { Tooltip } from "../components/ui/Tooltip";
 import { getDesktopBridge } from "../ipc/client";
-import appIcon from "../../../../assets/icon.webp";
+import appIcon from "@assets/icon.webp";
 
 interface AppChromeProps {
   columnLayout: Pick<

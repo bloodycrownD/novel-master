@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { parseApplicationModelId, TOKEN_COUNTER_MODE_SELECT_OPTIONS, type LlmProtocolKind, type ModelSamplingParams, type TokenizerOverride } from "@novel-master/core/provider";
-import { Button } from "../../components/ui/Button";
-import { toastSettingsError, toastSettingsSuccess } from "../../utils/settings-feedback";
+import { Button } from "@/components/ui/Button";
+import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
   ipcProviderModelsGetSaved,
   ipcProviderModelsResetContextWindow,
   ipcProviderModelsUpdateSettings,
   ipcProvidersGet,
-} from "../../ipc/client";
+} from "@/ipc/client";
 import type { SettingsNavState } from "./settings-nav";
 import { SamplingForm } from "./SamplingForm";
 import {

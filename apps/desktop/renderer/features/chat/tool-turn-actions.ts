@@ -1,12 +1,12 @@
 /**
  * Paired hide/delete for assistant tool_use turns and their tool_results user message.
  */
-import type { ChatMessageDto } from "../../../shared/ipc-types";
+import type { ChatMessageDto } from "@shared/ipc-types";
 import {
   ipcMessagesDelete,
   ipcMessagesHide,
   ipcMessagesShow,
-} from "../../ipc/client";
+} from "@/ipc/client";
 import { messageHasToolUse, resolveToolResultsMessageId } from "./message-blocks";
 
 export async function hideToolTurn(

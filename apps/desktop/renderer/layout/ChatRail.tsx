@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ProjectDto, SessionDto } from "../../shared/ipc-types";
+import type { ProjectDto, SessionDto } from "@shared/ipc-types";
 import { BatchCheckbox } from "../components/batch/BatchCheckbox";
 import { ManageHeader } from "../components/batch/ManageHeader";
 import { ConfirmModal } from "../components/ui/ConfirmModal";

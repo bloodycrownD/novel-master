@@ -4,7 +4,7 @@
 import {
   buildAgentStreamMetricsLabel,
   type AgentStreamMetricsView,
-} from "../../hooks/useAgentStreamMetrics";
+} from "@/hooks/useAgentStreamMetrics";
 
 export { buildAgentStreamMetricsLabel };
 

@@ -8,7 +8,7 @@ import {
   ipcScopeSetProject,
   ipcScopeSetSession,
 } from "../ipc/client";
-import type { ScopeSnapshotDto } from "../../shared/ipc-types";
+import type { ScopeSnapshotDto } from "@shared/ipc-types";
 
 export type DesktopScopeSnapshot = ScopeSnapshotDto;
 

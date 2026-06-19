@@ -3,9 +3,9 @@ import type {
   VfsScopeRequest,
   WorktreeListRowDto,
   WorkspacePanelScope,
-} from "../../../shared/ipc-types";
-import { ipcWorktreeBuildListRows, vfsScope } from "../../ipc/client";
-import { useShellNav } from "../../providers/ShellNavProvider";
+} from "@shared/ipc-types";
+import { ipcWorktreeBuildListRows, vfsScope } from "@/ipc/client";
+import { useShellNav } from "@/providers/ShellNavProvider";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
   entryName,

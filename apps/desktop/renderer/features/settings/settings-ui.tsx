@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { API_KEY_STATUS_LABELS } from "@novel-master/core/config-forms/shared";
-import { Switch } from "../../components/ui/Switch";
-import { BatchCheckbox } from "../../components/batch/BatchCheckbox";
+import { Switch } from "@/components/ui/Switch";
+import { BatchCheckbox } from "@/components/batch/BatchCheckbox";
 
 export function SettingsPanel({ children }: { children: ReactNode }) {
   return <div className="settings-panel">{children}</div>;

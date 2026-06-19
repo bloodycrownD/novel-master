@@ -15,7 +15,7 @@ import {
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
-} from "../../shared/agent-event-types.js";
+} from "@shared/agent-event-types";
 import { onAgentStream } from "../ipc/client";
 
 export interface UseAgentStreamOptions {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Button } from "../../components/ui/Button";
-import { TextArea } from "../../components/ui/TextArea";
+import { Button } from "@/components/ui/Button";
+import { TextArea } from "@/components/ui/TextArea";
 
 type MessageEditModalProps = {
   open: boolean;

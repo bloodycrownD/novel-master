@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChatMessageDto } from "../../../shared/ipc-types";
+import type { ChatMessageDto } from "@shared/ipc-types";
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
-} from "../../../shared/agent-event-types";
-import { useAgentStream } from "../../hooks/useAgentStream";
-import { useAgentStreamMetrics } from "../../hooks/useAgentStreamMetrics";
-import { useStreamToolInvoking } from "../../hooks/useStreamToolInvoking";
+} from "@shared/agent-event-types";
+import { useAgentStream } from "@/hooks/useAgentStream";
+import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
+import { useStreamToolInvoking } from "@/hooks/useStreamToolInvoking";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -17,11 +17,11 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesShowRange,
-} from "../../ipc/client";
-import { useBatchSelection } from "../../hooks/useBatchSelection";
-import { useShellNav } from "../../providers/ShellNavProvider";
-import { ConfirmModal } from "../../components/ui/ConfirmModal";
-import { showToast } from "../../components/ui/show-toast";
+} from "@/ipc/client";
+import { useBatchSelection } from "@/hooks/useBatchSelection";
+import { useShellNav } from "@/providers/ShellNavProvider";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { showToast } from "@/components/ui/show-toast";
 import { ChatComposer } from "./ChatComposer";
 import {
   deriveComposerSendState,

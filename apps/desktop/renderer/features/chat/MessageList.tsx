@@ -1,6 +1,6 @@
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { ChatMessageDto } from "../../../shared/ipc-types";
+import type { ChatMessageDto } from "@shared/ipc-types";
 import { buildChatListItems } from "./message-blocks";
 import { ToolCallGroupCard } from "./ToolCallGroupCard";
 import {

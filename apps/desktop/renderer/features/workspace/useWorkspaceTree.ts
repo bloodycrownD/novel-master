@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   PreviewFileSelection,
   WorkspacePanelScope,
-} from "../../../shared/ipc-types";
+} from "@shared/ipc-types";
 
 export function usePreviewSelection() {
   const [previewFile, setPreviewFile] = useState<PreviewFileSelection | null>(

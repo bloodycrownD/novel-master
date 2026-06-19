@@ -15,8 +15,8 @@ import {
   type UpdateCheckResultKind,
 } from "../components/ui/UpdateCheckResultModal";
 import { UpdateAvailableModal } from "../components/ui/UpdateAvailableModal";
-import { DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL } from "../../src/main/storage/app-ui-prefs";
-import type { UpdateCheckData } from "../../shared/ipc-types";
+import { DESKTOP_UI_KEY_UPDATES_SNOOZE_UNTIL } from "@shared/desktop-ui-keys";
+import type { UpdateCheckData } from "@shared/ipc-types";
 
 const AUTO_CHECK_DELAY_MS = 2000;
 const UPDATE_TOAST_MS = 8000;

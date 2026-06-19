@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types";
-import { PickerModal } from "../../components/ui/PickerModal";
-import { Tooltip } from "../../components/ui/Tooltip";
-import { showToast } from "../../components/ui/show-toast";
+import type { PromptChatTokenStatsResponse } from "@shared/ipc-types";
+import { PickerModal } from "@/components/ui/PickerModal";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { showToast } from "@/components/ui/show-toast";
 import {
   ipcAgentListPicker,
   ipcAgentSetCurrent,
@@ -10,9 +10,9 @@ import {
   ipcModelSetCurrent,
   ipcPromptAgentMeta,
   ipcPromptChatTokenLabel,
-} from "../../ipc/client";
-import { useShellNav } from "../../providers/ShellNavProvider";
-import { formatTokenCount } from "../../utils/format-token-count";
+} from "@/ipc/client";
+import { useShellNav } from "@/providers/ShellNavProvider";
+import { formatTokenCount } from "@/utils/format-token-count";
 
 interface WorkspaceFooterProps {
   projectId: string;

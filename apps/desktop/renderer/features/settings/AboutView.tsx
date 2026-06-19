@@ -1,15 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import appIcon from "../../../../../assets/icon.webp";
+import appIcon from "@assets/icon.webp";
 import {
   ipcAppCheckForUpdates,
   ipcAppGetInfo,
   ipcAppOpenExternal,
   ipcAppUiGet,
   ipcAppUiSet,
-} from "../../ipc/client";
-import { showToast } from "../../components/ui/show-toast";
-import { UpdateAvailableModal } from "../../components/ui/UpdateAvailableModal";
-import type { UpdateCheckData } from "../../../shared/ipc-types";
+} from "@/ipc/client";
+import { showToast } from "@/components/ui/show-toast";
+import { UpdateAvailableModal } from "@/components/ui/UpdateAvailableModal";
+import type { UpdateCheckData } from "@shared/ipc-types";
 import { ABOUT_LINKS } from "./about-links";
 import {
   SettingsPanel,
