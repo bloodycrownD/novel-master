@@ -13,9 +13,11 @@ import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { cleanseReplyTextAndThinking } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import {
+  emitDirectTextDelta,
   feedInlineThinkingAwareTextDelta,
   finishInlineThinkingAwareText,
 } from "./inline-thinking-parser.js";
+import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -55,8 +57,12 @@ function appendOpenAiStreamTextDelta(
   content: unknown,
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
+  const feedText = inlineStreamThinkingSplitEnabled()
+    ? feedInlineThinkingAwareTextDelta
+    : emitDirectTextDelta;
+
   if (typeof content === "string" && content !== "") {
-    feedInlineThinkingAwareTextDelta(state, content, onStream);
+    feedText(state, content, onStream);
     return;
   }
   if (!Array.isArray(content)) {
@@ -67,7 +73,7 @@ function appendOpenAiStreamTextDelta(
       continue;
     }
     if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
-      feedInlineThinkingAwareTextDelta(state, part.text, onStream);
+      feedText(state, part.text, onStream);
     }
   }
 }

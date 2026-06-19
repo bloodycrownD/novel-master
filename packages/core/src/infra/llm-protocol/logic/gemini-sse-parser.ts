@@ -9,9 +9,11 @@ import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
 import {
   cleanseReplyTextAndThinking,
+  emitDirectTextDelta,
   feedInlineThinkingAwareTextDelta,
   finishInlineThinkingAwareText,
 } from "./inline-thinking-parser.js";
+import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
 
@@ -114,7 +116,11 @@ function processGeminiResponseChunk(
         }
       } else {
         // Gemini gateways may also embed <thought> / >thought markers in plain text.
-        feedInlineThinkingAwareTextDelta(state, part.text, onStream);
+        if (inlineStreamThinkingSplitEnabled()) {
+          feedInlineThinkingAwareTextDelta(state, part.text, onStream);
+        } else {
+          emitDirectTextDelta(state, part.text, onStream);
+        }
       }
     } else if (part.thought === true) {
       const thoughtSignature = readThoughtSignature(part);
