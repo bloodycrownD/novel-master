@@ -16,17 +16,17 @@ import {
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import { type ChatMessage } from "@novel-master/core/chat";
-import type {MessageVisibilityBatchMode} from '../chat/transcript-selectable-role';
+import type {MessageVisibilityBatchMode} from '@/components/chat/transcript-selectable-role';
 import {
   isTranscriptRowSelectable,
   transcriptSelectableRole,
-} from '../chat/transcript-selectable-role';
-import {BatchCheckbox} from '../batch/BatchCheckbox';
-import {RichContentBody} from '../rich-content/RichContentBody';
-import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
-import type {ChatListScrollSnapshot} from '../../services/chat-list-scroll-cache';
-import {useTheme} from '../../theme/ThemeProvider';
-import type {ThemeTokens} from '../../theme/tokens';
+} from '@/components/chat/transcript-selectable-role';
+import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
+import {RichContentBody} from '@/components/rich-content/RichContentBody';
+import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
+import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
+import {useTheme} from '@/theme/ThemeProvider';
+import type {ThemeTokens} from '@/theme/tokens';
 import {buildChatListItems, type ChatListItem} from './message-blocks';
 import {ThinkingBlockCard} from './ThinkingBlockCard';
 import {ToolCallGroupCard} from './ToolCallGroupCard';

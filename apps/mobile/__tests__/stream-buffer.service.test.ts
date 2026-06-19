@@ -1,5 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {createStreamBuffer} from '../src/services/stream-buffer.service';
+import {createStreamBuffer} from '@/services/stream-buffer.service';
 
 describe('stream-buffer.service', () => {
   it('batches many deltas into throttled flushes', () => {

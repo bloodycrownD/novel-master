@@ -6,8 +6,8 @@ import {StyleSheet, Text, View} from 'react-native';
 import {
   buildChatStreamMetricsLine,
   type AgentStreamMetricsView,
-} from '../../hooks/useAgentStreamMetrics';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/hooks/useAgentStreamMetrics';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   metrics: AgentStreamMetricsView;

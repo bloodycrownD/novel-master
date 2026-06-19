@@ -8,7 +8,7 @@ import {
   toAgentStreamMetricsView,
   snapshotMetricsAcc,
   type StreamMetricsAccRef,
-} from '../../hooks/useAgentStreamMetrics';
+} from '@/hooks/useAgentStreamMetrics';
 import {ChatStreamMetricsBar} from './ChatStreamMetricsBar';
 
 type Props = {

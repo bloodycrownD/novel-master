@@ -2,19 +2,19 @@
  * Chat tab scroll position cache for legacy RN list vs WebView transcript.
  */
 import {useCallback, useEffect, useMemo} from 'react';
-import type {ChatTranscriptScrollSnapshot} from '../../../components/chat/ChatTranscriptBridge';
+import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
 import {
   getScrollSnapshot,
   scrollCacheKey,
   setScrollSnapshot,
   type ChatListScrollSnapshot,
-} from '../../../services/chat-list-scroll-cache';
+} from '@/services/chat-list-scroll-cache';
 import {
   getTranscriptScrollSnapshot,
   normalizeScrollSnapshot,
   setTranscriptScrollSnapshot,
-} from '../../../services/chat-transcript-scroll-cache';
-import {emitChatTranscriptTelemetry} from '../../../services/chat-transcript-telemetry';
+} from '@/services/chat-transcript-scroll-cache';
+import {emitChatTranscriptTelemetry} from '@/services/chat-transcript-telemetry';
 
 export function useChatTabScrollSnapshot(
   projectId: string | undefined,

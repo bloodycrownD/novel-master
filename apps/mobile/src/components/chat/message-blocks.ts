@@ -6,7 +6,7 @@ import { resolveToolResultOk } from "@novel-master/core";
 
 import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAt, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
 import type {TranscriptRow} from './ChatTranscriptBridge';
-import {decodeLiteralHtmlEntities} from '../rich-content/decode-literal-html-entities';
+import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'success' | 'error' | 'pending';
 

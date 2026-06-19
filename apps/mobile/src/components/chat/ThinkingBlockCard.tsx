@@ -3,9 +3,9 @@
  */
 import React, {useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {RichContentBody} from '../rich-content/RichContentBody';
-import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
-import {useTheme} from '../../theme/ThemeProvider';
+import {RichContentBody} from '@/components/rich-content/RichContentBody';
+import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
+import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   text: string;

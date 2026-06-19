@@ -7,36 +7,36 @@ import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import { type ChatMessage } from "@novel-master/core/chat";
 import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@novel-master/core/events";
-import {AppHeader} from '../../components/chrome/AppHeader';
-import {useToast} from '../../components/chrome/ToastHost';
+import {AppHeader} from '@/components/chrome/AppHeader';
+import {useToast} from '@/components/chrome/ToastHost';
 import {
   buildMessageActionItems,
-} from '../../components/chat/message-edit';
-import type {MessageMenuAnchor} from '../../components/chat/MessageActionMenu';
-import type {ChatTranscriptWebViewHandle} from '../../components/chat/ChatTranscriptWebView';
-import {ProjectDrawer} from '../../components/chrome/ProjectDrawer';
-import {useHeaderContext} from '../../navigation/HeaderContext';
-import type {RootStackParamList} from '../../navigation/types';
-import {useAndroidChatBackHandler} from '../../hooks/useAndroidChatBackHandler';
-import type {VfsFileManagerHandle} from '../../components/vfs/VfsFileManager';
-import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
-import {useBatchSelection} from '../../hooks/useBatchSelection';
+} from '@/components/chat/message-edit';
+import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
+import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import {ProjectDrawer} from '@/components/chrome/ProjectDrawer';
+import {useHeaderContext} from '@/navigation/HeaderContext';
+import type {RootStackParamList} from '@/navigation/types';
+import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
+import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
+import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
+import {useBatchSelection} from '@/hooks/useBatchSelection';
 import {
   isTranscriptRowSelectable,
   selectVisibilityBatchEligibleIdsFromAnchor,
   transcriptSelectableRole,
-} from '../../components/chat/transcript-selectable-role';
-import {TextPromptModal} from '../../components/ui/TextPromptModal';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useMobileScope} from '../../hooks/useMobileScope';
-import {readChatRichTextEnabled} from '../../storage/chat-rich-text-pref';
+} from '@/components/chat/transcript-selectable-role';
+import {TextPromptModal} from '@/components/ui/TextPromptModal';
+import {useRuntime} from '@/hooks/useRuntime';
+import {useMobileScope} from '@/hooks/useMobileScope';
+import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
 import {
   defaultChatTranscriptEngine,
   readChatTranscriptEngine,
   type ChatTranscriptEngine,
-} from '../../storage/chat-transcript-engine';
-import {useNovelMaster} from '../../runtime/novel-master-context';
-import {useTheme} from '../../theme/ThemeProvider';
+} from '@/storage/chat-transcript-engine';
+import {useNovelMaster} from '@/runtime/novel-master-context';
+import {useTheme} from '@/theme/ThemeProvider';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
 import {

@@ -7,32 +7,32 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { type ChatMessage } from "@novel-master/core/chat";
 
 import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
-import {toastMessage} from '../../../errors/toast-message';
+import {toastMessage} from '@/errors/toast-message';
 import {
   applyTextEditToMessage,
   editableTextFromMessage,
-} from '../../../components/chat/message-edit';
+} from '@/components/chat/message-edit';
 import {
   deriveComposerSendState,
   findLastVisibleMessage,
-} from '../../../components/chat/composer-send-state';
+} from '@/components/chat/composer-send-state';
 import {
   computeHideRangeFromSelection,
   computeShowRangeFromSelection,
-} from '../../../components/chat/transcript-selectable-role';
-import type {useBatchSelection} from '../../../hooks/useBatchSelection';
-import {rollbackToMessage} from '../../../services/message-rollback.service';
+} from '@/components/chat/transcript-selectable-role';
+import type {useBatchSelection} from '@/hooks/useBatchSelection';
+import {rollbackToMessage} from '@/services/message-rollback.service';
 import {
   getSessionViewCache,
   sessionViewCacheKey,
   setSessionViewCache,
-} from '../../../services/chat-session-view-cache';
+} from '@/services/chat-session-view-cache';
 import {
   loadSessionMessagesPageForDisplay,
   loadSessionMessagesTailForDisplay,
-} from '../../../services/regex-apply-channel';
-import {prependOlderMessages} from '../../../services/message-paging';
-import type {MobileNovelMasterRuntime} from '../../../runtime/types';
+} from '@/services/regex-apply-channel';
+import {prependOlderMessages} from '@/services/message-paging';
+import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import type {ChatSubview} from './useChatTabScope';
 
 const CHAT_PAGE_SIZE = 40;
