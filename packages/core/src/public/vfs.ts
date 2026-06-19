@@ -50,7 +50,6 @@ export {
 export { copyVfsPath } from "../domain/vfs/logic/vfs-copy.js";
 export type { CopyVfsPathOptions } from "../domain/vfs/logic/vfs-copy.js";
 export { replaceVfsSubtree } from "../domain/vfs/logic/vfs-tree-copy.js";
-export { renderSessionVfsTree } from "../domain/vfs/logic/render-session-vfs-tree.js";
 export {
   mapUserSaveToToolUses,
   buildUserVfsSaveEditActionXml,
