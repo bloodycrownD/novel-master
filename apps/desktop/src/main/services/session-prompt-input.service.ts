@@ -55,10 +55,16 @@ export async function buildSessionPromptInput(
     "llm",
   );
   const snapshot = await getSessionWorktreeSnapshot(runtime, scope);
+  const wt = runtime.worktree({
+    kind: "session",
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
+  });
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const ctx: PromptRenderContext = {
     worktreeDisplay: snapshot.worktreeDisplay,
     messages,
+    worktree: wt,
     vfs,
   };
   // 预览与 token 计数默认 agentStepIndex 为 0，含 once dynamic 块

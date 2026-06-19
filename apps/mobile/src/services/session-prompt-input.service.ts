@@ -41,10 +41,16 @@ export async function buildSessionPromptInput(
     'llm',
   );
   const snapshot = await getOrRefreshSessionWorktreeSnapshot(runtime, scope);
+  const wt = runtime.worktree({
+    kind: 'session',
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
+  });
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const ctx: PromptRenderContext = {
     worktreeDisplay: snapshot.worktreeDisplay,
     messages,
+    worktree: wt,
     vfs,
   };
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);

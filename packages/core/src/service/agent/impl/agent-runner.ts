@@ -158,10 +158,12 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
+        const wt = this.deps.worktree(wtScope);
         const promptRenderCtx = {
           worktreeDisplay: snapshot.worktreeDisplay,
           messages: visible,
           vfs: this.deps.toolCtx.vfs,
+          worktree: wt,
         };
         const promptInput = await buildPromptLlmInputFromLayout(
           options.definition.prompts,
