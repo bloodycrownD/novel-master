@@ -7,6 +7,7 @@ import Clipboard from '@react-native-clipboard/clipboard';
 import { type ChatMessage } from "@novel-master/core/chat";
 
 import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
+import {formatError} from '@/errors/format-error';
 import {toastMessage} from '@/errors/toast-message';
 import {
   applyTextEditToMessage,
@@ -21,6 +22,7 @@ import {
   computeShowRangeFromSelection,
 } from '@/components/chat/transcript-selectable-role';
 import type {useBatchSelection} from '@/hooks/useBatchSelection';
+import {isRollbackVfsDegradableError} from '@novel-master/core/session-fs';
 import {rollbackToMessage} from '@/services/message-rollback.service';
 import {
   getSessionViewCache,
@@ -481,6 +483,51 @@ export function useChatTabMessageActions({
         showToast(toastMessage('请稍候', 'Agent 运行中无法回滚'));
         return;
       }
+
+      const runRollback = async (
+        targetMessageId: string,
+        skipVfsReconcile = false,
+      ) => {
+        try {
+          await rollbackToMessage(
+            runtime,
+            {projectId, sessionId},
+            targetMessageId,
+            skipVfsReconcile ? {skipVfsReconcile: true} : undefined,
+          );
+          resetStreamingDisplay();
+          await reloadMessages(true);
+          if (!skipVfsReconcile) {
+            bumpVfsRefresh();
+          }
+          showToast(
+            skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
+          );
+        } catch (error) {
+          if (!skipVfsReconcile && isRollbackVfsDegradableError(error)) {
+            const errorMessage = formatError(error);
+            Alert.alert(
+              '无法恢复工作区',
+              `${errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`,
+              [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '仅删除后续对话',
+                  style: 'destructive',
+                  onPress: () => {
+                    void runRollback(targetMessageId, true).catch(err => {
+                      showToast(toastMessage('回滚失败', err));
+                    });
+                  },
+                },
+              ],
+            );
+            return;
+          }
+          showToast(toastMessage('回滚失败', error));
+        }
+      };
+
       Alert.alert(
         '回滚到此消息',
         '将删除此消息之后的对话，并撤销相关文件修改。是否继续？',
@@ -490,17 +537,9 @@ export function useChatTabMessageActions({
             text: '回滚',
             style: 'destructive',
             onPress: () => {
-              void (async () => {
-                try {
-                  await rollbackToMessage(runtime, {projectId, sessionId}, messageId);
-                  resetStreamingDisplay();
-                  await reloadMessages(true);
-                  bumpVfsRefresh();
-                  showToast('回滚成功');
-                } catch (error) {
-                  showToast(toastMessage('回滚失败', error));
-                }
-              })();
+              void runRollback(messageId).catch(err => {
+                showToast(toastMessage('回滚失败', err));
+              });
             },
           },
         ],
