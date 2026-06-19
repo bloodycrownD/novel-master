@@ -52,6 +52,12 @@ npm run build -w @novel-master/core -w @novel-master/tdbc-driver-rn
 
 `prestart` and `preandroid` in this package run the same build automatically.
 
+## Path aliases (`@/`)
+
+Mobile 源码使用 `@/` 指向 `apps/mobile/src/`（`tsconfig.json` paths、`metro.config.js` `resolveMobilePathAlias`、`jest.config.js` `moduleNameMapper` 三者一致）。示例：`@/components/chat/ChatComposer` → `src/components/chat/ChatComposer`。
+
+跨 workspace 包请用包名导入，例如 `@novel-master/core`、`@novel-master/tdbc-driver-rn`；**不要**用 `@/` 引用 `packages/` 内代码。
+
 ## App launcher icon
 
 Source: [`assets/icon.webp`](../../assets/icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
