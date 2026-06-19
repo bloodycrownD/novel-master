@@ -40,9 +40,12 @@ import {
 } from '@/services/chat-transcript-telemetry';
 import {useTheme} from '@/theme/ThemeProvider';
 import {prepareStreamTailHtml} from './prepare-stream-tail-html';
+import type {StreamWireChunk} from '@/services/stream-wire-queue';
+import {appendWireChunk} from '@/services/stream-wire-queue';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
+  pushStreamBatch: (payload: {segments: readonly StreamWireChunk[]}) => void;
   resetStream: () => void;
 };
 
@@ -223,6 +226,7 @@ export const ChatTranscriptWebView = memo(
   } | null>(null);
   const streamRafRef = useRef<number | null>(null);
   const pendingStreamDeltasRef = useRef({text: '', thinking: ''});
+  const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
   const streamTextAccumRef = useRef('');
   const streamThinkingAccumRef = useRef('');
   const richTextRef = useRef(flags?.richText ?? false);
@@ -287,6 +291,42 @@ export const ChatTranscriptWebView = memo(
     });
   }, [postToWeb]);
 
+  const flushPendingStreamBatch = useCallback(() => {
+    if (streamRafRef.current != null) {
+      return;
+    }
+    streamRafRef.current = requestAnimationFrame(() => {
+      streamRafRef.current = null;
+      const segments = pendingStreamSegmentsRef.current;
+      if (segments.length === 0) {
+        return;
+      }
+      pendingStreamSegmentsRef.current = [];
+      for (const seg of segments) {
+        if (seg.kind === 'text') {
+          streamTextAccumRef.current += seg.delta;
+        } else {
+          streamThinkingAccumRef.current += seg.delta;
+        }
+      }
+      const richText = richTextRef.current;
+      const textHtml = prepareStreamTailHtml(streamTextAccumRef.current, richText);
+      const thinkingHtml = prepareStreamTailHtml(
+        streamThinkingAccumRef.current,
+        richText,
+      );
+      postToWeb({
+        v: 1,
+        type: 'streamBatch',
+        payload: {
+          segments: segments.map(seg => ({kind: seg.kind, delta: seg.delta})),
+          textHtml,
+          thinkingHtml,
+        },
+      });
+    });
+  }, [postToWeb]);
+
   const queueStreamDelta = useCallback(
     (kind: 'text' | 'thinking', delta: string) => {
       if (!webReady || delta.length === 0) {
@@ -307,6 +347,23 @@ export const ChatTranscriptWebView = memo(
       flushPendingStreamDeltas();
     },
     [webReady, flushPendingStreamDeltas],
+  );
+
+  const queueStreamBatch = useCallback(
+    (payload: {segments: readonly StreamWireChunk[]}) => {
+      if (!webReady || payload.segments.length === 0) {
+        return;
+      }
+      streamActiveRef.current = true;
+      for (const seg of payload.segments) {
+        if (seg.delta.length === 0) {
+          continue;
+        }
+        appendWireChunk(pendingStreamSegmentsRef.current, seg);
+      }
+      flushPendingStreamBatch();
+    },
+    [webReady, flushPendingStreamBatch],
   );
 
   const sendInit = useCallback(() => {
@@ -429,6 +486,7 @@ export const ChatTranscriptWebView = memo(
       streamRafRef.current = null;
     }
     pendingStreamDeltasRef.current = {text: '', thinking: ''};
+    pendingStreamSegmentsRef.current = [];
     streamTextAccumRef.current = '';
     streamThinkingAccumRef.current = '';
     prevStreamTextRef.current = '';
@@ -444,9 +502,10 @@ export const ChatTranscriptWebView = memo(
     ref,
     () => ({
       pushStreamDelta: queueStreamDelta,
+      pushStreamBatch: queueStreamBatch,
       resetStream: resetStreamTail,
     }),
-    [queueStreamDelta, resetStreamTail],
+    [queueStreamDelta, queueStreamBatch, resetStreamTail],
   );
 
   const sendPrependPage = useCallback(

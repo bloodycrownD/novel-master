@@ -452,6 +452,56 @@ describe('ChatTranscriptWebView', () => {
     expect(typesAfterToggle).toContain('sessionSnapshot');
   });
 
+  it('imperative pushStreamBatch 发送 streamBatch 且 rich 含 html', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          flags={{richText: true, batchMode: false}}
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.pushStreamBatch({
+        segments: [
+          {kind: 'thinking', delta: '*r*'},
+          {kind: 'text', delta: '**b**'},
+        ],
+      });
+    });
+    await flushAnimationFrame();
+
+    const batchMsg = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(msg => msg.type === 'streamBatch');
+    expect(batchMsg?.type).toBe('streamBatch');
+    if (batchMsg?.type === 'streamBatch') {
+      expect(batchMsg.payload.segments).toEqual([
+        {kind: 'thinking', delta: '*r*'},
+        {kind: 'text', delta: '**b**'},
+      ]);
+      expect(typeof batchMsg.payload.textHtml).toBe('string');
+      expect(batchMsg.payload.textHtml!.length).toBeGreaterThan(0);
+      expect(typeof batchMsg.payload.thinkingHtml).toBe('string');
+      expect(batchMsg.payload.thinkingHtml!.length).toBeGreaterThan(0);
+    }
+  });
+
   it('agent 运行中 assistant 含 tool_use 落库时走 sessionSnapshot 而非 appendTailRows', async () => {
     const initialMessages = [sampleMessage('u1', 1)];
     let tree: TestRenderer.ReactTestRenderer;

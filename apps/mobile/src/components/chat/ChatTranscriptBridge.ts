@@ -121,6 +121,17 @@ export type HostToTranscriptMessage =
         html?: string;
       }
     >
+  | BridgeEnvelope<
+      'streamBatch',
+      {
+        segments: readonly {
+          kind: 'text' | 'thinking';
+          delta: string;
+        }[];
+        textHtml?: string;
+        thinkingHtml?: string;
+      }
+    >
   | BridgeEnvelope<'streamReset', Record<string, never>>
   | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>

@@ -1199,6 +1199,30 @@ export function buildTranscriptBootScript(): string {
     scheduleStickIfNearBottom();
   }
 
+  function applyStreamBatch(payload) {
+    var segments = payload.segments || [];
+    var lastTextIdx = -1;
+    var lastThinkIdx = -1;
+    for (var i = 0; i < segments.length; i++) {
+      if (segments[i].kind === 'text') {
+        lastTextIdx = i;
+      } else {
+        lastThinkIdx = i;
+      }
+    }
+    for (var j = 0; j < segments.length; j++) {
+      var seg = segments[j];
+      var html;
+      if (seg.kind === 'text' && j === lastTextIdx) {
+        html = state.flags.richText ? (payload.textHtml || '') : undefined;
+      } else if (seg.kind === 'thinking' && j === lastThinkIdx) {
+        html = state.flags.richText ? (payload.thinkingHtml || '') : undefined;
+      }
+      appendStreamDelta(seg.kind, seg.delta, html);
+    }
+    scheduleStickIfNearBottom();
+  }
+
   function onRowsClick(event) {
     var target = event.target;
     if (!target || !target.closest) return;
@@ -1281,6 +1305,10 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'streamDelta': {
         appendStreamDelta(p.kind, p.delta || '', p.html || '');
+        break;
+      }
+      case 'streamBatch': {
+        applyStreamBatch(p);
         break;
       }
       case 'streamReset':

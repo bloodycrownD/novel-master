@@ -63,6 +63,8 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('renderStreamingMarkdown');
     expect(script).toContain('scheduleStreamRichUpgrade');
     expect(script).toContain('appendStreamDeltaIncremental');
+    expect(script).toContain('applyStreamBatch');
+    expect(script).toContain("case 'streamBatch'");
   });
 
   it('does not rebuild whole bubble when text incremental update fails', () => {
