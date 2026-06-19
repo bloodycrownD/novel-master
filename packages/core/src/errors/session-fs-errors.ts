@@ -9,7 +9,8 @@ export type SessionFsErrorCode =
   | "ROLLBACK_MESSAGE_NOT_FOUND"
   | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
   | "ROLLBACK_NO_CHECKPOINT"
-  | "RESTORE_REVISION_MISSING";
+  | "RESTORE_REVISION_MISSING"
+  | "ROLLBACK_VFS_RESTORE_FAILED";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -113,4 +114,25 @@ export function sessionFsRollbackNoCheckpoint(
     "该消息无回滚点",
     { messageId, sessionId },
   );
+}
+
+/** VFS reconcile 失败，UI 可提供仅截断消息的降级回滚。 */
+export function sessionFsRollbackVfsRestoreFailed(
+  message: string,
+  options?: {
+    sessionId?: string;
+    messageId?: string;
+    logicalPath?: string;
+  },
+): SessionFsError {
+  return new SessionFsError("ROLLBACK_VFS_RESTORE_FAILED", message, options);
+}
+
+/**
+ * 判断错误是否可降级为仅截断消息（含 cause 链）。
+ *
+ * @remarks 当 error 或其 cause 链中存在 `ROLLBACK_VFS_RESTORE_FAILED` 时返回 true。
+ */
+export function isRollbackVfsDegradableError(error: unknown): boolean {
+  return isSessionFsError(error, "ROLLBACK_VFS_RESTORE_FAILED");
 }

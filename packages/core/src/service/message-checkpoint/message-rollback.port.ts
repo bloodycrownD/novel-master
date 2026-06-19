@@ -4,6 +4,12 @@
  * @module service/message-checkpoint/message-rollback.port
  */
 
+/** 回滚可选参数。 */
+export type RollbackOptions = {
+  /** 跳过 VFS reconcile，仅截断 tail 消息与 checkpoint。 */
+  readonly skipVfsReconcile?: boolean;
+};
+
 /**
  * Restores the session work tree to an anchor message checkpoint and truncates tail messages.
  */
@@ -15,5 +21,6 @@ export interface MessageRollbackService {
     sessionId: string,
     projectId: string,
     anchorMessageId: string,
+    options?: RollbackOptions,
   ): Promise<void>;
 }
