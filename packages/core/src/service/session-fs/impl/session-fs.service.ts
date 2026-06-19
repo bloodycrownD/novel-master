@@ -4,6 +4,7 @@
  * @module service/session-fs/impl/session-fs.service
  */
 
+import type { RollbackOptions } from "@/service/message-checkpoint/message-rollback.port.js";
 import type { MessageRollbackService } from "@/service/message-checkpoint/message-rollback.port.js";
 import type { SessionFsService } from "../session-fs.port.js";
 
@@ -22,11 +23,13 @@ export class DefaultSessionFsService implements SessionFsService {
     sessionId: string,
     projectId: string,
     messageId: string,
+    options?: RollbackOptions,
   ): Promise<void> {
     await this.deps.messageRollback.rollbackToMessage(
       sessionId,
       projectId,
       messageId,
+      options,
     );
   }
 }

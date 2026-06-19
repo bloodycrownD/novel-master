@@ -4,6 +4,8 @@
  * @module service/session-fs/session-fs.port
  */
 
+import type { RollbackOptions } from "@/service/message-checkpoint/message-rollback.port.js";
+
 /**
  * Session-scoped rollback entry point (delegates to message checkpoint restore).
  */
@@ -20,5 +22,6 @@ export interface SessionFsService {
     sessionId: string,
     projectId: string,
     messageId: string,
+    options?: RollbackOptions,
   ): Promise<void>;
 }
