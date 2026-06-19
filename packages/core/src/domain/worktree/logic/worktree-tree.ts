@@ -8,7 +8,8 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import type { WorktreeScope } from "../model/worktree-types.js";
 import { worktreeRootLogicalPath } from "./worktree-scope.js";
 
-function parentDir(logicalPath: string): string | null {
+/** 逻辑路径的父目录；根目录文件返回 `/`。 */
+export function parentDirOf(logicalPath: string): string | null {
   const n = normalizePath(logicalPath);
   if (n === "/") {
     return null;
@@ -21,10 +22,10 @@ function parentDir(logicalPath: string): string | null {
 }
 
 function addParentChain(dirs: Set<string>, logicalPath: string, root: string): void {
-  let current = parentDir(logicalPath);
+  let current = parentDirOf(logicalPath);
   while (current != null && current !== root) {
     dirs.add(current);
-    current = parentDir(current);
+    current = parentDirOf(current);
   }
   dirs.add(root);
 }
@@ -49,7 +50,7 @@ export function buildWorktreeDirSet(params: {
       continue;
     }
     addParentChain(dirs, n, root);
-    const parent = parentDir(n);
+    const parent = parentDirOf(n);
     if (parent != null) {
       dirs.add(parent);
     }
@@ -68,7 +69,7 @@ export function directChildDirs(
     if (d === normalized) {
       continue;
     }
-    if (parentDir(d) === normalized) {
+    if (parentDirOf(d) === normalized) {
       children.push(d);
     }
   }

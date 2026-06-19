@@ -37,3 +37,16 @@ export function displayStateLabel(state: DisplayState): string {
       return "文件名";
   }
 }
+
+/** `{{$filetree}}` 宏文件行尾加载状态文案（与 UI 四态标签分离）。 */
+export function filetreeMacroLoadStateLabel(state: DisplayState): string {
+  switch (state) {
+    case "full":
+      return "全部加载";
+    case "header":
+      return "部分加载";
+    case "filename":
+    case "hidden":
+      return "未加载";
+  }
+}

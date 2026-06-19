@@ -5,12 +5,17 @@
  */
 
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
-import type { WorktreeDirRule, WorktreeScope } from "../model/worktree-types.js";
+import type {
+  DisplayState,
+  WorktreeDirRule,
+  WorktreeScope,
+} from "../model/worktree-types.js";
 import {
   sortDirPaths,
   sortFilesForDir,
   type WorktreeFileSortMeta,
 } from "./worktree-eval.js";
+import { filetreeMacroLoadStateLabel } from "./worktree-labels.js";
 import { worktreeRootLogicalPath } from "./worktree-scope.js";
 import { directChildDirs, directChildFiles } from "./worktree-tree.js";
 
@@ -20,6 +25,12 @@ export interface RenderWorktreeFileTreeParams {
   readonly fileSet: ReadonlySet<string>;
   readonly dirRuleMap: ReadonlyMap<string, WorktreeDirRule>;
   readonly mtimeByPath: ReadonlyMap<string, number>;
+}
+
+/** 宏树渲染参数：在基础树参数上附带各文件 display 状态。 */
+export interface RenderWorktreeFileTreeForMacroParams
+  extends RenderWorktreeFileTreeParams {
+  readonly displayByPath: ReadonlyMap<string, DisplayState>;
 }
 
 type TreeEntry = { readonly kind: "dir" | "file"; readonly path: string };
@@ -77,19 +88,26 @@ function appendDirLines(
   dirPath: string,
   prefix: string,
   params: RenderWorktreeFileTreeParams,
+  displayByPath?: ReadonlyMap<string, DisplayState>,
 ): void {
   const children = sortedChildren(dirPath, params);
   for (let i = 0; i < children.length; i++) {
     const isLast = i === children.length - 1;
     const branch = isLast ? "└── " : "├── ";
     const child = children[i]!;
-    lines.push(`${prefix}${branch}${entryName(child)}`);
+    let lineName = entryName(child);
+    if (child.kind === "file" && displayByPath != null) {
+      const state = displayByPath.get(child.path) ?? "filename";
+      lineName += ` ${filetreeMacroLoadStateLabel(state)}`;
+    }
+    lines.push(`${prefix}${branch}${lineName}`);
     if (child.kind === "dir") {
       appendDirLines(
         lines,
         child.path,
         prefix + (isLast ? "    " : "│   "),
         params,
+        displayByPath,
       );
     }
   }
@@ -106,5 +124,19 @@ export function renderWorktreeFileTree(
   const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
   const lines: string[] = [headerLine];
   appendDirLines(lines, rootPath, "", params);
+  return lines.join("\n");
+}
+
+/**
+ * 渲染带加载状态后缀的 worktree ASCII 树（`{{$filetree}}` 与工作区宏树）。
+ */
+export function renderWorktreeFileTreeForMacro(
+  params: RenderWorktreeFileTreeForMacroParams,
+): string {
+  const rootPath = worktreeRootLogicalPath(params.scope);
+  const rootLabel = worktreeFileTreeRootLabel(params.scope);
+  const headerLine = rootLabel === "/" ? "/" : `${rootLabel}/`;
+  const lines: string[] = [headerLine];
+  appendDirLines(lines, rootPath, "", params, params.displayByPath);
   return lines.join("\n");
 }
