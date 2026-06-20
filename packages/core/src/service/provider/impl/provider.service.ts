@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Default provider CRUD service.
  *
  * @module service/provider/impl/provider.service
@@ -7,7 +7,10 @@
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { LlmProvider } from "@/domain/provider/model/provider.js";
-import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
+import {
+  providerApiKeyRef,
+  resolveProviderApiKeySecretRef,
+} from "@/domain/provider/model/provider.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -100,8 +103,16 @@ export class DefaultProviderService implements ProviderService {
     }
     let secretRef = provider.secretRef;
     if (patch.apiKey !== undefined) {
-      secretRef = providerApiKeyRef(id);
-      await this.deps.secretStore.set(secretRef, patch.apiKey);
+      if (patch.apiKey === "") {
+        const ref = resolveProviderApiKeySecretRef(provider);
+        if (await this.deps.secretStore.has(ref)) {
+          await this.deps.secretStore.delete(ref);
+        }
+        secretRef = null;
+      } else {
+        secretRef = providerApiKeyRef(id);
+        await this.deps.secretStore.set(secretRef, patch.apiKey);
+      }
     }
     const updated: LlmProvider = {
       ...provider,
@@ -131,19 +142,19 @@ export class DefaultProviderService implements ProviderService {
     await this.deps.suggestions.deleteByProvider(id);
     await this.deps.savedModels.deleteByProvider(id);
     await this.deps.providers.delete(id);
-    if (provider.secretRef) {
-      await this.deps.secretStore.delete(provider.secretRef);
+    const ref = resolveProviderApiKeySecretRef(provider);
+    if (await this.deps.secretStore.has(ref)) {
+      await this.deps.secretStore.delete(ref);
     }
   }
 
   private async apiKeyStatus(
     provider: LlmProvider,
   ): Promise<"set" | "not set"> {
-    const ref = provider.secretRef ?? providerApiKeyRef(provider.id);
+    const ref = resolveProviderApiKeySecretRef(provider);
     if (await this.deps.secretStore.has(ref)) {
       return "set";
     }
     return "not set";
   }
 }
-

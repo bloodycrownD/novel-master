@@ -14,7 +14,7 @@ export interface EnvSecretStoreLike {
 
 /**
  * Combines env (read-only override) with a DB-backed store.
- * Read order: env hit �?DB; writes go to DB only.
+ * Read order: env hit �?DB; writes go to DB only.
  */
 export function createCompositeSecretStore(options: {
   db: SecretStore;
@@ -26,6 +26,7 @@ export function createCompositeSecretStore(options: {
     async get(ref: string): Promise<string | null> {
       if (env) {
         const fromEnv = await env.get(ref);
+        // env 未命中：null（含空串/空白，见 EnvSecretStore）
         if (fromEnv !== null) {
           return fromEnv;
         }

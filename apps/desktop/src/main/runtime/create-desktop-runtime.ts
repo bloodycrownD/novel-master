@@ -72,9 +72,13 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
 
   const skspName = getPlatformSkspName();
   const dbStore = resolveSkspDriver(skspName).createStore(conn);
+  const envStore =
+    process.env.NM_SKSP_DISABLE_ENV === "1"
+      ? undefined
+      : createEnvSecretStore();
   const secretStore = createCompositeSecretStore({
     db: dbStore,
-    env: createEnvSecretStore(),
+    env: envStore,
   });
 
   const providerBundle = createProviderServices(conn, secretStore);

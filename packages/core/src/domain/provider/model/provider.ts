@@ -22,3 +22,10 @@ export interface LlmProvider {
 export function providerApiKeyRef(providerId: string): string {
   return `provider/${providerId}/apiKey`;
 }
+
+/** 解析 provider API 密钥 SKSP ref（list 状态、请求、delete、edit 共用）。 */
+export function resolveProviderApiKeySecretRef(
+  provider: Pick<LlmProvider, "id" | "secretRef">,
+): string {
+  return provider.secretRef ?? providerApiKeyRef(provider.id);
+}
