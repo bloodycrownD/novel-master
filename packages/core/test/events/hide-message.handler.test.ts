@@ -16,6 +16,9 @@ import {
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 
+import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
+
 novelMasterTestFixture();
 
 async function appendText(
@@ -51,11 +54,14 @@ describe("runHideMessageAction", () => {
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
 
+    const store = createSessionWorktreeSnapshotStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+
     await runHideMessageAction(
-      chatSession,
+      project.id,
       sessionRow.id,
       slice,
-      { messages: ctx.messages },
+      { messages: ctx.messages, messageTranscriptEffects: effects },
     );
 
     const list = await ctx.messages.listBySession(sessionRow.id);
@@ -85,11 +91,14 @@ describe("runHideMessageAction", () => {
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
 
+    const store = createSessionWorktreeSnapshotStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+
     await runHideMessageAction(
-      chatSession,
+      project.id,
       sessionRow.id,
       slice,
-      { messages: ctx.messages },
+      { messages: ctx.messages, messageTranscriptEffects: effects },
     );
 
     const list = await ctx.messages.listBySession(sessionRow.id);
