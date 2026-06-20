@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Default provider CRUD service.
  *
  * @module service/provider/impl/provider.service
@@ -11,6 +11,7 @@ import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
+import { BUILTIN_PROVIDER_IDS } from "@/domain/provider/logic/builtin-providers.js";
 import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
 import type {
   CreateProviderInput,
@@ -19,7 +20,7 @@ import type {
   ProviderService,
 } from "../provider.port.js";
 
-const BUILTIN_IDS = new Set(["openai", "anthropic", "google", "openrouter"]);
+const BUILTIN_IDS = new Set(BUILTIN_PROVIDER_IDS);
 
 export interface DefaultProviderServiceDeps {
   readonly providers: ProviderRepository;
@@ -145,3 +146,4 @@ export class DefaultProviderService implements ProviderService {
     return "not set";
   }
 }
+
