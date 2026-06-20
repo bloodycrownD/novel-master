@@ -68,6 +68,60 @@ describe("SqliteVfsEntryRepository", () => {
     assert.deepEqual(depth1, [{ path: `${a}/b`, kind: "directory" }]);
   });
 
+  it("list 将路径中的 % 按字面量匹配（非递归）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const draftDir = `${root}/x/v1%draft`;
+    const wrongDir = `${root}/x/v1Xdraft`;
+    await repo.insertDirectory(draftDir);
+    await repo.insert(`${draftDir}/keep.txt`, "keep");
+    await repo.insertDirectory(wrongDir);
+    await repo.insert(`${wrongDir}/wrong.txt`, "wrong");
+
+    const shallow = await repo.list(draftDir);
+    assert.deepEqual(shallow, [{ path: `${draftDir}/keep.txt`, kind: "file" }]);
+  });
+
+  it("list 将路径中的 % 按字面量匹配（递归）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const draftDir = `${root}/x/v1%draft`;
+    const wrongDir = `${root}/x/v1Xdraft`;
+    await repo.insertDirectory(draftDir);
+    await repo.insert(`${draftDir}/keep.txt`, "keep");
+    await repo.insertDirectory(`${draftDir}/nested`);
+    await repo.insert(`${draftDir}/nested/deep.txt`, "deep");
+    await repo.insertDirectory(wrongDir);
+    await repo.insert(`${wrongDir}/wrong.txt`, "wrong");
+
+    const recursive = await repo.list(draftDir, { recursive: true });
+    assert.deepEqual(
+      recursive.map((e) => e.path).sort(),
+      [
+        `${draftDir}/keep.txt`,
+        `${draftDir}/nested`,
+        `${draftDir}/nested/deep.txt`,
+      ].sort(),
+    );
+  });
+
+  it("list 将路径中的 _ 按字面量匹配（非递归）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteVfsEntryRepository(ctx.conn);
+    const root = isolatedRoot();
+    const barDir = `${root}/x/foo_bar`;
+    const wrongPath = `${root}/x/fooXbar/wrong.txt`;
+    await repo.insertDirectory(barDir);
+    await repo.insert(`${barDir}/ok.txt`, "ok");
+    await repo.insertDirectory(`${root}/x/fooXbar`);
+    await repo.insert(wrongPath, "wrong");
+
+    const shallow = await repo.list(barDir);
+    assert.deepEqual(shallow, [{ path: `${barDir}/ok.txt`, kind: "file" }]);
+  });
+
   it("detects version conflicts", async () => {
     const ctx = getNovelMasterTestContext();
     const repo = new SqliteVfsEntryRepository(ctx.conn);
