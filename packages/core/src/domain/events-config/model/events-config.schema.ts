@@ -9,6 +9,7 @@ import type { EventActionNode, EventActionType, EventsConfig } from "./events-co
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import { depthSliceFromWire } from "@/domain/depth/logic/depth-slice.js";
 import { validateDepthSlice } from "@/domain/depth/logic/depth-slice.js";
+import { validateEventActionDag } from "../logic/validate-event-action-dag.js";
 
 const depthWireSchema = z
   .object({
@@ -147,61 +148,13 @@ function parseActionNode(raw: unknown): EventActionNode {
   throw new Error(`unknown action type: ${type}`);
 }
 
-function validateDag(nodes: readonly EventActionNode[]): void {
-  const seen = new Set<string>();
-  for (const n of nodes) {
-    if (seen.has(n.type)) {
-      throw new Error(`duplicate action type in one event: ${n.type}`);
-    }
-    seen.add(n.type);
-  }
-  for (const n of nodes) {
-    for (const dep of n.dependency ?? []) {
-      if (!seen.has(dep)) {
-        throw new Error(`unknown dependency reference: ${n.type} depends on ${dep}`);
-      }
-    }
-  }
-
-  // Kahn's algorithm for cycle detection
-  const indegree = new Map<string, number>();
-  const out = new Map<string, string[]>();
-  for (const n of nodes) {
-    indegree.set(n.type, 0);
-    out.set(n.type, []);
-  }
-  for (const n of nodes) {
-    for (const dep of n.dependency ?? []) {
-      out.get(dep)!.push(n.type);
-      indegree.set(n.type, (indegree.get(n.type) ?? 0) + 1);
-    }
-  }
-  const queue: string[] = [];
-  for (const [t, deg] of indegree.entries()) {
-    if (deg === 0) queue.push(t);
-  }
-  let visited = 0;
-  while (queue.length > 0) {
-    const t = queue.shift()!;
-    visited++;
-    for (const nxt of out.get(t) ?? []) {
-      const v = (indegree.get(nxt) ?? 0) - 1;
-      indegree.set(nxt, v);
-      if (v === 0) queue.push(nxt);
-    }
-  }
-  if (visited !== nodes.length) {
-    throw new Error("dependency graph has a cycle");
-  }
-}
-
 const eventNodesSchema = z
   .array(z.unknown())
   .min(1)
   .transform((items): readonly EventActionNode[] => items.map(parseActionNode))
   .superRefine((nodes, ctx) => {
     try {
-      validateDag(nodes);
+      validateEventActionDag(nodes);
     } catch (e: unknown) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,

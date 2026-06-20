@@ -64,3 +64,21 @@ test("configToEventBlocks and eventBlocksToConfig round-trip", () => {
   assert.deepEqual(restored.events, original.events);
   assert.equal(restored.schemaVersion, 2);
 });
+
+test("configToEventBlocks strips endDepth; UI round-trip drops endDepth (C2)", () => {
+  const config: EventsConfig = {
+    schemaVersion: 2,
+    events: {
+      "session.compaction.requested": [
+        { type: "hide-message", params: { startDepth: 2, endDepth: 8 } },
+      ],
+    },
+  };
+  const blocks = configToEventBlocks(config);
+  assert.deepEqual(blocks[0]!.actions[0]!.params, { startDepth: 2 });
+  const restored = eventBlocksToConfig(blocks, 2);
+  assert.deepEqual(restored.events["session.compaction.requested"]![0]!.params, {
+    startDepth: 2,
+  });
+});
+

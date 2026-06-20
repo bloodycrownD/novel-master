@@ -162,7 +162,7 @@ describe("event orchestrator (DAG)", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.match(result.failures[0]?.error ?? "", /cycle detected/i);
+    assert.match(result.failures[0]?.error ?? "", /dependency graph has a cycle/);
   });
 
   it("returns explicit failure for duplicate action types during runtime prevalidation", async () => {

@@ -2,60 +2,34 @@
  * 事件配置 UI 草稿保存前校验。
  */
 import { validateDepthSlice } from "../shared/depth-slice.js";
+import {
+  EventActionDagError,
+  validateEventActionDag,
+} from "@/domain/events-config/logic/validate-event-action-dag.js";
+import type { EventActionType } from "@/domain/events-config/model/events-config.js";
 import type { EventBlockDraft } from "./event-config-state.js";
 import { actionTypeLabel, eventTypeLabel } from "./event-config-labels.js";
 
-function validateDag(
-  actions: readonly { type: string; dependency?: readonly string[] }[],
-): string | null {
-  const seen = new Set<string>();
-  for (const a of actions) {
-    if (seen.has(a.type)) {
-      return `动作「${a.type}」重复`;
+function mapDagErrorToUserMessage(error: EventActionDagError, eventLabel: string): string {
+  switch (error.code) {
+    case "duplicate_action_type": {
+      const type = error.actionType ?? "";
+      return `「${eventLabel}」中动作「${actionTypeLabel(type as EventActionType)}」重复，请删除多余项后再保存`;
     }
-    seen.add(a.type);
-  }
-  for (const a of actions) {
-    for (const dep of a.dependency ?? []) {
-      if (!seen.has(dep)) {
-        return `动作「${a.type}」依赖不存在：${dep}`;
-      }
-      if (dep === a.type) {
-        return `动作「${a.type}」不能依赖自身`;
-      }
+    case "unknown_dependency": {
+      const type = error.actionType ?? "";
+      const dep = error.dependency ?? "";
+      return `「${eventLabel}」中动作「${actionTypeLabel(type as EventActionType)}」依赖不存在的 ${dep}`;
     }
-  }
-
-  const indegree = new Map<string, number>();
-  const out = new Map<string, string[]>();
-  for (const a of actions) {
-    indegree.set(a.type, 0);
-    out.set(a.type, []);
-  }
-  for (const a of actions) {
-    for (const dep of a.dependency ?? []) {
-      out.get(dep)!.push(a.type);
-      indegree.set(a.type, (indegree.get(a.type) ?? 0) + 1);
+    case "self_dependency": {
+      const type = error.actionType ?? "";
+      return `「${eventLabel}」中动作「${actionTypeLabel(type as EventActionType)}」不能依赖自身`;
     }
+    case "cycle":
+      return `「${eventLabel}」中依赖存在循环（DAG 必须无环）`;
+    default:
+      return `「${eventLabel}」· ${error.message}`;
   }
-  const q: string[] = [];
-  for (const [t, d] of indegree.entries()) {
-    if (d === 0) q.push(t);
-  }
-  let visited = 0;
-  while (q.length > 0) {
-    const t = q.shift()!;
-    visited++;
-    for (const nxt of out.get(t) ?? []) {
-      const v = (indegree.get(nxt) ?? 0) - 1;
-      indegree.set(nxt, v);
-      if (v === 0) q.push(nxt);
-    }
-  }
-  if (visited !== actions.length) {
-    return "依赖存在循环（DAG 必须无环）";
-  }
-  return null;
 }
 
 export function validateEventConfigBlocks(
@@ -80,13 +54,7 @@ export function validateEventConfigBlocks(
       return `「${eventLabel}」至少需要一个动作`;
     }
 
-    const seenActions = new Set<string>();
     for (const action of block.actions) {
-      if (seenActions.has(action.type)) {
-        return `「${eventLabel}」中动作「${actionTypeLabel(action.type)}」重复，请删除多余项后再保存`;
-      }
-      seenActions.add(action.type);
-
       if (action.type === "run-agent") {
         const agentId =
           "agentId" in action.params ? String(action.params.agentId).trim() : "";
@@ -102,6 +70,7 @@ export function validateEventConfigBlocks(
       try {
         validateDepthSlice({
           startDepth: action.params.startDepth ?? undefined,
+          endDepth: action.params.endDepth ?? undefined,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -109,9 +78,13 @@ export function validateEventConfigBlocks(
       }
     }
 
-    const dagErr = validateDag(block.actions);
-    if (dagErr != null) {
-      return `「${eventLabel}」· ${dagErr}`;
+    try {
+      validateEventActionDag(block.actions);
+    } catch (e: unknown) {
+      if (e instanceof EventActionDagError) {
+        return mapDagErrorToUserMessage(e, eventLabel);
+      }
+      throw e;
     }
   }
   return null;

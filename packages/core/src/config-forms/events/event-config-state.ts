@@ -9,7 +9,10 @@ import { newEventBlockId } from "./event-block-id.js";
 
 export { newEventBlockId } from "./event-block-id.js";
 
-/** 事件配置 UI 仅编辑 startDepth；加载/保存时丢弃 endDepth。 */
+/**
+ * UI 不提供 endDepth 编辑；自 wire 加载后经本函数剥离。
+ * 经 UI 保存会丢失 endDepth；runtime/schema 仍支持完整 DepthSlice。
+ */
 export function normalizeHideMessageAction(action: EventActionNode): EventActionNode {
   if (action.type !== "hide-message") {
     return action;

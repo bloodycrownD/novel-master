@@ -1,7 +1,7 @@
 export * from "./event-config-state.js";
 export * from "./event-config-labels.js";
 export * from "./validate-event-config-blocks.js";
-export * from "./default-events-config.js";
+export { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-events.js";
 export {
   formatApplicationModelId,
   parseApplicationModelId,
