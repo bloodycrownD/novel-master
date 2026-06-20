@@ -218,7 +218,7 @@ export async function createNovelMasterRuntime(
     sessions: createSessionService(conn),
     messages,
     messageTranscriptEffects,
-    sessionFs: createSessionFsService(conn),
+    sessionFs: createSessionFsService(conn, worktreeSnapshot),
     messageCheckpoint: createMessageCheckpointService(conn),
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),

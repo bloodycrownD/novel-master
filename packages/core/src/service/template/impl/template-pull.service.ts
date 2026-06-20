@@ -8,11 +8,10 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { replaceVfsSubtree } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
-import { mapProjectWorktreePathToSession } from "@/domain/worktree/logic/worktree-path-map.js";
 import { worktreeScopeKey } from "@/domain/worktree/logic/worktree-scope.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { chatNotFound } from "@/errors/chat-errors.js";
-import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import type { TemplatePullService } from "../template-pull.port.js";
 
 /**
@@ -44,25 +43,10 @@ export class DefaultTemplatePullService implements TemplatePullService {
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
-    const projectId = session.projectId;
     await this.conn.transaction(async (tx) => {
-      await deleteSessionFsData(tx, sessionId);
-      const vfs = new SqliteVfsEntryRepository(tx);
-      const worktree = new SqliteWorktreeRepository(tx);
-      await replaceVfsSubtree(
-        vfs,
-        `/projects/${projectId}/template`,
-        `/projects/${projectId}/sessions/${sessionId}`,
-      );
-      await worktree.copyScope(
-        worktreeScopeKey({ kind: "project", projectId }),
-        worktreeScopeKey({
-          kind: "session",
-          projectId,
-          sessionId,
-        }),
-        mapProjectWorktreePathToSession,
-      );
+      await initializeSessionWorkspace(tx, session.projectId, sessionId, {
+        clearCheckpoints: true,
+      });
     });
   }
 }

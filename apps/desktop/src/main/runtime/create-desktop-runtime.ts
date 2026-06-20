@@ -144,7 +144,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     messages,
     messageTranscriptEffects,
     appendToolTurnBridge,
-    sessionFs: createSessionFsService(conn),
+    sessionFs: createSessionFsService(conn, worktreeSnapshot),
     messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
