@@ -21,3 +21,30 @@ export class CompactionConditionsError extends Error {
     this.code = code;
   }
 }
+
+/** 存储的压缩条件 wire 文档不符合 schema。 */
+export function compactionConditionsInvalidSchema(
+  message: string,
+  details?: Record<string, unknown>,
+): CompactionConditionsError {
+  return new CompactionConditionsError("INVALID_SCHEMA", message, details);
+}
+
+/** 类型守卫；兼容测试中 src/dist 双实例加载。 */
+export function isCompactionConditionsError(
+  error: unknown,
+  code?: CompactionConditionsErrorCode,
+): error is CompactionConditionsError {
+  if (!(error instanceof CompactionConditionsError)) {
+    if (
+      error != null &&
+      typeof error === "object" &&
+      (error as CompactionConditionsError).name === "CompactionConditionsError"
+    ) {
+      const c = (error as CompactionConditionsError).code;
+      return code == null || c === code;
+    }
+    return false;
+  }
+  return code == null || error.code === code;
+}
