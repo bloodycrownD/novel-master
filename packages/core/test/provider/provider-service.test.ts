@@ -78,7 +78,41 @@ describe("ProviderService", () => {
     assert.equal(await secrets.has("provider/tmpgw/apiKey"), false);
   });
 
-  it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
+  it("delete removes secret at default ref when secretRef is null", async () => {
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const id = "orphan" + testIsolationSuffix();
+    await secrets.set(`provider/${id}/apiKey`, "orphan-secret");
+    await bundle.providers.create({
+      id,
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+    });
+    assert.equal(await secrets.has(`provider/${id}/apiKey`), true);
+    await bundle.providers.delete(id);
+    assert.equal(await secrets.has(`provider/${id}/apiKey`), false);
+  });
+
+  it("edit with empty apiKey clears stored secret", async () => {
+    const ctx = getNovelMasterTestContext();
+    const secrets = memorySecretStore();
+    const bundle = createProviderServices(ctx.conn, secrets);
+    const id = "clearkey" + testIsolationSuffix();
+    await bundle.providers.create({
+      id,
+      protocol: "openai",
+      baseUrl: "https://example.com/v1",
+      apiKey: "to-clear",
+    });
+    assert.equal(await secrets.has(`provider/${id}/apiKey`), true);
+    await bundle.providers.edit(id, { apiKey: "" });
+    assert.equal(await secrets.has(`provider/${id}/apiKey`), false);
+    const row = await bundle.providers.get(id);
+    assert.equal(row.secretRef, null);
+  });
+
+    it("delete provider clears nm-model-suggestions KKV after fetch", async () => {
     clearProtocolAdapters();
     const fetchFn = mock.fn(async () => {
       return new Response(

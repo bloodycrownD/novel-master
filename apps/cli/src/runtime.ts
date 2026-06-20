@@ -146,9 +146,13 @@ export async function createNovelMasterRuntime(
   const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver("windows").createStore(conn);
+  const envStore =
+    process.env.NM_SKSP_DISABLE_ENV === "1"
+      ? undefined
+      : createEnvSecretStore();
   const secretStore = createCompositeSecretStore({
     db: dbStore,
-    env: createEnvSecretStore(),
+    env: envStore,
   });
   if (process.env.NM_LLM_E2E_FETCH === "1" && process.env.NM_AGENT_MOCK_LLM !== "1") {
     installE2eLlmFetchCapture();

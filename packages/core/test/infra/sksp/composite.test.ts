@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createCompositeSecretStore } from "../../../src/infra/sksp/impl/composite-secret-store.js";
+import { createEnvSecretStore } from "../../../src/infra/sksp/impl/env-secret-store.js";
 import type { SecretStore } from "../../../src/infra/sksp/ports/secret-store.port.js";
 
 function memoryStore(initial?: Record<string, string>): SecretStore {
@@ -52,6 +53,23 @@ describe("createCompositeSecretStore", () => {
     };
     const composite = createCompositeSecretStore({ db, env });
     assert.equal(await composite.get("provider/openai/apiKey"), "db-key");
+  });
+
+  it("falls back to db when env is empty string", async () => {
+    const key = "NOVEL_MASTER_PROVIDER_OPENAI_API_KEY";
+    delete process.env[key];
+    process.env[key] = "";
+    try {
+      const db = memoryStore({ "provider/openai/apiKey": "db-key" });
+      const composite = createCompositeSecretStore({
+        db,
+        env: createEnvSecretStore(),
+      });
+      assert.equal(await composite.get("provider/openai/apiKey"), "db-key");
+      assert.equal(await composite.has("provider/openai/apiKey"), true);
+    } finally {
+      delete process.env[key];
+    }
   });
 
   it("set/delete only touch db", async () => {

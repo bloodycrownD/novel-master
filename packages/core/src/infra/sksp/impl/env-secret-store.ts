@@ -6,7 +6,7 @@
 
 import { refToEnvVar } from "../logic/ref-to-env.js";
 
-/** Reads provider API keys from `NOVEL_MASTER_PROVIDER_*_API_KEY` env vars. */
+/** 从 NOVEL_MASTER_PROVIDER_*_API_KEY 环境变量读取 provider API 密钥。 */
 export class EnvSecretStore {
   async get(ref: string): Promise<string | null> {
     const name = refToEnvVar(ref);
@@ -14,16 +14,18 @@ export class EnvSecretStore {
       return null;
     }
     const v = process.env[name];
-    return v !== undefined ? v : null;
+    if (v === undefined || v === "" || v.trim() === "") {
+      return null;
+    }
+    return v;
   }
 
   async has(ref: string): Promise<boolean> {
-    const v = await this.get(ref);
-    return v !== null && v !== "";
+    return (await this.get(ref)) !== null;
   }
 }
 
-/** Creates an {@link EnvSecretStore} instance. */
+/** 创建 {@link EnvSecretStore} 实例。 */
 export function createEnvSecretStore(): EnvSecretStore {
   return new EnvSecretStore();
 }

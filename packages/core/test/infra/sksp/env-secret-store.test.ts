@@ -40,4 +40,18 @@ describe("EnvSecretStore", () => {
     assert.equal(await store.get("provider/openai/apiKey"), null);
     assert.equal(await store.has("provider/openai/apiKey"), false);
   });
+
+  it("treats empty string as unset", async () => {
+    process.env[key] = "";
+    const store = new EnvSecretStore();
+    assert.equal(await store.get("provider/openai/apiKey"), null);
+    assert.equal(await store.has("provider/openai/apiKey"), false);
+  });
+
+  it("treats whitespace-only as unset", async () => {
+    process.env[key] = "   ";
+    const store = new EnvSecretStore();
+    assert.equal(await store.get("provider/openai/apiKey"), null);
+    assert.equal(await store.has("provider/openai/apiKey"), false);
+  });
 });
