@@ -1,11 +1,11 @@
 /**
- * 消息可见性多选状态（隐藏 / 恢复专用，非通用批量）。
+ * 消息批量多选状态（隐藏 / 恢复 / 删除）。
  */
 import {useCallback, useMemo, useState} from 'react';
-import type {MessageVisibilityBatchMode} from '../components/chat/transcript-selectable-role';
+import type {MessageBatchMode} from '../components/chat/transcript-selectable-role';
 
 export function useBatchSelection() {
-  const [mode, setMode] = useState<MessageVisibilityBatchMode | null>(null);
+  const [mode, setMode] = useState<MessageBatchMode | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
   const active = mode != null;
@@ -17,6 +17,11 @@ export function useBatchSelection() {
 
   const enterRestore = useCallback(() => {
     setMode('restore');
+    setSelectedIds(new Set());
+  }, []);
+
+  const enterDelete = useCallback(() => {
+    setMode('delete');
     setSelectedIds(new Set());
   }, []);
 
@@ -43,7 +48,7 @@ export function useBatchSelection() {
     });
   }, []);
 
-  /** 重置并设置勾选集合（可见性批量范围全选）。 */
+  /** 重置并设置勾选集合（批量范围全选）。 */
   const selectRange = useCallback((ids: Iterable<string>) => {
     setSelectedIds(new Set(ids));
   }, []);
@@ -61,6 +66,7 @@ export function useBatchSelection() {
       selectedCount: selectedIds.size,
       enterHide,
       enterRestore,
+      enterDelete,
       enter,
       exit,
       toggle,
@@ -73,6 +79,7 @@ export function useBatchSelection() {
       selectedIds,
       enterHide,
       enterRestore,
+      enterDelete,
       enter,
       exit,
       toggle,

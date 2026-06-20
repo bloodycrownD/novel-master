@@ -6,7 +6,6 @@ import {Alert, StyleSheet, View} from 'react-native';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import { type ChatMessage } from "@novel-master/core/chat";
-import { type AgentRunFinishedPayload, type AgentStepCommittedPayload } from "@novel-master/core/events";
 import {AppHeader} from '@/components/chrome/AppHeader';
 import {useToast} from '@/components/chrome/ToastHost';
 import {
@@ -25,6 +24,11 @@ import {
   isTranscriptRowSelectable,
   selectVisibilityBatchEligibleIdsFromAnchor,
   transcriptSelectableRole,
+} from '@/components/chat/transcript-selectable-role';
+import {
+  chatMessagesToTailBatchRows,
+  isTailBatchMode,
+  selectTailBatchEligibleIdsFromAnchor,
 } from '@/components/chat/transcript-selectable-role';
 import {TextPromptModal} from '@/components/ui/TextPromptModal';
 import {useRuntime} from '@/hooks/useRuntime';
@@ -122,24 +126,6 @@ export function ChatTabScreen() {
 
   const agentRunningRef = useRef(false);
 
-  const handleStepCommitted = useCallback(
-    (payload: AgentStepCommittedPayload) => {
-      if (payload.phase === 'tool_results' && payload.vfsMutated === true) {
-        scope.bumpVfsRefresh();
-      }
-    },
-    [scope.bumpVfsRefresh],
-  );
-
-  const handleRunFinished = useCallback(
-    (payload: AgentRunFinishedPayload) => {
-      if (payload.vfsMutated === true) {
-        scope.bumpVfsRefresh();
-      }
-    },
-    [scope.bumpVfsRefresh],
-  );
-
   const handleMessagesChanged = useCallback(
     () =>
       messages.handleMessagesChanged(
@@ -155,8 +141,6 @@ export function ChatTabScreen() {
     chatStreamBatchEnabled,
     transcriptWebRef,
     onMessagesChanged: handleMessagesChanged,
-    onStepCommitted: handleStepCommitted,
-    onRunFinished: handleRunFinished,
   });
 
   agentRunningRef.current = stream.agentRunning;
@@ -171,7 +155,7 @@ export function ChatTabScreen() {
     resetStreamingDisplay: stream.resetStreamingDisplay,
     showToast,
     refreshChatTokenLabel: scope.refreshChatTokenLabel,
-    bumpVfsRefresh: scope.bumpVfsRefresh,
+    bumpWorktreeUiToken: scope.bumpWorktreeUiToken,
     reloadLists: scope.reloadLists,
     setCurrentSession,
     setChatSubview: scope.setChatSubview,
@@ -190,20 +174,31 @@ export function ChatTabScreen() {
 
   const handleToggleMessageSelect = useCallback(
     (messageId: string) => {
-      const target = messages.chatMessages.find(m => m.id === messageId);
-      if (target == null || messageBatch.mode == null) {
+      if (messageBatch.mode == null) {
         return;
       }
-      const role = transcriptSelectableRole(target.role, messageBatch.mode);
-      if (!isTranscriptRowSelectable(role)) {
+      if (messageBatch.mode === 'hide') {
+        const target = messages.chatMessages.find(m => m.id === messageId);
+        if (target == null) {
+          return;
+        }
+        const role = transcriptSelectableRole(target.role, messageBatch.mode);
+        if (!isTranscriptRowSelectable(role)) {
+          return;
+        }
+        const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
+          messages.chatMessages,
+          messageBatch.mode,
+          messageId,
+        );
+        messageBatch.selectRange(nextIds);
         return;
       }
-      const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
-        messages.chatMessages,
-        messageBatch.mode,
-        messageId,
-      );
-      messageBatch.selectRange(nextIds);
+      if (isTailBatchMode(messageBatch.mode)) {
+        const tailRows = chatMessagesToTailBatchRows(messages.chatMessages);
+        const nextIds = selectTailBatchEligibleIdsFromAnchor(tailRows, messageId);
+        messageBatch.selectRange(nextIds);
+      }
     },
     [messages.chatMessages, messageBatch],
   );
@@ -447,6 +442,10 @@ export function ChatTabScreen() {
           scope.setSessionDrawerOpen(false);
           messageActions.enterRestoreMessageBatch();
         }}
+        onEnterDeleteMessageBatch={() => {
+          scope.setSessionDrawerOpen(false);
+          messageActions.enterDeleteMessageBatch();
+        }}
         modelPickerOpen={modelPickerOpen}
         agentPickerOpen={agentPickerOpen}
         onCloseModelPicker={() => setModelPickerOpen(false)}
@@ -501,7 +500,7 @@ export function ChatTabScreen() {
         onStreamReset={stream.handleStreamReset}
         onMessagesChanged={() => handleMessagesChanged().catch(() => undefined)}
         onNeedModel={() => setModelPickerOpen(true)}
-        bumpVfsRefresh={scope.bumpVfsRefresh}
+        bumpWorktreeUiToken={scope.bumpWorktreeUiToken}
         onOpenFileEditor={scope.openFileEditor}
         workspaceVfsRef={workspaceVfsRef}
         onWorkspaceBackStateChange={setWorkspaceBackState}
@@ -534,7 +533,7 @@ export function ChatTabScreen() {
         onOpenSessionRename={scope.openSessionRenamePrompt}
         onCopySession={sid => scope.handleCopySession(sid).catch(() => undefined)}
         onConfirmDeleteSession={scope.confirmDeleteSession}
-        bumpVfsRefresh={scope.bumpVfsRefresh}
+        bumpWorktreeUiToken={scope.bumpWorktreeUiToken}
         onOpenFileEditor={scope.openFileEditor}
       />
       {sessionRenameModal}

@@ -389,10 +389,16 @@ export function buildTranscriptBootScript(): string {
     return state.affectedIds.indexOf(messageId) >= 0;
   }
 
+  function isBatchRowSelectable(messageRole, batchModeKind) {
+    if (!batchModeKind) return false;
+    if (batchModeKind === 'hide') return messageRole === 'assistant';
+    return true;
+  }
+
   function transcriptSelectableRole(messageRole, batchModeKind) {
     if (!batchModeKind) return 'none';
     if (batchModeKind === 'hide') return messageRole === 'assistant' ? 'assistant' : 'none';
-    return messageRole === 'user' ? 'user' : 'none';
+    return 'tail';
   }
 
   function parseUserVfsAction(text) {
@@ -458,7 +464,7 @@ export function buildTranscriptBootScript(): string {
     var selectedClass = selected ? ' selected' : '';
     var inRangeClass = inRange ? ' in-range' : '';
     var selectableRole = transcriptSelectableRole('user', state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = selectableRole !== 'none';
+    var rowSelectable = isBatchRowSelectable('user', state.flags.batchMode ? state.flags.batchModeKind : null);
     var html = '';
     if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
@@ -738,7 +744,7 @@ export function buildTranscriptBootScript(): string {
     var selectedClass = selected ? ' selected' : '';
     var inRangeClass = inRange ? ' in-range' : '';
     var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = selectableRole !== 'none';
+    var rowSelectable = isBatchRowSelectable(role, state.flags.batchMode ? state.flags.batchModeKind : null);
     var html = '';
     if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +

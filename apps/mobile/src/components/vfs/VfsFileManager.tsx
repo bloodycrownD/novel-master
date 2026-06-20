@@ -341,7 +341,11 @@ export const VfsFileManager = forwardRef<
     }
   }, [currentPath, fetchWorktreeRows, showToast]);
 
-  const reloadAfterMutation = useCallback(async () => {
+  const reloadVfsListOnly = useCallback(async () => {
+    await reload();
+  }, [reload]);
+
+  const reloadAfterRuleChange = useCallback(async () => {
     invalidateSessionSnapshot();
     await reload();
   }, [invalidateSessionSnapshot, reload]);
@@ -385,7 +389,7 @@ export const VfsFileManager = forwardRef<
                   }
                 }
                 vfsBatch.exit();
-                await reloadAfterMutation();
+                await reloadVfsListOnly();
               } catch (err) {
                 showToast(toastMessage('删除失败', err));
               }
@@ -394,7 +398,7 @@ export const VfsFileManager = forwardRef<
         },
       ],
     );
-  }, [vfsBatch, vfs, reloadAfterMutation, showToast, runtime, useUserVfsTurn, sessionId]);
+  }, [vfsBatch, vfs, reloadVfsListOnly, showToast, runtime, useUserVfsTurn, sessionId]);
 
   const runBatchSetRules = useCallback(
     async (enabled: boolean) => {
@@ -407,7 +411,7 @@ export const VfsFileManager = forwardRef<
           ? await batchSetDirRulesEnabled(worktree, paths, dirPathSet)
           : await batchSetDirRulesDisabled(worktree, paths, dirPathSet);
         vfsBatch.exit();
-        await reloadAfterMutation();
+        await reloadAfterRuleChange();
         if (result.skipped > 0) {
           showToast(
             enabled
@@ -421,7 +425,7 @@ export const VfsFileManager = forwardRef<
         showToast(toastMessage('操作失败', error));
       }
     },
-    [vfsBatch, worktree, dirPathSet, reloadAfterMutation, showToast],
+    [vfsBatch, worktree, dirPathSet, reloadAfterRuleChange, showToast],
   );
 
   const canGoUp = currentPath !== root;
@@ -562,7 +566,7 @@ export const VfsFileManager = forwardRef<
                   );
                 }
               }
-              await reloadAfterMutation();
+              await reloadVfsListOnly();
             } catch (err) {
               // WHY: Core rejects duplicate names; surface friendly copy on mobile.
               if (isVfsError(err, 'ALREADY_EXISTS')) {
@@ -593,7 +597,7 @@ export const VfsFileManager = forwardRef<
                   } else {
                     await deleteVfsEntry(vfs, menuPath, {recursive: true});
                   }
-                  await reloadAfterMutation();
+                  await reloadVfsListOnly();
                 };
                 runDelete().catch(err =>
                   showToast(toastMessage('删除失败', err)),
@@ -631,14 +635,14 @@ export const VfsFileManager = forwardRef<
           style: 'destructive',
           onPress: () => {
             importVfsZip(runtime, scope, {confirmed: true})
-              .then(() => reloadAfterMutation())
+              .then(() => reloadVfsListOnly())
               .then(() => showToast('ZIP 导入完成'))
               .catch(err => showToast(toastMessage('导入失败', err)));
           },
         },
       ],
     );
-  }, [runtime, scope, reloadAfterMutation, showToast]);
+  }, [runtime, scope, reloadVfsListOnly, showToast]);
 
   const handleMoreAction = (action: string) => {
     if (action === 'create-file') {
@@ -660,6 +664,7 @@ export const VfsFileManager = forwardRef<
           } else {
             await createVfsFile(vfs, path);
           }
+          await reloadVfsListOnly();
         },
       });
       return;
@@ -684,6 +689,7 @@ export const VfsFileManager = forwardRef<
             await createVfsDirectory(vfs, path);
           }
           await worktree.setDirRule(defaultDirRuleForm(path));
+          await reloadAfterRuleChange();
         },
       });
       return;
@@ -896,7 +902,7 @@ export const VfsFileManager = forwardRef<
         onSave={async input => {
           await worktree.setDirRule(input);
           setDirRuleInitial(input);
-          await reloadAfterMutation();
+          await reloadAfterRuleChange();
         }}
       />
 
@@ -936,7 +942,7 @@ export const VfsFileManager = forwardRef<
                   setPrompt(null);
                   current
                     .onSubmit(promptValue)
-                    .then(() => reloadAfterMutation())
+                    .then(() => reloadVfsListOnly())
                     .catch(err =>
                       showToast(toastMessage('失败', err)),
                     );

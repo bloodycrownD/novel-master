@@ -15,6 +15,7 @@ type Props = {
   onRealPrompt?: () => void;
   onHideMessages?: () => void;
   onRestoreMessages?: () => void;
+  onDeleteMessages?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -25,6 +26,7 @@ export function SessionActionsDrawer({
   onRealPrompt,
   onHideMessages,
   onRestoreMessages,
+  onDeleteMessages,
 }: Props) {
   const {tokens} = useTheme();
 
@@ -34,6 +36,7 @@ export function SessionActionsDrawer({
     {label: '压缩上下文', action: onCompact},
     {label: '隐藏消息', action: onHideMessages},
     {label: '恢复消息', action: onRestoreMessages},
+    {label: '删除消息', action: onDeleteMessages},
   ];
 
   return (
