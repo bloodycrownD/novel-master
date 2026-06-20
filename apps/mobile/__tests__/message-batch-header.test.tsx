@@ -117,11 +117,11 @@ describe('MessageBatchHeader', () => {
         node.props.children.includes('删除消息'),
     );
     expect(summary).toBeDefined();
-    const hint = texts.find(
-      node =>
-        typeof node.props.children === 'string' &&
-        node.props.children.includes('仅删对话'),
-    );
-    expect(hint).toBeDefined();
+    const allText = texts
+      .map(node => node.props.children)
+      .filter((c): c is string => typeof c === 'string')
+      .join('\n');
+    expect(allText).toContain('删除消息');
+    expect(allText).toContain('之后全部消息');
   });
 });
