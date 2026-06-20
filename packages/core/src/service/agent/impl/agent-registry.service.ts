@@ -11,21 +11,28 @@ import {
   validateAgentDefinition,
   type ValidateAgentDefinitionOptions,
 } from "@/domain/agent/logic/validate-agent-definition.js";
+import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import type { AgentRegistryService } from "../agent-registry.port.js";
 
+export interface DefaultAgentRegistryServiceDeps {
+  readonly repository: AgentDefinitionRepository;
+  /** 注入时，删除当前 Agent 会清空工作区指针。 */
+  readonly state?: PersistentState;
+}
+
 export class DefaultAgentRegistryService implements AgentRegistryService {
-  constructor(private readonly repository: AgentDefinitionRepository) {}
+  constructor(private readonly deps: DefaultAgentRegistryServiceDeps) {}
 
   async listAgentIds(): Promise<readonly string[]> {
-    return this.repository.listIds();
+    return this.deps.repository.listIds();
   }
 
   async getRawWire(agentId: string): Promise<unknown | null> {
-    return this.repository.getRawWire(agentId);
+    return this.deps.repository.getRawWire(agentId);
   }
 
   async get(agentId: string): Promise<AgentDefinition> {
-    const def = await this.repository.get(agentId);
+    const def = await this.deps.repository.get(agentId);
     if (def == null) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
@@ -48,21 +55,21 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
     await this.assertUniqueDisplayName(agentId, trimmedName);
 
     const normalized: AgentDefinition = { ...def, name: trimmedName };
-    await this.repository.upsert(agentId, normalized);
+    await this.deps.repository.upsert(agentId, normalized);
   }
 
   private async assertUniqueDisplayName(
     agentId: string,
     name: string,
   ): Promise<void> {
-    const ids = await this.repository.listIds();
+    const ids = await this.deps.repository.listIds();
     for (const otherId of ids) {
       if (otherId === agentId) {
         continue;
       }
       let otherName: string;
       try {
-        const otherDef = await this.repository.get(otherId);
+        const otherDef = await this.deps.repository.get(otherId);
         otherName = otherDef == null ? otherId.trim() : otherDef.name.trim();
       } catch {
         otherName = otherId.trim();
@@ -74,9 +81,15 @@ export class DefaultAgentRegistryService implements AgentRegistryService {
   }
 
   async delete(agentId: string): Promise<void> {
-    if (!(await this.repository.exists(agentId))) {
+    if (!(await this.deps.repository.exists(agentId))) {
       throw new AgentConfigError("AGENT_NOT_FOUND", `agent not found: ${agentId}`);
     }
-    await this.repository.delete(agentId);
+    await this.deps.repository.delete(agentId);
+    if (this.deps.state) {
+      const current = await this.deps.state.getCurrentAgentId();
+      if (current === agentId) {
+        await this.deps.state.resetCurrentAgentId();
+      }
+    }
   }
 }

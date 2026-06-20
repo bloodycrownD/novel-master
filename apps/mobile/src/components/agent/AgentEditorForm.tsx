@@ -301,16 +301,7 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 showToast('至少保留一个 Agent');
                 return;
               }
-              const currentId = await runtime.state.getCurrentAgentId();
               await runtime.agentRegistry.delete(agentId);
-              if (currentId === agentId) {
-                const remaining = ids.filter(id => id !== agentId);
-                if (remaining.length > 0) {
-                  await runtime.state.setCurrentAgentId(remaining[0]!);
-                } else {
-                  await runtime.state.resetCurrentAgentId();
-                }
-              }
               navigation.goBack();
             } catch (error) {
               showToast(toastMessage('删除失败', error));

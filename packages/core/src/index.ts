@@ -120,6 +120,15 @@ export {
   PREF_KEY_SESSION_FS_VERSION_CHECK,
   PREF_KEY_CHAT_LLM_STREAM,
 } from "./service/persistent-preferences/impl/preference-keys.js";
+export {
+  WORKSPACE_STATE_MODULE,
+  KEY_CURRENT_PROJECT_ID,
+  KEY_CURRENT_SESSION_ID,
+  KEY_CURRENT_PROVIDER_ID,
+  KEY_CURRENT_MODEL_ID,
+  KEY_CURRENT_REGEX_GROUP_ID,
+  KEY_CURRENT_AGENT_ID,
+} from "./service/persistent-state/impl/workspace-state-keys.js";
 /**
  * Tool 运行时：注册表、执行器与内置 `vfs.*` 工具。
  */

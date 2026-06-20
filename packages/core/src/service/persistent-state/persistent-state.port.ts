@@ -30,10 +30,16 @@ export interface PersistentState {
   setCurrentModelId(id: string): Promise<void>;
   resetCurrentModelId(): Promise<void>;
 
+  /**
+   * 当前正则分组指针；实体删除由 {@link import("@/service/regex/regex-config.port.js").RegexConfigService} 维护。
+   */
   getCurrentRegexGroupId(): Promise<string | undefined>;
   setCurrentRegexGroupId(id: string): Promise<void>;
   resetCurrentRegexGroupId(): Promise<void>;
 
+  /**
+   * 当前 Agent 指针；实体删除由 {@link import("@/service/agent/agent-registry.port.js").AgentRegistryService} 维护。
+   */
   getCurrentAgentId(): Promise<string | undefined>;
   setCurrentAgentId(id: string): Promise<void>;
   resetCurrentAgentId(): Promise<void>;

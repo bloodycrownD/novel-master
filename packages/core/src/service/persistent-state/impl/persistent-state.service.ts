@@ -7,16 +7,17 @@
 import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
+import {
+  KEY_CURRENT_AGENT_ID,
+  KEY_CURRENT_MODEL_ID,
+  KEY_CURRENT_PROJECT_ID,
+  KEY_CURRENT_PROVIDER_ID,
+  KEY_CURRENT_REGEX_GROUP_ID,
+  KEY_CURRENT_SESSION_ID,
+  WORKSPACE_STATE_MODULE,
+} from "./workspace-state-keys.js";
 
-/** KKV module for CLI/workspace pointers (not `global-config`). */
-const MODULE = "nm-workspace-state";
-
-const KEY_CURRENT_PROJECT_ID = "currentProjectId";
-const KEY_CURRENT_SESSION_ID = "currentSessionId";
-const KEY_CURRENT_PROVIDER_ID = "currentProviderId";
-const KEY_CURRENT_MODEL_ID = "currentModelId";
-const KEY_CURRENT_REGEX_GROUP_ID = "currentRegexGroupId";
-const KEY_CURRENT_AGENT_ID = "currentAgentId";
+const MODULE = WORKSPACE_STATE_MODULE;
 
 export class DefaultPersistentState implements PersistentState {
   constructor(private readonly kkv: KkvService) {}

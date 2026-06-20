@@ -86,7 +86,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     providerModels: providerBundle.providerModels,
   });
 
-  const agentRegistry = createAgentRegistryService(conn);
+  const agentRegistry = createAgentRegistryService(conn, state);
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,

@@ -101,7 +101,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     providerModels: providerBundle.providerModels,
   });
 
-  const agentRegistry = createAgentRegistryService(conn);
+  const agentRegistry = createAgentRegistryService(conn, state);
 
   const eventOrchestrator = createEventOrchestrator({
     eventsConfig,

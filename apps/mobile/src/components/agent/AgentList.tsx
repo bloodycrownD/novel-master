@@ -185,17 +185,7 @@ export function AgentList({onCreate}: Props) {
         style: 'destructive',
         onPress: () => {
           (async () => {
-            const currentId = await runtime.state.getCurrentAgentId();
-            const ids = await runtime.agentRegistry.listAgentIds();
             await runtime.agentRegistry.delete(agentId);
-            if (currentId === agentId) {
-              const remaining = ids.filter(id => id !== agentId);
-              if (remaining.length > 0) {
-                await runtime.state.setCurrentAgentId(remaining[0]);
-              } else {
-                await runtime.state.resetCurrentAgentId();
-              }
-            }
             await reload();
           })().catch(err =>
             showToast(toastMessage('删除失败', err)),
@@ -217,19 +207,8 @@ export function AgentList({onCreate}: Props) {
         style: 'destructive',
         onPress: () => {
           (async () => {
-            const currentId = await runtime.state.getCurrentAgentId();
             for (const agentId of ids) {
               await runtime.agentRegistry.delete(agentId);
-            }
-            if (currentId && ids.includes(currentId)) {
-              const remaining = (await runtime.agentRegistry.listAgentIds()).filter(
-                id => !ids.includes(id),
-              );
-              if (remaining.length > 0) {
-                await runtime.state.setCurrentAgentId(remaining[0]!);
-              } else {
-                await runtime.state.resetCurrentAgentId();
-              }
             }
             batch.exit();
             await reload();

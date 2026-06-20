@@ -144,10 +144,6 @@ export async function handleAgentRegistryDelete(
   try {
     const rt = await getDesktopRuntime();
     await rt.agentRegistry.delete(req.agentId);
-    const currentId = await rt.state.getCurrentAgentId();
-    if (currentId === req.agentId) {
-      await rt.state.resetCurrentAgentId();
-    }
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

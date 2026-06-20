@@ -118,4 +118,57 @@ describe("AgentRegistryService", () => {
         e instanceof AgentConfigError && e.code === "DUPLICATE_NAME",
     );
   });
+
+  it("AG5a: delete 当前 Agent 时重置指针（注入 state）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "a",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    await registry.upsert("agent-a", def);
+    await registry.upsert("agent-b", { ...def, name: "b" });
+    await ctx.state.setCurrentAgentId("agent-a");
+    await registry.delete("agent-a");
+    assert.equal(await ctx.state.getCurrentAgentId(), undefined);
+  });
+
+  it("AG5b: delete 非当前 Agent 时保留指针", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "a",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    await registry.upsert("agent-a", def);
+    await registry.upsert("agent-b", { ...def, name: "b" });
+    await ctx.state.setCurrentAgentId("agent-a");
+    await registry.delete("agent-b");
+    assert.equal(await ctx.state.getCurrentAgentId(), "agent-a");
+  });
+
+  it("AG5c: 未注入 state 时 delete 不清指针", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn);
+    const def = decode(
+      {
+        schemaVersion: 1,
+        name: "a",
+        prompts: { persist: {}, dynamic: {} },
+      },
+      agentDefinitionSchema,
+    );
+    await registry.upsert("agent-a", def);
+    await ctx.state.setCurrentAgentId("agent-a");
+    await registry.delete("agent-a");
+    assert.equal(await ctx.state.getCurrentAgentId(), "agent-a");
+  });
 });

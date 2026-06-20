@@ -18,5 +18,10 @@ export interface AgentRegistryService {
     def: AgentDefinition,
     options?: ValidateAgentDefinitionOptions,
   ): Promise<void>;
+  /**
+   * 删除指定 Agent。
+   *
+   * @remarks 工厂注入 {@link import("@/service/persistent-state/persistent-state.port.js").PersistentState} 且删除 id 为当前 Agent 时，会清空 `currentAgentId`。
+   */
   delete(agentId: string): Promise<void>;
 }
