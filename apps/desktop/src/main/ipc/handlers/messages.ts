@@ -158,7 +158,14 @@ export async function handleMessagesHide(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.messages.hide(req.messageId);
+    const msg = await rt.messages.get(req.messageId);
+    const session = await rt.sessions.get(msg.sessionId);
+    await rt.messageTranscriptEffects.hideMessagesInRange(
+      session.projectId,
+      msg.sessionId,
+      msg.seq,
+      msg.seq,
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -170,7 +177,14 @@ export async function handleMessagesShow(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.messages.show(req.messageId);
+    const msg = await rt.messages.get(req.messageId);
+    const session = await rt.sessions.get(msg.sessionId);
+    await rt.messageTranscriptEffects.showMessagesInRange(
+      session.projectId,
+      msg.sessionId,
+      msg.seq,
+      msg.seq,
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
