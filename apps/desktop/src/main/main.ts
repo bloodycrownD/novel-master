@@ -10,7 +10,6 @@ import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
 } from "./ipc/forward-event-bus.js";
-import { attachSessionWorktreeSync } from "./session-worktree-sync.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -24,7 +23,6 @@ const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
 
 let detachEventBusForwarder: (() => void) | undefined;
-let detachSessionWorktreeSync: (() => void) | undefined;
 
 function resolvePreloadPath(): string {
   // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
@@ -127,8 +125,6 @@ function createMainWindow(): BrowserWindow {
 function detachMainEventBusListeners(): void {
   detachEventBusForwarder?.();
   detachEventBusForwarder = undefined;
-  detachSessionWorktreeSync?.();
-  detachSessionWorktreeSync = undefined;
 }
 
 async function bootstrapMainServices(): Promise<void> {
@@ -136,7 +132,6 @@ async function bootstrapMainServices(): Promise<void> {
   const runtime = await getDesktopRuntime();
   detachMainEventBusListeners();
   detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
-  detachSessionWorktreeSync = attachSessionWorktreeSync(runtime.eventBus);
 }
 
 app.whenReady().then(async () => {

@@ -8,8 +8,7 @@ import { useShellNav } from "../providers/ShellNavProvider";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 
 export function PreviewPane() {
-  const { previewFile, projectId, sessionId, refreshWorkspaceTrees } =
-    useShellNav();
+  const { previewFile, projectId, sessionId } = useShellNav();
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -78,7 +77,6 @@ export function PreviewPane() {
       });
       setSavedContent(content);
       await loadFile();
-      refreshWorkspaceTrees();
     } finally {
       setSaving(false);
     }

@@ -27,6 +27,7 @@ import {
   type MessagesListRequest,
   type MessagesShowRequest,
   type MessagesShowRangeRequest,
+  type MessagesTruncateAfterRequest,
   type ModelListPickerResponse,
   type ModelSetCurrentRequest,
   type ProjectCreateRequest,
@@ -324,6 +325,12 @@ export async function ipcMessagesShowRange(
   req: MessagesShowRangeRequest,
 ): Promise<IpcResult<{ count: number }>> {
   return bridge().invoke(IPC_CHANNELS.MESSAGES_SHOW_RANGE, req);
+}
+
+export async function ipcMessagesTruncateAfter(
+  req: MessagesTruncateAfterRequest,
+): Promise<IpcResult<void>> {
+  return bridge().invoke(IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER, req);
 }
 
 export async function ipcMessagesDelete(

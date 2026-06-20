@@ -37,7 +37,6 @@ import {
 } from "../../services/vfs-zip.service.js";
 import {
   getVfsForScope,
-  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 
@@ -128,7 +127,6 @@ export async function handleVfsWrite(
       if (op != null) {
         await executeSessionUserVfsOp(rt, scope.sessionId, op);
       }
-      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
@@ -142,7 +140,6 @@ export async function handleVfsWrite(
         versionCheck: req.versionCheck ?? false,
       });
     }
-    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -162,13 +159,11 @@ export async function handleVfsMkdir(
         scope.sessionId,
         buildUserVfsMkdirOp(req.path),
       );
-      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
     const vfs = getVfsForScope(rt, scope);
     await vfs.mkdir(req.path);
-    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -188,13 +183,11 @@ export async function handleVfsDelete(
         scope.sessionId,
         buildUserVfsDeleteOp(req.path, req.recursive ?? true),
       );
-      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
     const vfs = getVfsForScope(rt, scope);
     await deleteVfsEntry(vfs, req.path, { recursive: req.recursive });
-    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -214,7 +207,6 @@ export async function handleVfsRename(
         scope.sessionId,
         buildUserVfsRenameOp(req.oldPath, req.newPath),
       );
-      invalidateSessionWorktreeSnapshot(rt, scope);
       return { ok: true, data: undefined };
     }
 
@@ -230,7 +222,6 @@ export async function handleVfsRename(
     } else {
       await renameVfsFile(vfs, req.oldPath, req.newPath);
     }
-    invalidateSessionWorktreeSnapshot(rt, scope);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -262,9 +253,6 @@ export async function handleVfsZipImport(
       { confirmed: req.confirmed === true },
       focusedWindow(),
     );
-    if (result === "imported") {
-      invalidateSessionWorktreeSnapshot(rt, scope);
-    }
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatError(err) };

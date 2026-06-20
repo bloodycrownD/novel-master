@@ -50,6 +50,7 @@ export const IPC_CHANNELS = {
   MESSAGES_SHOW: "nm:messages/show",
   MESSAGES_HIDE_RANGE: "nm:messages/hideRange",
   MESSAGES_SHOW_RANGE: "nm:messages/showRange",
+  MESSAGES_TRUNCATE_AFTER: "nm:messages/truncateAfter",
   MESSAGES_DELETE: "nm:messages/delete",
   MESSAGES_FORK: "nm:messages/fork",
   MESSAGES_ROLLBACK: "nm:messages/rollback",
@@ -445,6 +446,13 @@ export type MessagesShowRangeRequest = {
   readonly sessionId: string;
   readonly fromSeq: number;
   readonly toSeq: number;
+};
+
+/** 批量删 / tail 截断：保留 seq ≤ afterSeq 的消息。 */
+export type MessagesTruncateAfterRequest = {
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly afterSeq: number;
 };
 
 export type MessagesDeleteRequest = {

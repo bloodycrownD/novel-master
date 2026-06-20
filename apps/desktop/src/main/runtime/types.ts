@@ -11,6 +11,7 @@ import type {
 import type { AgentRegistryService } from "@novel-master/core/agent";
 import type {
   MessageService,
+  MessageTranscriptEffectsService,
   ProjectService,
   SessionService,
   UserVfsTurnService,
@@ -49,6 +50,8 @@ export interface DesktopNovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
+  /** hide/show/truncate 消息 transcript 并 markDirty session worktree。 */
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   /** maxSteps 截断后用户确认的 tool turn 桥接 assistant 追加。 */
   readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
   readonly sessionFs: SessionFsService;

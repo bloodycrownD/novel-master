@@ -51,7 +51,7 @@ export type ChatSessionListPanelProps = {
   onOpenSessionRename: (sessionId: string) => void;
   onCopySession: (sessionId: string) => void;
   onConfirmDeleteSession: (sessionId: string) => void;
-  bumpVfsRefresh: () => void;
+  bumpWorktreeUiToken: () => void;
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
 };
 
@@ -82,7 +82,7 @@ function ChatSessionListPanelInner({
   onOpenSessionRename,
   onCopySession,
   onConfirmDeleteSession,
-  bumpVfsRefresh,
+  bumpWorktreeUiToken,
   onOpenFileEditor,
 }: ChatSessionListPanelProps) {
   const projectVfsScope = useMemo((): VfsScope | null => {
@@ -98,9 +98,9 @@ function ChatSessionListPanelInner({
     }
     return {
       scope: {kind: 'project' as const, projectId},
-      onPulled: bumpVfsRefresh,
+      onPulled: bumpWorktreeUiToken,
     };
-  }, [projectId, bumpVfsRefresh]);
+  }, [projectId, bumpWorktreeUiToken]);
 
   return (
     <View

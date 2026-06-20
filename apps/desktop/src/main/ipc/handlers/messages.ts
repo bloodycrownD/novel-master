@@ -24,6 +24,7 @@ import type {
   MessagesListRequest,
   MessagesShowRequest,
   MessagesShowRangeRequest,
+  MessagesTruncateAfterRequest,
   SessionDto,
   SessionFsRollbackRequest,
 } from "../../../../shared/ipc-types.js";
@@ -157,7 +158,14 @@ export async function handleMessagesHide(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.messages.hide(req.messageId);
+    const msg = await rt.messages.get(req.messageId);
+    const session = await rt.sessions.get(msg.sessionId);
+    await rt.messageTranscriptEffects.hideMessagesInRange(
+      session.projectId,
+      msg.sessionId,
+      msg.seq,
+      msg.seq,
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -169,7 +177,14 @@ export async function handleMessagesShow(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.messages.show(req.messageId);
+    const msg = await rt.messages.get(req.messageId);
+    const session = await rt.sessions.get(msg.sessionId);
+    await rt.messageTranscriptEffects.showMessagesInRange(
+      session.projectId,
+      msg.sessionId,
+      msg.seq,
+      msg.seq,
+    );
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -181,7 +196,9 @@ export async function handleMessagesHideRange(
 ): Promise<IpcResult<{ count: number }>> {
   try {
     const rt = await getDesktopRuntime();
-    const count = await rt.messages.hideRange(
+    const session = await rt.sessions.get(req.sessionId);
+    const count = await rt.messageTranscriptEffects.hideMessagesInRange(
+      session.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
@@ -197,12 +214,30 @@ export async function handleMessagesShowRange(
 ): Promise<IpcResult<{ count: number }>> {
   try {
     const rt = await getDesktopRuntime();
-    const count = await rt.messages.showRange(
+    const session = await rt.sessions.get(req.sessionId);
+    const count = await rt.messageTranscriptEffects.showMessagesInRange(
+      session.projectId,
       req.sessionId,
       req.fromSeq,
       req.toSeq,
     );
     return { ok: true, data: { count } };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+export async function handleMessagesTruncateAfter(
+  req: MessagesTruncateAfterRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    await rt.messageTranscriptEffects.truncateMessagesAfter(
+      req.projectId,
+      req.sessionId,
+      req.afterSeq,
+    );
+    return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
@@ -259,9 +294,6 @@ export async function handleMessagesRollback(
       req.messageId,
       req.skipVfsReconcile ? { skipVfsReconcile: true } : undefined,
     );
-    if (!req.skipVfsReconcile) {
-      rt.worktreeSnapshot.markDirty(req.projectId, req.sessionId);
-    }
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

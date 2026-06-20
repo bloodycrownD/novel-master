@@ -89,8 +89,6 @@ export async function handleSessionsPullTemplate(
   try {
     const rt = await getDesktopRuntime();
     await rt.sessions.pullTemplate(req.sessionId);
-    const session = await rt.sessions.get(req.sessionId);
-    rt.worktreeSnapshot.markDirty(session.projectId, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

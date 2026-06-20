@@ -14,7 +14,6 @@ import {loadChatPromptTokenLabelResilient} from '@/services/chat-prompt-tokens.s
 import type {RootStackParamList} from '@/navigation/types';
 import type {MobileNovelMasterRuntime} from '@/runtime/types';
 import {clearSessionViewCache, sessionViewCacheKey} from '@/services/chat-session-view-cache';
-import {invalidateSessionWorktreeSnapshot} from '@/services/worktree-snapshot.service';
 import {nextDefaultSessionTitle} from '@/utils/session-default-title';
 
 export type SessionListPanel = 'sessions' | 'template';
@@ -285,12 +284,9 @@ export function useChatTabScope({
     [runtime, refreshScope, reloadLists],
   );
 
-  const bumpVfsRefresh = useCallback(() => {
-    if (projectId != null && sessionId != null) {
-      invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
-    }
+  const bumpWorktreeUiToken = useCallback(() => {
     setVfsRefreshKey(key => key + 1);
-  }, [runtime, projectId, sessionId]);
+  }, []);
 
   const openFileEditor = useCallback(
     (
@@ -309,7 +305,6 @@ export function useChatTabScope({
           scopeKind: 'session',
           projectId,
           sessionId,
-          onSessionVfsSaved: bumpVfsRefresh,
         });
       } else {
         navigation.navigate('FileEditor', {
@@ -319,7 +314,7 @@ export function useChatTabScope({
         });
       }
     },
-    [navigation, projectId, sessionId, bumpVfsRefresh],
+    [navigation, projectId, sessionId],
   );
 
   const openSessionFilePreview = useCallback(
@@ -380,7 +375,7 @@ export function useChatTabScope({
     sessionDrawerOpen,
     setSessionDrawerOpen,
     vfsRefreshKey,
-    bumpVfsRefresh,
+    bumpWorktreeUiToken,
     menuSessionId,
     setMenuSessionId,
     sessionRenamePrompt,

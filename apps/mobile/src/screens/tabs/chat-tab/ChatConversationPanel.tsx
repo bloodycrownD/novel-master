@@ -30,8 +30,13 @@ import {MessageList} from '@/components/chat/MessageList';
 import {MessageBatchHeader} from '@/components/batch/MessageBatchHeader';
 import {
   computeHideRangeFromSelection,
-  computeShowRangeFromSelection,
   computeVisibilityBatchAffectedIds,
+} from '@/components/chat/transcript-selectable-role';
+import {
+  chatMessagesToTailBatchRows,
+  computeTailBatchAffectedIds,
+  computeTailBatchRangeFromSelection,
+  type MessageBatchMode,
 } from '@/components/chat/transcript-selectable-role';
 import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
 import {SessionActionsDrawer} from '@/components/chrome/SessionActionsDrawer';
@@ -59,7 +64,7 @@ export type ChatConversationPanelProps = {
   streamMetricsLastRun: AgentStreamMetricsSnapshot | null;
   toolInvoking: boolean;
   messageBatchActive: boolean;
-  messageBatchMode: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
+  messageBatchMode: MessageBatchMode | null;
   messageBatchSelectedCount: number;
   messageBatchSelectedIds: ReadonlySet<string>;
   onExitMessageBatch: () => void;
@@ -73,7 +78,7 @@ export type ChatConversationPanelProps = {
   transcriptFlags: {
     richText: boolean;
     batchMode: boolean;
-    batchModeKind: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
+    batchModeKind: MessageBatchMode | null;
   };
   webMenuCloseSignal: number;
   restoredTranscriptScroll: ChatTranscriptScrollSnapshot | undefined;
@@ -98,6 +103,7 @@ export type ChatConversationPanelProps = {
   onNavigateRealPrompt: () => void;
   onEnterHideMessageBatch: () => void;
   onEnterRestoreMessageBatch: () => void;
+  onEnterDeleteMessageBatch: () => void;
   modelPickerOpen: boolean;
   agentPickerOpen: boolean;
   onCloseModelPicker: () => void;
@@ -125,7 +131,7 @@ export type ChatConversationPanelProps = {
   onStreamReset: () => void;
   onMessagesChanged: () => void;
   onNeedModel: () => void;
-  bumpVfsRefresh: () => void;
+  bumpWorktreeUiToken: () => void;
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
   workspaceVfsRef?: React.RefObject<VfsFileManagerHandle | null>;
   onWorkspaceBackStateChange?: (
@@ -180,6 +186,7 @@ export function ChatConversationPanel({
   onNavigateRealPrompt,
   onEnterHideMessageBatch,
   onEnterRestoreMessageBatch,
+  onEnterDeleteMessageBatch,
   modelPickerOpen,
   agentPickerOpen,
   onCloseModelPicker,
@@ -205,7 +212,7 @@ export function ChatConversationPanel({
   onStreamReset,
   onMessagesChanged,
   onNeedModel,
-  bumpVfsRefresh,
+  bumpWorktreeUiToken,
   onOpenFileEditor,
   workspaceVfsRef,
   onWorkspaceBackStateChange,
@@ -229,16 +236,16 @@ export function ChatConversationPanel({
       chatMessages.length > 0
         ? Math.max(...chatMessages.map(m => m.seq))
         : 0;
-    const affectedIds = computeVisibilityBatchAffectedIds(
-      chatMessages,
-      messageBatchMode,
-      messageBatchSelectedIds,
-      sessionMaxSeq,
-    );
-    if (affectedIds.size === 0) {
-      return {affectedIds, affectedCount: 0, rangeLabel: null};
-    }
     if (messageBatchMode === 'hide') {
+      const affectedIds = computeVisibilityBatchAffectedIds(
+        chatMessages,
+        messageBatchMode,
+        messageBatchSelectedIds,
+        sessionMaxSeq,
+      );
+      if (affectedIds.size === 0) {
+        return {affectedIds, affectedCount: 0, rangeLabel: null};
+      }
       const range = computeHideRangeFromSelection(
         chatMessages,
         messageBatchSelectedIds,
@@ -249,8 +256,17 @@ export function ChatConversationPanel({
         rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
       };
     }
-    const range = computeShowRangeFromSelection(
-      chatMessages,
+    const tailRows = chatMessagesToTailBatchRows(chatMessages);
+    const affectedIds = computeTailBatchAffectedIds(
+      tailRows,
+      messageBatchSelectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return {affectedIds, affectedCount: 0, rangeLabel: null};
+    }
+    const range = computeTailBatchRangeFromSelection(
+      tailRows,
       messageBatchSelectedIds,
       sessionMaxSeq,
     );
@@ -411,7 +427,7 @@ export function ChatConversationPanel({
                 rootPath="/"
                 pullFromParent={{
                   scope: {kind: 'session', sessionId},
-                  onPulled: bumpVfsRefresh,
+                  onPulled: bumpWorktreeUiToken,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
                 onDirectoryChange={emitWorkspaceBackState}
@@ -438,6 +454,7 @@ export function ChatConversationPanel({
         onRealPrompt={onNavigateRealPrompt}
         onHideMessages={onEnterHideMessageBatch}
         onRestoreMessages={onEnterRestoreMessageBatch}
+        onDeleteMessages={onEnterDeleteMessageBatch}
       />
       <MessageActionMenu
         visible={useWebviewMessageMenu && messageMenuTarget != null}

@@ -6,6 +6,7 @@
 
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { EventsConfigStore } from "@/service/events-config/events-config-store.port.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
@@ -28,6 +29,7 @@ export interface CreateEventOrchestratorDeps {
   readonly eventsConfig: EventsConfigStore;
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly runAgent?: RunAgentHandlerDeps;

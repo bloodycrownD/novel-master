@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import { type ChatMessage } from "@novel-master/core/chat";
-import type {MessageVisibilityBatchMode} from './transcript-selectable-role';
+import type {MessageBatchMode} from './transcript-selectable-role';
+import {isTailBatchMode} from './transcript-selectable-role';
 import {
   isTranscriptRowSelectable,
   transcriptSelectableRole,
@@ -42,7 +43,7 @@ type Props = {
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
   richRenderEpoch?: number;
-  batchMode?: MessageVisibilityBatchMode | null;
+  batchMode?: MessageBatchMode | null;
   selectedMessageIds?: ReadonlySet<string>;
   /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
   affectedMessageIds?: ReadonlySet<string>;
@@ -462,6 +463,19 @@ export function MessageList({
     );
   };
 
+  const isBatchRowSelectable = (
+    role: string,
+    mode: MessageBatchMode | null | undefined,
+  ): boolean => {
+    if (mode == null) {
+      return false;
+    }
+    if (isTailBatchMode(mode)) {
+      return true;
+    }
+    return isTranscriptRowSelectable(transcriptSelectableRole(role, mode));
+  };
+
   return (
     <FlatList
       ref={listRef}
@@ -570,8 +584,7 @@ export function MessageList({
               />
             </View>
           );
-          const selectableRole = transcriptSelectableRole('user', batchMode);
-          const rowSelectable = isTranscriptRowSelectable(selectableRole);
+          const rowSelectable = isBatchRowSelectable('user', batchMode);
           if (batchMode) {
             return (
               <View style={styles.batchRow} accessibilityState={{selected}}>
@@ -623,8 +636,7 @@ export function MessageList({
           )
         );
 
-        const selectableRole = transcriptSelectableRole(row.message.role, batchMode);
-        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+        const rowSelectable = isBatchRowSelectable(row.message.role, batchMode);
 
         if (batchMode) {
           return (

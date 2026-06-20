@@ -17,6 +17,7 @@ import {
 } from '@novel-master/core/events';
 import {
   createMessageService,
+  createMessageTranscriptEffectsService,
   createProjectService,
   createSessionService,
   createUserVfsTurnServiceBundle,
@@ -73,6 +74,10 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const compactionConditions = createCompactionConditionsStore(conn);
   const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
+  const messageTranscriptEffects = createMessageTranscriptEffectsService(
+    conn,
+    worktreeSnapshot,
+  );
   const {userVfsTurn, appendToolTurnBridge} = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -87,6 +92,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventsConfig,
     eventBus,
     messages,
+    messageTranscriptEffects,
     worktreeSnapshot,
     worktree: s => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
@@ -120,6 +126,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages,
+    messageTranscriptEffects,
     appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),

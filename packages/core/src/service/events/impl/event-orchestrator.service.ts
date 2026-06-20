@@ -8,6 +8,7 @@ import type { EventAction, EventActionNode } from "@/domain/events-config/model/
 import type { EventsConfigStore } from "@/service/events-config/events-config-store.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { MessageService } from "@/service/chat/message.port.js";
+import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
@@ -35,6 +36,7 @@ export interface DefaultEventOrchestratorDeps {
   readonly eventsConfig: EventsConfigStore;
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly createSession: (sessionId: string) => AgentSession;
@@ -226,16 +228,17 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
   }
 
   private async runAction(action: EventAction, ctx: EventEmitContext): Promise<void> {
-    const session = this.deps.createSession(ctx.sessionId);
     switch (action.type) {
       case "hide-message":
         await runHideMessageAction(
-          session,
+          ctx.projectId,
           ctx.sessionId,
           action.params as DepthSlice,
-          { messages: this.deps.messages },
+          {
+            messages: this.deps.messages,
+            messageTranscriptEffects: this.deps.messageTranscriptEffects,
+          },
         );
-        this.deps.worktreeSnapshot.markDirty(ctx.projectId, ctx.sessionId);
         return;
       case "run-agent": {
         if (this.deps.runAgent == null) {

@@ -17,6 +17,7 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesShowRange,
+  ipcMessagesTruncateAfter,
 } from "@/ipc/client";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useShellNav } from "@/providers/ShellNavProvider";
@@ -37,11 +38,15 @@ import { MessageList } from "./MessageList";
 import { RealPromptPanel } from "./RealPromptPanel";
 import { AgentStreamMetricsBar } from "./AgentStreamMetricsBar";
 import {
+  buildTailBatchRows,
   computeHideRangeFromSelection,
-  computeShowRangeFromSelection,
+  computeTailBatchAffectedIds,
+  computeTailBatchRangeFromSelection,
   computeVisibilityBatchAffectedIds,
   isTranscriptRowSelectable,
+  selectTailBatchEligibleIdsFromAnchor,
   selectVisibilityBatchEligibleIdsFromAnchor,
+  tailBatchDeleteAfterSeq,
   transcriptSelectableRole,
 } from "./transcript-selectable-role";
 
@@ -88,6 +93,7 @@ export function ConversationPanel({
   const [confirmState, setConfirmState] = useState<
     | { kind: "hide-messages"; toSeq: number }
     | { kind: "restore-messages"; fromSeq: number; toSeq: number }
+    | { kind: "delete-messages"; afterSeq: number; fromSeq: number }
     | { kind: "rollback"; messageId: string }
     | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
     | null
@@ -108,6 +114,11 @@ export function ConversationPanel({
     [messages],
   );
 
+  const tailBatchRows = useMemo(
+    () => buildTailBatchRows(messages),
+    [messages],
+  );
+
   const visibilityBatchPreview = useMemo(() => {
     if (messageBatch.mode == null) {
       return {
@@ -116,16 +127,16 @@ export function ConversationPanel({
         rangeLabel: null as string | null,
       };
     }
-    const affectedIds = computeVisibilityBatchAffectedIds(
-      messages,
-      messageBatch.mode,
-      messageBatch.selectedIds,
-      sessionMaxSeq,
-    );
-    if (affectedIds.size === 0) {
-      return { affectedIds, affectedCount: 0, rangeLabel: null };
-    }
     if (messageBatch.mode === "hide") {
+      const affectedIds = computeVisibilityBatchAffectedIds(
+        messages,
+        messageBatch.mode,
+        messageBatch.selectedIds,
+        sessionMaxSeq,
+      );
+      if (affectedIds.size === 0) {
+        return { affectedIds, affectedCount: 0, rangeLabel: null };
+      }
       const range = computeHideRangeFromSelection(
         messages,
         messageBatch.selectedIds,
@@ -136,8 +147,16 @@ export function ConversationPanel({
         rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
       };
     }
-    const range = computeShowRangeFromSelection(
-      messages,
+    const affectedIds = computeTailBatchAffectedIds(
+      tailBatchRows,
+      messageBatch.selectedIds,
+      sessionMaxSeq,
+    );
+    if (affectedIds.size === 0) {
+      return { affectedIds, affectedCount: 0, rangeLabel: null };
+    }
+    const range = computeTailBatchRangeFromSelection(
+      tailBatchRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
     );
@@ -146,7 +165,13 @@ export function ConversationPanel({
       affectedCount: affectedIds.size,
       rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
     };
-  }, [messages, messageBatch.mode, messageBatch.selectedIds, sessionMaxSeq]);
+  }, [
+    messages,
+    tailBatchRows,
+    messageBatch.mode,
+    messageBatch.selectedIds,
+    sessionMaxSeq,
+  ]);
 
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
@@ -188,24 +213,18 @@ export function ConversationPanel({
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
-      if (payload.phase === "tool_results" && payload.vfsMutated === true) {
-        refreshWorkspaceTrees();
-      }
     },
-    [reloadMessages, refreshWorkspaceTrees, onStreamReset],
+    [reloadMessages, onStreamReset],
   );
 
   const onRunFinished = useCallback(
-    (payload: AgentRunFinishedPayload) => {
+    (_payload: AgentRunFinishedPayload) => {
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
       void reloadMessages();
-      if (payload.vfsMutated === true) {
-        refreshWorkspaceTrees();
-      }
     },
-    [reloadMessages, refreshWorkspaceTrees],
+    [reloadMessages],
   );
 
   const onRunFailed = useCallback(
@@ -255,12 +274,20 @@ export function ConversationPanel({
       setConfirmState({ kind: "hide-messages", toSeq: range.toSeq });
       return;
     }
-    const range = computeShowRangeFromSelection(
-      messages,
+    const range = computeTailBatchRangeFromSelection(
+      tailBatchRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
     );
     if (range == null) {
+      return;
+    }
+    if (messageBatch.mode === "delete") {
+      setConfirmState({
+        kind: "delete-messages",
+        fromSeq: range.fromSeq,
+        afterSeq: tailBatchDeleteAfterSeq(range.fromSeq),
+      });
       return;
     }
     setConfirmState({
@@ -268,7 +295,7 @@ export function ConversationPanel({
       fromSeq: range.fromSeq,
       toSeq: range.toSeq,
     });
-  }, [messageBatch, messages, sessionMaxSeq]);
+  }, [messageBatch, messages, tailBatchRows, sessionMaxSeq]);
 
   const closeMessageMenu = useCallback(() => {
     setMessageMenu(null);
@@ -343,9 +370,7 @@ export function ConversationPanel({
       }
       setStreamingText("");
       await reloadMessages();
-      if (!skipVfsReconcile) {
-        refreshWorkspaceTrees();
-      }
+      refreshWorkspaceTrees();
       showToast(
         skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
       );
@@ -383,7 +408,6 @@ export function ConversationPanel({
         }
         setStreamingText("");
         await openSession(result.data, projectName ?? "—");
-        refreshWorkspaceTrees();
         return;
       }
       if (action === "rollback") {
@@ -398,7 +422,6 @@ export function ConversationPanel({
       rollbackToMessage,
       openSession,
       projectName,
-      refreshWorkspaceTrees,
     ],
   );
 
@@ -443,11 +466,30 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
+      } else if (state.kind === "delete-messages") {
+        const result = await ipcMessagesTruncateAfter({
+          projectId,
+          sessionId,
+          afterSeq: state.afterSeq,
+        });
+        if (!result.ok) {
+          showToast(result.error.message);
+          return;
+        }
       }
       messageBatch.exit();
       await reloadMessages();
+      refreshWorkspaceTrees();
     }
-  }, [confirmState, sessionId, messageBatch, executeRollback, reloadMessages]);
+  }, [
+    confirmState,
+    projectId,
+    sessionId,
+    messageBatch,
+    executeRollback,
+    reloadMessages,
+    refreshWorkspaceTrees,
+  ]);
 
   const confirmMessage = (() => {
     if (!confirmState) return "";
@@ -455,7 +497,10 @@ export function ConversationPanel({
       return `将隐藏所选 assistant 消息（seq ≤ ${confirmState.toSeq}）及其之前的所有消息。是否继续？`;
     }
     if (confirmState.kind === "restore-messages") {
-      return `将恢复所选 user 消息（seq ≥ ${confirmState.fromSeq}）及其之后的所有消息。是否继续？`;
+      return `将恢复所选消息（seq ≥ ${confirmState.fromSeq}）及其之后的所有消息。是否继续？`;
+    }
+    if (confirmState.kind === "delete-messages") {
+      return `将删除所选消息（seq ≥ ${confirmState.fromSeq}）及其之后的所有聊天记录。仅删除聊天记录，不修改工作区文件；相关检查点将一并清除。是否继续？`;
     }
     if (confirmState.kind === "rollback-degraded") {
       return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
@@ -464,17 +509,27 @@ export function ConversationPanel({
   })();
 
   const confirmTitle =
-    confirmState?.kind === "rollback-degraded" ? "无法恢复工作区" : "确认操作";
+    confirmState?.kind === "rollback-degraded"
+      ? "无法恢复工作区"
+      : confirmState?.kind === "delete-messages"
+        ? "确认删除消息"
+        : "确认操作";
 
   const confirmLabel =
-    confirmState?.kind === "rollback-degraded" ? "仅删除后续对话" : "确定";
+    confirmState?.kind === "rollback-degraded"
+      ? "仅删除后续对话"
+      : confirmState?.kind === "delete-messages"
+        ? "删除"
+        : "确定";
 
   const batchBarTitle =
     messageBatch.mode === "hide"
       ? "隐藏消息"
       : messageBatch.mode === "restore"
         ? "恢复消息"
-        : "";
+        : messageBatch.mode === "delete"
+          ? "删除消息"
+          : "";
 
   const batchBarSummary =
     visibilityBatchPreview.affectedCount > 0 &&
@@ -485,28 +540,43 @@ export function ConversationPanel({
   const batchHint =
     messageBatch.mode === "hide"
       ? "点击 assistant 将重置并勾选其上界以内全部 assistant"
-      : messageBatch.mode === "restore"
-        ? "点击 user 将重置并勾选其下界及之后全部 user"
+      : messageBatch.mode === "restore" || messageBatch.mode === "delete"
+        ? "点击任意消息将重置并勾选其下界及之后全部消息"
         : "";
 
   const handleToggleSelect = useCallback(
     (messageId: string) => {
-      const msg = messages.find((m) => m.id === messageId);
-      if (msg == null || messageBatch.mode == null) {
+      if (messageBatch.mode == null) {
         return;
       }
-      const role = transcriptSelectableRole(msg.role, messageBatch.mode);
-      if (!isTranscriptRowSelectable(role)) {
+      if (messageBatch.mode === "hide") {
+        const msg = messages.find((m) => m.id === messageId);
+        if (msg == null) {
+          return;
+        }
+        const role = transcriptSelectableRole(msg.role, messageBatch.mode);
+        if (!isTranscriptRowSelectable(role)) {
+          return;
+        }
+        const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
+          messages,
+          messageBatch.mode,
+          messageId,
+        );
+        messageBatch.selectRange(nextIds);
         return;
       }
-      const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
-        messages,
-        messageBatch.mode,
+      const row = tailBatchRows.find((r) => r.id === messageId);
+      if (row == null) {
+        return;
+      }
+      const nextIds = selectTailBatchEligibleIdsFromAnchor(
+        tailBatchRows,
         messageId,
       );
       messageBatch.selectRange(nextIds);
     },
-    [messages, messageBatch],
+    [messages, tailBatchRows, messageBatch],
   );
 
   return (
@@ -669,7 +739,8 @@ export function ConversationPanel({
         confirmLabel={confirmLabel}
         danger={
           confirmState?.kind === "rollback" ||
-          confirmState?.kind === "rollback-degraded"
+          confirmState?.kind === "rollback-degraded" ||
+          confirmState?.kind === "delete-messages"
         }
         onConfirm={() => void handleConfirm()}
         onCancel={() => setConfirmState(null)}
@@ -688,6 +759,8 @@ export async function runSessionAction(
     batch.enterHide();
   } else if (action === "restore-messages") {
     batch.enterRestore();
+  } else if (action === "delete-messages") {
+    batch.enterDelete();
   }
 }
 

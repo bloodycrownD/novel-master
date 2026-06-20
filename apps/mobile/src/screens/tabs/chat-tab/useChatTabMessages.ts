@@ -19,8 +19,13 @@ import {
 } from '@/components/chat/composer-send-state';
 import {
   computeHideRangeFromSelection,
-  computeShowRangeFromSelection,
 } from '@/components/chat/transcript-selectable-role';
+import {
+  chatMessagesToTailBatchRows,
+  computeTailBatchRangeFromSelection,
+  tailBatchDeleteAfterSeq,
+} from '@/components/chat/transcript-selectable-role';
+import type {MessageBatchMode} from '@/components/chat/transcript-selectable-role';
 import type {useBatchSelection} from '@/hooks/useBatchSelection';
 import {isRollbackVfsDegradableError} from '@novel-master/core/session-fs';
 import {rollbackToMessage} from '@/services/message-rollback.service';
@@ -241,9 +246,10 @@ export function useChatTabMessages({
 export type UseChatTabMessagesResult = ReturnType<typeof useChatTabMessages>;
 
 type BatchSelection = ReturnType<typeof useBatchSelection> & {
-  mode: import('../../../components/chat/transcript-selectable-role').MessageVisibilityBatchMode | null;
+  mode: MessageBatchMode | null;
   enterHide: () => void;
   enterRestore: () => void;
+  enterDelete: () => void;
 };
 
 export type UseChatTabMessageActionsParams = {
@@ -256,7 +262,7 @@ export type UseChatTabMessageActionsParams = {
   resetStreamingDisplay: () => void;
   showToast: (message: string) => void;
   refreshChatTokenLabel: () => Promise<void>;
-  bumpVfsRefresh: () => void;
+  bumpWorktreeUiToken: () => void;
   reloadLists: () => Promise<void>;
   setCurrentSession: (sessionId: string) => Promise<void>;
   setChatSubview: (subview: ChatSubview) => void;
@@ -276,7 +282,7 @@ export function useChatTabMessageActions({
   resetStreamingDisplay,
   showToast,
   refreshChatTokenLabel,
-  bumpVfsRefresh,
+  bumpWorktreeUiToken,
   reloadLists,
   setCurrentSession,
   setChatSubview,
@@ -307,8 +313,29 @@ export function useChatTabMessageActions({
     messageBatch.enterRestore();
   }, [agentRunning, messageBatch, showToast]);
 
+  const enterDeleteMessageBatch = useCallback(() => {
+    if (agentRunning) {
+      showToast(toastMessage('请稍候', 'Agent 运行中无法删除消息'));
+      return;
+    }
+    messageBatch.exit();
+    messageBatch.enterDelete();
+  }, [agentRunning, messageBatch, showToast]);
+
+  const finishMessageBatchMutation = useCallback(async () => {
+    exitMessageBatch();
+    await reloadMessages(true);
+    bumpWorktreeUiToken();
+    void refreshChatTokenLabel();
+  }, [
+    exitMessageBatch,
+    reloadMessages,
+    bumpWorktreeUiToken,
+    refreshChatTokenLabel,
+  ]);
+
   const confirmVisibilityBatch = useCallback(async () => {
-    if (sessionId == null || messageBatch.mode == null) {
+    if (projectId == null || sessionId == null || messageBatch.mode == null) {
       return;
     }
     if (messageBatch.selectedCount === 0) {
@@ -316,19 +343,35 @@ export function useChatTabMessageActions({
     }
 
     const runHide = async (toSeq: number) => {
-      await runtime.messages.hideRange(sessionId, 1, toSeq);
-      exitMessageBatch();
-      await reloadMessages(true);
-      void refreshChatTokenLabel();
+      await runtime.messageTranscriptEffects.hideMessagesInRange(
+        projectId,
+        sessionId,
+        1,
+        toSeq,
+      );
+      await finishMessageBatchMutation();
       showToast('已隐藏');
     };
 
     const runRestore = async (fromSeq: number, toSeq: number) => {
-      await runtime.messages.showRange(sessionId, fromSeq, toSeq);
-      exitMessageBatch();
-      await reloadMessages(true);
-      void refreshChatTokenLabel();
+      await runtime.messageTranscriptEffects.showMessagesInRange(
+        projectId,
+        sessionId,
+        fromSeq,
+        toSeq,
+      );
+      await finishMessageBatchMutation();
       showToast('已恢复');
+    };
+
+    const runDelete = async (afterSeq: number) => {
+      await runtime.messageTranscriptEffects.truncateMessagesAfter(
+        projectId,
+        sessionId,
+        afterSeq,
+      );
+      await finishMessageBatchMutation();
+      showToast('已删除');
     };
 
     if (messageBatch.mode === 'hide') {
@@ -358,17 +401,39 @@ export function useChatTabMessageActions({
     const all = await runtime.messages.listBySession(sessionId);
     const sessionMaxSeq =
       all.length > 0 ? Math.max(...all.map(m => m.seq)) : 0;
-    const range = computeShowRangeFromSelection(
-      chatMessages,
+    const tailRows = chatMessagesToTailBatchRows(all);
+    const range = computeTailBatchRangeFromSelection(
+      tailRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
     );
     if (range == null) {
       return;
     }
+
+    if (messageBatch.mode === 'delete') {
+      const afterSeq = tailBatchDeleteAfterSeq(range.fromSeq);
+      Alert.alert(
+        '确认删除',
+        `将永久删除所选消息（seq ≥ ${range.fromSeq}）及其之后的所有消息。仅删除聊天记录，工作区文件不变。是否继续？`,
+        [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '删除',
+            style: 'destructive',
+            onPress: () =>
+              runDelete(afterSeq).catch(err => {
+                showToast(toastMessage('删除失败', err));
+              }),
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       '确认恢复',
-      `将恢复所选 user 消息（seq ≥ ${range.fromSeq}）及其之后的所有消息。是否继续？`,
+      `将恢复所选消息（seq ≥ ${range.fromSeq}）及其之后的所有消息。是否继续？`,
       [
         {text: '取消', style: 'cancel'},
         {
@@ -381,13 +446,12 @@ export function useChatTabMessageActions({
       ],
     );
   }, [
+    projectId,
     sessionId,
     messageBatch,
     chatMessages,
     runtime,
-    exitMessageBatch,
-    reloadMessages,
-    refreshChatTokenLabel,
+    finishMessageBatchMutation,
     showToast,
   ]);
 
@@ -454,7 +518,6 @@ export function useChatTabMessageActions({
         setChatSubview('conversation');
         setConversationPanel('chat');
         resetStreamingDisplay();
-        bumpVfsRefresh();
         showToast(`已 Fork：${forked.title ?? forked.id}`);
       } catch (error) {
         showToast(toastMessage('Fork 失败', error));
@@ -469,7 +532,6 @@ export function useChatTabMessageActions({
       setChatSubview,
       setConversationPanel,
       resetStreamingDisplay,
-      bumpVfsRefresh,
       showToast,
     ],
   );
@@ -497,9 +559,7 @@ export function useChatTabMessageActions({
           );
           resetStreamingDisplay();
           await reloadMessages(true);
-          if (!skipVfsReconcile) {
-            bumpVfsRefresh();
-          }
+          bumpWorktreeUiToken();
           showToast(
             skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
@@ -552,7 +612,7 @@ export function useChatTabMessageActions({
       runtime,
       reloadMessages,
       resetStreamingDisplay,
-      bumpVfsRefresh,
+      bumpWorktreeUiToken,
       showToast,
     ],
   );
@@ -620,6 +680,7 @@ export function useChatTabMessageActions({
     exitMessageBatch,
     enterHideMessageBatch,
     enterRestoreMessageBatch,
+    enterDeleteMessageBatch,
     confirmVisibilityBatch,
     handleCompactSession,
     handleMessageMenuAction,

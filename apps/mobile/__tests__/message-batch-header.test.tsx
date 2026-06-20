@@ -95,4 +95,33 @@ describe('MessageBatchHeader', () => {
     });
     expect(handlers.onConfirm).toHaveBeenCalledTimes(1);
   });
+
+  it('delete 模式展示删除标题与确认文案', () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <MessageBatchHeader
+          tokens={lightTheme}
+          mode="delete"
+          selectedCount={1}
+          affectedCount={2}
+          rangeLabel="seq 3–末"
+          {...handlers}
+        />,
+      );
+    });
+    const texts = tree.root.findAll(node => node.type === 'Text');
+    const summary = texts.find(
+      node =>
+        typeof node.props.children === 'string' &&
+        node.props.children.includes('删除消息'),
+    );
+    expect(summary).toBeDefined();
+    const allText = texts
+      .map(node => node.props.children)
+      .filter((c): c is string => typeof c === 'string')
+      .join('\n');
+    expect(allText).toContain('删除消息');
+    expect(allText).toContain('之后全部消息');
+  });
 });
