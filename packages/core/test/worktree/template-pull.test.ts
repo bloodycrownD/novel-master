@@ -132,4 +132,36 @@ describe("template pull", () => {
       0,
     );
   });
+
+  it("session create 仅复制 template 文件", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    await ctx.projectVfs(project.id).write("/a.md", "A");
+    await ctx.projectVfs(project.id).write("/b.md", "B");
+
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const paths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path)
+      .sort();
+    assert.deepEqual(paths, ["/a.md", "/b.md"]);
+  });
+
+  it("session pull replace 语义移除 session 独有孤儿文件", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    await ctx.projectVfs(project.id).write("/a.md", "A");
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/orphan.md", "orphan");
+
+    await createTemplatePullService(ctx.conn).sessionTemplatePull(session.id);
+
+    const paths = (await svfs.list("/", { recursive: true }))
+      .filter((e) => e.kind === "file")
+      .map((e) => e.path)
+      .sort();
+    assert.deepEqual(paths, ["/a.md"]);
+  });
 });

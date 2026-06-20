@@ -12,9 +12,6 @@ import type { SessionRepository } from "@/domain/chat/repositories/session.port.
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
-import { SqliteWorktreeRepository } from "@/domain/worktree/repositories/impl/sqlite-worktree.repository.js";
-import { mapProjectWorktreePathToSession } from "@/domain/worktree/logic/worktree-path-map.js";
-import { worktreeScopeKey } from "@/domain/worktree/logic/worktree-scope.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
@@ -22,6 +19,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import type { SessionService } from "../session.port.js";
 
 function reposFor(conn: TdbcConnection) {
@@ -78,21 +76,9 @@ export class DefaultSessionService implements SessionService {
         updatedAtMs: now,
       };
       await r.sessions.insert(session);
-      await copyVfsTree(
-        r.vfs,
-        `/projects/${projectId}/template`,
-        `/projects/${projectId}/sessions/${session.id}`,
-      );
-      const worktree = new SqliteWorktreeRepository(tx);
-      await worktree.copyScope(
-        worktreeScopeKey({ kind: "project", projectId }),
-        worktreeScopeKey({
-          kind: "session",
-          projectId,
-          sessionId: session.id,
-        }),
-        mapProjectWorktreePathToSession,
-      );
+      await initializeSessionWorkspace(tx, projectId, session.id, {
+        clearCheckpoints: false,
+      });
       return session;
     });
   }

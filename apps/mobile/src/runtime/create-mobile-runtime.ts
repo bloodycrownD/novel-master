@@ -128,7 +128,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     messages,
     messageTranscriptEffects,
     appendToolTurnBridge,
-    sessionFs: createSessionFsService(conn),
+    sessionFs: createSessionFsService(conn, worktreeSnapshot),
     messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, {kind: 'global'}),
     projectVfs: projectId =>
