@@ -1,0 +1,18 @@
+[
+  "PromptError",
+  "buildPromptAssemblyFromLayout",
+  "buildPromptLlmInputFromLayout",
+  "buildPromptPreviewSegmentsFromLayout",
+  "computeLlmExportZonesFromLayout",
+  "expandDynamicMacros",
+  "formatPromptLlmInputForCliFromLayout",
+  "messageBodyText",
+  "movePersistBlock",
+  "normalizeForLlmExport",
+  "normalizePersistBlock",
+  "shouldIncludeDynamicBlock",
+  "updatePersistWorktreeRole",
+  "validateAgentPromptLayout",
+  "validateAgentPromptLayoutFromMaps",
+  "validateDynamicMacros"
+]

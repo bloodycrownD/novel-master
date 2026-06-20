@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import * as coreMain from "@novel-master/core";
 import { createKkvService, KkvError } from "@novel-master/core/kkv";
@@ -17,10 +17,23 @@ import { getNovelMasterTestContext, novelMasterTestFixture } from "./helpers/nov
 
 novelMasterTestFixture();
 
+// 完整 allowlist / 架构守卫见 test/package-exports/
+
 describe("T0 package exports (@novel-master/core entry)", () => {
   it("does not export createKkvService from main entry", () => {
     assert.equal(
       (coreMain as Record<string, unknown>).createKkvService,
+      undefined,
+    );
+  });
+
+  it("does not export SimpleEventBus from main entry", () => {
+    assert.equal((coreMain as Record<string, unknown>).SimpleEventBus, undefined);
+  });
+
+  it("does not export readTokenCounterModeFromPreferences from main entry", () => {
+    assert.equal(
+      (coreMain as Record<string, unknown>).readTokenCounterModeFromPreferences,
       undefined,
     );
   });

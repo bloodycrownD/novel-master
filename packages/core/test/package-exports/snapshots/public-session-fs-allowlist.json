@@ -1,0 +1,12 @@
+[
+  "SessionFsError",
+  "createMessageCheckpointService",
+  "createMessageRollbackService",
+  "createSessionFsService",
+  "isRollbackVfsDegradableError",
+  "isSessionFsError",
+  "sessionFsRollbackMessageNotFound",
+  "sessionFsRollbackMessageSessionMismatch",
+  "sessionFsRollbackNoCheckpoint",
+  "sessionFsRollbackVfsRestoreFailed"
+]
