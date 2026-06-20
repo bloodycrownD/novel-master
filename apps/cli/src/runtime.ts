@@ -26,9 +26,11 @@ import {
 } from "@novel-master/core/events";
 import {
   createMessageService,
+  createMessageTranscriptEffectsService,
   createProjectService,
   createSessionService,
   type MessageService,
+  type MessageTranscriptEffectsService,
   type ProjectService,
   type SessionService,
 } from "@novel-master/core/chat";
@@ -96,6 +98,8 @@ export interface NovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
+  /** hide/show/truncate 消息 transcript 并 markDirty session worktree。 */
+  readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly scope: CliScopeResolver;
@@ -162,6 +166,10 @@ export async function createNovelMasterRuntime(
   const compactionConditions = createCompactionConditionsStore(conn);
   const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const messages = createMessageService(conn);
+  const messageTranscriptEffects = createMessageTranscriptEffectsService(
+    conn,
+    worktreeSnapshot,
+  );
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
@@ -175,6 +183,7 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     eventBus,
     messages,
+    messageTranscriptEffects,
     worktreeSnapshot,
     worktree: (s) => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
@@ -208,6 +217,7 @@ export async function createNovelMasterRuntime(
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages,
+    messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     scope,
