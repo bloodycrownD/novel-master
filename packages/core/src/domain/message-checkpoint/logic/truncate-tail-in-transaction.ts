@@ -4,17 +4,11 @@
  * @module domain/message-checkpoint/logic/truncate-tail-in-transaction
  */
 
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
 
 /** tail 截断事务参数。 */
@@ -34,17 +28,6 @@ export type TruncateTailDeps = {
   readonly entries: VfsEntryRepository;
 };
 
-/** 从事务连接构造 {@link TruncateTailDeps}。 */
-export function truncateTailDepsFromTx(tx: TdbcConnection): TruncateTailDeps {
-  return {
-    messages: new SqliteMessageRepository(tx),
-    checkpoints: new SqliteMessageCheckpointRepository(tx),
-    sessions: new SqliteSessionRepository(tx),
-    revisions: new SqliteVfsRevisionRepository(tx),
-    entries: new SqliteVfsEntryRepository(tx),
-  };
-}
-
 /**
  * 在已有事务内截断 tail 消息并清理 checkpoint。
  *
@@ -55,7 +38,6 @@ export function truncateTailDepsFromTx(tx: TdbcConnection): TruncateTailDeps {
  * 5. 若 tail 非空 → sessions.setUserVfsPendingJson(sessionId, null)
  */
 export async function truncateTailInTransaction(
-  _tx: TdbcConnection,
   deps: TruncateTailDeps,
   params: TruncateTailParams,
 ): Promise<void> {

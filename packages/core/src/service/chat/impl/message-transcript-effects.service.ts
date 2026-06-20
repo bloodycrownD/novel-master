@@ -5,9 +5,9 @@
  */
 
 import {
-  truncateTailDepsFromTx,
+  createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from "@/domain/message-checkpoint/logic/truncate-tail-in-transaction.js";
+} from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { markSessionWorktreeDirty } from "@/service/prompt/logic/mark-session-worktree-dirty.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
@@ -66,9 +66,7 @@ export class DefaultMessageTranscriptEffectsService
     options?: { sweepRevisions?: boolean },
   ): Promise<void> {
     await this.deps.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(
-        tx,
-        truncateTailDepsFromTx(tx),
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx),
         {
           projectId,
           sessionId,

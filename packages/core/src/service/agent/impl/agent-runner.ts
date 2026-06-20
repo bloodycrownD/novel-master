@@ -61,7 +61,10 @@ export interface DefaultAgentRunnerDeps {
   readonly eventBus: SimpleEventBus;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
-  /** When set, captures checkpoint after mutating tools settle for the step. */
+  /**
+   * mutating ¹¤¾ß²¢ÐÐ settled ºóÍ¬²½ capture£»Ê§°Ü»áÖÐ¶Ïµ±Ç° agent run¡£
+   * @remarks ÔÚ append tool_results Ö®Ç° await£¬±ÜÃâ¶Ô»°¼ÌÐøµ«ÎÞ checkpoint¡£
+   */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
   /** Runs hide-message before prompt build on condition trigger (not bus.publish). */
@@ -73,7 +76,7 @@ export interface DefaultAgentRunnerDeps {
 const DEFAULT_MAX_STEPS = 20;
 
 /**
- * Executes agent loops: conditions â†’ LLM â†’ tools â†’ repeat up to maxSteps.
+ * Executes agent loops: conditions â†?LLM â†?tools â†?repeat up to maxSteps.
  */
 export class DefaultAgentRunner implements AgentRunner {
   private readonly toolRunner: ToolRunner<BuiltinToolContext>;
@@ -334,9 +337,21 @@ export class DefaultAgentRunner implements AgentRunner {
           assistantMessage != null &&
           this.deps.messageCheckpoint != null
         ) {
-          void this.deps.messageCheckpoint
-            .capture(sessionId, projectId, assistantMessage.id)
-            .catch(() => undefined);
+          try {
+            await this.deps.messageCheckpoint.capture(
+              sessionId,
+              projectId,
+              assistantMessage.id,
+            );
+          } catch (error) {
+            console.error("[agent-runner] checkpoint_capture_failed", {
+              sessionId,
+              projectId,
+              messageId: assistantMessage.id,
+              error,
+            });
+            throw error;
+          }
         }
 
         if (signal?.aborted) {

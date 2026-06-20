@@ -28,7 +28,10 @@ export interface CreateAgentRunnerDeps {
   readonly eventBus: SimpleEventBus;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
-  /** Captures message checkpoint after mutating tools complete (fork-join). */
+  /**
+   * mutating 工具并行 settled 后同步 capture；失败会中断当前 agent run。
+   * @remarks 在 append tool_results 之前 await，避免对话继续但无 checkpoint。
+   */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
   readonly eventOrchestrator?: EventOrchestrator;
