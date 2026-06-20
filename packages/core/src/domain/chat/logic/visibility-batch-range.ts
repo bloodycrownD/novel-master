@@ -1,4 +1,11 @@
 /** 消息可见性多选：按 role 限制可勾选行（Desktop / Mobile / WebView 共用语义）。 */
+
+import {
+  computeTailBatchRangeFromSelection,
+  selectTailBatchEligibleIdsFromAnchor as selectTailEligibleFromAnchor,
+  type TailBatchRow,
+} from "./tail-batch-range.js";
+
 export type MessageVisibilityBatchMode = "hide" | "restore";
 
 export type TranscriptSelectableRole = "user" | "assistant" | "none";
@@ -46,20 +53,32 @@ export function computeHideRangeFromSelection(
   return { fromSeq: 1, toSeq };
 }
 
-/** 恢复：showRange(min(selectedUser.seq), sessionMaxSeq) */
+/**
+ * 恢复：showRange(min(selected.seq), sessionMaxSeq)。
+ *
+ * @deprecated 请改用 {@link computeTailBatchRangeFromSelection}（restore / delete 共用）。
+ */
 export function computeShowRangeFromSelection(
   messages: readonly VisibilityBatchMessage[],
   selectedIds: ReadonlySet<string>,
   sessionMaxSeq: number,
 ): { fromSeq: number; toSeq: number } | null {
-  const selected = messages.filter(
-    (m) => selectedIds.has(m.id) && m.role === "user",
+  return computeTailBatchRangeFromSelection(
+    toTailBatchRows(messages),
+    selectedIds,
+    sessionMaxSeq,
   );
-  if (selected.length === 0) {
-    return null;
-  }
-  const fromSeq = Math.min(...selected.map((m) => m.seq));
-  return { fromSeq, toSeq: sessionMaxSeq };
+}
+
+function toTailBatchRows(
+  messages: readonly VisibilityBatchMessage[],
+): readonly TailBatchRow[] {
+  return messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    seq: m.seq,
+    selectable: m.role === "user",
+  }));
 }
 
 /**
@@ -86,8 +105,8 @@ export function computeVisibilityBatchAffectedIds(
       messages.filter((m) => m.seq <= range.toSeq).map((m) => m.id),
     );
   }
-  const range = computeShowRangeFromSelection(
-    messages,
+  const range = computeTailBatchRangeFromSelection(
+    toTailBatchRows(messages),
     selectedIds,
     sessionMaxSeq,
   );
@@ -127,9 +146,5 @@ export function selectVisibilityBatchEligibleIdsFromAnchor(
   if (anchor.role !== "user") {
     return new Set();
   }
-  return new Set(
-    messages
-      .filter((m) => m.role === "user" && m.seq >= anchor.seq)
-      .map((m) => m.id),
-  );
+  return selectTailEligibleFromAnchor(toTailBatchRows(messages), anchorId);
 }
