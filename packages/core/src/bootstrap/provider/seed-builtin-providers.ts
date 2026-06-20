@@ -7,33 +7,7 @@
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import { executeTemplate } from "@/infra/tdbc/logic/template-helper.js";
-
-const BUILTIN = [
-  {
-    id: "openai",
-    protocol: "openai",
-    baseUrl: "https://api.openai.com/v1",
-    displayName: "OpenAI",
-  },
-  {
-    id: "anthropic",
-    protocol: "anthropic",
-    baseUrl: "https://api.anthropic.com",
-    displayName: "Anthropic",
-  },
-  {
-    id: "google",
-    protocol: "gemini",
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    displayName: "Google Gemini",
-  },
-  {
-    id: "openrouter",
-    protocol: "openai",
-    baseUrl: "https://openrouter.ai/api/v1",
-    displayName: "OpenRouter",
-  },
-] as const;
+import { BUILTIN_PROVIDER_ROWS } from "@/domain/provider/logic/builtin-providers.js";
 
 /**
  * Inserts built-in providers when missing (does not overwrite user edits).
@@ -41,7 +15,7 @@ const BUILTIN = [
 export async function seedBuiltinProviders(conn: TdbcConnection): Promise<void> {
   const parser = new SqlTemplateParser();
   const now = Date.now();
-  for (const row of BUILTIN) {
+  for (const row of BUILTIN_PROVIDER_ROWS) {
     await executeTemplate(
       conn,
       parser,
