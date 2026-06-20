@@ -9,14 +9,14 @@ import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-ses
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
 import { restorePathToRevision } from "@/domain/message-checkpoint/logic/restore-path.js";
-import { sweepSessionRevisions } from "@/domain/message-checkpoint/logic/revision-gc.js";
-import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import {
+  truncateTailDepsFromTx,
+  truncateTailInTransaction,
+} from "@/domain/message-checkpoint/logic/truncate-tail-in-transaction.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
-import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import {
@@ -29,6 +29,8 @@ import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
+import { markSessionWorktreeDirty } from "@/service/prompt/logic/mark-session-worktree-dirty.js";
+import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type {
   MessageRollbackService,
   RollbackOptions,
@@ -41,6 +43,7 @@ export interface MessageRollbackServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly checkpoints: MessageCheckpointRepository;
+  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
 }
 
 /** 回滚计划：anchor、tail、待 reconcile 路径与目标树。 */
@@ -95,8 +98,19 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           );
         }
       }
-      await this.truncateTailState(tx, sessionId, plan);
+      await truncateTailInTransaction(tx, truncateTailDepsFromTx(tx), {
+        projectId: plan.projectId,
+        sessionId: plan.sessionId,
+        afterSeq: plan.anchor.seq,
+        sweepRevisions: true,
+      });
     });
+
+    markSessionWorktreeDirty(
+      this.deps.worktreeSnapshot,
+      projectId,
+      sessionId,
+    );
   }
 
   private async resolveRollbackPlan(
@@ -186,31 +200,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         await this.deletePathIfExists(vfs, logicalPath);
       }
     }
-  }
-
-  private async truncateTailState(
-    tx: TdbcConnection,
-    sessionId: string,
-    plan: RollbackPlan,
-  ): Promise<void> {
-    const revisions = new SqliteVfsRevisionRepository(tx);
-    const checkpoints = new SqliteMessageCheckpointRepository(tx);
-    const messages = new SqliteMessageRepository(tx);
-    const entries = new SqliteVfsEntryRepository(tx);
-
-    await checkpoints.deleteCheckpointsForMessages(
-      sessionId,
-      plan.tailMessageIds,
-    );
-    await messages.deleteAfterSeq(sessionId, plan.anchor.seq);
-
-    await sweepSessionRevisions(
-      revisions,
-      entries,
-      checkpoints,
-      plan.projectId,
-      sessionId,
-    );
   }
 
   private scopedVfs(

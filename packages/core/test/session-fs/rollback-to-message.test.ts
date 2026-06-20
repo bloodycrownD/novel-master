@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
+import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 
@@ -100,5 +102,39 @@ describe("rollbackToMessage", () => {
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
+  });
+
+  it("rollback 成功 markDirty worktree 快照", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const store = createSessionWorktreeSnapshotStore();
+    const rollback = createMessageRollbackService(ctx.conn, store);
+
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "bye" }],
+    });
+
+    await rollback.rollbackToMessage(session.id, project.id, user1.id);
+    assert.equal(store.isDirty(project.id, session.id), true);
+  });
+
+  it("skipVfsReconcile 仍 markDirty", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const store = createSessionWorktreeSnapshotStore();
+    const rollback = createMessageRollbackService(ctx.conn, store);
+
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+
+    await rollback.rollbackToMessage(session.id, project.id, user1.id, {
+      skipVfsReconcile: true,
+    });
+    assert.equal(store.isDirty(project.id, session.id), true);
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 1);
   });
 });

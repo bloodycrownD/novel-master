@@ -7,9 +7,9 @@ import { DefaultEventOrchestrator } from "../../src/service/events/impl/event-or
 function baseOrchestrator(
   config: EventsConfig,
   extras?: {
-    readonly onHide?: () => void | Promise<void>;
+    readonly onEffectsHide?: () => void | Promise<void>;
     readonly onRunAgent?: () => void | Promise<void>;
-    readonly markDirty?: () => void;
+    readonly onOrchestratorMarkDirty?: () => void;
   },
 ) {
   const messages: ChatMessage[] = [
@@ -44,16 +44,26 @@ function baseOrchestrator(
         return messages;
       },
     } as never,
+    messageTranscriptEffects: {
+      async hideMessagesInRange(
+        _projectId: string,
+        _sessionId: string,
+        _fromSeq: number,
+        _toSeq: number,
+      ) {
+        await extras?.onEffectsHide?.();
+        return 1;
+      },
+      async showMessagesInRange() {
+        return 0;
+      },
+      async truncateMessagesAfter() {},
+    } as never,
     worktreeSnapshot: {
-      markDirty: extras?.markDirty ?? (() => undefined),
+      markDirty: extras?.onOrchestratorMarkDirty ?? (() => undefined),
     } as never,
     worktree: () => ({}) as never,
-    createSession: () =>
-      ({
-        async hideRange() {
-          await extras?.onHide?.();
-        },
-      }) as never,
+    createSession: () => ({}) as never,
     runAgent: extras?.onRunAgent
       ? {
           messages: {} as never,
@@ -71,8 +81,9 @@ function baseOrchestrator(
 }
 
 describe("event orchestrator (DAG)", () => {
-  it("marks worktree snapshot dirty after hide-message", async () => {
-    let dirty = false;
+  it("hide-message 委托 effects，orchestrator 不二次 markDirty", async () => {
+    let effectsHideCalled = false;
+    let orchestratorMarkDirtyCalled = false;
     const config: EventsConfig = {
       schemaVersion: 2,
       events: {
@@ -82,8 +93,11 @@ describe("event orchestrator (DAG)", () => {
       },
     };
     const orch = baseOrchestrator(config, {
-      markDirty: () => {
-        dirty = true;
+      onEffectsHide: () => {
+        effectsHideCalled = true;
+      },
+      onOrchestratorMarkDirty: () => {
+        orchestratorMarkDirtyCalled = true;
       },
     });
     const result = await orch.emit("session.compaction.requested", {
@@ -92,7 +106,8 @@ describe("event orchestrator (DAG)", () => {
       trigger: "manual",
     });
     assert.equal(result.ok, true);
-    assert.equal(dirty, true);
+    assert.equal(effectsHideCalled, true);
+    assert.equal(orchestratorMarkDirtyCalled, false);
   });
 
   it("returns explicit failure for unknown dependency during runtime prevalidation", async () => {
