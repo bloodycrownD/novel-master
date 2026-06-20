@@ -14,7 +14,9 @@ export type ProviderErrorCode =
   | "API_KEY_NOT_SET"
   | "MODEL_NOT_SAVED"
   | "UNSUPPORTED_CONTENT"
-  | "UNSUPPORTED";
+  | "UNSUPPORTED"
+  | "MALFORMED_SSE"
+  | "INVALID_TOOL_ARGUMENTS";
 
 /**
  * Unified error for provider service and LLM HTTP operations.

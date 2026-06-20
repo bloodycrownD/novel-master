@@ -16,6 +16,12 @@ import {
 import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import {
+  assertSseParseSucceededOrThrow,
+  recordMalformedSseLine,
+  type SseParseDiagnostics,
+} from "./sse-parse-errors.js";
+import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,7 +34,7 @@ type FunctionCallAccumulator = {
   thinkingSignature?: string;
 };
 
-export type GeminiSseParserState = {
+export type GeminiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -36,6 +42,7 @@ export type GeminiSseParserState = {
   functionCalls: Map<string, FunctionCallAccumulator>;
   streamRaw: unknown;
   inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
+  emittedFunctionCallKeys: Set<string>;
 };
 
 function readThoughtSignature(part: Record<string, unknown>): string | undefined {
@@ -50,12 +57,37 @@ export function createGeminiSseParserState(): GeminiSseParserState {
     thinkingParts: [],
     functionCalls: new Map(),
     streamRaw: undefined,
+    malformedLineCount: 0,
+    emittedFunctionCallKeys: new Set(),
   };
+}
+
+function tryEmitGeminiToolUseIfComplete(
+  state: GeminiSseParserState,
+  key: string,
+  onStream?: (event: LlmStreamEvent) => void,
+): void {
+  if (state.emittedFunctionCallKeys.has(key)) {
+    return;
+  }
+  const acc = state.functionCalls.get(key);
+  if (acc == null || acc.name === "" || acc.argsJson === "") {
+    return;
+  }
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(acc.argsJson) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  state.emittedFunctionCallKeys.add(key);
+  onStream?.({ type: "tool-use", id: acc.id, name: acc.name, input });
 }
 
 function mergeFunctionCallPart(
   state: GeminiSseParserState,
   part: Record<string, unknown>,
+  onStream?: (event: LlmStreamEvent) => void,
 ): void {
   const fc = part.functionCall;
   if (!isRecord(fc) || typeof fc.name !== "string") {
@@ -81,6 +113,7 @@ function mergeFunctionCallPart(
   if (sig != null) {
     acc.thinkingSignature = sig;
   }
+  tryEmitGeminiToolUseIfComplete(state, key, onStream);
 }
 
 function processGeminiResponseChunk(
@@ -129,7 +162,7 @@ function processGeminiResponseChunk(
       }
     }
     if (part.functionCall != null) {
-      mergeFunctionCallPart(state, part);
+      mergeFunctionCallPart(state, part, onStream);
     }
   }
 }
@@ -150,6 +183,7 @@ function processGeminiSseLine(
   try {
     event = JSON.parse(payload) as Record<string, unknown>;
   } catch {
+    recordMalformedSseLine(state, payload);
     return;
   }
   processGeminiResponseChunk(state, event, onStream);
@@ -167,16 +201,21 @@ export function feedGeminiSseChunk(
 
 function functionCallsToToolUses(
   state: GeminiSseParserState,
+  strict = false,
 ): Array<{ id: string; name: string; input: Record<string, unknown> }> {
   const out: Array<{ id: string; name: string; input: Record<string, unknown> }> =
     [];
   for (const acc of state.functionCalls.values()) {
     let input: Record<string, unknown> = {};
     if (acc.argsJson !== "") {
-      try {
-        input = JSON.parse(acc.argsJson) as Record<string, unknown>;
-      } catch {
-        input = {};
+      if (strict) {
+        input = parseToolArgumentsJson(acc.argsJson, "gemini");
+      } else {
+        try {
+          input = JSON.parse(acc.argsJson) as Record<string, unknown>;
+        } catch {
+          input = {};
+        }
       }
     }
     out.push({
@@ -197,6 +236,7 @@ function emitToolUsesFromAccumulators(
     thinkingSignature?: string;
   }[],
   onStream?: (event: LlmStreamEvent) => void,
+  emittedKeys?: Set<string>,
 ): ContentBlock[] {
   const blocks: ContentBlock[] = [];
   let signatureEmitted = false;
@@ -215,12 +255,17 @@ function emitToolUsesFromAccumulators(
       input: tu.input,
       ...(thinkingSignature != null ? { thinkingSignature } : {}),
     });
-    onStream?.({
-      type: "tool-use",
-      id: tu.id,
-      name: tu.name,
-      input: tu.input,
-    });
+    if (emittedKeys == null || !emittedKeys.has(tu.id)) {
+      if (emittedKeys != null) {
+        emittedKeys.add(tu.id);
+      }
+      onStream?.({
+        type: "tool-use",
+        id: tu.id,
+        name: tu.name,
+        input: tu.input,
+      });
+    }
   }
   return blocks;
 }
@@ -256,7 +301,15 @@ export function finishGeminiSse(
   if (cleansed.visible !== "") {
     blocks.push({ type: "text", text: cleansed.visible });
   }
-  blocks.push(...emitToolUsesFromAccumulators(functionCallsToToolUses(state), onStream));
+  blocks.push(
+    ...emitToolUsesFromAccumulators(
+      functionCallsToToolUses(state, true),
+      onStream,
+      state.emittedFunctionCallKeys,
+    ),
+  );
+
+  assertSseParseSucceededOrThrow(state, blocks, "gemini");
 
   if (blocks.length === 0 && state.streamRaw != null) {
     const raw = state.streamRaw as {

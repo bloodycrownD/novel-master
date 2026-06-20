@@ -121,4 +121,27 @@ describe("anthropic-sse-parser", () => {
       assert.equal(blocks[0].data, "blob");
     }
   });
+  it("SSE-MAL-01: only malformed lines throw on finish", () => {
+    const state = createAnthropicSseParserState();
+    feedAnthropicSseChunk(state, "data: {bad\n\n");
+    assert.throws(() => finishAnthropicSse(state));
+  });
+
+  it("TU-04: invalid partial_json on block stop throws", () => {
+    const state = createAnthropicSseParserState();
+    assert.throws(() => {
+      feedAnthropicSseChunk(
+        state,
+        [
+          "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
+          "",
+          "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{bad\"}}",
+          "",
+          "data: {\"type\":\"content_block_stop\"}",
+          "",
+        ].join("\n"),
+      );
+    });
+  });
+
 });

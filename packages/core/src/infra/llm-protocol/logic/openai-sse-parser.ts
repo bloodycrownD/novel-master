@@ -13,6 +13,11 @@ import {
   openAiStreamDeltaToEvents,
 } from "./openai-content-mapper.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import {
+  assertSseParseSucceededOrThrow,
+  recordMalformedSseLine,
+  type SseParseDiagnostics,
+} from "./sse-parse-errors.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -25,7 +30,7 @@ type ToolCallAccumulator = {
 };
 
 /** Mutable accumulator state for one OpenAI SSE response. */
-export type OpenAiSseParserState = {
+export type OpenAiSseParserState = SseParseDiagnostics & {
   buffer: string;
   textParts: string[];
   thinkingParts: string[];
@@ -46,6 +51,7 @@ export function createOpenAiSseParserState(): OpenAiSseParserState {
     emittedToolIndices: new Set(),
     lastEvent: undefined,
     lastUsageEvent: undefined,
+    malformedLineCount: 0,
   };
 }
 
@@ -69,6 +75,7 @@ export function feedOpenAiSseChunk(
     try {
       event = JSON.parse(payload) as Record<string, unknown>;
     } catch {
+      recordMalformedSseLine(state, payload);
       return;
     }
     state.lastEvent = event;
@@ -98,8 +105,10 @@ export function finishOpenAiSse(
   if (state.buffer !== "") {
     feedOpenAiSseChunk(state, "\n", onStream);
   }
+  const blocks = openAiStreamAccumulatorsToBlocks(state, onStream);
+  assertSseParseSucceededOrThrow(state, blocks, "openai");
   return {
-    blocks: openAiStreamAccumulatorsToBlocks(state, onStream),
+    blocks,
     streamRaw: state.lastUsageEvent ?? state.lastEvent,
   };
 }

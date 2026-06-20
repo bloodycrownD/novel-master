@@ -11,6 +11,12 @@ import type { LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
+import {
+  assertSseParseSucceededOrThrow,
+  recordMalformedSseLine,
+  type SseParseDiagnostics,
+} from "./sse-parse-errors.js";
+import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -28,7 +34,7 @@ type ActiveBlock =
   | { type: "redacted_thinking"; data: string; signature?: string }
   | { type: "tool_use"; index: number };
 
-export type AnthropicSseParserState = {
+export type AnthropicSseParserState = SseParseDiagnostics & {
   buffer: string;
   blocks: ContentBlock[];
   active: ActiveBlock | null;
@@ -43,6 +49,7 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
     active: null,
     toolUses: [],
     streamRaw: undefined,
+    malformedLineCount: 0,
   };
 }
 
@@ -87,14 +94,7 @@ function flushActiveBlock(
     case "tool_use": {
       const tu = state.toolUses[active.index];
       if (tu != null) {
-        let input: Record<string, unknown> = {};
-        try {
-          input = tu.inputJson
-            ? (JSON.parse(tu.inputJson) as Record<string, unknown>)
-            : {};
-        } catch {
-          input = {};
-        }
+        const input = parseToolArgumentsJson(tu.inputJson, "anthropic");
         const name = toolNames?.fromWire(tu.name) ?? tu.name;
         state.blocks.push({
           type: "tool_use",
@@ -159,6 +159,7 @@ function processAnthropicSseLine(
   try {
     event = JSON.parse(payload) as Record<string, unknown>;
   } catch {
+    recordMalformedSseLine(state, payload);
     return;
   }
   const type = event.type;
@@ -252,6 +253,7 @@ export function finishAnthropicSse(
 
   flushActiveBlock(state, onStream, toolNames);
 
+  assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
   return { blocks: state.blocks, streamRaw: state.streamRaw };
 }
 

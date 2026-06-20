@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+﻿import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { AnthropicProtocolAdapter } from "../../src/infra/llm-protocol/impl/anthropic.adapter.js";
 
@@ -96,4 +96,42 @@ describe("AnthropicProtocolAdapter HTTP", () => {
       assert.equal(result.blocks[0].name, "foo.bar");
     }
   });
+
+  it("P-ANT-01: stream tool_use emits tool-use at content_block_stop", async () => {
+    const sse = [
+      "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"tu_1\",\"name\":\"read\"}}",
+      "",
+      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}",
+      "",
+      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"/tmp\\\"}\"}}",
+      "",
+      "data: {\"type\":\"content_block_stop\"}",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const toolUses: Array<{ input: Record<string, unknown> }> = [];
+    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+    await adapter.chat({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "key",
+      vendorModelId: "claude-3-5-sonnet",
+      userContent: "read",
+      stream: true,
+      tools: [{ name: "read", description: "d", inputSchema: {} }],
+      onStream: (ev) => {
+        if (ev.type === "tool-use") toolUses.push(ev);
+      },
+    });
+
+    assert.equal(toolUses.length, 1);
+    assert.equal(toolUses[0]!.input.path, "/tmp");
+  });
 });
+

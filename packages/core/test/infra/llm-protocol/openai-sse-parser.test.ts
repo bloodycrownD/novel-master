@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createOpenAiSseParserState,
@@ -154,4 +154,82 @@ describe("openai-sse-parser", () => {
     assert.deepEqual(deltas, ["Stream"]);
     assert.equal((blocks[0] as { text: string }).text, "Stream");
   });
+
+  it("SSE-MAL-01: only malformed lines throw on finish", () => {
+    const state = createOpenAiSseParserState();
+    feedOpenAiSseChunk(state, "data: {not-json\n\n");
+    assert.throws(() => finishOpenAiSse(state));
+  });
+
+  it("SSE-MAL-02: malformed plus valid text still yields blocks", () => {
+    const state = createOpenAiSseParserState();
+    feedOpenAiSseChunk(state, "data: bad\n\n");
+    feedOpenAiSseChunk(
+      state,
+      "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n",
+    );
+    const { blocks } = finishOpenAiSse(state);
+    assert.equal(state.malformedLineCount, 1);
+    assert.equal(blocks.length, 1);
+  });
+
+  it("TU-01: tool-use after second arguments chunk before finish", () => {
+    const state = createOpenAiSseParserState();
+    const toolUses: unknown[] = [];
+    const onStream = (ev: { type: string }) => {
+      if (ev.type === "tool-use") toolUses.push(ev);
+    };
+    const chunk1 = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_1",
+                function: { name: "read", arguments: "{\"path\":" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const chunk2 = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [{ index: 0, function: { arguments: "\"/z\"}" } }],
+          },
+        },
+      ],
+    });
+    feedOpenAiSseChunk(state, "data: " + chunk1 + "\n\n", onStream);
+    assert.equal(toolUses.length, 0);
+    feedOpenAiSseChunk(state, "data: " + chunk2 + "\n\n", onStream);
+    assert.equal(toolUses.length, 1);
+    finishOpenAiSse(state, onStream);
+    assert.equal(toolUses.length, 1);
+  });
+
+  it("TU-04: invalid tool JSON at finish throws", () => {
+    const state = createOpenAiSseParserState();
+    const bad = JSON.stringify({
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "c1",
+                function: { name: "read", arguments: "{bad" },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    feedOpenAiSseChunk(state, "data: " + bad + "\n\n");
+    assert.throws(() => finishOpenAiSse(state));
+  });
 });
+

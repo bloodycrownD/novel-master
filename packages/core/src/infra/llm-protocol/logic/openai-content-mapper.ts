@@ -18,6 +18,7 @@ import {
   finishInlineThinkingAwareText,
 } from "./inline-thinking-parser.js";
 import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
+import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -291,6 +292,31 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   return blocks;
 }
 
+function tryEmitOpenAiToolUseIfComplete(
+  state: {
+    toolCalls: Map<number, ToolCallAccumulator>;
+    emittedToolIndices: Set<number>;
+  },
+  index: number,
+  onStream?: (event: LlmStreamEvent) => void,
+): void {
+  if (state.emittedToolIndices.has(index)) {
+    return;
+  }
+  const acc = state.toolCalls.get(index);
+  if (acc == null || acc.name === "" || acc.argumentsJson === "") {
+    return;
+  }
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(acc.argumentsJson) as Record<string, unknown>;
+  } catch {
+    return;
+  }
+  state.emittedToolIndices.add(index);
+  onStream?.({ type: "tool-use", id: acc.id, name: acc.name, input });
+}
+
 type ToolCallAccumulator = {
   id: string;
   name: string;
@@ -351,6 +377,7 @@ export function openAiStreamDeltaToEvents(
         acc.argumentsJson += fn.arguments;
       }
     }
+    tryEmitOpenAiToolUseIfComplete(state, index, onStream);
   }
 }
 
@@ -374,14 +401,7 @@ export function openAiStreamAccumulatorsToBlocks(
   const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);
   for (const index of indices) {
     const acc = state.toolCalls.get(index)!;
-    let input: Record<string, unknown> = {};
-    if (acc.argumentsJson !== "") {
-      try {
-        input = JSON.parse(acc.argumentsJson) as Record<string, unknown>;
-      } catch {
-        input = {};
-      }
-    }
+    const input = parseToolArgumentsJson(acc.argumentsJson, "openai");
     blocks.push({
       type: "tool_use",
       id: acc.id,

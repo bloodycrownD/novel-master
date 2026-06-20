@@ -135,4 +135,48 @@ describe("gemini-sse-parser", () => {
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
   });
+  it("SSE-MAL-02: malformed line with valid text", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(state, "data: oops\n\n");
+    feedGeminiSseChunk(
+      state,
+      "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"x\"}]}}]}\n\n",
+    );
+    const { blocks } = finishGeminiSse(state);
+    assert.equal(state.malformedLineCount, 1);
+    assert.equal(blocks.length, 1);
+  });
+
+  it("TU-02: midway tool-use when functionCall args complete", () => {
+    const state = createGeminiSseParserState();
+    const toolUses: unknown[] = [];
+    const onStream = (ev: { type: string }) => {
+      if (ev.type === "tool-use") toolUses.push(ev);
+    };
+    feedGeminiSseChunk(
+      state,
+      "data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"write\",\"args\":{\"path\":\"/a\"},\"id\":\"c1\"}}]}}]}\n",
+      onStream,
+    );
+    assert.equal(toolUses.length, 1);
+    feedGeminiSseChunk(
+      state,
+      "data: {\"candidates\":[{\"content\":{\"parts\":[{\"functionCall\":{\"name\":\"write\",\"args\":{\"path\":\"/a\",\"content\":\"hi\"},\"id\":\"c1\"}}]}}]}\n",
+      onStream,
+    );
+    assert.equal(toolUses.length, 1);
+    finishGeminiSse(state, onStream);
+    assert.equal(toolUses.length, 1);
+  });
+
+  it("TU-04: invalid args JSON at finish throws", () => {
+    const state = createGeminiSseParserState();
+    state.functionCalls.set("c1", {
+      name: "read",
+      argsJson: "{bad",
+      id: "c1",
+    });
+    assert.throws(() => finishGeminiSse(state));
+  });
+
 });
