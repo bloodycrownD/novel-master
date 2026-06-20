@@ -7,8 +7,9 @@ import {
   parseUserVfsActionFromText,
   UserVfsActionBody,
 } from "./user-vfs-action-transcript";
-import type { MessageVisibilityBatchMode } from "./transcript-selectable-role";
+import type { MessageBatchMode } from "./transcript-selectable-role";
 import {
+  isTailBatchRowSelectable,
   isTranscriptRowSelectable,
   transcriptSelectableRole,
 } from "./transcript-selectable-role";
@@ -25,7 +26,7 @@ interface MessageListProps {
   streamingThinking?: string;
   toolInvoking?: boolean;
   agentRunning?: boolean;
-  batchMode?: MessageVisibilityBatchMode | null;
+  batchMode?: MessageBatchMode | null;
   selectedIds?: ReadonlySet<string>;
   /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
   affectedIds?: ReadonlySet<string>;
@@ -95,8 +96,22 @@ export function MessageList({
           }
           const selected = selectedIds?.has(item.id) ?? false;
           const inRange = affectedIds?.has(item.id) ?? false;
-          const selectableRole = transcriptSelectableRole("user", batchMode);
-          const rowSelectable = isTranscriptRowSelectable(selectableRole);
+          const tailBatchRow = {
+            id: item.id,
+            role: "user",
+            seq: messages.find((m) => m.id === item.id)?.seq ?? 0,
+            selectable: true,
+          };
+          const rowSelectable =
+            batchMode === "restore" || batchMode === "delete"
+              ? isTailBatchRowSelectable(tailBatchRow)
+              : isTranscriptRowSelectable(
+                  transcriptSelectableRole("user", batchMode),
+                );
+          const selectableRole =
+            batchMode === "restore" || batchMode === "delete"
+              ? (rowSelectable ? "user" : "none")
+              : transcriptSelectableRole("user", batchMode);
 
           return (
             <div
@@ -135,8 +150,22 @@ export function MessageList({
         const inRange = affectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
 
-        const selectableRole = transcriptSelectableRole(msg.role, batchMode);
-        const rowSelectable = isTranscriptRowSelectable(selectableRole);
+        const tailBatchRow = {
+          id: msg.id,
+          role: msg.role,
+          seq: msg.seq,
+          selectable: true,
+        };
+        const rowSelectable =
+          batchMode === "restore" || batchMode === "delete"
+            ? isTailBatchRowSelectable(tailBatchRow)
+            : isTranscriptRowSelectable(
+                transcriptSelectableRole(msg.role, batchMode),
+              );
+        const selectableRole =
+          batchMode === "restore" || batchMode === "delete"
+            ? (rowSelectable ? (msg.role as "user" | "assistant") : "none")
+            : transcriptSelectableRole(msg.role, batchMode);
         const userVfsAction =
           msg.role === "user" ? parseUserVfsActionFromText(text) : null;
 

@@ -157,13 +157,11 @@ function DesktopOverlays() {
           sessionId,
         );
       }
-      if (result.ok) {
-        refreshWorkspaceTrees();
-      } else {
+      if (!result.ok) {
         showToast(result.message);
       }
     },
-    [workspacePrompt, projectId, sessionId, refreshWorkspaceTrees],
+    [workspacePrompt, projectId, sessionId],
   );
 
   const handleWorkspaceConfirm = useCallback(async () => {
@@ -264,6 +262,23 @@ function DesktopOverlays() {
           }}
         >
           恢复消息
+        </button>
+        <button
+          type="button"
+          data-session-action="delete-messages"
+          onClick={() => {
+            closeMenus();
+            if (projectId && sessionId) {
+              void runSessionAction(
+                "delete-messages",
+                projectId,
+                sessionId,
+                messageBatch,
+              );
+            }
+          }}
+        >
+          删除消息
         </button>
         <button
           type="button"
