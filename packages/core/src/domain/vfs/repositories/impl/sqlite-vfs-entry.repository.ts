@@ -47,10 +47,6 @@ function rowToEntry(row: Row): VfsEntry {
   };
 }
 
-function listPrefix(dir: string): string {
-  return dir === "/" ? "/%" : `${dir}/%`;
-}
-
 function relativeUnderDir(dir: string, entryPath: string): string {
   if (dir === "/") {
     return entryPath.slice(1);
@@ -79,7 +75,10 @@ export class SqliteVfsEntryRepository implements VfsEntryRepository {
 
   async list(dir: string, options?: VfsListOptions): Promise<VfsListEntry[]> {
     const normalizedDir = normalizePath(dir);
-    const likePattern = listPrefix(normalizedDir);
+    const likePattern =
+      normalizedDir === "/"
+        ? "/%"
+        : `${escapeLike(normalizedDir)}/%`;
     const rows = await queryTemplate<{ path: string; entry_kind: string }>(
       this.conn,
       this.parser,
