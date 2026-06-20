@@ -73,6 +73,17 @@ export {
   computeVisibilityBatchAffectedIds,
   selectVisibilityBatchEligibleIdsFromAnchor,
 } from "../domain/chat/logic/visibility-batch-range.js";
+export type {
+  TailBatchMode,
+  TailBatchRow,
+} from "../domain/chat/logic/tail-batch-range.js";
+export {
+  isTailBatchRowSelectable,
+  selectTailBatchEligibleIdsFromAnchor,
+  computeTailBatchAffectedIds,
+  computeTailBatchRangeFromSelection,
+  tailBatchDeleteAfterSeq,
+} from "../domain/chat/logic/tail-batch-range.js";
 export {
   listVisibleSorted,
   visibleFloorByMessageId,
@@ -99,3 +110,5 @@ export type {
 export type { ProjectService } from "../service/chat/project.port.js";
 export type { SessionService } from "../service/chat/session.port.js";
 export type { MessageService } from "../service/chat/message.port.js";
+export type { MessageTranscriptEffectsService } from "../service/chat/message-transcript-effects.port.js";
+export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";
