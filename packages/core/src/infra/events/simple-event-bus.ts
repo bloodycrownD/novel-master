@@ -1,5 +1,5 @@
 /**
- * Synchronous in-process typed event bus (Library infra).
+ * 进程内同步类型化事件总线（基础设施层）。
  *
  * @module infra/events/simple-event-bus
  */
@@ -10,11 +10,26 @@ export interface EventSubscription {
   unsubscribe(): void;
 }
 
-/** Synchronous publish/subscribe bus for a single process. */
+/** 同步 handler 抛错时的回调（可选）。 */
+export interface SimpleEventBusOptions {
+  /** handler 同步抛错时调用；默认 console.error */
+  readonly onHandlerError?: (eventType: string, error: unknown) => void;
+}
+
+/** 单进程同步 publish/subscribe 总线。 */
 export class SimpleEventBus {
   private readonly handlers = new Map<string, Set<EventHandler>>();
+  private readonly onHandlerError: (eventType: string, error: unknown) => void;
 
-  /** Registers a handler; returns subscription for cleanup. */
+  constructor(options?: SimpleEventBusOptions) {
+    this.onHandlerError =
+      options?.onHandlerError ??
+      ((eventType, err) => {
+        console.error("[SimpleEventBus]", eventType, err);
+      });
+  }
+
+  /** 注册 handler，返回用于取消订阅的对象。 */
   subscribe<T>(eventType: string, handler: EventHandler<T>): EventSubscription {
     let set = this.handlers.get(eventType);
     if (set == null) {
@@ -32,18 +47,22 @@ export class SimpleEventBus {
     };
   }
 
-  /** Invokes all handlers for the event type in registration order. */
+  /** 按注册顺序同步调用该事件类型的全部 handler。 */
   publish<T>(eventType: string, payload: T): void {
     const set = this.handlers.get(eventType);
     if (set == null) {
       return;
     }
     for (const handler of set) {
-      handler(payload);
+      try {
+        handler(payload);
+      } catch (err) {
+        this.onHandlerError(eventType, err);
+      }
     }
   }
 
-  /** Removes every handler (tests). */
+  /** 移除全部 handler（测试用）。 */
   clear(): void {
     this.handlers.clear();
   }

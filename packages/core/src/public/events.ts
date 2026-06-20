@@ -38,6 +38,7 @@ export type { EventOrchestrator, EventEmitContext } from "../service/events/even
 export {
   createEventOrchestrator,
   createRunAgentHandlerDeps,
+  detachEventOrchestratorFromBus,
 } from "../service/events/create-event-orchestrator.js";
 export type { EventRunResult, EventActionFailure } from "../service/events/event-run-result.js";
 export { EventsError } from "../errors/events-errors.js";

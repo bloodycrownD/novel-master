@@ -26,6 +26,7 @@ import {
 import type { EventOrchestrator } from "./event-orchestrator.port.js";
 
 export interface CreateEventOrchestratorDeps {
+  readonly onActionFailure?: DefaultEventOrchestratorDeps["onActionFailure"];
   readonly eventsConfig: EventsConfigStore;
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;

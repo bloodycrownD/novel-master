@@ -37,6 +37,11 @@ import {
 } from "@/domain/events-config/logic/validate-event-action-dag.js";
 
 export interface DefaultEventOrchestratorDeps {
+  readonly onActionFailure?: (input: {
+    readonly eventType: string;
+    readonly ctx: EventEmitContext;
+    readonly result: EventRunResult;
+  }) => void;
   readonly eventsConfig: EventsConfigStore;
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
@@ -58,22 +63,56 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
       return;
     }
     this.busAttached = true;
-    const handler = async (eventType: string, payload: unknown) => {
+    const runFromBus = (eventType: string, payload: unknown) => {
       const ctx = payloadToEmitContext(payload);
       if (ctx == null) {
         return;
       }
-      await this.emit(eventType, ctx);
+      void this.emit(eventType, ctx)
+        .then((result) => {
+          if (!result.ok) {
+            this.reportActionFailure(eventType, ctx, result);
+          }
+        })
+        .catch((err) => {
+          this.reportActionFailure(eventType, ctx, {
+            ok: false,
+            partialFailure: false,
+            failures: [
+              {
+                actionType: eventType,
+                error: err instanceof Error ? err.message : String(err),
+              },
+            ],
+          });
+        });
     };
     this.busSubscriptions.push(
-      this.deps.eventBus.subscribe(
-        EVENT_SESSION_COMPACTION_REQUESTED,
-        (p) => void handler(EVENT_SESSION_COMPACTION_REQUESTED, p),
+      this.deps.eventBus.subscribe(EVENT_SESSION_COMPACTION_REQUESTED, (p) =>
+        runFromBus(EVENT_SESSION_COMPACTION_REQUESTED, p),
       ),
       this.deps.eventBus.subscribe(EVENT_SESSION_MESSAGE_RECEIVED, (p) =>
-        void handler(EVENT_SESSION_MESSAGE_RECEIVED, p),
+        runFromBus(EVENT_SESSION_MESSAGE_RECEIVED, p),
       ),
     );
+  }
+
+  private reportActionFailure(
+    eventType: string,
+    ctx: EventEmitContext,
+    result: EventRunResult,
+  ): void {
+    if (this.deps.onActionFailure != null) {
+      this.deps.onActionFailure({ eventType, ctx, result });
+      return;
+    }
+    console.error("[EventOrchestrator]", {
+      eventType,
+      projectId: ctx.projectId,
+      sessionId: ctx.sessionId,
+      ok: result.ok,
+      failures: result.failures,
+    });
   }
 
   /** Tear down bus listeners (rebootstrap / tests). */
