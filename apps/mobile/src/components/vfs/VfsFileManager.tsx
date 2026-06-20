@@ -42,7 +42,7 @@ import {
   type MappedVfsRow,
 } from './vfs-row-mapper';
 import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/provider";
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 
 import { isVfsError } from "@novel-master/core/vfs";
 import {

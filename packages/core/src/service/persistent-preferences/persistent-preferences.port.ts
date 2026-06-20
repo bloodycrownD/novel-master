@@ -22,6 +22,11 @@ export interface PersistentPreferences {
   setLlmStreamEnabled(enabled: boolean): Promise<void>;
   resetLlmStreamEnabled(): Promise<void>;
 
+  /** User VFS 统一 tool turn（未设置时默认 true）。 */
+  getUserVfsUnifiedToolTurn(): Promise<boolean>;
+  setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void>;
+  resetUserVfsUnifiedToolTurn(): Promise<void>;
+
   /** All entries in `nm-preferences`, sorted by key (for `nm preferences list`). */
   list(): Promise<ReadonlyArray<{ key: string; value: string }>>;
 

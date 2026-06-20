@@ -8,6 +8,10 @@ import {
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+import {
+  refreshUserVfsUnifiedToolTurnSnapshot,
+  resetUserVfsUnifiedToolTurnSnapshotForTests,
+} from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 
 function mockUserVfsTurn(overrides: {
   readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
@@ -148,6 +152,28 @@ describe("runAgentTurn", () => {
         return true;
       },
     );
+  });
+
+  it("flag 关闭时不调用 flush", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let flushCalled = false;
+    const runtime = makeRuntime({
+      userVfsTurn: mockUserVfsTurn({
+        flushPendingUserVfsTurns: async () => {
+          flushCalled = true;
+          return { flushed: false };
+        },
+      }),
+      append: async () => ({ id: "m-new" }),
+    });
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "hello");
+    } catch {
+      // runner deps stubbed
+    }
+    assert.equal(flushCalled, false);
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
   it("flushPendingUserVfsTurns 在 append user 之前调用", async () => {

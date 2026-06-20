@@ -19,7 +19,7 @@ import {toastMessage} from '../../errors/toast-message';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
 import {sessionSaveVfsFile} from '../../services/vfs-operations.service';
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/provider";
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,

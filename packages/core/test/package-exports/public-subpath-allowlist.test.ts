@@ -7,6 +7,7 @@ const SUBPATHS = [
   "chat",
   "compaction",
   "events",
+  "feature-flags",
   "prompt",
   "provider",
   "regex",

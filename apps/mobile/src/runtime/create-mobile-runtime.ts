@@ -26,6 +26,7 @@ import {
   createPersistentPreferences,
   createPersistentState,
 } from '@novel-master/core';
+import {refreshUserVfsUnifiedToolTurnSnapshot} from '@novel-master/core/feature-flags';
 import {
   createProviderServices,
   createDefaultTokenCounterRegistry,
@@ -60,6 +61,8 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const state = createPersistentState(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
+  const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
+  refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
   const regexConfig = createRegexConfigService(conn, state);
 
   const secretStore = createCompositeSecretStore({

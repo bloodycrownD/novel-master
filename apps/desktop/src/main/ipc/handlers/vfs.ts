@@ -17,7 +17,7 @@ import type {
   VfsZipImportResult,
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/provider";
+import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 
 import { buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp } from "@novel-master/core/vfs";
 import { BrowserWindow } from "electron";

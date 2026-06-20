@@ -32,6 +32,7 @@ import {
   createPersistentPreferences,
   createPersistentState,
 } from "@novel-master/core";
+import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 import { createRegexConfigService } from "@novel-master/core/regex";
 import {
   createMessageCheckpointService,
@@ -68,6 +69,8 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const state = createPersistentState(conn);
   const kkv = createKkvService(conn);
   const preferences = createPersistentPreferences(conn);
+  const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
+  refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
   const regexConfig = createRegexConfigService(conn, state);
 
   const skspName = getPlatformSkspName();

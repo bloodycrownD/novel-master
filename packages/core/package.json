@@ -26,6 +26,10 @@
       "types": "./dist/public/events.d.ts",
       "import": "./dist/public/events.js"
     },
+    "./feature-flags": {
+      "types": "./dist/public/feature-flags.d.ts",
+      "import": "./dist/public/feature-flags.js"
+    },
     "./prompt": {
       "types": "./dist/public/prompt.d.ts",
       "import": "./dist/public/prompt.js"

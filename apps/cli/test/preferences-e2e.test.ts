@@ -190,6 +190,42 @@ describe("preferences CLI e2e", () => {
     }
   });
 
+  it("vfs.userVfsUnifiedToolTurn set/get/reset", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "nm-pref-vfs-flag-"));
+    const dbPath = join(dir, "novel.db");
+    try {
+      runNm([
+        "preferences",
+        "set",
+        "vfs.userVfsUnifiedToolTurn",
+        "false",
+        "--db",
+        dbPath,
+      ]);
+      const get = runNm([
+        "preferences",
+        "get",
+        "vfs.userVfsUnifiedToolTurn",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(get.status, 0, get.stderr);
+      assert.equal(get.stdout.trim(), "false");
+
+      runNm(["preferences", "reset", "vfs.userVfsUnifiedToolTurn", "--db", dbPath]);
+      const afterReset = runNm([
+        "preferences",
+        "get",
+        "vfs.userVfsUnifiedToolTurn",
+        "--db",
+        dbPath,
+      ]);
+      assert.equal(afterReset.stdout.trim(), "true");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("T6: rejects retired preference keys", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-pref-v2-"));
     const dbPath = join(dir, "novel.db");

@@ -69,4 +69,29 @@ describe("PersistentPreferences", () => {
       assert.equal(await ctx.preferences.getLlmStreamEnabled(), false);
     });
   });
+
+  describe("vfs.userVfsUnifiedToolTurn", () => {
+    it("defaults to true when unset", async () => {
+      const ctx = getNovelMasterTestContext();
+      assert.equal(await ctx.preferences.getUserVfsUnifiedToolTurn(), true);
+    });
+
+    it("boolean round-trip and reset", async () => {
+      const ctx = getNovelMasterTestContext();
+      await ctx.preferences.setUserVfsUnifiedToolTurn(false);
+      assert.equal(await ctx.preferences.getUserVfsUnifiedToolTurn(), false);
+      await ctx.preferences.resetUserVfsUnifiedToolTurn();
+      assert.equal(await ctx.preferences.getUserVfsUnifiedToolTurn(), true);
+    });
+
+    it("throws PreferencesError on invalid stored boolean", async () => {
+      const ctx = getNovelMasterTestContext();
+      const kkv = createKkvService(ctx.conn);
+      await kkv.set("nm-preferences", "vfs.userVfsUnifiedToolTurn", "not-a-bool");
+      await assert.rejects(
+        () => ctx.preferences.getUserVfsUnifiedToolTurn(),
+        (e: unknown) => e instanceof PreferencesError && e.code === "INVALID_VALUE",
+      );
+    });
+  });
 });

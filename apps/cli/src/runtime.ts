@@ -8,6 +8,7 @@ import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { registerTokenizerNodeDriver } from "@novel-master/tokenizer-driver-node";
 import { bootstrapNovelMaster, createPersistentPreferences, createPersistentState, open, type PersistentPreferences, type PersistentState, type TdbcConnection } from "@novel-master/core";
+import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/feature-flags";
 
 import { createAgentRegistryService } from "@novel-master/core/agent";
 import {
@@ -143,6 +144,8 @@ export async function createNovelMasterRuntime(
   const state = createPersistentState(conn);
   const regexConfig = createRegexConfigService(conn, state);
   const preferences = createPersistentPreferences(conn);
+  const userVfsUnifiedToolTurnEnabled = await preferences.getUserVfsUnifiedToolTurn();
+  refreshUserVfsUnifiedToolTurnSnapshot(userVfsUnifiedToolTurnEnabled);
   const scope = new CliScopeResolver(state);
 
   const dbStore = resolveSkspDriver("windows").createStore(conn);

@@ -37,6 +37,7 @@
   "parseApplicationModelId",
   "parseTokenCounterModePref",
   "providerApiKeyRef",
+  "refreshUserVfsUnifiedToolTurnSnapshot",
   "registerTokenizerDriver",
   "resolveContextWindowTokens",
   "resolveTokenCounterModeForModel",

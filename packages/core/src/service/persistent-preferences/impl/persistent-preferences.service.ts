@@ -12,6 +12,7 @@ import type { PersistentPreferences } from "../persistent-preferences.port.js";
 import {
   PREF_KEY_CHAT_LLM_STREAM,
   PREF_KEY_SESSION_FS_VERSION_CHECK,
+  PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
   PREFERENCES_MODULE,
 } from "./preference-keys.js";
 
@@ -51,6 +52,25 @@ export class DefaultPersistentPreferences implements PersistentPreferences {
 
   async resetLlmStreamEnabled(): Promise<void> {
     await this.deletePref(PREF_KEY_CHAT_LLM_STREAM);
+  }
+
+  async getUserVfsUnifiedToolTurn(): Promise<boolean> {
+    return this.getBooleanPref(
+      PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
+      true,
+    );
+  }
+
+  async setUserVfsUnifiedToolTurn(enabled: boolean): Promise<void> {
+    await this.kkv.set(
+      PREFERENCES_MODULE,
+      PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN,
+      formatBoolean(enabled),
+    );
+  }
+
+  async resetUserVfsUnifiedToolTurn(): Promise<void> {
+    await this.deletePref(PREF_KEY_VFS_USER_VFS_UNIFIED_TOOL_TURN);
   }
 
   async list(): Promise<ReadonlyArray<{ key: string; value: string }>> {
