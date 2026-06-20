@@ -1,5 +1,5 @@
 /**
- * 用户 VFS U-A-U-A 服务工厂。
+ * 鐢ㄦ埛 VFS U-A-U-A 鏈嶅姟宸ュ巶銆?
  *
  * @module service/chat/create-user-vfs-turn-service
  */
@@ -24,14 +24,14 @@ import type {
   UserVfsTurnService,
 } from "./user-vfs-turn.port.js";
 
-/** `createUserVfsTurnServiceBundle` 返回值。 */
+/** `createUserVfsTurnServiceBundle` 杩斿洖鍊笺€?*/
 export interface UserVfsTurnServiceBundle {
   readonly userVfsTurn: UserVfsTurnService;
   readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
 }
 
 /**
- * 创建用户 VFS turn 服务与桥接 append 闭包（共享连接与 repo）。
+ * 鍒涘缓鐢ㄦ埛 VFS turn 鏈嶅姟涓庢ˉ鎺?append 闂寘锛堝叡浜繛鎺ヤ笌 repo锛夈€?
  */
 export function createUserVfsTurnServiceBundle(
   conn: TdbcConnection,
@@ -70,6 +70,7 @@ export function createUserVfsTurnServiceBundle(
   });
 
   const userVfsTurn = new DefaultUserVfsTurnService({
+    conn,
     sessions: sessionRepo,
     messages,
     toolRunner,
@@ -83,7 +84,7 @@ export function createUserVfsTurnServiceBundle(
   };
 }
 
-/** 创建 {@link UserVfsTurnService} 实例。 */
+/** 鍒涘缓 {@link UserVfsTurnService} 瀹炰緥銆?*/
 export function createUserVfsTurnService(
   conn: TdbcConnection,
 ): UserVfsTurnService {

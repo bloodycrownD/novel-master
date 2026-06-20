@@ -287,6 +287,7 @@ describe("UserVfsTurnService", () => {
     } as ToolRunner<BuiltinToolContext>;
 
     const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
       sessions: sessionRepo,
       messages,
       toolRunner: trackingRunner,
@@ -362,6 +363,7 @@ describe("UserVfsTurnService", () => {
     const toolRunner = new ToolRunner(registry);
 
     const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
       sessions: sessionRepo,
       messages,
       toolRunner,
@@ -437,6 +439,7 @@ describe("UserVfsTurnService", () => {
     });
 
     const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
       sessions: sessionRepo,
       messages,
       toolRunner,
@@ -451,4 +454,242 @@ describe("UserVfsTurnService", () => {
     assert.equal(result.ok, false);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
   });
+
+
+  it("T1：第二次 tool 失败时回滚已成功 path 且 pending 为空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const innerRunner = new ToolRunner(registry);
+    const toolRunner = {
+      runParallel: async (calls, toolCtx) => {
+        const outcomes = [];
+        for (let index = 0; index < calls.length; index += 1) {
+          const call = calls[index];
+          if (index === 1) {
+            outcomes.push({ ok: false as const, error: new Error("second fail") });
+            continue;
+          }
+          try {
+            const output = await innerRunner.call(call.name, call.input, toolCtx);
+            outcomes.push({ ok: true as const, output });
+          } catch (error: unknown) {
+            outcomes.push({ ok: false as const, error });
+          }
+        }
+        return outcomes;
+      },
+      call: innerRunner.call.bind(innerRunner),
+    } as ToolRunner<BuiltinToolContext>;
+    const messageRepo = new SqliteMessageRepository(ctx.conn);
+    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new CheckpointRepo(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const messages = new DefaultMessageService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages: messageRepo,
+      vfs: vfsRepo,
+      checkpoints: checkpointRepo,
+      revisions: revisionRepo,
+    });
+
+    const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages,
+      toolRunner,
+      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
+      messageCheckpoint: createMessageCheckpointService(ctx.conn),
+    });
+
+    const result = await userVfsTurn.executeOp(session.id, {
+      actionXml:
+        '<user-vfs-action kind="save" path="/a.md" method="write" />\n<user-vfs-action kind="save" path="/b.md" method="write" />',
+      tools: [
+        {
+          id: "tu_1",
+          name: "write",
+          input: { path: "/a.md", content: "A" },
+        },
+        {
+          id: "tu_2",
+          name: "write",
+          input: { path: "/b.md", content: "B" },
+        },
+      ],
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    await assert.rejects(() => svfs.read("/a.md"));
+    await assert.rejects(() => svfs.read("/b.md"));
+  });
+
+  it("T2：两次 tool 均成功时 pending 一条且磁盘保留", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const toolRunner = new ToolRunner(registry);
+    const messageRepo = new SqliteMessageRepository(ctx.conn);
+    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new CheckpointRepo(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const messages = new DefaultMessageService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages: messageRepo,
+      vfs: vfsRepo,
+      checkpoints: checkpointRepo,
+      revisions: revisionRepo,
+    });
+
+    const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages,
+      toolRunner,
+      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
+      messageCheckpoint: createMessageCheckpointService(ctx.conn),
+    });
+
+    const ok = await userVfsTurn.executeOp(session.id, {
+      actionXml:
+        '<user-vfs-action kind="save" path="/1.md" method="write" />\n<user-vfs-action kind="save" path="/2.md" method="write" />',
+      tools: [
+        {
+          id: "tu_1",
+          name: "write",
+          input: { path: "/1.md", content: "one" },
+        },
+        {
+          id: "tu_2",
+          name: "write",
+          input: { path: "/2.md", content: "two" },
+        },
+      ],
+    });
+    assert.equal(ok.ok, true);
+
+    const pendingJson = await sessionRepo.getUserVfsPendingJson(session.id);
+    assert.ok(pendingJson);
+    assert.equal(JSON.parse(pendingJson).length, 1);
+    assert.equal((await svfs.read("/1.md")).content, "one");
+    assert.equal((await svfs.read("/2.md")).content, "two");
+  });
+
+  it("T3：flush 事务第二次 insert 失败时无消息且 pending 不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const toolRunner = new ToolRunner(registry);
+    const messageRepo = new SqliteMessageRepository(ctx.conn);
+    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new CheckpointRepo(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const messages = new DefaultMessageService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages: messageRepo,
+      vfs: vfsRepo,
+      checkpoints: checkpointRepo,
+      revisions: revisionRepo,
+    });
+
+    const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages,
+      toolRunner,
+      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
+      messageCheckpoint: createMessageCheckpointService(ctx.conn),
+    });
+
+    await userVfsTurn.executeOp(session.id, writeOp("/tx.md", "body"));
+    const pendingBefore = await sessionRepo.getUserVfsPendingJson(session.id);
+    assert.ok(pendingBefore);
+
+    let insertCount = 0;
+    const origInsert = SqliteMessageRepository.prototype.insert;
+    SqliteMessageRepository.prototype.insert = async function insertSpy(message) {
+      insertCount += 1;
+      if (insertCount === 2) {
+        throw new Error("flush insert aborted");
+      }
+      return origInsert.call(this, message);
+    };
+
+    try {
+      await assert.rejects(() =>
+        userVfsTurn.flushPendingUserVfsTurns(session.id),
+      );
+      assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
+      assert.equal(
+        await sessionRepo.getUserVfsPendingJson(session.id),
+        pendingBefore,
+      );
+    } finally {
+      SqliteMessageRepository.prototype.insert = origInsert;
+    }
+  });
+
+  it("T5：capture 失败时 flush 抛错且已落库 2 条消息、pending 已清空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    const registry = new ToolRegistry<BuiltinToolContext>();
+    registerBuiltinTools(registry);
+    const toolRunner = new ToolRunner(registry);
+    const messageRepo = new SqliteMessageRepository(ctx.conn);
+    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
+    const checkpointRepo = new CheckpointRepo(ctx.conn);
+    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
+    const messages = new DefaultMessageService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages: messageRepo,
+      vfs: vfsRepo,
+      checkpoints: checkpointRepo,
+      revisions: revisionRepo,
+    });
+
+    const userVfsTurn = new DefaultUserVfsTurnService({
+      conn: ctx.conn,
+      sessions: sessionRepo,
+      messages,
+      toolRunner,
+      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
+      messageCheckpoint: {
+        capture: async () => {
+          throw new Error("capture failed");
+        },
+      },
+    });
+
+    await userVfsTurn.executeOp(session.id, writeOp("/cap.md", "x"));
+    await assert.rejects(() =>
+      userVfsTurn.flushPendingUserVfsTurns(session.id),
+    );
+
+    const listed = await messages.listBySession(session.id);
+    assert.equal(listed.length, 2);
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+  });
+
 });
