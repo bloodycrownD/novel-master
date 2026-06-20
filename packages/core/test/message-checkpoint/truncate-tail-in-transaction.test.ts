@@ -1,5 +1,5 @@
 /**
- * truncate-tail-in-transaction 单测。
+ * truncate-tail-in-transaction 单测�?
  */
 
 import assert from "node:assert/strict";
@@ -8,9 +8,9 @@ import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
-  truncateTailDepsFromTx,
+  createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from "../../src/domain/message-checkpoint/logic/truncate-tail-in-transaction.js";
+} from "../../src/service/message-checkpoint/truncate-tail-wiring.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -31,7 +31,7 @@ describe("truncateTailInTransaction", () => {
     await ctx.messages.append(session.id, "user", textBlocks("3"));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(tx, truncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -49,7 +49,7 @@ describe("truncateTailInTransaction", () => {
     assert.equal((await svfs.read("/a.md")).content, "v1");
   });
 
-  it("tail 非空时清空 user_vfs_pending_json", async () => {
+  it("tail 非空时清�?user_vfs_pending_json", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -60,7 +60,7 @@ describe("truncateTailInTransaction", () => {
     await ctx.messages.append(session.id, "user", textBlocks("2"));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(tx, truncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,
@@ -83,7 +83,7 @@ describe("truncateTailInTransaction", () => {
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("only"));
 
     await ctx.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(tx, truncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: project.id,
         sessionId: session.id,
         afterSeq: m1.seq,

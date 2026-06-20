@@ -22,6 +22,9 @@ export interface MessageCheckpointServiceDeps {
 export class DefaultMessageCheckpointService implements MessageCheckpointService {
   constructor(private readonly deps: MessageCheckpointServiceDeps) {}
 
+  /**
+   * @remarks listSessionFileHeads 在 insert 事务外执行；单写 desktop 可接受，并发 session 写可能捕获陈旧 head。
+   */
   async capture(
     sessionId: string,
     projectId: string,

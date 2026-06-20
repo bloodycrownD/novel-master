@@ -82,8 +82,6 @@ export interface RunAgentTurnOptions {
   readonly allowResumeWithoutInput?: boolean;
   readonly signal?: AbortSignal;
   readonly onUserMessageAppended?: () => void | Promise<void>;
-  /** @deprecated 用户 plain 文本不再 capture；保留兼容旧调用方。 */
-  readonly awaitMessageCheckpoint?: boolean;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
   ) => void | Promise<void>;

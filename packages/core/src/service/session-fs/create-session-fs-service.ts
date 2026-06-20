@@ -1,5 +1,5 @@
 ﻿/**
- * Session FS service factory.
+ * Session FS 服务工厂。
  *
  * @module service/session-fs/create-session-fs-service
  */
@@ -12,9 +12,10 @@ import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-work
 import type { SessionFsService } from "./session-fs.port.js";
 
 /**
- * Creates a {@link SessionFsService} for the given connection.
- * * @param conn - Open connection after {@link bootstrapNovelMaster}
- * @param worktreeSnapshot - 涓?runtime orchestrator 鍏辩敤鐨?worktree 蹇収 store锛堢敓浜х幆澧冨繀浼狅級
+ * 为给定连接创建 {@link SessionFsService}。
+ *
+ * @param conn - {@link bootstrapNovelMaster} 之后的已打开连接
+ * @param worktreeSnapshot - 与 runtime orchestrator 共用的 worktree 快照 store（生产环境必传）
  */
 export function createSessionFsService(
   conn: TdbcConnection,
@@ -25,7 +26,7 @@ export function createSessionFsService(
   });
 }
 
-/** Deletes message checkpoint rows for a session (used on session delete / template pull). */
+/** 删除会话的消息 checkpoint 行（会话删除 / 模板拉取时使用）。 */
 export async function deleteSessionFsData(
   conn: TdbcConnection,
   sessionId: string,

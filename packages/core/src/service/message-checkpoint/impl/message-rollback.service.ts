@@ -10,9 +10,9 @@ import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
 import { restorePathToRevision } from "@/domain/message-checkpoint/logic/restore-path.js";
 import {
-  truncateTailDepsFromTx,
+  createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from "@/domain/message-checkpoint/logic/truncate-tail-in-transaction.js";
+} from "@/service/message-checkpoint/truncate-tail-wiring.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -98,7 +98,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
           );
         }
       }
-      await truncateTailInTransaction(tx, truncateTailDepsFromTx(tx), {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: plan.projectId,
         sessionId: plan.sessionId,
         afterSeq: plan.anchor.seq,
