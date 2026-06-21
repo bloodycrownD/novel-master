@@ -8,6 +8,7 @@ import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import { ToolError } from "@/errors/tool-errors.js";
+import { classifyFsCommand } from "./fs-command-classify.js";
 import {
   capUtf8Bytes,
   TOOL_OUTPUT_MAX_BYTES,
@@ -120,14 +121,9 @@ export function parseFsCommand(command: string): FsCommand {
   }
 }
 
-/** Returns true for mutating fs subcommands; `ls` is read-only. */
+/** 突变 fs 子命令返回 true；`ls` 只读。 */
 export function isMutatingFsCommand(command: string): boolean {
-  const trimmed = command.trim();
-  if (trimmed === "") {
-    return false;
-  }
-  const head = trimmed.split(/\s+/)[0];
-  return head !== "ls";
+  return classifyFsCommand(command).mutating;
 }
 
 function formatListEntry(entry: VfsListEntry): string {

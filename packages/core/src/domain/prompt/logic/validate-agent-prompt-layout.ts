@@ -12,6 +12,10 @@ import type {
 } from "../model/agent-prompt-layout.js";
 import type { PromptBlockLifecycle } from "../model/prompt-block.js";
 import {
+  dynamicBlockToWire,
+  persistBlockToWire,
+} from "./agent-prompt-layout-wire.js";
+import {
   rejectPersistMacros,
   validateDynamicMacros,
 } from "./validate-dynamic-macros.js";
@@ -306,22 +310,6 @@ function assertUniqueBlockNames(
     }
     seen.add(block.name);
   }
-}
-
-function persistBlockToWire(block: PersistPromptBlock): Record<string, unknown> {
-  if (block.type === "worktree") {
-    return { type: "worktree", role: block.role ?? "user" };
-  }
-  return { type: "text", role: block.role, content: block.content };
-}
-
-function dynamicBlockToWire(block: DynamicPromptBlock): Record<string, unknown> {
-  return {
-    type: "text",
-    role: block.role,
-    content: block.content,
-    ...(block.lifecycle != null ? { lifecycle: block.lifecycle } : {}),
-  };
 }
 
 /**

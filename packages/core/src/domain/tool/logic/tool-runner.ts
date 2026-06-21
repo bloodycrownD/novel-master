@@ -11,7 +11,7 @@ import {
   toolNotFound,
   type ToolError,
 } from "@/errors/tool-errors.js";
-import { parseFsCommand } from "./fs-command.js";
+import { classifyMutatingToolCall } from "./fs-command-classify.js";
 import type { ToolRegistry } from "./tool-registry.js";
 
 /** A single tool invocation for parallel dispatch. */
@@ -57,40 +57,7 @@ async function mapWithConcurrency<T, R>(
 
 /** 提取突变 tool 调用涉及的路径，用于同 path 串行化。 */
 function extractMutatingPaths(call: ToolCall): readonly string[] | null {
-  if (call.name === "write" || call.name === "edit") {
-    const path =
-      typeof (call.input as { path?: unknown }).path === "string"
-        ? (call.input as { path: string }).path
-        : "";
-    return path.length > 0 ? [path] : null;
-  }
-  if (call.name === "fs") {
-    const command =
-      typeof (call.input as { command?: unknown }).command === "string"
-        ? (call.input as { command: string }).command
-        : "";
-    if (command === "") {
-      return null;
-    }
-    try {
-      const parsed = parseFsCommand(command);
-      switch (parsed.kind) {
-        case "ls":
-          return null;
-        case "rm":
-        case "rmdir":
-        case "mkdir":
-          return [parsed.path];
-        case "mv":
-          return [parsed.from, parsed.to];
-        case "cp":
-          return [parsed.from, parsed.to];
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return classifyMutatingToolCall(call.name, call.input).paths;
 }
 
 /**

@@ -6,8 +6,11 @@
 
 import { z } from "zod";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
+import {
+  dynamicBlockToWire,
+  persistBlockToWire,
+} from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
 import { validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
-import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
 const persistTextBlockValueSchema = z
@@ -124,30 +127,6 @@ function assertNoLegacyAgentFields(raw: unknown): void {
       "legacy nested model block is not supported",
     );
   }
-}
-
-function persistBlockToWire(
-  block: AgentPromptLayout["persist"][number],
-): AgentDefinitionDocument["prompts"]["persist"][string] {
-  if (block.type === "worktree") {
-    return { type: "worktree", role: block.role ?? "user" };
-  }
-  return {
-    type: "text",
-    role: block.role,
-    content: block.content,
-  };
-}
-
-function dynamicBlockToWire(
-  block: AgentPromptLayout["dynamic"][number],
-): AgentDefinitionDocument["prompts"]["dynamic"][string] {
-  return {
-    type: "text",
-    role: block.role,
-    content: block.content,
-    ...(block.lifecycle === "once" ? { lifecycle: "once" as const } : {}),
-  };
 }
 
 function wireToolsToDomain(

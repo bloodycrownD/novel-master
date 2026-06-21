@@ -5,7 +5,7 @@
  */
 
 import { isMutatingFileToolName } from "../builtin/vfs-tools.js";
-import { parseFsCommand } from "./fs-command.js";
+import { classifyFsCommand } from "./fs-command-classify.js";
 
 /** 单个 tool_use 是否会改变 session 工作区可见 VFS 状态。 */
 export function toolUseMutatesWorkspace(
@@ -19,12 +19,11 @@ export function toolUseMutatesWorkspace(
     return true; // write | edit
   }
   const command = typeof input.command === "string" ? input.command : "";
-  try {
-    return parseFsCommand(command).kind !== "ls";
-  } catch {
-    // 解析失败时保守视为突变（与 checkpoint 对 fs 的保守策略一致）
+  // checkpoint 对空 command 保守视为突变；runner 路径串行化则视为非突变（见 fs-command-classify）
+  if (command.trim() === "") {
     return true;
   }
+  return classifyFsCommand(command).mutating;
 }
 
 /** 一轮并行 tool_use 中是否存在任一突变。 */

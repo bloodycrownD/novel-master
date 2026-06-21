@@ -4,7 +4,7 @@
  * @module domain/vfs/logic/extract-mutating-paths
  */
 
-import { parseFsCommand } from "@/domain/tool/logic/fs-command.js";
+import { classifyMutatingToolCall } from "@/domain/tool/logic/fs-command-classify.js";
 
 /** 单次 tool 调用描述。 */
 export interface MutatingToolCall {
@@ -18,40 +18,7 @@ export interface MutatingToolCall {
 export function extractMutatingPaths(
   call: MutatingToolCall,
 ): readonly string[] | null {
-  if (call.name === "write" || call.name === "edit") {
-    const path =
-      typeof (call.input as { path?: unknown }).path === "string"
-        ? (call.input as { path: string }).path
-        : "";
-    return path.length > 0 ? [path] : null;
-  }
-  if (call.name === "fs") {
-    const command =
-      typeof (call.input as { command?: unknown }).command === "string"
-        ? (call.input as { command: string }).command
-        : "";
-    if (command === "") {
-      return null;
-    }
-    try {
-      const parsed = parseFsCommand(command);
-      switch (parsed.kind) {
-        case "ls":
-          return null;
-        case "rm":
-        case "rmdir":
-        case "mkdir":
-          return [parsed.path];
-        case "mv":
-          return [parsed.from, parsed.to];
-        case "cp":
-          return [parsed.from, parsed.to];
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return classifyMutatingToolCall(call.name, call.input).paths;
 }
 
 /** 合并一次 op 内所有突变路径（去重、保序）。 */
