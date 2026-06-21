@@ -4,7 +4,7 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {ScrollView, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {splitMarkdownFrontMatter} from '@novel-master/core/front-matter';
+import {splitMarkdownFrontMatter} from '@novel-master/core/worktree';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {

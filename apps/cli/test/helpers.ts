@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { bootstrapNovelMaster, createPersistentState, open, type TdbcConnection } from "@novel-master/core";
 
-import { createMessageCheckpointService } from "@novel-master/core/session-fs";
+import { createMessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 
 const CLI_ROOT = fileURLToPath(new URL("..", import.meta.url));

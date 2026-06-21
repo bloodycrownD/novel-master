@@ -11,7 +11,7 @@ import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_T
 
 import { flushPendingUserVfsTurnsWithTrailingUserReorder } from "../../src/service/agent/logic/run-agent-turn.js";
 
-import { type MessageCheckpointService } from "@novel-master/core/session-fs";
+import { type MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { ToolRegistry } from "../../src/domain/tool/logic/tool-registry.js";

@@ -33,7 +33,8 @@ import type {
   ProviderService,
   TokenCounterRegistry,
 } from "@novel-master/core/provider";
-import type { MessageCheckpointService, SessionFsService } from "@novel-master/core/session-fs";
+import type { MessageCheckpointService } from "@novel-master/core/message-checkpoint";
+import type { SessionFsService } from "@novel-master/core/session-fs";
 import type { RegexConfigService } from "@novel-master/core/regex";
 import type { VfsScope, VfsService } from "@novel-master/core/vfs";
 import type { SessionWorktreeSnapshotStore, WorktreeService } from "@novel-master/core/worktree";

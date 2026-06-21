@@ -23,7 +23,10 @@ module.exports = {
       'packages/core/dist/public/events.js',
     ),
   '^@/(.*)$': '<rootDir>/src/$1',
-    '^@novel-master/core/front-matter$': '<rootDir>/test-utils/front-matter-shim.ts',
+    '^@novel-master/core/worktree$': path.join(
+      repoRoot,
+      'packages/core/dist/public/worktree.js',
+    ),
     '^@novel-master/core/nmtp$': path.join(
       repoRoot,
       'packages/core/dist/infra/nmtp/index.js',

@@ -45,10 +45,9 @@ import {
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
 import { createRegexConfigService, type RegexConfigService } from "@novel-master/core/regex";
+import { createMessageCheckpointService, type MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import {
-  createMessageCheckpointService,
   createSessionFsService,
-  type MessageCheckpointService,
   type SessionFsService,
 } from "@novel-master/core/session-fs";
 import {

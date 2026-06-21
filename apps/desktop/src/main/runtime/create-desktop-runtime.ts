@@ -36,6 +36,8 @@ import { refreshUserVfsUnifiedToolTurnSnapshot } from "@novel-master/core/featur
 import { createRegexConfigService } from "@novel-master/core/regex";
 import {
   createMessageCheckpointService,
+} from "@novel-master/core/message-checkpoint";
+import {
   createSessionFsService,
 } from "@novel-master/core/session-fs";
 import {

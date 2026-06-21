@@ -17,8 +17,10 @@ import {
 } from "@novel-master/core/chat";
 import {
   createMessageCheckpointService,
-  createSessionFsService,
   type MessageCheckpointService,
+} from "@novel-master/core/message-checkpoint";
+import {
+  createSessionFsService,
   type SessionFsService,
 } from "@novel-master/core/session-fs";
 import { createScopedVfsService, type VfsService } from "@novel-master/core/vfs";
