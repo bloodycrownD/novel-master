@@ -8,15 +8,51 @@ import { assessEventsConfigWire } from "@/config-forms/stored-config-validity/as
 import type { StoredConfigHealth } from "@/config-forms/stored-config-validity/types.js";
 import { decode } from "@/infra/serialization/decode.js";
 import { encode } from "@/infra/serialization/encode.js";
+import { parseKkvJsonDocument } from "@/infra/kkv/logic/parse-kkv-json-document.js";
 import { eventsConfigSchema } from "@/domain/events-config/model/events-config.schema.js";
 import type { EventsConfig } from "@/domain/events-config/model/events-config.js";
 import { DEFAULT_EVENTS_CONFIG } from "@/domain/events-config/logic/default-events.js";
+import { ConfigDecodeError } from "@/errors/config-decode-errors.js";
+import {
+  eventsConfigInvalidJson,
+  eventsConfigInvalidSchema,
+} from "@/errors/events-config-errors.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { EventsConfigStore } from "../events-config-store.port.js";
 
 const MODULE = "nm-events";
 const KEY_CONFIG = "config";
+
+function rethrowParseError(error: unknown): never {
+  if (error instanceof SyntaxError) {
+    throw eventsConfigInvalidJson(
+      `invalid JSON in ${MODULE}/${KEY_CONFIG}: ${error.message}`,
+    );
+  }
+  if (error instanceof ConfigDecodeError && error.code === "INVALID_SCHEMA") {
+    throw eventsConfigInvalidSchema(error.message);
+  }
+  throw error;
+}
+
+function parseEventsConfigWire(raw: string): EventsConfig {
+  try {
+    return parseKkvJsonDocument(raw, (parsed) =>
+      decode(parsed, eventsConfigSchema),
+    );
+  } catch (error) {
+    rethrowParseError(error);
+  }
+}
+
+function parseEventsConfigJson(raw: string): unknown {
+  try {
+    return parseKkvJsonDocument(raw, (parsed) => parsed);
+  } catch (error) {
+    rethrowParseError(error);
+  }
+}
 
 export class DefaultEventsConfigStore implements EventsConfigStore {
   constructor(private readonly kkv: KkvService) {}
@@ -26,7 +62,7 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     if (raw === undefined) {
       return DEFAULT_EVENTS_CONFIG;
     }
-    return decode(JSON.parse(raw) as unknown, eventsConfigSchema);
+    return parseEventsConfigWire(raw);
   }
 
   async getRawWire(): Promise<unknown> {
@@ -34,7 +70,7 @@ export class DefaultEventsConfigStore implements EventsConfigStore {
     if (raw === undefined) {
       return encode(DEFAULT_EVENTS_CONFIG, eventsConfigSchema);
     }
-    return JSON.parse(raw) as unknown;
+    return parseEventsConfigJson(raw);
   }
 
   async assessStored(): Promise<StoredConfigHealth<EventsConfig>> {
