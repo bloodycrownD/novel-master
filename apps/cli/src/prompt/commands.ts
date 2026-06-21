@@ -59,7 +59,7 @@ export async function runPrompt(
   const snapshot = await rt.worktreeSnapshot.getOrRefresh(
     projectId,
     sessionId,
-    () => wt.materialize(),
+    () => wt.materializePersistBlock(),
   );
   const vfs = rt.sessionVfs(projectId, sessionId);
   const ctx = { worktreeDisplay: snapshot.worktreeDisplay, messages, vfs };

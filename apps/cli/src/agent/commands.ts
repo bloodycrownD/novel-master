@@ -182,7 +182,7 @@ export async function runAgent(
 
       const wt = rt.worktree({ kind: "session", projectId, sessionId });
       await rt.worktreeSnapshot.getOrRefresh(projectId, sessionId, () =>
-        wt.materialize(),
+        wt.materializePersistBlock(),
       );
 
       const baseRegistry = new ToolRegistry();

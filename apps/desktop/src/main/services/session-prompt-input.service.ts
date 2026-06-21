@@ -32,7 +32,7 @@ async function getSessionWorktreeSnapshot(
   return runtime.worktreeSnapshot.getOrRefresh(
     scope.projectId,
     scope.sessionId,
-    () => wt.materialize(),
+    () => wt.materializePersistBlock(),
   );
 }
 

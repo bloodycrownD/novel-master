@@ -48,12 +48,7 @@ async function loadWorktreeRows(
   const scope = resolveVfsScopeFromRequest(req);
   if (scope.kind === "session") {
     const wt = getWorktreeForScope(rt, scope);
-    const snap = await rt.worktreeSnapshot.getOrRefresh(
-      scope.projectId,
-      scope.sessionId,
-      () => wt.materialize(),
-    );
-    return [...snap.listRows];
+    return wt.buildListRows();
   }
   const wt = getWorktreeForScope(rt, scope);
   return wt.buildListRows();

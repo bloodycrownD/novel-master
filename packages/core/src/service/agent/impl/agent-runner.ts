@@ -138,11 +138,7 @@ export class DefaultAgentRunner implements AgentRunner {
           sessionId,
           async () => {
             const wt = this.deps.worktree(wtScope);
-            const [worktreeDisplay, listRows] = await Promise.all([
-              wt.renderDisplay(),
-              wt.buildListRows(),
-            ]);
-            return { worktreeDisplay, listRows };
+            return wt.materializePersistBlock();
           },
         );
 

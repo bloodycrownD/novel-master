@@ -228,13 +228,7 @@ export async function runAgentTurn(
   await runtime.worktreeSnapshot.getOrRefresh(
     scope.projectId,
     scope.sessionId,
-    async () => {
-      const [worktreeDisplay, listRows] = await Promise.all([
-        wt.renderDisplay(),
-        wt.buildListRows(),
-      ]);
-      return { worktreeDisplay, listRows };
-    },
+    async () => wt.materializePersistBlock(),
   );
 
   const runner = createAgentRunner({
