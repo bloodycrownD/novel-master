@@ -5,9 +5,12 @@
  */
 import { resolveApplicationModelId } from "@novel-master/core/agent";
 
-import { messageBodyText } from "@novel-master/core/prompt";
-
-import { countPromptLlmInput, resolveTokenCounterModeForModel, serializePromptLlmInput } from "@novel-master/core/provider";
+import {
+  countPromptLlmInput,
+  countPromptLlmInputHeuristicOnly,
+  resolveTokenCounterModeForModel,
+  serializePromptLlmInput,
+} from "@novel-master/core/provider";
 import type { PromptChatTokenStatsResponse } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { formatTokenCount } from "../utils/format-token-count.js";
@@ -98,37 +101,45 @@ async function loadChatPromptTokenStatsFallback(
   runtime: DesktopNovelMasterRuntime,
   scope: SessionPromptScope,
 ): Promise<PromptChatTokenStatsResponse> {
-  const all = await runtime.messages.listBySession(scope.sessionId);
-  const visible = all.filter((m) => !m.hidden);
-  const serialized = visible
-    .map((m) => `${m.role}: ${messageBodyText(m)}`)
-    .join("\n\n");
-  const count = runtime.tokenCounters.heuristic.countText(serialized);
+  const { definition, layout, ctx } = await buildSessionPromptInput(
+    runtime,
+    scope,
+  );
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  let applicationModelId: string | undefined;
-  try {
-    const { definition } = await buildSessionPromptInput(runtime, scope);
-    applicationModelId = resolveApplicationModelId({
-      agentModelId: definition.model,
-      workspaceModelId: workspaceModelId || undefined,
-    });
-  } catch {
-    applicationModelId = workspaceModelId || undefined;
+  const applicationModelId = resolveApplicationModelId({
+    agentModelId: definition.model,
+    workspaceModelId: workspaceModelId || undefined,
+  });
+
+  if (!applicationModelId) {
+    const serialized = await serializePromptLlmInput(layout, ctx);
+    const count = runtime.tokenCounters.heuristic.countText(serialized);
+    return buildTokenStats(count, true, "heuristic", undefined);
   }
+
+  const result = await countPromptLlmInputHeuristicOnly({
+    layout,
+    ctx,
+    applicationModelId,
+    registry: runtime.tokenCounters,
+  });
 
   let contextWindow: number | undefined;
-  if (applicationModelId) {
-    try {
-      const cw =
-        await runtime.providerModels.getContextWindow(applicationModelId);
-      contextWindow = cw ?? undefined;
-    } catch {
-      contextWindow = undefined;
-    }
+  try {
+    const cw =
+      await runtime.providerModels.getContextWindow(applicationModelId);
+    contextWindow = cw ?? undefined;
+  } catch {
+    contextWindow = undefined;
   }
 
-  return buildTokenStats(count, true, "heuristic", contextWindow);
+  return buildTokenStats(
+    result.tokenCount,
+    result.estimated,
+    result.counterKind,
+    contextWindow,
+  );
 }
 
 export async function loadChatPromptTokenStatsResilient(
