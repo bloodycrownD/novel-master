@@ -26,6 +26,7 @@ import {CompactionConditionsScreen} from '../screens/stack/CompactionConditionsS
 import {EventsConfigScreen} from '../screens/stack/EventsConfigScreen';
 import {CloudSyncConfigScreen} from '../screens/stack/CloudSyncConfigScreen';
 import {StorageConfigScreen} from '../screens/stack/StorageConfigScreen';
+import {CloudSyncProgressScreen} from '../screens/stack/CloudSyncProgressScreen';
 import {ChatConfigScreen} from '../screens/stack/ChatConfigScreen';
 import {GlobalTemplateScreen} from '../screens/stack/GlobalTemplateScreen';
 import {RegexGroupsScreen} from '../screens/stack/RegexGroupsScreen';
@@ -140,6 +141,10 @@ const CompactionConditionsStackScreen = withStackLayout(
 );
 const EventsConfigStackScreen = withStackLayout('EventsConfig', EventsConfigScreen);
 const StorageConfigStackScreen = withStackLayout('StorageConfig', StorageConfigScreen);
+const CloudSyncProgressStackScreen = withStackLayout(
+  'CloudSyncProgress',
+  CloudSyncProgressScreen,
+);
 const ChatConfigStackScreen = withStackLayout('ChatConfig', ChatConfigScreen);
 const CloudSyncConfigStackScreen = withStackLayout(
   'CloudSyncConfig',
@@ -187,6 +192,11 @@ export function RootNavigator() {
           />
           <Stack.Screen name="EventsConfig" component={EventsConfigStackScreen} />
           <Stack.Screen name="StorageConfig" component={StorageConfigStackScreen} />
+          <Stack.Screen
+            name="CloudSyncProgress"
+            component={CloudSyncProgressStackScreen}
+            options={{gestureEnabled: false}}
+          />
           <Stack.Screen name="ChatConfig" component={ChatConfigStackScreen} />
           <Stack.Screen
             name="CloudSyncConfig"

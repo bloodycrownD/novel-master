@@ -40,7 +40,7 @@ const EMPTY_FORM: FormState = {
   pathPrefix: DEFAULT_CLOUD_SYNC_PATH_PREFIX,
   accessKeyId: '',
   secretAccessKey: '',
-  forcePathStyle: true,
+  forcePathStyle: false,
   deviceLabel: '',
 };
 
@@ -200,7 +200,7 @@ export function CloudSyncConfigScreen() {
         </FormField>
         <FormSwitchRow
           label="Path style"
-          description="MinIO 与部分 OSS 需开启"
+          description="MinIO 需开启；阿里云 OSS 官方 Endpoint 请关闭"
           tokens={tokens}
           value={form.forcePathStyle}
           onValueChange={forcePathStyle =>

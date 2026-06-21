@@ -26,6 +26,7 @@ export const PAGE_HEADER_CONFIG: Record<HeaderPageKey, PageHeaderConfig> = {
   CompactionConditions: {title: '压缩配置', showBack: true, showNav: false},
   EventsConfig: {title: '事件配置', showBack: true, showNav: false},
   StorageConfig: {title: '存储配置', showBack: true, showNav: false},
+  CloudSyncProgress: {title: '云同步', showBack: true, showNav: false},
   ChatConfig: {title: '聊天配置', showBack: true, showNav: false},
   CloudSyncConfig: {title: '云存储配置', showBack: true, showNav: false},
   GlobalTemplate: {title: '全局工作区', showBack: true, showNav: false},

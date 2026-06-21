@@ -1,14 +1,23 @@
 /**
- * 云同步进度日志（仅 `__DEV__`）：`npx react-native log-android` 过滤 `[cloud-sync]`。
+ * 云同步进度追踪：UI 回调 + `__DEV__` 日志（`npx react-native log-android` 过滤 `[cloud-sync]`）。
  * 不记录 Secret Key；S3 key 仅输出末段文件名。
  *
  * @module services/cloud-sync-progress-log
  */
 import {isCloudSyncError, type ObjectStoragePort} from '@novel-master/core';
+import {
+  mapCloudSyncProgressEvent,
+  type CloudSyncProgressListener,
+} from './cloud-sync-progress-ui';
 
 const LOG_TAG = '[cloud-sync]';
 
 export type CloudSyncProgressOp = 'pull' | 'push' | 'test';
+
+export type CloudSyncProgressOptions = {
+  /** 向 UI 层推送阶段进度（生产环境可用） */
+  onUiProgress?: CloudSyncProgressListener;
+};
 
 export type CloudSyncProgress = {
   step: (event: string, detail?: Record<string, unknown>) => void;
@@ -29,14 +38,30 @@ function isDevLogEnabled(): boolean {
   return typeof __DEV__ !== 'undefined' && __DEV__;
 }
 
-/** 创建带耗时的进度追踪器（`msTotal` / `msStep`）。 */
+/** 创建带耗时的进度追踪器（`msTotal` / `msStep` + 可选 UI 回调）。 */
 export function createCloudSyncProgress(
   op: CloudSyncProgressOp,
+  options?: CloudSyncProgressOptions,
 ): CloudSyncProgress {
   const startedAt = Date.now();
   let lastAt = startedAt;
+  const onUiProgress = options?.onUiProgress;
+
+  const emitUi = (
+    event: string,
+    detail?: Record<string, unknown>,
+  ): void => {
+    if (onUiProgress == null || (op !== 'push' && op !== 'pull')) {
+      return;
+    }
+    const uiState = mapCloudSyncProgressEvent(op, event, detail);
+    if (uiState != null) {
+      onUiProgress(uiState);
+    }
+  };
 
   const step = (event: string, detail?: Record<string, unknown>): void => {
+    emitUi(event, detail);
     if (!isDevLogEnabled()) {
       return;
     }

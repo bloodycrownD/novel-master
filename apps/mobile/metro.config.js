@@ -41,6 +41,7 @@ if (!coreChatSource.includes('matchUserVfsTurnAt')) {
 }
 const zodRoot = path.resolve(monorepoRoot, 'node_modules/zod');
 const tiktokenShim = path.resolve(__dirname, 'src/shims/tiktoken.js');
+const awsXmlParserShim = path.resolve(__dirname, 'src/shims/aws-xml-parser.js');
 const nodeFsShim = path.resolve(__dirname, 'src/shims/node-fs.js');
 const readableStream = require.resolve('readable-stream', {paths: [__dirname]});
 const bufferModule = require.resolve('buffer/', {paths: [__dirname]});
@@ -168,6 +169,46 @@ function resolveAwsSdkRuntimeConfig(context, moduleName) {
   return null;
 }
 
+/**
+ * RN 强制使用 fast-xml-parser shim，避免 browser 版 DOMParser 在 Hermes 上反序列化失败。
+ */
+function resolveAwsXmlParser(context, moduleName) {
+  const origin = context.originModulePath ?? '';
+
+  if (moduleName.includes('xml-parser.browser')) {
+    return awsXmlParserShim;
+  }
+
+  const relNames = new Set([
+    './xml-parser',
+    './xml-parser.js',
+    './xml-parser.browser',
+    './xml-parser.browser.js',
+  ]);
+  if (
+    relNames.has(moduleName) &&
+    origin.includes(`${path.sep}@aws-sdk${path.sep}xml-builder${path.sep}`)
+  ) {
+    return awsXmlParserShim;
+  }
+  return null;
+}
+
+/** @smithy/core/serde 在 RN 下应使用 index.native.js */
+function resolveSmithySerdeNative(moduleName) {
+  if (moduleName !== '@smithy/core/serde') {
+    return null;
+  }
+  const nativePath = path.join(
+    monorepoRoot,
+    'node_modules/@smithy/core/dist-cjs/submodules/serde/index.native.js',
+  );
+  if (fs.existsSync(nativePath)) {
+    return nativePath;
+  }
+  return null;
+}
+
 /** Block Node-only tokenizer-driver-node from RN bundles. */
 const metroBlockList = [
   /[\\/]packages[\\/]tokenizer-driver-node[\\/]/,
@@ -197,6 +238,16 @@ const config = {
       const awsRuntimePath = resolveAwsSdkRuntimeConfig(context, moduleName);
       if (awsRuntimePath != null) {
         return {type: 'sourceFile', filePath: awsRuntimePath};
+      }
+
+      const awsXmlParserPath = resolveAwsXmlParser(context, moduleName);
+      if (awsXmlParserPath != null) {
+        return {type: 'sourceFile', filePath: awsXmlParserPath};
+      }
+
+      const smithySerdeNative = resolveSmithySerdeNative(moduleName);
+      if (smithySerdeNative != null) {
+        return {type: 'sourceFile', filePath: smithySerdeNative};
       }
 
       if (isTiktokenModule(moduleName)) {

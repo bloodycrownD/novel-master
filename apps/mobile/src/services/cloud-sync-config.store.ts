@@ -182,7 +182,7 @@ export async function getCloudSyncConfig(
     region: region ?? '',
     pathPrefix: pathPrefix ?? DEFAULT_CLOUD_SYNC_PATH_PREFIX,
     accessKeyId: accessKeyId ?? '',
-    forcePathStyle: parseBool(forcePathStyle, true),
+    forcePathStyle: parseBool(forcePathStyle, false),
     deviceId: deviceId ?? '',
     deviceLabel: deviceLabel?.trim() || undefined,
     secretKeySet,

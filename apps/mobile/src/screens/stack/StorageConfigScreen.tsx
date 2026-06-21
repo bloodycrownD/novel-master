@@ -16,12 +16,7 @@ import {
   exportDatabaseBackup,
   importDatabaseBackup,
 } from '../../services/db-backup.service';
-import {
-  getCloudSyncStatusView,
-  pullCloudSync,
-  pushCloudSync,
-} from '../../services/cloud-sync.service';
-import {isCloudSyncError} from '@novel-master/core';
+import {getCloudSyncStatusView} from '../../services/cloud-sync.service';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
@@ -38,7 +33,6 @@ export function StorageConfigScreen() {
   const {retry} = useNovelMaster();
   const navigation = useNavigation<Nav>();
   const [dbBusy, setDbBusy] = useState(false);
-  const [syncBusy, setSyncBusy] = useState(false);
   const [cloudRemoteRev, setCloudRemoteRev] = useState<number | null>(null);
   const [cloudLastSyncedRev, setCloudLastSyncedRev] = useState<number | null>(
     null,
@@ -93,7 +87,7 @@ export function StorageConfigScreen() {
     return date.toLocaleString();
   };
 
-  const syncControlsDisabled = dbBusy || syncBusy || agentActive;
+  const syncControlsDisabled = dbBusy || agentActive;
 
   const formatSyncResultLabel = (result?: string): string | undefined => {
     if (result === 'success') {
@@ -114,9 +108,6 @@ export function StorageConfigScreen() {
   ): string => {
     if (agentActive) {
       return 'Agent 运行中';
-    }
-    if (syncBusy) {
-      return '处理中…';
     }
     if (lastAt) {
       const resultLabel = formatSyncResultLabel(lastResult);
@@ -183,74 +174,18 @@ export function StorageConfigScreen() {
         {text: '取消', style: 'cancel'},
         {
           text: '拉取',
-          onPress: () => {
-            setSyncBusy(true);
-            pullCloudSync(runtime, retry)
-              .then(result => {
-                if (result.alreadyUpToDate) {
-                  showToast('已是最新');
-                } else {
-                  showToast('拉取成功，正在重新加载…');
-                }
-              })
-              .catch(err => showToast(toastMessage('拉取失败', err)))
-              .finally(() => {
-                setSyncBusy(false);
-                refreshCloudSyncStatus().catch(() => undefined);
-              });
-          },
+          onPress: () => navigation.navigate('CloudSyncProgress', {op: 'pull'}),
         },
       ],
     );
-  }, [syncControlsDisabled, runtime, retry, showToast, refreshCloudSyncStatus]);
+  }, [syncControlsDisabled, navigation]);
 
-  const runPush = useCallback(
-    (forceOverwriteRemote = false) => {
-      if (syncControlsDisabled) {
-        return;
-      }
-      setSyncBusy(true);
-      pushCloudSync(runtime, {forceOverwriteRemote})
-        .then(() => showToast('推送成功'))
-        .catch(err => {
-          if (
-            isCloudSyncError(err) &&
-            err.code === 'NEED_PULL_FIRST' &&
-            !forceOverwriteRemote
-          ) {
-            Alert.alert(
-              '云端有更新',
-              '建议先拉取云端数据。仍要覆盖云端吗？',
-              [
-                {text: '取消', style: 'cancel'},
-                {
-                  text: '先拉取',
-                  onPress: () => runPull(),
-                },
-                {
-                  text: '仍要覆盖云端',
-                  style: 'destructive',
-                  onPress: () => runPush(true),
-                },
-              ],
-            );
-            return;
-          }
-          showToast(toastMessage('推送失败', err));
-        })
-        .finally(() => {
-          setSyncBusy(false);
-          refreshCloudSyncStatus().catch(() => undefined);
-        });
-    },
-    [
-      syncControlsDisabled,
-      runtime,
-      showToast,
-      runPull,
-      refreshCloudSyncStatus,
-    ],
-  );
+  const runPush = useCallback(() => {
+    if (syncControlsDisabled) {
+      return;
+    }
+    navigation.navigate('CloudSyncProgress', {op: 'push'});
+  }, [syncControlsDisabled, navigation]);
 
   useEffect(() => {
     setAgentActive(isMobileAgentActive());
@@ -301,7 +236,7 @@ export function StorageConfigScreen() {
         label="推送到云端"
         value={syncControlValue(cloudLastPushAt, cloudLastPushResult)}
         tokens={tokens}
-        onPress={() => runPush()}
+        onPress={runPush}
       />
       <ListSectionTitle title="导入导出" tokens={tokens} />
       <ProfileMenuItem

@@ -21,6 +21,10 @@ export type RootStackParamList = {
   CompactionConditions: undefined;
   EventsConfig: undefined;
   StorageConfig: undefined;
+  CloudSyncProgress: {
+    op: 'pull' | 'push';
+    forceOverwriteRemote?: boolean;
+  };
   ChatConfig: undefined;
   CloudSyncConfig: undefined;
   GlobalTemplate: undefined;

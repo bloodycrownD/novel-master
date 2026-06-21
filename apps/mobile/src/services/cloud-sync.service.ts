@@ -16,6 +16,7 @@ import {
   createCloudSyncProgress,
   withCloudSyncStorageProgress,
 } from './cloud-sync-progress-log';
+import type {CloudSyncProgressListener} from './cloud-sync-progress-ui';
 import {createS3ObjectStorage} from '@novel-master/cloud-sync-driver-s3';
 import {
   HeadBucketCommand,
@@ -56,7 +57,16 @@ export type CloudSyncPullOutcome = {
 
 export type CloudSyncPushOptions = {
   forceOverwriteRemote?: boolean;
+  /** 同步阶段进度，供 UI 遮罩/进度条使用 */
+  onProgress?: CloudSyncProgressListener;
 };
+
+export type CloudSyncPullOptions = {
+  onProgress?: CloudSyncProgressListener;
+};
+
+export type {CloudSyncProgressListener, CloudSyncProgressUiState} from './cloud-sync-progress-ui';
+export {initialCloudSyncProgressUi} from './cloud-sync-progress-ui';
 
 /** @deprecated 请使用 snapshot-file-hash 模块导出 */
 export {sha256Hex} from './snapshot-file-hash';
@@ -278,13 +288,16 @@ export async function testCloudSyncConnection(
 export async function pullCloudSync(
   runtime: MobileNovelMasterRuntime,
   onRebootstrap: () => void,
+  options?: CloudSyncPullOptions,
 ): Promise<CloudSyncPullOutcome> {
   const local = await getCloudSyncLocalStatus(runtime);
   if (!local.configured) {
     throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
   }
 
-  const progress = createCloudSyncProgress('pull');
+  const progress = createCloudSyncProgress('pull', {
+    onUiProgress: options?.onProgress,
+  });
   progress.step('start', {lastSyncedRev: local.lastSyncedRev});
 
   const now = new Date().toISOString();
@@ -339,7 +352,9 @@ export async function pushCloudSync(
     throw new CloudSyncError('NOT_CONFIGURED', '请先配置云存储');
   }
 
-  const progress = createCloudSyncProgress('push');
+  const progress = createCloudSyncProgress('push', {
+    onUiProgress: options?.onProgress,
+  });
   progress.step('start', {
     lastSyncedRev: local.lastSyncedRev,
     forceOverwriteRemote: options?.forceOverwriteRemote ?? false,

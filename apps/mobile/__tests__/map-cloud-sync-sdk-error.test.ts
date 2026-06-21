@@ -47,6 +47,17 @@ const cases: MappingCase[] = [
     code: 'NETWORK',
     message: '云存储连接失败，请检查网络与配置',
   },
+  {
+    name: 'SecondLevelDomainForbidden → Path style 提示（非凭据）',
+    error: {
+      name: 'SecondLevelDomainForbidden',
+      message: 'Please use virtual hosted style to access.',
+      $metadata: {httpStatusCode: 403},
+    },
+    code: 'NETWORK',
+    message: '阿里云 OSS 请关闭 Path style；Endpoint 建议使用 https://oss-cn-xxx.aliyuncs.com',
+    messageNotContains: '凭据',
+  },
 ];
 
 describe.each(cases)('mapCloudSyncSdkError', ({name, error, code, message, messageNotContains}) => {

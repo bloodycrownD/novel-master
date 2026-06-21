@@ -19,6 +19,11 @@ const AUTH_ERROR_NAMES = new Set([
 
 const BUCKET_ERROR_NAMES = new Set(['NoSuchBucket', 'NotFound']);
 
+const PATH_STYLE_FORBIDDEN_NAMES = new Set(['SecondLevelDomainForbidden']);
+
+const PATH_STYLE_MESSAGE =
+  '阿里云 OSS 请关闭 Path style；Endpoint 建议使用 https://oss-cn-xxx.aliyuncs.com';
+
 function readErrorName(error: unknown): string {
   if (typeof error === 'object' && error != null && 'name' in error) {
     return String((error as {name: string}).name);
@@ -40,7 +45,18 @@ function readHttpStatusCode(error: unknown): number | undefined {
   return typeof statusCode === 'number' ? statusCode : undefined;
 }
 
+function isPathStyleForbiddenError(name: string, lowerMessage: string): boolean {
+  return (
+    PATH_STYLE_FORBIDDEN_NAMES.has(name) ||
+    lowerMessage.includes('virtual hosted style') ||
+    lowerMessage.includes('secondleveldomainforbidden')
+  );
+}
+
 function isAuthError(name: string, lowerMessage: string, httpStatusCode?: number): boolean {
+  if (isPathStyleForbiddenError(name, lowerMessage)) {
+    return false;
+  }
   return (
     AUTH_ERROR_NAMES.has(name) ||
     lowerMessage.includes('access denied') ||
@@ -72,9 +88,11 @@ function isConnectionError(lowerMessage: string): boolean {
 function isTechnicalFallbackError(name: string, lowerMessage: string): boolean {
   return (
     name === 'ReferenceError' ||
+    name === 'TypeError' ||
     lowerMessage.includes('domparser') ||
     lowerMessage.includes('deserialization') ||
-    lowerMessage.includes('referenceerror')
+    lowerMessage.includes('referenceerror') ||
+    lowerMessage.includes('undefined is not a function')
   );
 }
 
@@ -91,6 +109,10 @@ export function mapCloudSyncSdkError(error: unknown): CloudSyncError {
   const message = readErrorMessage(error);
   const lowerMessage = message.toLowerCase();
   const httpStatusCode = readHttpStatusCode(error);
+
+  if (isPathStyleForbiddenError(name, lowerMessage)) {
+    return new CloudSyncError('NETWORK', PATH_STYLE_MESSAGE, {cause: error});
+  }
 
   if (isAuthError(name, lowerMessage, httpStatusCode)) {
     return new CloudSyncError('AUTH', AUTH_MESSAGE, {cause: error});
