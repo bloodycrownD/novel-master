@@ -62,6 +62,7 @@ import {
   type VfsZipRequest,
   type WorktreeBuildListRowsRequest,
   type WorktreeGetDirRuleRequest,
+  type WorktreeInvalidateSessionSnapshotRequest,
   type WorktreeListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
@@ -227,6 +228,13 @@ export async function ipcWorktreeGetDirRule(
   req: WorktreeGetDirRuleRequest,
 ): Promise<IpcResult<WorktreeSetDirRuleRequest | null>> {
   return bridge().invoke(IPC_CHANNELS.WORKTREE_GET_DIR_RULE, req);
+}
+
+/** 手动刷新工作树快照（消费方 ②），不触发 UI 列表重载。 */
+export async function ipcWorktreeInvalidateSessionSnapshot(
+  req: WorktreeInvalidateSessionSnapshotRequest,
+): Promise<IpcResult<void>> {
+  return bridge().invoke(IPC_CHANNELS.WORKTREE_INVALIDATE_SESSION_SNAPSHOT, req);
 }
 
 export async function ipcVfsRead(
