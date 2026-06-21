@@ -1,20 +1,18 @@
 ---
 createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-06-19 16:00:00'
+updatedAt: '2026-06-21 24:00:00'
 ---
-# 动态记忆 — stream-display-rewrite
+# mobile-cloud-sync-rn-compat — 已合 main 并发版 v1.2.5
 
-## 状态：spec 修订待用户确认（九项风险已写入）
+## 状态：已发布 v1.2.5
 
-## 已定决策
-- Runtime: useExternalStoreRuntime（无 setMessages；Spike 验 warn/workaround）
-- Bus: runtime 独占 STREAM+STEP+RUN+RUN_FAILED；Composer library **零 Bus**
-- agentRunning: useChatLibraryRuntime 暴露（ChatTabScreen 不读旁路 stream）
-- Tool: TOOL_USE 订阅；废弃 useStreamToolInvoking
-- Display: Ingress 32ms；Apply 默认 re-render ~20Hz（Spike 写死；字符配额备选）
+## 已完成
+- feature/mobile-cloud-sync-rn-compat 已 fast-forward 合并到 main（c4481b7c）
+- 远程 main 已推送
+- 版本 bump：1.2.4 → 1.2.5（desktop + mobile）
 
-## 文档
-- `.apm/kb/docs/Iterations/stream-display-rewrite/{prd,spec,research}.md`
-
-## 下一步
-- 用户确认 spec → feature/stream-display-rewrite Step 0
+## 本迭代要点
+- Mobile 云同步 RN/Hermes 兼容（DOMParser、AWS SDK shim、TransformStream）
+- 阿里云 OSS 条件 PUT 客户端校验
+- 文件路径级快照 IO + 分块 SHA256
+- CloudSyncProgress 独立进度页
