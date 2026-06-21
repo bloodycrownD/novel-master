@@ -462,3 +462,23 @@ packages/core/src/bootstrap/sksp/
 **实现完成后**：`apm kb index rebuild`；provider-model CLI 依赖步骤 1–4；**步骤 5 与 provider 可并行**，但 **本期迭代结束前必须合入**。
 
 **v1 交付检查**：`sksp-windows` + `sksp-android` 均可用；`core/sksp` env 供 CI。
+
+---
+
+## Amendments（后续修订）
+
+> 以下条目由 [core-explore-remediation / sksp-key-lifecycle](../core-explore-remediation/features/sksp-key-lifecycle/spec.md) 实施并锁定；**不**变更 SKSP 端口、DDL、驱动契约。
+
+| 原 SPEC 表述 | 修订后语义 |
+|--------------|------------|
+| `get` 允许 `""` 与 unset 区分（env 路径） | **EnvSecretStore**：`undefined`、`""`、仅空白 → 均返回 `null`；`has` 与 `get` 一致 |
+| Composite `get`：env 返回值非 `undefined` 即命中 | **不变**：env 归一化后 falsy 视为 miss，**自动回退 DB**；读优先级仍为 **env 命中 > DB > null** |
+| `provider delete` 仅 `if (provider.secretRef)` 删 SKSP | **fallback ref**：`resolveProviderApiKeySecretRef(provider)`（`secretRef ?? provider/<id>/apiKey`）；`has(ref)` 为真才 `delete` |
+| `ProviderService.edit` 对 `patch.apiKey` 一律 `set` | **`patch.apiKey === ""`**：`delete(ref)` + `secretRef = null`；禁止向 DB 写入空 apiKey 行 |
+| CLI `edit --apiKey` | 支持 `--apiKey ""` 与 `--clear-api-key`，使空 patch 触达 `ProviderService.edit` |
+
+**交叉引用：**
+
+- Feature SPEC：[sksp-key-lifecycle](../core-explore-remediation/features/sksp-key-lifecycle/spec.md)
+- Feature PRD：[sksp-key-lifecycle PRD](../core-explore-remediation/features/sksp-key-lifecycle/prd.md)
+- 实现：`packages/core/src/infra/sksp/impl/env-secret-store.ts`、`packages/core/src/service/provider/impl/provider.service.ts`、`apps/cli/src/provider/commands.ts`
