@@ -11,6 +11,7 @@ import {
   parseCloudSyncStatus,
   statusKey,
 } from '@novel-master/core';
+import {mapCloudSyncSdkError} from './map-cloud-sync-sdk-error';
 import {createS3ObjectStorage} from '@novel-master/cloud-sync-driver-s3';
 import {
   HeadBucketCommand,
@@ -184,20 +185,8 @@ function buildS3Client(config: S3StorageConfig): S3Client {
   return new S3Client(clientConfig);
 }
 
-function mapSdkError(error: unknown): CloudSyncError | Error {
-  if (isCloudSyncError(error)) {
-    return error;
-  }
-  const name =
-    typeof error === 'object' && error != null && 'name' in error
-      ? String((error as {name: string}).name)
-      : '';
-  if (name === 'CredentialsProviderError' || name === 'InvalidAccessKeyId') {
-    return new CloudSyncError('AUTH', '云存储凭据无效', {cause: error});
-  }
-  return error instanceof Error
-    ? error
-    : new Error(String(error));
+function mapSdkError(error: unknown): CloudSyncError {
+  return mapCloudSyncSdkError(error);
 }
 
 async function readRemoteRev(
