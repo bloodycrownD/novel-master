@@ -104,6 +104,7 @@ export type ChatConversationPanelProps = {
   onEnterHideMessageBatch: () => void;
   onEnterRestoreMessageBatch: () => void;
   onEnterDeleteMessageBatch: () => void;
+  onRefreshWorktree?: () => void;
   modelPickerOpen: boolean;
   agentPickerOpen: boolean;
   onCloseModelPicker: () => void;
@@ -187,6 +188,7 @@ export function ChatConversationPanel({
   onEnterHideMessageBatch,
   onEnterRestoreMessageBatch,
   onEnterDeleteMessageBatch,
+  onRefreshWorktree,
   modelPickerOpen,
   agentPickerOpen,
   onCloseModelPicker,
@@ -299,6 +301,12 @@ export function ChatConversationPanel({
   useEffect(() => {
     emitWorkspaceBackState();
   }, [emitWorkspaceBackState, vfsRefreshKey]);
+
+  useEffect(() => {
+    if (conversationPanel === 'workspace') {
+      void workspaceVfsRef?.current?.reload();
+    }
+  }, [conversationPanel, workspaceVfsRef]);
 
   return (
     <View
@@ -455,6 +463,7 @@ export function ChatConversationPanel({
         onHideMessages={onEnterHideMessageBatch}
         onRestoreMessages={onEnterRestoreMessageBatch}
         onDeleteMessages={onEnterDeleteMessageBatch}
+        onRefreshWorktree={onRefreshWorktree}
       />
       <MessageActionMenu
         visible={useWebviewMessageMenu && messageMenuTarget != null}

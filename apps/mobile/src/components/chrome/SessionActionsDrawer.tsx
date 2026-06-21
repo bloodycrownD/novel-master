@@ -16,6 +16,7 @@ type Props = {
   onHideMessages?: () => void;
   onRestoreMessages?: () => void;
   onDeleteMessages?: () => void;
+  onRefreshWorktree?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -27,6 +28,7 @@ export function SessionActionsDrawer({
   onHideMessages,
   onRestoreMessages,
   onDeleteMessages,
+  onRefreshWorktree,
 }: Props) {
   const {tokens} = useTheme();
 
@@ -34,6 +36,7 @@ export function SessionActionsDrawer({
     {label: '聊天重命名', action: onRename},
     {label: '查看提示词', action: onRealPrompt},
     {label: '压缩上下文', action: onCompact},
+    {label: '刷新工作树', action: onRefreshWorktree},
     {label: '隐藏消息', action: onHideMessages},
     {label: '恢复消息', action: onRestoreMessages},
     {label: '删除消息', action: onDeleteMessages},
