@@ -71,10 +71,7 @@ import {
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
-import {
-  getOrRefreshSessionWorktreeSnapshot,
-  invalidateSessionWorktreeSnapshot,
-} from '../../services/worktree-snapshot.service';
+import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../template/TemplatePullButton';
 import {useToast} from '../chrome/ToastHost';
@@ -83,10 +80,11 @@ export type VfsFileManagerPullScope =
   | {kind: 'project'; projectId: string}
   | {kind: 'session'; sessionId: string};
 
-/** 供父组件控制系统返回时逐级退出目录。 */
+/** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
   canGoUp: () => boolean;
   goUp: () => void;
+  reload: () => Promise<void>;
 };
 
 export type VfsFileManagerProps = {
@@ -221,15 +219,6 @@ export const VfsFileManager = forwardRef<
     }
   }, [currentPath]);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      canGoUp: () => currentPath !== root,
-      goUp,
-    }),
-    [currentPath, root, goUp],
-  );
-
   useEffect(() => {
     onDirectoryChange?.();
   }, [currentPath, onDirectoryChange]);
@@ -244,17 +233,9 @@ export const VfsFileManager = forwardRef<
   scopeRef.current = scope;
 
   const fetchWorktreeRows = useCallback(async (): Promise<WorktreeListRow[]> => {
-    const scopeNow = scopeRef.current;
     const worktreeSvc = worktreeRef.current;
-    if (scopeNow.kind === 'session') {
-      const snap = await getOrRefreshSessionWorktreeSnapshot(runtime, {
-        projectId: scopeNow.projectId,
-        sessionId: scopeNow.sessionId,
-      });
-      return [...snap.listRows];
-    }
     return worktreeSvc.buildListRows();
-  }, [runtime]);
+  }, []);
 
   const applyWorktreeRowsToVisibleList = useCallback(
     (allRows: WorktreeListRow[]) => {
@@ -265,14 +246,9 @@ export const VfsFileManager = forwardRef<
   );
 
   const refreshVisibleRowsFromWorktree = useCallback(async () => {
-    invalidateSessionSnapshot();
     const allRows = await fetchWorktreeRows();
     applyWorktreeRowsToVisibleList(allRows);
-  }, [
-    fetchWorktreeRows,
-    applyWorktreeRowsToVisibleList,
-    invalidateSessionSnapshot,
-  ]);
+  }, [fetchWorktreeRows, applyWorktreeRowsToVisibleList]);
 
   const reload = useCallback(async () => {
     if (reloadInFlightRef.current) {
@@ -349,6 +325,16 @@ export const VfsFileManager = forwardRef<
     invalidateSessionSnapshot();
     await reload();
   }, [invalidateSessionSnapshot, reload]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      canGoUp: () => currentPath !== root,
+      goUp,
+      reload,
+    }),
+    [currentPath, root, goUp, reload],
+  );
 
   useEffect(() => {
     reload().catch(() => undefined);
@@ -487,6 +473,7 @@ export const VfsFileManager = forwardRef<
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file') {
           await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
+          invalidateSessionSnapshot();
           await refreshVisibleRowsFromWorktree();
           return;
         }
