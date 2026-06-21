@@ -5,6 +5,7 @@ import {
   evaluateTest,
   normalizeExpression,
 } from "@/infra/sql-template/expression.js";
+import { SqlTemplateError } from "@/infra/sql-template/errors.js";
 
 describe("expression", () => {
   it("normalizes MyBatis and/or/not", () => {
@@ -44,5 +45,20 @@ describe("expression", () => {
     assert.equal(evaluateTest("name == 'and'", stack), true);
     assert.equal(evaluateTest('status == "or"', stack), true);
     assert.equal(evaluateTest("name == 'or'", stack), false);
+  });
+
+  it("rejects constructor sandbox escape vectors", () => {
+    const stack = [{}];
+    for (const expr of [
+      "(0).constructor.constructor('return globalThis')()",
+      "constructor",
+      "obj.constructor",
+    ]) {
+      assert.throws(
+        () => evaluateTest(expr, stack),
+        (err: unknown) => err instanceof SqlTemplateError,
+        expr,
+      );
+    }
   });
 });

@@ -6,7 +6,8 @@ import { SqlTemplateError } from "./errors.js";
 import type { ContextStack } from "./context.js";
 import { mergedContextForExpression } from "./context-proxy.js";
 
-const FORBIDDEN_PATTERN = /[;{}]|=>|\bfunction\b|\bnew\b|\beval\b|\bimport\b/i;
+const FORBIDDEN_PATTERN =
+  /[;{}]|=>|\bfunction\b|\bnew\b|\beval\b|\bimport\b|\bconstructor\b/i;
 
 const RESERVED_WORDS = new Set([
   "true",
