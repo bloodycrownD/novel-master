@@ -1,15 +1,12 @@
 /**
- * Session 级 worktree 快照端口（仅 display + listRows）。
+ * Session 级 worktree 快照端口（仅持久 worktreeDisplay）。
  *
  * @module service/prompt/session-worktree-snapshot.port
  */
 
-import type { WorktreeListRow } from "@/domain/worktree/model/worktree-types.js";
-
-/** 单次 materialize 的 worktree 快照。 */
+/** 单次 materialize 的 worktree 快照（消费方 ②）。 */
 export interface SessionWorktreeSnapshot {
   readonly worktreeDisplay: string;
-  readonly listRows: readonly WorktreeListRow[];
   readonly refreshedAtMs: number;
 }
 
@@ -21,10 +18,7 @@ export interface SessionWorktreeSnapshotStore {
   getOrRefresh(
     projectId: string,
     sessionId: string,
-    render: () => Promise<{
-      readonly worktreeDisplay: string;
-      readonly listRows: readonly WorktreeListRow[];
-    }>,
+    render: () => Promise<{ readonly worktreeDisplay: string }>,
   ): Promise<SessionWorktreeSnapshot>;
   clear(projectId: string, sessionId: string): void;
 }

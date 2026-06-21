@@ -6,21 +6,19 @@ import {
 
 describe('worktree-snapshot.service', () => {
   it('getOrRefresh delegates to worktreeSnapshot store', async () => {
-    const materialize = jest.fn(async () => ({
+    const materializePersistBlock = jest.fn(async () => ({
       worktreeDisplay: 'wt',
-      listRows: [{kind: 'dir' as const, path: '/', ruleState: '', inclusionMode: '', displayState: ''}],
     }));
     const getOrRefresh = jest.fn(async (_p, _s, loader) => {
       const rendered = await loader();
       return {
         worktreeDisplay: rendered.worktreeDisplay,
-        listRows: rendered.listRows,
         refreshedAtMs: Date.now(),
       };
     });
     const runtime = {
       worktreeSnapshot: {getOrRefresh, markDirty: jest.fn()},
-      worktree: () => ({materialize}),
+      worktree: () => ({materializePersistBlock}),
     };
 
     const snap = await getOrRefreshSessionWorktreeSnapshot(runtime as any, {
@@ -29,8 +27,9 @@ describe('worktree-snapshot.service', () => {
     });
 
     expect(snap.worktreeDisplay).toBe('wt');
+    expect(snap.refreshedAtMs).toBeGreaterThan(0);
     expect(getOrRefresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
-    expect(materialize).toHaveBeenCalledTimes(1);
+    expect(materializePersistBlock).toHaveBeenCalledTimes(1);
   });
 
   it('invalidate marks session dirty', () => {

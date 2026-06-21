@@ -48,7 +48,12 @@ import type {
   WorktreeListRow,
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
-import type { WorktreeMaterialized, WorktreeService } from "../worktree.port.js";
+import type {
+  WorktreeLiveView,
+  WorktreeMaterialized,
+  WorktreePersistBlock,
+  WorktreeService,
+} from "../worktree.port.js";
 
 /** Dependencies for {@link DefaultWorktreeService}. */
 export interface WorktreeServiceDeps {
@@ -62,6 +67,9 @@ export interface WorktreeServiceDeps {
  */
 export class DefaultWorktreeService implements WorktreeService {
   readonly scope: WorktreeScope;
+
+  /** 并发 materializeLiveView 合并为单次 metadata 加载。 */
+  private liveViewInFlight: Promise<WorktreeLiveView> | null = null;
 
   constructor(private readonly deps: WorktreeServiceDeps) {
     this.scope = deps.scope;
@@ -121,6 +129,7 @@ export class DefaultWorktreeService implements WorktreeService {
 
   async materialize(): Promise<WorktreeMaterialized> {
     const ctx = await this.loadContextMetadata();
+    const displayByPath = this.buildDisplayByPath(ctx);
     const listRows: WorktreeListRow[] = [];
     const blocks: string[] = [];
     await this.walkDir(
@@ -129,27 +138,63 @@ export class DefaultWorktreeService implements WorktreeService {
       listRows,
       blocks,
     );
+    const filetreeDisplay = renderWorktreeFileTreeForMacro({
+      scope: this.scope,
+      allDirs: ctx.allDirs,
+      fileSet: ctx.fileSet,
+      dirRuleMap: ctx.dirRuleMap,
+      mtimeByPath: ctx.mtimeByPath,
+      displayByPath,
+    });
     return {
       listRows,
       worktreeDisplay: joinFileBlocks(blocks),
-      filetreeDisplay: await this.renderFileTree(),
+      filetreeDisplay,
     };
   }
 
-  async buildListRows(): Promise<WorktreeListRow[]> {
+  async materializeLiveView(): Promise<WorktreeLiveView> {
+    if (this.liveViewInFlight != null) {
+      return this.liveViewInFlight;
+    }
+    const inFlight = this.doMaterializeLiveView();
+    this.liveViewInFlight = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      if (this.liveViewInFlight === inFlight) {
+        this.liveViewInFlight = null;
+      }
+    }
+  }
+
+  async materializePersistBlock(): Promise<WorktreePersistBlock> {
     const ctx = await this.loadContextMetadata();
-    const rows: WorktreeListRow[] = [];
-    // List-only walk: metadata path never reads file content.
-    await this.walkDir(ctx, worktreeRootLogicalPath(this.scope), rows, null);
-    return rows;
+    const blocks: string[] = [];
+    await this.walkDir(
+      ctx,
+      worktreeRootLogicalPath(this.scope),
+      [],
+      blocks,
+    );
+    return { worktreeDisplay: joinFileBlocks(blocks) };
+  }
+
+  async buildListRows(): Promise<WorktreeListRow[]> {
+    const live = await this.materializeLiveView();
+    return [...live.listRows];
   }
 
   async renderDisplay(): Promise<string> {
-    return (await this.materialize()).worktreeDisplay;
+    return (await this.materializePersistBlock()).worktreeDisplay;
   }
 
   async renderFileTree(): Promise<string> {
-    const ctx = await this.loadContextMetadata();
+    return (await this.materializeLiveView()).filetreeDisplay;
+  }
+
+  /** 按文件路径预计算展示档位（宏树后缀用）。 */
+  private buildDisplayByPath(ctx: TreeContextMetadata): Map<string, DisplayState> {
     const displayByPath = new Map<string, DisplayState>();
     for (const filePath of ctx.fileSet) {
       const parent = parentDirOf(filePath);
@@ -161,7 +206,20 @@ export class DefaultWorktreeService implements WorktreeService {
         this.computeDisplay(filePath, parent, ctx),
       );
     }
-    return renderWorktreeFileTreeForMacro({
+    return displayByPath;
+  }
+
+  private async doMaterializeLiveView(): Promise<WorktreeLiveView> {
+    const ctx = await this.loadContextMetadata();
+    const displayByPath = this.buildDisplayByPath(ctx);
+    const listRows: WorktreeListRow[] = [];
+    await this.walkDir(
+      ctx,
+      worktreeRootLogicalPath(this.scope),
+      listRows,
+      null,
+    );
+    const filetreeDisplay = renderWorktreeFileTreeForMacro({
       scope: this.scope,
       allDirs: ctx.allDirs,
       fileSet: ctx.fileSet,
@@ -169,6 +227,7 @@ export class DefaultWorktreeService implements WorktreeService {
       mtimeByPath: ctx.mtimeByPath,
       displayByPath,
     });
+    return { listRows, filetreeDisplay };
   }
 
   /** Loads path/mtime/rules context without scanning file content. */

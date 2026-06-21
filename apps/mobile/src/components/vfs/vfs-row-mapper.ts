@@ -131,7 +131,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
       name: entryName(entry.path),
       kind: 'dir',
       subtitle: '',
-      badge: {label: '跟随', tone: 'follow'},
+      badge: dirRuleBadge(false),
       ruleEnabled: false,
     };
   }

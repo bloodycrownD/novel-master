@@ -22,6 +22,7 @@ import { NovelMasterProvider } from "./providers/NovelMasterProvider";
 import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
 import { ToastHost } from "./components/ui/ToastHost";
 import { ThemeProvider } from "./providers/ThemeProvider";
+import { ipcWorktreeInvalidateSessionSnapshot } from "./ipc/client";
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
   items: ReturnType<typeof workspaceMenuItems>;
@@ -279,6 +280,28 @@ function DesktopOverlays() {
           }}
         >
           删除消息
+        </button>
+        <button
+          type="button"
+          data-session-action="refresh-worktree"
+          onClick={() => {
+            closeMenus();
+            if (projectId && sessionId) {
+              void (async () => {
+                const result = await ipcWorktreeInvalidateSessionSnapshot({
+                  projectId,
+                  sessionId,
+                });
+                if (result.ok) {
+                  showToast("工作树已刷新");
+                } else {
+                  showToast(result.error.message);
+                }
+              })();
+            }
+          }}
+        >
+          刷新工作树
         </button>
         <button
           type="button"

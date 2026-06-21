@@ -4,7 +4,6 @@
  * @module service/prompt/impl/session-worktree-snapshot-store.service
  */
 
-import type { WorktreeListRow } from "@/domain/worktree/model/worktree-types.js";
 import type {
   SessionWorktreeSnapshot,
   SessionWorktreeSnapshotStore,
@@ -38,7 +37,6 @@ export class DefaultSessionWorktreeSnapshotStore
     this.store.set(key, {
       snapshot: {
         worktreeDisplay: "",
-        listRows: [],
         refreshedAtMs: 0,
       },
       dirty: true,
@@ -52,10 +50,7 @@ export class DefaultSessionWorktreeSnapshotStore
   async getOrRefresh(
     projectId: string,
     sessionId: string,
-    render: () => Promise<{
-      readonly worktreeDisplay: string;
-      readonly listRows: readonly WorktreeListRow[];
-    }>,
+    render: () => Promise<{ readonly worktreeDisplay: string }>,
   ): Promise<SessionWorktreeSnapshot> {
     const key = cacheKey(projectId, sessionId);
     const entry = this.store.get(key);
@@ -63,10 +58,9 @@ export class DefaultSessionWorktreeSnapshotStore
       return entry.snapshot;
     }
 
-    const { worktreeDisplay, listRows } = await render();
+    const { worktreeDisplay } = await render();
     const snapshot: SessionWorktreeSnapshot = {
       worktreeDisplay,
-      listRows,
       refreshedAtMs: Date.now(),
     };
     this.store.set(key, { snapshot, dirty: false });

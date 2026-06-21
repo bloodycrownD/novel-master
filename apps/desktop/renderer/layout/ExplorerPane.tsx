@@ -52,6 +52,9 @@ export function ExplorerPane({
                   className="explorer-tree"
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
+                  onPointerDown={() => {
+                    refreshWorkspaceTrees();
+                  }}
                   onContextMenu={(e) => {
                     if ((e.target as HTMLElement).closest(".tree-node")) {
                       return;

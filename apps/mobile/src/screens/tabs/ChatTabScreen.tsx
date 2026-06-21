@@ -32,6 +32,7 @@ import {
 } from '@/components/chat/transcript-selectable-role';
 import {TextPromptModal} from '@/components/ui/TextPromptModal';
 import {useRuntime} from '@/hooks/useRuntime';
+import {invalidateSessionWorktreeSnapshot} from '@/services/worktree-snapshot.service';
 import {useMobileScope} from '@/hooks/useMobileScope';
 import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
 import {
@@ -348,6 +349,14 @@ export function ChatTabScreen() {
     setChatStreamBatchEnabled(await readChatStreamBatchEnabled(appUi));
   }, [appUi]);
 
+  const handleRefreshWorktree = useCallback(() => {
+    if (projectId == null || sessionId == null) {
+      return;
+    }
+    invalidateSessionWorktreeSnapshot(runtime, projectId, sessionId);
+    showToast('工作树快照已标记刷新');
+  }, [runtime, projectId, sessionId, showToast]);
+
   useFocusEffect(
     useCallback(() => {
       refreshChatRichTextPref().catch(() => undefined);
@@ -445,6 +454,10 @@ export function ChatTabScreen() {
         onEnterDeleteMessageBatch={() => {
           scope.setSessionDrawerOpen(false);
           messageActions.enterDeleteMessageBatch();
+        }}
+        onRefreshWorktree={() => {
+          scope.setSessionDrawerOpen(false);
+          handleRefreshWorktree();
         }}
         modelPickerOpen={modelPickerOpen}
         agentPickerOpen={agentPickerOpen}

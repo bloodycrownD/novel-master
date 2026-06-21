@@ -12,15 +12,6 @@ describe("SessionWorktreeSnapshotStore", () => {
 
     const snapshot = await store.getOrRefresh(projectId, sessionId, async () => ({
       worktreeDisplay: "worktree-body",
-      listRows: [
-        {
-          kind: "file" as const,
-          path: "/a.md",
-          ruleState: "rule_on",
-          inclusionMode: "auto",
-          displayState: "full",
-        },
-      ],
     }));
 
     assert.ok(snapshot.worktreeDisplay.length > 0);
@@ -35,14 +26,12 @@ describe("SessionWorktreeSnapshotStore", () => {
 
     await store.getOrRefresh(projectId, sessionId, async () => ({
       worktreeDisplay: "first",
-      listRows: [],
     }));
 
     store.markDirty(projectId, sessionId);
 
     const refreshed = await store.getOrRefresh(projectId, sessionId, async () => ({
       worktreeDisplay: "second",
-      listRows: [],
     }));
 
     assert.equal(refreshed.worktreeDisplay, "second");

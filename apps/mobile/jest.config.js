@@ -18,6 +18,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/chat.js',
     ),
+    '^@novel-master/core/agent$': path.join(
+      repoRoot,
+      'packages/core/dist/public/agent.js',
+    ),
     '^@novel-master/core/events$': path.join(
       repoRoot,
       'packages/core/dist/public/events.js',
@@ -26,6 +30,14 @@ module.exports = {
     '^@novel-master/core/worktree$': path.join(
       repoRoot,
       'packages/core/dist/public/worktree.js',
+    ),
+    '^@novel-master/core/feature-flags$': path.join(
+      repoRoot,
+      'packages/core/dist/public/feature-flags.js',
+    ),
+    '^@novel-master/core/vfs$': path.join(
+      repoRoot,
+      'packages/core/dist/public/vfs.js',
     ),
     '^@novel-master/core/nmtp$': path.join(
       repoRoot,

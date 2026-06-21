@@ -7,6 +7,7 @@ import type {
   IpcResult,
   WorktreeBuildListRowsRequest,
   WorktreeGetDirRuleRequest,
+  WorktreeInvalidateSessionSnapshotRequest,
   WorktreeListRowDto,
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
@@ -48,12 +49,7 @@ async function loadWorktreeRows(
   const scope = resolveVfsScopeFromRequest(req);
   if (scope.kind === "session") {
     const wt = getWorktreeForScope(rt, scope);
-    const snap = await rt.worktreeSnapshot.getOrRefresh(
-      scope.projectId,
-      scope.sessionId,
-      () => wt.materialize(),
-    );
-    return [...snap.listRows];
+    return wt.buildListRows();
   }
   const wt = getWorktreeForScope(rt, scope);
   return wt.buildListRows();
@@ -106,6 +102,23 @@ export async function handleWorktreeSetFileRule(
       inclusionMode: req.inclusionMode,
     });
     invalidateSessionWorktreeSnapshot(rt, scope);
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+/** 手动「刷新工作树」：仅 markDirty，不重载消费方 ① UI。 */
+export async function handleWorktreeInvalidateSessionSnapshot(
+  req: WorktreeInvalidateSessionSnapshotRequest,
+): Promise<IpcResult<void>> {
+  try {
+    const rt = await getDesktopRuntime();
+    invalidateSessionWorktreeSnapshot(rt, {
+      kind: "session",
+      projectId: req.projectId,
+      sessionId: req.sessionId,
+    });
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

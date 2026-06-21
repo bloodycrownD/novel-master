@@ -145,5 +145,7 @@ describe('vfs-row-mapper', () => {
     expect(mapped.kind).toBe('dir');
     expect(mapped.name).toBe('drafts');
     expect(mapped.subtitle).toBe('');
+    expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
+    expect(mapped.badge?.label).not.toBe('跟随');
   });
 });

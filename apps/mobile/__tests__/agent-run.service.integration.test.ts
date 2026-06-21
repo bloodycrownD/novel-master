@@ -28,12 +28,11 @@ function baseRuntime(overrides: Partial<any> = {}) {
     sessionFs: {},
     regexConfig: {},
     eventBus: {publish: jest.fn(), subscribe: () => ({unsubscribe: () => undefined})},
-    worktreeSnapshot: {getOrRefresh: async () => ({worktreeDisplay: '', listRows: [], refreshedAtMs: 0})},
+    worktreeSnapshot: {
+      getOrRefresh: async () => ({worktreeDisplay: '', refreshedAtMs: 0}),
+    },
     worktree: () => ({
-      materialize: async () => ({
-        worktreeDisplay: '',
-        listRows: [],
-      }),
+      materializePersistBlock: async () => ({worktreeDisplay: ''}),
     }),
     modelRequests: {},
     compactionConditionEvaluator: undefined,

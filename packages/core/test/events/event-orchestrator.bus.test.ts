@@ -255,6 +255,7 @@ describe("event orchestrator (bus integration)", () => {
             scope: { kind: "session", projectId: "p1", sessionId: "s1" },
             renderDisplay: async () => "",
             buildListRows: async () => [],
+            materializePersistBlock: async () => ({ worktreeDisplay: "" }),
           }) as never,
         sessionVfs: () => ({}) as never,
         messageCheckpoint: {} as never,

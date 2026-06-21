@@ -13,7 +13,6 @@ export function mockWorktreeSnapshot(
     const rendered = await render();
     return originalGetOrRefresh(_p, _s, async () => ({
       worktreeDisplay: rendered.worktreeDisplay || worktreeDisplay,
-      listRows: rendered.listRows,
     }));
   };
   return store;
@@ -29,6 +28,7 @@ export function mockWorktreeService(
     scope: { kind: "session", projectId, sessionId },
     renderDisplay: async () => worktreeDisplay,
     buildListRows: async () => [],
+    materializePersistBlock: async () => ({ worktreeDisplay }),
   } as unknown as WorktreeService;
 }
 

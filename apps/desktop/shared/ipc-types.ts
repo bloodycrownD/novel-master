@@ -39,6 +39,8 @@ export const IPC_CHANNELS = {
   WORKTREE_SET_DIR_RULE: "nm:worktree/setDirRule",
   WORKTREE_SET_FILE_RULE: "nm:worktree/setFileRule",
   WORKTREE_GET_DIR_RULE: "nm:worktree/getDirRule",
+  WORKTREE_INVALIDATE_SESSION_SNAPSHOT:
+    "nm:worktree/invalidateSessionSnapshot",
 
   PROJECTS_PULL_TEMPLATE: "nm:projects/pullTemplate",
   SESSIONS_PULL_TEMPLATE: "nm:sessions/pullTemplate",
@@ -356,6 +358,12 @@ export type WorktreeSetFileRuleRequest = VfsScopeRequest & {
 
 export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
+};
+
+/** 手动刷新工作树：仅标记会话 worktree 快照 dirty（消费方 ②）。 */
+export type WorktreeInvalidateSessionSnapshotRequest = {
+  readonly projectId: string;
+  readonly sessionId: string;
 };
 
 export type SessionFsRollbackRequest = {

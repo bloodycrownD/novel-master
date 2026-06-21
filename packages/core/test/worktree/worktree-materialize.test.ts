@@ -79,10 +79,11 @@ describe("worktree materialize", () => {
 
     calls.scanContents = 0;
     calls.findByPath = 0;
+    calls.listFileMetaUnderPrefix = 0;
     const materialized = await wt.materialize();
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
-    assert.equal(calls.listFileMetaUnderPrefix, 3, "materialize 额外调用 renderFileTree 再加载一次 metadata");
+    assert.equal(calls.listFileMetaUnderPrefix, 1, "materialize 应仅加载一次 metadata");
   });
 
   it("filename fill display never calls findByPath", async () => {
@@ -192,7 +193,7 @@ describe("worktree materialize", () => {
     assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
 
-  it("session worktree snapshot getOrRefresh stores listRows", async () => {
+  it("session worktree snapshot getOrRefresh 仅存 worktreeDisplay", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -212,16 +213,10 @@ describe("worktree materialize", () => {
     const snapshot = await store.getOrRefresh(
       project.id,
       session.id,
-      async () => ({
-        worktreeDisplay: await wt.renderDisplay(),
-        listRows: await wt.buildListRows(),
-      }),
+      async () => wt.materializePersistBlock(),
     );
-    assert.ok(snapshot.listRows.length >= 2);
-    const listRows = await wt.buildListRows();
-    assert.deepEqual(
-      snapshot.listRows.map((r) => r.path),
-      listRows.map((r) => r.path),
-    );
+    assert.ok(snapshot.worktreeDisplay.length > 0);
+    const display = await wt.renderDisplay();
+    assert.equal(snapshot.worktreeDisplay, display);
   });
 });
