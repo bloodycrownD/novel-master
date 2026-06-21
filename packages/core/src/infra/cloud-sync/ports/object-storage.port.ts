@@ -22,4 +22,12 @@ export interface ObjectStoragePort {
     body: Uint8Array,
     options?: { ifMatch?: string; ifNoneMatch?: string },
   ): Promise<{ etag: string }>;
+  /** 从本地文件上传对象（可选；协调器在 Push 时优先于 bytes 路径） */
+  putFile?(
+    key: string,
+    filePath: string,
+    options?: { ifMatch?: string; ifNoneMatch?: string },
+  ): Promise<{ etag: string }>;
+  /** 下载对象到本地文件（可选；协调器在 Pull 时优先于内存路径） */
+  getToPath?(key: string, destPath: string): Promise<{ etag: string }>;
 }

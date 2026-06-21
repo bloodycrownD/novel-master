@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CloudSyncCoordinator } from "../../src/infra/cloud-sync/impl/cloud-sync-coordinator.js";
 import { CloudSyncError } from "../../src/infra/cloud-sync/errors/cloud-sync-errors.js";
 import { statusKey, snapshotKey } from "../../src/infra/cloud-sync/logic/paths.js";
@@ -10,6 +13,7 @@ import type { ObjectStoragePort } from "../../src/infra/cloud-sync/ports/object-
 const PREFIX = "novel-master/sync/";
 const DEVICE_ID = "550e8400-e29b-41d4-a716-446655440000";
 const EXPORT_PATH = "/tmp/test-export.nmbackup";
+const IMPORT_PATH = "/tmp/test-import.nmbackup";
 
 type StoredObject = {
   body: Uint8Array;
@@ -38,8 +42,12 @@ function createStorage(initial?: {
   }
   let etagCounter = 1;
 
-  const storage: ObjectStoragePort & { getStatusWrites: () => CloudSyncStatus[] } = {
+  const storage: ObjectStoragePort & {
+    getStatusWrites: () => CloudSyncStatus[];
+    getSnapshots: () => Map<string, StoredObject>;
+  } = {
     getStatusWrites: () => statusWrites,
+    getSnapshots: () => snapshots,
     async head(key: string) {
       if (key === statusKey(PREFIX)) {
         return {
@@ -77,6 +85,18 @@ function createStorage(initial?: {
       snapshots.set(key, { body, etag: newEtag });
       return { etag: newEtag };
     },
+
+    async putFile(key, filePath) {
+      const body = new Uint8Array(await readFile(filePath));
+      return storage.put(key, body);
+    },
+
+    async getToPath(key, destPath) {
+      const { body, etag } = await storage.get(key);
+      const { writeFile } = await import("node:fs/promises");
+      await writeFile(destPath, body);
+      return { etag };
+    },
   };
 
   return storage;
@@ -84,14 +104,20 @@ function createStorage(initial?: {
 
 function createMockDbSync(overrides?: Partial<DbSyncPort>): DbSyncPort & {
   imported: Uint8Array[];
+  importedPaths: string[];
 } {
   const imported: Uint8Array[] = [];
+  const importedPaths: string[] = [];
   return {
     imported,
+    importedPaths,
     isAgentActive: () => false,
     async exportSnapshotToPath(_destPath: string) {},
     async importSnapshot(bytes: Uint8Array) {
       imported.push(bytes);
+    },
+    async importSnapshotFromPath(path: string) {
+      importedPaths.push(path);
     },
     ...overrides,
   };
@@ -150,6 +176,45 @@ describe("CloudSyncCoordinator.pull", () => {
     assert.equal(result.rev, 2);
     assert.equal(dbSync.imported.length, 1);
     assert.deepEqual(dbSync.imported[0], snapBytes);
+    assert.equal(dbSync.importedPaths.length, 0);
+  });
+
+  it("CS-P1b: 文件路径 Pull 走 getToPath + importSnapshotFromPath", async () => {
+    const snapKey = snapshotKey(PREFIX, 2);
+    const snapBytes = new Uint8Array([10, 20, 30]);
+    const storage = createStorage({
+      status: {
+        schemaVersion: 1,
+        rev: 2,
+        snapshotKey: snapKey,
+        snapshotSha256: "deadbeef",
+        snapshotBytes: snapBytes.length,
+        lock: null,
+      },
+      snapshots: { [snapKey]: snapBytes },
+    });
+    const dbSync = createMockDbSync();
+    const importPath = join(tmpdir(), `nm-coord-pull-${Date.now()}.nmbackup`);
+    const coordinator = new CloudSyncCoordinator({
+      storage,
+      dbSync,
+      pathPrefix: PREFIX,
+      deviceId: DEVICE_ID,
+      exportTempPath: EXPORT_PATH,
+      importTempPath: importPath,
+      computeSha256Hex: () => "unused",
+      hashSnapshotFile: async () => "deadbeef",
+      readSnapshotBytes: async () => new Uint8Array(),
+      getSnapshotBytes: async () => 0,
+    });
+
+    const result = await coordinator.pull({ lastSyncedRev: 1 });
+    assert.equal(result.rev, 2);
+    assert.equal(dbSync.imported.length, 0);
+    assert.equal(dbSync.importedPaths.length, 1);
+    assert.equal(dbSync.importedPaths[0], importPath);
+    const onDisk = await readFile(importPath);
+    assert.deepEqual(new Uint8Array(onDisk), snapBytes);
   });
 
   it("CS-P2: remote.rev=1, local=1 返回 ALREADY_UP_TO_DATE", async () => {
@@ -226,6 +291,43 @@ describe("CloudSyncCoordinator.push", () => {
     assert.equal(finalWrite.lock, null);
     assert.equal(finalWrite.snapshotKey, snapshotKey(PREFIX, 2));
     assert.equal(finalWrite.snapshotSha256, "abc123");
+  });
+
+  it("CS-P5b: 文件路径 Push 走 hashSnapshotFile + putFile", async () => {
+    const storage = createStorage({
+      status: { schemaVersion: 1, rev: 1, lock: null },
+    });
+    const exportPath = join(tmpdir(), `nm-coord-push-${Date.now()}.nmbackup`);
+    const snapBytes = new Uint8Array([1, 2, 3, 4]);
+    await writeFile(exportPath, snapBytes);
+
+    const dbSync = createMockDbSync({
+      async exportSnapshotToPath(destPath: string) {
+        await writeFile(destPath, snapBytes);
+      },
+    });
+
+    const coordinator = new CloudSyncCoordinator({
+      storage,
+      dbSync,
+      pathPrefix: PREFIX,
+      deviceId: DEVICE_ID,
+      exportTempPath: exportPath,
+      computeSha256Hex: () => "unused",
+      hashSnapshotFile: async () => "abc123",
+      readSnapshotBytes: async () => {
+        throw new Error("不应走 bytes 读路径");
+      },
+      getSnapshotBytes: async () => snapBytes.length,
+    });
+
+    const result = await coordinator.push({ lastSyncedRev: 1 });
+    assert.equal(result.rev, 2);
+
+    const snapKey = snapshotKey(PREFIX, 2);
+    const stored = storage.getSnapshots().get(snapKey);
+    assert.ok(stored != null);
+    assert.deepEqual(stored.body, snapBytes);
   });
 
   it("CS-P6: Push 上传失败时 finally 尝试清锁", async () => {

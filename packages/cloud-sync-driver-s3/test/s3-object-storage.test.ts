@@ -8,7 +8,7 @@ import {
   type S3Client,
 } from "@aws-sdk/client-s3";
 import { CloudSyncError } from "@novel-master/core";
-import { createS3ObjectStorage } from "../src/create-s3-object-storage.js";
+import { createS3ObjectStorage, isAliyunOssEndpoint } from "../src/create-s3-object-storage.js";
 import type { S3StorageConfig } from "../src/s3-config.js";
 
 const testConfig: S3StorageConfig = {
@@ -119,5 +119,126 @@ describe("createS3ObjectStorage", () => {
         return true;
       },
     );
+  });
+
+  it("阿里云 OSS：条件 PUT 改为 Head 校验 etag，不传 If-Match", async () => {
+    const ossConfig: S3StorageConfig = {
+      ...testConfig,
+      endpoint: "https://oss-cn-beijing.aliyuncs.com",
+    };
+    const body = new Uint8Array([1, 2, 3]);
+    let headCalls = 0;
+
+    const storage = createS3ObjectStorage(ossConfig, {
+      client: createMockClient(async (command) => {
+        if (command instanceof HeadObjectCommand) {
+          headCalls += 1;
+          return { ETag: '"current-etag"', ContentLength: 10 };
+        }
+        assert.ok(command instanceof PutObjectCommand);
+        assert.equal(command.input.IfMatch, undefined);
+        assert.equal(command.input.IfNoneMatch, undefined);
+        return { ETag: '"new-etag"' };
+      }),
+    });
+
+    const result = await storage.put("status.json", body, {
+      ifMatch: "current-etag",
+    });
+    assert.equal(result.etag, "new-etag");
+    assert.equal(headCalls, 1);
+  });
+
+  it("阿里云 OSS：If-Match 与远端 etag 不一致时抛 LOCK_CONTENTION", async () => {
+    const ossConfig: S3StorageConfig = {
+      ...testConfig,
+      endpoint: "https://oss-cn-beijing.aliyuncs.com",
+    };
+    let putCalls = 0;
+
+    const storage = createS3ObjectStorage(ossConfig, {
+      client: createMockClient(async (command) => {
+        if (command instanceof HeadObjectCommand) {
+          return { ETag: '"other-etag"', ContentLength: 10 };
+        }
+        putCalls += 1;
+        return { ETag: '"new-etag"' };
+      }),
+    });
+
+    await assert.rejects(
+      () =>
+        storage.put("status.json", new Uint8Array([1]), {
+          ifMatch: "expected-etag",
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof CloudSyncError);
+        assert.equal(error.code, "LOCK_CONTENTION");
+        return true;
+      },
+    );
+    assert.equal(putCalls, 0);
+  });
+
+  it("putFile：从本地文件读取并上传", async () => {
+    const { writeFile, unlink } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const filePath = join(tmpdir(), `s3-put-file-${Date.now()}.bin`);
+    const payload = new Uint8Array([4, 5, 6]);
+    await writeFile(filePath, payload);
+
+    try {
+      const storage = createS3ObjectStorage(testConfig, {
+        client: createMockClient(async (command) => {
+          assert.ok(command instanceof PutObjectCommand);
+          assert.deepEqual(command.input.Body, payload);
+          return { ETag: '"file-etag"' };
+        }),
+      });
+
+      const result = await storage.putFile!("snapshots/test.nmbackup", filePath);
+      assert.equal(result.etag, "file-etag");
+    } finally {
+      await unlink(filePath).catch(() => undefined);
+    }
+  });
+
+  it("getToPath：下载并写入本地文件", async () => {
+    const { readFile, unlink } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const destPath = join(tmpdir(), `s3-get-to-path-${Date.now()}.bin`);
+    const payload = new Uint8Array([7, 8, 9]);
+
+    const storage = createS3ObjectStorage(testConfig, {
+      client: createMockClient(async (command) => {
+        assert.ok(command instanceof GetObjectCommand);
+        return {
+          ETag: '"get-path-etag"',
+          Body: { transformToByteArray: async () => payload },
+        };
+      }),
+    });
+
+    try {
+      const result = await storage.getToPath!("snapshots/test.nmbackup", destPath);
+      assert.equal(result.etag, "get-path-etag");
+      const onDisk = await readFile(destPath);
+      assert.deepEqual(new Uint8Array(onDisk), payload);
+    } finally {
+      await unlink(destPath).catch(() => undefined);
+    }
+  });
+});
+
+describe("isAliyunOssEndpoint", () => {
+  it("识别阿里云 OSS 官方 endpoint", () => {
+    assert.equal(
+      isAliyunOssEndpoint("https://oss-cn-beijing.aliyuncs.com"),
+      true,
+    );
+    assert.equal(isAliyunOssEndpoint("oss-cn-shanghai.aliyuncs.com"), true);
+    assert.equal(isAliyunOssEndpoint("https://s3.example.com"), false);
   });
 });

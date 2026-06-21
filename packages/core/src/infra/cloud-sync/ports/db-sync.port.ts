@@ -11,4 +11,6 @@ export interface DbSyncPort {
   isAgentActive(): boolean;
   exportSnapshotToPath(destPath: string): Promise<void>;
   importSnapshot(bytes: Uint8Array): Promise<void>;
+  /** 从本地快照文件导入（可选；协调器在 Pull 时优先于内存路径） */
+  importSnapshotFromPath?(path: string): Promise<void>;
 }

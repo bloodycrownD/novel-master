@@ -31,6 +31,10 @@ export type CloudSyncCoordinatorDeps = {
   computeSha256Hex: (bytes: Uint8Array) => string;
   readSnapshotBytes: (path: string) => Promise<Uint8Array>;
   getSnapshotBytes: (path: string) => Promise<number>;
+  /** 分块从文件计算 SHA-256（可选；与 putFile/getToPath 配合走文件路径） */
+  hashSnapshotFile?: (path: string) => Promise<string>;
+  /** Pull 时下载快照的临时路径（可选；与 getToPath 配合） */
+  importTempPath?: string;
   leaseSeconds?: number;
 };
 
@@ -63,6 +67,8 @@ export class CloudSyncCoordinator {
   private readonly computeSha256Hex: (bytes: Uint8Array) => string;
   private readonly readSnapshotBytes: (path: string) => Promise<Uint8Array>;
   private readonly getSnapshotBytes: (path: string) => Promise<number>;
+  private readonly hashSnapshotFile?: (path: string) => Promise<string>;
+  private readonly importTempPath?: string;
   private readonly leaseSeconds: number;
 
   constructor(deps: CloudSyncCoordinatorDeps) {
@@ -74,7 +80,27 @@ export class CloudSyncCoordinator {
     this.computeSha256Hex = deps.computeSha256Hex;
     this.readSnapshotBytes = deps.readSnapshotBytes;
     this.getSnapshotBytes = deps.getSnapshotBytes;
+    this.hashSnapshotFile = deps.hashSnapshotFile;
+    this.importTempPath = deps.importTempPath;
     this.leaseSeconds = deps.leaseSeconds ?? DEFAULT_LEASE_SECONDS;
+  }
+
+  /** Push 是否可走文件路径（分块哈希 + 单次读文件上传） */
+  private canUseFilePathPush(): boolean {
+    return (
+      this.hashSnapshotFile != null &&
+      typeof this.storage.putFile === "function"
+    );
+  }
+
+  /** Pull 是否可走文件路径（下载写盘 + 分块哈希 + 路径导入） */
+  private canUseFilePathPull(): boolean {
+    return (
+      this.importTempPath != null &&
+      this.hashSnapshotFile != null &&
+      typeof this.storage.getToPath === "function" &&
+      typeof this.dbSync.importSnapshotFromPath === "function"
+    );
   }
 
   /** 拉取云端快照并导入本机数据库 */
@@ -92,13 +118,24 @@ export class CloudSyncCoordinator {
     }
 
     const snapKey = remote.snapshotKey!;
-    const { body } = await this.storage.get(snapKey);
-    const localHash = this.computeSha256Hex(body);
-    if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
-      throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+
+    if (this.canUseFilePathPull()) {
+      const tempPath = this.importTempPath!;
+      await this.storage.getToPath!(snapKey, tempPath);
+      const localHash = await this.hashSnapshotFile!(tempPath);
+      if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+        throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+      }
+      await this.dbSync.importSnapshotFromPath!(tempPath);
+    } else {
+      const { body } = await this.storage.get(snapKey);
+      const localHash = this.computeSha256Hex(body);
+      if (remote.snapshotSha256 != null && localHash !== remote.snapshotSha256) {
+        throw new CloudSyncError("CHECKSUM_MISMATCH", "下载快照校验失败");
+      }
+      await this.dbSync.importSnapshot(body);
     }
 
-    await this.dbSync.importSnapshot(body);
     return { rev: remote.rev };
   }
 
@@ -131,15 +168,21 @@ export class CloudSyncCoordinator {
 
     try {
       await this.dbSync.exportSnapshotToPath(this.exportTempPath);
-      const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
-      const hash = this.computeSha256Hex(snapshotBytes);
       const size = await this.getSnapshotBytes(this.exportTempPath);
 
       const nextRev = remote.rev + 1;
       const snapKey = snapshotKey(this.pathPrefix, nextRev);
 
+      let hash: string;
       const uploadStart = Date.now();
-      await this.storage.put(snapKey, snapshotBytes);
+      if (this.canUseFilePathPush()) {
+        hash = await this.hashSnapshotFile!(this.exportTempPath);
+        await this.storage.putFile!(snapKey, this.exportTempPath);
+      } else {
+        const snapshotBytes = await this.readSnapshotBytes(this.exportTempPath);
+        hash = this.computeSha256Hex(snapshotBytes);
+        await this.storage.put(snapKey, snapshotBytes);
+      }
       const uploadElapsed = Date.now() - uploadStart;
 
       if (uploadElapsed > this.leaseSeconds * 500) {
