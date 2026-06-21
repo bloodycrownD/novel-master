@@ -8,6 +8,7 @@ const SUBPATHS = [
   "compaction",
   "events",
   "feature-flags",
+  "message-checkpoint",
   "prompt",
   "provider",
   "regex",

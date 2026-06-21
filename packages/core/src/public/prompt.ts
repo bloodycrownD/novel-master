@@ -1,10 +1,11 @@
+/**
+ * Prompt 组装、校验与 LLM 导出相关的公开入口。
+ *
+ * @module public/prompt
+ */
+
 export { PromptError } from "../errors/prompt-errors.js";
 export type { PromptErrorCode } from "../errors/prompt-errors.js";
-export type {
-  PromptBlock,
-  PromptBlockLifecycle,
-  PromptBlockRole,
-} from "../domain/prompt/model/prompt-block.js";
 export type {
   AgentPromptLayout,
   PersistPromptBlock,
@@ -12,11 +13,6 @@ export type {
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "../domain/prompt/model/agent-prompt-layout.js";
-export {
-  movePersistBlock,
-  updatePersistWorktreeRole,
-  normalizePersistBlock,
-} from "../config-forms/agent/agent-editor-state.js";
 export { shouldIncludeDynamicBlock } from "../domain/prompt/logic/should-include-dynamic-block.js";
 export { messageBodyText } from "../domain/prompt/logic/message-body.js";
 export {

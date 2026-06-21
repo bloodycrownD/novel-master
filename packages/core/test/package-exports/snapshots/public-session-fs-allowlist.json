@@ -1,7 +1,5 @@
 [
   "SessionFsError",
-  "createMessageCheckpointService",
-  "createMessageRollbackService",
   "createSessionFsService",
   "isRollbackVfsDegradableError",
   "isSessionFsError",

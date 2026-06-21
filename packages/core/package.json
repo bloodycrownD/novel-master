@@ -42,6 +42,10 @@
       "types": "./dist/public/regex.d.ts",
       "import": "./dist/public/regex.js"
     },
+    "./message-checkpoint": {
+      "types": "./dist/public/message-checkpoint.d.ts",
+      "import": "./dist/public/message-checkpoint.js"
+    },
     "./session-fs": {
       "types": "./dist/public/session-fs.d.ts",
       "import": "./dist/public/session-fs.js"
@@ -65,10 +69,6 @@
     "./nmtp": {
       "types": "./dist/infra/nmtp/index.d.ts",
       "import": "./dist/infra/nmtp/index.js"
-    },
-    "./front-matter": {
-      "types": "./dist/domain/worktree/logic/front-matter.d.ts",
-      "import": "./dist/domain/worktree/logic/front-matter.js"
     },
     "./kkv": {
       "types": "./dist/service/kkv/index.d.ts",

@@ -1,3 +1,9 @@
+/**
+ * Session 文件系统回滚门面与相关错误的公开入口。
+ *
+ * @module public/session-fs
+ */
+
 export {
   SessionFsError,
   isSessionFsError,
@@ -9,13 +15,4 @@ export {
 } from "../errors/session-fs-errors.js";
 export type { SessionFsErrorCode } from "../errors/session-fs-errors.js";
 export { createSessionFsService } from "../service/session-fs/create-session-fs-service.js";
-export {
-  createMessageCheckpointService,
-  createMessageRollbackService,
-} from "../service/message-checkpoint/create-message-checkpoint-services.js";
-export type { MessageCheckpointService } from "../service/message-checkpoint/message-checkpoint.port.js";
-export type {
-  MessageRollbackService,
-  RollbackOptions,
-} from "../service/message-checkpoint/message-rollback.port.js";
 export type { SessionFsService } from "../service/session-fs/session-fs.port.js";

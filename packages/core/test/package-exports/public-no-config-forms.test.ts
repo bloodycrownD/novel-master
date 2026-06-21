@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-/** 已知 config-forms 泄漏，P3 收敛后从此清单移除。 */
-const KNOWN_LEAKS = new Set(["prompt.ts"]);
+/** 已知 config-forms 泄漏；收敛后从此清单移除。 */
+const KNOWN_LEAKS = new Set<string>();
 
 const PUBLIC_DIR = join(import.meta.dirname, "../../src/public");
 

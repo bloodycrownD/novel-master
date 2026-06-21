@@ -7,12 +7,6 @@ export {
   normalizeVendorModelId,
 } from "../domain/provider/logic/application-model-id.js";
 export { inferLlmProtocolFromApplicationModelId } from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
-/** @deprecated 请从 @novel-master/core/feature-flags 导入。 */
-export {
-  DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
-  isUserVfsUnifiedToolTurnEnabled,
-  refreshUserVfsUnifiedToolTurnSnapshot,
-} from "./feature-flags.js";
 export type { LlmProvider } from "../domain/provider/model/provider.js";
 export { providerApiKeyRef } from "../domain/provider/model/provider.js";
 export type {
@@ -93,7 +87,6 @@ export {
   tokenizerAssetPaths,
   resolveContextWindowTokens,
   seedContextWindowTokens,
-  registerTokenizerDriver,
   getTokenizerDriver,
   resolveTokenizerDriver,
   clearTokenizerDrivers,

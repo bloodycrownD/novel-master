@@ -11,8 +11,8 @@
 | 层级 | 入口 | 用途 |
 |------|------|------|
 | 主入口 | `@novel-master/core` | 应用/bootstrap、TDBC、Tool、PersistentState、serde 等横切能力 |
-| Public 收口 | `@novel-master/core/{agent,chat,...}` | 按领域划分的 **11** 个子模块（见 `src/public/*`） |
-| 辅助子路径 | `./kkv`、`./config-forms/*`、`./tdbc`、`./sksp`、`./nmtp`、`./front-matter` | 偏好存储、UI 表单、驱动直连等 |
+| Public 收口 | `@novel-master/core/{agent,chat,...}` | 按领域划分的 **12** 个子模块（见 `src/public/*`） |
+| 辅助子路径 | `./kkv`、`./config-forms/*`、`./tdbc`、`./sksp`、`./nmtp` | 偏好存储、UI 表单、驱动直连等 |
 
 主入口 **不** re-export 各 public 子入口的工厂函数（见 `test/package-exports-t0.test.ts` denylist）。
 
@@ -32,7 +32,7 @@
 
 ---
 
-## 3. Public 子入口（11 个）
+## 3. Public 子入口（12 个）
 
 | 子路径 | 领域边界 |
 |--------|----------|
@@ -41,14 +41,15 @@
 | `./compaction` | Compaction 条件与 depth slice 工具 |
 | `./events` | Events 配置存储 |
 | `./feature-flags` | 用户 VFS 统一 tool turn 等功能开关 |
-| `./prompt` | Prompt 组装（含 **已知** 来自 config-forms 的 re-export，见 canonical 表） |
+| `./message-checkpoint` | 消息 checkpoint 捕获与回滚工厂、类型 |
+| `./prompt` | Prompt 组装、校验与 LLM 导出（不含 config-forms 编辑器块操作） |
 | `./provider` | Provider CRUD / 模型配置服务 |
 | `./regex` | Regex 配置服务 |
-| `./session-fs` | Session 文件系统与 checkpoint 相关（当前） |
+| `./session-fs` | Session 文件系统回滚门面与相关错误 |
 | `./vfs` | scoped VFS 服务与工具 |
 | `./worktree` | Worktree 与 front matter 解析（`parseMarkdownFrontMatter`） |
 
-架构守卫：`public/*` 源文件 **禁止新增** 对 `config-forms` 的 import；当前唯一登记豁免为 `prompt.ts`（`KNOWN_LEAKS`）。
+架构守卫：`public/*` 源文件 **禁止** 对 `config-forms` 的 import（`KNOWN_LEAKS` 为空）。
 
 ---
 
@@ -59,20 +60,20 @@
 | `./kkv` | App 级键值偏好（`createKkvService`） |
 | `./config-forms` 及子路径 | UI 配置表单专用 re-export |
 | `./tdbc` / `./sksp` / `./nmtp` | SQLite / SKSP / NMTP 驱动注册与底层 API |
-| `./front-matter` | 独立 front matter 模块（与 worktree 能力重叠，见 canonical） |
 
 ---
 
-## 5. Canonical 路径表（P2 起维护）
+## 5. Canonical 路径表
 
-| 能力 | 推荐（Canonical） | 过渡 re-export |
-|------|-------------------|----------------|
-| depth slice 工具 | `@novel-master/core/compaction` | `config-forms/events`、`config-forms/shared` |
-| feature-flags（user VFS unified tool turn） | `@novel-master/core/feature-flags` | `@novel-master/core/provider`（deprecated） |
+| 能力 | Canonical | 已移除 |
+|------|-----------|--------|
+| depth slice 工具 | `@novel-master/core/compaction` | — |
+| feature-flags（user VFS unified tool turn） | `@novel-master/core/feature-flags` | `@novel-master/core/provider` |
 | tokenizer 驱动注册 | `@novel-master/core/nmtp` | `@novel-master/core/provider` |
-| agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt`（计划 deprecated） |
-| front matter 解析 | `@novel-master/core/worktree` | `./front-matter`（零消费时可移除 export） |
-| message checkpoint | `@novel-master/core/session-fs`（当前） | 未来 `./message-checkpoint` / `./chat`（P3） |
+| agent 编辑器块操作 | `@novel-master/core/config-forms/agent` | `@novel-master/core/prompt` |
+| front matter 解析 | `@novel-master/core/worktree` | `./front-matter` |
+| message checkpoint | `@novel-master/core/message-checkpoint` | `@novel-master/core/session-fs` |
+| 遗留 PromptBlock 类型 | 内部 `domain/prompt/model/prompt-block.js` | `@novel-master/core/prompt` |
 
 重复 export **必须** 指向同一实现（见 `duplicate-export-consistency.test.ts`）。
 
