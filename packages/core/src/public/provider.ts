@@ -1,3 +1,12 @@
+/**
+ * LLM Provider 与模型配置的公开入口（CRUD、采样参数、协议推断）。
+ *
+ * tokenizer 驱动注册请使用 `@novel-master/core/nmtp`；
+ * feature flags 请使用 `@novel-master/core/feature-flags`。
+ *
+ * @module public/provider
+ */
+
 export { ProviderError } from "../errors/provider-errors.js";
 export type { ProviderErrorCode } from "../errors/provider-errors.js";
 export type { SecretStore } from "../infra/sksp/index.js";
