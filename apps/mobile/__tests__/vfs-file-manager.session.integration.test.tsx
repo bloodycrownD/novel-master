@@ -35,6 +35,36 @@ jest.mock('../src/components/chrome/ToastHost', () => ({
   useToast: () => ({showToast: mockShowToast}),
 }));
 
+jest.mock('../src/errors/toast-message', () => ({
+  toastMessage: (_title: string, err: unknown) =>
+    err instanceof Error ? err.message : String(err),
+}));
+
+jest.mock('../src/services/vfs-operations.service', () => ({
+  createVfsDirectory: jest.fn(),
+  createVfsFile: jest.fn(),
+  deleteVfsEntry: jest.fn(),
+  remapPathUnderDir: jest.fn(),
+  renameVfsDirectory: jest.fn(),
+  renameVfsFile: jest.fn(),
+  sessionCreateVfsDirectory: jest.fn(),
+  sessionCreateVfsFile: jest.fn(),
+  sessionDeleteVfsEntry: jest.fn(),
+  sessionRenameVfsDirectory: jest.fn(),
+  sessionRenameVfsFile: jest.fn(),
+}));
+
+jest.mock('../src/services/worktree-operations.service', () => ({
+  batchSetDirRulesDisabled: jest.fn(),
+  batchSetDirRulesEnabled: jest.fn(),
+  cycleFileInclusion: jest.fn(),
+  defaultDirRuleForm: jest.fn(),
+  dirRuleToForm: jest.fn(),
+  migrateWorktreeDirRename: jest.fn(),
+  toggleDirRuleEnabled: jest.fn(),
+  vfsScopeRootPath: () => '/',
+}));
+
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: () => null,
 }));
@@ -84,7 +114,7 @@ const fixedListRows = [
   },
 ];
 
-const buildListRows = jest.fn(async () => []);
+const buildListRows = jest.fn(async () => fixedListRows);
 const list = jest.fn(async () => []);
 const getDirRule = jest.fn(async () => null);
 const markDirty = jest.fn();
@@ -130,11 +160,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     markDirty.mockClear();
     mockShowToast.mockClear();
     mockGetOrRefresh.mockReset();
-    mockGetOrRefresh.mockImplementation(async (_runtime, _scope) => ({
-      worktreeDisplay: 'wt',
-      listRows: fixedListRows,
-      refreshedAtMs: 1,
-    }));
+    buildListRows.mockResolvedValue(fixedListRows);
   });
 
   afterEach(() => {
@@ -146,20 +172,33 @@ describe('VfsFileManager session worktree snapshot', () => {
     tree = undefined;
   });
 
-  it('session reload uses snapshot listRows and never buildListRows', async () => {
+  it('session reload uses buildListRows and never snapshot for list', async () => {
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
     });
 
-    expect(mockGetOrRefresh).toHaveBeenCalledWith(
-      mockRuntime,
-      expect.objectContaining({projectId: 'p1', sessionId: 's1'}),
-    );
-    expect(buildListRows).not.toHaveBeenCalled();
+    expect(buildListRows).toHaveBeenCalled();
+    expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 
-  it('invalidate marks snapshot dirty and reload re-fetches snapshot', async () => {
+  it('path change triggers buildListRows reload without snapshot', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(renderSessionVfm());
+      await flushPromises();
+    });
+    buildListRows.mockClear();
+    mockGetOrRefresh.mockClear();
+
+    await act(async () => {
+      tree!.update(renderSessionVfm('/subdir'));
+      await flushPromises();
+    });
+    expect(buildListRows).toHaveBeenCalled();
+    expect(mockGetOrRefresh).not.toHaveBeenCalled();
+  });
+
+  it('invalidate marks snapshot dirty without fetching list via snapshot', async () => {
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
@@ -170,11 +209,6 @@ describe('VfsFileManager session worktree snapshot', () => {
       invalidateSessionWorktreeSnapshot(mockRuntime as any, 'p1', 's1');
     });
     expect(markDirty).toHaveBeenCalledWith('p1', 's1');
-
-    await act(async () => {
-      tree!.update(renderSessionVfm('/subdir'));
-      await flushPromises();
-    });
-    expect(mockGetOrRefresh).toHaveBeenCalled();
+    expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 });
