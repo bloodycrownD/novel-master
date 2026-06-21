@@ -65,8 +65,23 @@ jest.mock('../src/services/worktree-operations.service', () => ({
   vfsScopeRootPath: () => '/',
 }));
 
+let capturedEntityMenuOnSelect: ((action: string) => void) | undefined;
+
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
-  BottomSheetMenu: () => null,
+  BottomSheetMenu: ({
+    visible,
+    onSelect,
+    items,
+  }: {
+    visible: boolean;
+    onSelect: (action: string) => void;
+    items: {action: string}[];
+  }) => {
+    if (visible && items?.some(item => item.action === 'toggle-include')) {
+      capturedEntityMenuOnSelect = onSelect;
+    }
+    return null;
+  },
 }));
 
 jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
@@ -93,6 +108,7 @@ jest.mock('../src/services/worktree-snapshot.service', () => {
   };
 });
 
+import {cycleFileInclusion} from '../src/services/worktree-operations.service';
 import {invalidateSessionWorktreeSnapshot} from '../src/services/worktree-snapshot.service';
 
 const {VfsFileManager} = require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
@@ -160,6 +176,9 @@ describe('VfsFileManager session worktree snapshot', () => {
     markDirty.mockClear();
     mockShowToast.mockClear();
     mockGetOrRefresh.mockReset();
+    capturedEntityMenuOnSelect = undefined;
+    (cycleFileInclusion as jest.Mock).mockReset();
+    (cycleFileInclusion as jest.Mock).mockResolvedValue('show');
     buildListRows.mockResolvedValue(fixedListRows);
   });
 
@@ -208,6 +227,31 @@ describe('VfsFileManager session worktree snapshot', () => {
     await act(async () => {
       invalidateSessionWorktreeSnapshot(mockRuntime as any, 'p1', 's1');
     });
+    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
+    expect(mockGetOrRefresh).not.toHaveBeenCalled();
+  });
+
+  it('file toggle-include 调用 invalidateSessionWorktreeSnapshot', async () => {
+    await act(async () => {
+      tree = TestRenderer.create(renderSessionVfm());
+      await flushPromises();
+    });
+    markDirty.mockClear();
+    mockGetOrRefresh.mockClear();
+
+    const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
+    await act(async () => {
+      menuBtn.props.onPress();
+      await flushPromises();
+    });
+    expect(capturedEntityMenuOnSelect).toBeDefined();
+
+    await act(async () => {
+      await capturedEntityMenuOnSelect!('toggle-include');
+      await flushPromises();
+    });
+
+    expect(cycleFileInclusion).toHaveBeenCalled();
     expect(markDirty).toHaveBeenCalledWith('p1', 's1');
     expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
