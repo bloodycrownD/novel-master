@@ -70,6 +70,7 @@ function runnerDeps(
         scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
         renderDisplay: async () => "",
         buildListRows: async () => [],
+        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
       }) as never,
   };
 }

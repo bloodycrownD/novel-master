@@ -68,7 +68,6 @@ function makeRuntime(overrides: {
         const data = await render();
         return {
           worktreeDisplay: data.worktreeDisplay,
-          listRows: data.listRows,
           refreshedAtMs: Date.now(),
         };
       },
@@ -88,6 +87,7 @@ function makeRuntime(overrides: {
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
+        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
     ...(overrides.userVfsTurn != null
       ? { userVfsTurn: overrides.userVfsTurn }

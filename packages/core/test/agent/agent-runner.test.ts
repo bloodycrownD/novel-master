@@ -40,6 +40,7 @@ function runnerDeps(
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
         renderDisplay: async () => "WT",
         buildListRows: async () => [],
+        materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
       }) as never,
   };
 }
@@ -337,6 +338,7 @@ describe("AgentRunner", () => {
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
         }) as never,
     });
     await runner.run({
@@ -389,6 +391,7 @@ describe("AgentRunner", () => {
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
         }) as never,
     });
     await runner.run({
@@ -460,6 +463,7 @@ describe("AgentRunner", () => {
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
           renderDisplay: async () => "WT",
           buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
         }) as never,
     });
     await runner.run({
