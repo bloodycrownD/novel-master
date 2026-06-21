@@ -152,6 +152,19 @@ describe('testCloudSyncConnection', () => {
     await expect(testCloudSyncConnection(runtime)).resolves.toBeUndefined();
     expect(mockHeadBucket).toHaveBeenCalled();
   });
+
+  it('SDK 抛出 Deserialization error 时 reject 为用户向中文 message', async () => {
+    const sdkError = new Error(
+      'Deserialization error: Unable to parse response body',
+    );
+    mockHeadBucket.mockRejectedValue(sdkError);
+    mockListObjects.mockRejectedValue(sdkError);
+
+    await expect(testCloudSyncConnection(runtime)).rejects.toMatchObject({
+      code: 'NETWORK',
+      message: '云存储连接失败，请检查网络与配置',
+    });
+  });
 });
 
 describe('pullCloudSync', () => {
