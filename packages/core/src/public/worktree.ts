@@ -40,6 +40,8 @@ export { createWorktreeService } from "../service/worktree/create-worktree-servi
 export type {
   WorktreeService,
   WorktreeMaterialized,
+  WorktreeLiveView,
+  WorktreePersistBlock,
 } from "../service/worktree/worktree.port.js";
 export { createTemplatePullService } from "../service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "../service/template/template-pull.port.js";

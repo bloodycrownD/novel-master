@@ -12,7 +12,18 @@ import type {
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
 
-/** Single materialized worktree snapshot: list rows plus macro display strings. */
+/** 消费方 ①：工作区列表 + `{{$filetree}}` 宏，单次元数据遍历产出。 */
+export interface WorktreeLiveView {
+  readonly listRows: readonly WorktreeListRow[];
+  readonly filetreeDisplay: string;
+}
+
+/** 消费方 ②：提示词持久 worktree 块（不含列表与宏树）。 */
+export interface WorktreePersistBlock {
+  readonly worktreeDisplay: string;
+}
+
+/** 向后兼容：列表 + 持久块 + 宏树（单次 metadata 分叉）。 */
 export interface WorktreeMaterialized {
   readonly listRows: readonly WorktreeListRow[];
   readonly worktreeDisplay: string;
@@ -30,17 +41,23 @@ export interface WorktreeService {
   setFileRule(input: SetFileRuleInput): Promise<void>;
 
   /**
-   * Materializes list rows and macro strings in one metadata-first DFS.
-   * Display blocks lazily read file content only for `full` / `header` files.
+   * 向后兼容：单次 metadata 后分叉产出列表、持久块与宏树。
+   * 新代码请优先使用 {@link materializeLiveView} / {@link materializePersistBlock}。
    */
   materialize(): Promise<WorktreeMaterialized>;
 
-  /** Full tree listing rows (without TSV header). */
+  /** 消费方 ①：实时列表 + 宏树（无缓存，并发调用合并为单次 metadata）。 */
+  materializeLiveView(): Promise<WorktreeLiveView>;
+
+  /** 消费方 ②：仅持久 worktree 块（供快照缓存与提示词）。 */
+  materializePersistBlock(): Promise<WorktreePersistBlock>;
+
+  /** 工作区列表行（委托 {@link materializeLiveView}）。 */
   buildListRows(): Promise<WorktreeListRow[]>;
 
-  /** Renders `<file>` blocks for visible files. */
+  /** 持久 worktree 块（委托 {@link materializePersistBlock}）。 */
   renderDisplay(): Promise<string>;
 
-  /** 渲染 worktree ASCII 目录树（`{{$filetree}}` 与工作区，含加载状态后缀）。 */
+  /** `{{$filetree}}` 宏树（委托 {@link materializeLiveView}）。 */
   renderFileTree(): Promise<string>;
 }
