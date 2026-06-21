@@ -12,7 +12,10 @@ export interface SseParseDiagnostics {
   malformedLineCount: number;
 }
 
-/** 是否输出畸形 SSE 行的调试告警。 */
+/**
+ * 是否输出畸形 SSE 行的调试告警。
+ * 仅读取环境变量：优先 `NM_DEBUG_LLM_SSE=1`，回退 `NM_DEBUG_LLM_FETCH=1`（与 transport 调试一致）。
+ */
 export function isSseParseDebugEnabled(): boolean {
   if (process.env.NM_DEBUG_LLM_SSE === "1") {
     return true;
@@ -20,16 +23,7 @@ export function isSseParseDebugEnabled(): boolean {
   if (process.env.NM_DEBUG_LLM_FETCH === "1") {
     return true;
   }
-  const g = globalThis as {
-    __NM_DEBUG_LLM_SSE__?: boolean;
-    __NM_DEBUG_LLM_FETCH__?: boolean;
-    __DEV__?: boolean;
-  };
-  return (
-    g.__NM_DEBUG_LLM_SSE__ === true ||
-    g.__NM_DEBUG_LLM_FETCH__ === true ||
-    g.__DEV__ === true
-  );
+  return false;
 }
 
 /** 记录一条无法 JSON 解析的 SSE data 行。 */

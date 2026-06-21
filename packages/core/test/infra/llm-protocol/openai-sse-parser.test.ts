@@ -1,5 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ProviderError } from "../../../src/errors/provider-errors.js";
 import {
   createOpenAiSseParserState,
   feedOpenAiSseChunk,
@@ -158,7 +159,14 @@ describe("openai-sse-parser", () => {
   it("SSE-MAL-01: only malformed lines throw on finish", () => {
     const state = createOpenAiSseParserState();
     feedOpenAiSseChunk(state, "data: {not-json\n\n");
-    assert.throws(() => finishOpenAiSse(state));
+    assert.throws(
+      () => finishOpenAiSse(state),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "MALFORMED_SSE");
+        return true;
+      },
+    );
   });
 
   it("SSE-MAL-02: malformed plus valid text still yields blocks", () => {
@@ -229,7 +237,14 @@ describe("openai-sse-parser", () => {
       ],
     });
     feedOpenAiSseChunk(state, "data: " + bad + "\n\n");
-    assert.throws(() => finishOpenAiSse(state));
+    assert.throws(
+      () => finishOpenAiSse(state),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
+        return true;
+      },
+    );
   });
 });
 

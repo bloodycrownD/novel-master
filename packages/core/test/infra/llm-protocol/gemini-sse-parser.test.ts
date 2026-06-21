@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ProviderError } from "../../../src/errors/provider-errors.js";
 import {
   createGeminiSseParserState,
   feedGeminiSseChunk,
@@ -135,6 +136,19 @@ describe("gemini-sse-parser", () => {
     assert.equal(blocks.length, 1);
     assert.equal(blocks[0]?.type, "thinking");
   });
+  it("SSE-MAL-01: only malformed lines throw on finish", () => {
+    const state = createGeminiSseParserState();
+    feedGeminiSseChunk(state, "data: {not-json\n\n");
+    assert.throws(
+      () => finishGeminiSse(state),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "MALFORMED_SSE");
+        return true;
+      },
+    );
+  });
+
   it("SSE-MAL-02: malformed line with valid text", () => {
     const state = createGeminiSseParserState();
     feedGeminiSseChunk(state, "data: oops\n\n");
@@ -176,7 +190,14 @@ describe("gemini-sse-parser", () => {
       argsJson: "{bad",
       id: "c1",
     });
-    assert.throws(() => finishGeminiSse(state));
+    assert.throws(
+      () => finishGeminiSse(state),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
+        return true;
+      },
+    );
   });
 
 });

@@ -133,5 +133,56 @@ describe("AnthropicProtocolAdapter HTTP", () => {
     assert.equal(toolUses.length, 1);
     assert.equal(toolUses[0]!.input.path, "/tmp");
   });
+
+  it("P-ANT-02: stream accumulates tool_use input across chunks", async () => {
+    const sse = [
+      "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"call_1\",\"name\":\"read\"}}",
+      "",
+      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"path\\\":\"}}",
+      "",
+      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"/tmp/x\\\"}\"}}",
+      "",
+      "data: {\"type\":\"content_block_stop\"}",
+      "",
+    ].join("\n");
+
+    const fetchFn = mock.fn(async () => {
+      return new Response(sse, {
+        status: 200,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    });
+
+    const toolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> =
+      [];
+    let done = false;
+    const adapter = new AnthropicProtocolAdapter(fetchFn as typeof fetch);
+    const result = await adapter.chat({
+      baseUrl: "https://api.anthropic.com",
+      apiKey: "key",
+      vendorModelId: "claude-3-5-sonnet",
+      userContent: "read file",
+      stream: true,
+      tools: [{ name: "read", description: "read", inputSchema: {} }],
+      onStream: (ev) => {
+        if (ev.type === "tool-use") {
+          toolUses.push({ id: ev.id, name: ev.name, input: ev.input });
+        }
+        if (ev.type === "done") {
+          done = true;
+        }
+      },
+    });
+
+    assert.equal(toolUses.length, 1);
+    assert.equal(toolUses[0]!.id, "call_1");
+    assert.equal(toolUses[0]!.name, "read");
+    assert.equal(toolUses[0]!.input.path, "/tmp/x");
+    const toolBlock = result.blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolBlock && toolBlock.type === "tool_use");
+    assert.equal(toolBlock.name, "read");
+    assert.equal((toolBlock as { input: Record<string, unknown> }).input.path, "/tmp/x");
+    assert.ok(done);
+  });
 });
 

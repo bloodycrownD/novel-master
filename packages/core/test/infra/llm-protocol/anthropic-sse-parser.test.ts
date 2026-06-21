@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ProviderError } from "../../../src/errors/provider-errors.js";
 import {
   createAnthropicSseParserState,
   feedAnthropicSseChunk,
@@ -124,24 +125,50 @@ describe("anthropic-sse-parser", () => {
   it("SSE-MAL-01: only malformed lines throw on finish", () => {
     const state = createAnthropicSseParserState();
     feedAnthropicSseChunk(state, "data: {bad\n\n");
-    assert.throws(() => finishAnthropicSse(state));
+    assert.throws(
+      () => finishAnthropicSse(state),
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "MALFORMED_SSE");
+        return true;
+      },
+    );
+  });
+
+  it("SSE-MAL-02: malformed line with valid text", () => {
+    const state = createAnthropicSseParserState();
+    feedAnthropicSseChunk(state, "data: oops\n\n");
+    feedAnthropicSseChunk(
+      state,
+      "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\n\n",
+    );
+    const { blocks } = finishAnthropicSse(state);
+    assert.equal(state.malformedLineCount, 1);
+    assert.equal(blocks.length, 1);
   });
 
   it("TU-04: invalid partial_json on block stop throws", () => {
     const state = createAnthropicSseParserState();
-    assert.throws(() => {
-      feedAnthropicSseChunk(
-        state,
-        [
-          "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
-          "",
-          "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{bad\"}}",
-          "",
-          "data: {\"type\":\"content_block_stop\"}",
-          "",
-        ].join("\n"),
-      );
-    });
+    assert.throws(
+      () => {
+        feedAnthropicSseChunk(
+          state,
+          [
+            "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
+            "",
+            "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{bad\"}}",
+            "",
+            "data: {\"type\":\"content_block_stop\"}",
+            "",
+          ].join("\n"),
+        );
+      },
+      (err: unknown) => {
+        assert.ok(err instanceof ProviderError);
+        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
+        return true;
+      },
+    );
   });
 
 });

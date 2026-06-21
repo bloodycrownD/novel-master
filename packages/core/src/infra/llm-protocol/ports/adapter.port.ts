@@ -28,10 +28,10 @@ export type LlmStreamEvent =
   | { readonly type: "thinking-delta"; readonly text: string }
   | {
       /**
-       * ????????? tool call ? input ?????? JSON ????? emit?
-       * ?????? tool call ?????Anthropic ? content block ???
-       * OpenAI/Gemini ? arguments ????????? JSON ??
-       * Stream ?????????? `tool-use`?`done` ??????? `blocks`?
+       * 流式对话中，当某次 tool call 的 input 对象已完整且 JSON 解析成功时 emit，
+       * 每种协议每个 tool call 至多一次。Anthropic 在 content block 结束；
+       * OpenAI/Gemini 在 arguments 字符串首次成为合法 JSON 时。
+       * Stream 正常结束前可能已收到 `tool-use`；`done` 事件仍携带完整 `blocks`。
        */
       readonly type: "tool-use";
       readonly id: string;

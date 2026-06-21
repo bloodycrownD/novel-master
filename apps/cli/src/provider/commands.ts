@@ -132,13 +132,14 @@ export async function runProvider(
       if (headers) {
         patch.headers = headers;
       }
-      const apiKey = flagString(flags, "apiKey");
-      if (apiKey) {
-        patch.apiKey = apiKey;
+      if (flags.has("clear-api-key")) {
+        patch.apiKey = "";
+      } else if (flags.has("apiKey")) {
+        patch.apiKey = flagString(flags, "apiKey") ?? "";
       }
       if (Object.keys(patch).length === 0) {
         throw new Error(
-          "Usage: nm provider edit --providerId <id> [--baseUrl] [--displayName] [--headers] [--apiKey] [--protocol]",
+          "Usage: nm provider edit --providerId <id> [--baseUrl] [--displayName] [--headers] [--apiKey] [--clear-api-key] [--protocol]",
         );
       }
       await rt.providers.edit(id, patch);
