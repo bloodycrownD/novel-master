@@ -12,7 +12,7 @@ export {
   DEFAULT_USER_VFS_UNIFIED_TOOL_TURN,
   isUserVfsUnifiedToolTurnEnabled,
   refreshUserVfsUnifiedToolTurnSnapshot,
-} from "../domain/feature-flags/user-vfs-unified-tool-turn.js";
+} from "./feature-flags.js";
 export type { LlmProvider } from "../domain/provider/model/provider.js";
 export { providerApiKeyRef } from "../domain/provider/model/provider.js";
 export type {

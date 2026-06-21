@@ -1,5 +1,5 @@
 /**
- * truncate-tail-in-transaction 单测�?
+ * truncate-tail-in-transaction 单测。
  */
 
 import assert from "node:assert/strict";
@@ -49,7 +49,7 @@ describe("truncateTailInTransaction", () => {
     assert.equal((await svfs.read("/a.md")).content, "v1");
   });
 
-  it("tail 非空时清�?user_vfs_pending_json", async () => {
+  it("tail 非空时清空 user_vfs_pending_json", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

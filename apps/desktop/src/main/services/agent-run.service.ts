@@ -61,7 +61,6 @@ export async function runAgentTurn(
 ): Promise<AgentRunResult> {
   return coreRunAgentTurn(runtime, scope, userContent, {
     ...options,
-    awaitMessageCheckpoint: true,
     onAfterResolveModel: async (ctx) => {
       if (!isDesktopLlmDebug()) {
         return;

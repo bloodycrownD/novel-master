@@ -345,6 +345,7 @@ export class DefaultAgentRunner implements AgentRunner {
             );
           } catch (error) {
             console.error("[agent-runner] checkpoint_capture_failed", {
+              stage: "checkpoint_capture",
               sessionId,
               projectId,
               messageId: assistantMessage.id,
