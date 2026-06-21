@@ -111,8 +111,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventBus,
     messages,
     messageTranscriptEffects,
-    worktreeSnapshot,
-    worktree: (s) => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,

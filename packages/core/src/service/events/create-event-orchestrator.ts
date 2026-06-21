@@ -1,10 +1,9 @@
 /**
- * Factory for {@link DefaultEventOrchestrator}.
+ * {@link DefaultEventOrchestrator} 工厂。
  *
  * @module service/events/create-event-orchestrator
  */
 
-import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
@@ -31,12 +30,10 @@ export interface CreateEventOrchestratorDeps {
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
-  readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly runAgent?: RunAgentHandlerDeps;
 }
 
-/** Wires {@link RunAgentHandlerDeps} for CLI / Mobile runtimes. */
+/** 为 CLI / Mobile 等 runtime 装配 {@link RunAgentHandlerDeps}。 */
 export function createRunAgentHandlerDeps(input: {
   readonly messages: MessageService;
   readonly agentRegistry: AgentRegistryService;
@@ -67,17 +64,12 @@ export function createRunAgentHandlerDeps(input: {
 export function createEventOrchestrator(
   deps: CreateEventOrchestratorDeps,
 ): EventOrchestrator {
-  const fullDeps: DefaultEventOrchestratorDeps = {
-    ...deps,
-    createSession: (sessionId) => new ChatAgentSession(deps.messages, sessionId),
-    runAgent: deps.runAgent,
-  };
-  const orchestrator = new DefaultEventOrchestrator(fullDeps);
+  const orchestrator = new DefaultEventOrchestrator(deps);
   orchestrator.attachToBus();
   return orchestrator;
 }
 
-/** Detaches orchestrator bus listeners when rebootstraping or in tests. */
+/** rebootstrap 或测试时卸载 orchestrator 的 bus 监听。 */
 export function detachEventOrchestratorFromBus(
   orchestrator: EventOrchestrator,
 ): void {

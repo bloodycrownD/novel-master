@@ -1,5 +1,5 @@
 /**
- * Event orchestrator: loads config and runs sequential/parallel action chains.
+ * 事件编排器：加载配置并执行顺序/并行 action 链。
  *
  * @module service/events/impl/event-orchestrator.service
  */
@@ -9,10 +9,6 @@ import type { EventsConfigStore } from "@/service/events-config/events-config-st
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
-import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
-import type { WorktreeService } from "@/service/worktree/worktree.port.js";
-import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import {
   EVENT_SESSION_COMPACTION_REQUESTED,
@@ -46,9 +42,6 @@ export interface DefaultEventOrchestratorDeps {
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
-  readonly worktree: (scope: VfsScope) => WorktreeService;
-  readonly createSession: (sessionId: string) => AgentSession;
   readonly runAgent?: RunAgentHandlerDeps;
 }
 

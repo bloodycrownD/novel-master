@@ -96,8 +96,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventBus,
     messages,
     messageTranscriptEffects,
-    worktreeSnapshot,
-    worktree: s => createWorktreeService(conn, s),
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,

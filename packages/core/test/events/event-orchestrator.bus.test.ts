@@ -84,9 +84,6 @@ function createOrchestrator(input: {
       },
       async truncateMessagesAfter() {},
     } as never,
-    worktreeSnapshot: { markDirty: () => undefined } as never,
-    worktree: () => ({}) as never,
-    createSession: () => ({}) as never,
   });
   return { orch, getHideCalls: () => hideCalls };
 }
