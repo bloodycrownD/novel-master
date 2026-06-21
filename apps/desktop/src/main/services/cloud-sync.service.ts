@@ -4,6 +4,7 @@
  * @module services/cloud-sync.service
  */
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { readFile, stat, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -51,6 +52,17 @@ let syncBusy = false;
 
 function computeSha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+/** 分块从文件计算 SHA-256 十六进制 */
+async function hashSnapshotFile(path: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const stream = createReadStream(path, { highWaterMark: 512 * 1024 });
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("end", () => resolve(hash.digest("hex")));
+    stream.on("error", reject);
+  });
 }
 
 function isConfigured(config: CloudSyncConfigDto, secret: string | null): boolean {
@@ -210,9 +222,11 @@ export class DesktopCloudSyncService {
     syncBusy = true;
     const meta = await this.configStore.getLocalMeta();
     let exportTempPath: string | undefined;
+    let importTempPath: string | undefined;
     try {
       const built = await this.buildCoordinator();
       exportTempPath = built.exportTempPath;
+      importTempPath = built.importTempPath;
       const result = await built.coordinator.pull({
         lastSyncedRev: meta.lastSyncedRev,
       });
@@ -233,6 +247,9 @@ export class DesktopCloudSyncService {
       if (exportTempPath != null) {
         await unlink(exportTempPath).catch(() => undefined);
       }
+      if (importTempPath != null) {
+        await unlink(importTempPath).catch(() => undefined);
+      }
     }
   }
 
@@ -242,9 +259,11 @@ export class DesktopCloudSyncService {
     }
     syncBusy = true;
     let exportTempPath: string | undefined;
+    let importTempPath: string | undefined;
     try {
       const built = await this.buildCoordinator();
       exportTempPath = built.exportTempPath;
+      importTempPath = built.importTempPath;
       const meta = await this.configStore.getLocalMeta();
       const result = await built.coordinator.push({
         lastSyncedRev: meta.lastSyncedRev,
@@ -262,6 +281,9 @@ export class DesktopCloudSyncService {
       syncBusy = false;
       if (exportTempPath != null) {
         await unlink(exportTempPath).catch(() => undefined);
+      }
+      if (importTempPath != null) {
+        await unlink(importTempPath).catch(() => undefined);
       }
     }
   }
@@ -297,6 +319,7 @@ export class DesktopCloudSyncService {
   private async buildCoordinator(): Promise<{
     coordinator: CloudSyncCoordinator;
     exportTempPath: string;
+    importTempPath: string;
   }> {    const publicConfig = await this.configStore.getPublicConfig();
     const secret = await this.configStore.getSecretAccessKey();
     if (
@@ -320,7 +343,9 @@ export class DesktopCloudSyncService {
     });
 
     const runtime = this.runtime;
-    const exportTempPath = join(tmpdir(), `nm-cloud-sync-${Date.now()}.nmbackup`);
+    const stamp = Date.now();
+    const exportTempPath = join(tmpdir(), `nm-cloud-sync-export-${stamp}.nmbackup`);
+    const importTempPath = join(tmpdir(), `nm-cloud-sync-import-${stamp}.nmbackup`);
 
     const dbSync = {
       isAgentActive: () => isDesktopAgentActive(),
@@ -336,6 +361,12 @@ export class DesktopCloudSyncService {
         );
         await importDatabaseBackupFromBytes(bytes);
       },
+      importSnapshotFromPath: async (path: string) => {
+        const { importDatabaseBackupFromPath } = await import(
+          "./db-backup.service.js"
+        );
+        await importDatabaseBackupFromPath(path);
+      },
     };
 
     return {
@@ -345,7 +376,9 @@ export class DesktopCloudSyncService {
         pathPrefix: publicConfig.pathPrefix,
         deviceId: publicConfig.deviceId,
         exportTempPath,
+        importTempPath,
         computeSha256Hex,
+        hashSnapshotFile,
         readSnapshotBytes: async (path: string) => readFile(path),
         getSnapshotBytes: async (path: string) => {
           const info = await stat(path);
@@ -353,6 +386,7 @@ export class DesktopCloudSyncService {
         },
       }),
       exportTempPath,
+      importTempPath,
     };
   }
 }

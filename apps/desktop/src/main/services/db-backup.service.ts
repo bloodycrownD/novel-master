@@ -69,6 +69,41 @@ export async function exportDatabaseBackupToPath(
 }
 
 /**
+ * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无对话框与 rebootstrap。
+ * 调用方须在成功后执行 rebootstrap。
+ */
+export async function importDatabaseBackupFromPath(
+  srcPath: string,
+): Promise<void> {
+  const header = await readFile(srcPath, { encoding: null });
+  assertSqliteFile(new Uint8Array(header.subarray(0, 16)));
+
+  const dbPath = resolveDbPath();
+  const bakPath = `${dbPath}.nmbackup.bak`;
+
+  const liveConn = await getDesktopConnection();
+  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
+  try {
+    await copyFile(dbPath, bakPath).catch(() => undefined);
+    await closeDesktopConnection();
+    await copyFile(srcPath, dbPath);
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+  } catch (error) {
+    await copyFile(bakPath, dbPath).catch(() => undefined);
+    throw error;
+  } finally {
+    await unlink(bakPath).catch(() => undefined);
+  }
+}
+
+/**
  * 从内存中的备份字节导入数据库（dump → close → replace → restore），无对话框与 rebootstrap。
  * 调用方须在成功后执行 rebootstrap。
  */

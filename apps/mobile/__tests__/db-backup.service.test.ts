@@ -3,6 +3,7 @@ import {
   exportDatabaseBackupToPath,
   importDatabaseBackup,
   importDatabaseBackupFromBytes,
+  importDatabaseBackupFromPath,
 } from '../src/services/db-backup.service';
 
 const mockCheckpoint = jest.fn();
@@ -208,6 +209,23 @@ describe('db-backup.service', () => {
     );
     expect(mockRestoreConnClose).toHaveBeenCalled();
     expect(onRebootstrap).not.toHaveBeenCalled();
+  });
+
+  it('importDatabaseBackupFromPath uses cp instead of base64 writeFile', async () => {
+    const srcPath = '/cache/import-snapshot.nmbackup';
+    mockReadFile.mockResolvedValue(
+      Buffer.from('SQLite format 3\0padding').toString('base64'),
+    );
+    mockExists.mockResolvedValue(true);
+
+    await importDatabaseBackupFromPath(srcPath);
+
+    expect(mockReadFile).toHaveBeenCalledWith(srcPath, 'base64', 16);
+    expect(mockDumpSnapshot).toHaveBeenCalledWith(liveConn);
+    expect(mockClose).toHaveBeenCalled();
+    expect(mockCp).toHaveBeenCalledWith(srcPath, '/db/novel_master_vfs');
+    expect(mockWriteFile).not.toHaveBeenCalled();
+    expect(mockRestoreSnapshot).toHaveBeenCalled();
   });
 
   it('importDatabaseBackupFromBytes rejects invalid sqlite bytes', async () => {

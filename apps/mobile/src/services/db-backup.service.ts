@@ -111,6 +111,53 @@ export async function exportDatabaseBackupToPath(
 }
 
 /**
+ * 从本地快照文件导入数据库（dump → close → cp 替换 → restore），无选择器与 rebootstrap。
+ * 调用方须在成功后执行 rebootstrap。
+ */
+export async function importDatabaseBackupFromPath(
+  srcPath: string,
+): Promise<void> {
+  const headerBase64 = await ReactNativeBlobUtil.fs.readFile(
+    srcPath,
+    'base64',
+    16,
+  );
+  const headerBytes = new Uint8Array(
+    Buffer.from(headerBase64, 'base64'),
+  );
+  assertSqliteFile(headerBytes);
+
+  const dbPath = await resolveMobileDatabaseFilePath();
+  const bakPath = `${dbPath}.nmbackup.bak`;
+
+  const liveConn = await getMobileConnection();
+  const providerSnapshot = await dumpProviderTableSnapshot(liveConn);
+
+  const dbExists = await ReactNativeBlobUtil.fs.exists(dbPath);
+  if (dbExists) {
+    await ReactNativeBlobUtil.fs.cp(dbPath, bakPath);
+  }
+
+  try {
+    await closeMobileConnection();
+    await ReactNativeBlobUtil.fs.cp(srcPath, dbPath);
+
+    const restoreConn = await openDbForProviderRestore();
+    try {
+      await restoreProviderTableSnapshot(restoreConn, providerSnapshot);
+    } finally {
+      await restoreConn.close();
+    }
+  } catch (error) {
+    const bakExists = await ReactNativeBlobUtil.fs.exists(bakPath);
+    if (bakExists) {
+      await ReactNativeBlobUtil.fs.cp(bakPath, dbPath).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/**
  * 从内存中的备份字节导入数据库（dump → close → replace → restore），无选择器与 rebootstrap。
  * 调用方须在成功后执行 rebootstrap。
  */
