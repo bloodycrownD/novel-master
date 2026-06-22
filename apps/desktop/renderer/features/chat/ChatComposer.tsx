@@ -21,6 +21,10 @@ interface ChatComposerProps {
   lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本时禁用输入。 */
   lastMessageIsPlainUserText: boolean;
+  /** 受控内联错误（由 ConversationPanel 提升状态）。 */
+  error?: string;
+  /** 内联错误变更回调；未传入时回退到组件内 local state。 */
+  onErrorChange?: (msg: string | undefined) => void;
   onRunningChange: (running: boolean) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
@@ -33,13 +37,15 @@ export function ChatComposer({
   canResumeWithoutInput,
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
+  error: controlledError,
+  onErrorChange,
   onRunningChange,
   onStreamReset,
   onMessagesChanged,
 }: ChatComposerProps) {
   const { agentConfigRevision } = useShellNav();
   const [text, setText] = useState("");
-  const [error, setError] = useState<string | undefined>();
+  const [localError, setLocalError] = useState<string | undefined>();
   const [hasModel, setHasModel] = useState(false);
   const [bridgePendingText, setBridgePendingText] = useState<string | null>(
     null,
@@ -59,6 +65,20 @@ export function ChatComposer({
     void checkModel();
   }, [checkModel, sessionId, agentConfigRevision]);
 
+  const isControlled = onErrorChange != null;
+  const displayError = isControlled ? controlledError : localError;
+
+  const reportError = useCallback(
+    (msg: string | undefined) => {
+      if (onErrorChange) {
+        onErrorChange(msg);
+      } else {
+        setLocalError(msg);
+      }
+    },
+    [onErrorChange],
+  );
+
   const runAgent = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
       const modelCheck = await ipcPromptAgentMeta();
@@ -67,11 +87,11 @@ export function ChatComposer({
         (modelCheck.data.modelLabel === "未选择模型" ||
           modelCheck.data.modelLabel === "—")
       ) {
-        setError("请先配置模型");
+        reportError("请先配置模型");
         return false;
       }
 
-      setError(undefined);
+      reportError(undefined);
       onStreamReset();
       onRunningChange(true);
       if (content) {
@@ -89,7 +109,7 @@ export function ChatComposer({
       });
 
       if (!result.ok) {
-        setError(result.error.message);
+        reportError(result.error.message);
         onRunningChange(false);
         return false;
       }
@@ -102,6 +122,7 @@ export function ChatComposer({
       onRunningChange,
       onStreamReset,
       projectId,
+      reportError,
       sessionId,
     ],
   );
@@ -142,7 +163,7 @@ export function ChatComposer({
     try {
       const bridgeResult = await ipcMessagesAppendToolTurnBridge({ sessionId });
       if (!bridgeResult.ok) {
-        setError(bridgeResult.error.message);
+        reportError(bridgeResult.error.message);
         return;
       }
       await onMessagesChanged();
@@ -164,7 +185,9 @@ export function ChatComposer({
 
   return (
     <>
-      {error ? <p className="chat-composer__error">{error}</p> : null}
+      {displayError ? (
+        <p className="chat-composer__error">{displayError}</p>
+      ) : null}
       <div className="chat-composer" id="chat-composer">
         <div className="chat-composer__box">
           <textarea
