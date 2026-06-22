@@ -165,11 +165,13 @@ function DesktopOverlays() {
           sessionId,
         );
       }
-      if (!result.ok) {
+      if (result.ok) {
+        refreshWorkspaceTrees();
+      } else {
         showToast(result.message);
       }
     },
-    [workspacePrompt, projectId, sessionId],
+    [workspacePrompt, projectId, sessionId, refreshWorkspaceTrees],
   );
 
   const handleSessionRenameConfirm = useCallback(
