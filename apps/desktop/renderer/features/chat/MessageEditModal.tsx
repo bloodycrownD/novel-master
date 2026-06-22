@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { TextArea } from "@/components/ui/TextArea";
+import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 type MessageEditModalProps = {
   open: boolean;
@@ -64,6 +65,13 @@ export function MessageEditModal({
           onChange={(e) => setValue(e.target.value)}
           autoFocus
           rows={8}
+          onKeyDown={(e) => {
+            handleMultilineSubmitKeyDown(
+              e,
+              () => void handleConfirm(),
+              { disabled: !canSubmit },
+            );
+          }}
         />
         <div className="text-prompt-modal__actions">
           <Button variant="secondary" disabled={saving} onClick={onClose}>

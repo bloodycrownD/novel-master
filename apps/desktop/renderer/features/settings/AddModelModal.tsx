@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { handleSingleLineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 type AddModelModalProps = {
   open: boolean;
@@ -59,6 +60,13 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
           onChange={(e) => setVendorModelId(e.target.value)}
           placeholder="如 gpt-4o"
           autoFocus
+          onKeyDown={(e) => {
+            handleSingleLineSubmitKeyDown(e, () => {
+              if (canSubmit) {
+                void handleConfirm();
+              }
+            });
+          }}
         />
         <p className="text-prompt-modal__label">显示名称（可选）</p>
         <input
@@ -68,9 +76,11 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="留空则使用厂商 ID"
           onKeyDown={(e) => {
-            if (e.key === "Enter" && canSubmit) {
-              void handleConfirm();
-            }
+            handleSingleLineSubmitKeyDown(e, () => {
+              if (canSubmit) {
+                void handleConfirm();
+              }
+            });
           }}
         />
         <div className="text-prompt-modal__actions">

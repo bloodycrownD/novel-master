@@ -3814,7 +3814,7 @@ html[data-theme="dark"] .chat-batch-bar {
 .chat-composer__input {
   width: 100%;
   min-height: 36px;
-  max-height: 160px;
+  max-height: 200px;
   resize: none;
   padding: 2px 4px;
   font-size: 14px;

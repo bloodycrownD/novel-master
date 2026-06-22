@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { handleSingleLineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 type TextPromptModalProps = {
   open: boolean;
@@ -71,9 +72,11 @@ export function TextPromptModal({
           placeholder={placeholder}
           autoFocus
           onKeyDown={(e) => {
-            if (e.key === "Enter" && canSubmit) {
-              void handleConfirm();
-            }
+            handleSingleLineSubmitKeyDown(e, () => {
+              if (canSubmit) {
+                void handleConfirm();
+              }
+            });
           }}
         />
         <div className="text-prompt-modal__actions">

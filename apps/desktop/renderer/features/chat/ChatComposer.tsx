@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
+import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -44,6 +46,7 @@ export function ChatComposer({
   onMessagesChanged,
 }: ChatComposerProps) {
   const { agentConfigRevision } = useShellNav();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState("");
   const [localError, setLocalError] = useState<string | undefined>();
   const [hasModel, setHasModel] = useState(false);
@@ -64,6 +67,8 @@ export function ChatComposer({
   useEffect(() => {
     void checkModel();
   }, [checkModel, sessionId, agentConfigRevision]);
+
+  useAutoResizeTextarea(textareaRef, text, 200);
 
   const isControlled = onErrorChange != null;
   const displayError = isControlled ? controlledError : localError;
@@ -180,7 +185,7 @@ export function ChatComposer({
     !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel
-    ? "输入消息…"
+    ? "输入消息…（Ctrl+Enter 发送）"
     : "请先配置模型（设置 → Provider）";
 
   return (
@@ -191,6 +196,7 @@ export function ChatComposer({
       <div className="chat-composer" id="chat-composer">
         <div className="chat-composer__box">
           <textarea
+            ref={textareaRef}
             className="chat-composer__input"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -199,10 +205,11 @@ export function ChatComposer({
             aria-label="消息输入"
             rows={1}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey && !sendDisabled) {
-                e.preventDefault();
-                void send();
-              }
+              handleMultilineSubmitKeyDown(
+                e,
+                () => void send(),
+                { disabled: sendDisabled },
+              );
             }}
           />
           <div className="chat-composer__toolbar">
