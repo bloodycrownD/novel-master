@@ -6,7 +6,7 @@ import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
-import { PreviewBreadcrumb } from "./PreviewBreadcrumb";
+import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 
 export function PreviewPane() {
@@ -15,8 +15,6 @@ export function PreviewPane() {
     projectId,
     sessionId,
     refreshWorkspaceTrees,
-    selectPreviewFile,
-    requestTreeExpandPath,
   } = useShellNav();
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
@@ -97,21 +95,7 @@ export function PreviewPane() {
   return (
     <>
       <header className="column-header" id="preview-header" aria-label="文件预览">
-        <span className="column-header__title">文件预览</span>
-        {previewFile ? (
-          <PreviewBreadcrumb
-            filePath={previewFile.path}
-            workspaceScope={previewFile.workspaceScope}
-            onSelectPath={(path) =>
-              selectPreviewFile(previewFile.workspaceScope, path)
-            }
-            onExpandDir={requestTreeExpandPath}
-          />
-        ) : (
-          <span className="column-header__meta" id="preview-filename">
-            —
-          </span>
-        )}
+        <PreviewEditorTabs />
         <div className="column-header__actions">
           <SegmentedControl
             aria-label="预览模式"

@@ -23,6 +23,7 @@ import {
 } from "react";
 
 import type { ProjectDto, SessionDto, PreviewFileSelection } from "@shared/ipc-types";
+import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
 
@@ -72,8 +73,15 @@ export interface ShellNavContextValue {
 
   goBackToSessions: () => void;
 
+  previewTabs: PreviewFileSelection[];
+  activePreviewKey: string | null;
+  /** 当前激活的预览文件（由 active tab 派生） */
   previewFile: PreviewFileSelection | null;
   selectPreviewFile: (
+    workspaceScope: PreviewFileSelection["workspaceScope"],
+    path: string,
+  ) => void;
+  closePreviewTab: (
     workspaceScope: PreviewFileSelection["workspaceScope"],
     path: string,
   ) => void;
@@ -141,9 +149,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const [sessionName, setSessionName] = useState<string | undefined>();
 
-  const [previewFile, setPreviewFile] = useState<PreviewFileSelection | null>(
-    null,
-  );
+  const [previewTabs, setPreviewTabs] = useState<PreviewFileSelection[]>([]);
+  const [activePreviewKey, setActivePreviewKey] = useState<string | null>(null);
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
   const [treeExpandRequest, setTreeExpandRequest] = useState<{
     path: string;
@@ -153,18 +160,67 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const selectPreviewFile = useCallback(
     (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
-      setPreviewFile({
-        workspaceScope,
-        path,
-        name: path === "/" ? "/" : path.slice(path.lastIndexOf("/") + 1),
+      const key = previewTabKey(workspaceScope, path);
+      const name = path === "/" ? "/" : path.slice(path.lastIndexOf("/") + 1);
+      setPreviewTabs((prev) => {
+        const exists = prev.some(
+          (tab) =>
+            tab.workspaceScope === workspaceScope && tab.path === path,
+        );
+        if (exists) {
+          return prev;
+        }
+        return [...prev, { workspaceScope, path, name }];
+      });
+      setActivePreviewKey(key);
+    },
+    [],
+  );
+
+  const closePreviewTab = useCallback(
+    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+      const key = previewTabKey(workspaceScope, path);
+      setPreviewTabs((prev) => {
+        const index = prev.findIndex(
+          (tab) =>
+            tab.workspaceScope === workspaceScope && tab.path === path,
+        );
+        if (index === -1) {
+          return prev;
+        }
+        const next = prev.filter((_, i) => i !== index);
+        setActivePreviewKey((activeKey) => {
+          if (activeKey !== key) {
+            return activeKey;
+          }
+          if (next.length === 0) {
+            return null;
+          }
+          const nextIndex = Math.min(index, next.length - 1);
+          const tab = next[nextIndex]!;
+          return previewTabKey(tab.workspaceScope, tab.path);
+        });
+        return next;
       });
     },
     [],
   );
 
   const clearPreviewFile = useCallback(() => {
-    setPreviewFile(null);
+    setPreviewTabs([]);
+    setActivePreviewKey(null);
   }, []);
+
+  const previewFile = useMemo(() => {
+    if (activePreviewKey == null) {
+      return null;
+    }
+    return (
+      previewTabs.find(
+        (tab) => previewTabKey(tab.workspaceScope, tab.path) === activePreviewKey,
+      ) ?? null
+    );
+  }, [previewTabs, activePreviewKey]);
 
   const refreshWorkspaceTrees = useCallback(() => {
     setTreeRefreshToken((t) => t + 1);
@@ -439,9 +495,15 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       goBackToSessions,
 
+      previewTabs,
+
+      activePreviewKey,
+
       previewFile,
 
       selectPreviewFile,
+
+      closePreviewTab,
 
       clearPreviewFile,
 
@@ -485,9 +547,15 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       goBackToSessions,
 
+      previewTabs,
+
+      activePreviewKey,
+
       previewFile,
 
       selectPreviewFile,
+
+      closePreviewTab,
 
       clearPreviewFile,
 
