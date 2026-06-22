@@ -41,7 +41,7 @@ export function workspaceMenuItems(target: WorkspaceContextTarget): Array<{
       { action: "create-folder", label: "新建文件夹" },
       { action: "rule-config", label: "规则配置" },
       { action: "rename", label: "重命名" },
-      { action: "delete", label: "删除", danger: true },
+      { action: "delete", label: "删除文件夹", danger: true },
     ];
   }
 

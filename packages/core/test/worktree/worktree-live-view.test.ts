@@ -112,4 +112,31 @@ describe("worktree materializeLiveView", () => {
     );
     assert.equal(fileTree, live.filetreeDisplay);
   });
+
+  it("deleteRulesUnderLogicalPrefix 移除幽灵目录行", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+    await svfs.delete("/55", { recursive: true });
+
+    const wt = new DefaultWorktreeService({
+      scope: { kind: "session", projectId: project.id, sessionId: session.id },
+      vfs: new SqliteVfsEntryRepository(ctx.conn),
+      worktree: new SqliteWorktreeRepository(ctx.conn),
+    });
+    await wt.setFileRule({
+      logicalPath: "/55/诗歌.txt",
+      inclusionMode: "show",
+    });
+
+    let rows = await wt.buildListRows();
+    assert.ok(rows.some((r) => r.kind === "dir" && r.path === "/55"));
+
+    await wt.deleteRulesUnderLogicalPrefix("/55");
+
+    rows = await wt.buildListRows();
+    assert.ok(!rows.some((r) => r.path === "/55" || r.path.startsWith("/55/")));
+  });
 });

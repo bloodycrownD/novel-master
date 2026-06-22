@@ -25,6 +25,7 @@ DerivedData/
 **/out/
 **/release/
 apps/desktop/build/
+apps/desktop/.test-native/
 
 .env
 .env.*

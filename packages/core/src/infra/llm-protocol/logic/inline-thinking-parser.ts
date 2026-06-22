@@ -71,6 +71,16 @@ function extractXmlThinkingBlocks(text: string, sink: string[]): string {
   return out;
 }
 
+/** GLM 等网关有时只泄漏闭合标签，剥离以免污染可见正文与提示词预览。 */
+function stripOrphanClosingThinkingTags(text: string): string {
+  return text
+    .replace(
+      new RegExp(`</(${INLINE_THINKING_TAG_PATTERN})\\b[^>]*>`, "gi"),
+      "",
+    )
+    .trim();
+}
+
 function extractThinkFencedBlocks(text: string, sink: string[]): string {
   return text.replace(
     /`([\s\S]*?)`/gi,
@@ -132,6 +142,7 @@ export function splitInlineThinkingFromText(raw: string): SplitResult {
   let visible = extractThinkFencedBlocks(normalized, thinkingParts);
   visible = extractXmlThinkingBlocks(visible, thinkingParts);
   visible = extractMalformedThoughtDelimiter(visible, thinkingParts);
+  visible = stripOrphanClosingThinkingTags(visible);
 
   return {
     thinking: joinThinkingParts(thinkingParts),

@@ -218,6 +218,29 @@ async function writeWithRevision(
   return { version };
 }
 
+async function appendDeletedRevisionsForSubtree(
+  entryRepo: VfsEntryRepository,
+  revisionRepo: VfsRevisionRepository,
+  path: string,
+): Promise<void> {
+  const files = await entryRepo.scanContents(path);
+  for (const file of files) {
+    if (file.path === path) {
+      continue;
+    }
+    const fileEntry = await entryRepo.findByPath(file.path);
+    if (fileEntry == null || fileEntry.entryKind !== "file") {
+      continue;
+    }
+    await appendDeletedRevision(
+      revisionRepo,
+      fileEntry.path,
+      fileEntry.version,
+      fileEntry.storageKind,
+    );
+  }
+}
+
 async function deleteWithRevision(
   entryRepo: VfsEntryRepository,
   revisionRepo: VfsRevisionRepository,
@@ -226,7 +249,17 @@ async function deleteWithRevision(
 ): Promise<void> {
   const entry = await entryRepo.findByPath(path);
   if (entry == null) {
-    throw vfsNotFound(path);
+    if (!recursive) {
+      throw vfsNotFound(path);
+    }
+    // WHY: Worktree 可从子文件推断目录，但 vfs_entry 未必有 directory 行。
+    const under = await entryRepo.listEntriesUnderPrefix(path);
+    if (under.length === 0) {
+      return;
+    }
+    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, path);
+    await entryRepo.delete(path, { recursive: true });
+    return;
   }
 
   if (entry.entryKind === "file") {
@@ -236,22 +269,7 @@ async function deleteWithRevision(
   }
 
   if (recursive) {
-    const files = await entryRepo.scanContents(path);
-    for (const file of files) {
-      if (file.path === path) {
-        continue;
-      }
-      const fileEntry = await entryRepo.findByPath(file.path);
-      if (fileEntry == null || fileEntry.entryKind !== "file") {
-        continue;
-      }
-      await appendDeletedRevision(
-        revisionRepo,
-        fileEntry.path,
-        fileEntry.version,
-        fileEntry.storageKind,
-      );
-    }
+    await appendDeletedRevisionsForSubtree(entryRepo, revisionRepo, path);
     await entryRepo.delete(path, { recursive: true });
     return;
   }

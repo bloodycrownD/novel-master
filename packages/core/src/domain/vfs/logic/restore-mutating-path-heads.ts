@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 突变路径 head 快照与补偿回滚。
  *
  * @module domain/vfs/logic/restore-mutating-path-heads
@@ -21,10 +21,22 @@ export type MutatingPathHeadPresent = {
   readonly version: number;
 };
 
+/** 起始 head 快照：目录（含子树文件内容）。 */
+export type MutatingPathHeadDirectory = {
+  readonly kind: "directory";
+  readonly path: string;
+  readonly files: readonly {
+    readonly path: string;
+    readonly content: string;
+    readonly version: number;
+  }[];
+};
+
 /** 单路径 head 快照。 */
 export type MutatingPathHeadSnapshot =
   | MutatingPathHeadAbsent
-  | MutatingPathHeadPresent;
+  | MutatingPathHeadPresent
+  | MutatingPathHeadDirectory;
 
 /** restore 阶段聚合错误（spec：CompositeError 语义）。 */
 export class MutatingPathRestoreCompositeError extends Error {
@@ -35,6 +47,26 @@ export class MutatingPathRestoreCompositeError extends Error {
     this.name = "MutatingPathRestoreCompositeError";
     this.causes = causes;
   }
+}
+
+async function captureDirectorySnapshot(
+  vfs: VfsService,
+  path: string,
+): Promise<MutatingPathHeadDirectory> {
+  const entries = await vfs.list(path, { recursive: true });
+  const files: MutatingPathHeadDirectory["files"][number][] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "file") {
+      continue;
+    }
+    const read = await vfs.read(entry.path);
+    files.push({
+      path: entry.path,
+      content: read.content,
+      version: read.version,
+    });
+  }
+  return { kind: "directory", path, files };
 }
 
 /**
@@ -56,7 +88,16 @@ export async function captureMutatingPathHeadSnapshots(
       });
     } catch (error: unknown) {
       if (isVfsError(error, "NOT_FOUND")) {
-        snapshots.set(path, { kind: "absent", path });
+        const entries = await vfs.list(path, { recursive: true });
+        if (entries.length > 0) {
+          snapshots.set(path, await captureDirectorySnapshot(vfs, path));
+        } else {
+          snapshots.set(path, { kind: "absent", path });
+        }
+        continue;
+      }
+      if (isVfsError(error, "IS_DIRECTORY")) {
+        snapshots.set(path, await captureDirectorySnapshot(vfs, path));
         continue;
       }
       throw error;
@@ -82,11 +123,28 @@ export async function restoreMutatingPathHeads(
     try {
       if (snapshot.kind === "absent") {
         try {
-          await vfs.delete(path);
+          await vfs.delete(path, { recursive: true });
         } catch (error: unknown) {
           if (!isVfsError(error, "NOT_FOUND")) {
             throw error;
           }
+        }
+        continue;
+      }
+      if (snapshot.kind === "directory") {
+        try {
+          await vfs.delete(path, { recursive: true });
+        } catch (error: unknown) {
+          if (!isVfsError(error, "NOT_FOUND")) {
+            throw error;
+          }
+        }
+        if (snapshot.files.length === 0) {
+          await vfs.mkdir(path);
+          continue;
+        }
+        for (const file of snapshot.files) {
+          await vfs.write(file.path, file.content, { versionCheck: false });
         }
         continue;
       }

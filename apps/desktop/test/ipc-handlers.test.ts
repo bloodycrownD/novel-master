@@ -1,36 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { setMacKeychainTestPassthrough } from "@novel-master/sksp-mac";
-import { setDpapiTestPassthrough } from "@novel-master/sksp-windows";
-import { closeDesktopConnection } from "../src/main/runtime/connection.js";
 import { handleProjectsCreate, handleProjectsList } from "../src/main/ipc/handlers/projects.js";
 import { handleScopeGet, handleScopeSetProject } from "../src/main/ipc/handlers/scope.js";
+import {
+  setupDesktopDbTestEnv,
+  teardownDesktopDbTestEnv,
+} from "./desktop-db-test-env.js";
 
 describe("desktop ipc handlers", () => {
   let tempDir: string;
 
   before(async () => {
-    if (process.platform === "darwin") {
-      setMacKeychainTestPassthrough(true);
-    } else {
-      setDpapiTestPassthrough(true);
-    }
-    tempDir = await mkdtemp(join(tmpdir(), "nm-desktop-ipc-"));
-    process.env.NOVEL_MASTER_DB = join(tempDir, "novel.db");
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-ipc-"));
   });
 
   after(async () => {
-    await closeDesktopConnection();
-    delete process.env.NOVEL_MASTER_DB;
-    if (process.platform === "darwin") {
-      setMacKeychainTestPassthrough(false);
-    } else {
-      setDpapiTestPassthrough(false);
-    }
-    await rm(tempDir, { recursive: true, force: true });
+    await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("scope/get returns reconciled empty scope on fresh db", async () => {

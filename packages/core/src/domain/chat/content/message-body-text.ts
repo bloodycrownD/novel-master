@@ -9,10 +9,22 @@ import type { ContentBlock } from "../model/content-block.js";
 import type { ChatMessage } from "../model/message.js";
 import type { MessageContent } from "../model/content-block.js";
 
+/** 剥离模型泄漏的孤立闭合思考标签（GLM / 代理网关常见）。 */
+function stripOrphanThinkingCloseTags(text: string): string {
+  return text
+    .replace(
+      /<\/(?:thought|thinking|think|redacted_thinking)\b[^>]*>/gi,
+      "",
+    )
+    .trim();
+}
+
 function blockBodyText(block: ContentBlock): string | null {
   switch (block.type) {
-    case "text":
-      return block.text;
+    case "text": {
+      const cleaned = stripOrphanThinkingCloseTags(block.text);
+      return cleaned === "" ? null : cleaned;
+    }
     case "image":
       return "[image]";
     case "tool_use": {
@@ -58,44 +70,60 @@ export function messageBodyText(m: ChatMessage): string {
   return messageBodyTextFromContent(m.content);
 }
 
-/** Role-prefixed segments for CLI / real-prompt preview (tool_result → `tool` role). */
+/** Role-prefixed segments for CLI / real-prompt preview (tool_result → `tool`; tool_use → `tool_call`). */
 export function formatChatMessageForCliPreview(
   message: ChatMessage,
 ): ReadonlyArray<{ readonly role: string; readonly body: string }> {
-  const toolResults = message.content.blocks.filter(
-    (b) => b.type === "tool_result",
-  );
-  const other = message.content.blocks.filter(
-    (b) =>
-      b.type !== "tool_result" &&
-      b.type !== "thinking" &&
-      b.type !== "redacted_thinking",
-  );
-
   const segments: Array<{ role: string; body: string }> = [];
 
-  if (toolResults.length > 0) {
-    const bodies: string[] = [];
-    for (const tr of toolResults) {
-      if (tr.type !== "tool_result") {
-        continue;
-      }
-      const body = formatToolResultContentForDisplay(tr.content);
-      if (body !== "") {
-        bodies.push(body);
-      }
+  const toolResultBodies: string[] = [];
+  for (const block of message.content.blocks) {
+    if (block.type !== "tool_result") {
+      continue;
     }
-    if (bodies.length > 0) {
-      segments.push({ role: "tool", body: bodies.join("\n\n") });
+    const body = formatToolResultContentForDisplay(block.content);
+    if (body !== "") {
+      toolResultBodies.push(body);
     }
   }
+  if (toolResultBodies.length > 0) {
+    segments.push({ role: "tool", body: toolResultBodies.join("\n\n") });
+  }
 
-  if (other.length > 0) {
-    const body = messageBodyTextFromBlocks(other);
+  let textBuffer: string[] = [];
+  const flushText = () => {
+    if (textBuffer.length === 0) {
+      return;
+    }
+    const body = textBuffer.join("\n\n");
     if (body !== "") {
       segments.push({ role: message.role, body });
     }
+    textBuffer = [];
+  };
+
+  for (const block of message.content.blocks) {
+    if (
+      block.type === "tool_result" ||
+      block.type === "thinking" ||
+      block.type === "redacted_thinking"
+    ) {
+      continue;
+    }
+    if (block.type === "tool_use") {
+      flushText();
+      const body = blockBodyText(block);
+      if (body != null && body !== "") {
+        segments.push({ role: "tool_call", body });
+      }
+      continue;
+    }
+    const text = blockBodyText(block);
+    if (text != null && text !== "") {
+      textBuffer.push(text);
+    }
   }
+  flushText();
 
   return segments;
 }

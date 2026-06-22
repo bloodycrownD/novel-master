@@ -24,6 +24,7 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
+import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import {
   getNovelMasterTestContext,
@@ -690,6 +691,24 @@ describe("UserVfsTurnService", () => {
     const listed = await messages.listBySession(session.id);
     assert.equal(listed.length, 2);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+  });
+
+  it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+
+    await svfs.mkdir("/55");
+    await svfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+
+    const result = await userVfsTurn.executeOp(
+      session.id,
+      buildUserVfsDeleteOp("/55", true),
+    );
+    assert.equal(result.ok, true);
+    await assert.rejects(() => svfs.list("/55"));
   });
 
 });

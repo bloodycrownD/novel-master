@@ -1,46 +1,28 @@
-/**
- * 云同步 IPC 处理器集成测试（空库配置读写）。
- */
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
-import { setMacKeychainTestPassthrough } from "@novel-master/sksp-mac";
-import { setDpapiTestPassthrough } from "@novel-master/sksp-windows";
-import { closeDesktopConnection } from "../src/main/runtime/connection.js";
+import { resetDesktopCloudSyncServiceForTest } from "../src/main/services/cloud-sync.service.js";
 import {
   handleCloudSyncGetConfig,
   handleCloudSyncGetLocalStatus,
   handleCloudSyncSetConfig,
   handleCloudSyncSetEnabled,
 } from "../src/main/ipc/handlers/cloud-sync.js";
-import { resetDesktopCloudSyncServiceForTest } from "../src/main/services/cloud-sync.service.js";
+import {
+  setupDesktopDbTestEnv,
+  teardownDesktopDbTestEnv,
+} from "./desktop-db-test-env.js";
 
 describe("cloud-sync ipc handlers", () => {
   let tempDir: string;
 
   before(async () => {
-    if (process.platform === "darwin") {
-      setMacKeychainTestPassthrough(true);
-    } else {
-      setDpapiTestPassthrough(true);
-    }
-    tempDir = await mkdtemp(join(tmpdir(), "nm-desktop-cloud-sync-"));
-    process.env.NOVEL_MASTER_DB = join(tempDir, "novel.db");
+    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-cloud-sync-"));
     resetDesktopCloudSyncServiceForTest();
   });
 
   after(async () => {
     resetDesktopCloudSyncServiceForTest();
-    await closeDesktopConnection();
-    delete process.env.NOVEL_MASTER_DB;
-    if (process.platform === "darwin") {
-      setMacKeychainTestPassthrough(false);
-    } else {
-      setDpapiTestPassthrough(false);
-    }
-    await rm(tempDir, { recursive: true, force: true });
+    await teardownDesktopDbTestEnv(tempDir);
   });
 
   it("getConfig 在未配置时返回空字段", async () => {

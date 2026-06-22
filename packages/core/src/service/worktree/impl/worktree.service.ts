@@ -127,6 +127,15 @@ export class DefaultWorktreeService implements WorktreeService {
     });
   }
 
+  async deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void> {
+    const normalized = normalizePath(logicalPrefix);
+    assertLogicalPathAllowed(this.scope, normalized);
+    await this.deps.worktree.deleteRulesUnderLogicalPrefix(
+      worktreeScopeKey(this.scope),
+      normalized,
+    );
+  }
+
   async materialize(): Promise<WorktreeMaterialized> {
     const ctx = await this.loadContextMetadata();
     const displayByPath = this.buildDisplayByPath(ctx);

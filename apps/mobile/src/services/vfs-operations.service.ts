@@ -1,10 +1,15 @@
 /**
  * VFS mutations for the file manager (create / delete / rename).
  */
-import { type VfsListEntry, type VfsService } from "@novel-master/core/vfs";
+import {
+  type VfsListEntry,
+  type VfsScope,
+  type VfsService,
+} from "@novel-master/core/vfs";
 import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {executeSessionUserVfsOp} from './user-vfs-turn-execute.service';
+import {invalidateSessionWorktreeSnapshot} from './worktree-snapshot.service';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -73,6 +78,39 @@ export async function sessionDeleteVfsEntry(
     sessionId,
     buildUserVfsDeleteOp(path, options?.recursive ?? true),
   );
+}
+
+async function cleanupWorktreeAfterVfsDelete(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+  path: string,
+): Promise<void> {
+  const wt = runtime.worktree(scope);
+  await wt.deleteRulesUnderLogicalPrefix(path);
+  if (scope.kind === 'session') {
+    invalidateSessionWorktreeSnapshot(runtime, scope.projectId, scope.sessionId);
+  }
+}
+
+/** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */
+export async function deleteScopedVfsEntry(
+  runtime: MobileNovelMasterRuntime,
+  scope: VfsScope,
+  vfs: VfsService,
+  path: string,
+  options: {
+    recursive?: boolean;
+    useUserVfsTurn: boolean;
+    sessionId?: string;
+  },
+): Promise<void> {
+  const recursive = options.recursive ?? true;
+  if (options.useUserVfsTurn && options.sessionId != null) {
+    await sessionDeleteVfsEntry(runtime, options.sessionId, path, {recursive});
+  } else {
+    await deleteVfsEntry(vfs, path, {recursive});
+  }
+  await cleanupWorktreeAfterVfsDelete(runtime, scope, path);
 }
 
 /** Rename a file or directory (delegates to Core move logic). */

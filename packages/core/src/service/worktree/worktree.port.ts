@@ -40,6 +40,9 @@ export interface WorktreeService {
 
   setFileRule(input: SetFileRuleInput): Promise<void>;
 
+  /** 删除路径及其子路径下的 worktree 纳入/目录规则（VFS 删除后清理 Explorer 幽灵目录）。 */
+  deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void>;
+
   /**
    * 向后兼容：单次 metadata 后分叉产出列表、持久块与宏树。
    * 新代码请优先使用 {@link materializeLiveView} / {@link materializePersistBlock}。

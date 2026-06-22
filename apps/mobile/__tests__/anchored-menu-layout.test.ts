@@ -11,7 +11,7 @@ describe('layoutAnchoredMenu', () => {
     {label: '编辑'},
     {label: '隐藏'},
     {label: '复制'},
-    {label: 'Fork'},
+    {label: '分叉'},
     {label: '回滚'},
     {label: '删除'},
   ];

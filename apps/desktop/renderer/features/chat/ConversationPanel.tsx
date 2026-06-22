@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import type {
   AgentRunFailedPayload,
@@ -6,6 +6,7 @@ import type {
   AgentStepCommittedPayload,
 } from "@shared/agent-event-types";
 import { useAgentStream } from "@/hooks/useAgentStream";
+import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
 import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
 import { useStreamToolInvoking } from "@/hooks/useStreamToolInvoking";
 import {
@@ -261,6 +262,16 @@ export function ConversationPanel({
     onStepCommitted,
     onRunFinished,
     onRunFailed,
+  });
+
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
+  useChatMessagesScrollFollow(chatMessagesRef, {
+    streamingText: running ? streamingText : undefined,
+    streamingThinking: running ? streamingThinking : undefined,
+    toolInvoking: running ? toolInvoking : false,
+    messagesLength: messages.length,
+    running,
+    sessionId,
   });
 
   const requestBatchConfirm = useCallback(() => {
@@ -616,6 +627,7 @@ export function ConversationPanel({
           <AgentStreamMetricsBar metrics={streamMetrics} />
         ) : null}
         <div
+          ref={chatMessagesRef}
           className={`chat-messages${messageBatch.active ? " chat-messages--batch" : ""}`}
           id="chat-messages"
         >

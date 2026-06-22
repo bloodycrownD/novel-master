@@ -42,7 +42,7 @@ export function applyTextEditToContentBlocks(
   return result;
 }
 
-/** 长按菜单：编辑、复制、Fork、回滚（无 hide/unhide/delete）。 */
+/** 长按菜单：编辑、复制、分叉、回滚（无 hide/unhide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessageDto,
 ): MessageActionMenuItem[] {

@@ -7,6 +7,7 @@
 import { copyVfsPath } from "@/domain/vfs/logic/vfs-copy.js";
 import { moveVfsPath } from "@/domain/vfs/logic/vfs-move.js";
 import type { VfsListEntry, VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
+import { isVfsError } from "@/errors/vfs-errors.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { classifyFsCommand } from "./fs-command-classify.js";
 import {
@@ -152,15 +153,45 @@ function formatLsOutput(entries: readonly VfsListEntry[]): FsLsOutput {
   };
 }
 
+/** `rm` 未带 `-r` 时，若目标是目录则自动递归删除（兼容 Agent 常见用法）。 */
+async function rmRecursiveWhenTargetIsDirectory(
+  vfs: VfsService,
+  path: string,
+  recursive: boolean,
+): Promise<boolean> {
+  if (recursive) {
+    return true;
+  }
+  try {
+    await vfs.read(path);
+    return false;
+  } catch (error: unknown) {
+    if (isVfsError(error, "IS_DIRECTORY")) {
+      return true;
+    }
+    if (isVfsError(error, "NOT_FOUND")) {
+      const entries = await vfs.list(path);
+      return entries.length > 0;
+    }
+    throw error;
+  }
+}
+
 /** Executes a parsed fs command against the injected VFS instance. */
 export async function executeFsCommand(
   vfs: VfsService,
   parsed: FsCommand,
 ): Promise<FsCommandResult> {
   switch (parsed.kind) {
-    case "rm":
-      await vfs.delete(parsed.path, { recursive: parsed.recursive });
+    case "rm": {
+      const recursive = await rmRecursiveWhenTargetIsDirectory(
+        vfs,
+        parsed.path,
+        parsed.recursive,
+      );
+      await vfs.delete(parsed.path, { recursive });
       return { ok: true as const };
+    }
     case "rmdir":
       // WHY: rmdir maps to non-recursive delete — VFS rejects non-empty directories.
       await vfs.delete(parsed.path, { recursive: false });

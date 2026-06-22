@@ -18,6 +18,7 @@ import type {
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+import { VfsError } from "@novel-master/core/vfs";
 
 import { buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp } from "@novel-master/core/vfs";
 import { BrowserWindow } from "electron";
@@ -37,10 +38,26 @@ import {
 } from "../../services/vfs-zip.service.js";
 import {
   getVfsForScope,
+  getWorktreeForScope,
+  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 
 function formatError(err: unknown): { code: string; message: string } {
+  if (err instanceof VfsError) {
+    return { code: err.code, message: err.message };
+  }
+  if (err instanceof Error && err.name === "ToolError") {
+    const toolErr = err as Error & { code?: string; cause?: unknown };
+    const cause = toolErr.cause;
+    const message =
+      cause instanceof VfsError
+        ? cause.message
+        : cause instanceof Error
+          ? cause.message
+          : err.message;
+    return { code: toolErr.code ?? err.name, message };
+  }
   if (err instanceof Error) {
     return { code: err.name || "ERROR", message: err.message };
   }
@@ -176,18 +193,23 @@ export async function handleVfsDelete(
   try {
     const rt = await getDesktopRuntime();
     const scope = resolveVfsScopeFromRequest(req);
+    const recursive = req.recursive ?? true;
 
     if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       await executeSessionUserVfsOp(
         rt,
         scope.sessionId,
-        buildUserVfsDeleteOp(req.path, req.recursive ?? true),
+        buildUserVfsDeleteOp(req.path, recursive),
       );
-      return { ok: true, data: undefined };
+    } else {
+      const vfs = getVfsForScope(rt, scope);
+      await deleteVfsEntry(vfs, req.path, { recursive });
     }
 
-    const vfs = getVfsForScope(rt, scope);
-    await deleteVfsEntry(vfs, req.path, { recursive: req.recursive });
+    const wt = getWorktreeForScope(rt, scope);
+    await wt.deleteRulesUnderLogicalPrefix(req.path);
+    invalidateSessionWorktreeSnapshot(rt, scope);
+
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

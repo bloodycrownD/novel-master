@@ -92,6 +92,19 @@ describe("fs-command integration", () => {
     await assert.rejects(() => vfs.read("/copy/x.txt"));
   });
 
+  it("rm without -r recursively deletes non-empty directory", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+
+    await vfs.mkdir("/55");
+    await vfs.write("/55/诗歌.txt", "poem", { versionCheck: false });
+
+    await executeFsCommand(vfs, parseFsCommand("rm /55"));
+    await assert.rejects(() => vfs.list("/55"));
+  });
+
   it("rmdir fails on non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);

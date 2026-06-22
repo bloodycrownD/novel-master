@@ -115,4 +115,33 @@ describe("formatChatMessageForCliPreview", () => {
     assert.equal(segments.filter((s) => s.role === "tool").length, 1);
     assert.equal(segments[0]?.body, "ok\n\nok");
   });
+
+  it("assistant 的 tool_use 与正文拆成独立段", () => {
+    const segments = formatChatMessageForCliPreview(
+      msg("a1", 20, "assistant", [
+        { type: "text", text: "已完成删除。" },
+        {
+          type: "tool_use",
+          id: "call_1",
+          name: "fs",
+          input: { command: "ls /" },
+        },
+      ]),
+    );
+    assert.equal(segments.length, 2);
+    assert.equal(segments[0]?.role, "assistant");
+    assert.equal(segments[0]?.body, "已完成删除。");
+    assert.equal(segments[1]?.role, "tool_call");
+    assert.match(segments[1]?.body ?? "", /\[tool_use name=fs/);
+  });
+
+  it("剥离 text 块中泄漏的闭合思考标签", () => {
+    const closeTag = "</" + "redacted_thinking" + ">";
+    const segments = formatChatMessageForCliPreview(
+      msg("a2", 21, "assistant", [
+        { type: "text", text: `回复正文${closeTag}` },
+      ]),
+    );
+    assert.equal(segments[0]?.body, "回复正文");
+  });
 });

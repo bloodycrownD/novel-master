@@ -209,24 +209,24 @@ describe("Builtin file tools V2 (integration)", () => {
     );
   });
 
-  it("fs rm non-recursive fails on non-empty directory", async () => {
+  it("fs rm without -r recursively deletes non-empty directory", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`p-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const vfs = ctx.sessionVfs(project.id, session.id);
     await vfs.mkdir("/dir");
-    await vfs.write("/dir/a.txt", "stay");
+    await vfs.write("/dir/a.txt", "gone");
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const runner = new ToolRunner(registry);
     const baseCtx = toolCtx(vfs, project.id, session.id);
 
+    await runner.call("fs", { command: "rm /dir" }, baseCtx);
     await assert.rejects(
-      () => runner.call("fs", { command: "rm /dir" }, baseCtx),
-      (e: unknown) => e instanceof ToolError && e.code === "FAILED",
+      () => vfs.read("/dir/a.txt"),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
     );
-    assert.equal((await vfs.read("/dir/a.txt")).content, "stay");
   });
 
   it("fs rm -r removes directory tree", async () => {

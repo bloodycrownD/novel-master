@@ -48,13 +48,12 @@ import { isVfsError } from "@novel-master/core/vfs";
 import {
   createVfsDirectory,
   createVfsFile,
-  deleteVfsEntry,
+  deleteScopedVfsEntry,
   remapPathUnderDir,
   renameVfsDirectory,
   renameVfsFile,
   sessionCreateVfsDirectory,
   sessionCreateVfsFile,
-  sessionDeleteVfsEntry,
   sessionRenameVfsDirectory,
   sessionRenameVfsFile,
 } from '../../services/vfs-operations.service';
@@ -366,13 +365,11 @@ export const VfsFileManager = forwardRef<
             void (async () => {
               try {
                 for (const path of paths) {
-                  if (useUserVfsTurn) {
-                    await sessionDeleteVfsEntry(runtime, sessionId!, path, {
-                      recursive: true,
-                    });
-                  } else {
-                    await deleteVfsEntry(vfs, path, {recursive: true});
-                  }
+                  await deleteScopedVfsEntry(runtime, scope, vfs, path, {
+                    recursive: true,
+                    useUserVfsTurn,
+                    sessionId,
+                  });
                 }
                 vfsBatch.exit();
                 await reloadVfsListOnly();
@@ -577,13 +574,11 @@ export const VfsFileManager = forwardRef<
               style: 'destructive',
               onPress: () => {
                 const runDelete = async () => {
-                  if (useUserVfsTurn) {
-                    await sessionDeleteVfsEntry(runtime, sessionId!, menuPath, {
-                      recursive: true,
-                    });
-                  } else {
-                    await deleteVfsEntry(vfs, menuPath, {recursive: true});
-                  }
+                  await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
+                    recursive: true,
+                    useUserVfsTurn,
+                    sessionId,
+                  });
                   await reloadVfsListOnly();
                 };
                 runDelete().catch(err =>

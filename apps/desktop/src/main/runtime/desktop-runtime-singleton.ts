@@ -33,8 +33,13 @@ export function getDesktopRuntimeOrThrow(): DesktopNovelMasterRuntime {
 
 /** Closes DB and rebuilds the full service graph (backup import, etc.). */
 export async function rebootstrapDesktopRuntime(): Promise<DesktopNovelMasterRuntime> {
+  await resetDesktopRuntimeForTest();
+  return getDesktopRuntime();
+}
+
+/** Clears singleton state between integration tests (system Node host). */
+export async function resetDesktopRuntimeForTest(): Promise<void> {
   await closeDesktopConnection();
   runtime = undefined;
   initPromise = undefined;
-  return getDesktopRuntime();
 }

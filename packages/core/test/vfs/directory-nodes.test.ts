@@ -104,6 +104,34 @@ describe("VFS directory nodes", () => {
     assert.equal((await vfs.read(`${drafts}/a.md`)).content, "updated");
   });
 
+  it("recursive delete succeeds for virtual directory without directory row", async () => {
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
+    const root = await prepareRoot(vfs);
+    const dir = `${root}/55`;
+    await vfs.write(`${dir}/诗歌.txt`, "poem", { versionCheck: false });
+    await conn.execute(
+      `DELETE FROM vfs_entry WHERE path = ? AND entry_kind = 'directory'`,
+      [dir],
+    );
+
+    await vfs.delete(dir, { recursive: true });
+
+    await assert.rejects(
+      () => vfs.read(`${dir}/诗歌.txt`),
+      (e: unknown) => isVfsError(e, "NOT_FOUND"),
+    );
+  });
+
+  it("recursive delete succeeds for worktree-only empty virtual directory", async () => {
+    const ctx = getNovelMasterTestContext();
+    const vfs = createVfsService(ctx.conn);
+    const root = await prepareRoot(vfs);
+    const dir = `${root}/empty-virtual`;
+    await assert.doesNotReject(() => vfs.delete(dir, { recursive: true }));
+  });
+
   it("mkdir fails when parent path is a file row", async () => {
     const ctx = getNovelMasterTestContext();
     const vfs = createVfsService(ctx.conn);

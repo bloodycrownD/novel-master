@@ -44,7 +44,7 @@ export function applyTextEditToMessage(
   return {blocks: result};
 }
 
-/** 长按菜单：编辑、复制、Fork、回滚（无 hide/unhide/delete）。 */
+/** 长按菜单：编辑、复制、分叉、回滚（无 hide/unhide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {
@@ -53,7 +53,7 @@ export function buildMessageActionItems(
     items.push({label: '编辑', action: 'edit'});
   }
   items.push({label: '复制', action: 'copy'});
-  items.push({label: 'Fork', action: 'fork'});
+  items.push({label: '分叉', action: 'fork'});
   items.push({label: '回滚', action: 'rollback', danger: true});
   return items;
 }

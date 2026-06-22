@@ -43,13 +43,12 @@ jest.mock('../src/errors/toast-message', () => ({
 jest.mock('../src/services/vfs-operations.service', () => ({
   createVfsDirectory: jest.fn(),
   createVfsFile: jest.fn(),
-  deleteVfsEntry: jest.fn(),
+  deleteScopedVfsEntry: jest.fn(),
   remapPathUnderDir: jest.fn(),
   renameVfsDirectory: jest.fn(),
   renameVfsFile: jest.fn(),
   sessionCreateVfsDirectory: jest.fn(),
   sessionCreateVfsFile: jest.fn(),
-  sessionDeleteVfsEntry: jest.fn(),
   sessionRenameVfsDirectory: jest.fn(),
   sessionRenameVfsFile: jest.fn(),
 }));

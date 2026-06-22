@@ -77,4 +77,11 @@ describe("inline-thinking-parser", () => {
   it("decodeBasicHtmlEntities round-trips common escapes", () => {
     assert.equal(decodeBasicHtmlEntities("&gt;thought"), ">thought");
   });
+
+  it("strips orphan closing redacted_thinking tag from visible text", () => {
+    const closeTag = "</" + "redacted_thinking" + ">";
+    const split = splitInlineThinkingFromText(`已完成删除。${closeTag}`);
+    assert.equal(split.thinking, "");
+    assert.equal(split.visible, "已完成删除。");
+  });
 });

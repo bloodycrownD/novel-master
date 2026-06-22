@@ -22,6 +22,10 @@ import type {
 } from "../../model/worktree-types.js";
 import type { WorktreeRepository } from "../worktree.port.js";
 
+function escapeLike(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
 function rowToDirRule(row: Row): WorktreeDirRule {
   return {
     scopeKey: String(row.scope_key),
@@ -197,5 +201,30 @@ export class SqliteWorktreeRepository implements WorktreeRepository {
         logicalPath: mapLogicalPath(f.logicalPath),
       });
     }
+  }
+
+  async deleteRulesUnderLogicalPrefix(
+    scopeKey: string,
+    logicalPrefix: string,
+  ): Promise<void> {
+    const base = normalizePath(logicalPrefix);
+    const escaped = escapeLike(base);
+    const childPattern = `${escaped}/%`;
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM worktree_dir_rule
+       WHERE scope_key = #{scopeKey}
+         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
+      { scopeKey, path: base, childPattern },
+    );
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM worktree_file_rule
+       WHERE scope_key = #{scopeKey}
+         AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
+      { scopeKey, path: base, childPattern },
+    );
   }
 }

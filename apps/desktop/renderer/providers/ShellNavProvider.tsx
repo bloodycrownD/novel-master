@@ -85,6 +85,10 @@ export interface ShellNavContextValue {
     workspaceScope: PreviewFileSelection["workspaceScope"],
     path: string,
   ) => void;
+  closePreviewTabsUnderPath: (
+    workspaceScope: PreviewFileSelection["workspaceScope"],
+    path: string,
+  ) => void;
   clearPreviewFile: () => void;
   treeRefreshToken: number;
   refreshWorkspaceTrees: () => void;
@@ -198,6 +202,39 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
           }
           const nextIndex = Math.min(index, next.length - 1);
           const tab = next[nextIndex]!;
+          return previewTabKey(tab.workspaceScope, tab.path);
+        });
+        return next;
+      });
+    },
+    [],
+  );
+
+  const closePreviewTabsUnderPath = useCallback(
+    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+      setPreviewTabs((prev) => {
+        const next = prev.filter(
+          (tab) =>
+            tab.workspaceScope !== workspaceScope ||
+            (tab.path !== path && !tab.path.startsWith(`${path}/`)),
+        );
+        if (next.length === prev.length) {
+          return prev;
+        }
+        setActivePreviewKey((activeKey) => {
+          if (activeKey == null) {
+            return null;
+          }
+          const stillOpen = next.some(
+            (tab) => previewTabKey(tab.workspaceScope, tab.path) === activeKey,
+          );
+          if (stillOpen) {
+            return activeKey;
+          }
+          if (next.length === 0) {
+            return null;
+          }
+          const tab = next[next.length - 1]!;
           return previewTabKey(tab.workspaceScope, tab.path);
         });
         return next;
@@ -505,6 +542,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       closePreviewTab,
 
+      closePreviewTabsUnderPath,
+
       clearPreviewFile,
 
       treeRefreshToken,
@@ -556,6 +595,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       selectPreviewFile,
 
       closePreviewTab,
+
+      closePreviewTabsUnderPath,
 
       clearPreviewFile,
 

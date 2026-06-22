@@ -42,6 +42,12 @@ export interface WorktreeRepository {
     toScopeKey: string,
     mapLogicalPath: (logical: string) => string,
   ): Promise<void>;
+
+  /** 删除某逻辑路径及其子路径下的目录/文件纳入规则。 */
+  deleteRulesUnderLogicalPrefix(
+    scopeKey: string,
+    logicalPrefix: string,
+  ): Promise<void>;
 }
 
 export type { InclusionMode, WorktreeDirRule, WorktreeFileRule };

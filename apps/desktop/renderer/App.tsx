@@ -44,7 +44,7 @@ function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
-  const { projectId, sessionId, sessionName, updateSessionName, refreshWorkspaceTrees, notifyAgentConfigChanged } =
+  const { projectId, sessionId, sessionName, updateSessionName, refreshWorkspaceTrees, notifyAgentConfigChanged, closePreviewTabsUnderPath } =
     useShellNav();
 
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
@@ -217,13 +217,19 @@ function DesktopOverlays() {
         sessionId,
       );
       if (result.ok) {
+        if (confirm.target.kind === "row") {
+          closePreviewTabsUnderPath(
+            confirm.target.panelScope,
+            confirm.target.row.path,
+          );
+        }
         refreshWorkspaceTrees();
       } else {
         showToast(result.message);
       }
       return;
     }
-  }, [workspaceConfirm, projectId, sessionId, refreshWorkspaceTrees]);
+  }, [workspaceConfirm, projectId, sessionId, refreshWorkspaceTrees, closePreviewTabsUnderPath]);
 
   return (
     <>

@@ -13,6 +13,8 @@ const ROLE_LABELS: Record<string, string> = {
   system: PROMPT_REGION_LABELS.system,
   user: "用户",
   assistant: "助手",
+  tool: "工具结果",
+  tool_call: "工具调用",
 };
 
 function segmentTitleLabel(title: string): string {

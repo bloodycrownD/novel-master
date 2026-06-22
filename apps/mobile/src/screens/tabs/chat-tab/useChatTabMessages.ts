@@ -508,7 +508,7 @@ export function useChatTabMessageActions({
         return;
       }
       if (agentRunning) {
-        showToast(toastMessage('请稍候', 'Agent 运行中无法 Fork'));
+        showToast(toastMessage('请稍候', 'Agent 运行中无法分叉'));
         return;
       }
       try {
@@ -518,9 +518,9 @@ export function useChatTabMessageActions({
         setChatSubview('conversation');
         setConversationPanel('chat');
         resetStreamingDisplay();
-        showToast(`已 Fork：${forked.title ?? forked.id}`);
+        showToast(`已分叉：${forked.title ?? forked.id}`);
       } catch (error) {
-        showToast(toastMessage('Fork 失败', error));
+        showToast(toastMessage('分叉失败', error));
       }
     },
     [

@@ -102,4 +102,26 @@ describe("RevisionAwareVfsService (integration)", () => {
     assert.equal(rev.status, "active");
     assert.equal((await vfs.read("/again.txt")).content, "restored");
   });
+
+  it("recursive delete succeeds when directory row is missing but children exist", async () => {
+    const ctx = getNovelMasterTestContext();
+    const conn = ctx.conn;
+    const vfs = createVfsService(conn);
+    const revisions = new SqliteVfsRevisionRepository(conn);
+    const root = `/template/${testIsolationSuffix()}`;
+    await vfs.mkdir(root);
+    const dir = `${root}/55`;
+    await vfs.write(`${dir}/诗歌.txt`, "poem", { versionCheck: false });
+    await conn.execute(
+      `DELETE FROM vfs_entry WHERE path = ? AND entry_kind = 'directory'`,
+      [dir],
+    );
+
+    await vfs.delete(dir, { recursive: true });
+
+    await assert.rejects(() => vfs.read(`${dir}/诗歌.txt`));
+    const deleted = await revisions.findByPathAndVersion(`${dir}/诗歌.txt`, 2);
+    assert.ok(deleted);
+    assert.equal(deleted.status, "deleted");
+  });
 });
