@@ -22,7 +22,7 @@ import { NovelMasterProvider } from "./providers/NovelMasterProvider";
 import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
 import { ToastHost } from "./components/ui/ToastHost";
 import { ThemeProvider } from "./providers/ThemeProvider";
-import { ipcWorktreeInvalidateSessionSnapshot } from "./ipc/client";
+import { ipcWorktreeInvalidateSessionSnapshot, ipcSessionsRename } from "./ipc/client";
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
   items: ReturnType<typeof workspaceMenuItems>;
@@ -35,11 +35,16 @@ type WorkspacePromptState =
 
 type WorkspaceConfirmState = { kind: "delete"; target: WorkspaceContextTarget };
 
+type SessionRenamePromptState = {
+  sessionId: string;
+  initialTitle: string;
+};
+
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
-  const { projectId, sessionId, refreshWorkspaceTrees, notifyAgentConfigChanged } =
+  const { projectId, sessionId, sessionName, updateSessionName, refreshWorkspaceTrees, notifyAgentConfigChanged } =
     useShellNav();
 
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
@@ -51,6 +56,8 @@ function DesktopOverlays() {
     bottom: number;
   } | null>(null);
   const [confirmCompact, setConfirmCompact] = useState(false);
+  const [sessionRenamePrompt, setSessionRenamePrompt] =
+    useState<SessionRenamePromptState | null>(null);
 
   const closeMenus = useCallback(() => {
     setWorkspaceMenu(null);
@@ -163,6 +170,33 @@ function DesktopOverlays() {
       }
     },
     [workspacePrompt, projectId, sessionId],
+  );
+
+  const handleSessionRenameConfirm = useCallback(
+    async (title: string) => {
+      const prompt = sessionRenamePrompt;
+      setSessionRenamePrompt(null);
+      if (!prompt) {
+        return;
+      }
+      const trimmed = title.trim();
+      if (!trimmed) {
+        return;
+      }
+      const result = await ipcSessionsRename({
+        id: prompt.sessionId,
+        title: trimmed,
+      });
+      if (result.ok) {
+        if (prompt.sessionId === sessionId) {
+          updateSessionName(trimmed);
+        }
+        showToast("已重命名会话");
+      } else {
+        showToast(result.error.message);
+      }
+    },
+    [sessionRenamePrompt, sessionId, updateSessionName],
   );
 
   const handleWorkspaceConfirm = useCallback(async () => {
@@ -283,6 +317,21 @@ function DesktopOverlays() {
         </button>
         <button
           type="button"
+          data-session-action="rename"
+          onClick={() => {
+            closeMenus();
+            if (sessionId && sessionName != null) {
+              setSessionRenamePrompt({
+                sessionId,
+                initialTitle: sessionName,
+              });
+            }
+          }}
+        >
+          聊天重命名
+        </button>
+        <button
+          type="button"
           data-session-action="refresh-worktree"
           onClick={() => {
             closeMenus();
@@ -313,13 +362,13 @@ function DesktopOverlays() {
             }
           }}
         >
-          压缩聊天
+          压缩上下文
         </button>
       </div>
 
       <ConfirmModal
         open={confirmCompact}
-        title="压缩聊天"
+        title="压缩上下文"
         message="将按照事件配置压缩上下文。是否继续？"
         onConfirm={() => {
           setConfirmCompact(false);
@@ -383,6 +432,15 @@ function DesktopOverlays() {
         }
         onClose={() => setWorkspacePrompt(null)}
         onConfirm={handleWorkspacePromptConfirm}
+      />
+
+      <TextPromptModal
+        open={sessionRenamePrompt != null}
+        title="重命名会话"
+        placeholder="会话名称"
+        initialValue={sessionRenamePrompt?.initialTitle ?? ""}
+        onClose={() => setSessionRenamePrompt(null)}
+        onConfirm={handleSessionRenameConfirm}
       />
 
       <ConfirmModal

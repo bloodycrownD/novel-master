@@ -60,6 +60,8 @@ export interface ShellNavContextValue {
 
   sessionName: string | undefined;
 
+  updateSessionName: (name: string) => void;
+
   showNavView: (viewId: NavViewId) => void;
 
   openProject: (project: ProjectDto) => Promise<void>;
@@ -179,7 +181,9 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     setAgentConfigRevision((r) => r + 1);
   }, []);
 
-
+  const updateSessionName = useCallback((name: string) => {
+    setSessionName(name);
+  }, []);
 
   const showNavView = useCallback((nextViewId: NavViewId) => {
 
@@ -423,6 +427,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       sessionName,
 
+      updateSessionName,
+
       showNavView,
 
       openProject,
@@ -466,6 +472,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       sessionId,
 
       sessionName,
+
+      updateSessionName,
 
       showNavView,
 

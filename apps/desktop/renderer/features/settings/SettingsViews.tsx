@@ -12,6 +12,7 @@ import { ManageHeader } from "@/components/batch/ManageHeader";
 import { TextPromptModal } from "@/components/ui/TextPromptModal";
 import { showToast } from "@/components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useNovelMaster } from "@/providers/NovelMasterProvider";
 import {
@@ -1126,7 +1127,14 @@ export function ProviderFormView({
           <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
         </SettingsField>
         <SettingsField label="Headers JSON">
-          <textarea rows={4} value={headersJson} onChange={(e) => setHeadersJson(e.target.value)} />
+          <textarea
+            rows={4}
+            value={headersJson}
+            onChange={(e) => setHeadersJson(e.target.value)}
+            onKeyDown={(e) => {
+              handleMultilineSubmitKeyDown(e, () => void submit());
+            }}
+          />
         </SettingsField>
       </SettingsFormSection>
     </SettingsPanel>

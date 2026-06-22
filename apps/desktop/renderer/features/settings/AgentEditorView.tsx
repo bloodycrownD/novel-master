@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { type AgentDefinition } from "@novel-master/core/agent";
 
 import { type DynamicPromptBlock, type PersistPromptBlock, type PersistTextPromptBlock } from "@novel-master/core/prompt";
@@ -60,6 +60,7 @@ import {
   SettingsSection,
 } from "./settings-ui";
 import { Switch } from "@/components/ui/Switch";
+import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 
 const DYNAMIC_MACROS = [
   { label: "$time", token: "{{$time}}" },
@@ -506,6 +507,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
   const displayName = name.trim() || "未命名 Agent";
 
+  const handlePromptTextareaKeyDown = (
+    e: ReactKeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    handleMultilineSubmitKeyDown(e, () => void save(), { disabled: saving });
+  };
+
   useEffect(() => {
     nav.navState.editingAgentDisplayName = displayName;
     nav.setAgentEditorTitle?.(displayName);
@@ -655,6 +662,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     rows={4}
                     value={systemContent}
                     onChange={(e) => setSystemContent(e.target.value)}
+                    onKeyDown={handlePromptTextareaKeyDown}
                     placeholder={PROMPT_REGION_LABELS.systemPlaceholder}
                   />
                 </SettingsField>
@@ -931,6 +939,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                       rows={4}
                       value={block.content}
                       onFocus={() => setDynamicInsertIndex(index)}
+                      onKeyDown={handlePromptTextareaKeyDown}
                       onChange={(e) =>
                         setDynamic((prev) =>
                           prev.map((b, i) =>

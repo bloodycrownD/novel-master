@@ -52,6 +52,6 @@ export function buildMessageActionItems(
   }
   items.push({ label: "复制", action: "copy" });
   items.push({ label: "分叉", action: "fork" });
-  items.push({ label: "回滚到此", action: "rollback", danger: true });
+  items.push({ label: "回滚", action: "rollback", danger: true });
   return items;
 }
