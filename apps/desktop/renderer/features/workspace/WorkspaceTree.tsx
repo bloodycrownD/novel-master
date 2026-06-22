@@ -119,6 +119,7 @@ export function WorkspaceTree({
               role="button"
               tabIndex={0}
               aria-expanded={isDir ? expanded : undefined}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={() => {
                 if (isDir) {
                   toggleDir(row.path);

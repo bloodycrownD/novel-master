@@ -52,7 +52,11 @@ export function ExplorerPane({
                   className="explorer-tree"
                   data-tree={scope}
                   id={`workspace-tree-${scope}`}
-                  onPointerDown={() => {
+                  onPointerDown={(e) => {
+                    // 树节点按下时不 refresh，避免 reload 替换 DOM 导致 macOS 单击丢失
+                    if ((e.target as HTMLElement).closest(".tree-node")) {
+                      return;
+                    }
                     refreshWorkspaceTrees();
                   }}
                   onContextMenu={(e) => {
