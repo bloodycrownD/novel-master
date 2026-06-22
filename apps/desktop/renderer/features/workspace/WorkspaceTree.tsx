@@ -9,6 +9,7 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import type { WorkspaceContextTarget } from "./workspace-context";
 import {
   entryName,
+  ancestorDirPaths,
   isTreeRowVisible,
   pathDepth,
   vfsEntryStatusText,
@@ -37,7 +38,8 @@ export function WorkspaceTree({
   refreshToken,
   onOpenContextMenu,
 }: WorkspaceTreeProps) {
-  const { projectId, sessionId, previewFile, selectPreviewFile } = useShellNav();
+  const { projectId, sessionId, previewFile, selectPreviewFile, treeExpandRequest } =
+    useShellNav();
   const [rows, setRows] = useState<WorktreeListRowDto[]>([]);
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(
     () => new Set(["/"]),
@@ -71,6 +73,19 @@ export function WorkspaceTree({
   useEffect(() => {
     void reload();
   }, [reload, refreshToken]);
+
+  useEffect(() => {
+    if (!treeExpandRequest) {
+      return;
+    }
+    setExpandedDirs((prev) => {
+      const next = new Set(prev);
+      for (const dir of ancestorDirPaths(treeExpandRequest.path)) {
+        next.add(dir);
+      }
+      return next;
+    });
+  }, [treeExpandRequest]);
 
   const visibleRows = useMemo(
     () => rows.filter((row) => isTreeRowVisible(row.path, expandedDirs)),

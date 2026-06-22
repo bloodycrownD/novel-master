@@ -78,6 +78,8 @@ export interface ShellNavContextValue {
   clearPreviewFile: () => void;
   treeRefreshToken: number;
   refreshWorkspaceTrees: () => void;
+  treeExpandRequest: { path: string; token: number } | null;
+  requestTreeExpandPath: (path: string) => void;
   /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
   agentConfigRevision: number;
   notifyAgentConfigChanged: () => void;
@@ -141,6 +143,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [treeRefreshToken, setTreeRefreshToken] = useState(0);
+  const [treeExpandRequest, setTreeExpandRequest] = useState<{
+    path: string;
+    token: number;
+  } | null>(null);
   const [agentConfigRevision, setAgentConfigRevision] = useState(0);
 
   const selectPreviewFile = useCallback(
@@ -160,6 +166,13 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
   const refreshWorkspaceTrees = useCallback(() => {
     setTreeRefreshToken((t) => t + 1);
+  }, []);
+
+  const requestTreeExpandPath = useCallback((path: string) => {
+    setTreeExpandRequest((prev) => ({
+      path,
+      token: (prev?.token ?? 0) + 1,
+    }));
   }, []);
 
   const notifyAgentConfigChanged = useCallback(() => {
@@ -430,6 +443,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       refreshWorkspaceTrees,
 
+      treeExpandRequest,
+
+      requestTreeExpandPath,
+
       agentConfigRevision,
 
       notifyAgentConfigChanged,
@@ -469,6 +486,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       treeRefreshToken,
 
       refreshWorkspaceTrees,
+
+      treeExpandRequest,
+
+      requestTreeExpandPath,
 
       agentConfigRevision,
 

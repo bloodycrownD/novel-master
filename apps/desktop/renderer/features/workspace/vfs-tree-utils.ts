@@ -1,6 +1,38 @@
 /** VFS tree row display helpers (aligned with mobile vfs-row-mapper). */
 import type { WorktreeListRowDto } from "@shared/ipc-types";
 
+/** `/notes/ch1.md` → [`notes`, `ch1.md`]（跳过空段） */
+export function logicalPathSegments(path: string): string[] {
+  if (path === "/") {
+    return [];
+  }
+  return path.split("/").filter(Boolean);
+}
+
+/** 段 index 对应的绝对逻辑路径，如 index=0 → `/notes` */
+export function logicalPathForSegmentIndex(
+  segments: readonly string[],
+  index: number,
+): string {
+  if (index < 0 || index >= segments.length) {
+    throw new RangeError(`segment index 越界: ${index}`);
+  }
+  return `/${segments.slice(0, index + 1).join("/")}`;
+}
+
+/** 从根到目标目录的路径链（含目标；用于树展开请求） */
+export function ancestorDirPaths(path: string): string[] {
+  if (path === "/") {
+    return ["/"];
+  }
+  const segments = logicalPathSegments(path);
+  const dirs: string[] = ["/"];
+  for (let i = 0; i < segments.length; i++) {
+    dirs.push(logicalPathForSegmentIndex(segments, i));
+  }
+  return dirs;
+}
+
 /** Parent logical path; session root `/` stays `/`. */
 export function parentLogicalPath(path: string): string | null {
   if (path === "/") {

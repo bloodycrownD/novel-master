@@ -465,6 +465,68 @@ html:not([data-theme="dark"]) .chat-composer {
   flex: 1;
 }
 
+.preview-breadcrumb {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.preview-breadcrumb__list {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-breadcrumb__item {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.preview-breadcrumb__item:last-child {
+  flex-shrink: 0;
+}
+
+.preview-breadcrumb__sep {
+  margin: 0 4px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.preview-breadcrumb__segment {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 12em;
+}
+
+.preview-breadcrumb__segment:hover {
+  text-decoration: underline;
+}
+
+.preview-breadcrumb__segment--current {
+  font-weight: 600;
+  cursor: default;
+}
+
+.preview-breadcrumb__segment--current:hover {
+  text-decoration: none;
+}
+
 .column-header__actions {
   display: flex;
   align-items: center;

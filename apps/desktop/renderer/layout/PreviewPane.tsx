@@ -1,14 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { useShellNav } from "../providers/ShellNavProvider";
+import { PreviewBreadcrumb } from "./PreviewBreadcrumb";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
 
 export function PreviewPane() {
-  const { previewFile, projectId, sessionId } = useShellNav();
+  const {
+    previewFile,
+    projectId,
+    sessionId,
+    refreshWorkspaceTrees,
+    selectPreviewFile,
+    requestTreeExpandPath,
+  } = useShellNav();
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
   const [savedContent, setSavedContent] = useState("");
@@ -64,7 +73,7 @@ export function PreviewPane() {
     }
     setSaving(true);
     try {
-      await ipcVfsWrite({
+      const result = await ipcVfsWrite({
         ...vfsScope(
           previewFile.workspaceScope,
           projectId,
@@ -75,8 +84,11 @@ export function PreviewPane() {
         expectedVersion: version,
         versionCheck: version != null,
       });
-      setSavedContent(content);
-      await loadFile();
+      if (result.ok) {
+        setSavedContent(content);
+        await loadFile();
+        refreshWorkspaceTrees();
+      }
     } finally {
       setSaving(false);
     }
@@ -86,9 +98,20 @@ export function PreviewPane() {
     <>
       <header className="column-header" id="preview-header" aria-label="文件预览">
         <span className="column-header__title">文件预览</span>
-        <span className="column-header__meta" id="preview-filename">
-          {previewFile?.name ?? "—"}
-        </span>
+        {previewFile ? (
+          <PreviewBreadcrumb
+            filePath={previewFile.path}
+            workspaceScope={previewFile.workspaceScope}
+            onSelectPath={(path) =>
+              selectPreviewFile(previewFile.workspaceScope, path)
+            }
+            onExpandDir={requestTreeExpandPath}
+          />
+        ) : (
+          <span className="column-header__meta" id="preview-filename">
+            —
+          </span>
+        )}
         <div className="column-header__actions">
           <SegmentedControl
             aria-label="预览模式"
@@ -123,7 +146,7 @@ export function PreviewPane() {
           <div className="preview-body" id="preview-body">
             {isMarkdown ? (
               <div className="preview-markdown">
-                <Markdown>{content}</Markdown>
+                <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
               </div>
             ) : (
               <pre className="preview-text">{content || "（空文件）"}</pre>
