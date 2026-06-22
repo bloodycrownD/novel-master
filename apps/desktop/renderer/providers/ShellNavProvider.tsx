@@ -182,6 +182,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
     async (project: ProjectDto) => {
 
+      clearPreviewFile();
+
       setProjectId(project.id);
 
       setProjectName(project.name);
@@ -196,7 +198,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
     },
 
-    [showNavView],
+    [showNavView, clearPreviewFile],
 
   );
 
@@ -205,6 +207,8 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   const openSession = useCallback(
 
     async (session: SessionDto, parentProjectName: string) => {
+
+      clearPreviewFile();
 
       setProjectId(session.projectId);
 
@@ -220,13 +224,15 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
     },
 
-    [showNavView],
+    [showNavView, clearPreviewFile],
 
   );
 
 
 
   const goBackToProjects = useCallback(() => {
+
+    clearPreviewFile();
 
     setProjectId(undefined);
 
@@ -238,11 +244,13 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
     showNavView("projects");
 
-  }, [showNavView]);
+  }, [showNavView, clearPreviewFile]);
 
 
 
   const goBackToSessions = useCallback(() => {
+
+    clearPreviewFile();
 
     setSessionId(undefined);
 
@@ -250,7 +258,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
     showNavView("sessions");
 
-  }, [showNavView]);
+  }, [showNavView, clearPreviewFile]);
 
 
 
