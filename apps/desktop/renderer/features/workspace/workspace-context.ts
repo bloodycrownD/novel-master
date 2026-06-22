@@ -46,9 +46,7 @@ export function workspaceMenuItems(target: WorkspaceContextTarget): Array<{
   }
 
   return [
-    { action: "include-hide", label: "隐藏文件" },
-    { action: "include-show", label: "展示文件" },
-    { action: "include-follow", label: "跟随目录" },
+    { action: "file-inclusion", label: "状态设置" },
     { action: "rename", label: "重命名" },
     { action: "delete", label: "删除文件", danger: true },
   ];

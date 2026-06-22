@@ -4427,6 +4427,83 @@ html[data-theme="dark"] .chat-batch-bar {
   margin-bottom: 4px;
 }
 
+.file-inclusion-modal {
+  text-align: left;
+}
+
+.file-inclusion-modal__header {
+  margin-bottom: 16px;
+}
+
+.file-inclusion-modal__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.file-inclusion-modal__path {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: left;
+  word-break: break-all;
+}
+
+.file-inclusion-modal__options {
+  margin: 0 0 20px;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-inclusion-modal__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.file-inclusion-modal__option:hover {
+  background: var(--surface-hover, rgba(0, 0, 0, 0.03));
+}
+
+.file-inclusion-modal__option.is-selected {
+  border-color: var(--accent, #3b82f6);
+  background: var(--accent-subtle, rgba(59, 130, 246, 0.08));
+}
+
+.file-inclusion-modal__option input[type="radio"] {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent, #3b82f6);
+}
+
+.file-inclusion-modal__option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-inclusion-modal__option-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.file-inclusion-modal__option-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 .text-prompt-modal__title {
   margin: 0 0 12px;
   font-size: 18px;

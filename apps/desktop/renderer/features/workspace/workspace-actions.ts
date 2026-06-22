@@ -26,46 +26,21 @@ export function scopeRequestFromTarget(
   return vfsScope(target.panelScope, projectId, sessionId);
 }
 
-export async function runDirectWorkspaceAction(
+export async function saveFileInclusion(
   target: WorkspaceContextTarget,
-  action: string,
+  inclusionMode: "auto" | "show" | "hide",
   projectId: string | undefined,
   sessionId: string | undefined,
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const req = scopeRequestFromTarget(target, projectId, sessionId);
-  if (target.kind !== "row") {
+  if (target.kind !== "row" || target.row.kind !== "file") {
     return { ok: false, message: "无效操作" };
   }
-  const row = target.row;
-
-  if (action === "include-hide" && row.kind === "file") {
-    const result = await ipcWorktreeSetFileRule({
-      ...req,
-      logicalPath: row.path,
-      inclusionMode: "hide",
-    });
-    return result.ok ? { ok: true } : { ok: false, message: result.error.message };
-  }
-  if (action === "include-show" && row.kind === "file") {
-    const result = await ipcWorktreeSetFileRule({
-      ...req,
-      logicalPath: row.path,
-      inclusionMode: "show",
-    });
-    return result.ok ? { ok: true } : { ok: false, message: result.error.message };
-  }
-  if (action === "include-follow" && row.kind === "file") {
-    const result = await ipcWorktreeSetFileRule({
-      ...req,
-      logicalPath: row.path,
-      inclusionMode: "auto",
-    });
-    return result.ok ? { ok: true } : { ok: false, message: result.error.message };
-  }
-  if (action === "rule-config" && row.kind === "dir") {
-    return { ok: false, message: "请使用规则配置对话框" };
-  }
-  return { ok: false, message: "未知操作" };
+  const result = await ipcWorktreeSetFileRule({
+    ...scopeRequestFromTarget(target, projectId, sessionId),
+    logicalPath: target.row.path,
+    inclusionMode,
+  });
+  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
 export async function createWorkspaceEntry(

@@ -6,12 +6,12 @@ import { ConfirmModal } from "./components/ui/ConfirmModal";
 import { TextPromptModal } from "./components/ui/TextPromptModal";
 import { showToast } from "./components/ui/show-toast";
 import { DirectoryRuleModal } from "./features/workspace/DirectoryRuleModal";
+import { FileInclusionModal } from "./features/workspace/FileInclusionModal";
 import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   entryLabelForTarget,
   renameWorkspaceEntry,
-  runDirectWorkspaceAction,
 } from "./features/workspace/workspace-actions";
 import { workspaceMenuItems } from "./features/workspace/workspace-context";
 import type { WorkspaceContextTarget } from "./features/workspace/WorkspaceTree";
@@ -51,6 +51,8 @@ function DesktopOverlays() {
   const [workspacePrompt, setWorkspacePrompt] = useState<WorkspacePromptState | null>(null);
   const [workspaceConfirm, setWorkspaceConfirm] = useState<WorkspaceConfirmState | null>(null);
   const [dirRuleTarget, setDirRuleTarget] = useState<WorkspaceContextTarget | null>(null);
+  const [fileInclusionTarget, setFileInclusionTarget] =
+    useState<WorkspaceContextTarget | null>(null);
   const [sessionMenu, setSessionMenu] = useState<{
     left: number;
     bottom: number;
@@ -117,20 +119,12 @@ function DesktopOverlays() {
         setDirRuleTarget(target);
         return;
       }
-
-      const result = await runDirectWorkspaceAction(
-        target,
-        action,
-        projectId,
-        sessionId,
-      );
-      if (result.ok) {
-        refreshWorkspaceTrees();
-      } else {
-        showToast(result.message);
+      if (action === "file-inclusion") {
+        setFileInclusionTarget(target);
+        return;
       }
     },
-    [projectId, sessionId, refreshWorkspaceTrees],
+    [],
   );
 
   const handleWorkspacePromptConfirm = useCallback(
@@ -464,6 +458,15 @@ function DesktopOverlays() {
           refreshWorkspaceTrees();
           showToast("目录规则已保存");
         }}
+      />
+
+      <FileInclusionModal
+        open={fileInclusionTarget != null}
+        target={fileInclusionTarget}
+        projectId={projectId}
+        sessionId={sessionId}
+        onClose={() => setFileInclusionTarget(null)}
+        onSaved={() => refreshWorkspaceTrees()}
       />
 
       <ToastHost />
