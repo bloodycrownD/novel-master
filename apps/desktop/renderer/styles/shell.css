@@ -1602,7 +1602,13 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
 .picker-modal__list {
   flex: 1;
   overflow-y: auto;
+  margin: 0;
   padding: 8px 12px;
+  list-style: none;
+}
+
+.picker-modal__list > li {
+  list-style: none;
 }
 
 .picker-modal__item {
