@@ -23,6 +23,7 @@ import { useBatchSelection } from "@/hooks/useBatchSelection";
 import { useShellNav } from "@/providers/ShellNavProvider";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { showToast } from "@/components/ui/show-toast";
+import { formatUserError } from "@/utils/format-user-error";
 import { ChatComposer } from "./ChatComposer";
 import {
   deriveComposerSendState,
@@ -80,6 +81,7 @@ export function ConversationPanel({
   } = useAgentStreamMetrics(running);
   const [streamingText, setStreamingText] = useState("");
   const [streamingThinking, setStreamingThinking] = useState("");
+  const [composerError, setComposerError] = useState<string | undefined>();
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -182,6 +184,11 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
+  // 切换会话时清空 Composer 内联错误
+  useEffect(() => {
+    setComposerError(undefined);
+  }, [sessionId]);
+
   useEffect(() => {
     ipcAppUiGet("chatRichText")
       .then((res) =>
@@ -213,18 +220,26 @@ export function ConversationPanel({
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
+      // Desktop-only 实时消费方 ①：Agent 工具 write/edit 后立即刷新 Explorer
+      if (payload.vfsMutated) {
+        refreshWorkspaceTrees();
+      }
     },
-    [reloadMessages, onStreamReset],
+    [reloadMessages, onStreamReset, refreshWorkspaceTrees],
   );
 
   const onRunFinished = useCallback(
-    (_payload: AgentRunFinishedPayload) => {
+    (payload: AgentRunFinishedPayload) => {
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
+      // 兜底：若 step 事件漏发 vfsMutated，run 结束时再刷新一次
+      if (payload.vfsMutated) {
+        refreshWorkspaceTrees();
+      }
       void reloadMessages();
     },
-    [reloadMessages],
+    [reloadMessages, refreshWorkspaceTrees],
   );
 
   const onRunFailed = useCallback(
@@ -232,6 +247,7 @@ export function ConversationPanel({
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
+      setComposerError(formatUserError(payload.error));
       showToast(payload.error);
       void reloadMessages();
     },
@@ -715,6 +731,8 @@ export function ConversationPanel({
             lastMessageIsPlainUserText={
               composerSendState.lastMessageIsPlainUserText
             }
+            error={composerError}
+            onErrorChange={setComposerError}
             onRunningChange={setRunning}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}
