@@ -263,18 +263,6 @@ export function ConversationPanel({
     onRunFailed,
   });
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      const target = e.target as HTMLElement | null;
-      const btn = target?.closest("[data-action='open-session-actions']");
-      if (btn instanceof HTMLElement) {
-        onOpenSessionActions(btn);
-      }
-    };
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, [onOpenSessionActions]);
-
   const requestBatchConfirm = useCallback(() => {
     if (messageBatch.selectedCount === 0 || messageBatch.mode == null) {
       return;
@@ -736,6 +724,7 @@ export function ConversationPanel({
             onRunningChange={setRunning}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}
+            onOpenSessionActions={onOpenSessionActions}
           />
         ) : null}
       </div>

@@ -30,6 +30,8 @@ interface ChatComposerProps {
   onRunningChange: (running: boolean) => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
+  /** 打开会话操作菜单；由父级定位并渲染菜单。 */
+  onOpenSessionActions?: (anchor: HTMLElement) => void;
 }
 
 export function ChatComposer({
@@ -44,6 +46,7 @@ export function ChatComposer({
   onRunningChange,
   onStreamReset,
   onMessagesChanged,
+  onOpenSessionActions,
 }: ChatComposerProps) {
   const { agentConfigRevision } = useShellNav();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -220,6 +223,10 @@ export function ChatComposer({
                 data-action="open-session-actions"
                 aria-label="更多选项"
                 aria-haspopup="menu"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenSessionActions?.(e.currentTarget);
+                }}
               >
                 ⋯
               </button>

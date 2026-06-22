@@ -67,7 +67,16 @@ function DesktopOverlays() {
   }, []);
 
   useEffect(() => {
-    const onDocClick = () => closeMenus();
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target?.closest("[data-action='open-session-actions']") ||
+        target?.closest("#session-actions-menu")
+      ) {
+        return;
+      }
+      closeMenus();
+    };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [closeMenus]);
