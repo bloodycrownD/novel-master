@@ -1,17 +1,8 @@
 ---
 createdAt: '2026-05-23 17:38:51'
-updatedAt: '2026-06-22 21:42:13'
+updatedAt: '2026-06-23 21:54:17'
 ---
-# desktop-ux-bug-fixes ????
-
-## ??
-feature/desktop-ux-bug-fixes
-
-## ??
-635c8ff..e029cdc4?7 commits?
-
-## ???
-Bug 1 P0/P1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ????
-
-## ??
-agent-registry-handlers ???????P2 ?? Enter ????
+??: desktop-workspace-ux-fixes
+Spec: Iterations/desktop-workspace-ux-fixes/spec.md
+??: feature/desktop-workspace-ux-fixes
+??: 0
