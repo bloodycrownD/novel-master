@@ -32,6 +32,19 @@ test("syncPreviewTabsWithFileRows 将不在列表中的 tab 标为已删除", ()
   assert.equal(next[1]?.isDeleted, true);
 });
 
+test("syncPreviewTabsWithFileRows 文件重新出现时清除删除态", () => {
+  const tabs = [
+    {
+      workspaceScope: "chat" as const,
+      path: "/a.md",
+      name: "a.md",
+      isDeleted: true,
+    },
+  ];
+  const next = syncPreviewTabsWithFileRows(tabs, [fileRow("/a.md")], "chat");
+  assert.equal(next[0]?.isDeleted, false);
+});
+
 test("markPreviewTabsDeletedUnderPathInList 匹配子路径", () => {
   const tabs = [
     {

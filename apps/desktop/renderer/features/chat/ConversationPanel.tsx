@@ -70,6 +70,12 @@ export function ConversationPanel({
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (running) {
+      vfsMutatedInRunRef.current = false;
+    }
+  }, [running]);
   const {
     toolInvoking,
     noteTextDelta: noteInvokingTextDelta,

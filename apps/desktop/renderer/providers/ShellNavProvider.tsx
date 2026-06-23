@@ -110,11 +110,13 @@ export interface ShellNavContextValue {
     workspaceScope: PreviewFileSelection["workspaceScope"],
     path: string,
   ) => void;
+  /** 工作区重命名后同步预览 tab 的路径与文件名 */
   renamePreviewTab: (
     workspaceScope: PreviewFileSelection["workspaceScope"],
     oldPath: string,
     newPath: string,
   ) => void;
+  /** 工作区树重载后，用 file 行校验 open tab 是否存在 */
   syncPreviewTabsFromFileRows: (
     scope: WorkspacePanelScope,
     rows: WorktreeListRowDto[],

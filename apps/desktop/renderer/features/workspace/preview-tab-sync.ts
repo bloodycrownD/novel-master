@@ -17,10 +17,17 @@ export function syncPreviewTabsWithFileRows(
   );
   let changed = false;
   const next = tabs.map((tab) => {
-    if (tab.workspaceScope !== scope || tab.isDeleted) {
+    if (tab.workspaceScope !== scope) {
       return tab;
     }
     if (filePaths.has(tab.path)) {
+      if (tab.isDeleted) {
+        changed = true;
+        return { ...tab, isDeleted: false };
+      }
+      return tab;
+    }
+    if (tab.isDeleted) {
       return tab;
     }
     changed = true;
