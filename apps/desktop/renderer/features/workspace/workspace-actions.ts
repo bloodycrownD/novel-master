@@ -56,8 +56,14 @@ export async function createWorkspaceEntry(
     const result = await ipcVfsWrite({ ...req, path, content: "" });
     return result.ok ? { ok: true } : { ok: false, message: result.error.message };
   }
-  const result = await ipcVfsMkdir({ ...req, path });
-  return result.ok ? { ok: true } : { ok: false, message: result.error.message };
+  const mkdirResult = await ipcVfsMkdir({ ...req, path });
+  if (!mkdirResult.ok) {
+    return { ok: false, message: mkdirResult.error.message };
+  }
+  const ruleResult = await ipcWorktreeSetDirRule(defaultDirRuleRequest(path, req));
+  return ruleResult.ok
+    ? { ok: true }
+    : { ok: false, message: ruleResult.error.message };
 }
 
 export async function renameWorkspaceEntry(
@@ -97,6 +103,7 @@ export async function deleteWorkspaceEntry(
   return result.ok ? { ok: true } : { ok: false, message: result.error.message };
 }
 
+/** 新建目录时持久化的默认规则（规则启用）。 */
 export function defaultDirRuleRequest(
   logicalPath: string,
   scope: VfsScopeRequest,
@@ -110,6 +117,25 @@ export function defaultDirRuleRequest(
     tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
     fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
     ruleEnabled: true,
+  };
+}
+
+/**
+ * 无持久化规则记录时弹窗展示的表单初值（规则关闭，其余字段同 Core 默认）。
+ */
+export function emptyDirRuleForm(
+  logicalPath: string,
+  scope: VfsScopeRequest,
+): WorktreeSetDirRuleRequest {
+  return {
+    ...scope,
+    logicalPath,
+    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    ruleEnabled: false,
   };
 }
 
@@ -138,7 +164,7 @@ export async function loadDirRuleForm(
       fillPolicy: result.data.fillPolicy,
     };
   }
-  return defaultDirRuleRequest(target.row.path, req);
+  return emptyDirRuleForm(target.row.path, req);
 }
 
 export async function saveDirRule(
