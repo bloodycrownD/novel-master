@@ -72,7 +72,7 @@ export function DirectoryRuleModal({
 }: DirectoryRuleModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [ruleEnabled, setRuleEnabled] = useState(true);
+  const [ruleEnabled, setRuleEnabled] = useState(false);
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [headCount, setHeadCount] = useState("0");
@@ -98,7 +98,7 @@ export function DirectoryRuleModal({
         if (cancelled || !form) {
           return;
         }
-        setRuleEnabled(rootRuleLocked ? true : (form.ruleEnabled ?? true));
+        setRuleEnabled(rootRuleLocked ? true : form.ruleEnabled);
         setSortField(form.sortField ?? "name");
         setSortOrder(form.sortOrder ?? "asc");
         setHeadCount(String(form.headCount ?? 0));
