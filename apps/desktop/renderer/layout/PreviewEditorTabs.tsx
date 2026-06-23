@@ -22,10 +22,11 @@ export function PreviewEditorTabs() {
       {previewTabs.map((tab) => {
         const key = previewTabKey(tab.workspaceScope, tab.path);
         const isActive = key === activePreviewKey;
+        const isDeleted = tab.isDeleted === true;
         return (
           <div
             key={key}
-            className={`preview-editor-tabs__tab${isActive ? " is-active" : ""}`}
+            className={`preview-editor-tabs__tab${isActive ? " is-active" : ""}${isDeleted ? " is-deleted" : ""}`}
             role="presentation"
           >
             <button
@@ -33,7 +34,7 @@ export function PreviewEditorTabs() {
               className="preview-editor-tabs__label"
               role="tab"
               aria-selected={isActive}
-              title={tab.path}
+              title={isDeleted ? `${tab.path}（已删除）` : tab.path}
               onClick={() => selectPreviewFile(tab.workspaceScope, tab.path)}
             >
               {tab.name}

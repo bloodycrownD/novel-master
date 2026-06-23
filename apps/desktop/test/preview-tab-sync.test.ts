@@ -1,0 +1,51 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  markPreviewTabsDeletedUnderPathInList,
+  syncPreviewTabsWithFileRows,
+} from "@/features/workspace/preview-tab-sync";
+import type { WorktreeListRowDto } from "@shared/ipc-types";
+
+const fileRow = (path: string): WorktreeListRowDto => ({
+  path,
+  kind: "file",
+  inclusionMode: "自动",
+  displayState: "全内容",
+  ruleState: "",
+});
+
+test("syncPreviewTabsWithFileRows 将不在列表中的 tab 标为已删除", () => {
+  const tabs = [
+    {
+      workspaceScope: "chat" as const,
+      path: "/a.md",
+      name: "a.md",
+    },
+    {
+      workspaceScope: "chat" as const,
+      path: "/b.md",
+      name: "b.md",
+    },
+  ];
+  const next = syncPreviewTabsWithFileRows(tabs, [fileRow("/a.md")], "chat");
+  assert.equal(next[0]?.isDeleted, undefined);
+  assert.equal(next[1]?.isDeleted, true);
+});
+
+test("markPreviewTabsDeletedUnderPathInList 匹配子路径", () => {
+  const tabs = [
+    {
+      workspaceScope: "chat" as const,
+      path: "/notes/ch1.md",
+      name: "ch1.md",
+    },
+    {
+      workspaceScope: "chat" as const,
+      path: "/other.md",
+      name: "other.md",
+    },
+  ];
+  const next = markPreviewTabsDeletedUnderPathInList(tabs, "chat", "/notes");
+  assert.equal(next[0]?.isDeleted, true);
+  assert.equal(next[1]?.isDeleted, undefined);
+});

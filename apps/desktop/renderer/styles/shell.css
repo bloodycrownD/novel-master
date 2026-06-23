@@ -495,6 +495,21 @@ html:not([data-theme="dark"]) .chat-composer {
   box-shadow: var(--shadow-card-subtle);
 }
 
+.preview-editor-tabs__tab.is-deleted .preview-editor-tabs__label {
+  font-style: italic;
+  color: var(--text-tertiary);
+  opacity: 0.75;
+}
+
+.preview-editor-tabs__tab.is-deleted.is-active .preview-editor-tabs__label {
+  color: var(--text-tertiary);
+}
+
+.preview-empty--deleted {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 .preview-editor-tabs__label {
   flex: 1;
   min-width: 0;

@@ -12,6 +12,7 @@ import type {
   VfsReadRequest,
   VfsReadResultDto,
   VfsRenameRequest,
+  VfsScopeRequest,
   VfsWriteRequest,
   VfsZipExportResult,
   VfsZipImportResult,
@@ -42,6 +43,10 @@ import {
   invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
+import {
+  notifyWorkspaceMutatedToRenderer,
+  workspaceMutatedPayloadFromRequest,
+} from "../forward-workspace-mutated.js";
 
 function formatError(err: unknown): { code: string; message: string } {
   if (err instanceof VfsError) {
@@ -66,6 +71,11 @@ function formatError(err: unknown): { code: string; message: string } {
 
 function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
+}
+
+/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）。 */
+function pushWorkspaceMutated(req: VfsScopeRequest): void {
+  notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
 }
 
 async function readBaselineContent(
@@ -144,6 +154,7 @@ export async function handleVfsWrite(
       if (op != null) {
         await executeSessionUserVfsOp(rt, scope.sessionId, op);
       }
+      pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
     }
 
@@ -157,6 +168,7 @@ export async function handleVfsWrite(
         versionCheck: req.versionCheck ?? false,
       });
     }
+    pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -176,11 +188,13 @@ export async function handleVfsMkdir(
         scope.sessionId,
         buildUserVfsMkdirOp(req.path),
       );
+      pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
     }
 
     const vfs = getVfsForScope(rt, scope);
     await vfs.mkdir(req.path);
+    pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -210,6 +224,7 @@ export async function handleVfsDelete(
     await wt.deleteRulesUnderLogicalPrefix(req.path);
     invalidateSessionWorktreeSnapshot(rt, scope);
 
+    pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -229,6 +244,7 @@ export async function handleVfsRename(
         scope.sessionId,
         buildUserVfsRenameOp(req.oldPath, req.newPath),
       );
+      pushWorkspaceMutated(req);
       return { ok: true, data: undefined };
     }
 
@@ -244,6 +260,7 @@ export async function handleVfsRename(
     } else {
       await renameVfsFile(vfs, req.oldPath, req.newPath);
     }
+    pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

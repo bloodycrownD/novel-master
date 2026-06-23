@@ -10,6 +10,7 @@ import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
 } from "./ipc/forward-event-bus.js";
+import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -109,6 +110,10 @@ function createMainWindow(): BrowserWindow {
   });
 
   setEventBusForwardTarget(() => {
+    const focused = BrowserWindow.getFocusedWindow();
+    return (focused ?? window).webContents;
+  });
+  setWorkspaceMutatedForwardTarget(() => {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   });

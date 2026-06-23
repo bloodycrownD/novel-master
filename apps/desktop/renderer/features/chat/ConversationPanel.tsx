@@ -65,7 +65,8 @@ export function ConversationPanel({
   onOpenSessionActions,
   messageBatch,
 }: ConversationPanelProps) {
-  const { refreshWorkspaceTrees, openSession, projectName } = useShellNav();
+  const { notifyWorkspaceMutated, openSession, projectName } = useShellNav();
+  const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [running, setRunning] = useState(false);
@@ -221,12 +222,13 @@ export function ConversationPanel({
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
-      // Desktop-only 实时消费方 ①：Agent 工具 write/edit 后立即刷新 Explorer
+      // Desktop-only 实时消费方 ①：Agent 工具突变后立即刷新 Explorer
       if (payload.vfsMutated) {
-        refreshWorkspaceTrees();
+        vfsMutatedInRunRef.current = true;
+        notifyWorkspaceMutated();
       }
     },
-    [reloadMessages, onStreamReset, refreshWorkspaceTrees],
+    [reloadMessages, onStreamReset, notifyWorkspaceMutated],
   );
 
   const onRunFinished = useCallback(
@@ -234,13 +236,13 @@ export function ConversationPanel({
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
-      // 兜底：若 step 事件漏发 vfsMutated，run 结束时再刷新一次
       if (payload.vfsMutated) {
-        refreshWorkspaceTrees();
+        notifyWorkspaceMutated();
       }
+      vfsMutatedInRunRef.current = false;
       void reloadMessages();
     },
-    [reloadMessages, refreshWorkspaceTrees],
+    [reloadMessages, notifyWorkspaceMutated],
   );
 
   const onRunFailed = useCallback(
@@ -248,11 +250,15 @@ export function ConversationPanel({
       setRunning(false);
       setStreamingText("");
       setStreamingThinking("");
+      if (vfsMutatedInRunRef.current) {
+        notifyWorkspaceMutated();
+      }
+      vfsMutatedInRunRef.current = false;
       setComposerError(formatUserError(payload.error));
       showToast(payload.error);
       void reloadMessages();
     },
-    [reloadMessages],
+    [reloadMessages, notifyWorkspaceMutated],
   );
 
   useAgentStream({
@@ -385,12 +391,12 @@ export function ConversationPanel({
       }
       setStreamingText("");
       await reloadMessages();
-      refreshWorkspaceTrees();
+      notifyWorkspaceMutated();
       showToast(
         skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
       );
     },
-    [projectId, sessionId, reloadMessages, refreshWorkspaceTrees],
+    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
   );
 
   const handleMessageAction = useCallback(
@@ -494,7 +500,7 @@ export function ConversationPanel({
       }
       messageBatch.exit();
       await reloadMessages();
-      refreshWorkspaceTrees();
+      notifyWorkspaceMutated();
     }
   }, [
     confirmState,
@@ -503,7 +509,7 @@ export function ConversationPanel({
     messageBatch,
     executeRollback,
     reloadMessages,
-    refreshWorkspaceTrees,
+    notifyWorkspaceMutated,
   ]);
 
   const confirmMessage = (() => {

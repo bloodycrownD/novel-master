@@ -66,6 +66,7 @@ import {
   type WorktreeListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
+  type WorkspaceMutatedPayload,
 } from "@shared/ipc-types";
 
 function bridge() {
@@ -99,6 +100,16 @@ export function onAgentStream(
   callback: (payload: AgentStreamEventPayload) => void,
 ): () => void {
   return bridge().on(IPC_CHANNELS.AGENT_STREAM, callback as (p: unknown) => void);
+}
+
+/** 订阅 main 进程推送的工作区变更通知（VFS / 规则变更后 Explorer 刷新）。 */
+export function onWorkspaceMutated(
+  callback: (payload: WorkspaceMutatedPayload) => void,
+): () => void {
+  return bridge().on(
+    IPC_CHANNELS.WORKSPACE_MUTATED,
+    callback as (p: unknown) => void,
+  );
 }
 
 export async function ipcScopeGet(): Promise<IpcResult<ScopeSnapshotDto>> {

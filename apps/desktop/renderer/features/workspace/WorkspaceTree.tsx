@@ -21,6 +21,8 @@ interface WorkspaceTreeProps {
   panelScope: WorkspacePanelScope;
   refreshToken: number;
   onOpenContextMenu: (target: WorkspaceContextTarget) => void;
+  /** 列表重载成功后回调，用于同步预览 tab 删除态 */
+  onRowsLoaded?: (rows: WorktreeListRowDto[]) => void;
   /** Blank-area menu is handled on `.explorer-tree` in ExplorerPane. */
   onBlankContextMenu?: (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => void;
 }
@@ -37,6 +39,7 @@ export function WorkspaceTree({
   panelScope,
   refreshToken,
   onOpenContextMenu,
+  onRowsLoaded,
 }: WorkspaceTreeProps) {
   const { projectId, sessionId, previewFile, selectPreviewFile, treeExpandRequest } =
     useShellNav();
@@ -57,6 +60,7 @@ export function WorkspaceTree({
       const result = await ipcWorktreeBuildListRows(req);
       if (result.ok) {
         setRows(result.data);
+        onRowsLoaded?.(result.data);
         setExpandedDirs(
           new Set(
             result.data
@@ -68,7 +72,7 @@ export function WorkspaceTree({
     } finally {
       setLoading(false);
     }
-  }, [req]);
+  }, [req, onRowsLoaded]);
 
   useEffect(() => {
     void reload();

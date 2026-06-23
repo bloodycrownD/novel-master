@@ -18,6 +18,10 @@ import {
   invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
+import {
+  notifyWorkspaceMutatedToRenderer,
+  workspaceMutatedPayloadFromRequest,
+} from "../forward-workspace-mutated.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -84,6 +88,7 @@ export async function handleWorktreeSetDirRule(
       fillPolicy: req.fillPolicy,
     });
     invalidateSessionWorktreeSnapshot(rt, scope);
+    notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -102,6 +107,7 @@ export async function handleWorktreeSetFileRule(
       inclusionMode: req.inclusionMode,
     });
     invalidateSessionWorktreeSnapshot(rt, scope);
+    notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

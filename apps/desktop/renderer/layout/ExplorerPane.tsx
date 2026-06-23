@@ -22,7 +22,8 @@ export function ExplorerPane({
     projectId,
     sessionId,
     treeRefreshToken,
-    refreshWorkspaceTrees,
+    notifyWorkspaceMutated,
+    syncPreviewTabsFromFileRows,
   } = useShellNav();
   const title = workspaceTitleForScope(workspaceScope);
 
@@ -34,7 +35,7 @@ export function ExplorerPane({
         </span>
         <WorkspaceHeaderActions
           panelScope={workspaceScope}
-          onRefresh={refreshWorkspaceTrees}
+          onRefresh={notifyWorkspaceMutated}
         />
       </header>
       <section id="explorer-pane" aria-label="工作区">
@@ -57,7 +58,7 @@ export function ExplorerPane({
                     if ((e.target as HTMLElement).closest(".tree-node")) {
                       return;
                     }
-                    refreshWorkspaceTrees();
+                    notifyWorkspaceMutated();
                   }}
                   onContextMenu={(e) => {
                     if ((e.target as HTMLElement).closest(".tree-node")) {
@@ -77,6 +78,9 @@ export function ExplorerPane({
                       panelScope={scope}
                       refreshToken={treeRefreshToken}
                       onOpenContextMenu={onOpenContextMenu}
+                      onRowsLoaded={(rows) =>
+                        syncPreviewTabsFromFileRows(scope, rows)
+                      }
                     />
                   ) : null}
                 </div>

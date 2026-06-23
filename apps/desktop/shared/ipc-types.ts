@@ -8,6 +8,8 @@ export const IPC_CHANNELS = {
   BOOTSTRAP_REBOOTSTRAP: "nm:bootstrap/rebootstrap",
   EVENT_BUS: "nm:event-bus",
   AGENT_STREAM: "nm:agent-stream",
+  /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
+  WORKSPACE_MUTATED: "nm:workspace/mutated",
 
   SCOPE_GET: "nm:scope/get",
   SCOPE_SET_PROJECT: "nm:scope/setProject",
@@ -558,10 +560,19 @@ export type AgentStreamEventPayload = {
   readonly payload: unknown;
 };
 
+/** Main 进程在 VFS / worktree 规则变更成功后推送给 renderer 的载荷。 */
+export type WorkspaceMutatedPayload = {
+  readonly workspaceScope: WorkspacePanelScope;
+  readonly projectId?: string;
+  readonly sessionId?: string;
+};
+
 export type PreviewFileSelection = {
   readonly workspaceScope: WorkspacePanelScope;
   readonly path: string;
   readonly name: string;
+  /** 文件在工作区已不存在时为 true（VS Code 式删除态 tab） */
+  readonly isDeleted?: boolean;
 };
 
 export type ProviderListItemDto = {

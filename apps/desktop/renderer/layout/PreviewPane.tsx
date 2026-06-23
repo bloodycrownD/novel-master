@@ -14,7 +14,8 @@ export function PreviewPane() {
     previewFile,
     projectId,
     sessionId,
-    refreshWorkspaceTrees,
+    treeRefreshToken,
+    notifyWorkspaceMutated,
   } = useShellNav();
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [content, setContent] = useState("");
@@ -22,15 +23,23 @@ export function PreviewPane() {
   const [version, setVersion] = useState<number | undefined>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fileMissing, setFileMissing] = useState(false);
 
   const loadFile = useCallback(async () => {
     if (!previewFile) {
       setContent("");
       setSavedContent("");
       setVersion(undefined);
+      setFileMissing(false);
+      return;
+    }
+    if (previewFile.isDeleted) {
+      setFileMissing(true);
+      setLoading(false);
       return;
     }
     setLoading(true);
+    setFileMissing(false);
     try {
       const result = await ipcVfsRead({
         ...vfsScope(
@@ -44,6 +53,9 @@ export function PreviewPane() {
         setContent(result.data.content);
         setSavedContent(result.data.content);
         setVersion(result.data.version);
+        setFileMissing(false);
+      } else if (result.error.code === "NOT_FOUND") {
+        setFileMissing(true);
       }
     } finally {
       setLoading(false);
@@ -54,6 +66,12 @@ export function PreviewPane() {
     void loadFile();
     setMode("read");
   }, [loadFile]);
+
+  useEffect(() => {
+    if (previewFile && !previewFile.isDeleted) {
+      void loadFile();
+    }
+  }, [treeRefreshToken, previewFile, loadFile]);
 
   const isDirty = content !== savedContent;
   const isMarkdown =
@@ -66,7 +84,7 @@ export function PreviewPane() {
   );
 
   const save = async () => {
-    if (!previewFile || !isDirty) {
+    if (!previewFile || !isDirty || fileMissing) {
       return;
     }
     setSaving(true);
@@ -85,12 +103,14 @@ export function PreviewPane() {
       if (result.ok) {
         setSavedContent(content);
         await loadFile();
-        refreshWorkspaceTrees();
+        notifyWorkspaceMutated();
       }
     } finally {
       setSaving(false);
     }
   };
+
+  const showMissing = fileMissing || previewFile?.isDeleted;
 
   return (
     <>
@@ -106,7 +126,7 @@ export function PreviewPane() {
             ]}
             onChange={setMode}
           />
-          {previewFile && mode === "edit" ? (
+          {previewFile && mode === "edit" && !showMissing ? (
             <Button
               variant="primary"
               disabled={!isDirty || saving}
@@ -121,6 +141,12 @@ export function PreviewPane() {
         {!previewFile ? (
           <div className="preview-body" id="preview-body">
             <p className="preview-empty">在工作区选择文件以预览</p>
+          </div>
+        ) : showMissing ? (
+          <div className="preview-body" id="preview-body">
+            <p className="preview-empty preview-empty--deleted">
+              文件已删除或不存在
+            </p>
           </div>
         ) : loading ? (
           <div className="preview-body" id="preview-body">

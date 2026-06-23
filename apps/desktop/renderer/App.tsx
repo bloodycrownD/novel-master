@@ -44,7 +44,7 @@ function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
-  const { projectId, sessionId, sessionName, updateSessionName, refreshWorkspaceTrees, notifyAgentConfigChanged, closePreviewTabsUnderPath } =
+  const { projectId, sessionId, sessionName, updateSessionName, notifyWorkspaceMutated, notifyAgentConfigChanged, markPreviewTabsDeletedUnderPath, renamePreviewTab } =
     useShellNav();
 
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
@@ -167,14 +167,23 @@ function DesktopOverlays() {
           projectId,
           sessionId,
         );
+        if (result.ok && prompt.target.kind === "row") {
+          const row = prompt.target.row;
+          const parent =
+            row.path === "/"
+              ? ""
+              : row.path.slice(0, row.path.lastIndexOf("/")) || "";
+          const newPath = `${parent}/${value.trim()}`.replace(/\/+/g, "/");
+          renamePreviewTab(prompt.target.panelScope, row.path, newPath);
+        }
       }
       if (result.ok) {
-        refreshWorkspaceTrees();
+        notifyWorkspaceMutated();
       } else {
         showToast(result.message);
       }
     },
-    [workspacePrompt, projectId, sessionId, refreshWorkspaceTrees],
+    [workspacePrompt, projectId, sessionId, notifyWorkspaceMutated, renamePreviewTab],
   );
 
   const handleSessionRenameConfirm = useCallback(
@@ -218,18 +227,18 @@ function DesktopOverlays() {
       );
       if (result.ok) {
         if (confirm.target.kind === "row") {
-          closePreviewTabsUnderPath(
+          markPreviewTabsDeletedUnderPath(
             confirm.target.panelScope,
             confirm.target.row.path,
           );
         }
-        refreshWorkspaceTrees();
+        notifyWorkspaceMutated();
       } else {
         showToast(result.message);
       }
       return;
     }
-  }, [workspaceConfirm, projectId, sessionId, refreshWorkspaceTrees, closePreviewTabsUnderPath]);
+  }, [workspaceConfirm, projectId, sessionId, notifyWorkspaceMutated, markPreviewTabsDeletedUnderPath]);
 
   return (
     <>
@@ -470,7 +479,7 @@ function DesktopOverlays() {
         sessionId={sessionId}
         onClose={() => setDirRuleTarget(null)}
         onSaved={() => {
-          refreshWorkspaceTrees();
+          notifyWorkspaceMutated();
           showToast("目录规则已保存");
         }}
       />
@@ -481,7 +490,7 @@ function DesktopOverlays() {
         projectId={projectId}
         sessionId={sessionId}
         onClose={() => setFileInclusionTarget(null)}
-        onSaved={() => refreshWorkspaceTrees()}
+        onSaved={() => notifyWorkspaceMutated()}
       />
 
       <ToastHost />

@@ -16,13 +16,22 @@ import {
 
   useMemo,
 
+  useRef,
+
   useState,
 
   type ReactNode,
 
 } from "react";
 
-import type { ProjectDto, SessionDto, PreviewFileSelection } from "@shared/ipc-types";
+import type {
+  ProjectDto,
+  SessionDto,
+  PreviewFileSelection,
+  WorktreeListRowDto,
+  WorkspaceMutatedPayload,
+  WorkspacePanelScope,
+} from "@shared/ipc-types";
 import { previewTabKey } from "../layout/preview-tab-utils";
 
 import {
@@ -31,7 +40,14 @@ import {
 
   ipcSessionsListByProject,
 
+  onWorkspaceMutated,
+
 } from "../ipc/client";
+
+import {
+  markPreviewTabsDeletedUnderPathInList,
+  syncPreviewTabsWithFileRows,
+} from "../features/workspace/preview-tab-sync";
 
 import { loadDesktopScope, setDesktopProject, setDesktopSession } from "../state/desktop-scope";
 
@@ -89,8 +105,25 @@ export interface ShellNavContextValue {
     workspaceScope: PreviewFileSelection["workspaceScope"],
     path: string,
   ) => void;
+  /** 将路径下预览 tab 标为已删除（VS Code 式，不关闭 tab） */
+  markPreviewTabsDeletedUnderPath: (
+    workspaceScope: PreviewFileSelection["workspaceScope"],
+    path: string,
+  ) => void;
+  renamePreviewTab: (
+    workspaceScope: PreviewFileSelection["workspaceScope"],
+    oldPath: string,
+    newPath: string,
+  ) => void;
+  syncPreviewTabsFromFileRows: (
+    scope: WorkspacePanelScope,
+    rows: WorktreeListRowDto[],
+  ) => void;
   clearPreviewFile: () => void;
   treeRefreshToken: number;
+  /** Desktop 消费方 ①：VFS / 规则变更后立即刷新 Explorer（100ms 去抖） */
+  notifyWorkspaceMutated: () => void;
+  /** @deprecated 使用 notifyWorkspaceMutated */
   refreshWorkspaceTrees: () => void;
   treeExpandRequest: { path: string; token: number } | null;
   requestTreeExpandPath: (path: string) => void;
@@ -100,6 +133,23 @@ export interface ShellNavContextValue {
 }
 
 
+
+const WORKSPACE_MUTATED_DEBOUNCE_MS = 100;
+
+/** 判断 main push 的工作区变更是否影响当前导航上下文。 */
+function workspaceMutatedMatchesNav(
+  payload: WorkspaceMutatedPayload,
+  projectId: string | undefined,
+  sessionId: string | undefined,
+): boolean {
+  if (payload.workspaceScope === "global") {
+    return true;
+  }
+  if (payload.workspaceScope === "session") {
+    return payload.projectId === projectId;
+  }
+  return payload.projectId === projectId && payload.sessionId === sessionId;
+}
 
 const ShellNavContext = createContext<ShellNavContextValue | undefined>(
 
@@ -161,20 +211,57 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     token: number;
   } | null>(null);
   const [agentConfigRevision, setAgentConfigRevision] = useState(0);
+  const mutateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const bumpTreeRefresh = useCallback(() => {
+    setTreeRefreshToken((t) => t + 1);
+  }, []);
+
+  const notifyWorkspaceMutated = useCallback(() => {
+    if (mutateDebounceRef.current != null) {
+      clearTimeout(mutateDebounceRef.current);
+    }
+    mutateDebounceRef.current = setTimeout(() => {
+      mutateDebounceRef.current = null;
+      bumpTreeRefresh();
+    }, WORKSPACE_MUTATED_DEBOUNCE_MS);
+  }, [bumpTreeRefresh]);
+
+  useEffect(() => {
+    return () => {
+      if (mutateDebounceRef.current != null) {
+        clearTimeout(mutateDebounceRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    return onWorkspaceMutated((payload) => {
+      if (workspaceMutatedMatchesNav(payload, projectId, sessionId)) {
+        notifyWorkspaceMutated();
+      }
+    });
+  }, [projectId, sessionId, notifyWorkspaceMutated]);
 
   const selectPreviewFile = useCallback(
     (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
       const key = previewTabKey(workspaceScope, path);
       const name = path === "/" ? "/" : path.slice(path.lastIndexOf("/") + 1);
       setPreviewTabs((prev) => {
-        const exists = prev.some(
+        const index = prev.findIndex(
           (tab) =>
             tab.workspaceScope === workspaceScope && tab.path === path,
         );
-        if (exists) {
-          return prev;
+        if (index !== -1) {
+          const tab = prev[index]!;
+          if (!tab.isDeleted) {
+            return prev;
+          }
+          const next = [...prev];
+          next[index] = { ...tab, isDeleted: false };
+          return next;
         }
-        return [...prev, { workspaceScope, path, name }];
+        return [...prev, { workspaceScope, path, name, isDeleted: false }];
       });
       setActivePreviewKey(key);
     },
@@ -243,6 +330,51 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const markPreviewTabsDeletedUnderPath = useCallback(
+    (workspaceScope: PreviewFileSelection["workspaceScope"], path: string) => {
+      setPreviewTabs((prev) =>
+        markPreviewTabsDeletedUnderPathInList(prev, workspaceScope, path),
+      );
+    },
+    [],
+  );
+
+  const renamePreviewTab = useCallback(
+    (
+      workspaceScope: PreviewFileSelection["workspaceScope"],
+      oldPath: string,
+      newPath: string,
+    ) => {
+      const newName =
+        newPath === "/" ? "/" : newPath.slice(newPath.lastIndexOf("/") + 1);
+      const oldKey = previewTabKey(workspaceScope, oldPath);
+      const newKey = previewTabKey(workspaceScope, newPath);
+      setPreviewTabs((prev) =>
+        prev.map((tab) =>
+          tab.workspaceScope === workspaceScope && tab.path === oldPath
+            ? {
+                ...tab,
+                path: newPath,
+                name: newName,
+                isDeleted: false,
+              }
+            : tab,
+        ),
+      );
+      setActivePreviewKey((activeKey) =>
+        activeKey === oldKey ? newKey : activeKey,
+      );
+    },
+    [],
+  );
+
+  const syncPreviewTabsFromFileRows = useCallback(
+    (scope: WorkspacePanelScope, rows: WorktreeListRowDto[]) => {
+      setPreviewTabs((prev) => syncPreviewTabsWithFileRows(prev, rows, scope));
+    },
+    [],
+  );
+
   const clearPreviewFile = useCallback(() => {
     setPreviewTabs([]);
     setActivePreviewKey(null);
@@ -259,9 +391,7 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
     );
   }, [previewTabs, activePreviewKey]);
 
-  const refreshWorkspaceTrees = useCallback(() => {
-    setTreeRefreshToken((t) => t + 1);
-  }, []);
+  const refreshWorkspaceTrees = notifyWorkspaceMutated;
 
   const requestTreeExpandPath = useCallback((path: string) => {
     setTreeExpandRequest((prev) => ({
@@ -544,9 +674,17 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       closePreviewTabsUnderPath,
 
+      markPreviewTabsDeletedUnderPath,
+
+      renamePreviewTab,
+
+      syncPreviewTabsFromFileRows,
+
       clearPreviewFile,
 
       treeRefreshToken,
+
+      notifyWorkspaceMutated,
 
       refreshWorkspaceTrees,
 
@@ -598,9 +736,17 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       closePreviewTabsUnderPath,
 
+      markPreviewTabsDeletedUnderPath,
+
+      renamePreviewTab,
+
+      syncPreviewTabsFromFileRows,
+
       clearPreviewFile,
 
       treeRefreshToken,
+
+      notifyWorkspaceMutated,
 
       refreshWorkspaceTrees,
 
