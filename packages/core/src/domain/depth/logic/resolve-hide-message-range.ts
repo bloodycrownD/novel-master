@@ -1,5 +1,5 @@
 /**
- * hide-message 事件：open-ended depth slice 时锚定 assistant 起点的 seq 范围。
+ * hide-message 事件：解析 open-ended depth slice 的 seq 隐藏范围。
  *
  * @module domain/depth/logic/resolve-hide-message-range
  */
@@ -67,5 +67,5 @@ export function resolveHideMessageRange(
     return null;
   }
 
-  return { fromSeq: anchor.seq, toSeq: maxSeq };
+  return { fromSeq: minSeq, toSeq: maxSeq };
 }
