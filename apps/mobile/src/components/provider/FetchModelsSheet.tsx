@@ -11,6 +11,7 @@ import {
   View,
 } from 'react-native';
 import {useRuntime} from '../../hooks/useRuntime';
+import {formatError} from '../../errors/format-error';
 import {AppModal} from '../ui/AppModal';
 import {useTheme} from '../../theme/ThemeProvider';
 
@@ -56,7 +57,7 @@ export function FetchModelsSheet({
       setRows(suggestions.filter(s => !s.stale));
     } catch (cause) {
       setRows([]);
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(formatError(cause));
     } finally {
       setLoading(false);
     }
@@ -83,7 +84,7 @@ export function FetchModelsSheet({
       setAddedIds(prev => new Set(prev).add(suggestion.vendorModelId));
       onSaved();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      setError(formatError(cause));
     } finally {
       setSavingId(undefined);
     }

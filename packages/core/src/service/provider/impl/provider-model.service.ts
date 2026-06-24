@@ -21,8 +21,7 @@ import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved
 import type { SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
 import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
-
-import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
+import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 
@@ -83,7 +82,7 @@ export class DefaultProviderModelService implements ProviderModelService {
 
     const provider = await this.deps.providers.get(providerId);
 
-    const apiKey = await this.resolveApiKey(provider.id, provider.secretRef);
+    const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
 
     const adapter = getProtocolAdapter(provider.protocol);
 
@@ -433,38 +432,6 @@ export class DefaultProviderModelService implements ProviderModelService {
     const saved = await this.getSaved(applicationModelId);
 
     return saved?.settings.tokenCounterMode ?? "auto";
-
-  }
-
-
-
-  private async resolveApiKey(
-
-    providerId: string,
-
-    secretRef: string | null,
-
-  ): Promise<string> {
-
-    const ref = secretRef ?? providerApiKeyRef(providerId);
-
-    const key = await this.deps.secretStore.get(ref);
-
-    if (key == null || key === "") {
-
-      throw new ProviderError(
-
-        "API_KEY_NOT_SET",
-
-        `API key not set for provider ${providerId} (run: nm provider edit --providerId ${providerId} --apiKey <key>)`,
-
-        { providerId },
-
-      );
-
-    }
-
-    return key;
 
   }
 

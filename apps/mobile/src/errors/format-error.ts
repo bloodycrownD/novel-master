@@ -27,12 +27,25 @@ function readCause(error: Error): unknown {
   return (error as Error & {cause?: unknown}).cause;
 }
 
+function formatProviderError(error: ProviderError): string {
+  switch (error.code) {
+    case "API_KEY_NOT_SET":
+      return "请先在服务商设置中配置 API Key";
+    case "MODEL_NOT_SAVED":
+      return "请先从远程拉取并保存模型";
+    default:
+      return error.message;
+  }
+}
+
 /** Formats an error for on-screen display; unwraps known Core error types. */
 export function formatError(error: unknown): string {
+  if (error instanceof ProviderError) {
+    return formatProviderError(error);
+  }
   if (
     error instanceof VfsError ||
     error instanceof VfsZipError ||
-    error instanceof ProviderError ||
     error instanceof ChatError ||
     error instanceof AgentError ||
     error instanceof SessionFsError ||

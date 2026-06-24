@@ -14,6 +14,7 @@ describe("inferLlmProtocolFromApplicationModelId", () => {
       applicationModelId: "openrouter/meta-llama/llama-3-70b-instruct",
       expected: "openai",
     },
+    { applicationModelId: "opencode/big-pickle", expected: "openai" },
     { applicationModelId: "custom-gateway/some-model", expected: "anthropic" },
     { applicationModelId: "not-a-valid-id", expected: "anthropic" },
   ];

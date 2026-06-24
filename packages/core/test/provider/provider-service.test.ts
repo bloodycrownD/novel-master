@@ -31,6 +31,15 @@ function memorySecretStore(): SecretStore {
 novelMasterTestFixture();
 
 describe("ProviderService", () => {
+  it("lists opencode with apiKey set via builtin default", async () => {
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const list = await bundle.providers.list();
+    const opencode = list.find((p) => p.id === "opencode");
+    assert.ok(opencode);
+    assert.equal(opencode.apiKeyStatus, "set");
+  });
+
   it("rejects create with built-in id", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());

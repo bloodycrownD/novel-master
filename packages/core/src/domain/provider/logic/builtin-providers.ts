@@ -12,6 +12,8 @@ export type BuiltinProviderSeedRow = {
   readonly protocol: LlmProtocolKind;
   readonly baseUrl: string;
   readonly displayName: string;
+  /** SKSP 未配置时使用的内置默认 apiKey（仅部分内置服务商）。 */
+  readonly defaultApiKey?: string;
 };
 
 /** 单一数据源：内置 provider 列表。 */
@@ -40,7 +42,26 @@ export const BUILTIN_PROVIDER_ROWS: readonly BuiltinProviderSeedRow[] = [
     baseUrl: "https://openrouter.ai/api/v1",
     displayName: "OpenRouter",
   },
+  {
+    id: "opencode",
+    protocol: "openai",
+    baseUrl: "https://opencode.ai/zen/v1",
+    displayName: "OpenCode Zen",
+    defaultApiKey: "public",
+  },
 ] as const;
+
+const BUILTIN_DEFAULT_API_KEY_BY_ID: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    BUILTIN_PROVIDER_ROWS.flatMap((row) =>
+      row.defaultApiKey != null ? [[row.id, row.defaultApiKey]] : [],
+    ),
+  );
+
+/** 内置 provider 在无 SKSP 密钥时的默认 apiKey；无则 undefined。 */
+export function builtinDefaultApiKey(providerId: string): string | undefined {
+  return BUILTIN_DEFAULT_API_KEY_BY_ID[providerId];
+}
 
 /** provider id → LLM 协议种类（由 BUILTIN_PROVIDER_ROWS 派生）。 */
 export const BUILTIN_PROVIDER_PROTOCOLS: Readonly<

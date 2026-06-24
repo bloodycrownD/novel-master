@@ -4,9 +4,9 @@
  * @module service/provider/impl/model-request.service
  */
 
-import { ProviderError } from "@/errors/provider-errors.js";
+import { ProviderError, providerModelNotSavedMessage } from "@/errors/provider-errors.js";
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import { providerApiKeyRef } from "@/domain/provider/model/provider.js";
+import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
 import { getProtocolAdapter } from "@/infra/llm-protocol/logic/registry.js";
@@ -126,7 +126,7 @@ export class DefaultModelRequestService implements ModelRequestService {
     if (!saved) {
       throw new ProviderError(
         "MODEL_NOT_SAVED",
-        `Model not saved: ${applicationModelId} (run: nm provider model save --vendorModelId ${vendorModelId})`,
+        providerModelNotSavedMessage(applicationModelId),
         { modelId: applicationModelId, providerId },
       );
     }
@@ -136,15 +136,7 @@ export class DefaultModelRequestService implements ModelRequestService {
         providerId,
       });
     }
-    const ref = provider.secretRef ?? providerApiKeyRef(providerId);
-    const apiKey = await this.deps.secretStore.get(ref);
-    if (apiKey == null || apiKey === "") {
-      throw new ProviderError(
-        "API_KEY_NOT_SET",
-        `API key not set for provider ${providerId} (run: nm provider edit --providerId ${providerId} --apiKey <key>)`,
-        { providerId },
-      );
-    }
+    const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
     let sampling = options?.sampling;
     if (sampling === undefined) {
       if (

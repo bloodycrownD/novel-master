@@ -15,6 +15,7 @@ import type { ProviderRepository } from "@/domain/provider/repositories/provider
 import type { ModelSuggestionRepository } from "@/domain/provider/repositories/model-suggestion.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { BUILTIN_PROVIDER_IDS } from "@/domain/provider/logic/builtin-providers.js";
+import { providerApiKeyIsConfigured } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import { normalizeBaseUrl } from "@/infra/llm-protocol/logic/http-util.js";
 import type {
   CreateProviderInput,
@@ -151,10 +152,8 @@ export class DefaultProviderService implements ProviderService {
   private async apiKeyStatus(
     provider: LlmProvider,
   ): Promise<"set" | "not set"> {
-    const ref = resolveProviderApiKeySecretRef(provider);
-    if (await this.deps.secretStore.has(ref)) {
-      return "set";
-    }
-    return "not set";
+    return (await providerApiKeyIsConfigured(provider, this.deps.secretStore))
+      ? "set"
+      : "not set";
   }
 }

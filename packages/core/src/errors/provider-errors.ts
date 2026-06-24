@@ -38,3 +38,13 @@ export class ProviderError extends Error {
     this.modelId = options?.modelId;
   }
 }
+
+/** Platform-neutral copy for missing provider API key. */
+export function providerApiKeyNotSetMessage(providerId: string): string {
+  return `API key not set for provider ${providerId}. Configure it in provider settings.`;
+}
+
+/** Platform-neutral copy for unsaved application model id. */
+export function providerModelNotSavedMessage(applicationModelId: string): string {
+  return `Model not saved: ${applicationModelId}. Fetch and save the model first.`;
+}

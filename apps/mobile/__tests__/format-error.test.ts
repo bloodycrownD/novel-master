@@ -11,11 +11,11 @@ describe('formatError (T4)', () => {
     expect(formatError(err)).toBe('Path not found: /x');
   });
 
-  it('formats ProviderError message', () => {
+  it('formats ProviderError API_KEY_NOT_SET for mobile', () => {
     const err = new ProviderError('API_KEY_NOT_SET', 'API key not set', {
       providerId: 'openai',
     });
-    expect(formatError(err)).toBe('API key not set');
+    expect(formatError(err)).toBe('请先在服务商设置中配置 API Key');
   });
 
   it('formats ChatError message', () => {

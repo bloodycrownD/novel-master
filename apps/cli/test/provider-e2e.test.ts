@@ -13,7 +13,7 @@ import { readCliState } from "./helpers.js";
 import { runNm } from "./helpers.js";
 
 describe("provider CLI e2e", () => {
-  it("lists four built-in providers on fresh db", async () => {
+  it("lists five built-in providers on fresh db", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-provider-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -23,6 +23,7 @@ describe("provider CLI e2e", () => {
       assert.match(list.stdout, /anthropic/);
       assert.match(list.stdout, /google/);
       assert.match(list.stdout, /openrouter/);
+      assert.match(list.stdout, /opencode/);
       assert.doesNotMatch(list.stdout, /sk-test/);
     } finally {
       await rm(dir, { recursive: true, force: true });
