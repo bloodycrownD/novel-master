@@ -48,7 +48,7 @@ describe("resolveHideMessageRange", () => {
     assert.equal(range.toSeq, 1);
   });
 
-  it("startDepth=6 且 depth6 为 user 时锚定更深 assistant", () => {
+  it("startDepth=6 且 depth6 为 user 时校验 assistant 后返回 slice min~max", () => {
     const withUserAt6 = [
       makeMsg("m1", 1, "user"),
       makeMsg("m2", 2, "assistant"),
@@ -66,7 +66,21 @@ describe("resolveHideMessageRange", () => {
     const ids = messageIdsInSlice(vis, slice);
     const range = resolveHideMessageRange(vis, slice, ids);
     assert.ok(range);
-    assert.equal(range.fromSeq, 2);
+    assert.equal(range.fromSeq, 1);
+    assert.equal(range.toSeq, 4);
+  });
+
+  it("PRD：10 条可见 startDepth 6 时 range 覆盖 depth 6-9 全部", () => {
+    const tenVisible = Array.from({ length: 10 }, (_, i) =>
+      makeMsg(`m${i}`, i + 1, i % 2 === 0 ? "user" : "assistant"),
+    );
+    const vis = listVisibleForDepth(tenVisible);
+    const slice = { startDepth: 6 };
+    const ids = messageIdsInSlice(vis, slice);
+    assert.equal(ids.length, 4);
+    const range = resolveHideMessageRange(vis, slice, ids);
+    assert.ok(range);
+    assert.equal(range.fromSeq, 1);
     assert.equal(range.toSeq, 4);
   });
 
