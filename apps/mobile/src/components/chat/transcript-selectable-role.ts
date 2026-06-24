@@ -53,7 +53,7 @@ export function chatMessagesToTailBatchRows(
         id: view.id,
         role: 'user',
         seq: actionMsg.seq,
-        selectable: !view.hidden,
+        selectable: true,
       });
       index += USER_VFS_TURN_SPAN;
       continue;
@@ -64,7 +64,7 @@ export function chatMessagesToTailBatchRows(
       id: message.id,
       role: message.role,
       seq: message.seq,
-      selectable: !message.hidden,
+      selectable: true,
     });
     index += 1;
   }

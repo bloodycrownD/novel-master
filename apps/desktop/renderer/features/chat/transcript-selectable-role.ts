@@ -43,7 +43,7 @@ export function buildTailBatchRows(
         id: item.id,
         role: msg.role,
         seq: msg.seq,
-        selectable: !item.hidden,
+        selectable: true,
       });
       continue;
     }
@@ -51,7 +51,7 @@ export function buildTailBatchRows(
       id: item.message.id,
       role: item.message.role,
       seq: item.message.seq,
-      selectable: !item.message.hidden,
+      selectable: true,
     });
   }
 

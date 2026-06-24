@@ -17,7 +17,7 @@ const rows = [
   { id: "u2", role: "user", seq: 3, selectable: true },
   { id: "a2", role: "assistant", seq: 4, selectable: true },
   { id: "card", role: "user", seq: 5, selectable: true },
-  { id: "hidden", role: "assistant", seq: 6, selectable: false },
+  { id: "hidden", role: "assistant", seq: 6, selectable: true },
 ] as const;
 
 describe("tail-batch-range", () => {
@@ -25,7 +25,7 @@ describe("tail-batch-range", () => {
     const anchorIds = selectTailBatchEligibleIdsFromAnchor(rows, "u2");
     const anchorIdsAgain = selectTailBatchEligibleIdsFromAnchor(rows, "u2");
     assert.deepEqual([...anchorIds].sort(), [...anchorIdsAgain].sort());
-    assert.deepEqual([...anchorIds].sort(), ["a2", "card", "u2"]);
+    assert.deepEqual([...anchorIds].sort(), ["a2", "card", "hidden", "u2"]);
   });
 
   it("restore 与 delete 同选中集产出相同 affectedIds 与 range", () => {
@@ -45,12 +45,21 @@ describe("tail-batch-range", () => {
 
   it("assistant 锚点可选并级联 seq 下界及之后全部可选行", () => {
     const ids = selectTailBatchEligibleIdsFromAnchor(rows, "a2");
-    assert.deepEqual([...ids].sort(), ["a2", "card"]);
+    assert.deepEqual([...ids].sort(), ["a2", "card", "hidden"]);
+  });
+
+  it("hidden 行可作为 restore 锚点并级联其后可选行", () => {
+    const ids = selectTailBatchEligibleIdsFromAnchor(rows, "hidden");
+    assert.deepEqual([...ids].sort(), ["hidden"]);
   });
 
   it("不可选锚点返回空集", () => {
+    const ineligible = [
+      ...rows.slice(0, 5),
+      { id: "locked", role: "user", seq: 7, selectable: false },
+    ] as const;
     assert.equal(
-      selectTailBatchEligibleIdsFromAnchor(rows, "hidden").size,
+      selectTailBatchEligibleIdsFromAnchor(ineligible, "locked").size,
       0,
     );
   });
@@ -64,8 +73,11 @@ describe("tail-batch-range", () => {
       computeTailBatchAffectedIds(rows, new Set(), 5).size,
       0,
     );
+    const ineligible = [
+      { id: "locked", role: "user", seq: 7, selectable: false },
+    ] as const;
     assert.equal(
-      computeTailBatchRangeFromSelection(rows, new Set(["hidden"]), 5),
+      computeTailBatchRangeFromSelection(ineligible, new Set(["locked"]), 8),
       null,
     );
   });
