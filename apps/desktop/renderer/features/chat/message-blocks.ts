@@ -192,6 +192,23 @@ function summarizeToolInput(
   }
 }
 
+/** 可在聊天工作区 Preview 中打开的文件类工具名。 */
+const FILE_OPEN_TOOL_NAMES = new Set(["read", "write", "edit"]);
+
+/** 解析工具卡片对应的 VFS 文件路径；不可打开时返回 undefined。 */
+export function vfsToolFilePath(tool: ToolCallView): string | undefined {
+  const name =
+    tool.name.startsWith("vfs.") ? tool.name.slice(4) : tool.name;
+  if (!FILE_OPEN_TOOL_NAMES.has(name)) {
+    return undefined;
+  }
+  const path = tool.input.path;
+  if (typeof path === "string" && path.startsWith("/")) {
+    return path;
+  }
+  return undefined;
+}
+
 export function toolCallSummary(tool: ToolCallView): string {
   const fromInput = summarizeToolInput(tool.name, tool.input);
   if (fromInput) {
