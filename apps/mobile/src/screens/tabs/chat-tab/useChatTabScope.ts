@@ -59,6 +59,7 @@ export function useChatTabScope({
     {sessionId: string; initialTitle: string} | undefined
   >();
   const [agentMeta, setAgentMeta] = useState<ChatAgentMeta>({
+    source: 'none',
     agentId: undefined,
     agentName: '—',
     modelLabel: '—',
@@ -87,8 +88,19 @@ export function useChatTabScope({
   const refreshChatMeta = useCallback(async () => {
     const modelId = await runtime.state.getCurrentModelId();
     setHasWorkspaceModel(modelId != null && modelId !== '');
+    if (projectId == null) {
+      setAgentMeta({
+        source: 'none',
+        agentId: undefined,
+        agentName: '—',
+        modelLabel: '—',
+        tokenLabel: '',
+        hasDedicatedModel: false,
+      });
+      return;
+    }
     try {
-      const meta = await loadChatAgentMeta(runtime);
+      const meta = await loadChatAgentMeta(runtime, projectId);
       setAgentMeta(prev => ({
         ...prev,
         ...meta,
@@ -97,6 +109,7 @@ export function useChatTabScope({
       void refreshChatTokenLabel();
     } catch {
       setAgentMeta({
+        source: 'none',
         agentId: undefined,
         agentName: '—',
         modelLabel: '—',
@@ -104,7 +117,7 @@ export function useChatTabScope({
         hasDedicatedModel: false,
       });
     }
-  }, [runtime, refreshChatTokenLabel]);
+  }, [runtime, projectId, refreshChatTokenLabel]);
 
   const reloadLists = useCallback(async () => {
     const plist = await runtime.projects.list();

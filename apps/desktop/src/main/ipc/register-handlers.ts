@@ -2,7 +2,7 @@
  * Registers typed ipcMain handlers for all desktop domains.
  */
 import { ipcMain } from "electron";
-import { IPC_CHANNELS } from "../../../shared/ipc-types.js";
+import { IPC_CHANNELS, type PromptScopeRequest } from "../../../shared/ipc-types.js";
 import { handleAppUiGet, handleAppUiSet } from "./handlers/app-ui.js";
 import {
   handleAgentAbort,
@@ -291,7 +291,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL, (_event, req) =>
     handlePromptChatTokenLabel(req),
   );
-  ipcMain.handle(IPC_CHANNELS.PROMPT_AGENT_META, () => handlePromptAgentMeta());
+  ipcMain.handle(IPC_CHANNELS.PROMPT_AGENT_META, (_event, req: PromptScopeRequest) =>
+    handlePromptAgentMeta(req),
+  );
 
   ipcMain.handle(IPC_CHANNELS.COMPACTION_MANUAL, (_event, req) =>
     handleCompactionManual(req),

@@ -1,15 +1,16 @@
 /**
  * Chat header meta: current agent name + resolved model label (PRD D4).
  */
-import {resolveApplicationModelId} from '@novel-master/core/agent';
+import {
+  AgentRunResolveError,
+  resolveAgentForProject,
+  resolveApplicationModelId,
+} from '@novel-master/core/agent';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
-import {
-  resolveCurrentAgentDefinition,
-  resolveCurrentAgentId,
-} from './agent-run.service';
 
 export interface ChatAgentMeta {
+  readonly source: 'global' | 'project-custom' | 'none';
   readonly agentId: string | undefined;
   readonly agentName: string;
   readonly modelLabel: string;
@@ -19,22 +20,14 @@ export interface ChatAgentMeta {
   readonly hasDedicatedModel: boolean;
 }
 
+/** 按项目解析 Agent 元信息；custom 模式不含 agentId。 */
 export async function loadChatAgentMeta(
   runtime: MobileNovelMasterRuntime,
+  projectId: string,
 ): Promise<ChatAgentMeta> {
-  const agentId = await resolveCurrentAgentId(runtime);
-  if (agentId == null) {
-    return {
-      agentId: undefined,
-      agentName: '未配置 Agent',
-      modelLabel: '—',
-      tokenLabel: '',
-      hasDedicatedModel: false,
-    };
-  }
-
   try {
-    const {definition} = await resolveCurrentAgentDefinition(runtime);
+    const resolved = await resolveAgentForProject(runtime, projectId);
+    const {definition} = resolved;
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
     const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
@@ -53,20 +46,35 @@ export async function loadChatAgentMeta(
         modelLabel = applicationModelId;
       }
     }
+    if (resolved.source === 'global') {
+      return {
+        source: 'global',
+        agentId: resolved.agentId,
+        agentName: definition.name,
+        modelLabel,
+        tokenLabel: '',
+        hasDedicatedModel,
+      };
+    }
     return {
-      agentId,
+      source: 'project-custom',
+      agentId: undefined,
       agentName: definition.name,
       modelLabel,
       tokenLabel: '',
       hasDedicatedModel,
     };
-  } catch {
-    return {
-      agentId,
-      agentName: agentId,
-      modelLabel: '—',
-      tokenLabel: '',
-      hasDedicatedModel: false,
-    };
+  } catch (error) {
+    if (error instanceof AgentRunResolveError) {
+      return {
+        source: 'none',
+        agentId: undefined,
+        agentName: '未配置 Agent',
+        modelLabel: '—',
+        tokenLabel: '',
+        hasDedicatedModel: false,
+      };
+    }
+    throw error;
   }
 }

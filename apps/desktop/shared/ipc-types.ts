@@ -538,7 +538,8 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly agentId: string | undefined;
+  readonly source: "global" | "project-custom" | "none";
+  readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
   readonly hasDedicatedModel: boolean;

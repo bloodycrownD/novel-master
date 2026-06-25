@@ -51,6 +51,9 @@ function makeRuntime(overrides: {
       listAgentIds: async () => ["a1"],
       get: async () => sampleDefinition,
     },
+    projects: {
+      getAgentConfig: async () => ({ mode: "follow" }),
+    } as AgentTurnRuntimePort["projects"],
     messages: {
       listBySession:
         overrides.listBySession ?? (async () => []),

@@ -1,12 +1,11 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import { type AgentDefinition } from "@novel-master/core/agent";
+import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { applyActiveRegexChannel } from "./regex-apply-channel.service.js";
-import { resolveCurrentAgentDefinition } from "./agent-run.service.js";
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -42,7 +41,8 @@ export async function buildSessionPromptInput(
   definition?: AgentDefinition,
 ): Promise<SessionPromptInputBundle> {
   const resolved =
-    definition ?? (await resolveCurrentAgentDefinition(runtime)).definition;
+    definition ??
+    (await resolveAgentForProject(runtime, scope.projectId)).definition;
 
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter((m) => !m.hidden);

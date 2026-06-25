@@ -424,10 +424,10 @@ export async function ipcPromptChatTokenLabel(
   return bridge().invoke(IPC_CHANNELS.PROMPT_CHAT_TOKEN_LABEL, req);
 }
 
-export async function ipcPromptAgentMeta(): Promise<
-  IpcResult<PromptAgentMetaResponse>
-> {
-  return bridge().invoke(IPC_CHANNELS.PROMPT_AGENT_META);
+export async function ipcPromptAgentMeta(
+  req: PromptScopeRequest,
+): Promise<IpcResult<PromptAgentMetaResponse>> {
+  return bridge().invoke(IPC_CHANNELS.PROMPT_AGENT_META, req);
 }
 
 export async function ipcCompactionManual(

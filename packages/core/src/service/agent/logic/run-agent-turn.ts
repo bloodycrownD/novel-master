@@ -27,6 +27,7 @@ import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-work
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
+import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
@@ -34,9 +35,9 @@ import { ChatAgentSession } from "../impl/chat-agent-session.js";
 import {
   AgentRunResolveError,
   resolveApplicationModelIdForRun,
-  resolveCurrentAgentDefinition,
   type AgentRunRuntimePort,
 } from "./agent-run-shared.js";
+import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 
 export interface AgentTurnScope {
   readonly projectId: string;
@@ -45,6 +46,7 @@ export interface AgentTurnScope {
 
 /** Runtime surface required to run one agent dialogue turn. */
 export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
+  readonly projects: ProjectService;
   readonly messages: MessageService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
@@ -175,7 +177,7 @@ export async function runAgentTurn(
   }
 
   const { definition } = await mapResolveError(() =>
-    resolveCurrentAgentDefinition(runtime),
+    resolveAgentForProject(runtime, scope.projectId),
   );
   stage = "resolve-model";
   const { applicationModelId, workspaceModelId } = await mapResolveError(() =>

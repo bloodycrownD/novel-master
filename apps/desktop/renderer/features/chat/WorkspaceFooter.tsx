@@ -44,7 +44,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
 
   const reload = useCallback(async () => {
     const [meta, tokens] = await Promise.all([
-      ipcPromptAgentMeta(),
+      ipcPromptAgentMeta({ projectId, sessionId }),
       ipcPromptChatTokenLabel({ projectId, sessionId }),
     ]);
     if (meta.ok) {

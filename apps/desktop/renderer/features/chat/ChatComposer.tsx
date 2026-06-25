@@ -59,13 +59,13 @@ export function ChatComposer({
   const [bridgeBusy, setBridgeBusy] = useState(false);
 
   const checkModel = useCallback(async () => {
-    const result = await ipcPromptAgentMeta();
+    const result = await ipcPromptAgentMeta({ projectId, sessionId });
     if (result.ok) {
       setHasModel(
         result.data.modelLabel !== "未选择模型" && result.data.modelLabel !== "—",
       );
     }
-  }, []);
+  }, [projectId, sessionId]);
 
   useEffect(() => {
     void checkModel();
@@ -89,7 +89,7 @@ export function ChatComposer({
 
   const runAgent = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {
-      const modelCheck = await ipcPromptAgentMeta();
+      const modelCheck = await ipcPromptAgentMeta({ projectId, sessionId });
       if (
         modelCheck.ok &&
         (modelCheck.data.modelLabel === "未选择模型" ||

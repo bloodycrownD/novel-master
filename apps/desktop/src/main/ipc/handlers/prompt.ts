@@ -1,7 +1,11 @@
 /**
  * Prompt IPC handlers — real prompt preview segments, chat token label, agent meta.
  */
-import { resolveApplicationModelId } from "@novel-master/core/agent";
+import {
+  AgentRunResolveError,
+  resolveAgentForProject,
+  resolveApplicationModelId,
+} from "@novel-master/core/agent";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
@@ -10,10 +14,6 @@ import type {
   PromptScopeRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import {
-  resolveCurrentAgentDefinition,
-  resolveCurrentAgentId,
-} from "../../services/agent-run.service.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
 import { buildRealPromptPreviewSegments } from "../../services/prompt-preview.service.js";
 
@@ -56,43 +56,60 @@ export async function handlePromptChatTokenLabel(
   }
 }
 
-export async function handlePromptAgentMeta(): Promise<
-  IpcResult<PromptAgentMetaResponse>
-> {
+export async function handlePromptAgentMeta(
+  req: PromptScopeRequest,
+): Promise<IpcResult<PromptAgentMetaResponse>> {
   try {
     const rt = await getDesktopRuntime();
-    const agentId = await resolveCurrentAgentId(rt);
-    if (agentId == null) {
+    try {
+      const resolved = await resolveAgentForProject(rt, req.projectId);
+      const { definition } = resolved;
+      const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
+      const applicationModelId = resolveApplicationModelId({
+        agentModelId: definition.model,
+        workspaceModelId: workspaceModelId || undefined,
+      });
+      let modelLabel = "未选择模型";
+      if (applicationModelId) {
+        modelLabel = applicationModelId;
+      }
+      const hasDedicatedModel =
+        definition.model != null && definition.model !== "";
+      if (resolved.source === "global") {
+        return {
+          ok: true,
+          data: {
+            source: "global",
+            agentId: resolved.agentId,
+            agentName: definition.name,
+            modelLabel,
+            hasDedicatedModel,
+          },
+        };
+      }
       return {
         ok: true,
         data: {
-          agentId: undefined,
-          agentName: "未配置 Agent",
-          modelLabel: "—",
-          hasDedicatedModel: false,
+          source: "project-custom",
+          agentName: definition.name,
+          modelLabel,
+          hasDedicatedModel,
         },
       };
+    } catch (error) {
+      if (error instanceof AgentRunResolveError) {
+        return {
+          ok: true,
+          data: {
+            source: "none",
+            agentName: "未配置 Agent",
+            modelLabel: "—",
+            hasDedicatedModel: false,
+          },
+        };
+      }
+      throw error;
     }
-    const { definition } = await resolveCurrentAgentDefinition(rt);
-    const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
-    const applicationModelId = resolveApplicationModelId({
-      agentModelId: definition.model,
-      workspaceModelId: workspaceModelId || undefined,
-    });
-    let modelLabel = "未选择模型";
-    if (applicationModelId) {
-      modelLabel = applicationModelId;
-    }
-    return {
-      ok: true,
-      data: {
-        agentId,
-        agentName: definition.name,
-        modelLabel,
-        hasDedicatedModel:
-          definition.model != null && definition.model !== "",
-      },
-    };
   } catch (err) {
     return { ok: false, error: formatError(err) };
   }

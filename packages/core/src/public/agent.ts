@@ -47,6 +47,13 @@ export {
 } from "../service/agent/logic/agent-run-shared.js";
 export type { AgentRunRuntimePort } from "../service/agent/logic/agent-run-shared.js";
 export {
+  resolveAgentForProject,
+} from "../service/agent/logic/resolve-agent-for-project.js";
+export type {
+  ResolvedAgentForProject,
+  ResolveAgentForProjectRuntimePort,
+} from "../service/agent/logic/resolve-agent-for-project.js";
+export {
   runAgentTurn,
   AgentTurnError,
 } from "../service/agent/logic/run-agent-turn.js";
