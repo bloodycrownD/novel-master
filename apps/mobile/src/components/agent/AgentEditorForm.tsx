@@ -81,13 +81,35 @@ function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
   return agentId;
 }
 
-type Props = {
+type RegistryEditorProps = {
+  editorMode?: 'registry';
   agentId: string;
+  projectId?: never;
+  initialDefinition?: never;
   onDirtyChange?: (dirty: boolean) => void;
-  onSaved?: () => void;
+  onSaved?: () => void | Promise<void>;
 };
 
-export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
+type ProjectEditorProps = {
+  editorMode: 'project';
+  projectId: string;
+  initialDefinition: AgentDefinition;
+  agentId?: never;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSaved?: () => void | Promise<void>;
+};
+
+type Props = RegistryEditorProps | ProjectEditorProps;
+
+export function AgentEditorForm(props: Props) {
+  const {
+    onDirtyChange,
+    onSaved,
+  } = props;
+  const isProjectMode = props.editorMode === 'project';
+  const agentId = !isProjectMode ? props.agentId : '';
+  const projectId = isProjectMode ? props.projectId : '';
+  const initialDefinition = isProjectMode ? props.initialDefinition : undefined;
   const {tokens} = useTheme();
   const {showToast} = useToast();
   const navigation = useNavigation<StackNav>();
@@ -190,7 +212,107 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     [runtime],
   );
 
+  const populateFormFromDefinition = useCallback(
+    async (def: AgentDefinition) => {
+      const promptForm = definitionToForm(def);
+      setName(def.name);
+      setMaxSteps(String(def.runtime?.maxSteps ?? 20));
+      setSystemEnabled(promptForm.systemEnabled);
+      setSystemContent(promptForm.systemContent);
+      setPersistEnabled(promptForm.persistEnabled);
+      setDynamicEnabled(promptForm.dynamicEnabled);
+      setPersist([...promptForm.persist]);
+      setDynamic([...promptForm.dynamic]);
+
+      const toolsWire = toolsSelectionFromDefinition(def);
+      setToolsMode(toolsWire.mode);
+      setToolsSelected([...toolsWire.selected]);
+      const providerList = await loadProviders();
+      if (def.model) {
+        setModelEnabled(true);
+        try {
+          const parsed = parseApplicationModelId(def.model);
+          setProviderId(parsed.providerId);
+          await loadSavedModels(parsed.providerId);
+          setVendorModelId(parsed.vendorModelId);
+        } catch {
+          setModelEnabled(false);
+        }
+      } else {
+        setModelEnabled(false);
+        const workspaceId = await runtime.state.getCurrentModelId();
+        if (workspaceId) {
+          try {
+            const parsed = parseApplicationModelId(workspaceId);
+            setProviderId(parsed.providerId);
+            await loadSavedModels(parsed.providerId);
+            setVendorModelId(parsed.vendorModelId);
+          } catch {
+            /* ignore */
+          }
+        } else if (providerList.length > 0) {
+          setProviderId(providerList[0].id);
+          const saved = await loadSavedModels(providerList[0].id);
+          if (saved.length > 0) {
+            setVendorModelId(saved[0].vendorModelId);
+          }
+        }
+      }
+      const modelEnabledWire = Boolean(def.model);
+      let baselineProviderId = '';
+      let baselineVendorModelId = '';
+      if (modelEnabledWire && def.model) {
+        try {
+          const parsed = parseApplicationModelId(def.model);
+          baselineProviderId = parsed.providerId;
+          baselineVendorModelId = parsed.vendorModelId;
+        } catch {
+          /* treat as no dedicated model */
+        }
+      }
+      setSavedBaseline(
+        formSnapshotJson({
+          name: def.name,
+          maxSteps: String(def.runtime?.maxSteps ?? 20),
+          modelEnabled: modelEnabledWire,
+          providerId: baselineProviderId,
+          vendorModelId: baselineVendorModelId,
+          toolsMode: toolsWire.mode,
+          toolsSelected: [...toolsWire.selected],
+          ...promptForm,
+          persist: [...promptForm.persist],
+        }),
+      );
+    },
+    [loadProviders, loadSavedModels, runtime],
+  );
+
   const loadAgent = useCallback(async () => {
+    if (isProjectMode) {
+      if (initialDefinition == null) {
+        setLoadError('缺少项目专属 Agent 定义');
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setLoadError(null);
+      setInvalidConfig(null);
+      try {
+        const health = assessAgentDefinitionWire(initialDefinition);
+        if (health.status === 'invalid') {
+          setInvalidConfig({code: health.code, message: health.message});
+          return;
+        }
+        await populateFormFromDefinition(health.value);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setLoadError(message);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     setLoadError(null);
     setInvalidConfig(null);
@@ -205,83 +327,20 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         setInvalidConfig({code: health.code, message: health.message});
         return;
       }
-      const def = health.value;
-    const promptForm = definitionToForm(def);
-    setName(def.name);
-    setMaxSteps(String(def.runtime?.maxSteps ?? 20));
-    setSystemEnabled(promptForm.systemEnabled);
-    setSystemContent(promptForm.systemContent);
-    setPersistEnabled(promptForm.persistEnabled);
-    setDynamicEnabled(promptForm.dynamicEnabled);
-    setPersist([...promptForm.persist]);
-    setDynamic([...promptForm.dynamic]);
-
-    const toolsWire = toolsSelectionFromDefinition(def);
-    setToolsMode(toolsWire.mode);
-    setToolsSelected([...toolsWire.selected]);
-    const providerList = await loadProviders();
-    if (def.model) {
-      setModelEnabled(true);
-      try {
-        const parsed = parseApplicationModelId(def.model);
-        setProviderId(parsed.providerId);
-        await loadSavedModels(parsed.providerId);
-        setVendorModelId(parsed.vendorModelId);
-      } catch {
-        setModelEnabled(false);
-      }
-    } else {
-      setModelEnabled(false);
-      const workspaceId = await runtime.state.getCurrentModelId();
-      if (workspaceId) {
-        try {
-          const parsed = parseApplicationModelId(workspaceId);
-          setProviderId(parsed.providerId);
-          await loadSavedModels(parsed.providerId);
-          setVendorModelId(parsed.vendorModelId);
-        } catch {
-          /* ignore */
-        }
-      } else if (providerList.length > 0) {
-        setProviderId(providerList[0].id);
-        const saved = await loadSavedModels(providerList[0].id);
-        if (saved.length > 0) {
-          setVendorModelId(saved[0].vendorModelId);
-        }
-      }
-    }
-    const modelEnabled = Boolean(def.model);
-    let baselineProviderId = '';
-    let baselineVendorModelId = '';
-    if (modelEnabled && def.model) {
-      try {
-        const parsed = parseApplicationModelId(def.model);
-        baselineProviderId = parsed.providerId;
-        baselineVendorModelId = parsed.vendorModelId;
-      } catch {
-        /* treat as no dedicated model */
-      }
-    }
-    setSavedBaseline(
-      formSnapshotJson({
-        name: def.name,
-        maxSteps: String(def.runtime?.maxSteps ?? 20),
-        modelEnabled,
-        providerId: baselineProviderId,
-        vendorModelId: baselineVendorModelId,
-        toolsMode: toolsWire.mode,
-        toolsSelected: [...toolsWire.selected],
-        ...promptForm,
-        persist: [...promptForm.persist],
-      }),
-    );
+      await populateFormFromDefinition(health.value);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLoadError(message);
     } finally {
       setLoading(false);
     }
-  }, [agentId, runtime, loadProviders, loadSavedModels]);
+  }, [
+    agentId,
+    initialDefinition,
+    isProjectMode,
+    populateFormFromDefinition,
+    runtime,
+  ]);
 
   useEffect(() => {
     loadAgent().catch(err => showToast(toastMessage('加载失败', err)));
@@ -313,9 +372,14 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
   }, [agentId, navigation, runtime, showToast]);
 
   const handleOverwriteDefault = useCallback(() => {
+    const preservedName = isProjectMode
+      ? initialDefinition?.name?.trim() || '项目专属'
+      : undefined;
     Alert.alert(
       '覆盖为默认模板',
-      '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
+      isProjectMode
+        ? '将用默认 prompts 与运行时覆盖当前项目专属配置，并保留显示名称。是否继续？'
+        : '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
       [
         {text: '取消', style: 'cancel'},
         {
@@ -324,17 +388,29 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
             void (async () => {
               setRecovering(true);
               try {
-                const raw = await runtime.agentRegistry.getRawWire(agentId);
-                const displayName = agentDisplayNameFromWire(raw, agentId);
+                let displayName = preservedName ?? agentId;
+                if (!isProjectMode) {
+                  const raw = await runtime.agentRegistry.getRawWire(agentId);
+                  displayName = agentDisplayNameFromWire(raw, agentId);
+                }
                 const def = buildDefaultAgentDefinitionPreservingName(
-                  displayName.trim() || agentId,
+                  displayName.trim() || agentId || '项目专属',
                 );
                 const probe = new ToolRegistry();
                 registerBuiltinTools(probe);
-                await runtime.agentRegistry.upsert(agentId, def, {
-                  registeredToolNames: probe.list(),
-                });
+                if (isProjectMode) {
+                  await runtime.projects.updateAgentConfig(
+                    projectId,
+                    {mode: 'custom', definition: def},
+                    {registeredToolNames: probe.list()},
+                  );
+                } else {
+                  await runtime.agentRegistry.upsert(agentId, def, {
+                    registeredToolNames: probe.list(),
+                  });
+                }
                 await loadAgent();
+                await onSaved?.();
                 showToast('已用默认模板覆盖并保存');
               } catch (error) {
                 showToast(toastMessage('覆盖默认失败', error));
@@ -346,7 +422,16 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
         },
       ],
     );
-  }, [agentId, loadAgent, runtime, showToast]);
+  }, [
+    agentId,
+    initialDefinition?.name,
+    isProjectMode,
+    loadAgent,
+    onSaved,
+    projectId,
+    runtime,
+    showToast,
+  ]);
 
   const preferredModelId = modelEnabled
     ? formatApplicationModelId(providerId, vendorModelId)
@@ -377,12 +462,20 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
     try {
       const probe = new ToolRegistry();
       registerBuiltinTools(probe);
-      await runtime.agentRegistry.upsert(agentId, def, {
-        registeredToolNames: probe.list(),
-      });
+      if (isProjectMode) {
+        await runtime.projects.updateAgentConfig(
+          projectId,
+          {mode: 'custom', definition: def},
+          {registeredToolNames: probe.list()},
+        );
+      } else {
+        await runtime.agentRegistry.upsert(agentId, def, {
+          registeredToolNames: probe.list(),
+        });
+      }
       setSavedBaseline(snapshot);
-      onSaved?.();
-      showToast('已保存 Agent 配置');
+      await onSaved?.();
+      showToast(isProjectMode ? '已保存项目专属配置' : '已保存 Agent 配置');
     } catch (error) {
       showToast(toastMessage('保存失败', error));
     } finally {
@@ -548,13 +641,15 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
                 </Text>
               </Pressable>
             ) : null}
-            <Pressable
-              disabled={recovering}
-              onPress={handleDeleteBrokenAgent}>
-              <Text style={{color: tokens.danger, fontSize: 14, fontWeight: '600'}}>
-                {STORED_CONFIG_LABELS.agentDelete}
-              </Text>
-            </Pressable>
+            {!isProjectMode ? (
+              <Pressable
+                disabled={recovering}
+                onPress={handleDeleteBrokenAgent}>
+                <Text style={{color: tokens.danger, fontSize: 14, fontWeight: '600'}}>
+                  {STORED_CONFIG_LABELS.agentDelete}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </View>
@@ -642,14 +737,20 @@ export function AgentEditorForm({agentId, onDirtyChange, onSaved}: Props) {
           />
         }>
         <FormSectionCard title="基本信息" tokens={tokens}>
-          <View style={styles.yamlActions}>
-            <Pressable onPress={() => handleImportYaml()}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>导入 YAML</Text>
-            </Pressable>
-            <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
-              <Text style={{color: tokens.primary, fontWeight: '600'}}>导出 YAML</Text>
-            </Pressable>
-          </View>
+          {!isProjectMode ? (
+            <View style={styles.yamlActions}>
+              <Pressable onPress={() => handleImportYaml()}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>导入 YAML</Text>
+              </Pressable>
+              <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
+                <Text style={{color: tokens.primary, fontWeight: '600'}}>导出 YAML</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+              项目专属配置，不会写入全局 Agent 列表。
+            </Text>
+          )}
           <FormField label="名称" tokens={tokens}>
             <FormTextInput tokens={tokens} value={name} onChangeText={setName} />
           </FormField>

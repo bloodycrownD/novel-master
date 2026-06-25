@@ -71,6 +71,14 @@ module.exports = {
       repoRoot,
       'packages/core/dist/config-forms/agent/index.js',
     ),
+    '^@novel-master/core/config-forms/stored-config-validity$': path.join(
+      repoRoot,
+      'packages/core/dist/config-forms/stored-config-validity/index.js',
+    ),
+    '^@novel-master/core/provider$': path.join(
+      repoRoot,
+      'packages/core/dist/public/provider.js',
+    ),
     '^@novel-master/core/config-forms$': path.join(
       repoRoot,
       'packages/core/dist/config-forms/index.js',
