@@ -273,6 +273,37 @@ describe("runAgentTurn", () => {
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
 
+  it("net diff 空 flush 返回 flushed:false 时仍重排末条 user", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      listBySession: async () => [
+        {
+          id: "u-trail",
+          role: "user",
+          content: { blocks: [{ type: "text", text: "续跑" }] },
+        },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => true,
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: false };
+        },
+      }),
+      append: async () => {
+        order.push("append");
+        return { id: "u-reappended" };
+      },
+    });
+
+    await flushPendingUserVfsTurnsWithTrailingUserReorder(runtime, "s", "");
+
+    assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
+  });
+
   it("pending 为空时空续跑不重排末条 user", async () => {
     const order: string[] = [];
     const runtime = makeRuntime({

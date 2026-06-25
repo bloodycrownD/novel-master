@@ -24,8 +24,12 @@ import { SqliteVfsEntryRepository } from "../../src/domain/vfs/repositories/impl
 import { SqliteMessageCheckpointRepository as CheckpointRepo } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { SqliteVfsRevisionRepository } from "../../src/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-service.js";
-import { buildUserVfsDeleteOp } from "../../src/service/vfs/build-user-vfs-turn-op.js";
+import {
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+} from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
+import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -49,6 +53,43 @@ function makeToolCtx(
     projectId,
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
+  };
+}
+
+function makeUserVfsTurnDeps(
+  conn: TdbcConnection,
+  overrides: Partial<UserVfsTurnServiceDeps> = {},
+): UserVfsTurnServiceDeps {
+  const sessionRepo = new SqliteSessionRepository(conn);
+  const messageRepo = new SqliteMessageRepository(conn);
+  const vfsRepo = new SqliteVfsEntryRepository(conn);
+  const checkpointRepo = new CheckpointRepo(conn);
+  const revisionRepo = new SqliteVfsRevisionRepository(conn);
+  const messages = new DefaultMessageService({
+    conn,
+    sessions: sessionRepo,
+    messages: messageRepo,
+    vfs: vfsRepo,
+    checkpoints: checkpointRepo,
+    revisions: revisionRepo,
+  });
+
+  const registry = new ToolRegistry<BuiltinToolContext>();
+  registerBuiltinTools(registry);
+  const toolRunner = new ToolRunner(registry);
+
+  return {
+    conn,
+    sessions: sessionRepo,
+    messages,
+    chatMessages: messageRepo,
+    checkpoints: checkpointRepo,
+    entries: vfsRepo,
+    revisions: revisionRepo,
+    toolRunner,
+    resolveToolCtx: (sid, pid) => makeToolCtx(conn, pid, sid),
+    messageCheckpoint: createMessageCheckpointService(conn),
+    ...overrides,
   };
 }
 
@@ -258,20 +299,6 @@ describe("UserVfsTurnService", () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
-
     let runParallelCalls = 0;
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
@@ -287,14 +314,9 @@ describe("UserVfsTurnService", () => {
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner: trackingRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
-      messageCheckpoint: createMessageCheckpointService(ctx.conn),
-    });
+    const userVfsTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, { toolRunner: trackingRunner }),
+    );
 
     await userVfsTurn.executeOp(session.id, writeOp("/track.md", "T"));
     assert.equal(runParallelCalls, 1);
@@ -338,20 +360,6 @@ describe("UserVfsTurnService", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
-
     const captureCalls: Array<{ sessionId: string; messageId: string }> = [];
     const mockCheckpoint: MessageCheckpointService = {
       capture: async (sessionId, _projectId, messageId) => {
@@ -359,23 +367,15 @@ describe("UserVfsTurnService", () => {
       },
     };
 
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const toolRunner = new ToolRunner(registry);
-
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
+    const deps = makeUserVfsTurnDeps(ctx.conn, {
       messageCheckpoint: mockCheckpoint,
     });
+    const userVfsTurn = new DefaultUserVfsTurnService(deps);
 
     await userVfsTurn.executeOp(session.id, writeOp("/cp.md", "checkpoint"));
     await userVfsTurn.flushPendingUserVfsTurns(session.id);
 
-    const listed = await messages.listBySession(session.id);
+    const listed = await deps.messages.listBySession(session.id);
     const actionUser = listed[0]!;
     assert.equal(actionUser.role, "user");
     assert.equal(readMessageMetadata(actionUser.raw)?.kind, "user_vfs_action");
@@ -426,27 +426,10 @@ describe("UserVfsTurnService", () => {
       },
     });
     const toolRunner = new ToolRunner(registry);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
-      messageCheckpoint: createMessageCheckpointService(ctx.conn),
-    });
+    const userVfsTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
+    );
 
     const result = await userVfsTurn.executeOp(session.id, {
       actionXml: '<user-vfs-action kind="save" path="/f.md" method="write" />',
@@ -487,27 +470,10 @@ describe("UserVfsTurnService", () => {
       },
       call: innerRunner.call.bind(innerRunner),
     } as ToolRunner<BuiltinToolContext>;
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
-      messageCheckpoint: createMessageCheckpointService(ctx.conn),
-    });
+    const userVfsTurn = new DefaultUserVfsTurnService(
+      makeUserVfsTurnDeps(ctx.conn, { toolRunner }),
+    );
 
     const result = await userVfsTurn.executeOp(session.id, {
       actionXml:
@@ -542,27 +508,8 @@ describe("UserVfsTurnService", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const toolRunner = new ToolRunner(registry);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
-      messageCheckpoint: createMessageCheckpointService(ctx.conn),
-    });
+    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
 
     const ok = await userVfsTurn.executeOp(session.id, {
       actionXml:
@@ -598,27 +545,8 @@ describe("UserVfsTurnService", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const toolRunner = new ToolRunner(registry);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
-      toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
-      messageCheckpoint: createMessageCheckpointService(ctx.conn),
-    });
+    const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
 
     await userVfsTurn.executeOp(session.id, writeOp("/tx.md", "body"));
     const pendingBefore = await sessionRepo.getUserVfsPendingJson(session.id);
@@ -657,39 +585,90 @@ describe("UserVfsTurnService", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
     const toolRunner = new ToolRunner(registry);
-    const messageRepo = new SqliteMessageRepository(ctx.conn);
-    const vfsRepo = new SqliteVfsEntryRepository(ctx.conn);
-    const checkpointRepo = new CheckpointRepo(ctx.conn);
-    const revisionRepo = new SqliteVfsRevisionRepository(ctx.conn);
-    const messages = new DefaultMessageService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages: messageRepo,
-      vfs: vfsRepo,
-      checkpoints: checkpointRepo,
-      revisions: revisionRepo,
-    });
 
-    const userVfsTurn = new DefaultUserVfsTurnService({
-      conn: ctx.conn,
-      sessions: sessionRepo,
-      messages,
+    const deps = makeUserVfsTurnDeps(ctx.conn, {
       toolRunner,
-      resolveToolCtx: (sid, pid) => makeToolCtx(ctx.conn, pid, sid),
       messageCheckpoint: {
         capture: async () => {
           throw new Error("capture failed");
         },
       },
     });
+    const userVfsTurn = new DefaultUserVfsTurnService(deps);
 
     await userVfsTurn.executeOp(session.id, writeOp("/cap.md", "x"));
     await assert.rejects(() =>
       userVfsTurn.flushPendingUserVfsTurns(session.id),
     );
 
-    const listed = await messages.listBySession(session.id);
+    const listed = await deps.messages.listBySession(session.id);
     assert.equal(listed.length, 2);
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+  });
+
+  it("F4 flush：pending 非空但 net diff 空（删目录再 mkdir 同路径）→ 无 message、pending 清空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    await userVfsTurn.executeOp(session.id, buildUserVfsMkdirOp("/drafts"));
+    await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/drafts", true));
+
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, false);
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+  });
+
+  it("F4 flush：真删除仍有 U+A", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    await userVfsTurn.executeOp(session.id, writeOp("/gone.md", "bye"));
+    const firstFlush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(firstFlush.flushed, true);
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      buildUserVfsDeleteOp("/gone.md", false),
+    );
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+
+    const listed = await ctx.messages.listBySession(session.id);
+    assert.equal(listed.length, 4);
+    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_action");
+    assert.equal(readMessageMetadata(listed[3]!.raw)?.kind, "user_vfs_ack");
+    const deleteText =
+      listed[2]!.content.blocks[0]?.type === "text"
+        ? listed[2]!.content.blocks[0].text
+        : "";
+    assert.match(deleteText, /\/gone\.md/);
+    assert.match(deleteText, /kind="delete"/);
+  });
+
+  it("F4 flush：删文件再 write 同路径同内容 → net diff 空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same"));
+    await userVfsTurn.flushPendingUserVfsTurns(session.id);
+
+    await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/round.md", false));
+    await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same", "tu_rewrite"));
+
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, false);
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
   });
 

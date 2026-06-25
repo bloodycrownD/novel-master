@@ -5,16 +5,31 @@
  */
 
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
-import { mergePendingVfsTurns } from "@/domain/chat/logic/merge-pending-vfs-turns.js";
+import {
+  diffWorkspaceForUserVfsFlush,
+  isWorkspaceFlushDiffEmpty,
+} from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
+import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
+import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
+import { synthesizeUserVfsFlushActions } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
 import {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from "@/domain/chat/logic/user-vfs-turn-constants.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
+import {
+  toPhysicalPath,
+  type VfsScope,
+} from "@/domain/vfs/logic/vfs-path-mapper.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import {
   userVfsPendingQueueSchema,
   type UserVfsPendingEntry,
@@ -48,12 +63,61 @@ export interface UserVfsTurnServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
   readonly messages: MessageService;
+  /** flush 基准解析：会话消息 seq 上界。 */
+  readonly chatMessages: MessageRepository;
+  readonly checkpoints: MessageCheckpointRepository;
+  readonly entries: VfsEntryRepository;
+  readonly revisions: VfsRevisionRepository;
   readonly toolRunner: ToolRunner<BuiltinToolContext>;
   readonly resolveToolCtx: (
     sessionId: string,
     projectId: string,
   ) => BuiltinToolContext;
   readonly messageCheckpoint: MessageCheckpointService;
+}
+
+async function loadRevisionContent(
+  revisions: VfsRevisionRepository,
+  scope: VfsScope,
+  logicalPath: string,
+  version: number,
+): Promise<string> {
+  const physical = toPhysicalPath(scope, logicalPath);
+  const rev = await revisions.findByPathAndVersion(physical, version);
+  if (rev == null || rev.status === "deleted") {
+    return "";
+  }
+  return rev.content ?? "";
+}
+
+/** 读取 baseline / current 快照中各 path 的 revision 正文。 */
+async function loadWorkspaceFlushContentMaps(
+  revisions: VfsRevisionRepository,
+  scope: VfsScope,
+  baseline: WorkspaceFlushSnapshot,
+  current: WorkspaceFlushSnapshot,
+): Promise<{
+  baselineContentByPath: Map<string, string>;
+  currentContentByPath: Map<string, string>;
+}> {
+  const baselineContentByPath = new Map<string, string>();
+  const currentContentByPath = new Map<string, string>();
+
+  for (const [path, version] of baseline.fileTree) {
+    baselineContentByPath.set(
+      path,
+      await loadRevisionContent(revisions, scope, path, version),
+    );
+  }
+
+  for (const [path, version] of current.fileTree) {
+    currentContentByPath.set(
+      path,
+      await loadRevisionContent(revisions, scope, path, version),
+    );
+  }
+
+  return { baselineContentByPath, currentContentByPath };
 }
 
 async function loadPendingQueue(
@@ -189,9 +253,8 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
   private async flushPendingInTransaction(
     tx: TdbcConnection,
     sessionId: string,
-    pending: UserVfsPendingQueue,
+    actionsXml: string,
   ): Promise<ChatMessage> {
-    const { actionsXml } = mergePendingVfsTurns(pending);
     const text = wrapUserVfsActionsForStorage(actionsXml);
 
     const actionUser = await appendMessageInTx(
@@ -243,8 +306,44 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { flushed: false };
     }
 
+    const baseline = await resolveFlushBaselineTree(
+      this.deps.checkpoints,
+      this.deps.chatMessages,
+      sessionId,
+    );
+    const current = await resolveCurrentWorkspaceSnapshot(
+      this.deps.entries,
+      session.projectId,
+      sessionId,
+    );
+    const scope: VfsScope = {
+      kind: "session",
+      projectId: session.projectId,
+      sessionId,
+    };
+    const { baselineContentByPath, currentContentByPath } =
+      await loadWorkspaceFlushContentMaps(
+        this.deps.revisions,
+        scope,
+        baseline,
+        current,
+      );
+
+    const diff = diffWorkspaceForUserVfsFlush({
+      baseline,
+      current,
+      baselineContentByPath,
+      currentContentByPath,
+    });
+    const actionsXml = synthesizeUserVfsFlushActions(diff);
+
+    if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
+      await savePendingQueue(this.deps.sessions, sessionId, []);
+      return { flushed: false };
+    }
+
     const actionUser = await this.deps.conn.transaction((tx) =>
-      this.flushPendingInTransaction(tx, sessionId, pending),
+      this.flushPendingInTransaction(tx, sessionId, actionsXml),
     );
 
     await this.deps.messageCheckpoint.capture(
