@@ -6,7 +6,6 @@
 
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import {
-  ANTHROPIC_SAMPLING_DEFAULTS,
   GEMINI_SAMPLING_DEFAULTS,
   OPENAI_SAMPLING_DEFAULTS,
 } from "@/domain/provider/model/protocol-sampling-defaults.js";
