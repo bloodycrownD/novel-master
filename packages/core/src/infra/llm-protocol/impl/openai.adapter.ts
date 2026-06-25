@@ -39,8 +39,12 @@ import {
   feedOpenAiSseChunk,
   finishOpenAiSse,
 } from "../logic/openai-sse-parser.js";
+import { applyOpenAiThinkingToBody } from "../logic/apply-thinking-to-body.js";
 
 function useTextOnlyShortcut(req: LlmChatRequest): boolean {
+  if (req.thinking != null) {
+    return false;
+  }
   return (
     !req.stream &&
     (req.tools == null || req.tools.length === 0) &&
@@ -125,6 +129,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "openai") {
       Object.assign(body, req.sampling.openai);
     }
+    applyOpenAiThinkingToBody(body, req.thinking);
     return body;
   }
 

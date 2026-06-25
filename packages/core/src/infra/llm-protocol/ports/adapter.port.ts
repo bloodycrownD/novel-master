@@ -5,6 +5,7 @@
  */
 
 import type { ModelSamplingParams } from "@/domain/provider/model/model-sampling-params.js";
+import type { ModelThinkingParams } from "@/domain/provider/model/model-thinking-params.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 
@@ -55,6 +56,8 @@ export interface LlmChatRequest {
   readonly stream?: boolean;
   readonly onStream?: (event: LlmStreamEvent) => void;
   readonly sampling?: ModelSamplingParams;
+  /** 协议级思考参数；关闭或未传时 adapter 不写 wire 字段。 */
+  readonly thinking?: ModelThinkingParams;
   /** Cancels network IO and stream reads when run is terminated. */
   readonly signal?: AbortSignal;
 }

@@ -28,6 +28,7 @@ import {
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
+import { applyGeminiThinkingToBody } from "../logic/apply-thinking-to-body.js";
 import { parseGeminiUsage } from "../logic/usage-parser.js";
 
 export class GeminiProtocolAdapter implements LlmProtocolAdapter {
@@ -93,6 +94,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "gemini") {
       body.generationConfig = { ...req.sampling.gemini };
     }
+    applyGeminiThinkingToBody(body, req.thinking);
     return body;
   }
 

@@ -36,6 +36,7 @@ import { ANTHROPIC_API_VERSION } from "../logic/anthropic-api-version.js";
 import { fetchJson, joinUrl } from "../logic/http-util.js";
 import { postSse } from "../logic/llm-sse-transport.js";
 import { isRequestAborted } from "../logic/request-abort.js";
+import { applyAnthropicThinkingToBody } from "../logic/apply-thinking-to-body.js";
 import { parseAnthropicUsage } from "../logic/usage-parser.js";
 
 function anthropicTools(
@@ -140,6 +141,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       if (s.top_k != null) body.top_k = s.top_k;
       if (s.max_tokens != null) body.max_tokens = s.max_tokens;
     }
+    applyAnthropicThinkingToBody(body, req.thinking);
     return body;
   }
 
