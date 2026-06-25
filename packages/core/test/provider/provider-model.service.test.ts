@@ -184,6 +184,10 @@ describe("ProviderModelService settings", () => {
     });
     assert.equal(updated.settings.generation.thinking.enabled, true);
     assert.equal(updated.settings.schemaVersion, 2);
+    const refetched = await bundle.providerModels.getSaved("openai/gpt-4o");
+    assert.ok(refetched != null);
+    assert.equal(refetched.settings.generation.thinking.enabled, true);
+    assert.equal(refetched.settings.schemaVersion, 2);
   });
 });
 

@@ -65,4 +65,18 @@ describe("savedModelSettings schema", () => {
     assert.ok("internal" in json);
     assert.ok("generation" in json);
   });
+
+  it("v2 缺 thinking 时默认为 enabled false", () => {
+    const settings = savedModelSettingsFromJson({
+      schemaVersion: 2,
+      internal: {
+        contextWindowTokens: 128_000,
+        tokenCounterMode: "auto",
+      },
+      generation: {
+        sampling: { enabled: false },
+      },
+    });
+    assert.equal(savedModelThinking(settings).enabled, false);
+  });
 });

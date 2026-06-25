@@ -5,7 +5,12 @@
  */
 
 import { readFile } from "node:fs/promises";
-import { parseApplicationModelId, savedModelSettingsFromJson, savedModelSettingsToJson } from "@novel-master/core/provider";
+import {
+  parseApplicationModelId,
+  savedModelSampling,
+  savedModelSettingsFromJson,
+  savedModelSettingsToJson,
+} from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
 
@@ -45,7 +50,7 @@ export async function runProviderModelSampling(
 
   switch (subcommand) {
     case "show": {
-      const sampling = saved.settings.sampling;
+      const sampling = savedModelSampling(saved.settings);
       console.log(
         JSON.stringify(
           {
@@ -67,15 +72,19 @@ export async function runProviderModelSampling(
       }
       const raw = await readFile(filePath, "utf8");
       const doc = JSON.parse(raw) as unknown;
+      const base = savedModelSettingsToJson(saved.settings);
       const parsed = savedModelSettingsFromJson({
-        ...savedModelSettingsToJson(saved.settings),
-        sampling: {
-          enabled: Boolean((doc as { enabled?: boolean }).enabled),
-          params: (doc as { params?: unknown }).params,
+        ...base,
+        generation: {
+          ...base.generation,
+          sampling: {
+            enabled: Boolean((doc as { enabled?: boolean }).enabled),
+            params: (doc as { params?: unknown }).params,
+          },
         },
       });
       await rt.providerModels.updateSettings(providerId, vendorModelId, {
-        sampling: parsed.sampling,
+        sampling: savedModelSampling(parsed),
       });
       return;
     }
