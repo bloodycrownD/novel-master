@@ -1,0 +1,100 @@
+/**
+ * synthesize-user-vfs-flush-actions 单测。
+ */
+
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import type { WorkspaceFlushDiff } from "../../src/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
+import { synthesizeUserVfsFlushActions } from "../../src/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+import { parseAllUserVfsActionsFromText } from "../../src/domain/chat/logic/user-vfs-turn-view.js";
+
+describe("synthesizeUserVfsFlushActions", () => {
+  it("空 diff 返回空字符串", () => {
+    const diff: WorkspaceFlushDiff = {
+      deletedFiles: [],
+      addedFiles: [],
+      changedFiles: [],
+      addedDirs: [],
+      deletedDirs: [],
+      renames: [],
+    };
+    assert.equal(synthesizeUserVfsFlushActions(diff), "");
+  });
+
+  it("输出含可解析的 user-vfs-action", () => {
+    const diff: WorkspaceFlushDiff = {
+      addedDirs: ["/notes"],
+      addedFiles: [{ path: "/notes/a.md", content: "hello" }],
+      changedFiles: [],
+      deletedFiles: [],
+      deletedDirs: [],
+      renames: [],
+    };
+    const xml = synthesizeUserVfsFlushActions(diff);
+    assert.ok(xml.includes("<user-vfs-action"));
+    const actions = parseAllUserVfsActionsFromText(xml);
+    assert.equal(actions.length, 2);
+    assert.equal(actions[0]?.kind, "mkdir");
+    assert.equal(actions[0]?.path, "/notes");
+    assert.equal(actions[1]?.kind, "save");
+    assert.equal(actions[1]?.path, "/notes/a.md");
+    assert.equal(actions[1]?.method, "write");
+  });
+
+  it("rename 输出 kind=rename 而非 delete+write", () => {
+    const diff: WorkspaceFlushDiff = {
+      renames: [{ from: "/a.md", to: "/b.md" }],
+      addedFiles: [],
+      changedFiles: [],
+      deletedFiles: [],
+      deletedDirs: [],
+      addedDirs: [],
+    };
+    const xml = synthesizeUserVfsFlushActions(diff);
+    const actions = parseAllUserVfsActionsFromText(xml);
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0]?.kind, "rename");
+    assert.ok(!xml.includes('kind="delete"'));
+    assert.ok(!xml.includes('method="write"'));
+  });
+
+  it("内容变更合成 edit 或 write action", () => {
+    const diff: WorkspaceFlushDiff = {
+      changedFiles: [
+        {
+          path: "/ch.md",
+          baselineContent: "line1\nline2\nline3",
+          currentContent: "line1\nLINE2\nline3",
+        },
+      ],
+      addedFiles: [],
+      deletedFiles: [],
+      deletedDirs: [],
+      addedDirs: [],
+      renames: [],
+    };
+    const xml = synthesizeUserVfsFlushActions(diff);
+    assert.ok(xml.includes("<user-vfs-action"));
+    const actions = parseAllUserVfsActionsFromText(xml);
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0]?.kind, "save");
+    assert.equal(actions[0]?.method, "edit");
+    assert.equal(actions[0]?.path, "/ch.md");
+  });
+
+  it("删除文件合成 delete action", () => {
+    const diff: WorkspaceFlushDiff = {
+      deletedFiles: ["/gone.md"],
+      addedFiles: [],
+      changedFiles: [],
+      addedDirs: [],
+      deletedDirs: [],
+      renames: [],
+    };
+    const xml = synthesizeUserVfsFlushActions(diff);
+    const actions = parseAllUserVfsActionsFromText(xml);
+    assert.equal(actions.length, 1);
+    assert.equal(actions[0]?.kind, "delete");
+    assert.equal(actions[0]?.path, "/gone.md");
+  });
+});
