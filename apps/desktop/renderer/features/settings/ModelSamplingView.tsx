@@ -15,12 +15,30 @@ import {
   SettingsFormSection,
   SettingsPanel,
   SettingsSection,
+  SettingsSwitchRow,
 } from "./settings-ui";
 
 type Nav = {
   push: (view: string) => void;
   pop: () => void;
   navState: SettingsNavState;
+};
+
+/** v2 已保存模型 settings 形态（handler 返回嵌套结构）。 */
+type SavedModelSettingsV2 = {
+  readonly internal: {
+    readonly contextWindowTokens: number;
+    readonly tokenCounterMode: TokenizerOverride;
+  };
+  readonly generation: {
+    readonly sampling: {
+      readonly enabled: boolean;
+      readonly params?: ModelSamplingParams;
+    };
+    readonly thinking: {
+      readonly enabled: boolean;
+    };
+  };
 };
 
 function paramsEmpty(params: ModelSamplingParams | undefined): boolean {
@@ -45,6 +63,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
   const [contextWindowTokens, setContextWindowTokens] = useState("");
   const [tokenCounterMode, setTokenCounterMode] = useState<TokenizerOverride>("auto");
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -65,23 +84,16 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
       if (!savedRes.ok || !savedRes.data) {
         return;
       }
-      const saved = savedRes.data as {
-        settings: {
-          contextWindowTokens: number;
-          tokenCounterMode: TokenizerOverride;
-          sampling: {
-            enabled: boolean;
-            params?: ModelSamplingParams;
-          };
-        };
-      };
-      setContextWindowTokens(String(saved.settings.contextWindowTokens));
-      setTokenCounterMode(saved.settings.tokenCounterMode);
+      const saved = savedRes.data as { settings: SavedModelSettingsV2 };
+      const { internal, generation } = saved.settings;
+      setContextWindowTokens(String(internal.contextWindowTokens));
+      setTokenCounterMode(internal.tokenCounterMode);
       const stored =
-        saved.settings.sampling.enabled && saved.settings.sampling.params != null
-          ? saved.settings.sampling.params
+        generation.sampling.enabled && generation.sampling.params != null
+          ? generation.sampling.params
           : undefined;
       setParams(stored);
+      setThinkingEnabled(generation.thinking.enabled);
     } finally {
       setLoading(false);
     }
@@ -114,6 +126,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         contextWindowTokens: contextWindow,
         tokenCounterMode,
         sampling,
+        thinking: { enabled: thinkingEnabled },
       });
       if (!res.ok) {
         toastSettingsError(res.error.message);
@@ -144,8 +157,8 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         return;
       }
       if (resetRes.data) {
-        const saved = resetRes.data as { settings: { contextWindowTokens: number } };
-        setContextWindowTokens(String(saved.settings.contextWindowTokens));
+        const saved = resetRes.data as { settings: SavedModelSettingsV2 };
+        setContextWindowTokens(String(saved.settings.internal.contextWindowTokens));
       }
       setParams(undefined);
       toastSettingsSuccess("已恢复默认采样参数");
@@ -159,8 +172,34 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   return (
     <SettingsPanel>
       {loading ? <p className="settings-hint">加载中…</p> : null}
+
+      <SettingsSection
+        title="内部预算"
+        desc="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。"
+      >
+        <SettingsField label="上下文上限 (tokens)">
+          <input
+            type="number"
+            value={contextWindowTokens}
+            onChange={(e) => setContextWindowTokens(e.target.value)}
+          />
+        </SettingsField>
+        <SettingsField label="计数方式">
+          <select
+            value={tokenCounterMode}
+            onChange={(e) => setTokenCounterMode(e.target.value as TokenizerOverride)}
+          >
+            {TOKEN_COUNTER_MODE_SELECT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </SettingsField>
+      </SettingsSection>
+
       <SettingsFormSection
-        title="采样参数"
+        title="生成参数"
         desc={sectionHint}
         toolbar={
           <button
@@ -178,33 +217,13 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
           </Button>
         }
       >
-        <SettingsField label="上下文上限 (tokens)">
-          <input
-            type="number"
-            value={contextWindowTokens}
-            onChange={(e) => setContextWindowTokens(e.target.value)}
-          />
-        </SettingsField>
         <SamplingForm protocol={protocol} params={params} onChange={setParams} />
+        <SettingsSwitchRow
+          label="思考"
+          checked={thinkingEnabled}
+          onChange={setThinkingEnabled}
+        />
       </SettingsFormSection>
-
-      <SettingsSection
-        title="Token 计数器"
-        desc="自动按模型名匹配分词器族；保存后以本页为准。"
-      >
-        <SettingsField label="计数方式">
-          <select
-            value={tokenCounterMode}
-            onChange={(e) => setTokenCounterMode(e.target.value as TokenizerOverride)}
-          >
-            {TOKEN_COUNTER_MODE_SELECT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </SettingsField>
-      </SettingsSection>
     </SettingsPanel>
   );
 }

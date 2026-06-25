@@ -642,9 +642,10 @@ export type ProviderModelsGetSavedRequest = {
 
 export type ProviderModelsUpdateSettingsRequest = ProviderIdRequest & {
   readonly vendorModelId: string;
-  readonly contextWindowTokens: number;
-  readonly tokenCounterMode: string;
-  readonly sampling: unknown;
+  readonly contextWindowTokens?: number;
+  readonly tokenCounterMode?: string;
+  readonly sampling?: unknown;
+  readonly thinking?: { readonly enabled: boolean };
 };
 
 export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {

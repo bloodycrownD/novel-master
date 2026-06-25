@@ -108,11 +108,20 @@ export async function handleProviderModelsUpdateSettings(
   try {
     const rt = await getDesktopRuntime();
     await rt.providerModels.updateSettings(req.providerId, req.vendorModelId, {
-      contextWindowTokens: req.contextWindowTokens,
-      tokenCounterMode: req.tokenCounterMode as "auto",
-      sampling: req.sampling as Parameters<
-        typeof rt.providerModels.updateSettings
-      >[2]["sampling"],
+      ...(req.contextWindowTokens != null
+        ? { contextWindowTokens: req.contextWindowTokens }
+        : {}),
+      ...(req.tokenCounterMode != null
+        ? { tokenCounterMode: req.tokenCounterMode as "auto" }
+        : {}),
+      ...(req.sampling != null
+        ? {
+            sampling: req.sampling as Parameters<
+              typeof rt.providerModels.updateSettings
+            >[2]["sampling"],
+          }
+        : {}),
+      ...(req.thinking != null ? { thinking: req.thinking } : {}),
     });
     return { ok: true, data: undefined };
   } catch (err) {
