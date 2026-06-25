@@ -32,9 +32,12 @@ import {
   type ModelSetCurrentRequest,
   type ProjectCreateRequest,
   type ProjectDeleteRequest,
+  type ProjectAgentConfigDto,
   type ProjectDto,
+  type ProjectGetAgentConfigRequest,
   type ProjectPullTemplateRequest,
   type ProjectRenameRequest,
+  type ProjectUpdateAgentConfigRequest,
   type PromptAgentMetaResponse,
   type PromptPreviewSegmentDto,
   type PromptChatTokenStatsResponse,
@@ -160,6 +163,24 @@ export async function ipcProjectsDelete(
   req: ProjectDeleteRequest,
 ): Promise<IpcResult<void>> {
   return bridge().invoke<IpcResult<void>>(IPC_CHANNELS.PROJECTS_DELETE, req);
+}
+
+export async function ipcProjectsGetAgentConfig(
+  req: ProjectGetAgentConfigRequest,
+): Promise<IpcResult<ProjectAgentConfigDto>> {
+  return bridge().invoke<IpcResult<ProjectAgentConfigDto>>(
+    IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG,
+    req,
+  );
+}
+
+export async function ipcProjectsUpdateAgentConfig(
+  req: ProjectUpdateAgentConfigRequest,
+): Promise<IpcResult<ProjectAgentConfigDto>> {
+  return bridge().invoke<IpcResult<ProjectAgentConfigDto>>(
+    IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG,
+    req,
+  );
 }
 
 export async function ipcSessionsListByProject(

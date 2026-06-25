@@ -116,9 +116,11 @@ import {
 import {
   handleProjectsCreate,
   handleProjectsDelete,
+  handleProjectsGetAgentConfig,
   handleProjectsList,
   handleProjectsPullTemplate,
   handleProjectsRename,
+  handleProjectsUpdateAgentConfig,
 } from "./handlers/projects.js";
 import {
   handleScopeGet,
@@ -176,6 +178,12 @@ export function registerIpcHandlers(): void {
   );
   ipcMain.handle(IPC_CHANNELS.PROJECTS_PULL_TEMPLATE, (_event, req) =>
     handleProjectsPullTemplate(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG, (_event, req) =>
+    handleProjectsGetAgentConfig(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG, (_event, req) =>
+    handleProjectsUpdateAgentConfig(req),
   );
 
   ipcMain.handle(IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT, (_event, req) =>

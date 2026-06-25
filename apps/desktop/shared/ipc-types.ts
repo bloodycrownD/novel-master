@@ -19,6 +19,8 @@ export const IPC_CHANNELS = {
   PROJECTS_CREATE: "nm:projects/create",
   PROJECTS_RENAME: "nm:projects/rename",
   PROJECTS_DELETE: "nm:projects/delete",
+  PROJECTS_GET_AGENT_CONFIG: "nm:projects/getAgentConfig",
+  PROJECTS_UPDATE_AGENT_CONFIG: "nm:projects/updateAgentConfig",
 
   SESSIONS_LIST_BY_PROJECT: "nm:sessions/listByProject",
   SESSIONS_CREATE: "nm:sessions/create",
@@ -218,6 +220,27 @@ export type ProjectRenameRequest = {
 
 export type ProjectDeleteRequest = {
   readonly id: string;
+};
+
+/** 项目智能体策略模式。 */
+export type ProjectAgentModeDto = "follow" | "custom";
+
+/** 项目智能体配置（IPC 传输）。 */
+export type ProjectAgentConfigDto = {
+  readonly mode: ProjectAgentModeDto;
+  readonly definition?: unknown;
+};
+
+export type ProjectGetAgentConfigRequest = {
+  readonly projectId: string;
+};
+
+export type ProjectUpdateAgentConfigRequest = {
+  readonly projectId: string;
+  readonly patch: {
+    readonly mode?: ProjectAgentModeDto;
+    readonly definition?: unknown;
+  };
 };
 
 export type SessionListByProjectRequest = {

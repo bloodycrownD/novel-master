@@ -4427,6 +4427,46 @@ html[data-theme="dark"] .chat-batch-bar {
   max-width: 480px;
 }
 
+.project-agent-config-modal {
+  max-width: min(92vw, 720px);
+  max-height: min(90vh, 860px);
+  overflow: auto;
+  text-align: left;
+}
+
+.project-agent-config-modal__header {
+  margin-bottom: 12px;
+}
+
+.project-agent-config-modal__title {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.project-agent-config-modal__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.project-agent-config-modal__follow {
+  margin-top: 12px;
+}
+
+.project-agent-config-modal__custom {
+  margin-top: 12px;
+}
+
+.project-agent-config-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .dir-rule-modal {
   max-height: min(85vh, 640px);
   overflow: auto;

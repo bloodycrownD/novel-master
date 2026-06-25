@@ -1,13 +1,17 @@
 /**
  * Project CRUD IPC handlers.
  */
+import type { ProjectAgentConfigPatch } from "@novel-master/core/chat";
 import type {
   IpcResult,
+  ProjectAgentConfigDto,
   ProjectCreateRequest,
   ProjectDeleteRequest,
   ProjectDto,
+  ProjectGetAgentConfigRequest,
   ProjectPullTemplateRequest,
   ProjectRenameRequest,
+  ProjectUpdateAgentConfigRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 
@@ -85,6 +89,48 @@ export async function handleProjectsPullTemplate(
     const rt = await getDesktopRuntime();
     await rt.projects.pullTemplate(req.projectId);
     return { ok: true, data: undefined };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+function toAgentConfigDto(config: {
+  mode: "follow" | "custom";
+  definition?: unknown;
+}): ProjectAgentConfigDto {
+  return {
+    mode: config.mode,
+    ...(config.definition !== undefined ? { definition: config.definition } : {}),
+  };
+}
+
+/** 读取项目智能体配置。 */
+export async function handleProjectsGetAgentConfig(
+  req: ProjectGetAgentConfigRequest,
+): Promise<IpcResult<ProjectAgentConfigDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const config = await rt.projects.getAgentConfig(req.projectId);
+    return { ok: true, data: toAgentConfigDto(config) };
+  } catch (err) {
+    return { ok: false, error: formatError(err) };
+  }
+}
+
+/** 更新项目智能体配置（不写全局 registry）。 */
+export async function handleProjectsUpdateAgentConfig(
+  req: ProjectUpdateAgentConfigRequest,
+): Promise<IpcResult<ProjectAgentConfigDto>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const patch: ProjectAgentConfigPatch = {
+      ...(req.patch.mode !== undefined ? { mode: req.patch.mode } : {}),
+      ...(req.patch.definition !== undefined
+        ? { definition: req.patch.definition as ProjectAgentConfigPatch["definition"] }
+        : {}),
+    };
+    const config = await rt.projects.updateAgentConfig(req.projectId, patch);
+    return { ok: true, data: toAgentConfigDto(config) };
   } catch (err) {
     return { ok: false, error: formatError(err) };
   }
