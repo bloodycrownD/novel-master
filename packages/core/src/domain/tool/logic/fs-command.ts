@@ -170,8 +170,15 @@ async function rmRecursiveWhenTargetIsDirectory(
       return true;
     }
     if (isVfsError(error, "NOT_FOUND")) {
-      const entries = await vfs.list(path);
-      return entries.length > 0;
+      try {
+        const entries = await vfs.list(path);
+        return entries.length > 0;
+      } catch (listError: unknown) {
+        if (isVfsError(listError, "NOT_FOUND")) {
+          return false;
+        }
+        throw listError;
+      }
     }
     throw error;
   }

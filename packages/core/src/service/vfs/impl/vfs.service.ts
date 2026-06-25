@@ -36,11 +36,19 @@ import type {
 export class DefaultVfsService implements VfsService {
   constructor(private readonly repo: VfsEntryRepository) {}
 
-  list(
+  async list(
     dir: string,
     options?: { recursive?: boolean; maxDepth?: number },
   ): Promise<VfsListEntry[]> {
-    return this.repo.list(dir, options);
+    const normalized = normalizePath(dir);
+    const entries = await this.repo.list(normalized, options);
+    if (normalized !== "/") {
+      const entry = await this.repo.findByPath(normalized);
+      if (entry == null && entries.length === 0) {
+        throw vfsNotFound(normalized);
+      }
+    }
+    return entries;
   }
 
   async mkdir(path: string): Promise<void> {

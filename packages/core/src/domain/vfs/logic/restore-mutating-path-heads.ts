@@ -88,11 +88,19 @@ export async function captureMutatingPathHeadSnapshots(
       });
     } catch (error: unknown) {
       if (isVfsError(error, "NOT_FOUND")) {
-        const entries = await vfs.list(path, { recursive: true });
-        if (entries.length > 0) {
-          snapshots.set(path, await captureDirectorySnapshot(vfs, path));
-        } else {
-          snapshots.set(path, { kind: "absent", path });
+        try {
+          const entries = await vfs.list(path, { recursive: true });
+          if (entries.length > 0) {
+            snapshots.set(path, await captureDirectorySnapshot(vfs, path));
+          } else {
+            snapshots.set(path, { kind: "absent", path });
+          }
+        } catch (listError: unknown) {
+          if (isVfsError(listError, "NOT_FOUND")) {
+            snapshots.set(path, { kind: "absent", path });
+          } else {
+            throw listError;
+          }
         }
         continue;
       }
