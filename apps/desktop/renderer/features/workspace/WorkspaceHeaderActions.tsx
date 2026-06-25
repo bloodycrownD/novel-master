@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { ContextMenu, type ContextMenuItem } from "@/components/ui/ContextMenu";
 import { IconButton } from "@/components/ui/IconButton";
 import { showToast } from "@/components/ui/show-toast";
 import {
@@ -14,6 +15,11 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 
 type ConfirmKind = "import-zip" | "pull-template";
 
+type MenuState = {
+  x: number;
+  y: number;
+};
+
 interface WorkspaceHeaderActionsProps {
   panelScope: WorkspacePanelScope;
   onRefresh: () => void;
@@ -25,6 +31,7 @@ export function WorkspaceHeaderActions({
 }: WorkspaceHeaderActionsProps) {
   const { projectId, sessionId } = useShellNav();
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
+  const [menu, setMenu] = useState<MenuState | null>(null);
   const [busy, setBusy] = useState(false);
 
   const req = vfsScope(panelScope, projectId, sessionId);
@@ -81,6 +88,33 @@ export function WorkspaceHeaderActions({
     }
   }, [panelScope, projectId, sessionId, onRefresh]);
 
+  const menuItems = useMemo((): readonly ContextMenuItem[] => {
+    const items: ContextMenuItem[] = [];
+    if (showSync) {
+      items.push({ label: "初始化", action: "pull-template" });
+    }
+    items.push({ label: "导入", action: "import-zip" });
+    items.push({ label: "导出", action: "export-zip" });
+    return items;
+  }, [showSync]);
+
+  const handleMenuSelect = useCallback(
+    (action: string) => {
+      if (action === "export-zip") {
+        void exportZip();
+        return;
+      }
+      if (action === "import-zip") {
+        setConfirmKind("import-zip");
+        return;
+      }
+      if (action === "pull-template") {
+        setConfirmKind("pull-template");
+      }
+    },
+    [exportZip],
+  );
+
   const confirmMessage =
     confirmKind === "import-zip"
       ? "导入 ZIP 将覆盖当前工作区全部文件，确定继续？"
@@ -91,21 +125,28 @@ export function WorkspaceHeaderActions({
   return (
     <>
       <div className="explorer-header__actions">
-        {showSync ? (
-          <IconButton
-            label="从上级同步"
-            onClick={() => setConfirmKind("pull-template")}
-          >
-            ↻
-          </IconButton>
-        ) : null}
-        <IconButton label="导出 ZIP" onClick={() => void exportZip()}>
-          ⬇
-        </IconButton>
-        <IconButton label="导入 ZIP" onClick={() => setConfirmKind("import-zip")}>
-          ⬆
+        <IconButton
+          className="explorer-header__more-btn"
+          label="更多"
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setMenu({
+              x: Math.max(8, rect.right - 120),
+              y: Math.max(8, rect.bottom + 4),
+            });
+          }}
+        >
+          ⋯
         </IconButton>
       </div>
+      <ContextMenu
+        open={menu != null}
+        x={menu?.x ?? 0}
+        y={menu?.y ?? 0}
+        items={menuItems}
+        onSelect={handleMenuSelect}
+        onClose={() => setMenu(null)}
+      />
       <ConfirmModal
         open={confirmKind != null}
         title="确认操作"
