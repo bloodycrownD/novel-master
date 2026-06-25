@@ -82,6 +82,36 @@ export class SqliteProjectRepository implements ProjectRepository {
     return result.changes > 0;
   }
 
+  async getAgentConfig(id: string): Promise<string | null> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT agent_config_json FROM chat_project WHERE id = #{id}`,
+      { id },
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    const value = rows[0]!.agent_config_json;
+    return value == null ? null : String(value);
+  }
+
+  async updateAgentConfig(
+    id: string,
+    configJson: string | null,
+    updatedAtMs: number,
+  ): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_project
+       SET agent_config_json = #{configJson}, updated_at_ms = #{updatedAtMs}
+       WHERE id = #{id}`,
+      { id, configJson, updatedAtMs },
+    );
+    return result.changes > 0;
+  }
+
   async delete(id: string): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,

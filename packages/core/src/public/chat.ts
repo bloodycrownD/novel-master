@@ -1,6 +1,16 @@
 export { ChatError } from "../errors/chat-errors.js";
 export type { ChatErrorCode } from "../errors/chat-errors.js";
 export type { ChatProject } from "../domain/chat/model/project.js";
+export type {
+  ProjectAgentConfig,
+  ProjectAgentConfigPatch,
+  ProjectAgentMode,
+} from "../domain/chat/model/project-agent-config.js";
+export { DEFAULT_PROJECT_AGENT_CONFIG } from "../domain/chat/model/project-agent-config.js";
+export {
+  projectAgentConfigSchema,
+  projectAgentModeSchema,
+} from "../domain/chat/model/project-agent-config.schema.js";
 export type { ChatSession } from "../domain/chat/model/session.js";
 export type {
   ChatMessage,

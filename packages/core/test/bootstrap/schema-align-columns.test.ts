@@ -178,6 +178,7 @@ describe("schema 列对齐（T-B3）", () => {
 
     assert.ok((await tableColumnNames(conn, "chat_session")).has("user_vfs_pending_json"));
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
+    assert.ok((await tableColumnNames(conn, "chat_project")).has("agent_config_json"));
     const vfsCols = await tableColumnNames(conn, "vfs_entry");
     assert.ok(vfsCols.has("entry_kind"));
     assert.ok(vfsCols.has("head_version"));
@@ -210,6 +211,42 @@ describe("schema 列对齐（T-B3）", () => {
     assert.equal(await repo.getUserVfsPendingJson(sessionId), null);
     assert.equal(await repo.setUserVfsPendingJson(sessionId, pendingJson), true);
     assert.equal(await repo.getUserVfsPendingJson(sessionId), pendingJson);
+
+    await conn.close();
+  });
+
+  it("A8：legacy chat_project 缺 agent_config_json，bootstrap 后列存在且读写正常", async () => {
+    const conn = await openInMemoryConnection();
+    const projectId = randomUUID();
+    const now = 1_700_000_000_000;
+
+    await conn.execute(`
+      CREATE TABLE IF NOT EXISTS chat_project (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    await execBootstrapSchemaDdl(conn);
+    await conn.execute(
+      `INSERT INTO chat_project (id, name, created_at_ms, updated_at_ms)
+       VALUES ('${projectId}', 'legacy-project', ${now}, ${now})`,
+    );
+    await bootstrapNovelMaster(conn);
+
+    const columns = await tableColumnNames(conn, "chat_project");
+    assert.ok(columns.has("agent_config_json"));
+
+    const { SqliteProjectRepository } = await import(
+      "../../src/domain/chat/repositories/impl/sqlite-project.repository.js"
+    );
+    const repo = new SqliteProjectRepository(conn);
+    assert.equal(await repo.getAgentConfig(projectId), null);
+
+    const configJson = JSON.stringify({ mode: "follow" });
+    assert.equal(await repo.updateAgentConfig(projectId, configJson, now + 1), true);
+    assert.equal(await repo.getAgentConfig(projectId), configJson);
 
     await conn.close();
   });

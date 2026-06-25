@@ -9,6 +9,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
   `CREATE TABLE IF NOT EXISTS chat_project (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    agent_config_json TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
   )`,

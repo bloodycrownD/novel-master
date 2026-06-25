@@ -30,6 +30,12 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_session ADD COLUMN user_vfs_pending_json TEXT NULL",
   },
   {
+    table: "chat_project",
+    column: "agent_config_json",
+    addColumnSql:
+      "ALTER TABLE chat_project ADD COLUMN agent_config_json TEXT NULL",
+  },
+  {
     table: "vfs_entry",
     column: "entry_kind",
     addColumnSql:

@@ -7,6 +7,14 @@
 import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { ChatProject } from "@/domain/chat/model/project.js";
+import {
+  DEFAULT_PROJECT_AGENT_CONFIG,
+  type ProjectAgentConfig,
+  type ProjectAgentConfigPatch,
+} from "@/domain/chat/model/project-agent-config.js";
+import { projectAgentConfigSchema } from "@/domain/chat/model/project-agent-config.schema.js";
+import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
+import type { ValidateAgentDefinitionOptions } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { ProjectRepository } from "@/domain/chat/repositories/project.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
@@ -14,6 +22,7 @@ import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.por
 import { projectVfsPrefix } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { copyVfsTree, deleteVfsPrefix } from "@/domain/vfs/logic/vfs-tree-copy.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
+import { decode } from "@/infra/serialization/decode.js";
 import { SqliteProjectRepository } from "@/domain/chat/repositories/impl/sqlite-project.repository.js";
 import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
@@ -29,6 +38,39 @@ function reposFor(conn: TdbcConnection) {
     messages: new SqliteMessageRepository(conn),
     vfs: new SqliteVfsEntryRepository(conn),
   };
+}
+
+function parseStoredAgentConfig(json: string): ProjectAgentConfig {
+  return decode(JSON.parse(json), projectAgentConfigSchema);
+}
+
+function mergeAgentConfigPatch(
+  current: ProjectAgentConfig,
+  patch: ProjectAgentConfigPatch,
+): ProjectAgentConfig {
+  return {
+    mode: patch.mode ?? current.mode,
+    ...(patch.definition !== undefined
+      ? { definition: patch.definition }
+      : current.definition !== undefined
+        ? { definition: current.definition }
+        : {}),
+  };
+}
+
+/** 纯 follow 且无草稿时存 NULL；否则存 wire JSON。 */
+function serializeAgentConfigForStorage(
+  config: ProjectAgentConfig,
+): string | null {
+  if (config.mode === "follow" && config.definition == null) {
+    return null;
+  }
+  return JSON.stringify(projectAgentConfigSchema.toWire(config));
+}
+
+/** Deep-clones stored JSON for project copy. */
+function deepCloneAgentConfigJson(json: string): string {
+  return JSON.stringify(JSON.parse(json));
 }
 
 /** Dependencies for {@link DefaultProjectService}. */
@@ -120,8 +162,46 @@ export class DefaultProjectService implements ProjectService {
     );
   }
 
+  async getAgentConfig(id: string): Promise<ProjectAgentConfig> {
+    await this.get(id);
+    const json = await this.deps.projects.getAgentConfig(id);
+    if (json == null) {
+      return DEFAULT_PROJECT_AGENT_CONFIG;
+    }
+    return parseStoredAgentConfig(json);
+  }
+
+  async updateAgentConfig(
+    id: string,
+    patch: ProjectAgentConfigPatch,
+    options: ValidateAgentDefinitionOptions = {},
+  ): Promise<ProjectAgentConfig> {
+    await this.get(id);
+    const current = await this.getAgentConfig(id);
+    const merged = mergeAgentConfigPatch(current, patch);
+    const validated = decode(
+      projectAgentConfigSchema.toWire(merged),
+      projectAgentConfigSchema,
+    );
+    if (validated.mode === "custom") {
+      await validateAgentDefinition(validated.definition!, options);
+    }
+    const updatedAtMs = Date.now();
+    const configJson = serializeAgentConfigForStorage(validated);
+    const updated = await this.deps.projects.updateAgentConfig(
+      id,
+      configJson,
+      updatedAtMs,
+    );
+    if (!updated) {
+      throw chatNotFound("project", id);
+    }
+    return validated;
+  }
+
   async copy(id: string): Promise<ChatProject> {
     const source = await this.get(id);
+    const sourceAgentConfigJson = await this.deps.projects.getAgentConfig(id);
     return this.deps.conn.transaction(async (tx) => {
       const r = reposFor(tx);
       const now = Date.now();
@@ -132,6 +212,10 @@ export class DefaultProjectService implements ProjectService {
         updatedAtMs: now,
       };
       await r.projects.insert(copy);
+      if (sourceAgentConfigJson != null) {
+        const clonedJson = deepCloneAgentConfigJson(sourceAgentConfigJson);
+        await r.projects.updateAgentConfig(copy.id, clonedJson, now);
+      }
       await copyVfsTree(
         r.vfs,
         `${projectVfsPrefix(id)}/template`,
