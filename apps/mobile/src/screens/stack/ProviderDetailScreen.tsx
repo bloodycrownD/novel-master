@@ -15,7 +15,7 @@ import {
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import {formatApplicationModelId} from '@novel-master/core/provider';
+import {formatApplicationModelId, savedModelSampling} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {AddModelModal} from '../../components/provider/AddModelModal';
@@ -87,8 +87,9 @@ export function ProviderDetailScreen() {
           providerId,
           model.vendorModelId,
         );
+        const sampling = savedModelSampling(model.settings);
         const hasSampling = Boolean(
-          model.settings.sampling.enabled && model.settings.sampling.params,
+          sampling.enabled && sampling.params,
         );
         let label = model.displayName?.trim() || model.vendorModelId;
         try {

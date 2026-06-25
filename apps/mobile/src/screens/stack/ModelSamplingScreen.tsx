@@ -1,15 +1,25 @@
 /**
- * Per-model settings: context window + sampling (`settings_json`).
+ * 单模型设置：内部预算（上下文、计数）与生成参数（采样、思考）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
-import { type LlmProtocolKind, type ModelSamplingParams, type TokenizerOverride } from "@novel-master/core/provider";
-import { parseApplicationModelId, TOKEN_COUNTER_MODE_SELECT_OPTIONS } from "@novel-master/core/provider";
+import {
+  parseApplicationModelId,
+  savedModelContextWindowTokens,
+  savedModelSampling,
+  savedModelThinking,
+  savedModelTokenCounterMode,
+  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
+  type LlmProtocolKind,
+  type ModelSamplingParams,
+  type TokenizerOverride,
+} from '@novel-master/core/provider';
 import {FormField} from '../../components/form/FormField';
 import {FormSelectField} from '../../components/form/FormSelectField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
+import {FormSwitchRow} from '../../components/form/FormSwitchRow';
 import {FormTextInput} from '../../components/form/FormTextInput';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
@@ -52,6 +62,7 @@ export function ModelSamplingScreen() {
   const [contextWindowTokens, setContextWindowTokens] = useState('');
   const [tokenCounterMode, setTokenCounterMode] =
     useState<TokenizerOverride>('auto');
+  const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -75,13 +86,17 @@ export function ModelSamplingScreen() {
       }
       const saved = await runtime.providerModels.getSaved(applicationModelId);
       if (saved) {
-        setContextWindowTokens(String(saved.settings.contextWindowTokens));
-        setTokenCounterMode(saved.settings.tokenCounterMode);
+        setContextWindowTokens(
+          String(savedModelContextWindowTokens(saved.settings)),
+        );
+        setTokenCounterMode(savedModelTokenCounterMode(saved.settings));
+        const sampling = savedModelSampling(saved.settings);
         const stored =
-          saved.settings.sampling.enabled && saved.settings.sampling.params != null
-            ? saved.settings.sampling.params
+          sampling.enabled && sampling.params != null
+            ? sampling.params
             : undefined;
         setParams(stored);
+        setThinkingEnabled(savedModelThinking(saved.settings).enabled);
       }
     } catch (error) {
       showToast(toastMessage('加载失败', error));
@@ -122,6 +137,7 @@ export function ModelSamplingScreen() {
         contextWindowTokens: contextWindow,
         sampling,
         tokenCounterMode,
+        thinking: {enabled: thinkingEnabled},
       });
       showToast('已保存模型设置');
       navigation.goBack();
@@ -147,7 +163,9 @@ export function ModelSamplingScreen() {
       await runtime.providerModels.updateSettings(providerId, vendorModelId, {
         sampling: {enabled: false},
       });
-      setContextWindowTokens(String(updated.settings.contextWindowTokens));
+      setContextWindowTokens(
+        String(savedModelContextWindowTokens(updated.settings)),
+      );
       setParams(undefined);
       showToast('已恢复默认采样参数');
     } catch (error) {
@@ -177,7 +195,34 @@ export function ModelSamplingScreen() {
         />
       }>
       <FormSectionCard
-        title="采样参数"
+        title="内部预算"
+        tokens={tokens}
+        hint="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。">
+        <FormField label="上下文上限 (tokens)" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={contextWindowTokens}
+            onChangeText={setContextWindowTokens}
+            keyboardType="number-pad"
+          />
+        </FormField>
+        <FormField
+          label="计数方式"
+          tokens={tokens}
+          hint="自动按模型名匹配分词器族；保存后以本页为准。">
+          <FormSelectField
+            tokens={tokens}
+            value={tokenCounterMode}
+            onChange={v => setTokenCounterMode(v as TokenizerOverride)}
+            options={TOKEN_COUNTER_MODE_SELECT_OPTIONS}
+            sheetTitle="Token 计数器"
+            placeholder="auto"
+          />
+        </FormField>
+      </FormSectionCard>
+
+      <FormSectionCard
+        title="生成参数"
         tokens={tokens}
         hint={sectionHint}
         rightAction={
@@ -192,35 +237,18 @@ export function ModelSamplingScreen() {
             </Text>
           </Pressable>
         }>
-        <FormField label="上下文上限 (tokens)" tokens={tokens}>
-          <FormTextInput
-            tokens={tokens}
-            value={contextWindowTokens}
-            onChangeText={setContextWindowTokens}
-            keyboardType="number-pad"
-          />
-        </FormField>
         <SamplingForm
           tokens={tokens}
           protocol={protocol}
           params={params}
           onChange={setParams}
         />
-      </FormSectionCard>
-      <FormSectionCard title="Token 计数器" tokens={tokens}>
-        <FormField
-          label="计数方式"
+        <FormSwitchRow
+          label="思考"
           tokens={tokens}
-          hint="自动按模型名匹配分词器族；保存后以本页为准。">
-          <FormSelectField
-            tokens={tokens}
-            value={tokenCounterMode}
-            onChange={v => setTokenCounterMode(v as TokenizerOverride)}
-            options={TOKEN_COUNTER_MODE_SELECT_OPTIONS}
-            sheetTitle="Token 计数器"
-            placeholder="auto"
-          />
-        </FormField>
+          value={thinkingEnabled}
+          onValueChange={setThinkingEnabled}
+        />
       </FormSectionCard>
     </ScreenFormLayout>
   );
