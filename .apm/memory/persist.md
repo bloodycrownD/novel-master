@@ -15,9 +15,26 @@ updatedAt: '2026-06-24 00:00:00'
 
 **实现顺序**：F3 → F2 → F4（Core）
 
-## 其它迭代（未动 SPEC）
+## model-generation-params（已合并 main）
 
-| 迭代 | PRD |
+| 文档 | 路径 |
+|------|------|
+| PRD | Iterations/model-generation-params/prd.md |
+| SPEC | Iterations/model-generation-params/spec.md |
+
+**合并**：main @ e6e03eea
+
+## project-agent-config（下一迭代）
+
+| 文档 | 路径 |
 |------|-----|
-| model-generation-params | Iterations/model-generation-params/prd.md |
-| project-agent-config | Iterations/project-agent-config/prd.md |
+| PRD | Iterations/project-agent-config/prd.md |
+| SPEC | Iterations/project-agent-config/spec.md |
+
+**分支建议**：`feature/project-agent-config`
+
+**核心方案**：`chat_project.agent_config_json` **列**（非独立表）；`resolveAgentForProject` discriminated union（custom 无 agentId）；run 仅消费 definition；copy 复制列
+
+**已确认**：克隆全局 / copy 复制 / 跟随保留草稿 / ChatRail 入口
+
+**主要风险**：调用方假设必有 agentId；prompt/meta 漏改 projectId
