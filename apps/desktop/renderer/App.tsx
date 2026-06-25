@@ -44,7 +44,7 @@ function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
   const messageBatch = useBatchSelection();
-  const { projectId, sessionId, sessionName, updateSessionName, notifyWorkspaceMutated, notifyAgentConfigChanged, markPreviewTabsDeletedUnderPath, renamePreviewTab } =
+  const { projectId, sessionId, sessionName, updateSessionName, notifyWorkspaceMutated, notifyAgentConfigChanged, markPreviewTabsDeletedUnderPath, renamePreviewTab, registerEnsurePreviewVisible } =
     useShellNav();
 
   const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
@@ -65,6 +65,18 @@ function DesktopOverlays() {
     setWorkspaceMenu(null);
     setSessionMenu(null);
   }, []);
+
+  useEffect(() => {
+    registerEnsurePreviewVisible(() => {
+      if (!columnLayout.columnVisibility.preview) {
+        columnLayout.toggleColumn("preview");
+      }
+    });
+  }, [
+    registerEnsurePreviewVisible,
+    columnLayout.columnVisibility.preview,
+    columnLayout.toggleColumn,
+  ]);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {

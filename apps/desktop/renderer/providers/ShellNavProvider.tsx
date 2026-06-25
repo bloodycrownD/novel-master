@@ -132,6 +132,10 @@ export interface ShellNavContextValue {
   /** Bumps when workspace model/agent selection changes (footer, settings, etc.). */
   agentConfigRevision: number;
   notifyAgentConfigChanged: () => void;
+  /** 注册 Preview 列可见性回调（由 App 注入 toggleColumn）。 */
+  registerEnsurePreviewVisible: (fn: () => void) => void;
+  /** 在聊天工作区 Preview 打开文件；若 Preview 列隐藏则先显示。 */
+  openChatWorkspacePreview: (path: string) => void;
 }
 
 
@@ -214,6 +218,11 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
   } | null>(null);
   const [agentConfigRevision, setAgentConfigRevision] = useState(0);
   const mutateDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ensurePreviewVisibleRef = useRef<(() => void) | null>(null);
+
+  const registerEnsurePreviewVisible = useCallback((fn: () => void) => {
+    ensurePreviewVisibleRef.current = fn;
+  }, []);
 
   const bumpTreeRefresh = useCallback(() => {
     setTreeRefreshToken((t) => t + 1);
@@ -268,6 +277,14 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       setActivePreviewKey(key);
     },
     [],
+  );
+
+  const openChatWorkspacePreview = useCallback(
+    (path: string) => {
+      selectPreviewFile("chat", path);
+      ensurePreviewVisibleRef.current?.();
+    },
+    [selectPreviewFile],
   );
 
   const closePreviewTab = useCallback(
@@ -698,6 +715,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
 
       notifyAgentConfigChanged,
 
+      registerEnsurePreviewVisible,
+
+      openChatWorkspacePreview,
+
     }),
 
     [
@@ -759,6 +780,10 @@ export function ShellNavProvider({ children }: { children: ReactNode }) {
       agentConfigRevision,
 
       notifyAgentConfigChanged,
+
+      registerEnsurePreviewVisible,
+
+      openChatWorkspacePreview,
 
     ],
 

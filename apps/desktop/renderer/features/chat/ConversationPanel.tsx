@@ -65,7 +65,7 @@ export function ConversationPanel({
   onOpenSessionActions,
   messageBatch,
 }: ConversationPanelProps) {
-  const { notifyWorkspaceMutated, openSession, projectName } = useShellNav();
+  const { notifyWorkspaceMutated, openSession, projectName, openChatWorkspacePreview } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
@@ -655,6 +655,7 @@ export function ConversationPanel({
             chatRichText={chatRichText}
             onToggleSelect={handleToggleSelect}
             onOpenMessageMenu={messageBatch.active ? undefined : openMessageMenu}
+            onOpenToolFile={openChatWorkspacePreview}
           />
         </div>
         <div
