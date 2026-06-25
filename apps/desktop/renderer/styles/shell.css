@@ -4810,6 +4810,12 @@ html[data-theme="dark"] .chat-batch-bar {
   margin-left: auto;
 }
 
+#explorer-header .explorer-header__more-btn {
+  letter-spacing: 0.05em;
+  font-size: 1.05em;
+  line-height: 1;
+}
+
 #explorer-header .column-header__title {
   flex: 1;
   min-width: 0;
