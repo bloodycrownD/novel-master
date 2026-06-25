@@ -4871,6 +4871,31 @@ html[data-theme="dark"] .chat-batch-bar {
   word-break: break-word;
 }
 
+.tool-call-card--clickable {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  border-color: var(--primary);
+  transition: opacity 0.15s ease;
+}
+
+.tool-call-card--clickable:hover {
+  opacity: 0.85;
+}
+
+.tool-call-card--clickable:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.tool-call-card__open-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--primary);
+}
+
 .chat-message__markdown {
   margin: 0;
   font-size: inherit;

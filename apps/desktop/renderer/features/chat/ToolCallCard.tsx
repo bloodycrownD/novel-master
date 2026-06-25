@@ -1,12 +1,14 @@
 import type { ToolCallView } from "./message-blocks";
-import { toolCallSummary } from "./message-blocks";
+import { toolCallSummary, vfsToolFilePath } from "./message-blocks";
 
 type ToolCallCardProps = {
   tool: ToolCallView;
-  /** When true, show full JSON input instead of summary. */
+  /** 为 true 时展示完整 JSON 入参而非摘要。 */
   showFullParams?: boolean;
-  /** Inline row inside ToolCallGroupCard. */
+  /** ToolCallGroupCard 内的行内卡片。 */
   groupItem?: boolean;
+  /** 工具含 VFS 文件路径时可点击打开 Preview。 */
+  onOpenFile?: (path: string) => void;
 };
 
 function statusLabel(status: ToolCallView["status"]): string {
@@ -26,17 +28,17 @@ export function ToolCallCard({
   tool,
   showFullParams,
   groupItem = false,
+  onOpenFile,
 }: ToolCallCardProps) {
+  const filePath = vfsToolFilePath(tool);
+  const canOpen = filePath != null && onOpenFile != null;
   const summary = toolCallSummary(tool);
   const detail = showFullParams
     ? JSON.stringify(tool.input, null, 2)
     : summary;
 
-  return (
-    <div
-      className={`tool-call-card tool-call-card--${tool.status}${groupItem ? " tool-call-card--group-item" : ""}`}
-      data-tool-use-id={tool.toolUseId}
-    >
+  const content = (
+    <>
       <div className="tool-call-card__header">
         <span className="tool-call-card__name">{tool.name}</span>
         <span className={`tool-call-card__status tool-call-card__status--${tool.status}`}>
@@ -44,6 +46,38 @@ export function ToolCallCard({
         </span>
       </div>
       {detail ? <p className="tool-call-card__summary">{detail}</p> : null}
+      {canOpen ? (
+        <p className="tool-call-card__open-hint">点击查看 · 聊天工作区</p>
+      ) : null}
+    </>
+  );
+
+  const className = [
+    "tool-call-card",
+    `tool-call-card--${tool.status}`,
+    groupItem ? "tool-call-card--group-item" : "",
+    canOpen ? "tool-call-card--clickable" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (canOpen) {
+    return (
+      <button
+        type="button"
+        className={className}
+        data-tool-use-id={tool.toolUseId}
+        aria-label={`打开文件 ${filePath}`}
+        onClick={() => onOpenFile(filePath)}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className={className} data-tool-use-id={tool.toolUseId}>
+      {content}
     </div>
   );
 }

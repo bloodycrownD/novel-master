@@ -36,6 +36,8 @@ interface MessageListProps {
     message: ChatMessageDto,
     position: { x: number; y: number },
   ) => void;
+  /** 点击文件类工具卡片时在聊天工作区 Preview 打开路径。 */
+  onOpenToolFile?: (path: string) => void;
 }
 
 function MessageBody({
@@ -69,6 +71,7 @@ export function MessageList({
   chatRichText = false,
   onToggleSelect,
   onOpenMessageMenu,
+  onOpenToolFile,
 }: MessageListProps) {
   const hasStreaming = !!streamingText || !!streamingThinking || toolInvoking;
 
@@ -139,7 +142,11 @@ export function MessageList({
                     <span className="chat-message__hidden-tag">已隐藏</span>
                   ) : null}
                 </span>
-                <ToolCallGroupCard tools={item.tools} dimmed={item.hidden} />
+                <ToolCallGroupCard
+                  tools={item.tools}
+                  dimmed={item.hidden}
+                  onOpenFile={onOpenToolFile}
+                />
               </div>
             </div>
           );
@@ -230,7 +237,11 @@ export function MessageList({
                 )
               ) : null}
               {item.tools.length > 0 ? (
-                <ToolCallGroupCard tools={item.tools} dimmed={msg.hidden} />
+                <ToolCallGroupCard
+                  tools={item.tools}
+                  dimmed={msg.hidden}
+                  onOpenFile={onOpenToolFile}
+                />
               ) : null}
             </div>
           </div>
