@@ -18,7 +18,13 @@ import type { SavedModel } from "@/domain/provider/model/saved-model.js";
 
 import { defaultSavedModelSettings } from "@/domain/provider/model/default-saved-model-settings.js";
 
-import type { SavedModelSettingsPatch } from "@/domain/provider/model/saved-model-settings.js";
+import {
+  applySavedModelSettingsPatch,
+  savedModelContextWindowTokens,
+  savedModelTokenCounterMode,
+  type SavedModelSettingsPatch,
+} from "@/domain/provider/model/saved-model-settings.js";
+import { assertSavedModelSettingsPersistable } from "@/domain/provider/model/saved-model-settings-from-json.js";
 import { isValidTokenCounterModePref } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
@@ -351,30 +357,13 @@ export class DefaultProviderModelService implements ProviderModelService {
       );
     }
 
+    const mergedSettings = applySavedModelSettingsPatch(existing.settings, patch);
+    assertSavedModelSettingsPersistable(mergedSettings);
+
     const updated: SavedModel = {
-
       ...existing,
-
-      settings: {
-
-        ...existing.settings,
-
-        ...(patch.contextWindowTokens != null
-
-          ? { contextWindowTokens: patch.contextWindowTokens }
-
-          : {}),
-
-        ...(patch.sampling != null ? { sampling: patch.sampling } : {}),
-
-        ...(patch.tokenCounterMode != null
-          ? { tokenCounterMode: patch.tokenCounterMode }
-          : {}),
-
-      },
-
+      settings: mergedSettings,
       updatedAtMs: Date.now(),
-
     };
 
     await this.deps.savedModels.update(updated);
@@ -396,9 +385,7 @@ export class DefaultProviderModelService implements ProviderModelService {
     const defaults = defaultSavedModelSettings(vendorModelId);
 
     return this.updateSettings(providerId, vendorModelId, {
-
-      contextWindowTokens: defaults.contextWindowTokens,
-
+      contextWindowTokens: defaults.internal.contextWindowTokens,
     });
 
   }
@@ -421,7 +408,7 @@ export class DefaultProviderModelService implements ProviderModelService {
 
     const saved = await this.getSaved(applicationModelId);
 
-    return saved?.settings.contextWindowTokens ?? null;
+    return saved != null ? savedModelContextWindowTokens(saved.settings) : null;
 
   }
 
@@ -431,7 +418,7 @@ export class DefaultProviderModelService implements ProviderModelService {
 
     const saved = await this.getSaved(applicationModelId);
 
-    return saved?.settings.tokenCounterMode ?? "auto";
+    return saved != null ? savedModelTokenCounterMode(saved.settings) : "auto";
 
   }
 

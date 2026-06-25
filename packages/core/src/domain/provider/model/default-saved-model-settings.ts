@@ -1,5 +1,5 @@
 /**
- * Default per-model settings for save/create/backfill.
+ * 新建/回填时的默认 per-model 设置。
  *
  * @module domain/provider/model/default-saved-model-settings
  */
@@ -8,15 +8,20 @@ import { seedContextWindowTokens } from "@/infra/tokenizer/logic/seed-context-wi
 import type { SavedModelSettings } from "./saved-model-settings.js";
 
 /**
- * Default settings for a vendor model id (context window from seed map).
+ * 按 vendor model id 生成默认设置（上下文窗口来自 seed map）。
  *
- * @param vendorModelId Provider model name.
+ * @param vendorModelId Provider 模型名。
  */
 export function defaultSavedModelSettings(vendorModelId: string): SavedModelSettings {
   return {
-    schemaVersion: 1,
-    contextWindowTokens: seedContextWindowTokens(vendorModelId),
-    sampling: { enabled: false },
-    tokenCounterMode: "auto",
+    schemaVersion: 2,
+    internal: {
+      contextWindowTokens: seedContextWindowTokens(vendorModelId),
+      tokenCounterMode: "auto",
+    },
+    generation: {
+      sampling: { enabled: false },
+      thinking: { enabled: false },
+    },
   };
 }

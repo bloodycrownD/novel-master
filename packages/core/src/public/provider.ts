@@ -36,8 +36,31 @@ export type { SavedModel } from "../domain/provider/model/saved-model.js";
 export type {
   SavedModelSettings,
   SavedModelSamplingSettings,
+  SavedModelThinkingSettings,
+  SavedModelInternalSettings,
+  SavedModelGenerationSettings,
   SavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
+export {
+  savedModelContextWindowTokens,
+  savedModelTokenCounterMode,
+  savedModelSampling,
+  savedModelThinking,
+  applySavedModelSettingsPatch,
+} from "../domain/provider/model/saved-model-settings.js";
+export type {
+  ModelThinkingParams,
+  AnthropicThinkingParams,
+  OpenAiThinkingParams,
+  GeminiThinkingParams,
+  GeminiThinkingConfig,
+} from "../domain/provider/model/model-thinking-params.js";
+export { thinkingProtocol } from "../domain/provider/model/model-thinking-params.js";
+export {
+  resolveEffectiveMaxTokens,
+  resolveThinkingWireDefaults,
+  resolveThinkingParamsForProtocol,
+} from "../domain/provider/logic/resolve-thinking-wire.js";
 export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
 export {
   savedModelSettingsFromJson,

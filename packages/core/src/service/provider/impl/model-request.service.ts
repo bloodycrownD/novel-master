@@ -139,11 +139,9 @@ export class DefaultModelRequestService implements ModelRequestService {
     const apiKey = await resolveProviderApiKey(provider, this.deps.secretStore);
     let sampling = options?.sampling;
     if (sampling === undefined) {
-      if (
-        saved.settings.sampling.enabled &&
-        saved.settings.sampling.params != null
-      ) {
-        sampling = saved.settings.sampling.params;
+      const savedSampling = saved.settings.generation.sampling;
+      if (savedSampling.enabled && savedSampling.params != null) {
+        sampling = savedSampling.params;
       }
     }
 

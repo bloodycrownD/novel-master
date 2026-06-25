@@ -1,8 +1,12 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { formatApplicationModelId } from "../../src/domain/provider/logic/application-model-id.js";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
 import { ProviderError } from "../../src/errors/provider-errors.js";
-import { formatApplicationModelId } from "../../src/domain/provider/logic/application-model-id.js";
+import {
+  savedModelContextWindowTokens,
+  savedModelTokenCounterMode,
+} from "../../src/domain/provider/model/saved-model-settings.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
 import {
   clearProtocolAdapters,
@@ -102,14 +106,14 @@ describe("ProviderModelService settings", () => {
       "openai",
       "claude-3-5-sonnet",
     );
-    assert.equal(saved.settings.contextWindowTokens, 200_000);
+    assert.equal(savedModelContextWindowTokens(saved.settings), 200_000);
   });
 
   it("save unknown model gets contextWindowTokens 128_000", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "unknown-model");
-    assert.equal(saved.settings.contextWindowTokens, 128_000);
+    assert.equal(savedModelContextWindowTokens(saved.settings), 128_000);
   });
 
   it("updateSettings rejects non-positive contextWindowTokens", async () => {
@@ -129,7 +133,7 @@ describe("ProviderModelService settings", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "gpt-4o");
-    assert.equal(saved.settings.tokenCounterMode, "auto");
+    assert.equal(savedModelTokenCounterMode(saved.settings), "auto");
   });
 
   it("updateSettings persists tokenCounterMode round-trip", async () => {
@@ -141,7 +145,7 @@ describe("ProviderModelService settings", () => {
       "gpt-4o",
       { tokenCounterMode: "gemma" },
     );
-    assert.equal(updated.settings.tokenCounterMode, "gemma");
+    assert.equal(savedModelTokenCounterMode(updated.settings), "gemma");
     const appId = formatApplicationModelId("openai", "gpt-4o");
     assert.equal(
       await bundle.providerModels.getTokenCounterMode(appId),
@@ -169,6 +173,17 @@ describe("ProviderModelService settings", () => {
         }),
       (e) => e instanceof ProviderError && e.code === "INVALID_ARGUMENT",
     );
+  });
+
+  it("updateSettings 持久化 thinking 为 v2 JSON", async () => {
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    await bundle.providerModels.create("openai", "gpt-4o");
+    const updated = await bundle.providerModels.updateSettings("openai", "gpt-4o", {
+      thinking: { enabled: true },
+    });
+    assert.equal(updated.settings.generation.thinking.enabled, true);
+    assert.equal(updated.settings.schemaVersion, 2);
   });
 });
 
