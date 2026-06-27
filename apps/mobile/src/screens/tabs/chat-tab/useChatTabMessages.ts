@@ -565,7 +565,6 @@ export function useChatTabMessageActions({
           );
           resetStreamingDisplay();
           await reloadMessages(true);
-          bumpWorktreeUiToken();
           showToast(
             skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
@@ -618,7 +617,6 @@ export function useChatTabMessageActions({
       runtime,
       reloadMessages,
       resetStreamingDisplay,
-      bumpWorktreeUiToken,
       showToast,
     ],
   );
