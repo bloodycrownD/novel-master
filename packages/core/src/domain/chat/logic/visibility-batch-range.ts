@@ -1,11 +1,5 @@
 /** 消息可见性多选：按 role 限制可勾选行（Desktop / Mobile / WebView 共用语义）。 */
 
-import {
-  computeTailBatchRangeFromSelection,
-  selectTailBatchEligibleIdsFromAnchor as selectTailEligibleFromAnchor,
-  type TailBatchRow,
-} from "./tail-batch-range.js";
-
 export type MessageVisibilityBatchMode = "hide" | "restore";
 
 export type TranscriptSelectableRole = "user" | "assistant" | "none";
@@ -54,7 +48,7 @@ export function computeHideRangeFromSelection(
 }
 
 /**
- * 恢复：showRange(min(selected.seq), sessionMaxSeq)。
+ * 恢复：showRange(min(selectedUser.seq), sessionMaxSeq)。
  *
  * @deprecated 请改用 {@link computeTailBatchRangeFromSelection}（restore / delete 共用）。
  */
@@ -63,22 +57,27 @@ export function computeShowRangeFromSelection(
   selectedIds: ReadonlySet<string>,
   sessionMaxSeq: number,
 ): { fromSeq: number; toSeq: number } | null {
-  return computeTailBatchRangeFromSelection(
-    toTailBatchRows(messages),
+  return computeVisibilityRestoreRangeFromSelection(
+    messages,
     selectedIds,
     sessionMaxSeq,
   );
 }
 
-function toTailBatchRows(
+/** 可见性 restore：按 user 选中计算 seq 下界（与 tail-batch hidden 语义无关）。 */
+function computeVisibilityRestoreRangeFromSelection(
   messages: readonly VisibilityBatchMessage[],
-): readonly TailBatchRow[] {
-  return messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    seq: m.seq,
-    selectable: m.role === "user",
-  }));
+  selectedIds: ReadonlySet<string>,
+  sessionMaxSeq: number,
+): { fromSeq: number; toSeq: number } | null {
+  const selected = messages.filter(
+    (m) => selectedIds.has(m.id) && m.role === "user",
+  );
+  if (selected.length === 0) {
+    return null;
+  }
+  const fromSeq = Math.min(...selected.map((m) => m.seq));
+  return { fromSeq, toSeq: sessionMaxSeq };
 }
 
 /**
@@ -105,8 +104,8 @@ export function computeVisibilityBatchAffectedIds(
       messages.filter((m) => m.seq <= range.toSeq).map((m) => m.id),
     );
   }
-  const range = computeTailBatchRangeFromSelection(
-    toTailBatchRows(messages),
+  const range = computeVisibilityRestoreRangeFromSelection(
+    messages,
     selectedIds,
     sessionMaxSeq,
   );
@@ -146,5 +145,9 @@ export function selectVisibilityBatchEligibleIdsFromAnchor(
   if (anchor.role !== "user") {
     return new Set();
   }
-  return selectTailEligibleFromAnchor(toTailBatchRows(messages), anchorId);
+  return new Set(
+    messages
+      .filter((m) => m.role === "user" && m.seq >= anchor.seq)
+      .map((m) => m.id),
+  );
 }

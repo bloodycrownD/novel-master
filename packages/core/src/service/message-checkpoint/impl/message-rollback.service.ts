@@ -29,7 +29,6 @@ import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import { markSessionWorktreeDirty } from "@/service/prompt/logic/mark-session-worktree-dirty.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type {
   MessageRollbackService,
@@ -105,12 +104,6 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
         sweepRevisions: true,
       });
     });
-
-    markSessionWorktreeDirty(
-      this.deps.worktreeSnapshot,
-      projectId,
-      sessionId,
-    );
   }
 
   private async resolveRollbackPlan(

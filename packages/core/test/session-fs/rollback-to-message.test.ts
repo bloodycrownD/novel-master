@@ -104,7 +104,7 @@ describe("rollbackToMessage", () => {
     assert.equal(left[0]!.id, m1.id);
   });
 
-  it("rollback 成功 markDirty worktree 快照", async () => {
+  it("rollback 成功不 markDirty worktree 快照", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -117,10 +117,10 @@ describe("rollbackToMessage", () => {
     });
 
     await rollback.rollbackToMessage(session.id, project.id, user1.id);
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(store.isDirty(project.id, session.id), false);
   });
 
-  it("skipVfsReconcile 仍 markDirty", async () => {
+  it("skipVfsReconcile 不 markDirty", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -133,12 +133,12 @@ describe("rollbackToMessage", () => {
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(store.isDirty(project.id, session.id), false);
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
   });
 
-  it("sessionFs facade 经共享 store rollback 后 markDirty", async () => {
+  it("sessionFs facade 经共享 store rollback 后不 markDirty", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -150,6 +150,6 @@ describe("rollbackToMessage", () => {
 
     assert.equal(ctx.worktreeSnapshot.isDirty(project.id, session.id), false);
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-    assert.equal(ctx.worktreeSnapshot.isDirty(project.id, session.id), true);
+    assert.equal(ctx.worktreeSnapshot.isDirty(project.id, session.id), false);
   });
 });

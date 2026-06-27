@@ -75,10 +75,5 @@ export class DefaultMessageTranscriptEffectsService
         },
       );
     });
-    markSessionWorktreeDirty(
-      this.deps.worktreeSnapshot,
-      projectId,
-      sessionId,
-    );
   }
 }

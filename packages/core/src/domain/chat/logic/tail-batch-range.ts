@@ -12,31 +12,46 @@ export type TailBatchRow = {
   readonly id: string;
   readonly role: string;
   readonly seq: number;
+  readonly hidden: boolean;
   /** 合成行（如 user_vfs_turn 卡片）仍为 true */
   readonly selectable: boolean;
 };
 
-/** restore / delete：任意可选行均可勾选（含 user_vfs_turn 展示行）。 */
-export function isTailBatchRowSelectable(row: TailBatchRow): boolean {
-  return row.selectable;
+/**
+ * delete：仅未隐藏且可选；restore：仅已隐藏且可选。
+ */
+export function isTailBatchRowSelectable(
+  row: TailBatchRow,
+  mode: TailBatchMode,
+): boolean {
+  if (!row.selectable) {
+    return false;
+  }
+  if (mode === "delete") {
+    return !row.hidden;
+  }
+  return row.hidden;
 }
 
 /**
  * 以锚点消息为界，计算 tail 批量应勾选的可选行 id（先重置再范围全选）。
  *
- * 锚点可选时，勾选所有 `seq >= anchor.seq` 的可选行。
+ * 锚点可选时，勾选所有 `seq >= anchor.seq` 且符合 mode 可选规则的行。
  */
 export function selectTailBatchEligibleIdsFromAnchor(
   rows: readonly TailBatchRow[],
   anchorId: string,
+  mode: TailBatchMode,
 ): ReadonlySet<string> {
   const anchor = rows.find((r) => r.id === anchorId);
-  if (anchor == null || !isTailBatchRowSelectable(anchor)) {
+  if (anchor == null || !isTailBatchRowSelectable(anchor, mode)) {
     return new Set();
   }
   return new Set(
     rows
-      .filter((r) => isTailBatchRowSelectable(r) && r.seq >= anchor.seq)
+      .filter(
+        (r) => isTailBatchRowSelectable(r, mode) && r.seq >= anchor.seq,
+      )
       .map((r) => r.id),
   );
 }
@@ -44,23 +59,22 @@ export function selectTailBatchEligibleIdsFromAnchor(
 /**
  * 计算 tail 批量操作将影响的消息 id 集合（范围预览）。
  *
- * 有有效选中时，包含所有 `seq >= min(selected.seq)` 的消息 id（全 role）。
+ * 有有效选中时，包含所有 `seq >= min(selected.seq)` 的消息 id（全 role，含 hidden）。
  */
 export function computeTailBatchAffectedIds(
   rows: readonly TailBatchRow[],
   selectedIds: ReadonlySet<string>,
-  sessionMaxSeq: number,
+  _sessionMaxSeq: number,
 ): ReadonlySet<string> {
-  const range = computeTailBatchRangeFromSelection(
-    rows,
-    selectedIds,
-    sessionMaxSeq,
+  const selected = rows.filter(
+    (r) => selectedIds.has(r.id) && r.selectable,
   );
-  if (range == null) {
+  if (selected.length === 0) {
     return new Set();
   }
+  const fromSeq = Math.min(...selected.map((r) => r.seq));
   return new Set(
-    rows.filter((r) => r.seq >= range.fromSeq).map((r) => r.id),
+    rows.filter((r) => r.seq >= fromSeq).map((r) => r.id),
   );
 }
 
@@ -73,9 +87,10 @@ export function computeTailBatchRangeFromSelection(
   rows: readonly TailBatchRow[],
   selectedIds: ReadonlySet<string>,
   sessionMaxSeq: number,
+  mode: TailBatchMode,
 ): { fromSeq: number; toSeq: number } | null {
   const selected = rows.filter(
-    (r) => selectedIds.has(r.id) && isTailBatchRowSelectable(r),
+    (r) => selectedIds.has(r.id) && isTailBatchRowSelectable(r, mode),
   );
   if (selected.length === 0) {
     return null;

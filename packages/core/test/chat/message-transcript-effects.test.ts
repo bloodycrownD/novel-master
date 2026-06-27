@@ -57,7 +57,7 @@ describe("MessageTranscriptEffectsService", () => {
     assert.ok(messages.every((m) => !m.hidden));
   });
 
-  it("truncateMessagesAfter 删除 tail 并 markDirty，VFS 不变", async () => {
+  it("truncateMessagesAfter 删除 tail 且不 markDirty，VFS 不变", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -76,7 +76,7 @@ describe("MessageTranscriptEffectsService", () => {
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(store.isDirty(project.id, session.id), false);
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
