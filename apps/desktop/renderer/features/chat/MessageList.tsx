@@ -103,11 +103,12 @@ export function MessageList({
             id: item.id,
             role: "user",
             seq: messages.find((m) => m.id === item.id)?.seq ?? 0,
+            hidden: item.hidden,
             selectable: true,
           };
           const rowSelectable =
             batchMode === "restore" || batchMode === "delete"
-              ? isTailBatchRowSelectable(tailBatchRow)
+              ? isTailBatchRowSelectable(tailBatchRow, batchMode)
               : isTranscriptRowSelectable(
                   transcriptSelectableRole("user", batchMode),
                 );
@@ -161,11 +162,12 @@ export function MessageList({
           id: msg.id,
           role: msg.role,
           seq: msg.seq,
+          hidden: msg.hidden,
           selectable: true,
         };
         const rowSelectable =
           batchMode === "restore" || batchMode === "delete"
-            ? isTailBatchRowSelectable(tailBatchRow)
+            ? isTailBatchRowSelectable(tailBatchRow, batchMode)
             : isTranscriptRowSelectable(
                 transcriptSelectableRole(msg.role, batchMode),
               );

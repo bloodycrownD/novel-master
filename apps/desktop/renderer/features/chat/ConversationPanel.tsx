@@ -169,6 +169,7 @@ export function ConversationPanel({
       tailBatchRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
+      messageBatch.mode,
     );
     return {
       affectedIds,
@@ -305,6 +306,7 @@ export function ConversationPanel({
       tailBatchRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
+      messageBatch.mode,
     );
     if (range == null) {
       return;
@@ -397,12 +399,11 @@ export function ConversationPanel({
       }
       setStreamingText("");
       await reloadMessages();
-      notifyWorkspaceMutated();
       showToast(
         skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
       );
     },
-    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
+    [projectId, sessionId, reloadMessages],
   );
 
   const handleMessageAction = useCallback(
@@ -473,6 +474,7 @@ export function ConversationPanel({
     } else if (state.kind === "rollback-degraded") {
       await executeRollback(state.messageId, true);
     } else {
+      let shouldNotifyWorkspace = false;
       if (state.kind === "hide-messages") {
         const result = await ipcMessagesHideRange({
           sessionId,
@@ -483,6 +485,7 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
+        shouldNotifyWorkspace = true;
       } else if (state.kind === "restore-messages") {
         const result = await ipcMessagesShowRange({
           sessionId,
@@ -493,6 +496,7 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
+        shouldNotifyWorkspace = true;
       } else if (state.kind === "delete-messages") {
         const result = await ipcMessagesTruncateAfter({
           projectId,
@@ -506,7 +510,9 @@ export function ConversationPanel({
       }
       messageBatch.exit();
       await reloadMessages();
-      notifyWorkspaceMutated();
+      if (shouldNotifyWorkspace) {
+        notifyWorkspaceMutated();
+      }
     }
   }, [
     confirmState,
@@ -567,9 +573,11 @@ export function ConversationPanel({
   const batchHint =
     messageBatch.mode === "hide"
       ? "点击 assistant 将重置并勾选其上界以内全部 assistant"
-      : messageBatch.mode === "restore" || messageBatch.mode === "delete"
-        ? "点击任意消息将重置并勾选其下界及之后全部消息"
-        : "";
+      : messageBatch.mode === "delete"
+        ? "点击未隐藏的消息将重置并勾选其下界及之后全部消息"
+        : messageBatch.mode === "restore"
+          ? "点击已隐藏的消息将重置并勾选其下界及之后全部消息"
+          : "";
 
   const handleToggleSelect = useCallback(
     (messageId: string) => {
@@ -600,6 +608,7 @@ export function ConversationPanel({
       const nextIds = selectTailBatchEligibleIdsFromAnchor(
         tailBatchRows,
         messageId,
+        messageBatch.mode,
       );
       messageBatch.selectRange(nextIds);
     },
