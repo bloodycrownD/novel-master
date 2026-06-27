@@ -31,9 +31,6 @@ export function ChatMetaBar({meta}: Props) {
         </Text>
       </View>
       <View style={styles.metaRight}>
-        <Text style={[styles.fieldLabel, {color: tokens.textSecondary}]}>
-          模型
-        </Text>
         <Text
           style={[styles.model, {color: tokens.textSecondary}]}
           numberOfLines={1}>
