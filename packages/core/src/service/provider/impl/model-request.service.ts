@@ -6,7 +6,7 @@
 
 import { ProviderError, providerModelNotSavedMessage } from "@/errors/provider-errors.js";
 import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
-import { resolveThinkingParamsForProtocol } from "@/domain/provider/logic/resolve-thinking-wire.js";
+import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { ProviderRepository } from "@/domain/provider/repositories/provider.port.js";
@@ -148,11 +148,11 @@ export class DefaultModelRequestService implements ModelRequestService {
 
     let thinking = options?.thinking;
     if (thinking === undefined) {
-      const savedThinking = saved.settings.generation.thinking;
-      if (savedThinking.enabled) {
-        thinking = resolveThinkingParamsForProtocol(
+      const thinkingLevel = saved.settings.generation.thinkingLevel;
+      if (thinkingLevel !== "off") {
+        thinking = resolveThinkingParamsForLevel(
+          thinkingLevel,
           provider.protocol,
-          savedThinking,
           saved.settings.generation.sampling,
           vendorModelId,
         );

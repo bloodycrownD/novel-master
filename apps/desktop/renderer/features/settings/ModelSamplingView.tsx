@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { parseApplicationModelId, TOKEN_COUNTER_MODE_SELECT_OPTIONS, type LlmProtocolKind, type ModelSamplingParams, type TokenizerOverride } from "@novel-master/core/provider";
+import {
+  parseApplicationModelId,
+  THINKING_LEVEL_SELECT_OPTIONS,
+  TOKEN_COUNTER_MODE_SELECT_OPTIONS,
+  type LlmProtocolKind,
+  type ModelSamplingParams,
+  type ThinkingLevel,
+  type TokenizerOverride,
+} from "@novel-master/core/provider";
 import { Button } from "@/components/ui/Button";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
   ipcProviderModelsGetSaved,
@@ -15,7 +24,6 @@ import {
   SettingsFormSection,
   SettingsPanel,
   SettingsSection,
-  SettingsSwitchRow,
 } from "./settings-ui";
 
 type Nav = {
@@ -35,9 +43,7 @@ type SavedModelSettingsV2 = {
       readonly enabled: boolean;
       readonly params?: ModelSamplingParams;
     };
-    readonly thinking: {
-      readonly enabled: boolean;
-    };
+    readonly thinkingLevel: ThinkingLevel;
   };
 };
 
@@ -63,7 +69,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
   const [contextWindowTokens, setContextWindowTokens] = useState("");
   const [tokenCounterMode, setTokenCounterMode] = useState<TokenizerOverride>("auto");
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -93,7 +99,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
           ? generation.sampling.params
           : undefined;
       setParams(stored);
-      setThinkingEnabled(generation.thinking.enabled);
+      setThinkingLevel(generation.thinkingLevel);
     } finally {
       setLoading(false);
     }
@@ -126,7 +132,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         contextWindowTokens: contextWindow,
         tokenCounterMode,
         sampling,
-        thinking: { enabled: thinkingEnabled },
+        thinkingLevel,
       });
       if (!res.ok) {
         toastSettingsError(res.error.message);
@@ -177,25 +183,27 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         title="内部预算"
         desc="上下文窗口与 token 计数方式，不直接映射 HTTP 生成 body。"
       >
-        <SettingsField label="上下文上限 (tokens)">
-          <input
-            type="number"
-            value={contextWindowTokens}
-            onChange={(e) => setContextWindowTokens(e.target.value)}
-          />
-        </SettingsField>
-        <SettingsField label="计数方式">
-          <select
-            value={tokenCounterMode}
-            onChange={(e) => setTokenCounterMode(e.target.value as TokenizerOverride)}
-          >
-            {TOKEN_COUNTER_MODE_SELECT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </SettingsField>
+        <div className="settings-fields">
+          <SettingsField label="上下文上限 (tokens)">
+            <input
+              type="number"
+              value={contextWindowTokens}
+              onChange={(e) => setContextWindowTokens(e.target.value)}
+            />
+          </SettingsField>
+          <SettingsField label="计数方式">
+            <select
+              value={tokenCounterMode}
+              onChange={(e) => setTokenCounterMode(e.target.value as TokenizerOverride)}
+            >
+              {TOKEN_COUNTER_MODE_SELECT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </SettingsField>
+        </div>
       </SettingsSection>
 
       <SettingsFormSection
@@ -218,11 +226,14 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
         }
       >
         <SamplingForm protocol={protocol} params={params} onChange={setParams} />
-        <SettingsSwitchRow
-          label="思考"
-          checked={thinkingEnabled}
-          onChange={setThinkingEnabled}
-        />
+        <SettingsField label="思考强度">
+          <SegmentedControl
+            aria-label="思考强度"
+            value={thinkingLevel}
+            options={THINKING_LEVEL_SELECT_OPTIONS}
+            onChange={setThinkingLevel}
+          />
+        </SettingsField>
       </SettingsFormSection>
     </SettingsPanel>
   );

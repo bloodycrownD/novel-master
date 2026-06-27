@@ -9,18 +9,20 @@ import {
   parseApplicationModelId,
   savedModelContextWindowTokens,
   savedModelSampling,
-  savedModelThinking,
+  savedModelThinkingLevel,
   savedModelTokenCounterMode,
+  THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
   type LlmProtocolKind,
   type ModelSamplingParams,
+  type ThinkingLevel,
   type TokenizerOverride,
 } from '@novel-master/core/provider';
 import {FormField} from '../../components/form/FormField';
 import {FormSelectField} from '../../components/form/FormSelectField';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {FormSwitchRow} from '../../components/form/FormSwitchRow';
 import {FormTextInput} from '../../components/form/FormTextInput';
+import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SamplingForm} from '../../components/provider/SamplingForm';
@@ -62,7 +64,7 @@ export function ModelSamplingScreen() {
   const [contextWindowTokens, setContextWindowTokens] = useState('');
   const [tokenCounterMode, setTokenCounterMode] =
     useState<TokenizerOverride>('auto');
-  const [thinkingEnabled, setThinkingEnabled] = useState(false);
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>('off');
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -96,7 +98,7 @@ export function ModelSamplingScreen() {
             ? sampling.params
             : undefined;
         setParams(stored);
-        setThinkingEnabled(savedModelThinking(saved.settings).enabled);
+        setThinkingLevel(savedModelThinkingLevel(saved.settings));
       }
     } catch (error) {
       showToast(toastMessage('加载失败', error));
@@ -137,7 +139,7 @@ export function ModelSamplingScreen() {
         contextWindowTokens: contextWindow,
         sampling,
         tokenCounterMode,
-        thinking: {enabled: thinkingEnabled},
+        thinkingLevel,
       });
       showToast('已保存模型设置');
       navigation.goBack();
@@ -243,12 +245,14 @@ export function ModelSamplingScreen() {
           params={params}
           onChange={setParams}
         />
-        <FormSwitchRow
-          label="思考"
-          tokens={tokens}
-          value={thinkingEnabled}
-          onValueChange={setThinkingEnabled}
-        />
+        <FormField label="思考强度" tokens={tokens}>
+          <SegmentedControl
+            tokens={tokens}
+            value={thinkingLevel}
+            options={THINKING_LEVEL_SELECT_OPTIONS}
+            onChange={setThinkingLevel}
+          />
+        </FormField>
       </FormSectionCard>
     </ScreenFormLayout>
   );

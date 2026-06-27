@@ -40,7 +40,7 @@ export function savedModelSettingsToJson(
     },
     generation: {
       sampling: settings.generation.sampling,
-      thinking: settings.generation.thinking,
+      thinkingLevel: settings.generation.thinkingLevel,
     },
   };
 }

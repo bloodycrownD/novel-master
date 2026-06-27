@@ -24,6 +24,19 @@ updatedAt: '2026-06-24 00:00:00'
 
 **合并**：main @ e6e03eea
 
+## thinking-level（待确认 spec）
+
+| 文档 | 路径 |
+|------|------|
+| PRD | Iterations/thinking-level/prd.md |
+| SPEC | Iterations/thinking-level/spec.md |
+
+**依赖**：model-generation-params（main 未发版部分）
+
+**核心方案**：`generation.thinkingLevel` 四档；`ModelThinkingParams` 仅运行时；preset 表 `thinking-level-presets.ts`
+
+**基线**：`v1.2.7` 读入 → `off`；替换未发布 `thinking.enabled` Switch
+
 ## project-agent-config（下一迭代）
 
 | 文档 | 路径 |

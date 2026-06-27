@@ -129,7 +129,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     if (req.sampling?.protocol === "openai") {
       Object.assign(body, req.sampling.openai);
     }
-    applyOpenAiThinkingToBody(body, req.thinking);
+    applyOpenAiThinkingToBody(body, req.thinking, req.vendorModelId);
     return body;
   }
 
@@ -140,6 +140,14 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         ? chatMessagesToTextOnly(req.history)
         : blocksToTextOnly(textBlocks(req.userContent).blocks);
 
+    const body: Record<string, unknown> = {
+      model: req.vendorModelId,
+      stream: false,
+      messages: [{ role: "user", content: userText }],
+      ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
+    };
+    applyOpenAiThinkingToBody(body, req.thinking, req.vendorModelId);
+
     const raw = await fetchJson(this.fetchFn, url, {
       method: "POST",
       headers: {
@@ -147,12 +155,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
         "Content-Type": "application/json",
         ...req.extraHeaders,
       },
-      body: JSON.stringify({
-        model: req.vendorModelId,
-        stream: false,
-        messages: [{ role: "user", content: userText }],
-        ...(req.sampling?.protocol === "openai" ? req.sampling.openai : {}),
-      }),
+      body: JSON.stringify(body),
       signal: req.signal,
     });
     const record = raw as {

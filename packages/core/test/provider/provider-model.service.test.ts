@@ -175,18 +175,18 @@ describe("ProviderModelService settings", () => {
     );
   });
 
-  it("updateSettings 持久化 thinking 为 v2 JSON", async () => {
+  it("updateSettings 持久化 thinkingLevel 为 v2 JSON", async () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await bundle.providerModels.create("openai", "gpt-4o");
     const updated = await bundle.providerModels.updateSettings("openai", "gpt-4o", {
-      thinking: { enabled: true },
+      thinkingLevel: "high",
     });
-    assert.equal(updated.settings.generation.thinking.enabled, true);
+    assert.equal(updated.settings.generation.thinkingLevel, "high");
     assert.equal(updated.settings.schemaVersion, 2);
     const refetched = await bundle.providerModels.getSaved("openai/gpt-4o");
     assert.ok(refetched != null);
-    assert.equal(refetched.settings.generation.thinking.enabled, true);
+    assert.equal(refetched.settings.generation.thinkingLevel, "high");
     assert.equal(refetched.settings.schemaVersion, 2);
   });
 });

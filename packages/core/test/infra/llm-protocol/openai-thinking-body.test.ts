@@ -15,16 +15,41 @@ describe("OpenAI thinking body", () => {
 
   it("未传 thinking 时不写入字段", () => {
     const body: Record<string, unknown> = { model: "gpt-4o" };
-    applyOpenAiThinkingToBody(body, undefined);
+    applyOpenAiThinkingToBody(body, undefined, "gpt-4o");
     assert.equal(body.reasoning_effort, undefined);
+    assert.equal(body.thinking, undefined);
+  });
+
+  it("GLM-4.7 未传 thinking 时显式关闭", () => {
+    const body: Record<string, unknown> = { model: "glm-4.7" };
+    applyOpenAiThinkingToBody(body, undefined, "glm-4.7");
+    assert.deepEqual(body.thinking, { type: "disabled" });
+    assert.equal(body.enable_thinking, false);
+    assert.equal(body.reasoning_effort, undefined);
+  });
+
+  it("GLM-4.7 thinking 开启时写入 enabled 与 reasoning_effort", () => {
+    const body: Record<string, unknown> = { model: "glm-4.7" };
+    applyOpenAiThinkingToBody(
+      body,
+      { protocol: "openai", openai: { reasoning_effort: "medium" } },
+      "glm-4.7",
+    );
+    assert.deepEqual(body.thinking, { type: "enabled" });
+    assert.equal(body.enable_thinking, true);
+    assert.equal(body.reasoning_effort, "medium");
   });
 
   it("协议不匹配时不写入字段", () => {
     const body: Record<string, unknown> = { model: "gpt-4o" };
-    applyOpenAiThinkingToBody(body, {
-      protocol: "anthropic",
-      anthropic: { type: "enabled", budget_tokens: 1000 },
-    });
+    applyOpenAiThinkingToBody(
+      body,
+      {
+        protocol: "anthropic",
+        anthropic: { type: "enabled", budget_tokens: 1000 },
+      },
+      "gpt-4o",
+    );
     assert.equal(body.reasoning_effort, undefined);
   });
 

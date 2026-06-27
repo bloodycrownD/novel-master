@@ -669,7 +669,7 @@ export type ProviderModelsUpdateSettingsRequest = ProviderIdRequest & {
   readonly contextWindowTokens?: number;
   readonly tokenCounterMode?: string;
   readonly sampling?: unknown;
-  readonly thinking?: { readonly enabled: boolean };
+  readonly thinkingLevel?: "off" | "low" | "medium" | "high";
 };
 
 export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {

@@ -36,7 +36,7 @@ export type { SavedModel } from "../domain/provider/model/saved-model.js";
 export type {
   SavedModelSettings,
   SavedModelSamplingSettings,
-  SavedModelThinkingSettings,
+  ThinkingLevel,
   SavedModelInternalSettings,
   SavedModelGenerationSettings,
   SavedModelSettingsPatch,
@@ -45,9 +45,13 @@ export {
   savedModelContextWindowTokens,
   savedModelTokenCounterMode,
   savedModelSampling,
-  savedModelThinking,
+  savedModelThinkingLevel,
   applySavedModelSettingsPatch,
 } from "../domain/provider/model/saved-model-settings.js";
+export {
+  THINKING_LEVEL_OPTIONS,
+  THINKING_LEVEL_SELECT_OPTIONS,
+} from "../domain/provider/model/thinking-level-options.js";
 export type {
   ModelThinkingParams,
   AnthropicThinkingParams,
@@ -58,9 +62,9 @@ export type {
 export { thinkingProtocol } from "../domain/provider/model/model-thinking-params.js";
 export {
   resolveEffectiveMaxTokens,
-  resolveThinkingWireDefaults,
-  resolveThinkingParamsForProtocol,
+  resolveThinkingParamsForLevel,
 } from "../domain/provider/logic/resolve-thinking-wire.js";
+export { thinkingLevelToModelThinkingParams } from "../domain/provider/logic/thinking-level-presets.js";
 export { defaultSavedModelSettings } from "../domain/provider/model/default-saved-model-settings.js";
 export {
   savedModelSettingsFromJson,

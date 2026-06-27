@@ -21,7 +21,7 @@ export function defaultSavedModelSettings(vendorModelId: string): SavedModelSett
     },
     generation: {
       sampling: { enabled: false },
-      thinking: { enabled: false },
+      thinkingLevel: "off",
     },
   };
 }

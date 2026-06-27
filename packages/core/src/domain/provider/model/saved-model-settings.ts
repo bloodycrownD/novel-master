@@ -6,18 +6,14 @@
 
 import type { TokenizerOverride } from "@/infra/tokenizer/logic/resolve-tokenizer-family.js";
 import type { ModelSamplingParams } from "./model-sampling-params.js";
-import type { ModelThinkingParams } from "./model-thinking-params.js";
+
+/** 思考强度档位：关 / 低 / 中 / 高。 */
+export type ThinkingLevel = "off" | "low" | "medium" | "high";
 
 /** {@link SavedModelGenerationSettings} 中的采样小节。 */
 export interface SavedModelSamplingSettings {
   readonly enabled: boolean;
   readonly params?: ModelSamplingParams;
-}
-
-/** {@link SavedModelGenerationSettings} 中的思考小节。 */
-export interface SavedModelThinkingSettings {
-  readonly enabled: boolean;
-  readonly params?: ModelThinkingParams;
 }
 
 /** 内部预算：不直接映射 HTTP 生成 body。 */
@@ -26,10 +22,10 @@ export interface SavedModelInternalSettings {
   readonly tokenCounterMode: TokenizerOverride;
 }
 
-/** 生成参数：采样与思考。 */
+/** 生成参数：采样与思考强度档位。 */
 export interface SavedModelGenerationSettings {
   readonly sampling: SavedModelSamplingSettings;
-  readonly thinking: SavedModelThinkingSettings;
+  readonly thinkingLevel: ThinkingLevel;
 }
 
 /** 单条已保存模型的完整设置（内存恒为 v2）。 */
@@ -44,7 +40,7 @@ export interface SavedModelSettingsPatch {
   readonly contextWindowTokens?: number;
   readonly sampling?: SavedModelSamplingSettings;
   readonly tokenCounterMode?: TokenizerOverride;
-  readonly thinking?: SavedModelThinkingSettings;
+  readonly thinkingLevel?: ThinkingLevel;
 }
 
 /** 读取上下文窗口 token 上限。 */
@@ -62,9 +58,9 @@ export function savedModelSampling(settings: SavedModelSettings): SavedModelSamp
   return settings.generation.sampling;
 }
 
-/** 读取生成思考小节。 */
-export function savedModelThinking(settings: SavedModelSettings): SavedModelThinkingSettings {
-  return settings.generation.thinking;
+/** 读取思考强度档位。 */
+export function savedModelThinkingLevel(settings: SavedModelSettings): ThinkingLevel {
+  return settings.generation.thinkingLevel;
 }
 
 /**
@@ -86,7 +82,7 @@ export function applySavedModelSettingsPatch(
     },
     generation: {
       sampling: patch.sampling ?? settings.generation.sampling,
-      thinking: patch.thinking ?? settings.generation.thinking,
+      thinkingLevel: patch.thinkingLevel ?? settings.generation.thinkingLevel,
     },
   };
 }

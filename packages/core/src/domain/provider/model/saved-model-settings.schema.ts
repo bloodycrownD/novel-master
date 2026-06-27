@@ -10,8 +10,7 @@ import {
   parseTokenCounterModePref,
 } from "@/infra/tokenizer/logic/read-token-counter-mode-pref.js";
 import { modelSamplingParamsSchema } from "./model-sampling-params.schema.js";
-import { modelThinkingParamsSchema } from "./model-thinking-params.schema.js";
-import type { SavedModelSettings } from "./saved-model-settings.js";
+import type { SavedModelSettings, ThinkingLevel } from "./saved-model-settings.js";
 
 const savedModelSamplingSettingsSchema = z
   .object({
@@ -20,12 +19,40 @@ const savedModelSamplingSettingsSchema = z
   })
   .strict();
 
-export const savedModelThinkingSettingsSchema = z
-  .object({
-    enabled: z.boolean(),
-    params: modelThinkingParamsSchema.optional(),
-  })
-  .strict();
+/** 思考强度档位枚举（持久化 canonical）。 */
+export const thinkingLevelSchema = z.enum(["off", "low", "medium", "high"]);
+
+/**
+ * dev-only：将未发布的 `thinking.enabled` 形态映射为 `thinkingLevel`。
+ * 不写入 v1.2.7 用户迁移义务；仅减轻本地 dev 库残留。
+ */
+function normalizeGenerationForRead(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw == null) {
+    return raw;
+  }
+  const generation = raw as Record<string, unknown>;
+  if ("thinkingLevel" in generation) {
+    return raw;
+  }
+  const thinking = generation.thinking;
+  if (typeof thinking !== "object" || thinking == null || !("enabled" in thinking)) {
+    return raw;
+  }
+  const enabled = (thinking as { enabled: boolean }).enabled;
+  const { thinking: _removed, ...rest } = generation;
+  const thinkingLevel: ThinkingLevel = enabled ? "medium" : "off";
+  return { ...rest, thinkingLevel };
+}
+
+const savedModelGenerationSettingsSchema = z.preprocess(
+  normalizeGenerationForRead,
+  z
+    .object({
+      sampling: savedModelSamplingSettingsSchema,
+      thinkingLevel: thinkingLevelSchema.default("off"),
+    })
+    .strict(),
+);
 
 const tokenCounterModeSchema = z
   .string()
@@ -37,13 +64,6 @@ const savedModelInternalSettingsSchema = z
   .object({
     contextWindowTokens: z.number().int().positive(),
     tokenCounterMode: tokenCounterModeSchema,
-  })
-  .strict();
-
-const savedModelGenerationSettingsSchema = z
-  .object({
-    sampling: savedModelSamplingSettingsSchema,
-    thinking: savedModelThinkingSettingsSchema.default({ enabled: false }),
   })
   .strict();
 
@@ -78,7 +98,7 @@ const savedModelSettingsV1DocumentSchema = z
       },
       generation: {
         sampling: doc.sampling,
-        thinking: { enabled: false },
+        thinkingLevel: "off",
       },
     }),
   );

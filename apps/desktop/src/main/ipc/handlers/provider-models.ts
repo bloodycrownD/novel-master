@@ -121,7 +121,7 @@ export async function handleProviderModelsUpdateSettings(
             >[2]["sampling"],
           }
         : {}),
-      ...(req.thinking != null ? { thinking: req.thinking } : {}),
+      ...(req.thinkingLevel != null ? { thinkingLevel: req.thinkingLevel } : {}),
     });
     return { ok: true, data: undefined };
   } catch (err) {
