@@ -389,10 +389,12 @@ export function buildTranscriptBootScript(): string {
     return state.affectedIds.indexOf(messageId) >= 0;
   }
 
-  function isBatchRowSelectable(messageRole, batchModeKind) {
+  function isBatchRowSelectable(messageRole, batchModeKind, rowHidden) {
     if (!batchModeKind) return false;
     if (batchModeKind === 'hide') return messageRole === 'assistant';
-    return true;
+    if (batchModeKind === 'delete') return !rowHidden;
+    if (batchModeKind === 'restore') return !!rowHidden;
+    return false;
   }
 
   function transcriptSelectableRole(messageRole, batchModeKind) {
@@ -464,7 +466,7 @@ export function buildTranscriptBootScript(): string {
     var selectedClass = selected ? ' selected' : '';
     var inRangeClass = inRange ? ' in-range' : '';
     var selectableRole = transcriptSelectableRole('user', state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = isBatchRowSelectable('user', state.flags.batchMode ? state.flags.batchModeKind : null);
+    var rowSelectable = isBatchRowSelectable('user', state.flags.batchMode ? state.flags.batchModeKind : null, !!row.hidden);
     var html = '';
     if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
@@ -746,7 +748,7 @@ export function buildTranscriptBootScript(): string {
     var selectedClass = selected ? ' selected' : '';
     var inRangeClass = inRange ? ' in-range' : '';
     var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = isBatchRowSelectable(role, state.flags.batchMode ? state.flags.batchModeKind : null);
+    var rowSelectable = isBatchRowSelectable(role, state.flags.batchMode ? state.flags.batchModeKind : null, !!row.hidden);
     var html = '';
     if (state.flags.batchMode && rowSelectable) {
       html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +

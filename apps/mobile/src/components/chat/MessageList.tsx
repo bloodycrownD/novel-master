@@ -19,6 +19,7 @@ import { type ChatMessage } from "@novel-master/core/chat";
 import type {MessageBatchMode} from './transcript-selectable-role';
 import {isTailBatchMode} from './transcript-selectable-role';
 import {
+  isTailBatchRowSelectable,
   isTranscriptRowSelectable,
   transcriptSelectableRole,
 } from './transcript-selectable-role';
@@ -465,13 +466,17 @@ export function MessageList({
 
   const isBatchRowSelectable = (
     role: string,
+    hidden: boolean,
     mode: MessageBatchMode | null | undefined,
   ): boolean => {
     if (mode == null) {
       return false;
     }
     if (isTailBatchMode(mode)) {
-      return true;
+      return isTailBatchRowSelectable(
+        {id: '', role, seq: 0, hidden, selectable: true},
+        mode,
+      );
     }
     return isTranscriptRowSelectable(transcriptSelectableRole(role, mode));
   };
@@ -584,7 +589,7 @@ export function MessageList({
               />
             </View>
           );
-          const rowSelectable = isBatchRowSelectable('user', batchMode);
+          const rowSelectable = isBatchRowSelectable('user', hidden, batchMode);
           if (batchMode) {
             return (
               <View style={styles.batchRow} accessibilityState={{selected}}>
@@ -636,7 +641,11 @@ export function MessageList({
           )
         );
 
-        const rowSelectable = isBatchRowSelectable(row.message.role, batchMode);
+        const rowSelectable = isBatchRowSelectable(
+          row.message.role,
+          hidden,
+          batchMode,
+        );
 
         if (batchMode) {
           return (
