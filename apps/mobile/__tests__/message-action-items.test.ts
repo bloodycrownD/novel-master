@@ -48,4 +48,12 @@ describe('buildMessageActionItems', () => {
     ).map(i => i.action);
     expect(actions).toEqual(['copy', 'fork', 'rollback']);
   });
+
+  it('hidden 消息不展示回滚', () => {
+    const actions = buildMessageActionItems({
+      ...msg([{type: 'text', text: 'hi'}]),
+      hidden: true,
+    }).map(i => i.action);
+    expect(actions).toEqual(['edit', 'copy', 'fork']);
+  });
 });

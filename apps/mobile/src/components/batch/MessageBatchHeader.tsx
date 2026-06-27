@@ -31,9 +31,9 @@ function batchHint(mode: MessageBatchMode): string {
     return '点击 assistant 将重置并勾选其上界以内全部 assistant';
   }
   if (mode === 'delete') {
-    return '点击任意消息将重置并勾选其下界及之后全部消息（仅删聊天记录）';
+    return '点击未隐藏的消息将重置并勾选其下界及之后全部消息（仅删聊天记录）';
   }
-  return '点击任意消息将重置并勾选其下界及之后全部消息';
+  return '点击已隐藏的消息将重置并勾选其下界及之后全部消息';
 }
 
 export function MessageBatchHeader({

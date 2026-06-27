@@ -322,17 +322,22 @@ export function useChatTabMessageActions({
     messageBatch.enterDelete();
   }, [agentRunning, messageBatch, showToast]);
 
-  const finishMessageBatchMutation = useCallback(async () => {
-    exitMessageBatch();
-    await reloadMessages(true);
-    bumpWorktreeUiToken();
-    void refreshChatTokenLabel();
-  }, [
-    exitMessageBatch,
-    reloadMessages,
-    bumpWorktreeUiToken,
-    refreshChatTokenLabel,
-  ]);
+  const finishMessageBatchMutation = useCallback(
+    async (mode: MessageBatchMode) => {
+      exitMessageBatch();
+      await reloadMessages(true);
+      if (mode === 'hide' || mode === 'restore') {
+        bumpWorktreeUiToken();
+      }
+      void refreshChatTokenLabel();
+    },
+    [
+      exitMessageBatch,
+      reloadMessages,
+      bumpWorktreeUiToken,
+      refreshChatTokenLabel,
+    ],
+  );
 
   const confirmVisibilityBatch = useCallback(async () => {
     if (projectId == null || sessionId == null || messageBatch.mode == null) {
@@ -349,7 +354,7 @@ export function useChatTabMessageActions({
         1,
         toSeq,
       );
-      await finishMessageBatchMutation();
+      await finishMessageBatchMutation('hide');
       showToast('已隐藏');
     };
 
@@ -360,7 +365,7 @@ export function useChatTabMessageActions({
         fromSeq,
         toSeq,
       );
-      await finishMessageBatchMutation();
+      await finishMessageBatchMutation('restore');
       showToast('已恢复');
     };
 
@@ -370,7 +375,7 @@ export function useChatTabMessageActions({
         sessionId,
         afterSeq,
       );
-      await finishMessageBatchMutation();
+      await finishMessageBatchMutation('delete');
       showToast('已删除');
     };
 
@@ -406,6 +411,7 @@ export function useChatTabMessageActions({
       tailRows,
       messageBatch.selectedIds,
       sessionMaxSeq,
+      messageBatch.mode,
     );
     if (range == null) {
       return;

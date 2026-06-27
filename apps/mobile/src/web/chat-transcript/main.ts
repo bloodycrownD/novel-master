@@ -519,7 +519,9 @@ export function buildTranscriptBootScript(): string {
     if (row.text) items.push({ label: '编辑', action: 'edit' });
     items.push({ label: '复制', action: 'copy' });
     items.push({ label: '分叉', action: 'fork' });
-    items.push({ label: '回滚', action: 'rollback', danger: true });
+    if (!row.hidden) {
+      items.push({ label: '回滚', action: 'rollback', danger: true });
+    }
     return items;
   }
 

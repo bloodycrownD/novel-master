@@ -271,6 +271,7 @@ export function ChatConversationPanel({
       tailRows,
       messageBatchSelectedIds,
       sessionMaxSeq,
+      messageBatchMode,
     );
     return {
       affectedIds,

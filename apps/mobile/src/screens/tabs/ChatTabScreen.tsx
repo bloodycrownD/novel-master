@@ -197,7 +197,11 @@ export function ChatTabScreen() {
       }
       if (isTailBatchMode(messageBatch.mode)) {
         const tailRows = chatMessagesToTailBatchRows(messages.chatMessages);
-        const nextIds = selectTailBatchEligibleIdsFromAnchor(tailRows, messageId);
+        const nextIds = selectTailBatchEligibleIdsFromAnchor(
+          tailRows,
+          messageId,
+          messageBatch.mode,
+        );
         messageBatch.selectRange(nextIds);
       }
     },
