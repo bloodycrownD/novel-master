@@ -6,6 +6,7 @@ import {
   resolveAgentForProject,
   resolveApplicationModelId,
 } from '@novel-master/core/agent';
+import {PROJECT_AGENT_META_DISPLAY_LABEL} from '@novel-master/core/chat';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {resolveModelDisplayLabel} from '../provider/model-display-label';
 
@@ -59,7 +60,7 @@ export async function loadChatAgentMeta(
     return {
       source: 'project-custom',
       agentId: undefined,
-      agentName: definition.name,
+      agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
       modelLabel,
       tokenLabel: '',
       hasDedicatedModel,

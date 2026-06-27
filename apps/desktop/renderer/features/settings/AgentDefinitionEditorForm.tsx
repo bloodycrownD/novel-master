@@ -504,17 +504,18 @@ export const AgentDefinitionEditorForm = forwardRef<
       </SettingsSection>
 
       <SettingsSection title="模型">
-        <div className="settings-row settings-row--switch">
-          <span className="settings-row__label">专属模型</span>
+        <SettingsField label="专属模型" row>
           <Switch
             checked={modelEnabled}
             disabled={disabled}
             onChange={setModelEnabled}
             aria-label="专属模型"
           />
-        </div>
+        </SettingsField>
         {!modelEnabled ? (
-          <p className="settings-hint">未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。</p>
+          <p className="settings-hint settings-hint--compact">
+            未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
+          </p>
         ) : (
           <>
             <SettingsField label="服务商">

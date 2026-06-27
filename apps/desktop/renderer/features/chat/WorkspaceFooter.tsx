@@ -33,6 +33,9 @@ function tokenCountLabel(stats: PromptChatTokenStatsResponse): string {
 export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) {
   const { notifyAgentConfigChanged } = useShellNav();
   const [agentName, setAgentName] = useState("—");
+  const [agentSource, setAgentSource] = useState<
+    "global" | "project-custom" | "none"
+  >("none");
   const [modelLabel, setModelLabel] = useState("—");
   const [tokenStats, setTokenStats] = useState<PromptChatTokenStatsResponse | null>(
     null,
@@ -49,6 +52,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     ]);
     if (meta.ok) {
       setAgentName(meta.data.agentName);
+      setAgentSource(meta.data.source);
       setModelLabel(meta.data.modelLabel);
     }
     if (tokens.ok) {
@@ -60,7 +64,13 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
     void reload();
   }, [reload]);
 
+  const agentLocked = agentSource === "project-custom";
+
   const openAgentPicker = async () => {
+    if (agentLocked) {
+      showToast("本项目使用项目专属智能体，请在项目菜单「智能体配置」中修改。");
+      return;
+    }
     const result = await ipcAgentListPicker();
     if (!result.ok || result.data.rows.length === 0) {
       showToast("暂无 Agent，请先在设置中配置。");
@@ -92,9 +102,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
       <div className="workspace-footer__picks">
         <button
           type="button"
-          className="workspace-pick"
+          className={`workspace-pick${agentLocked ? " workspace-pick--locked" : ""}`}
           data-action="open-agent-picker"
-          aria-label="切换 agent"
+          aria-label={agentLocked ? "项目专属智能体（不可切换）" : "切换 agent"}
+          aria-disabled={agentLocked}
           onClick={() => void openAgentPicker()}
         >
           <span className="workspace-pick__icon" aria-hidden="true">

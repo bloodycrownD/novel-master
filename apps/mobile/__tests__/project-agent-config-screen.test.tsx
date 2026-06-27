@@ -58,6 +58,26 @@ jest.mock('../src/components/form/FormSectionCard', () => {
   };
 });
 
+jest.mock('../src/components/form/FormSwitchRow', () => {
+  const mockReact = require('react');
+  return {
+    FormSwitchRow: ({
+      value,
+      onValueChange,
+      testID,
+    }: {
+      value: boolean;
+      onValueChange: (value: boolean) => void;
+      testID?: string;
+    }) =>
+      mockReact.createElement('Switch', {
+        testID,
+        value,
+        onValueChange,
+      }),
+  };
+});
+
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -85,24 +105,24 @@ jest.mock('react-native', () => {
   const mockReact = require('react');
   return {
     Alert: {alert: jest.fn()},
-    Pressable: ({
-      children,
-      onPress,
-      testID,
-    }: {
-      children?: React.ReactNode;
-      onPress?: () => void;
-      testID?: string;
-    }) =>
-      mockReact.createElement(
-        'Pressable',
-        {testID, onPress},
-        children,
-      ),
     StyleSheet: {
       create: (s: object) => s,
       hairlineWidth: 1,
     },
+    Switch: ({
+      value,
+      onValueChange,
+      testID,
+    }: {
+      value?: boolean;
+      onValueChange?: (value: boolean) => void;
+      testID?: string;
+    }) =>
+      mockReact.createElement('Switch', {
+        testID,
+        value,
+        onValueChange: () => onValueChange?.(!value),
+      }),
     Text: ({
       children,
       testID,
@@ -117,34 +137,6 @@ jest.mock('react-native', () => {
       children?: React.ReactNode;
       testID?: string;
     }) => mockReact.createElement('View', {testID}, children),
-  };
-});
-
-jest.mock('../src/components/ui/SegmentedControl', () => {
-  const mockReact = require('react');
-  return {
-    SegmentedControl: ({
-      options,
-      onChange,
-    }: {
-      options: {value: string; label: string; testID?: string}[];
-      onChange: (value: string) => void;
-    }) =>
-      mockReact.createElement(
-        'View',
-        {testID: 'segmented-control'},
-        options.map(option =>
-          mockReact.createElement(
-            'Pressable',
-            {
-              key: option.value,
-              testID: option.testID,
-              onPress: () => onChange(option.value),
-            },
-            option.label,
-          ),
-        ),
-      ),
   };
 });
 
@@ -177,16 +169,18 @@ describe('ProjectAgentConfigScreen', () => {
     expect(json).toContain('全局助手');
   });
 
-  it('首次切自定义时克隆全局 Agent 并写入 updateAgentConfig', async () => {
+  it('开启专属智能体时克隆全局 Agent 并写入 updateAgentConfig', async () => {
     let tree!: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<ProjectAgentConfigScreen />);
       await Promise.resolve();
     });
 
-    const customButton = tree!.root.findByProps({testID: 'project-agent-mode-custom'});
+    const customSwitch = tree!.root.findByProps({
+      testID: 'project-agent-custom-switch',
+    });
     await act(async () => {
-      customButton.props.onPress();
+      customSwitch.props.onValueChange(true);
       await Promise.resolve();
     });
 
@@ -201,7 +195,7 @@ describe('ProjectAgentConfigScreen', () => {
     expect(tree!.root.findByProps({testID: 'agent-editor-form'})).toBeTruthy();
   });
 
-  it('已有 definition 时切自定义仅更新 mode', async () => {
+  it('已有 definition 时开启专属智能体仅更新 mode', async () => {
     const existing = buildDefaultAgentDefinitionPreservingName('项目副本');
     mockGetAgentConfig.mockResolvedValue({
       mode: 'follow',
@@ -214,9 +208,11 @@ describe('ProjectAgentConfigScreen', () => {
       await Promise.resolve();
     });
 
-    const customButton = tree!.root.findByProps({testID: 'project-agent-mode-custom'});
+    const customSwitch = tree!.root.findByProps({
+      testID: 'project-agent-custom-switch',
+    });
     await act(async () => {
-      customButton.props.onPress();
+      customSwitch.props.onValueChange(true);
       await Promise.resolve();
     });
 

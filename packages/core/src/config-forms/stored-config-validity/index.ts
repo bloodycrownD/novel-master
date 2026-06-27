@@ -7,5 +7,8 @@
 export * from "./types.js";
 export * from "./labels.js";
 export { assessEventsConfigWire } from "./assess-events-config-wire.js";
-export { assessAgentDefinitionWire } from "./assess-agent-definition-wire.js";
+export {
+  assessAgentDefinitionWire,
+  resolveAgentDefinitionFromStorage,
+} from "./assess-agent-definition-wire.js";
 export { buildDefaultAgentDefinitionPreservingName } from "./build-default-agent-definition.js";

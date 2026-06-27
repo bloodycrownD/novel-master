@@ -12,6 +12,7 @@ type Props = {
   onValueChange: (value: boolean) => void;
   description?: string;
   disabled?: boolean;
+  testID?: string;
 };
 
 export function FormSwitchRow({
@@ -21,6 +22,7 @@ export function FormSwitchRow({
   onValueChange,
   description,
   disabled = false,
+  testID,
 }: Props) {
   const hasDescription = description != null && description !== '';
   return (
@@ -35,6 +37,7 @@ export function FormSwitchRow({
       </View>
       <View style={styles.switchWrap}>
         <Switch
+          testID={testID}
           value={value}
           onValueChange={onValueChange}
           disabled={disabled}

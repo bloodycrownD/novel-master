@@ -6,6 +6,7 @@ import {
   resolveAgentForProject,
   resolveApplicationModelId,
 } from "@novel-master/core/agent";
+import { PROJECT_AGENT_META_DISPLAY_LABEL } from "@novel-master/core/chat";
 import type {
   IpcResult,
   PromptAgentMetaResponse,
@@ -91,7 +92,7 @@ export async function handlePromptAgentMeta(
         ok: true,
         data: {
           source: "project-custom",
-          agentName: definition.name,
+          agentName: PROJECT_AGENT_META_DISPLAY_LABEL,
           modelLabel,
           hasDedicatedModel,
         },

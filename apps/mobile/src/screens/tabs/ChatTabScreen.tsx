@@ -90,7 +90,7 @@ export function ChatTabScreen() {
     if (scope.chatSubview === 'conversation' && sessionId != null) {
       refreshChatMeta().catch(() => undefined);
     }
-  }, [scope.chatSubview, sessionId, refreshChatMeta]);
+  }, [scope.chatSubview, sessionId, projectId, refreshChatMeta]);
 
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);

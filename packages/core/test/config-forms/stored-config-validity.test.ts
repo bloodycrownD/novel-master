@@ -9,6 +9,7 @@ import {
   assessAgentDefinitionWire,
   assessEventsConfigWire,
   buildDefaultAgentDefinitionPreservingName,
+  resolveAgentDefinitionFromStorage,
   STORED_CONFIG_LABELS,
 } from "../../src/config-forms/stored-config-validity/index.js";
 import {
@@ -118,6 +119,36 @@ describe("assessAgentDefinitionWire", () => {
       assert.equal(health.value.name, "writer");
       assert.equal(health.value.runtime?.maxSteps, 5);
     }
+  });
+});
+
+describe("resolveAgentDefinitionFromStorage", () => {
+  it("已解析领域对象（persist 为数组）→ valid", () => {
+    const wire = {
+      schemaVersion: 1,
+      name: "writer",
+      prompts: { persist: {}, dynamic: {} },
+    };
+    const parsed = assessAgentDefinitionWire(wire);
+    assert.equal(parsed.status, "valid");
+    if (parsed.status !== "valid") {
+      return;
+    }
+    const health = resolveAgentDefinitionFromStorage(parsed.value);
+    assert.equal(health.status, "valid");
+    if (health.status === "valid") {
+      assert.equal(health.value.name, "writer");
+    }
+  });
+
+  it("wire 文档仍走 assess", () => {
+    const wire = {
+      schemaVersion: 1,
+      name: "writer",
+      prompts: { persist: {}, dynamic: {} },
+    };
+    const health = resolveAgentDefinitionFromStorage(wire);
+    assert.equal(health.status, "valid");
   });
 });
 

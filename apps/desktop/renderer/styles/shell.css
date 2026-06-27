@@ -1011,6 +1011,16 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   box-shadow: var(--shadow-card-subtle);
 }
 
+.workspace-pick--locked {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.workspace-pick--locked:hover {
+  border-color: var(--border-light);
+  box-shadow: none;
+}
+
 .workspace-pick__icon {
   flex-shrink: 0;
   width: 28px;
@@ -2059,6 +2069,22 @@ html:not([data-theme="dark"]) .chat-composer__send:not(:disabled) {
   margin-top: 0;
   margin-bottom: 10px;
   font-size: 12px;
+}
+
+.settings-section--form .settings-fields > .settings-section > .settings-field--row {
+  margin-bottom: 4px;
+}
+
+.settings-section--form .settings-fields > .settings-section > .settings-field--row .settings-field__label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.settings-hint--compact {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .settings-fields {

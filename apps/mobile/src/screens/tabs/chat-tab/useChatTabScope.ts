@@ -141,6 +141,10 @@ export function useChatTabScope({
     reloadLists().catch(() => undefined);
   }, [reloadLists]);
 
+  useEffect(() => {
+    refreshChatMeta().catch(() => undefined);
+  }, [refreshChatMeta]);
+
   const currentSession = sessions.find(s => s.id === sessionId);
 
   const backFromConversation = useCallback(

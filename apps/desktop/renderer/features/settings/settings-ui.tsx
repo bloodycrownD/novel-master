@@ -214,13 +214,18 @@ export function SettingsField({
   label,
   children,
   narrow,
+  row,
 }: {
   label: string;
   children: ReactNode;
   narrow?: boolean;
+  /** 标签与控件同一行（如 Switch），无卡片背景。 */
+  row?: boolean;
 }) {
   return (
-    <label className={`settings-field${narrow ? " settings-field--narrow" : ""}`}>
+    <label
+      className={`settings-field${narrow ? " settings-field--narrow" : ""}${row ? " settings-field--row" : ""}`}
+    >
       <span className="settings-field__label">{label}</span>
       {children}
     </label>

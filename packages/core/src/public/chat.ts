@@ -6,7 +6,10 @@ export type {
   ProjectAgentConfigPatch,
   ProjectAgentMode,
 } from "../domain/chat/model/project-agent-config.js";
-export { DEFAULT_PROJECT_AGENT_CONFIG } from "../domain/chat/model/project-agent-config.js";
+export {
+  DEFAULT_PROJECT_AGENT_CONFIG,
+  PROJECT_AGENT_META_DISPLAY_LABEL,
+} from "../domain/chat/model/project-agent-config.js";
 export {
   projectAgentConfigSchema,
   projectAgentModeSchema,

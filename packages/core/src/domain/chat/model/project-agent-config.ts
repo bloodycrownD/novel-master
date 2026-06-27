@@ -26,3 +26,6 @@ export interface ProjectAgentConfigPatch {
 export const DEFAULT_PROJECT_AGENT_CONFIG: ProjectAgentConfig = {
   mode: "follow",
 };
+
+/** 项目 custom 模式下会话顶栏/底栏展示的固定 Agent 名称。 */
+export const PROJECT_AGENT_META_DISPLAY_LABEL = "项目智能体";

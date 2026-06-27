@@ -1,15 +1,15 @@
 /**
- * 项目智能体配置页：跟随全局 / 自定义专属 Agent。
+ * 项目智能体配置页：压缩配置式开关（关=跟随全局，开=项目专属）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type AgentDefinition } from "@novel-master/core/agent";
 import {
   assessAgentDefinitionWire,
   buildDefaultAgentDefinitionPreservingName,
+  resolveAgentDefinitionFromStorage,
 } from "@novel-master/core/config-forms/stored-config-validity";
 import type { ProjectAgentModeDto } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { showToast } from "@/components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
@@ -22,12 +22,7 @@ import {
   AgentDefinitionEditorForm,
   type AgentDefinitionEditorFormHandle,
 } from "./AgentDefinitionEditorForm";
-import { SettingsFormSection } from "./settings-ui";
-
-const MODE_OPTIONS = [
-  { value: "follow" as const, label: "跟随全局" },
-  { value: "custom" as const, label: "自定义" },
-] satisfies ReadonlyArray<{ value: ProjectAgentModeDto; label: string }>;
+import { SettingsFormSection, SettingsSwitchRow } from "./settings-ui";
 
 export type ProjectAgentConfigViewProps = {
   open: boolean;
@@ -59,7 +54,7 @@ function definitionFromStored(stored: unknown): AgentDefinition | undefined {
   if (stored == null) {
     return undefined;
   }
-  const health = assessAgentDefinitionWire(stored);
+  const health = resolveAgentDefinitionFromStorage(stored);
   if (health.status === "valid") {
     return health.value;
   }
@@ -206,6 +201,8 @@ export function ProjectAgentConfigView({
     return null;
   }
 
+  const customEnabled = mode === "custom";
+
   return (
     <div className="text-prompt-overlay" onClick={onClose}>
       <div
@@ -234,23 +231,22 @@ export function ProjectAgentConfigView({
         ) : (
           <>
             <SettingsFormSection
-              title="策略"
-              desc="选择本项目运行时使用的 Agent 配置来源"
+              title="项目智能体配置"
+              desc="关闭时跟随全局智能体；开启后为本项目单独配置，会话中将显示「项目智能体」。"
             >
-              <SegmentedControl
-                value={mode}
-                options={MODE_OPTIONS}
-                onChange={handleModeChange}
-                aria-label="项目智能体策略"
+              <SettingsSwitchRow
+                label="启用项目专属智能体"
+                checked={customEnabled}
+                onChange={(next) => handleModeChange(next ? "custom" : "follow")}
               />
 
-              {mode === "follow" ? (
+              {!customEnabled ? (
                 <div className="project-agent-config-modal__follow">
                   <p className="settings-hint">
                     跟随全局：<strong>{globalAgentName}</strong>
                   </p>
                   <p className="settings-hint settings-hint--subtle">
-                    全局 Agent 变更后，本项目将自动使用新的全局配置。
+                    全局 Agent 变更后，本项目将自动使用新的全局配置；关闭专属配置时会保留自定义草稿但不生效。
                   </p>
                 </div>
               ) : formDefinition ? (

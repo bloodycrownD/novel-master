@@ -17,6 +17,7 @@
   "createUserVfsTurnService",
   "createUserVfsTurnServiceBundle",
   "DEFAULT_PROJECT_AGENT_CONFIG",
+  "PROJECT_AGENT_META_DISPLAY_LABEL",
   "deriveDirPathsFromFileTree",
   "deriveToolUsesFromVfsActions",
   "diffWorkspaceForUserVfsFlush",

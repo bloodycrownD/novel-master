@@ -1,5 +1,5 @@
 /**
- * 项目智能体配置：跟随全局 / 项目专属自定义。
+ * 项目智能体配置：压缩配置式开关（关=跟随全局，开=项目专属）。
  */
 import React, {useCallback, useEffect, useState} from 'react';
 import {Alert, StyleSheet, Text, View} from 'react-native';
@@ -11,7 +11,7 @@ import {type ProjectAgentConfig, type ProjectAgentMode} from '@novel-master/core
 import {buildDefaultAgentDefinitionPreservingName} from '@novel-master/core/config-forms/stored-config-validity';
 import {AgentEditorForm} from '../../components/agent/AgentEditorForm';
 import {FormSectionCard} from '../../components/form/FormSectionCard';
-import {SegmentedControl} from '../../components/ui/SegmentedControl';
+import {FormSwitchRow} from '../../components/form/FormSwitchRow';
 import {useUnsavedGuard} from '../../hooks/useUnsavedGuard';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
@@ -21,11 +21,6 @@ import {useToast} from '../../components/chrome/ToastHost';
 import {toastMessage} from '../../errors/toast-message';
 
 type ScreenRoute = RouteProp<RootStackParamList, 'ProjectAgentConfig'>;
-
-const MODE_OPTIONS = [
-  {value: 'follow' as const, label: '跟随全局', testID: 'project-agent-mode-follow'},
-  {value: 'custom' as const, label: '自定义', testID: 'project-agent-mode-custom'},
-];
 
 function cloneDefinition(def: AgentDefinition): AgentDefinition {
   return JSON.parse(JSON.stringify(def)) as AgentDefinition;
@@ -158,47 +153,64 @@ export function ProjectAgentConfigScreen() {
     );
   }
 
+  const customEnabled = mode === 'custom';
+
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <SegmentedControl
-        tokens={tokens}
-        options={MODE_OPTIONS}
-        value={mode}
-        onChange={value => {
-          void handleModeChange(value).catch(() => undefined);
-        }}
-      />
-      {mode === 'follow' ? (
-        <View style={styles.followWrap}>
-          <FormSectionCard title="当前策略" tokens={tokens}>
-            <Text style={[styles.followTitle, {color: tokens.text}]}>
-              跟随全局智能体
-            </Text>
-            <Text style={[styles.followMeta, {color: tokens.textSecondary}]}>
-              当前全局：{globalAgentName}
-            </Text>
-            <Text style={[styles.followHint, {color: tokens.textTertiary}]}>
-              本项目对话将使用全局当前 Agent 的配置；切回跟随时会保留自定义草稿但不生效。
-            </Text>
-          </FormSectionCard>
-        </View>
-      ) : config?.definition != null ? (
-        <AgentEditorForm
-          editorMode="project"
-          projectId={projectId}
-          initialDefinition={config.definition}
-          onDirtyChange={setFormDirty}
-          onSaved={async () => {
-            setFormDirty(false);
-            const refreshed = await runtime.projects.getAgentConfig(projectId);
-            setConfig(refreshed);
-          }}
-        />
-      ) : (
-        <View style={styles.center}>
-          <Text style={{color: tokens.textSecondary}}>正在准备自定义配置…</Text>
-        </View>
-      )}
+      <View style={styles.content}>
+        <FormSectionCard
+          title="项目智能体配置"
+          tokens={tokens}
+          hint="关闭时跟随全局智能体；开启后为本项目单独配置，会话中将显示「项目智能体」。">
+          <FormSwitchRow
+            label="启用项目专属智能体"
+            tokens={tokens}
+            value={customEnabled}
+            disabled={modeBusy}
+            testID="project-agent-custom-switch"
+            onValueChange={enabled => {
+              void handleModeChange(enabled ? 'custom' : 'follow').catch(
+                () => undefined,
+              );
+            }}
+          />
+          {!customEnabled ? (
+            <View style={styles.followBody}>
+              <Text style={[styles.followTitle, {color: tokens.text}]}>
+                跟随全局智能体
+              </Text>
+              <Text style={[styles.followMeta, {color: tokens.textSecondary}]}>
+                当前全局：{globalAgentName}
+              </Text>
+              <Text style={[styles.followHint, {color: tokens.textTertiary}]}>
+                本项目对话将使用全局当前 Agent 的配置；关闭专属配置时会保留自定义草稿但不生效。
+              </Text>
+            </View>
+          ) : null}
+        </FormSectionCard>
+
+        {customEnabled ? (
+          config?.definition != null ? (
+            <AgentEditorForm
+              editorMode="project"
+              projectId={projectId}
+              initialDefinition={config.definition}
+              onDirtyChange={setFormDirty}
+              onSaved={async () => {
+                setFormDirty(false);
+                const refreshed = await runtime.projects.getAgentConfig(projectId);
+                setConfig(refreshed);
+              }}
+            />
+          ) : (
+            <View style={styles.center}>
+              <Text style={{color: tokens.textSecondary}}>
+                正在准备自定义配置…
+              </Text>
+            </View>
+          )
+        ) : null}
+      </View>
       {modeBusy ? (
         <View style={styles.busyOverlay} pointerEvents="none">
           <Text style={{color: tokens.textSecondary}}>切换模式中…</Text>
@@ -210,10 +222,11 @@ export function ProjectAgentConfigScreen() {
 
 const styles = StyleSheet.create({
   root: {flex: 1},
+  content: {flex: 1, paddingTop: 8, paddingHorizontal: 5},
   center: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
-  followWrap: {paddingTop: 8, paddingHorizontal: 5},
-  followTitle: {fontSize: 16, fontWeight: '600', marginBottom: 6},
-  followMeta: {fontSize: 14, lineHeight: 20, marginBottom: 8},
+  followBody: {marginTop: 12, gap: 6},
+  followTitle: {fontSize: 16, fontWeight: '600'},
+  followMeta: {fontSize: 14, lineHeight: 20},
   followHint: {fontSize: 13, lineHeight: 19},
   busyOverlay: {
     position: 'absolute',

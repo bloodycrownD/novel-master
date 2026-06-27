@@ -298,12 +298,7 @@ export function AgentEditorForm(props: Props) {
       setLoadError(null);
       setInvalidConfig(null);
       try {
-        const health = assessAgentDefinitionWire(initialDefinition);
-        if (health.status === 'invalid') {
-          setInvalidConfig({code: health.code, message: health.message});
-          return;
-        }
-        await populateFormFromDefinition(health.value);
+        await populateFormFromDefinition(initialDefinition);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setLoadError(message);
@@ -619,7 +614,7 @@ export function AgentEditorForm(props: Props) {
           <Text style={[styles.invalidReason, {color: tokens.textSecondary}]}>
             {reason}
           </Text>
-          {detail.length > 0 ? (
+          {typeof __DEV__ !== 'undefined' && __DEV__ && detail.length > 0 ? (
             <Text style={[styles.invalidDetail, {color: tokens.textTertiary}]}>
               {detail}
             </Text>
