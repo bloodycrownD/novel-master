@@ -130,6 +130,7 @@ export {
 } from "../service/chat/create-user-vfs-turn-service.js";
 export type { UserVfsTurnServiceBundle } from "../service/chat/create-user-vfs-turn-service.js";
 export { TOOL_TURN_BRIDGE_TEXT } from "../service/chat/impl/append-tool-turn-bridge.js";
+export { resolveVfsToolFilePath } from "../domain/tool/logic/vfs-tool-file-path.js";
 export type {
   UserVfsTurnService,
   UserVfsTurnOp,

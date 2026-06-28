@@ -39,6 +39,7 @@
   "readMessageMetadata",
   "resolveCurrentWorkspaceSnapshot",
   "resolveFlushBaselineTree",
+  "resolveVfsToolFilePath",
   "selectTailBatchEligibleIdsFromAnchor",
   "selectVisibilityBatchEligibleIdsFromAnchor",
   "synthesizeUserVfsFlushActions",
