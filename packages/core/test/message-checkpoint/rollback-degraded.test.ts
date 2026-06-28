@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import {
+  isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
   isSessionFsError,
   SessionFsError,
@@ -38,7 +39,7 @@ async function setupR1Scenario() {
 }
 
 describe("MessageRollbackService (degraded fallback)", () => {
-  it("DF1: revision 缺失时完整回滚抛 ROLLBACK_VFS_RESTORE_FAILED，消息与 VFS 不变", async () => {
+  it("DF1: revision 缺失时完整回滚抛 ROLLBACK_REVISION_BACKFILL_REQUIRED，消息与 VFS 不变", async () => {
     const { ctx, project, session, svfs, assistant1 } = await setupR1Scenario();
 
     const physicalPath = toPhysicalPath(
@@ -59,12 +60,13 @@ describe("MessageRollbackService (degraded fallback)", () => {
       () =>
         ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
       (error: unknown) => {
-        assert.equal(isRollbackVfsDegradableError(error), true);
+        assert.equal(isRollbackRevisionBackfillRequiredError(error), true);
+        assert.equal(isRollbackVfsDegradableError(error), false);
         assert.equal(
-          isSessionFsError(error, "ROLLBACK_VFS_RESTORE_FAILED"),
+          isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED"),
           true,
         );
-        assert.match((error as Error).message, /^工作区无法恢复：/);
+        assert.match((error as Error).message, /回滚所需 revision 缺失/);
         return true;
       },
     );
@@ -72,6 +74,37 @@ describe("MessageRollbackService (degraded fallback)", () => {
     assert.equal((await svfs.read("/poem.md")).content, "violets");
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 4);
+  });
+
+  it("DF1b: revision 缺失时 revisionHeadBackfill 回滚成功，缺失 path 保持现状", async () => {
+    const { ctx, project, session, svfs, user1, assistant1 } =
+      await setupR1Scenario();
+
+    const physicalPath = toPhysicalPath(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      "/poem.md",
+    );
+    const revisions = await ctx.conn.query<{ version: number }>(
+      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
+      [physicalPath],
+    );
+    await ctx.conn.execute(
+      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
+      [physicalPath, revisions[0]!.version],
+    );
+
+    await ctx.sessionFs.rollbackToMessage(
+      session.id,
+      project.id,
+      assistant1.id,
+      { revisionHeadBackfill: true },
+    );
+
+    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0]!.id, user1.id);
+    assert.equal(messages[1]!.id, assistant1.id);
   });
 
   it("DF2: DF1 场景后 skipVfsReconcile 仅截断 tail，VFS 不变", async () => {

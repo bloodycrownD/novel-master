@@ -8,6 +8,8 @@
 export type RollbackOptions = {
   /** 跳过 VFS reconcile，仅截断 tail 消息与 checkpoint。 */
   readonly skipVfsReconcile?: boolean;
+  /** 对缺失 revision 的 path 用 live head 回补后再 reconcile。 */
+  readonly revisionHeadBackfill?: boolean;
 };
 
 /**

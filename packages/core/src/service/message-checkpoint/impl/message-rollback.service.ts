@@ -6,9 +6,13 @@
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
+import { findMissingRevisionPointers } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
 import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
-import { restorePathToRevision } from "@/domain/message-checkpoint/logic/restore-path.js";
+import {
+  restorePathToRevision,
+  restorePathToRevisionWithBackfill,
+} from "@/domain/message-checkpoint/logic/restore-path.js";
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
@@ -19,9 +23,11 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
+import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import {
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
+  sessionFsRollbackRevisionBackfillRequired,
   sessionFsRollbackVfsRestoreFailed,
   isSessionFsError,
 } from "@/errors/session-fs-errors.js";
@@ -68,6 +74,14 @@ function formatDegradableMessage(cause: unknown): string {
   return `工作区无法恢复：${detail}`;
 }
 
+function assertRollbackOptionsCompatible(options?: RollbackOptions): void {
+  if (options?.skipVfsReconcile && options?.revisionHeadBackfill) {
+    throw new Error(
+      "skipVfsReconcile 与 revisionHeadBackfill 不能同时指定",
+    );
+  }
+}
+
 /**
  * Forward-restores the workspace to an anchor checkpoint tree and truncates tail state.
  */
@@ -80,16 +94,37 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     anchorMessageId: string,
     options?: RollbackOptions,
   ): Promise<void> {
+    assertRollbackOptionsCompatible(options);
+
     const plan = await this.resolveRollbackPlan(
       sessionId,
       projectId,
       anchorMessageId,
     );
 
+    if (!options?.skipVfsReconcile) {
+      const missing = await findMissingRevisionPointers(
+        this.deps.revisions,
+        plan.scope,
+        plan.targetTree,
+        plan.pathsToReconcile,
+      );
+      if (missing.length > 0 && !options?.revisionHeadBackfill) {
+        throw sessionFsRollbackRevisionBackfillRequired(missing, {
+          sessionId,
+          messageId: anchorMessageId,
+        });
+      }
+    }
+
     await this.deps.conn.transaction(async (tx) => {
       if (!options?.skipVfsReconcile) {
         try {
-          await this.reconcileVfsPaths(tx, plan);
+          await this.reconcileVfsPaths(
+            tx,
+            plan,
+            options?.revisionHeadBackfill === true,
+          );
         } catch (cause) {
           throw sessionFsRollbackVfsRestoreFailed(
             formatDegradableMessage(cause),
@@ -174,21 +209,34 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
   private async reconcileVfsPaths(
     tx: TdbcConnection,
     plan: RollbackPlan,
+    useRevisionHeadBackfill: boolean,
   ): Promise<void> {
     const { scope, pathsToReconcile, targetTree, projectId, sessionId } = plan;
     const vfs = this.scopedVfs(projectId, sessionId, tx);
     const revisions = new SqliteVfsRevisionRepository(tx);
+    const entries = new SqliteVfsEntryRepository(tx);
 
     for (const logicalPath of pathsToReconcile) {
       const version = targetTree.get(logicalPath);
       if (version != null) {
-        await restorePathToRevision(
-          vfs,
-          revisions,
-          scope,
-          logicalPath,
-          version,
-        );
+        if (useRevisionHeadBackfill) {
+          await restorePathToRevisionWithBackfill(
+            vfs,
+            revisions,
+            entries,
+            scope,
+            logicalPath,
+            version,
+          );
+        } else {
+          await restorePathToRevision(
+            vfs,
+            revisions,
+            scope,
+            logicalPath,
+            version,
+          );
+        }
       } else {
         await this.deletePathIfExists(vfs, logicalPath);
       }

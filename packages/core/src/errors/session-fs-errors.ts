@@ -10,7 +10,8 @@ export type SessionFsErrorCode =
   | "ROLLBACK_MESSAGE_SESSION_MISMATCH"
   | "ROLLBACK_NO_CHECKPOINT"
   | "RESTORE_REVISION_MISSING"
-  | "ROLLBACK_VFS_RESTORE_FAILED";
+  | "ROLLBACK_VFS_RESTORE_FAILED"
+  | "ROLLBACK_REVISION_BACKFILL_REQUIRED";
 
 /**
  * Unified error for session-fs rollback operations.
@@ -21,6 +22,7 @@ export class SessionFsError extends Error {
   readonly messageId?: string;
   readonly logicalPath?: string;
   readonly revisionVersion?: number;
+  readonly missingLogicalPaths?: readonly string[];
 
   constructor(
     code: SessionFsErrorCode,
@@ -30,6 +32,7 @@ export class SessionFsError extends Error {
       messageId?: string;
       logicalPath?: string;
       revisionVersion?: number;
+      missingLogicalPaths?: readonly string[];
     },
   ) {
     super(message);
@@ -39,6 +42,7 @@ export class SessionFsError extends Error {
     this.messageId = options?.messageId;
     this.logicalPath = options?.logicalPath;
     this.revisionVersion = options?.revisionVersion;
+    this.missingLogicalPaths = options?.missingLogicalPaths;
   }
 }
 
@@ -126,6 +130,31 @@ export function sessionFsRollbackVfsRestoreFailed(
   },
 ): SessionFsError {
   return new SessionFsError("ROLLBACK_VFS_RESTORE_FAILED", message, options);
+}
+
+/**
+ * checkpoint revision 缺失，需用户确认 head 回补后再回滚。
+ */
+export function sessionFsRollbackRevisionBackfillRequired(
+  missingLogicalPaths: readonly string[],
+  options?: {
+    sessionId?: string;
+    messageId?: string;
+  },
+): SessionFsError {
+  const paths = missingLogicalPaths.join(", ");
+  return new SessionFsError(
+    "ROLLBACK_REVISION_BACKFILL_REQUIRED",
+    `回滚所需 revision 缺失，需确认使用最新内容修复：${paths}`,
+    { ...options, missingLogicalPaths },
+  );
+}
+
+/** 判断是否为 revision 缺失需回补错误（含 cause 链）。 */
+export function isRollbackRevisionBackfillRequiredError(
+  error: unknown,
+): boolean {
+  return isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
 }
 
 /**

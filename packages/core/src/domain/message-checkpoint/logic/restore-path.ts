@@ -11,10 +11,12 @@ import {
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { sessionFsRestoreRevisionMissing } from "@/errors/session-fs-errors.js";
 import { isVfsError } from "@/errors/vfs-errors.js";
 import type { VfsRestorePort } from "@/domain/vfs/ports/vfs-restore.port.js";
+import { backfillMissingRevisionIfNeeded } from "./backfill-missing-revision.js";
 
 /**
  * Creates parent directories from root down (idempotent mkdir).
@@ -64,4 +66,33 @@ export async function restorePathToRevision(
 
   await ensureDirectoryChain(vfs, logicalPath);
   await vfs.write(logicalPath, rev.content ?? "", { versionCheck: false });
+}
+
+/**
+ * 缺失 revision 时先回补 placeholder，再执行严格 restore。
+ *
+ * @returns 是否对该 path 执行了 head 回补
+ */
+export async function restorePathToRevisionWithBackfill(
+  vfs: VfsRestorePort,
+  revisionRepo: VfsRevisionRepository,
+  entryRepo: VfsEntryRepository,
+  scope: VfsScope,
+  logicalPath: string,
+  version: number,
+): Promise<{ backfilled: boolean }> {
+  const physical = toPhysicalPath(scope, logicalPath);
+  const backfilled = await backfillMissingRevisionIfNeeded(
+    { revisionRepo, entryRepo },
+    physical,
+    version,
+  );
+  await restorePathToRevision(
+    vfs,
+    revisionRepo,
+    scope,
+    logicalPath,
+    version,
+  );
+  return { backfilled };
 }
