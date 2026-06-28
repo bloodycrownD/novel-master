@@ -59,12 +59,12 @@ describe("savedModelSettings schema", () => {
     assert.equal(savedModelTokenCounterMode(parsed), "gemma");
   });
 
-  it("写盘仅输出 v2", () => {
+  it("写盘仅输出 v2，新建默认 thinkingLevel 为高", () => {
     const json = savedModelSettingsToJson(defaultSavedModelSettings("gpt-4o"));
     assert.equal(json.schemaVersion, 2);
     assert.ok("internal" in json);
     assert.ok("generation" in json);
-    assert.equal(json.generation.thinkingLevel, "off");
+    assert.equal(json.generation.thinkingLevel, "high");
   });
 
   it("v2 缺 thinkingLevel 时默认为 off", () => {

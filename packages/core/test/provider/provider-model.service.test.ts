@@ -5,6 +5,7 @@ import { createProviderServices } from "../../src/service/provider/create-provid
 import { ProviderError } from "../../src/errors/provider-errors.js";
 import {
   savedModelContextWindowTokens,
+  savedModelThinkingLevel,
   savedModelTokenCounterMode,
 } from "../../src/domain/provider/model/saved-model-settings.js";
 import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
@@ -134,6 +135,13 @@ describe("ProviderModelService settings", () => {
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     const saved = await bundle.providerModels.create("openai", "gpt-4o");
     assert.equal(savedModelTokenCounterMode(saved.settings), "auto");
+  });
+
+  it("new saved model defaults thinkingLevel to high", async () => {
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create("openai", "gpt-4o");
+    assert.equal(savedModelThinkingLevel(saved.settings), "high");
   });
 
   it("updateSettings persists tokenCounterMode round-trip", async () => {

@@ -82,7 +82,13 @@ function createService(
 describe("DefaultModelRequestService thinking", () => {
   it("thinkingLevel 为 off 时不向 adapter 传 thinking", async () => {
     let captured: LlmChatRequest | undefined;
-    const settings = defaultSavedModelSettings("gpt-4o");
+    const settings: SavedModelSettings = {
+      ...defaultSavedModelSettings("gpt-4o"),
+      generation: {
+        sampling: { enabled: false },
+        thinkingLevel: "off",
+      },
+    };
     const svc = createService(settings, "openai", (req) => {
       captured = req;
     });
@@ -90,6 +96,21 @@ describe("DefaultModelRequestService thinking", () => {
     await svc.request("openai/test-model", "hello");
 
     assert.equal(captured?.thinking, undefined);
+  });
+
+  it("新建默认 thinkingLevel 为 high 时解析并传给 adapter", async () => {
+    let captured: LlmChatRequest | undefined;
+    const settings = defaultSavedModelSettings("gpt-4o");
+    const svc = createService(settings, "openai", (req) => {
+      captured = req;
+    });
+
+    await svc.request("openai/test-model", "hello");
+
+    assert.deepEqual(captured?.thinking, {
+      protocol: "openai",
+      openai: { reasoning_effort: "high" },
+    });
   });
 
   it("thinkingLevel medium 时解析并传给 adapter", async () => {
