@@ -102,6 +102,18 @@ describe("DefaultVfsService (integration)", () => {
     assert.equal(hits[0]!.line, 1);
   });
 
+  it("空 storage root 目录 list 返回 [] 而非 NOT_FOUND", async () => {
+    const ctx = getNovelMasterTestContext();
+    const vfs = createVfsService(ctx.conn);
+    const projectId = `proj-${testIsolationSuffix()}`;
+    assert.deepEqual(await vfs.list("/template"), []);
+    assert.deepEqual(await vfs.list(`/projects/${projectId}/template`), []);
+    assert.deepEqual(
+      await vfs.list(`/projects/${projectId}/sessions/sess-1`),
+      [],
+    );
+  });
+
   it("lists with recursive depth", async () => {
     const ctx = getNovelMasterTestContext();
     const conn = ctx.conn;

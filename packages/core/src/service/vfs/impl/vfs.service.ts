@@ -42,8 +42,9 @@ export class DefaultVfsService implements VfsService {
   ): Promise<VfsListEntry[]> {
     const normalized = normalizePath(dir);
     const entries = await this.repo.list(normalized, options);
-    if (normalized !== "/") {
+    if (normalized !== "/" && !isStorageRootParent(normalized)) {
       const entry = await this.repo.findByPath(normalized);
+      // 虚拟 storage root 无目录行时视为空目录，与 mkdir 豁免一致
       if (entry == null && entries.length === 0) {
         throw vfsNotFound(normalized);
       }
