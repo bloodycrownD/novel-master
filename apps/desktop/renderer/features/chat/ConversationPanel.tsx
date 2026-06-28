@@ -413,11 +413,14 @@ export function ConversationPanel({
       }
       setStreamingText("");
       await reloadMessages();
+      if (!options?.skipVfsReconcile) {
+        notifyWorkspaceMutated();
+      }
       showToast(
         options?.skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
       );
     },
-    [projectId, sessionId, reloadMessages],
+    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
   );
 
   const handleMessageAction = useCallback(
