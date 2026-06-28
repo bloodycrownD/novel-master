@@ -397,6 +397,8 @@ export type SessionFsRollbackRequest = {
   readonly messageId: string;
   /** 为 true 时仅截断消息，不恢复工作区文件。 */
   readonly skipVfsReconcile?: boolean;
+  /** 为 true 时 revision 缺失 path 使用 head 回补，其余 path 正常回滚。 */
+  readonly revisionHeadBackfill?: boolean;
 };
 
 export type ProjectPullTemplateRequest = {

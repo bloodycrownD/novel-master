@@ -105,6 +105,7 @@ export function ConversationPanel({
     | { kind: "restore-messages"; fromSeq: number; toSeq: number }
     | { kind: "delete-messages"; afterSeq: number; fromSeq: number }
     | { kind: "rollback"; messageId: string }
+    | { kind: "rollback-backfill"; messageId: string }
     | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
     | null
   >(null);
@@ -378,14 +379,27 @@ export function ConversationPanel({
   );
 
   const executeRollback = useCallback(
-    async (messageId: string, skipVfsReconcile?: boolean) => {
+    async (
+      messageId: string,
+      options?: {
+        skipVfsReconcile?: boolean;
+        revisionHeadBackfill?: boolean;
+      },
+    ) => {
       const result = await ipcMessagesRollback({
         projectId,
         sessionId,
         messageId,
-        ...(skipVfsReconcile ? { skipVfsReconcile: true } : {}),
+        ...(options?.skipVfsReconcile ? { skipVfsReconcile: true } : {}),
+        ...(options?.revisionHeadBackfill
+          ? { revisionHeadBackfill: true }
+          : {}),
       });
       if (!result.ok) {
+        if (result.error.code === "ROLLBACK_REVISION_BACKFILL_REQUIRED") {
+          setConfirmState({ kind: "rollback-backfill", messageId });
+          return;
+        }
         if (result.error.code === "ROLLBACK_VFS_RESTORE_FAILED") {
           setConfirmState({
             kind: "rollback-degraded",
@@ -400,7 +414,7 @@ export function ConversationPanel({
       setStreamingText("");
       await reloadMessages();
       showToast(
-        skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
+        options?.skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
       );
     },
     [projectId, sessionId, reloadMessages],
@@ -471,8 +485,10 @@ export function ConversationPanel({
     if (!state) return;
     if (state.kind === "rollback") {
       await executeRollback(state.messageId);
+    } else if (state.kind === "rollback-backfill") {
+      await executeRollback(state.messageId, { revisionHeadBackfill: true });
     } else if (state.kind === "rollback-degraded") {
-      await executeRollback(state.messageId, true);
+      await executeRollback(state.messageId, { skipVfsReconcile: true });
     } else {
       let shouldNotifyWorkspace = false;
       if (state.kind === "hide-messages") {
@@ -538,22 +554,29 @@ export function ConversationPanel({
     if (confirmState.kind === "rollback-degraded") {
       return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
     }
+    if (confirmState.kind === "rollback-backfill") {
+      return "快照丢失，将使用最新内容修复。\n\n其余文件将正常回滚至锚点。";
+    }
     return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
   })();
 
   const confirmTitle =
     confirmState?.kind === "rollback-degraded"
       ? "无法恢复工作区"
-      : confirmState?.kind === "delete-messages"
-        ? "确认删除消息"
-        : "确认操作";
+      : confirmState?.kind === "rollback-backfill"
+        ? "快照丢失"
+        : confirmState?.kind === "delete-messages"
+          ? "确认删除消息"
+          : "确认操作";
 
   const confirmLabel =
     confirmState?.kind === "rollback-degraded"
       ? "仅删除后续对话"
-      : confirmState?.kind === "delete-messages"
-        ? "删除"
-        : "确定";
+      : confirmState?.kind === "rollback-backfill"
+        ? "继续回滚"
+        : confirmState?.kind === "delete-messages"
+          ? "删除"
+          : "确定";
 
   const batchBarTitle =
     messageBatch.mode === "hide"
@@ -780,6 +803,7 @@ export function ConversationPanel({
         confirmLabel={confirmLabel}
         danger={
           confirmState?.kind === "rollback" ||
+          confirmState?.kind === "rollback-backfill" ||
           confirmState?.kind === "rollback-degraded" ||
           confirmState?.kind === "delete-messages"
         }

@@ -288,11 +288,20 @@ export async function handleMessagesRollback(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
+    const rollbackOptions =
+      req.skipVfsReconcile || req.revisionHeadBackfill
+        ? {
+            ...(req.skipVfsReconcile ? { skipVfsReconcile: true as const } : {}),
+            ...(req.revisionHeadBackfill
+              ? { revisionHeadBackfill: true as const }
+              : {}),
+          }
+        : undefined;
     await rt.sessionFs.rollbackToMessage(
       req.sessionId,
       req.projectId,
       req.messageId,
-      req.skipVfsReconcile ? { skipVfsReconcile: true } : undefined,
+      rollbackOptions,
     );
     return { ok: true, data: undefined };
   } catch (err) {

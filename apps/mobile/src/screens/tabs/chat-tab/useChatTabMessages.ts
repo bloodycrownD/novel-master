@@ -27,7 +27,11 @@ import {
 } from '@/components/chat/transcript-selectable-role';
 import type {MessageBatchMode} from '@/components/chat/transcript-selectable-role';
 import type {useBatchSelection} from '@/hooks/useBatchSelection';
-import {isRollbackVfsDegradableError} from '@novel-master/core/session-fs';
+import {
+  isRollbackRevisionBackfillRequiredError,
+  isRollbackVfsDegradableError,
+} from '@novel-master/core/session-fs';
+import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
 import {
   getSessionViewCache,
@@ -554,22 +558,47 @@ export function useChatTabMessageActions({
 
       const runRollback = async (
         targetMessageId: string,
-        skipVfsReconcile = false,
+        options?: RollbackOptions,
       ) => {
         try {
           await rollbackToMessage(
             runtime,
             {projectId, sessionId},
             targetMessageId,
-            skipVfsReconcile ? {skipVfsReconcile: true} : undefined,
+            options,
           );
           resetStreamingDisplay();
           await reloadMessages(true);
           showToast(
-            skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
+            options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
         } catch (error) {
-          if (!skipVfsReconcile && isRollbackVfsDegradableError(error)) {
+          if (
+            !options?.skipVfsReconcile &&
+            !options?.revisionHeadBackfill &&
+            isRollbackRevisionBackfillRequiredError(error)
+          ) {
+            Alert.alert(
+              '快照丢失',
+              '快照丢失，将使用最新内容修复。\n\n其余文件将正常回滚至锚点。',
+              [
+                {text: '取消', style: 'cancel'},
+                {
+                  text: '继续回滚',
+                  style: 'destructive',
+                  onPress: () => {
+                    void runRollback(targetMessageId, {
+                      revisionHeadBackfill: true,
+                    }).catch(err => {
+                      showToast(toastMessage('回滚失败', err));
+                    });
+                  },
+                },
+              ],
+            );
+            return;
+          }
+          if (!options?.skipVfsReconcile && isRollbackVfsDegradableError(error)) {
             const errorMessage = formatError(error);
             Alert.alert(
               '无法恢复工作区',
@@ -580,7 +609,9 @@ export function useChatTabMessageActions({
                   text: '仅删除后续对话',
                   style: 'destructive',
                   onPress: () => {
-                    void runRollback(targetMessageId, true).catch(err => {
+                    void runRollback(targetMessageId, {
+                      skipVfsReconcile: true,
+                    }).catch(err => {
                       showToast(toastMessage('回滚失败', err));
                     });
                   },
