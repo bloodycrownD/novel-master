@@ -414,6 +414,25 @@ describe('message-blocks', () => {
     ).toBeUndefined();
   });
 
+  it('vfsToolFilePath normalizes relative paths', () => {
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't3',
+        name: 'write',
+        input: {path: 'chapter.md'},
+        status: 'success',
+      }),
+    ).toBe('/chapter.md');
+    expect(
+      vfsToolFilePath({
+        toolUseId: 't4',
+        name: 'read',
+        input: {path: 'notes/a.md'},
+        status: 'success',
+      }),
+    ).toBe('/notes/a.md');
+  });
+
   it('B2-4: UA 两段折叠为单个 user_vfs_turn', () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages = [

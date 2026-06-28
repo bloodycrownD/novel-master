@@ -4,7 +4,7 @@
 import { type ChatMessage, type ContentBlock, type ParsedUserVfsAction, type ToolResultBlock, type ToolUseBlock } from "@novel-master/core/chat";
 import { resolveToolResultOk } from "@novel-master/core";
 
-import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAt, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
+import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAt, resolveVfsToolFilePath, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
@@ -202,21 +202,9 @@ function summarizeToolInput(name: string, input: Record<string, unknown>): strin
   }
 }
 
-/** File tools whose `input.path` points at a file we can open in session workspace. */
-const FILE_OPEN_TOOL_NAMES = new Set(['read', 'write', 'edit']);
-
-/** Logical file path for workspace preview, or undefined if not openable. */
+/** 工具卡片可打开的逻辑文件路径；不可打开时返回 undefined。 */
 export function vfsToolFilePath(tool: ToolCallView): string | undefined {
-  const name =
-    tool.name.startsWith('vfs.') ? tool.name.slice(4) : tool.name;
-  if (!FILE_OPEN_TOOL_NAMES.has(name)) {
-    return undefined;
-  }
-  const path = tool.input.path;
-  if (typeof path === 'string' && path.startsWith('/')) {
-    return path;
-  }
-  return undefined;
+  return resolveVfsToolFilePath(tool.name, tool.input);
 }
 
 export function toolCallSummary(tool: ToolCallView): string {

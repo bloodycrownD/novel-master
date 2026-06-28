@@ -85,4 +85,11 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain("var streamTextBody = ensureStreamTextBody(bubble);");
     expect(script).toContain("streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));");
   });
+
+  it('normalizes relative vfs tool paths in boot script', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain('resolveVfsToolFilePath');
+    expect(script).toContain('resolveLogicalPathForToolCard');
+    expect(script).toContain("return normalizePathForToolCard('/' + trimmed);");
+  });
 });

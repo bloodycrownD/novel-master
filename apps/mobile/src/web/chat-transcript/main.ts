@@ -23,6 +23,7 @@ import {
 } from '../../components/chat/anchored-menu-layout';
 import {DECODE_LITERAL_HTML_ENTITIES_BOOT} from '../../components/rich-content/decode-literal-html-entities';
 import {STREAM_MARKDOWN_BOOT} from './stream-markdown.boot';
+import {VFS_TOOL_FILE_PATH_BOOT} from './vfs-tool-file-path-boot';
 
 export function buildTranscriptBootScript(): string {
   return `
@@ -146,13 +147,7 @@ export function buildTranscriptBootScript(): string {
 
   ${STREAM_MARKDOWN_BOOT}
 
-  function vfsToolFilePath(name, input) {
-    if (name.indexOf('vfs.') === 0) name = name.slice(4);
-    if (!VFS_FILE_TOOLS[name]) return null;
-    var path = input && input.path;
-    if (typeof path === 'string' && path.charAt(0) === '/') return path;
-    return null;
-  }
+  ${VFS_TOOL_FILE_PATH_BOOT}
 
   function summarizeToolInput(name, input) {
     var path = input && (input.path || input.dir || input.from);

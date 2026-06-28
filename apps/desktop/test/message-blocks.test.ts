@@ -71,7 +71,7 @@ test("vfsToolFilePath：delete 与非文件工具返回 undefined", () => {
   );
 });
 
-test("vfsToolFilePath：path 无 / 前缀返回 undefined", () => {
+test("vfsToolFilePath：相对 path 规范化为绝对逻辑路径", () => {
   assert.equal(
     vfsToolFilePath({
       toolUseId: "t7",
@@ -79,6 +79,6 @@ test("vfsToolFilePath：path 无 / 前缀返回 undefined", () => {
       input: { path: "relative.md" },
       status: "success",
     }),
-    undefined,
+    "/relative.md",
   );
 });
