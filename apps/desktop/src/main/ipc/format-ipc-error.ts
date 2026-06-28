@@ -45,6 +45,14 @@ function typedDomainCode(err: Error): string | undefined {
   return coded.code;
 }
 
+function sessionFsMissingPaths(
+  err: Error,
+): readonly string[] | undefined {
+  const paths = (err as Error & { missingLogicalPaths?: readonly string[] })
+    .missingLogicalPaths;
+  return paths != null && paths.length > 0 ? paths : undefined;
+}
+
 /**
  * Maps a thrown value to an {@link IpcErrorPayload} for IPC responses.
  * Typed Core errors use their domain `code`; generic errors fall back to `name`.
@@ -59,7 +67,12 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   if (err instanceof Error) {
     const code = typedDomainCode(err);
     if (code != null) {
-      return { code, message: err.message };
+      const missingLogicalPaths = sessionFsMissingPaths(err);
+      return {
+        code,
+        message: err.message,
+        ...(missingLogicalPaths != null ? { missingLogicalPaths } : {}),
+      };
     }
     return { code: err.name || "ERROR", message: err.message };
   }

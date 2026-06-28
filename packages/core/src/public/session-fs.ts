@@ -9,6 +9,8 @@ export {
   isSessionFsError,
   isRollbackVfsDegradableError,
   isRollbackRevisionBackfillRequiredError,
+  readRollbackRevisionBackfillMissingPaths,
+  formatRollbackRevisionBackfillAlertMessage,
   sessionFsRollbackMessageNotFound,
   sessionFsRollbackMessageSessionMismatch,
   sessionFsRollbackNoCheckpoint,

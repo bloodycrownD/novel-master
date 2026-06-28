@@ -153,8 +153,36 @@ export function sessionFsRollbackRevisionBackfillRequired(
 /** 判断是否为 revision 缺失需回补错误（含 cause 链）。 */
 export function isRollbackRevisionBackfillRequiredError(
   error: unknown,
-): boolean {
+): error is SessionFsError {
   return isSessionFsError(error, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
+}
+
+/** 从回补错误中读取缺失快照的逻辑路径列表。 */
+export function readRollbackRevisionBackfillMissingPaths(
+  error: unknown,
+): readonly string[] {
+  if (!isRollbackRevisionBackfillRequiredError(error)) {
+    return [];
+  }
+  return error.missingLogicalPaths ?? [];
+}
+
+/**
+ * 构建「快照丢失需回补」二次确认 Alert 正文。
+ *
+ * @param missingLogicalPaths checkpoint 指向但 revision 行缺失的文件路径
+ */
+export function formatRollbackRevisionBackfillAlertMessage(
+  missingLogicalPaths: readonly string[],
+): string {
+  const displayNames = missingLogicalPaths.map((logicalPath) =>
+    logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath,
+  );
+  const fileLines =
+    displayNames.length > 0
+      ? displayNames.map((name) => `· ${name}`).join("\n")
+      : "· （未知文件）";
+  return `快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n${fileLines}\n\n其余文件将正常回滚至锚点。`;
 }
 
 /**

@@ -1,3 +1,4 @@
+import { formatRollbackRevisionBackfillAlertMessage } from "@novel-master/core/session-fs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import type {
@@ -105,7 +106,7 @@ export function ConversationPanel({
     | { kind: "restore-messages"; fromSeq: number; toSeq: number }
     | { kind: "delete-messages"; afterSeq: number; fromSeq: number }
     | { kind: "rollback"; messageId: string }
-    | { kind: "rollback-backfill"; messageId: string }
+    | { kind: "rollback-backfill"; messageId: string; missingLogicalPaths: readonly string[] }
     | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
     | null
   >(null);
@@ -397,7 +398,11 @@ export function ConversationPanel({
       });
       if (!result.ok) {
         if (result.error.code === "ROLLBACK_REVISION_BACKFILL_REQUIRED") {
-          setConfirmState({ kind: "rollback-backfill", messageId });
+          setConfirmState({
+            kind: "rollback-backfill",
+            messageId,
+            missingLogicalPaths: result.error.missingLogicalPaths ?? [],
+          });
           return;
         }
         if (result.error.code === "ROLLBACK_VFS_RESTORE_FAILED") {
@@ -558,7 +563,9 @@ export function ConversationPanel({
       return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
     }
     if (confirmState.kind === "rollback-backfill") {
-      return "快照丢失，将使用最新内容修复。\n\n其余文件将正常回滚至锚点。";
+      return formatRollbackRevisionBackfillAlertMessage(
+        confirmState.missingLogicalPaths,
+      );
     }
     return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
   })();

@@ -1,9 +1,11 @@
 [
   "SessionFsError",
   "createSessionFsService",
+  "formatRollbackRevisionBackfillAlertMessage",
   "isRollbackRevisionBackfillRequiredError",
   "isRollbackVfsDegradableError",
   "isSessionFsError",
+  "readRollbackRevisionBackfillMissingPaths",
   "sessionFsRollbackMessageNotFound",
   "sessionFsRollbackMessageSessionMismatch",
   "sessionFsRollbackNoCheckpoint",

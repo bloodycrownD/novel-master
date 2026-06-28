@@ -28,8 +28,10 @@ import {
 import type {MessageBatchMode} from '@/components/chat/transcript-selectable-role';
 import type {useBatchSelection} from '@/hooks/useBatchSelection';
 import {
+  formatRollbackRevisionBackfillAlertMessage,
   isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
+  readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
 import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
 import {rollbackToMessage} from '@/services/message-rollback.service';
@@ -578,9 +580,11 @@ export function useChatTabMessageActions({
             !options?.revisionHeadBackfill &&
             isRollbackRevisionBackfillRequiredError(error)
           ) {
+            const missingPaths =
+              readRollbackRevisionBackfillMissingPaths(error);
             Alert.alert(
               '快照丢失',
-              '快照丢失，将使用最新内容修复。\n\n其余文件将正常回滚至锚点。',
+              formatRollbackRevisionBackfillAlertMessage(missingPaths),
               [
                 {text: '取消', style: 'cancel'},
                 {

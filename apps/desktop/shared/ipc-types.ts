@@ -155,6 +155,8 @@ export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
 export type IpcErrorPayload = {
   readonly code: string;
   readonly message: string;
+  /** revision 缺失需回补时，丢失快照的逻辑路径列表。 */
+  readonly missingLogicalPaths?: readonly string[];
 };
 
 export type IpcResult<T> =

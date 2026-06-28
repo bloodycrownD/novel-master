@@ -26,12 +26,19 @@ describe("formatIpcError", () => {
   });
 
   it("maps sessionFsRollbackRevisionBackfillRequired to ROLLBACK_REVISION_BACKFILL_REQUIRED", () => {
-    const err = sessionFsRollbackRevisionBackfillRequired(["chapter-1.md"], {
+    const err = sessionFsRollbackRevisionBackfillRequired(
+      ["/chapter-1.md", "/notes/b.md"],
+      {
       sessionId: "sess-1",
       messageId: "msg-1",
-    });
+    },
+    );
     const payload = formatIpcError(err);
     assert.equal(payload.code, "ROLLBACK_REVISION_BACKFILL_REQUIRED");
     assert.match(payload.message, /revision 缺失/);
+    assert.deepEqual(payload.missingLogicalPaths, [
+      "/chapter-1.md",
+      "/notes/b.md",
+    ]);
   });
 });
