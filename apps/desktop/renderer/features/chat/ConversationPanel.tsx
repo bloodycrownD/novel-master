@@ -75,6 +75,7 @@ export function ConversationPanel({
   useEffect(() => {
     if (running) {
       vfsMutatedInRunRef.current = false;
+      hasSeenStreamTextRef.current = false;
     }
   }, [running]);
   const {
@@ -82,8 +83,10 @@ export function ConversationPanel({
     noteTextDelta: noteInvokingTextDelta,
     noteThinkingDelta: noteInvokingThinkingDelta,
     latchToolUse,
+    clearToolUseLatch,
     resetAll: resetToolInvoking,
   } = useStreamToolInvokingDisplay(running);
+  const hasSeenStreamTextRef = useRef(false);
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
@@ -212,10 +215,17 @@ export function ConversationPanel({
   }, []);
 
   const onTextDelta = useCallback((delta: string) => {
+    if (delta.length === 0) {
+      return;
+    }
+    if (!hasSeenStreamTextRef.current) {
+      hasSeenStreamTextRef.current = true;
+      clearToolUseLatch();
+    }
     noteInvokingTextDelta(delta);
     noteMetricsTextDelta(delta);
     setStreamingText((prev) => prev + delta);
-  }, [noteInvokingTextDelta, noteMetricsTextDelta]);
+  }, [noteInvokingTextDelta, noteMetricsTextDelta, clearToolUseLatch]);
 
   const onThinkingDelta = useCallback((delta: string) => {
     noteInvokingThinkingDelta(delta);
@@ -224,6 +234,7 @@ export function ConversationPanel({
   }, [noteInvokingThinkingDelta, noteMetricsThinkingDelta]);
 
   const onStreamReset = useCallback(() => {
+    hasSeenStreamTextRef.current = false;
     resetToolInvoking();
     setStreamingText("");
     setStreamingThinking("");
