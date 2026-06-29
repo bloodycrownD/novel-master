@@ -3,7 +3,7 @@
  */
 import {
   buildUserVfsTurnView,
-  matchUserVfsTurnAt,
+  matchUserVfsTurnAtForDisplay,
   resolveVfsToolFilePath,
   USER_VFS_TURN_SPAN,
   type ParsedUserVfsAction,
@@ -219,7 +219,7 @@ export function buildChatListItems(
   const items: ChatListItem[] = [];
 
   for (let index = 0; index < messages.length; ) {
-    const vfsTurn = matchUserVfsTurnAt(coreMessages, index);
+    const vfsTurn = matchUserVfsTurnAtForDisplay(coreMessages, index);
     if (vfsTurn != null) {
       const view = buildUserVfsTurnView(vfsTurn);
       // UA flush 后会话内无 tool_result，用 view 内已执行成功的合成结果判定卡片状态。

@@ -4,7 +4,7 @@
 import { type ChatMessage, type ContentBlock, type ParsedUserVfsAction, type ToolResultBlock, type ToolUseBlock } from "@novel-master/core/chat";
 import { resolveToolResultOk } from "@novel-master/core";
 
-import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAt, resolveVfsToolFilePath, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
+import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAtForDisplay, resolveVfsToolFilePath, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
@@ -228,7 +228,7 @@ export function buildChatListItems(
   const items: ChatListItem[] = [];
 
   for (let index = 0; index < messages.length; ) {
-    const vfsTurn = matchUserVfsTurnAt(messages, index);
+    const vfsTurn = matchUserVfsTurnAtForDisplay(messages, index);
     if (vfsTurn != null) {
       const view = buildUserVfsTurnView(vfsTurn);
       // UA flush 后会话内无 tool_result，用 view 内已执行成功的合成结果判定卡片状态。

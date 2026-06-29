@@ -433,6 +433,34 @@ describe('message-blocks', () => {
     ).toBe('/notes/a.md');
   });
 
+  it('B2-4b: hidden UA 两段仍折叠为 user_vfs_turn', () => {
+    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const messages = [
+      msg(
+        'u1',
+        'user',
+        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        1,
+        true,
+        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+      ),
+      msg(
+        'a1',
+        'assistant',
+        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
+        2,
+        true,
+        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
+      ),
+    ];
+    const items = buildChatListItems(messages);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe('user_vfs_turn');
+    if (items[0]?.kind === 'user_vfs_turn') {
+      expect(items[0].hidden).toBe(true);
+    }
+  });
+
   it('B2-4: UA 两段折叠为单个 user_vfs_turn', () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages = [

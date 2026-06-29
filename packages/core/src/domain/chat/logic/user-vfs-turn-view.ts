@@ -153,18 +153,16 @@ function messageHasToolUse(message: ChatMessage): boolean {
 export const USER_VFS_TURN_SPAN = 2 as const;
 
 /**
- * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。
+ * 从 `startIndex` 起 UA 两段结构是否合法（不检查 hidden）。
+ * 供 transcript 展示与 LLM 匹配共用。
  */
-export function matchUserVfsTurnAt(
+function matchUserVfsTurnStructureAt(
   messages: readonly ChatMessage[],
   startIndex: number,
 ): readonly [ChatMessage, ChatMessage] | null {
   const m0 = messages[startIndex];
   const m1 = messages[startIndex + 1];
   if (m0 == null || m1 == null) {
-    return null;
-  }
-  if (m0.hidden || m1.hidden) {
     return null;
   }
   if (readMessageMetadata(m0.raw)?.kind !== "user_vfs_action") {
@@ -189,6 +187,36 @@ export function matchUserVfsTurnAt(
   return [m0, m1];
 }
 
+/**
+ * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。
+ * 用于 LLM 相关路径；transcript 请用 {@link matchUserVfsTurnAtForDisplay}。
+ */
+export function matchUserVfsTurnAt(
+  messages: readonly ChatMessage[],
+  startIndex: number,
+): readonly [ChatMessage, ChatMessage] | null {
+  const turn = matchUserVfsTurnStructureAt(messages, startIndex);
+  if (turn == null) {
+    return null;
+  }
+  const [m0, m1] = turn;
+  if (m0.hidden || m1.hidden) {
+    return null;
+  }
+  return turn;
+}
+
+/**
+ * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（允许 hidden）。
+ * transcript / tail-batch 合成 user_vfs_turn 卡片时使用。
+ */
+export function matchUserVfsTurnAtForDisplay(
+  messages: readonly ChatMessage[],
+  startIndex: number,
+): readonly [ChatMessage, ChatMessage] | null {
+  return matchUserVfsTurnStructureAt(messages, startIndex);
+}
+
 export type UserVfsTurnView = {
   readonly id: string;
   readonly hidden: boolean;
@@ -208,7 +236,7 @@ export function buildUserVfsTurnView(
   const toolUses = derivedToToolUseBlocks(deriveToolUsesFromVfsActions(actions));
   return {
     id: actionMsg.id,
-    hidden: actionMsg.hidden,
+    hidden: actionMsg.hidden || ackMsg.hidden,
     actions,
     toolUses,
     toolResults: syntheticToolResults(toolUses),

@@ -31,6 +31,7 @@
   "isWorkspaceFlushDiffEmpty",
   "listVisibleSorted",
   "matchUserVfsTurnAt",
+  "matchUserVfsTurnAtForDisplay",
   "mergePendingVfsTurns",
   "parseAllUserVfsActionsFromText",
   "parseMessageContent",

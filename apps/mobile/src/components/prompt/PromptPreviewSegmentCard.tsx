@@ -73,12 +73,18 @@ export function PromptPreviewSegmentCard({segment}: Props) {
             {segmentTitleLabel(segment.title)}
           </Text>
           {!expanded ? (
-            <Text
-              style={[styles.preview, {color: tokens.textSecondary}]}
-              numberOfLines={2}>
-              {collapsedHint}
-              {charCount > 0 ? ` · ${charCount} 字` : ''}
-            </Text>
+            <View>
+              <Text
+                style={[styles.preview, {color: tokens.textSecondary}]}
+                numberOfLines={2}>
+                {collapsedHint}
+              </Text>
+              {charCount > 0 ? (
+                <Text style={[styles.charCount, {color: tokens.textSecondary}]}>
+                  {charCount} 字
+                </Text>
+              ) : null}
+            </View>
           ) : null}
         </View>
         <Text style={[styles.chevron, {color: tokens.textTertiary}]}>
@@ -113,6 +119,7 @@ const styles = StyleSheet.create({
   role: {fontSize: 12, fontWeight: '700', marginBottom: 2},
   title: {fontSize: 13, fontWeight: '600', marginBottom: 4},
   preview: {fontSize: 12, lineHeight: 17},
+  charCount: {fontSize: 12, lineHeight: 17, marginTop: 2},
   chevron: {fontSize: 10, paddingTop: 4},
   body: {
     marginTop: 10,

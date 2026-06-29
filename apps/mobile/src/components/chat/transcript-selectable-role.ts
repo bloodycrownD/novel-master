@@ -1,7 +1,7 @@
 /** Mobile 薄 re-export：可见性 / tail 批量范围逻辑见 @novel-master/core/chat。 */
 import {
   buildUserVfsTurnView,
-  matchUserVfsTurnAt,
+  matchUserVfsTurnAtForDisplay,
   USER_VFS_TURN_SPAN,
   type ChatMessage,
   type MessageVisibilityBatchMode,
@@ -45,7 +45,7 @@ export function chatMessagesToTailBatchRows(
   const rows: TailBatchRow[] = [];
 
   for (let index = 0; index < messages.length; ) {
-    const vfsTurn = matchUserVfsTurnAt(messages, index);
+    const vfsTurn = matchUserVfsTurnAtForDisplay(messages, index);
     if (vfsTurn != null) {
       const view = buildUserVfsTurnView(vfsTurn);
       const actionMsg = messages[index]!;

@@ -6,6 +6,7 @@ import {
   deriveToolUsesFromVfsActions,
   formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
+  matchUserVfsTurnAtForDisplay,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_ACK_TEXT,
 } from "../../src/domain/chat/logic/user-vfs-turn-view.js";
@@ -83,6 +84,59 @@ describe("matchUserVfsTurnAt", () => {
     assert.equal(view.toolResults.length, 1);
     assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
     assert.match(formatUserVfsTurnPreviewBody(view), /用户 VFS 操作/);
+  });
+
+  it("hidden UA 对：ForDisplay 仍匹配，At 返回 null", () => {
+    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const hiddenMessages: ChatMessage[] = [
+      msg(
+        "u1",
+        1,
+        "user",
+        [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }],
+        { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
+      ),
+      msg(
+        "a1",
+        2,
+        "assistant",
+        [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }],
+        { metadata: { kind: "user_vfs_ack", synthetic: true } },
+      ),
+    ];
+    hiddenMessages[0] = { ...hiddenMessages[0]!, hidden: true };
+    hiddenMessages[1] = { ...hiddenMessages[1]!, hidden: true };
+
+    const displayTurn = matchUserVfsTurnAtForDisplay(hiddenMessages, 0);
+    assert.ok(displayTurn != null);
+    const view = buildUserVfsTurnView(displayTurn);
+    assert.equal(view.hidden, true);
+
+    assert.equal(matchUserVfsTurnAt(hiddenMessages, 0), null);
+  });
+
+  it("仅 ack hidden 时 view.hidden 为 true", () => {
+    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const messages: ChatMessage[] = [
+      msg(
+        "u1",
+        1,
+        "user",
+        [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }],
+        { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
+      ),
+      msg(
+        "a1",
+        2,
+        "assistant",
+        [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }],
+        { metadata: { kind: "user_vfs_ack", synthetic: true } },
+      ),
+    ];
+    messages[1] = { ...messages[1]!, hidden: true };
+    const turn = matchUserVfsTurnAtForDisplay(messages, 0);
+    assert.ok(turn != null);
+    assert.equal(buildUserVfsTurnView(turn).hidden, true);
   });
 
   it("旧 U-A-U-A 四段不匹配", () => {
