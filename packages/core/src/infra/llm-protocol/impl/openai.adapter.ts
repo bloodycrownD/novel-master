@@ -40,6 +40,7 @@ import {
   finishOpenAiSse,
 } from "../logic/openai-sse-parser.js";
 import { applyOpenAiThinkingToBody } from "../logic/apply-thinking-to-body.js";
+import { isGlmToolStreamModel } from "../logic/glm-tool-stream.js";
 
 function useTextOnlyShortcut(req: LlmChatRequest): boolean {
   if (req.thinking != null) {
@@ -130,6 +131,14 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       Object.assign(body, req.sampling.openai);
     }
     applyOpenAiThinkingToBody(body, req.thinking, req.vendorModelId);
+    if (
+      stream &&
+      req.tools != null &&
+      req.tools.length > 0 &&
+      isGlmToolStreamModel(req.vendorModelId)
+    ) {
+      body.tool_stream = true;
+    }
     return body;
   }
 

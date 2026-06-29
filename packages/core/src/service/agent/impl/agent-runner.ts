@@ -258,6 +258,11 @@ export class DefaultAgentRunner implements AgentRunner {
 
         stepsExecuted += 1;
 
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
         let assistantMessage: ChatMessage | undefined;
         if (result.blocks.length > 0) {
           assistantMessage = await session.append("assistant", { blocks: result.blocks }, {

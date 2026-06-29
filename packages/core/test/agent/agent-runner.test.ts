@@ -198,8 +198,8 @@ describe("AgentRunner", () => {
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 2);
-    assert.equal(msgs[1]!.role, "assistant");
+    assert.equal(msgs.length, 1);
+    assert.equal(msgs[0]!.role, "user");
   });
 
   it("maxSteps=1: runs tool once, no second model call", async () => {

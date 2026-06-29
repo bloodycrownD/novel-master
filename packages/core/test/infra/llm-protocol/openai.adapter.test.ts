@@ -94,3 +94,57 @@ describe("OpenAiProtocolAdapter chatStream", () => {
     assert.deepEqual(doneEvent!.result, result);
   });
 });
+
+const sampleTools = [
+  {
+    name: "write",
+    description: "写文件",
+    inputSchema: { type: "object", properties: { path: { type: "string" } } },
+  },
+] as const;
+
+describe("OpenAiProtocolAdapter buildBody tool_stream", () => {
+  it("T3: GLM + stream + tools 请求体含 tool_stream: true", async () => {
+    postSseMock.mock.resetCalls();
+
+    const adapter = new OpenAiProtocolAdapter(async () => {
+      throw new Error("fetch must not be called when postSse is mocked");
+    });
+
+    await adapter.chat({
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      apiKey: "sk-test",
+      vendorModelId: "glm-5.2",
+      userContent: "hi",
+      stream: true,
+      tools: [...sampleTools],
+    });
+
+    assert.equal(postSseMock.mock.calls.length, 1);
+    const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as { tool_stream?: boolean };
+    assert.equal(body.tool_stream, true);
+  });
+
+  it("T4: GPT + stream + tools 请求体不含 tool_stream", async () => {
+    postSseMock.mock.resetCalls();
+
+    const adapter = new OpenAiProtocolAdapter(async () => {
+      throw new Error("fetch must not be called when postSse is mocked");
+    });
+
+    await adapter.chat({
+      baseUrl: "https://api.example.com/v1",
+      apiKey: "sk-test",
+      vendorModelId: "gpt-4o",
+      userContent: "hi",
+      stream: true,
+      tools: [...sampleTools],
+    });
+
+    assert.equal(postSseMock.mock.calls.length, 1);
+    const init = postSseMock.mock.calls[0]!.arguments[1] as RequestInit;
+    const body = JSON.parse(String(init.body)) as { tool_stream?: boolean };
+    assert.equal(body.tool_stream, undefined);
+  });
+});
