@@ -1,6 +1,6 @@
 {
   "name": "@novel-master/mobile",
-  "version": "1.3.05",
+  "version": "1.3.06",
   "private": true,
   "scripts": {
     "android": "react-native run-android",
