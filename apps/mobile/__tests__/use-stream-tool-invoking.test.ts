@@ -17,23 +17,12 @@ describe('computeToolInvoking', () => {
     ).toBe(false);
   });
 
-  it('无 thinking 时为 false', () => {
+  it('无 thinking 且无正文时为 false', () => {
     expect(
       computeToolInvoking({
         agentRunning: true,
         thinkingContent: '',
         textContent: '',
-        msSinceLastThinkingDelta: 500,
-      }),
-    ).toBe(false);
-  });
-
-  it('已有正文时为 false', () => {
-    expect(
-      computeToolInvoking({
-        agentRunning: true,
-        thinkingContent: 'plan',
-        textContent: 'hello',
         msSinceLastThinkingDelta: 500,
       }),
     ).toBe(false);
@@ -60,6 +49,44 @@ describe('computeToolInvoking', () => {
         msSinceLastThinkingDelta: 300,
       }),
     ).toBe(true);
+  });
+
+  it('有正文且 text 空闲不足阈值为 false', () => {
+    expect(
+      computeToolInvoking({
+        agentRunning: true,
+        thinkingContent: 'plan',
+        textContent: 'hello',
+        msSinceLastThinkingDelta: 500,
+        msSinceLastTextDelta: 100,
+        idleThresholdMs: 300,
+      }),
+    ).toBe(false);
+  });
+
+  it('有正文且 text 空闲 ≥300ms 时为 true（post-text 路径）', () => {
+    expect(
+      computeToolInvoking({
+        agentRunning: true,
+        thinkingContent: '',
+        textContent: 'hello',
+        msSinceLastThinkingDelta: 0,
+        msSinceLastTextDelta: 300,
+      }),
+    ).toBe(true);
+  });
+
+  it('有正文且仍在流式输出时为 false', () => {
+    expect(
+      computeToolInvoking({
+        agentRunning: true,
+        thinkingContent: 'plan',
+        textContent: 'hello',
+        msSinceLastThinkingDelta: 500,
+        msSinceLastTextDelta: 50,
+        idleThresholdMs: 300,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -100,5 +127,31 @@ describe('useStreamToolInvoking', () => {
       jest.advanceTimersByTime(50);
     });
     expect(renderCount).toBe(2);
+  });
+
+  it('post-text idle 后 toolInvoking 为 true', () => {
+    let toolInvoking = false;
+    let noteTextDelta: (delta: string) => void = () => undefined;
+
+    function Harness() {
+      const state = useStreamToolInvoking(true);
+      toolInvoking = state.toolInvoking;
+      noteTextDelta = state.noteTextDelta;
+      return null;
+    }
+
+    act(() => {
+      TestRenderer.create(React.createElement(Harness));
+    });
+
+    act(() => {
+      noteTextDelta('正文');
+    });
+    expect(toolInvoking).toBe(false);
+
+    act(() => {
+      jest.advanceTimersByTime(300);
+    });
+    expect(toolInvoking).toBe(true);
   });
 });

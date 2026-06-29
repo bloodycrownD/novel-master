@@ -139,6 +139,38 @@ describe('useChatStreamRuntime', () => {
     expect(api.toolInvoking).toBe(true);
   });
 
+  it('thinking→text→timer 使 toolInvoking 为 true（post-text 启发式）', () => {
+    const {api} = mountRuntime();
+    act(() => {
+      api.setAgentRunning(true);
+    });
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
+        sessionId: 's1',
+        text: 'think',
+      });
+    });
+    act(() => {
+      jest.advanceTimersByTime(350);
+    });
+    expect(api.toolInvoking).toBe(true);
+
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        text: 'body',
+      });
+      jest.advanceTimersByTime(32);
+      jest.advanceTimersByTime(64);
+    });
+    expect(api.toolInvoking).toBe(false);
+
+    act(() => {
+      jest.advanceTimersByTime(500);
+    });
+    expect(api.toolInvoking).toBe(true);
+  });
+
   it('chatStreamBatchEnabled=false 时走 pushStreamDelta 保序', () => {
     const {webHandle} = mountRuntime({batchEnabled: false});
     act(() => {

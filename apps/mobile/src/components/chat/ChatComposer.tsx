@@ -170,6 +170,7 @@ export function ChatComposer({
     }
     if (running) {
       runAbortController?.abort();
+      onStreamReset();
       // WHY: keep `running` true until `finally` — abort must not race with teardown.
       return;
     }
@@ -189,6 +190,7 @@ export function ChatComposer({
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
     runAbortController,
+    onStreamReset,
     onNeedModel,
     sendWithBridgeIfNeeded,
   ]);
