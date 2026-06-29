@@ -51,3 +51,29 @@ updatedAt: '2026-06-24 00:00:00'
 **已确认**：克隆全局 / copy 复制 / 跟随保留草稿 / ChatRail 入口
 
 **主要风险**：调用方假设必有 agentId；prompt/meta 漏改 projectId
+
+## empty-storage-root-list-not-found（已合并 main）
+
+| 文档 | 路径 |
+|------|------|
+| Bug PRD | Iterations/vfs-unified-root/bugs/empty-storage-root-list-not-found/prd.md |
+| Bug SPEC | Iterations/vfs-unified-root/bugs/empty-storage-root-list-not-found/spec.md |
+
+**根因**：`DefaultVfsService.list()` 未对 `isStorageRootParent` 豁免（`06e91720` 回归）
+
+**修复**：main @ `4d821e60` + docs `3f7512f5`
+
+## hide-vfs-turn-prompt-char-count（待确认 spec）
+
+| 文档 | 路径 |
+|------|------|
+| PRD | Iterations/hide-vfs-turn-prompt-char-count/prd.md |
+| SPEC | Iterations/hide-vfs-turn-prompt-char-count/spec.md |
+
+**依赖**：vfs-user-ops-unified-tool-turn、message-visibility、mobile-app
+
+**缺陷 A**：hidden 时 transcript 仍合成 `user_vfs_turn`（`matchUserVfsTurnAtForDisplay`）；LLM 仍跳过 hidden
+
+**缺陷 B**：`PromptPreviewSegmentCard` 折叠字数与预览分开展示
+
+**分支建议**：`fix/hide-vfs-turn-prompt-char-count`
