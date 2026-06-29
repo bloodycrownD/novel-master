@@ -1,6 +1,7 @@
 /**
  * 检测 stream tail 是否应显示「工具调用中」。
- * 条件：agent 运行中 + 有过 thinking + 无 text + thinking 空闲 ≥300ms。
+ * 路径1：agent 运行中 + 有过 thinking + 无 text + thinking 空闲 ≥300ms。
+ * 路径2：agent 运行中 + 有 text + text 空闲 ≥300ms（正文后等待 tool_call）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -12,19 +13,22 @@ export function computeToolInvoking(input: {
   thinkingContent: string;
   textContent: string;
   msSinceLastThinkingDelta: number;
+  msSinceLastTextDelta?: number;
   idleThresholdMs?: number;
 }): boolean {
   const threshold = input.idleThresholdMs ?? DEFAULT_IDLE_MS;
   if (!input.agentRunning) {
     return false;
   }
-  if (input.thinkingContent.length === 0) {
-    return false;
-  }
-  if (input.textContent.length > 0) {
-    return false;
-  }
-  return input.msSinceLastThinkingDelta >= threshold;
+  const msSinceLastText =
+    input.msSinceLastTextDelta ?? Number.POSITIVE_INFINITY;
+  const thinkingPath =
+    input.thinkingContent.length > 0 &&
+    input.textContent.length === 0 &&
+    input.msSinceLastThinkingDelta >= threshold;
+  const postTextToolPendingPath =
+    input.textContent.length > 0 && msSinceLastText >= threshold;
+  return thinkingPath || postTextToolPendingPath;
 }
 
 export function useStreamToolInvoking(agentRunning: boolean): {
@@ -36,12 +40,14 @@ export function useStreamToolInvoking(agentRunning: boolean): {
   const textRef = useRef("");
   const thinkingRef = useRef("");
   const lastThinkingAtRef = useRef(0);
+  const lastTextAtRef = useRef(0);
   const [tick, setTick] = useState(0);
 
   const reset = useCallback(() => {
     textRef.current = "";
     thinkingRef.current = "";
     lastThinkingAtRef.current = 0;
+    lastTextAtRef.current = 0;
     setTick((t) => t + 1);
   }, []);
 
@@ -53,16 +59,18 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     textRef.current = "";
     thinkingRef.current = "";
     lastThinkingAtRef.current = 0;
+    lastTextAtRef.current = 0;
     const id = setInterval(() => setTick((t) => t + 1), 100);
     return () => clearInterval(id);
   }, [agentRunning, reset]);
 
-  // Delta handlers update refs only; 100ms interval re-reads for toolInvoking (no per-delta setState).
+  // Delta handlers 仅更新 ref；100ms tick 重读 toolInvoking（避免每 delta setState）。
   const noteTextDelta = useCallback((delta: string) => {
     if (delta.length === 0) {
       return;
     }
     textRef.current += delta;
+    lastTextAtRef.current = Date.now();
   }, []);
 
   const noteThinkingDelta = useCallback((delta: string) => {
@@ -79,12 +87,17 @@ export function useStreamToolInvoking(agentRunning: boolean): {
     lastThinkingAtRef.current > 0
       ? Date.now() - lastThinkingAtRef.current
       : Number.POSITIVE_INFINITY;
+  const msSinceLastText =
+    lastTextAtRef.current > 0
+      ? Date.now() - lastTextAtRef.current
+      : Number.POSITIVE_INFINITY;
 
   const toolInvoking = computeToolInvoking({
     agentRunning,
     thinkingContent: thinkingRef.current,
     textContent: textRef.current,
     msSinceLastThinkingDelta: msSinceLastThinking,
+    msSinceLastTextDelta: msSinceLastText,
   });
 
   return { toolInvoking, noteTextDelta, noteThinkingDelta, reset };

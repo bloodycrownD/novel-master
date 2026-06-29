@@ -9,7 +9,7 @@ import type {
 import { useAgentStream } from "@/hooks/useAgentStream";
 import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
 import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
-import { useStreamToolInvoking } from "@/hooks/useStreamToolInvoking";
+import { useStreamToolInvokingDisplay } from "@/hooks/useStreamToolInvokingDisplay";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -81,8 +81,9 @@ export function ConversationPanel({
     toolInvoking,
     noteTextDelta: noteInvokingTextDelta,
     noteThinkingDelta: noteInvokingThinkingDelta,
-    reset: resetToolInvoking,
-  } = useStreamToolInvoking(running);
+    latchToolUse,
+    resetAll: resetToolInvoking,
+  } = useStreamToolInvokingDisplay(running);
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
@@ -274,6 +275,7 @@ export function ConversationPanel({
     sessionId,
     onTextDelta,
     onThinkingDelta,
+    onToolUse: () => latchToolUse(),
     onStepCommitted,
     onRunFinished,
     onRunFailed,
