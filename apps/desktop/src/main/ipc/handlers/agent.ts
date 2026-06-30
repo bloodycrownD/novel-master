@@ -7,6 +7,11 @@ import { resolveApplicationModelId } from "@novel-master/core/agent";
 
 import { formatApplicationModelId } from "@novel-master/core/provider";
 import type {
+  AgentRunFailedPayload,
+  AgentRunFinishedPayload,
+  AgentRunStartedPayload,
+} from "@novel-master/core/events";
+import type {
   AgentAbortRequest,
   AgentListPickerResponse,
   AgentResolveCurrentResponse,
@@ -25,8 +30,9 @@ import {
   runAgentTurn,
 } from "../../services/agent-run.service.js";
 import {
+  decrementDesktopAgentActive,
+  incrementDesktopAgentActive,
   isDesktopAgentActive,
-  setDesktopAgentActive,
 } from "../../runtime/agent-activity.js";
 import { desktopLogError } from "../../log/desktop-log.js";
 
@@ -169,7 +175,52 @@ export async function handleModelSetCurrent(
   }
 }
 
-const activeRuns = new Map<string, AbortController>();
+type RunEntry = { controller: AbortController; runId: string | null };
+
+const activeRuns = new Map<string, RunEntry>();
+/** abort 删除 activeRuns 后仍用于 FINISHED/FAILED 与 runId 匹配。 */
+const sessionRunIds = new Map<string, string>();
+
+/**
+ * RUN_STARTED 转发前登记 runId（由 forward-event-bus 调用，非 renderer 侧）。
+ */
+export function onCoreRunStarted({
+  sessionId,
+  runId,
+}: AgentRunStartedPayload): void {
+  const entry = activeRuns.get(sessionId);
+  if (entry != null) {
+    entry.runId = runId;
+  }
+  sessionRunIds.set(sessionId, runId);
+}
+
+function finishTrackedRun(sessionId: string, runId: string): void {
+  const entry = activeRuns.get(sessionId);
+  const trackedRunId = entry?.runId ?? sessionRunIds.get(sessionId);
+  if (trackedRunId !== runId) {
+    return;
+  }
+  activeRuns.delete(sessionId);
+  sessionRunIds.delete(sessionId);
+  decrementDesktopAgentActive();
+}
+
+/** RUN_FINISHED 转发前清理 run 登记（由 forward-event-bus 调用）。 */
+export function onCoreRunFinished({
+  sessionId,
+  runId,
+}: AgentRunFinishedPayload): void {
+  finishTrackedRun(sessionId, runId);
+}
+
+/** RUN_FAILED 转发前清理 run 登记（由 forward-event-bus 调用）。 */
+export function onCoreRunFailed({
+  sessionId,
+  runId,
+}: AgentRunFailedPayload): void {
+  finishTrackedRun(sessionId, runId);
+}
 
 export async function handleAgentAbort(
   req: AgentAbortRequest,
@@ -192,12 +243,13 @@ export async function handleAgentRun(
       (await resolveCurrentAgentDefinition(rt)).definition,
     );
     const controller = new AbortController();
-    activeRuns.set(req.sessionId, controller);
-    setDesktopAgentActive(true);
+    const { sessionId } = req;
+    activeRuns.set(sessionId, { controller, runId: null });
+    incrementDesktopAgentActive();
 
     void runAgentTurn(
       rt,
-      { projectId: req.projectId, sessionId: req.sessionId },
+      { projectId: req.projectId, sessionId },
       req.userContent,
       {
         stream: req.stream !== false,
@@ -207,7 +259,7 @@ export async function handleAgentRun(
     )
       .catch((err) => {
         desktopLogError("agent/run IPC background task failed", {
-          sessionId: req.sessionId,
+          sessionId,
           projectId: req.projectId,
           err:
             err instanceof Error
@@ -216,19 +268,35 @@ export async function handleAgentRun(
         });
       })
       .finally(() => {
-        activeRuns.delete(req.sessionId);
-        setDesktopAgentActive(false);
+        const entry = activeRuns.get(sessionId);
+        if (entry?.controller !== controller) {
+          return;
+        }
+        if (entry.runId != null) {
+          // 正常路径由 RUN_FINISHED/FAILED 递减；此处仅兜底 controller 结束但事件未达
+          if (sessionRunIds.get(sessionId) === entry.runId) {
+            activeRuns.delete(sessionId);
+            sessionRunIds.delete(sessionId);
+            decrementDesktopAgentActive();
+          }
+          return;
+        }
+        // 无 RUN_STARTED 的早退（T23）
+        activeRuns.delete(sessionId);
+        decrementDesktopAgentActive();
       });
 
     return { ok: true, data: { started: true } };
   } catch (err) {
-    setDesktopAgentActive(false);
+    activeRuns.delete(req.sessionId);
+    sessionRunIds.delete(req.sessionId);
+    decrementDesktopAgentActive();
     return { ok: false, error: formatError(err) };
   }
 }
 
+/** 仅 abort；decrement 交给 RUN_FINISHED/FAILED 或 finally 兜底。 */
 export function abortAgentRun(sessionId: string): void {
-  activeRuns.get(sessionId)?.abort();
+  activeRuns.get(sessionId)?.controller.abort();
   activeRuns.delete(sessionId);
-  setDesktopAgentActive(false);
 }
