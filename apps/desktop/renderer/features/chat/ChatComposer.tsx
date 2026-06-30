@@ -27,7 +27,8 @@ interface ChatComposerProps {
   error?: string;
   /** 内联错误变更回调；未传入时回退到组件内 local state。 */
   onErrorChange?: (msg: string | undefined) => void;
-  onRunningChange: (running: boolean) => void;
+  beginUiRun: () => void;
+  abortUiRun: () => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void | Promise<void>;
   /** 打开会话操作菜单；由父级定位并渲染菜单。 */
@@ -43,7 +44,8 @@ export function ChatComposer({
   lastMessageIsPlainUserText,
   error: controlledError,
   onErrorChange,
-  onRunningChange,
+  beginUiRun,
+  abortUiRun,
   onStreamReset,
   onMessagesChanged,
   onOpenSessionActions,
@@ -101,7 +103,7 @@ export function ChatComposer({
 
       reportError(undefined);
       onStreamReset();
-      onRunningChange(true);
+      beginUiRun();
       if (content) {
         setText("");
       }
@@ -118,7 +120,7 @@ export function ChatComposer({
 
       if (!result.ok) {
         reportError(result.error.message);
-        onRunningChange(false);
+        abortUiRun();
         return false;
       }
 
@@ -126,8 +128,9 @@ export function ChatComposer({
       return true;
     },
     [
+      abortUiRun,
+      beginUiRun,
       onMessagesChanged,
-      onRunningChange,
       onStreamReset,
       projectId,
       reportError,
@@ -137,9 +140,8 @@ export function ChatComposer({
 
   const send = async () => {
     if (running) {
+      abortUiRun();
       await ipcAgentAbort({ sessionId });
-      onRunningChange(false);
-      onStreamReset();
       return;
     }
 

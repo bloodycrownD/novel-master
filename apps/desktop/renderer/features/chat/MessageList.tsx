@@ -22,9 +22,10 @@ const ROLE_LABELS: Record<string, string> = {
 
 interface MessageListProps {
   messages: readonly ChatMessageDto[];
+  uiRunning?: boolean;
   streamingText?: string;
   streamingThinking?: string;
-  toolInvoking?: boolean;
+  streamTailGenerating?: boolean;
   agentRunning?: boolean;
   batchMode?: MessageBatchMode | null;
   selectedIds?: ReadonlySet<string>;
@@ -61,9 +62,10 @@ function MessageBody({
 
 export function MessageList({
   messages,
+  uiRunning = false,
   streamingText,
   streamingThinking,
-  toolInvoking = false,
+  streamTailGenerating = false,
   agentRunning = false,
   batchMode = null,
   selectedIds,
@@ -73,7 +75,9 @@ export function MessageList({
   onOpenMessageMenu,
   onOpenToolFile,
 }: MessageListProps) {
-  const hasStreaming = !!streamingText || !!streamingThinking || toolInvoking;
+  const hasStreamTextOrThinking = !!streamingText || !!streamingThinking;
+  const hasStreaming =
+    uiRunning && (hasStreamTextOrThinking || streamTailGenerating);
 
   if (messages.length === 0 && !hasStreaming) {
     return <p className="chat-messages__empty">暂无消息</p>;
@@ -264,8 +268,8 @@ export function MessageList({
                 <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
               </div>
             ) : null}
-            {toolInvoking ? (
-              <p className="chat-message__tool-invoking">工具调用中</p>
+            {streamTailGenerating ? (
+              <p className="chat-message__stream-tail">生成中</p>
             ) : null}
           </div>
         </div>

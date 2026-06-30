@@ -7,7 +7,7 @@ import {
 interface UseChatMessagesScrollFollowOptions {
   readonly streamingText?: string;
   readonly streamingThinking?: string;
-  readonly toolInvoking?: boolean;
+  readonly streamTailGenerating?: boolean;
   readonly messagesLength: number;
   readonly running: boolean;
   readonly sessionId: string;
@@ -26,7 +26,7 @@ export function useChatMessagesScrollFollow(
   {
     streamingText,
     streamingThinking,
-    toolInvoking = false,
+    streamTailGenerating = false,
     messagesLength,
     running,
     sessionId,
@@ -123,14 +123,14 @@ export function useChatMessagesScrollFollow(
   }, [messagesLength, followTailIfNearBottom]);
 
   useLayoutEffect(() => {
-    if (!streamingText && !streamingThinking && !toolInvoking) {
+    if (!streamingText && !streamingThinking && !streamTailGenerating) {
       return;
     }
     followTailIfNearBottom();
   }, [
     streamingText,
     streamingThinking,
-    toolInvoking,
+    streamTailGenerating,
     followTailIfNearBottom,
   ]);
 

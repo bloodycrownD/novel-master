@@ -7,9 +7,10 @@ import type {
   AgentStepCommittedPayload,
 } from "@shared/agent-event-types";
 import { useAgentStream } from "@/hooks/useAgentStream";
+import { useAgentRunLifecycle } from "@/hooks/useAgentRunLifecycle";
 import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
 import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
-import { useStreamToolInvokingDisplay } from "@/hooks/useStreamToolInvokingDisplay";
+import { useStreamTailGenerating } from "@/hooks/useStreamTailGenerating";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -68,32 +69,50 @@ export function ConversationPanel({
 }: ConversationPanelProps) {
   const { notifyWorkspaceMutated, openSession, projectName, openChatWorkspacePreview } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
+  const streamResetRef = useRef<() => void>(() => {});
   const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
-  const [running, setRunning] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [streamingThinking, setStreamingThinking] = useState("");
+
+  const runLifecycle = useAgentRunLifecycle(() => streamResetRef.current());
+  const {
+    uiRunning: running,
+    acceptRunEvent,
+    beginUiRun,
+    abortUiRun,
+    onRunStarted,
+    onRunFinished: finishUiRun,
+    onRunFailed: failUiRun,
+    resetUiForSessionChange,
+  } = runLifecycle;
+
+  const {
+    streamTailGenerating,
+    noteStreamDelta,
+    resetStreamClock,
+  } = useStreamTailGenerating(running);
+
+  const onStreamReset = useCallback(() => {
+    setStreamingText("");
+    setStreamingThinking("");
+    resetStreamClock();
+  }, [resetStreamClock]);
+
+  useEffect(() => {
+    streamResetRef.current = onStreamReset;
+  }, [onStreamReset]);
 
   useEffect(() => {
     if (running) {
       vfsMutatedInRunRef.current = false;
-      hasSeenStreamTextRef.current = false;
     }
   }, [running]);
-  const {
-    toolInvoking,
-    noteTextDelta: noteInvokingTextDelta,
-    noteThinkingDelta: noteInvokingThinkingDelta,
-    latchToolUse,
-    clearToolUseLatch,
-    resetAll: resetToolInvoking,
-  } = useStreamToolInvokingDisplay(running);
-  const hasSeenStreamTextRef = useRef(false);
   const {
     metrics: streamMetrics,
     noteTextDelta: noteMetricsTextDelta,
     noteThinkingDelta: noteMetricsThinkingDelta,
   } = useAgentStreamMetrics(running);
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingThinking, setStreamingThinking] = useState("");
   const [composerError, setComposerError] = useState<string | undefined>();
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
@@ -199,10 +218,12 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
-  // 切换会话时清空 Composer 内联错误
+  // 切换会话时重置 UI 运行态
   useEffect(() => {
+    resetUiForSessionChange();
+    onStreamReset();
     setComposerError(undefined);
-  }, [sessionId]);
+  }, [sessionId, resetUiForSessionChange, onStreamReset]);
 
   useEffect(() => {
     ipcAppUiGet("chatRichText")
@@ -218,27 +239,16 @@ export function ConversationPanel({
     if (delta.length === 0) {
       return;
     }
-    if (!hasSeenStreamTextRef.current) {
-      hasSeenStreamTextRef.current = true;
-      clearToolUseLatch();
-    }
-    noteInvokingTextDelta(delta);
+    noteStreamDelta();
     noteMetricsTextDelta(delta);
     setStreamingText((prev) => prev + delta);
-  }, [noteInvokingTextDelta, noteMetricsTextDelta, clearToolUseLatch]);
+  }, [noteStreamDelta, noteMetricsTextDelta]);
 
   const onThinkingDelta = useCallback((delta: string) => {
-    noteInvokingThinkingDelta(delta);
+    noteStreamDelta();
     noteMetricsThinkingDelta(delta);
     setStreamingThinking((prev) => prev + delta);
-  }, [noteInvokingThinkingDelta, noteMetricsThinkingDelta]);
-
-  const onStreamReset = useCallback(() => {
-    hasSeenStreamTextRef.current = false;
-    resetToolInvoking();
-    setStreamingText("");
-    setStreamingThinking("");
-  }, [resetToolInvoking]);
+  }, [noteStreamDelta, noteMetricsThinkingDelta]);
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
@@ -254,7 +264,9 @@ export function ConversationPanel({
 
   const onRunFinished = useCallback(
     (payload: AgentRunFinishedPayload) => {
-      setRunning(false);
+      if (!finishUiRun(payload)) {
+        return;
+      }
       setStreamingText("");
       setStreamingThinking("");
       if (payload.vfsMutated) {
@@ -263,12 +275,14 @@ export function ConversationPanel({
       vfsMutatedInRunRef.current = false;
       void reloadMessages();
     },
-    [reloadMessages, notifyWorkspaceMutated],
+    [finishUiRun, reloadMessages, notifyWorkspaceMutated],
   );
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload) => {
-      setRunning(false);
+      if (!failUiRun(payload)) {
+        return;
+      }
       setStreamingText("");
       setStreamingThinking("");
       if (vfsMutatedInRunRef.current) {
@@ -279,14 +293,15 @@ export function ConversationPanel({
       showToast(payload.error);
       void reloadMessages();
     },
-    [reloadMessages, notifyWorkspaceMutated],
+    [failUiRun, reloadMessages, notifyWorkspaceMutated],
   );
 
   useAgentStream({
     sessionId,
+    acceptRunEvent,
     onTextDelta,
     onThinkingDelta,
-    onToolUse: () => latchToolUse(),
+    onRunStarted,
     onStepCommitted,
     onRunFinished,
     onRunFailed,
@@ -296,7 +311,7 @@ export function ConversationPanel({
   useChatMessagesScrollFollow(chatMessagesRef, {
     streamingText: running ? streamingText : undefined,
     streamingThinking: running ? streamingThinking : undefined,
-    toolInvoking: running ? toolInvoking : false,
+    streamTailGenerating: running ? streamTailGenerating : false,
     messagesLength: messages.length,
     running,
     sessionId,
@@ -700,9 +715,10 @@ export function ConversationPanel({
         >
           <MessageList
             messages={messages}
+            uiRunning={running}
             streamingText={running ? streamingText : undefined}
             streamingThinking={running ? streamingThinking : undefined}
-            toolInvoking={running ? toolInvoking : false}
+            streamTailGenerating={running ? streamTailGenerating : false}
             agentRunning={running}
             batchMode={messageBatch.mode}
             selectedIds={messageBatch.selectedIds}
@@ -801,7 +817,8 @@ export function ConversationPanel({
             }
             error={composerError}
             onErrorChange={setComposerError}
-            onRunningChange={setRunning}
+            beginUiRun={beginUiRun}
+            abortUiRun={abortUiRun}
             onStreamReset={onStreamReset}
             onMessagesChanged={reloadMessages}
             onOpenSessionActions={onOpenSessionActions}
