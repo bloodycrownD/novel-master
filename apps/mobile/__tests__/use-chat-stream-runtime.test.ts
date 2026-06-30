@@ -4,12 +4,19 @@ import {SimpleEventBus} from '@novel-master/core/events';
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
 } from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
+import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
+import {useStreamTailGenerating} from '@/hooks/useStreamTailGenerating';
 import {useChatStreamRuntime} from '@/screens/tabs/chat-tab/useChatStreamRuntime';
+import {
+  isMobileAgentActive,
+  setMobileAgentActive,
+} from '@/runtime/agent-activity';
 
 const mockFlushRunUi = jest.fn(async () => undefined);
 const mockFlushAgentStepUi = jest.fn(async () => undefined);
@@ -25,22 +32,27 @@ jest.mock('@/hooks/useRuntime', () => ({
   useRuntime: () => mockRuntime,
 }));
 
+const RUN_ID = 'run-test-1';
+
 describe('useChatStreamRuntime', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     mockFlushRunUi.mockClear();
     mockFlushAgentStepUi.mockClear();
     mockRuntime.eventBus.clear();
+    setMobileAgentActive(false);
   });
 
   afterEach(() => {
     jest.useRealTimers();
+    setMobileAgentActive(false);
   });
 
   function mountRuntime(options?: {
     useWebview?: boolean;
     batchEnabled?: boolean;
     web?: Partial<ChatTranscriptWebViewHandle>;
+    beginUiRun?: boolean;
   }) {
     const webHandle: ChatTranscriptWebViewHandle = {
       pushStreamDelta: jest.fn(),
@@ -50,19 +62,33 @@ describe('useChatStreamRuntime', () => {
     };
     const onMessagesChanged = jest.fn(async () => undefined);
     const onRunFailed = jest.fn();
-    const api: Partial<ReturnType<typeof useChatStreamRuntime>> = {};
+    const api: {
+      stream?: ReturnType<typeof useChatStreamRuntime>;
+      lifecycle?: ReturnType<typeof useAgentRunLifecycle>;
+      streamTail?: ReturnType<typeof useStreamTailGenerating>;
+    } = {};
 
     function Harness() {
       const ref = useRef<ChatTranscriptWebViewHandle>(webHandle);
+      const lifecycle = useAgentRunLifecycle();
+      const streamTail = useStreamTailGenerating(lifecycle.uiRunning);
       const state = useChatStreamRuntime({
         sessionId: 's1',
+        uiRunning: lifecycle.uiRunning,
         useWebviewTranscript: options?.useWebview ?? true,
         chatStreamBatchEnabled: options?.batchEnabled ?? true,
         transcriptWebRef: ref,
         onMessagesChanged,
-        onRunFailed,
+        acceptRunEvent: lifecycle.acceptRunEvent,
+        onRunStarted: lifecycle.onRunStarted,
+        onRunFinished: lifecycle.onRunFinished,
+        onRunFailed: lifecycle.onRunFailed,
+        noteStreamDelta: streamTail.noteStreamDelta,
+        resetStreamClock: streamTail.resetStreamClock,
       });
-      Object.assign(api, state);
+      api.stream = state;
+      api.lifecycle = lifecycle;
+      api.streamTail = streamTail;
       return null;
     }
 
@@ -70,18 +96,43 @@ describe('useChatStreamRuntime', () => {
       TestRenderer.create(React.createElement(Harness));
     });
 
-    return {api: api as ReturnType<typeof useChatStreamRuntime>, webHandle, onMessagesChanged, onRunFailed};
+    if (options?.beginUiRun) {
+      act(() => {
+        api.lifecycle!.beginUiRun();
+      });
+    }
+
+    const startRun = () => {
+      act(() => {
+        mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+          sessionId: 's1',
+          projectId: 'p1',
+          runId: RUN_ID,
+        });
+      });
+    };
+
+    return {
+      api: api as Required<typeof api>,
+      webHandle,
+      onMessagesChanged,
+      onRunFailed,
+      startRun,
+    };
   }
 
   it('webview：FIFO 交错 wire 走 pushStreamBatch', () => {
-    const {webHandle} = mountRuntime();
+    const {webHandle, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'A',
       });
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'B',
       });
       jest.advanceTimersByTime(32);
@@ -96,90 +147,99 @@ describe('useChatStreamRuntime', () => {
   });
 
   it('legacy-rn：更新 streamingText/Thinking', () => {
-    const {api} = mountRuntime({useWebview: false});
+    const {api, startRun} = mountRuntime({useWebview: false, beginUiRun: true});
+    startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'think',
       });
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'body',
       });
       jest.advanceTimersByTime(32);
       jest.advanceTimersByTime(64);
     });
-    expect(api.streamingThinking).toBe('think');
-    expect(api.streamingText).toBe('body');
+    expect(api.stream!.streamingThinking).toBe('think');
+    expect(api.stream!.streamingText).toBe('body');
   });
 
-  it('RUN_FAILED 触发 flushRunUi', () => {
-    mountRuntime();
+  it('RUN_FAILED 触发 flushRunUi 并递减 agentActive', () => {
+    const {startRun} = mountRuntime({beginUiRun: true});
+    startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FAILED, {
         sessionId: 's1',
         projectId: 'p1',
+        runId: RUN_ID,
         error: 'boom',
       });
     });
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
+    expect(isMobileAgentActive()).toBe(false);
   });
 
-  it('TOOL_USE latch 使 toolInvoking 为 true', () => {
-    const {api} = mountRuntime();
+  it('stale delta 在 runId 不匹配时被丢弃', () => {
+    const {api, startRun} = mountRuntime({useWebview: false, beginUiRun: true});
+    startRun();
     act(() => {
-      api.setAgentRunning(true);
-      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
-        id: 't1',
-        name: 'read',
-        input: {},
+        runId: 'stale-run',
+        text: 'x',
       });
+      jest.advanceTimersByTime(96);
     });
-    expect(api.toolInvoking).toBe(true);
+    expect(api.stream!.streamingText).toBe('');
   });
 
-  it('thinking→text→timer 使 toolInvoking 为 true（post-text 启发式）', () => {
-    const {api} = mountRuntime();
-    act(() => {
-      api.setAgentRunning(true);
-    });
+  it('thinking 空闲 ≥300ms 后 streamTailGenerating 为 true', () => {
+    const {api, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'think',
       });
     });
     act(() => {
-      jest.advanceTimersByTime(350);
+      jest.advanceTimersByTime(300);
     });
-    expect(api.toolInvoking).toBe(true);
+    expect(api.streamTail!.streamTailGenerating).toBe(true);
+  });
 
+  it('仅 TOOL_USE、无 text/thinking delta 时空闲 ≥300ms 显示 streamTailGenerating', () => {
+    const {api, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
     act(() => {
-      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
         sessionId: 's1',
-        text: 'body',
+        runId: RUN_ID,
+        id: 't1',
+        name: 'read',
+        input: {},
       });
-      jest.advanceTimersByTime(32);
-      jest.advanceTimersByTime(64);
-    });
-    expect(api.toolInvoking).toBe(false);
-
-    act(() => {
       jest.advanceTimersByTime(500);
     });
-    expect(api.toolInvoking).toBe(true);
+    expect(api.streamTail!.streamTailGenerating).toBe(true);
   });
 
   it('chatStreamBatchEnabled=false 时走 pushStreamDelta 保序', () => {
-    const {webHandle} = mountRuntime({batchEnabled: false});
+    const {webHandle, startRun} = mountRuntime({batchEnabled: false, beginUiRun: true});
+    startRun();
     act(() => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'A',
       });
       mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
         sessionId: 's1',
+        runId: RUN_ID,
         text: 'B',
       });
       jest.advanceTimersByTime(32);
@@ -195,5 +255,21 @@ describe('useChatStreamRuntime', () => {
       'text',
       'B',
     ]);
+  });
+
+  it('RUN_FINISHED 匹配 runId 时收尾 uiRunning', async () => {
+    const {api, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        stopReason: 'end_turn',
+      });
+      await Promise.resolve();
+    });
+    expect(api.lifecycle!.uiRunning).toBe(false);
+    expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
   });
 });

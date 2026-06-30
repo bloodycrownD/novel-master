@@ -2,6 +2,10 @@ import React from 'react';
 import {describe, expect, it, jest} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
+jest.mock('../src/errors/format-error', () => ({
+  formatError: (err: unknown) => String(err),
+}));
+
 jest.mock('@novel-master/core', () => ({
   EVENT_AGENT_RUN_FINISHED: 'agent.run.finished',
   EVENT_AGENT_STREAM_TEXT_DELTA: 'agent.stream.text',
@@ -54,6 +58,8 @@ jest.mock('../src/services/agent-run.service', () => ({
 }));
 
 import {ChatComposer} from '../src/components/chat/ChatComposer';
+import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
+import {setMobileAgentActive} from '../src/runtime/agent-activity';
 import {ThemeProvider} from '../src/theme/ThemeProvider';
 
 function Harness(props: {
@@ -61,14 +67,15 @@ function Harness(props: {
   lastMessageHasToolResult?: boolean;
   lastMessageIsPlainUserText?: boolean;
 }) {
-  const [running, setRunning] = React.useState(false);
+  const lifecycle = useAgentRunLifecycle();
   return (
     <ThemeProvider>
       <ChatComposer
         scope={{projectId: 'p', sessionId: 's'}}
         hasModel={true}
-        running={running}
-        onRunningChange={setRunning}
+        running={lifecycle.uiRunning}
+        beginUiRun={lifecycle.beginUiRun}
+        abortUiRun={lifecycle.abortUiRun}
         onStreamReset={() => undefined}
         onMessagesChanged={() => undefined}
         onNeedModel={() => undefined}
@@ -81,6 +88,10 @@ function Harness(props: {
 }
 
 describe('ChatComposer integration', () => {
+  beforeEach(() => {
+    setMobileAgentActive(false);
+    mockRunAgentTurn.mockClear();
+  });
   it('running-state “终止” action aborts current run', async () => {
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {

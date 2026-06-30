@@ -93,7 +93,9 @@ function TestHost({
       agentMeta={{agentId: 'a1', agentName: 'A', hasDedicatedModel: false}}
       streamMetricsAccRef={{current: null}}
       streamMetricsLastRun={null}
-      toolInvoking={false}
+      streamTailGenerating={false}
+      uiRunning={false}
+      agentActive={false}
       messageBatchActive={false}
       messageBatchMode={null}
       messageBatchSelectedCount={0}
@@ -105,7 +107,6 @@ function TestHost({
       chatScrollKey="p1:s1"
       chatMessages={[]}
       hasMoreMessages={false}
-      agentRunning={false}
       transcriptFlags={{
         richText: false,
         batchMode: false,
@@ -156,7 +157,8 @@ function TestHost({
       onWebMessageMenuAction={jest.fn()}
       onToggleMessageSelect={jest.fn()}
       onMessageLongPress={jest.fn()}
-      onAgentRunningChange={jest.fn()}
+      beginUiRun={jest.fn()}
+      abortUiRun={jest.fn()}
       onStreamReset={jest.fn()}
       onMessagesChanged={jest.fn()}
       onNeedModel={jest.fn()}
