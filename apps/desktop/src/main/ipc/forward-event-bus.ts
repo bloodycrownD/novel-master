@@ -3,8 +3,24 @@
  * Agent stream + step events are relayed on `nm:agent-stream`.
  */
 import type { WebContents } from "electron";
-import { EVENT_AGENT_RUN_FAILED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_AGENT_STREAM_THINKING_DELTA, EVENT_AGENT_STREAM_TOOL_USE, type SimpleEventBus } from "@novel-master/core/events";
-import type { AgentRunFailedPayload } from "../../../shared/agent-event-types.js";
+import {
+  EVENT_AGENT_RUN_FAILED,
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STEP_COMMITTED,
+  EVENT_AGENT_STREAM_TEXT_DELTA,
+  EVENT_AGENT_STREAM_THINKING_DELTA,
+  EVENT_AGENT_STREAM_TOOL_USE,
+  type AgentRunFailedPayload,
+  type AgentRunFinishedPayload,
+  type AgentRunStartedPayload,
+  type SimpleEventBus,
+} from "@novel-master/core/events";
+import {
+  onCoreRunFailed,
+  onCoreRunFinished,
+  onCoreRunStarted,
+} from "./handlers/agent.js";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
 import { desktopLogError } from "../log/desktop-log.js";
 
@@ -28,9 +44,18 @@ export function setEventBusForwardTarget(
   getTargetWebContents = resolver;
 }
 
+/**
+ * run 生命周期登记/清理在 main 的 forward-event-bus 统一处理（agent.ts 导出钩子），
+ * 不在 renderer 重复 refcount。
+ */
 function forwardEvent(type: string, payload: unknown): void {
-  if (type === EVENT_AGENT_RUN_FAILED) {
+  if (type === EVENT_AGENT_RUN_STARTED) {
+    onCoreRunStarted(payload as AgentRunStartedPayload);
+  } else if (type === EVENT_AGENT_RUN_FINISHED) {
+    onCoreRunFinished(payload as AgentRunFinishedPayload);
+  } else if (type === EVENT_AGENT_RUN_FAILED) {
     const failed = payload as AgentRunFailedPayload;
+    onCoreRunFailed(failed);
     desktopLogError("agent run failed (forwarding to renderer)", {
       sessionId: failed.sessionId,
       projectId: failed.projectId,
