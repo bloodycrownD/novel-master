@@ -7,7 +7,7 @@ import {
   MENU_OPEN_GRACE_MS,
   shouldCancelLongPressForMove,
 } from './menu-overlay-guards';
-import {NEAR_BOTTOM_THRESHOLD_PX} from './scroll';
+import { NEAR_BOTTOM_THRESHOLD_PX } from './scroll';
 import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   ANCHORED_MENU_GAP,
@@ -21,9 +21,9 @@ import {
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_SCREEN_MARGIN,
 } from '../../components/chat/anchored-menu-layout';
-import {DECODE_LITERAL_HTML_ENTITIES_BOOT} from '../../components/rich-content/decode-literal-html-entities';
-import {STREAM_MARKDOWN_BOOT} from './stream-markdown.boot';
-import {VFS_TOOL_FILE_PATH_BOOT} from './vfs-tool-file-path-boot';
+import { DECODE_LITERAL_HTML_ENTITIES_BOOT } from '../../components/rich-content/decode-literal-html-entities';
+import { STREAM_MARKDOWN_BOOT } from './stream-markdown.boot';
+import { VFS_TOOL_FILE_PATH_BOOT } from './vfs-tool-file-path-boot';
 
 export function buildTranscriptBootScript(): string {
   return `

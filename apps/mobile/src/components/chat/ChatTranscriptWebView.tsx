@@ -10,9 +10,9 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {StyleSheet, View} from 'react-native';
-import WebView, {type WebViewMessageEvent} from 'react-native-webview';
-import { type ChatMessage } from "@novel-master/core/chat";
+import { StyleSheet, View } from 'react-native';
+import WebView, { type WebViewMessageEvent } from 'react-native-webview';
+import { type ChatMessage } from '@novel-master/core/chat';
 import {
   encodeHostToTranscript,
   decodeTranscriptToHost,
@@ -24,7 +24,7 @@ import {
   type TranscriptScrollIntent,
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
-import {enrichTranscriptRows} from './enrich-transcript-rows';
+import { enrichTranscriptRows } from './enrich-transcript-rows';
 import {
   buildTranscriptRows,
   messageHasToolUse,
@@ -35,17 +35,15 @@ import {
   CHAT_TRANSCRIPT_BASE_URL,
   CHAT_TRANSCRIPT_HTML,
 } from '@/web/chat-transcript/transcript-html';
-import {
-  emitChatTranscriptTelemetry,
-} from '@/services/chat-transcript-telemetry';
-import {useTheme} from '@/theme/ThemeProvider';
-import {prepareStreamTailHtml} from './prepare-stream-tail-html';
-import type {StreamWireChunk} from '@/services/stream-wire-queue';
-import {appendWireChunk} from '@/services/stream-wire-queue';
+import { emitChatTranscriptTelemetry } from '@/services/chat-transcript-telemetry';
+import { useTheme } from '@/theme/ThemeProvider';
+import { prepareStreamTailHtml } from './prepare-stream-tail-html';
+import type { StreamWireChunk } from '@/services/stream-wire-queue';
+import { appendWireChunk } from '@/services/stream-wire-queue';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
-  pushStreamBatch: (payload: {segments: readonly StreamWireChunk[]}) => void;
+  pushStreamBatch: (payload: { segments: readonly StreamWireChunk[] }) => void;
   resetStream: () => void;
 };
 
@@ -138,15 +136,15 @@ function themeFromTokens(tokens: {
 function resolveOpenScrollIntent(
   initialScroll: ChatTranscriptScrollSnapshot | null,
   defaultScrollToBottom: boolean,
-): {intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll} {
+): { intent: TranscriptScrollIntent; restoreScroll?: TranscriptRestoreScroll } {
   if (defaultScrollToBottom) {
-    return {intent: 'stick'};
+    return { intent: 'stick' };
   }
   if (initialScroll == null) {
-    return {intent: 'stick'};
+    return { intent: 'stick' };
   }
   if (initialScroll.nearBottom) {
-    return {intent: 'stick'};
+    return { intent: 'stick' };
   }
   return {
     intent: 'restore',
@@ -181,664 +179,687 @@ function emitScrollRestoreTelemetry(
 export const ChatTranscriptWebView = memo(
   forwardRef<ChatTranscriptWebViewHandle, ChatTranscriptWebViewProps>(
     function ChatTranscriptWebView(
-  {
-    sessionKey,
-    messages,
-    streamingText = '',
-    streamingThinking = '',
-    hasMore = false,
-    flags,
-    initialScroll = null,
-    defaultScrollToBottom = true,
-    agentRunning = false,
-    uiRunning: uiRunningProp,
-    toolInvoking = false,
-    selectedMessageIds,
-    affectedMessageIds,
-    menuCloseSignal = 0,
-    onScrollSnapshot,
-    onReady,
-    onLoadOlder,
-    onOpenToolFile,
-    onOpenMessageMenu,
-    onMessageMenuAction,
-    onWebMenuOpenChange,
-    onToggleMessageSelect,
-  },
-  ref,
-) {
-  const uiRunning = uiRunningProp ?? agentRunning;
-  const {tokens} = useTheme();
-  const webRef = useRef<WebView>(null);
-  const [webReady, setWebReady] = useState(false);
-  const prevStreamTextRef = useRef('');
-  const prevStreamThinkingRef = useRef('');
-  const sessionKeyRef = useRef(sessionKey);
-  const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
-  const prevMessageCountRef = useRef(0);
-  const prevRichTextRef = useRef(flags?.richText ?? false);
-  const prevMessagesRef = useRef(messages);
-  const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
-  const lastScrollRef = useRef({nearBottom: true, offsetY: 0});
-  const initialScrollRef = useRef(initialScroll);
-  const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
-  const needsOpenSnapshotRef = useRef(true);
-  const snapshotDeferTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const pendingSnapshotRef = useRef<{
-    intent: TranscriptScrollIntent;
-    restoreScroll?: TranscriptRestoreScroll;
-  } | null>(null);
-  const streamRafRef = useRef<number | null>(null);
-  /** batch-off 回滚路径：按到达序排队，RAF 内逐条 post streamDelta（禁止 text/thinking 分区重排）。 */
-  const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
-  const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
-  const streamTextAccumRef = useRef('');
-  const streamThinkingAccumRef = useRef('');
-  const richTextRef = useRef(flags?.richText ?? false);
-  const streamActiveRef = useRef(false);
+      {
+        sessionKey,
+        messages,
+        streamingText = '',
+        streamingThinking = '',
+        hasMore = false,
+        flags,
+        initialScroll = null,
+        defaultScrollToBottom = true,
+        agentRunning = false,
+        uiRunning: uiRunningProp,
+        toolInvoking = false,
+        selectedMessageIds,
+        affectedMessageIds,
+        menuCloseSignal = 0,
+        onScrollSnapshot,
+        onReady,
+        onLoadOlder,
+        onOpenToolFile,
+        onOpenMessageMenu,
+        onMessageMenuAction,
+        onWebMenuOpenChange,
+        onToggleMessageSelect,
+      },
+      ref,
+    ) {
+      const uiRunning = uiRunningProp ?? agentRunning;
+      const { tokens } = useTheme();
+      const webRef = useRef<WebView>(null);
+      const [webReady, setWebReady] = useState(false);
+      const prevStreamTextRef = useRef('');
+      const prevStreamThinkingRef = useRef('');
+      const sessionKeyRef = useRef(sessionKey);
+      const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
+      const prevMessageCountRef = useRef(0);
+      const prevRichTextRef = useRef(flags?.richText ?? false);
+      const prevMessagesRef = useRef(messages);
+      const prevSentFlagsRef = useRef<TranscriptFlags | null>(null);
+      const lastScrollRef = useRef({ nearBottom: true, offsetY: 0 });
+      const initialScrollRef = useRef(initialScroll);
+      const defaultScrollToBottomRef = useRef(defaultScrollToBottom);
+      const needsOpenSnapshotRef = useRef(true);
+      const snapshotDeferTimerRef = useRef<ReturnType<
+        typeof setTimeout
+      > | null>(null);
+      const pendingSnapshotRef = useRef<{
+        intent: TranscriptScrollIntent;
+        restoreScroll?: TranscriptRestoreScroll;
+      } | null>(null);
+      const streamRafRef = useRef<number | null>(null);
+      /** batch-off 回滚路径：按到达序排队，RAF 内逐条 post streamDelta（禁止 text/thinking 分区重排）。 */
+      const pendingStreamDeltaSegmentsRef = useRef<StreamWireChunk[]>([]);
+      const pendingStreamSegmentsRef = useRef<StreamWireChunk[]>([]);
+      const streamTextAccumRef = useRef('');
+      const streamThinkingAccumRef = useRef('');
+      const richTextRef = useRef(flags?.richText ?? false);
+      const streamActiveRef = useRef(false);
 
-  useEffect(() => {
-    richTextRef.current = flags?.richText ?? false;
-  }, [flags?.richText]);
+      useEffect(() => {
+        richTextRef.current = flags?.richText ?? false;
+      }, [flags?.richText]);
 
-  useEffect(() => {
-    initialScrollRef.current = initialScroll;
-  }, [initialScroll]);
+      useEffect(() => {
+        initialScrollRef.current = initialScroll;
+      }, [initialScroll]);
 
-  useEffect(() => {
-    defaultScrollToBottomRef.current = defaultScrollToBottom;
-  }, [defaultScrollToBottom]);
+      useEffect(() => {
+        defaultScrollToBottomRef.current = defaultScrollToBottom;
+      }, [defaultScrollToBottom]);
 
-  const postToWeb = useCallback((message: HostToTranscriptMessage) => {
-    webRef.current?.postMessage(encodeHostToTranscript(message));
-  }, []);
+      const postToWeb = useCallback((message: HostToTranscriptMessage) => {
+        webRef.current?.postMessage(encodeHostToTranscript(message));
+      }, []);
 
-  const flushPendingStreamDeltas = useCallback(() => {
-    if (streamRafRef.current != null) {
-      return;
-    }
-    streamRafRef.current = requestAnimationFrame(() => {
-      streamRafRef.current = null;
-      const segments = pendingStreamDeltaSegmentsRef.current;
-      if (segments.length === 0) {
-        return;
-      }
-      pendingStreamDeltaSegmentsRef.current = [];
-      // WHY（中文）：
-      // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
-      // - Web 侧在 richText 开启时会优先用 html 走 `innerHTML` 路径，以保证 text/thinking 的流式 rich 行为一致。
-      const richText = richTextRef.current;
-      const textHtml = prepareStreamTailHtml(streamTextAccumRef.current, richText);
-      const thinkingHtml = prepareStreamTailHtml(
-        streamThinkingAccumRef.current,
-        richText,
+      const flushPendingStreamDeltas = useCallback(() => {
+        if (streamRafRef.current != null) {
+          return;
+        }
+        streamRafRef.current = requestAnimationFrame(() => {
+          streamRafRef.current = null;
+          const segments = pendingStreamDeltaSegmentsRef.current;
+          if (segments.length === 0) {
+            return;
+          }
+          pendingStreamDeltaSegmentsRef.current = [];
+          // WHY（中文）：
+          // - spec 要求 RN 保留 `prepareStreamTailHtml` 产物并透传 `payload.html`。
+          // - Web 侧在 richText 开启时会优先用 html 走 `innerHTML` 路径，以保证 text/thinking 的流式 rich 行为一致。
+          const richText = richTextRef.current;
+          const textHtml = prepareStreamTailHtml(
+            streamTextAccumRef.current,
+            richText,
+          );
+          const thinkingHtml = prepareStreamTailHtml(
+            streamThinkingAccumRef.current,
+            richText,
+          );
+
+          for (const seg of segments) {
+            postToWeb({
+              v: 1,
+              type: 'streamDelta',
+              payload: {
+                kind: seg.kind,
+                delta: seg.delta,
+                html: seg.kind === 'text' ? textHtml : thinkingHtml,
+              },
+            });
+          }
+        });
+      }, [postToWeb]);
+
+      const flushPendingStreamBatch = useCallback(() => {
+        if (streamRafRef.current != null) {
+          return;
+        }
+        streamRafRef.current = requestAnimationFrame(() => {
+          streamRafRef.current = null;
+          const segments = pendingStreamSegmentsRef.current;
+          if (segments.length === 0) {
+            return;
+          }
+          pendingStreamSegmentsRef.current = [];
+          for (const seg of segments) {
+            if (seg.kind === 'text') {
+              streamTextAccumRef.current += seg.delta;
+            } else {
+              streamThinkingAccumRef.current += seg.delta;
+            }
+          }
+          const richText = richTextRef.current;
+          const textHtml = prepareStreamTailHtml(
+            streamTextAccumRef.current,
+            richText,
+          );
+          const thinkingHtml = prepareStreamTailHtml(
+            streamThinkingAccumRef.current,
+            richText,
+          );
+          postToWeb({
+            v: 1,
+            type: 'streamBatch',
+            payload: {
+              segments: segments.map(seg => ({
+                kind: seg.kind,
+                delta: seg.delta,
+              })),
+              textHtml,
+              thinkingHtml,
+            },
+          });
+        });
+      }, [postToWeb]);
+
+      const queueStreamDelta = useCallback(
+        (kind: 'text' | 'thinking', delta: string) => {
+          if (!webReady || delta.length === 0) {
+            return;
+          }
+          streamActiveRef.current = true;
+          if (kind === 'text') {
+            streamTextAccumRef.current += delta;
+          } else {
+            streamThinkingAccumRef.current += delta;
+          }
+          appendWireChunk(pendingStreamDeltaSegmentsRef.current, {
+            kind,
+            delta,
+          });
+          flushPendingStreamDeltas();
+        },
+        [webReady, flushPendingStreamDeltas],
       );
 
-      for (const seg of segments) {
+      const queueStreamBatch = useCallback(
+        (payload: { segments: readonly StreamWireChunk[] }) => {
+          if (!webReady || payload.segments.length === 0) {
+            return;
+          }
+          streamActiveRef.current = true;
+          for (const seg of payload.segments) {
+            if (seg.delta.length === 0) {
+              continue;
+            }
+            appendWireChunk(pendingStreamSegmentsRef.current, seg);
+          }
+          flushPendingStreamBatch();
+        },
+        [webReady, flushPendingStreamBatch],
+      );
+
+      const sendInit = useCallback(() => {
+        const resolvedFlags: TranscriptFlags = {
+          richText: flags?.richText ?? false,
+          batchMode: flags?.batchMode ?? false,
+          batchModeKind: flags?.batchModeKind ?? null,
+          menuDisabled: uiRunning,
+        };
         postToWeb({
           v: 1,
-          type: 'streamDelta',
-          payload: {
-            kind: seg.kind,
-            delta: seg.delta,
-            html: seg.kind === 'text' ? textHtml : thinkingHtml,
-          },
+          type: 'init',
+          payload: { theme: themeFromTokens(tokens), flags: resolvedFlags },
         });
-      }
-    });
-  }, [postToWeb]);
+      }, [
+        flags?.richText,
+        flags?.batchMode,
+        flags?.batchModeKind,
+        postToWeb,
+        tokens,
+        uiRunning,
+      ]);
 
-  const flushPendingStreamBatch = useCallback(() => {
-    if (streamRafRef.current != null) {
-      return;
-    }
-    streamRafRef.current = requestAnimationFrame(() => {
-      streamRafRef.current = null;
-      const segments = pendingStreamSegmentsRef.current;
-      if (segments.length === 0) {
-        return;
-      }
-      pendingStreamSegmentsRef.current = [];
-      for (const seg of segments) {
-        if (seg.kind === 'text') {
-          streamTextAccumRef.current += seg.delta;
-        } else {
-          streamThinkingAccumRef.current += seg.delta;
-        }
-      }
-      const richText = richTextRef.current;
-      const textHtml = prepareStreamTailHtml(streamTextAccumRef.current, richText);
-      const thinkingHtml = prepareStreamTailHtml(
-        streamThinkingAccumRef.current,
-        richText,
-      );
-      postToWeb({
-        v: 1,
-        type: 'streamBatch',
-        payload: {
-          segments: segments.map(seg => ({kind: seg.kind, delta: seg.delta})),
-          textHtml,
-          thinkingHtml,
+      // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
+      const sendSessionSnapshotNow = useCallback(
+        (
+          scrollIntent: TranscriptScrollIntent,
+          restoreScroll?: TranscriptRestoreScroll,
+        ) => {
+          const richText = flags?.richText ?? false;
+          const rows = enrichTranscriptRows(
+            buildTranscriptRows(messages, undefined, { agentRunning }),
+            richText,
+          );
+          postToWeb({
+            v: 1,
+            type: 'sessionSnapshot',
+            payload: {
+              sessionKey,
+              rows,
+              hasMore,
+              scrollIntent,
+              ...(scrollIntent === 'restore' && restoreScroll != null
+                ? { restoreScroll }
+                : {}),
+            },
+          });
         },
-      });
-    });
-  }, [postToWeb]);
-
-  const queueStreamDelta = useCallback(
-    (kind: 'text' | 'thinking', delta: string) => {
-      if (!webReady || delta.length === 0) {
-        return;
-      }
-      streamActiveRef.current = true;
-      if (kind === 'text') {
-        streamTextAccumRef.current += delta;
-      } else {
-        streamThinkingAccumRef.current += delta;
-      }
-      appendWireChunk(pendingStreamDeltaSegmentsRef.current, {kind, delta});
-      flushPendingStreamDeltas();
-    },
-    [webReady, flushPendingStreamDeltas],
-  );
-
-  const queueStreamBatch = useCallback(
-    (payload: {segments: readonly StreamWireChunk[]}) => {
-      if (!webReady || payload.segments.length === 0) {
-        return;
-      }
-      streamActiveRef.current = true;
-      for (const seg of payload.segments) {
-        if (seg.delta.length === 0) {
-          continue;
-        }
-        appendWireChunk(pendingStreamSegmentsRef.current, seg);
-      }
-      flushPendingStreamBatch();
-    },
-    [webReady, flushPendingStreamBatch],
-  );
-
-  const sendInit = useCallback(() => {
-    const resolvedFlags: TranscriptFlags = {
-      richText: flags?.richText ?? false,
-      batchMode: flags?.batchMode ?? false,
-      batchModeKind: flags?.batchModeKind ?? null,
-      menuDisabled: uiRunning,
-    };
-    postToWeb({
-      v: 1,
-      type: 'init',
-      payload: {theme: themeFromTokens(tokens), flags: resolvedFlags},
-    });
-  }, [
-    flags?.richText,
-    flags?.batchMode,
-    flags?.batchModeKind,
-    postToWeb,
-    tokens,
-    uiRunning,
-  ]);
-
-  // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
-  const sendSessionSnapshotNow = useCallback(
-    (
-      scrollIntent: TranscriptScrollIntent,
-      restoreScroll?: TranscriptRestoreScroll,
-    ) => {
-      const richText = flags?.richText ?? false;
-      const rows = enrichTranscriptRows(
-        buildTranscriptRows(messages, undefined, {agentRunning}),
-        richText,
-      );
-      postToWeb({
-        v: 1,
-        type: 'sessionSnapshot',
-        payload: {
-          sessionKey,
-          rows,
+        [
+          messages,
           hasMore,
-          scrollIntent,
-          ...(scrollIntent === 'restore' && restoreScroll != null
-            ? {restoreScroll}
-            : {}),
-        },
-      });
-    },
-    [messages, hasMore, postToWeb, sessionKey, flags?.richText, agentRunning],
-  );
+          postToWeb,
+          sessionKey,
+          flags?.richText,
+          agentRunning,
+        ],
+      );
 
-  const flushPendingSnapshot = useCallback(() => {
-    if (snapshotDeferTimerRef.current != null) {
-      clearTimeout(snapshotDeferTimerRef.current);
-      snapshotDeferTimerRef.current = null;
-    }
-    const pending = pendingSnapshotRef.current;
-    pendingSnapshotRef.current = null;
-    if (pending != null) {
-      sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
-    }
-  }, [sendSessionSnapshotNow]);
-
-  const sendSessionSnapshot = useCallback(
-    (
-      intent: TranscriptScrollIntent,
-      restoreScroll?: TranscriptRestoreScroll,
-    ) => {
-      if (!uiRunning) {
-        sendSessionSnapshotNow(intent, restoreScroll);
-        return;
-      }
-      pendingSnapshotRef.current = {intent, restoreScroll};
-      if (streamActiveRef.current) {
-        return;
-      }
-      if (snapshotDeferTimerRef.current != null) {
-        return;
-      }
-      snapshotDeferTimerRef.current = setTimeout(() => {
-        snapshotDeferTimerRef.current = null;
-        if (streamActiveRef.current) {
-          return;
+      const flushPendingSnapshot = useCallback(() => {
+        if (snapshotDeferTimerRef.current != null) {
+          clearTimeout(snapshotDeferTimerRef.current);
+          snapshotDeferTimerRef.current = null;
         }
         const pending = pendingSnapshotRef.current;
         pendingSnapshotRef.current = null;
         if (pending != null) {
           sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
         }
-      }, 0);
-    },
-    [uiRunning, sendSessionSnapshotNow],
-  );
+      }, [sendSessionSnapshotNow]);
 
-  const sendAppendTailRows = useCallback(
-    (tailMessages: readonly ChatMessage[]) => {
-      if (tailMessages.length === 0) {
-        return;
-      }
-      const richText = flags?.richText ?? false;
-      const rows = enrichTranscriptRows(
-        selectTailTranscriptRows(messages, tailMessages, {agentRunning}),
-        richText,
-      );
-      if (rows.length === 0) {
-        return;
-      }
-      postToWeb({
-        v: 1,
-        type: 'appendTailRows',
-        payload: {rows},
-      });
-    },
-    [postToWeb, flags?.richText, agentRunning, messages],
-  );
-
-  const resetStreamTail = useCallback(() => {
-    if (streamRafRef.current != null) {
-      cancelAnimationFrame(streamRafRef.current);
-      streamRafRef.current = null;
-    }
-    pendingStreamDeltaSegmentsRef.current = [];
-    pendingStreamSegmentsRef.current = [];
-    streamTextAccumRef.current = '';
-    streamThinkingAccumRef.current = '';
-    prevStreamTextRef.current = '';
-    prevStreamThinkingRef.current = '';
-    streamActiveRef.current = false;
-    if (webReady) {
-      postToWeb({v: 1, type: 'streamReset', payload: {}});
-    }
-    flushPendingSnapshot();
-  }, [webReady, postToWeb, flushPendingSnapshot]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      pushStreamDelta: queueStreamDelta,
-      pushStreamBatch: queueStreamBatch,
-      resetStream: resetStreamTail,
-    }),
-    [queueStreamDelta, queueStreamBatch, resetStreamTail],
-  );
-
-  const sendPrependPage = useCallback(
-    (prependedCount: number) => {
-      const richText = flags?.richText ?? false;
-      const olderMessages = messages.slice(0, prependedCount);
-      postToWeb({
-        v: 1,
-        type: 'prependPage',
-        payload: {
-          rows: enrichTranscriptRows(
-            buildTranscriptRows(olderMessages, undefined, {agentRunning}),
-            richText,
-          ),
-          prependedCount,
+      const sendSessionSnapshot = useCallback(
+        (
+          intent: TranscriptScrollIntent,
+          restoreScroll?: TranscriptRestoreScroll,
+        ) => {
+          if (!uiRunning) {
+            sendSessionSnapshotNow(intent, restoreScroll);
+            return;
+          }
+          pendingSnapshotRef.current = { intent, restoreScroll };
+          if (streamActiveRef.current) {
+            return;
+          }
+          if (snapshotDeferTimerRef.current != null) {
+            return;
+          }
+          snapshotDeferTimerRef.current = setTimeout(() => {
+            snapshotDeferTimerRef.current = null;
+            if (streamActiveRef.current) {
+              return;
+            }
+            const pending = pendingSnapshotRef.current;
+            pendingSnapshotRef.current = null;
+            if (pending != null) {
+              sendSessionSnapshotNow(pending.intent, pending.restoreScroll);
+            }
+          }, 0);
         },
-      });
-    },
-    [messages, postToWeb, flags?.richText, agentRunning],
-  );
+        [uiRunning, sendSessionSnapshotNow],
+      );
 
-  const handleMessage = useCallback(
-    (event: WebViewMessageEvent) => {
-      let message;
-      try {
-        message = decodeTranscriptToHost(event.nativeEvent.data);
-      } catch {
-        return;
-      }
-      if (message.type === 'ready') {
-        setWebReady(true);
-        onReady?.();
-        return;
-      }
-      if (message.type === 'scrollSnapshot') {
-        const snap = parseScrollSnapshotFromHost(message);
-        if (snap) {
-          lastScrollRef.current = {
-            nearBottom: snap.nearBottom,
-            offsetY: snap.offsetY,
-          };
-          onScrollSnapshot?.(snap);
+      const sendAppendTailRows = useCallback(
+        (tailMessages: readonly ChatMessage[]) => {
+          if (tailMessages.length === 0) {
+            return;
+          }
+          const richText = flags?.richText ?? false;
+          const rows = enrichTranscriptRows(
+            selectTailTranscriptRows(messages, tailMessages, { agentRunning }),
+            richText,
+          );
+          if (rows.length === 0) {
+            return;
+          }
+          postToWeb({
+            v: 1,
+            type: 'appendTailRows',
+            payload: { rows },
+          });
+        },
+        [postToWeb, flags?.richText, agentRunning, messages],
+      );
+
+      const resetStreamTail = useCallback(() => {
+        if (streamRafRef.current != null) {
+          cancelAnimationFrame(streamRafRef.current);
+          streamRafRef.current = null;
         }
-        return;
-      }
-      if (message.type === 'loadOlder') {
-        onLoadOlder?.();
-        return;
-      }
-      if (message.type === 'openToolFile') {
-        onOpenToolFile?.(message.payload.path);
-        return;
-      }
-      if (message.type === 'openMessageMenu') {
-        if (uiRunning) {
+        pendingStreamDeltaSegmentsRef.current = [];
+        pendingStreamSegmentsRef.current = [];
+        streamTextAccumRef.current = '';
+        streamThinkingAccumRef.current = '';
+        prevStreamTextRef.current = '';
+        prevStreamThinkingRef.current = '';
+        streamActiveRef.current = false;
+        if (webReady) {
+          postToWeb({ v: 1, type: 'streamReset', payload: {} });
+        }
+        flushPendingSnapshot();
+      }, [webReady, postToWeb, flushPendingSnapshot]);
+
+      useImperativeHandle(
+        ref,
+        () => ({
+          pushStreamDelta: queueStreamDelta,
+          pushStreamBatch: queueStreamBatch,
+          resetStream: resetStreamTail,
+        }),
+        [queueStreamDelta, queueStreamBatch, resetStreamTail],
+      );
+
+      const sendPrependPage = useCallback(
+        (prependedCount: number) => {
+          const richText = flags?.richText ?? false;
+          const olderMessages = messages.slice(0, prependedCount);
+          postToWeb({
+            v: 1,
+            type: 'prependPage',
+            payload: {
+              rows: enrichTranscriptRows(
+                buildTranscriptRows(olderMessages, undefined, { agentRunning }),
+                richText,
+              ),
+              prependedCount,
+            },
+          });
+        },
+        [messages, postToWeb, flags?.richText, agentRunning],
+      );
+
+      const handleMessage = useCallback(
+        (event: WebViewMessageEvent) => {
+          let message;
+          try {
+            message = decodeTranscriptToHost(event.nativeEvent.data);
+          } catch {
+            return;
+          }
+          if (message.type === 'ready') {
+            setWebReady(true);
+            onReady?.();
+            return;
+          }
+          if (message.type === 'scrollSnapshot') {
+            const snap = parseScrollSnapshotFromHost(message);
+            if (snap) {
+              lastScrollRef.current = {
+                nearBottom: snap.nearBottom,
+                offsetY: snap.offsetY,
+              };
+              onScrollSnapshot?.(snap);
+            }
+            return;
+          }
+          if (message.type === 'loadOlder') {
+            onLoadOlder?.();
+            return;
+          }
+          if (message.type === 'openToolFile') {
+            onOpenToolFile?.(message.payload.path);
+            return;
+          }
+          if (message.type === 'openMessageMenu') {
+            if (uiRunning) {
+              return;
+            }
+            emitChatTranscriptTelemetry({ name: 'menu_open' });
+            onOpenMessageMenu?.(
+              message.payload.messageId,
+              message.payload.pageX,
+              message.payload.pageY,
+            );
+            return;
+          }
+          if (message.type === 'messageMenuAction') {
+            onMessageMenuAction?.(
+              message.payload.messageId,
+              message.payload.action,
+            );
+            return;
+          }
+          if (message.type === 'menuOpened') {
+            onWebMenuOpenChange?.(true);
+            return;
+          }
+          if (message.type === 'menuClosed') {
+            onWebMenuOpenChange?.(false);
+            return;
+          }
+          if (message.type === 'toggleMessageSelect') {
+            onToggleMessageSelect?.(message.payload.messageId);
+            return;
+          }
+        },
+        [
+          onReady,
+          onScrollSnapshot,
+          onLoadOlder,
+          onOpenToolFile,
+          onOpenMessageMenu,
+          onMessageMenuAction,
+          onWebMenuOpenChange,
+          onToggleMessageSelect,
+          uiRunning,
+        ],
+      );
+
+      useEffect(() => {
+        if (!webReady) {
           return;
         }
-        emitChatTranscriptTelemetry({name: 'menu_open'});
-        onOpenMessageMenu?.(
-          message.payload.messageId,
-          message.payload.pageX,
-          message.payload.pageY,
-        );
-        return;
-      }
-      if (message.type === 'messageMenuAction') {
-        onMessageMenuAction?.(
-          message.payload.messageId,
-          message.payload.action,
-        );
-        return;
-      }
-      if (message.type === 'menuOpened') {
-        onWebMenuOpenChange?.(true);
-        return;
-      }
-      if (message.type === 'menuClosed') {
-        onWebMenuOpenChange?.(false);
-        return;
-      }
-      if (message.type === 'toggleMessageSelect') {
-        onToggleMessageSelect?.(message.payload.messageId);
-        return;
-      }
-    },
-    [
-      onReady,
-      onScrollSnapshot,
-      onLoadOlder,
-      onOpenToolFile,
-      onOpenMessageMenu,
-      onMessageMenuAction,
-      onWebMenuOpenChange,
-      onToggleMessageSelect,
-      uiRunning,
-    ],
-  );
+        sendInit();
+      }, [webReady, sendInit]);
 
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    sendInit();
-  }, [webReady, sendInit]);
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        const resolvedFlags: TranscriptFlags = {
+          richText: flags?.richText ?? false,
+          batchMode: flags?.batchMode ?? false,
+          batchModeKind: flags?.batchModeKind ?? null,
+          menuDisabled: uiRunning,
+        };
+        const prev = prevSentFlagsRef.current;
+        if (
+          prev != null &&
+          prev.richText === resolvedFlags.richText &&
+          prev.batchMode === resolvedFlags.batchMode &&
+          prev.batchModeKind === resolvedFlags.batchModeKind &&
+          prev.menuDisabled === resolvedFlags.menuDisabled
+        ) {
+          return;
+        }
+        prevSentFlagsRef.current = resolvedFlags;
+        postToWeb({
+          v: 1,
+          type: 'flagsUpdate',
+          payload: { flags: resolvedFlags },
+        });
+      }, [
+        webReady,
+        flags?.richText,
+        flags?.batchMode,
+        flags?.batchModeKind,
+        uiRunning,
+        postToWeb,
+      ]);
 
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    const resolvedFlags: TranscriptFlags = {
-      richText: flags?.richText ?? false,
-      batchMode: flags?.batchMode ?? false,
-      batchModeKind: flags?.batchModeKind ?? null,
-      menuDisabled: uiRunning,
-    };
-    const prev = prevSentFlagsRef.current;
-    if (
-      prev != null &&
-      prev.richText === resolvedFlags.richText &&
-      prev.batchMode === resolvedFlags.batchMode &&
-      prev.batchModeKind === resolvedFlags.batchModeKind &&
-      prev.menuDisabled === resolvedFlags.menuDisabled
-    ) {
-      return;
-    }
-    prevSentFlagsRef.current = resolvedFlags;
-    postToWeb({
-      v: 1,
-      type: 'flagsUpdate',
-      payload: {flags: resolvedFlags},
-    });
-  }, [
-    webReady,
-    flags?.richText,
-    flags?.batchMode,
-    flags?.batchModeKind,
-    uiRunning,
-    postToWeb,
-  ]);
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        postToWeb({
+          v: 1,
+          type: 'themeUpdate',
+          payload: { theme: themeFromTokens(tokens) },
+        });
+      }, [webReady, tokens, postToWeb]);
 
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    postToWeb({
-      v: 1,
-      type: 'themeUpdate',
-      payload: {theme: themeFromTokens(tokens)},
-    });
-  }, [webReady, tokens, postToWeb]);
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        postToWeb({
+          v: 1,
+          type: 'selectionUpdate',
+          payload: {
+            selectedMessageIds: selectedMessageIds
+              ? [...selectedMessageIds]
+              : [],
+            affectedMessageIds: affectedMessageIds
+              ? [...affectedMessageIds]
+              : [],
+          },
+        });
+      }, [webReady, selectedMessageIds, affectedMessageIds, postToWeb]);
 
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    postToWeb({
-      v: 1,
-      type: 'selectionUpdate',
-      payload: {
-        selectedMessageIds: selectedMessageIds
-          ? [...selectedMessageIds]
-          : [],
-        affectedMessageIds: affectedMessageIds
-          ? [...affectedMessageIds]
-          : [],
-      },
-    });
-  }, [webReady, selectedMessageIds, affectedMessageIds, postToWeb]);
+      useEffect(() => {
+        if (!webReady || menuCloseSignal === 0) {
+          return;
+        }
+        postToWeb({ v: 1, type: 'closeMenu', payload: {} });
+      }, [webReady, menuCloseSignal, postToWeb]);
 
-  useEffect(() => {
-    if (!webReady || menuCloseSignal === 0) {
-      return;
-    }
-    postToWeb({v: 1, type: 'closeMenu', payload: {}});
-  }, [webReady, menuCloseSignal, postToWeb]);
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        postToWeb({
+          v: 1,
+          type: 'streamToolInvoking',
+          payload: { active: toolInvoking },
+        });
+      }, [webReady, toolInvoking, postToWeb]);
 
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    postToWeb({
-      v: 1,
-      type: 'streamToolInvoking',
-      payload: {active: toolInvoking},
-    });
-  }, [webReady, toolInvoking, postToWeb]);
-
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    const richText = flags?.richText ?? false;
-    if (prevRichTextRef.current === richText) {
-      return;
-    }
-    prevRichTextRef.current = richText;
-    sendSessionSnapshot('preserve');
-  }, [webReady, flags?.richText, sendSessionSnapshot]);
-
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    if (sessionKeyRef.current !== sessionKey) {
-      sessionKeyRef.current = sessionKey;
-      prevStreamTextRef.current = '';
-      prevStreamThinkingRef.current = '';
-      prevFirstMessageIdRef.current = undefined;
-      prevMessageCountRef.current = 0;
-      needsOpenSnapshotRef.current = true;
-    }
-
-    if (needsOpenSnapshotRef.current) {
-      needsOpenSnapshotRef.current = false;
-      const {intent, restoreScroll} = resolveOpenScrollIntent(
-        initialScrollRef.current,
-        defaultScrollToBottomRef.current,
-      );
-      sendSessionSnapshot(intent, restoreScroll);
-      emitScrollRestoreTelemetry(intent, restoreScroll);
-      emitChatTranscriptTelemetry({
-        name: 'transcript_ready',
-        sessionKey,
-        rowCount: messages.length,
-        hasInitialScroll: initialScrollRef.current != null,
-        defaultScrollToBottom: defaultScrollToBottomRef.current,
-      });
-      prevFirstMessageIdRef.current = messages[0]?.id;
-      prevMessageCountRef.current = messages.length;
-      prevMessagesRef.current = messages;
-      return;
-    }
-
-    if (prevMessagesRef.current === messages) {
-      return;
-    }
-    prevMessagesRef.current = messages;
-
-    const firstId = messages[0]?.id;
-    const prevFirstId = prevFirstMessageIdRef.current;
-    const prevCount = prevMessageCountRef.current;
-    const grew = messages.length > prevCount;
-    const prependedOlder =
-      grew &&
-      prevFirstId != null &&
-      firstId != null &&
-      firstId !== prevFirstId;
-
-    if (prependedOlder) {
-      const prependedCount = messages.length - prevCount;
-      emitChatTranscriptTelemetry({
-        name: 'prepend_detected',
-        prependedCount,
-        wasNearBottom: lastScrollRef.current.nearBottom,
-        offsetYBefore: lastScrollRef.current.offsetY,
-      });
-      sendPrependPage(prependedCount);
-    } else if (uiRunning && grew) {
-      const added = messages.slice(prevCount);
-      // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
-      const needsFullSnapshot =
-        added.some(messageIsToolResultsOnly) ||
-        added.some(
-          message =>
-            message.role === 'assistant' && messageHasToolUse(message),
-        );
-      if (needsFullSnapshot) {
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        const richText = flags?.richText ?? false;
+        if (prevRichTextRef.current === richText) {
+          return;
+        }
+        prevRichTextRef.current = richText;
         sendSessionSnapshot('preserve');
-      } else {
-        sendAppendTailRows(added);
-      }
-    } else {
-      sendSessionSnapshot('preserve');
-    }
+      }, [webReady, flags?.richText, sendSessionSnapshot]);
 
-    prevFirstMessageIdRef.current = firstId;
-    prevMessageCountRef.current = messages.length;
-  }, [
-    webReady,
-    sessionKey,
-    messages,
-    uiRunning,
-    sendSessionSnapshot,
-    sendPrependPage,
-    sendAppendTailRows,
-  ]);
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        if (sessionKeyRef.current !== sessionKey) {
+          sessionKeyRef.current = sessionKey;
+          prevStreamTextRef.current = '';
+          prevStreamThinkingRef.current = '';
+          prevFirstMessageIdRef.current = undefined;
+          prevMessageCountRef.current = 0;
+          needsOpenSnapshotRef.current = true;
+        }
 
-  // Legacy MessageList path: stream via props. WebView path uses imperative ref (no parent re-render).
-  useEffect(() => {
-    if (!webReady) {
-      return;
-    }
-    const prevText = prevStreamTextRef.current;
-    const prevThinking = prevStreamThinkingRef.current;
-    if (
-      streamingText.length < prevText.length ||
-      streamingThinking.length < prevThinking.length
-    ) {
-      resetStreamTail();
-      return;
-    }
-    const textDelta = streamingText.slice(prevText.length);
-    const thinkingDelta = streamingThinking.slice(prevThinking.length);
-    prevStreamTextRef.current = streamingText;
-    prevStreamThinkingRef.current = streamingThinking;
-    if (textDelta.length > 0) {
-      queueStreamDelta('text', textDelta);
-    }
-    if (thinkingDelta.length > 0) {
-      queueStreamDelta('thinking', thinkingDelta);
-    }
-  }, [
-    webReady,
-    streamingText,
-    streamingThinking,
-    queueStreamDelta,
-    resetStreamTail,
-  ]);
+        if (needsOpenSnapshotRef.current) {
+          needsOpenSnapshotRef.current = false;
+          const { intent, restoreScroll } = resolveOpenScrollIntent(
+            initialScrollRef.current,
+            defaultScrollToBottomRef.current,
+          );
+          sendSessionSnapshot(intent, restoreScroll);
+          emitScrollRestoreTelemetry(intent, restoreScroll);
+          emitChatTranscriptTelemetry({
+            name: 'transcript_ready',
+            sessionKey,
+            rowCount: messages.length,
+            hasInitialScroll: initialScrollRef.current != null,
+            defaultScrollToBottom: defaultScrollToBottomRef.current,
+          });
+          prevFirstMessageIdRef.current = messages[0]?.id;
+          prevMessageCountRef.current = messages.length;
+          prevMessagesRef.current = messages;
+          return;
+        }
 
-  return (
-    <View style={styles.fill}>
-      <WebView
-        ref={webRef}
-        style={styles.fill}
-        originWhitelist={['*']}
-        source={{html: CHAT_TRANSCRIPT_HTML, baseUrl: CHAT_TRANSCRIPT_BASE_URL}}
-        onMessage={handleMessage}
-        javaScriptEnabled
-        domStorageEnabled
-        scrollEnabled={false}
-        showsVerticalScrollIndicator={false}
-        keyboardDisplayRequiresUserAction={false}
-      />
-    </View>
-  );
-}),
+        if (prevMessagesRef.current === messages) {
+          return;
+        }
+        prevMessagesRef.current = messages;
+
+        const firstId = messages[0]?.id;
+        const prevFirstId = prevFirstMessageIdRef.current;
+        const prevCount = prevMessageCountRef.current;
+        const grew = messages.length > prevCount;
+        const prependedOlder =
+          grew &&
+          prevFirstId != null &&
+          firstId != null &&
+          firstId !== prevFirstId;
+
+        if (prependedOlder) {
+          const prependedCount = messages.length - prevCount;
+          emitChatTranscriptTelemetry({
+            name: 'prepend_detected',
+            prependedCount,
+            wasNearBottom: lastScrollRef.current.nearBottom,
+            offsetYBefore: lastScrollRef.current.offsetY,
+          });
+          sendPrependPage(prependedCount);
+        } else if (uiRunning && grew) {
+          const added = messages.slice(prevCount);
+          // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
+          const needsFullSnapshot =
+            added.some(messageIsToolResultsOnly) ||
+            added.some(
+              message =>
+                message.role === 'assistant' && messageHasToolUse(message),
+            );
+          if (needsFullSnapshot) {
+            sendSessionSnapshot('preserve');
+          } else {
+            sendAppendTailRows(added);
+          }
+        } else {
+          sendSessionSnapshot('preserve');
+        }
+
+        prevFirstMessageIdRef.current = firstId;
+        prevMessageCountRef.current = messages.length;
+      }, [
+        webReady,
+        sessionKey,
+        messages,
+        uiRunning,
+        sendSessionSnapshot,
+        sendPrependPage,
+        sendAppendTailRows,
+      ]);
+
+      // Legacy MessageList path: stream via props. WebView path uses imperative ref (no parent re-render).
+      useEffect(() => {
+        if (!webReady) {
+          return;
+        }
+        const prevText = prevStreamTextRef.current;
+        const prevThinking = prevStreamThinkingRef.current;
+        if (
+          streamingText.length < prevText.length ||
+          streamingThinking.length < prevThinking.length
+        ) {
+          resetStreamTail();
+          return;
+        }
+        const textDelta = streamingText.slice(prevText.length);
+        const thinkingDelta = streamingThinking.slice(prevThinking.length);
+        prevStreamTextRef.current = streamingText;
+        prevStreamThinkingRef.current = streamingThinking;
+        if (textDelta.length > 0) {
+          queueStreamDelta('text', textDelta);
+        }
+        if (thinkingDelta.length > 0) {
+          queueStreamDelta('thinking', thinkingDelta);
+        }
+      }, [
+        webReady,
+        streamingText,
+        streamingThinking,
+        queueStreamDelta,
+        resetStreamTail,
+      ]);
+
+      return (
+        <View style={styles.fill}>
+          <WebView
+            ref={webRef}
+            style={styles.fill}
+            originWhitelist={['*']}
+            source={{
+              html: CHAT_TRANSCRIPT_HTML,
+              baseUrl: CHAT_TRANSCRIPT_BASE_URL,
+            }}
+            onMessage={handleMessage}
+            javaScriptEnabled
+            domStorageEnabled
+            scrollEnabled={false}
+            showsVerticalScrollIndicator={false}
+            keyboardDisplayRequiresUserAction={false}
+          />
+        </View>
+      );
+    },
+  ),
   chatTranscriptWebViewPropsEqual,
 );
 
 const styles = StyleSheet.create({
-  fill: {flex: 1, minHeight: 0},
+  fill: { flex: 1, minHeight: 0 },
 });

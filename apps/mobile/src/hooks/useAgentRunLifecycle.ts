@@ -2,13 +2,13 @@
  * Agent 回合 UI 生命周期：uiRunning + activeRunId。
  * agentActive refcount 由平台层独占；beginUiRun 递增，RUN_FINISHED/FAILED 在 stream runtime 递减。
  */
-import {useCallback, useRef, useState} from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
 } from '@novel-master/core/events';
-import {incrementAgentActive} from '@/runtime/agent-activity';
+import { incrementAgentActive } from '@/runtime/agent-activity';
 
 export type AgentRunLifecycle = {
   readonly uiRunning: boolean;

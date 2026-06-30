@@ -2,7 +2,7 @@ import {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
   type ChatMessage,
-} from "@novel-master/core/chat";
+} from '@novel-master/core/chat';
 import {
   buildChatListItems,
   buildToolResultByUseId,
@@ -28,7 +28,7 @@ function msg(
     sessionId: 's1',
     seq,
     role,
-    content: {blocks},
+    content: { blocks },
     provider: null,
     raw,
     createdAtMs: seq,
@@ -41,20 +41,35 @@ describe('message-blocks', () => {
     const ravenSnippet =
       'Thrilled me—filled me with fantastic terrors never felt before;';
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/poem.txt'}},
-      ], 1),
-      msg('u1', 'user', [
-        {
-          type: 'tool_result',
-          toolUseId: 'tu1',
-          content: JSON.stringify(
-            {path: '/poem.txt', content: ravenSnippet, truncated: false},
-            null,
-            2,
-          ),
-        },
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'read',
+            input: { path: '/poem.txt' },
+          },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [
+          {
+            type: 'tool_result',
+            toolUseId: 'tu1',
+            content: JSON.stringify(
+              { path: '/poem.txt', content: ravenSnippet, truncated: false },
+              null,
+              2,
+            ),
+          },
+        ],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
@@ -66,21 +81,36 @@ describe('message-blocks', () => {
     const ravenSnippet =
       'Thrilled me—filled me with fantastic terrors never felt before;';
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/poem.txt'}},
-      ], 1),
-      msg('u1', 'user', [
-        {
-          type: 'tool_result',
-          toolUseId: 'tu1',
-          ok: true,
-          content: JSON.stringify(
-            {path: '/poem.txt', content: ravenSnippet, truncated: false},
-            null,
-            2,
-          ),
-        },
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'read',
+            input: { path: '/poem.txt' },
+          },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [
+          {
+            type: 'tool_result',
+            toolUseId: 'tu1',
+            ok: true,
+            content: JSON.stringify(
+              { path: '/poem.txt', content: ravenSnippet, truncated: false },
+              null,
+              2,
+            ),
+          },
+        ],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
@@ -90,12 +120,25 @@ describe('message-blocks', () => {
 
   it('R6: legacy tool_result without ok uses Error: prefix for status', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/ok.txt'}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'file body'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'read',
+            input: { path: '/ok.txt' },
+          },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'file body' }],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
@@ -103,16 +146,31 @@ describe('message-blocks', () => {
     }
 
     const errorMessages = [
-      msg('a2', 'assistant', [
-        {type: 'tool_use', id: 'tu2', name: 'read', input: {path: '/missing'}},
-      ], 3),
-      msg('u2', 'user', [
-        {
-          type: 'tool_result',
-          toolUseId: 'tu2',
-          content: 'Error: Path not found: /missing',
-        },
-      ], 4),
+      msg(
+        'a2',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu2',
+            name: 'read',
+            input: { path: '/missing' },
+          },
+        ],
+        3,
+      ),
+      msg(
+        'u2',
+        'user',
+        [
+          {
+            type: 'tool_result',
+            toolUseId: 'tu2',
+            content: 'Error: Path not found: /missing',
+          },
+        ],
+        4,
+      ),
     ];
     const errorItems = buildChatListItems(errorMessages);
     if (errorItems[0]?.kind === 'message') {
@@ -122,16 +180,31 @@ describe('message-blocks', () => {
 
   it('marks tool_result starting with Error: as error', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/missing'}},
-      ], 1),
-      msg('u1', 'user', [
-        {
-          type: 'tool_result',
-          toolUseId: 'tu1',
-          content: 'Error: Path not found: /missing',
-        },
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'read',
+            input: { path: '/missing' },
+          },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [
+          {
+            type: 'tool_result',
+            toolUseId: 'tu1',
+            content: 'Error: Path not found: /missing',
+          },
+        ],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     if (items[0]?.kind === 'message') {
@@ -141,16 +214,22 @@ describe('message-blocks', () => {
 
   it('pairs tool_result with tool_use id', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } }],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
     ];
     const map = buildToolResultByUseId(messages);
     const view = toolCallViewFromUse(
-      {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
+      { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } },
       map,
     );
     expect(view.status).toBe('success');
@@ -159,11 +238,14 @@ describe('message-blocks', () => {
 
   it('orphan tool_use without result → interrupted when agent inactive', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
-      ], 1),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        1,
+      ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: false});
+    const items = buildChatListItems(messages, { agentRunning: false });
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
@@ -173,11 +255,14 @@ describe('message-blocks', () => {
 
   it('tool executing → pending cards when agentRunning', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
-      ], 1),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        1,
+      ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = buildChatListItems(messages, { agentRunning: true });
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('pending');
@@ -186,14 +271,20 @@ describe('message-blocks', () => {
 
   it('tool complete → terminal tool cards', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = buildChatListItems(messages, { agentRunning: true });
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
       expect(items[0].tools[0]?.status).toBe('success');
@@ -202,14 +293,20 @@ describe('message-blocks', () => {
 
   it('incomplete turns: only last assistant pending when agentRunning', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
-      ], 1),
-      msg('a2', 'assistant', [
-        {type: 'tool_use', id: 'tu2', name: 'list', input: {}},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        1,
+      ),
+      msg(
+        'a2',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu2', name: 'list', input: {} }],
+        2,
+      ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: true});
+    const items = buildChatListItems(messages, { agentRunning: true });
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
@@ -219,11 +316,14 @@ describe('message-blocks', () => {
 
   it('abort 后无 result 的工具卡不为执行中', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
-      ], 1),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+        1,
+      ),
     ];
-    const items = buildChatListItems(messages, {agentRunning: false});
+    const items = buildChatListItems(messages, { agentRunning: false });
     if (items[0]?.kind === 'message') {
       expect(items[0].tools[0]?.status).toBe('interrupted');
       expect(items[0].tools[0]?.status).not.toBe('pending');
@@ -231,40 +331,69 @@ describe('message-blocks', () => {
   });
 
   it('turnToolResultsComplete detects paired results', () => {
-    const assistant = msg('a1', 'assistant', [
-      {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
-    ], 1);
+    const assistant = msg(
+      'a1',
+      'assistant',
+      [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+      1,
+    );
     const incomplete = [assistant];
     const complete = [
       assistant,
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 2),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
     ];
     expect(turnToolResultsComplete(assistant, incomplete)).toBe(false);
     expect(turnToolResultsComplete(assistant, complete)).toBe(true);
   });
 
   it('isTurnToolExecuting requires agentRunning', () => {
-    const assistant = msg('a1', 'assistant', [
-      {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
-    ], 1);
+    const assistant = msg(
+      'a1',
+      'assistant',
+      [{ type: 'tool_use', id: 'tu1', name: 'read', input: {} }],
+      1,
+    );
     expect(isTurnToolExecuting(assistant, [assistant], false)).toBe(false);
     expect(isTurnToolExecuting(assistant, [assistant], true)).toBe(true);
   });
 
   it('merges 3 tool_use into one assistant message item when complete', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {path: '/a'}},
-        {type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {}},
-        {type: 'tool_use', id: 'tu3', name: 'vfs.write', input: {path: '/b'}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'a'},
-        {type: 'tool_result', toolUseId: 'tu2', content: 'b'},
-        {type: 'tool_result', toolUseId: 'tu3', content: 'c'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'vfs.read',
+            input: { path: '/a' },
+          },
+          { type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {} },
+          {
+            type: 'tool_use',
+            id: 'tu3',
+            name: 'vfs.write',
+            input: { path: '/b' },
+          },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [
+          { type: 'tool_result', toolUseId: 'tu1', content: 'a' },
+          { type: 'tool_result', toolUseId: 'tu2', content: 'b' },
+          { type: 'tool_result', toolUseId: 'tu3', content: 'c' },
+        ],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     expect(items).toHaveLength(1);
@@ -275,14 +404,22 @@ describe('message-blocks', () => {
 
   it('emits text bubbles with embedded tools (no standalone tool rows)', () => {
     const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'hi'}], 1),
-      msg('a1', 'assistant', [
-        {type: 'text', text: 'hello'},
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/x'}},
-      ], 2),
-      msg('u2', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 3),
+      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 1),
+      msg(
+        'a1',
+        'assistant',
+        [
+          { type: 'text', text: 'hello' },
+          { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/x' } },
+        ],
+        2,
+      ),
+      msg(
+        'u2',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        3,
+      ),
     ];
     const items = buildChatListItems(messages);
     expect(items.map(i => i.kind)).toEqual(['message', 'message']);
@@ -293,8 +430,8 @@ describe('message-blocks', () => {
 
   it('keeps hidden text messages in chat list items', () => {
     const messages = [
-      msg('u1', 'user', [{type: 'text', text: 'visible'}], 1),
-      msg('u2', 'user', [{type: 'text', text: 'hidden row'}], 2, true),
+      msg('u1', 'user', [{ type: 'text', text: 'visible' }], 1),
+      msg('u2', 'user', [{ type: 'text', text: 'hidden row' }], 2, true),
     ];
     const items = buildChatListItems(messages);
     expect(items).toHaveLength(2);
@@ -306,13 +443,16 @@ describe('message-blocks', () => {
 
   it('pairs tool_result on hidden user messages for tool card status', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
-      ], 1),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } }],
+        1,
+      ),
       msg(
         'u1',
         'user',
-        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok'}],
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
         2,
         true,
       ),
@@ -330,7 +470,7 @@ describe('message-blocks', () => {
       msg(
         'a1',
         'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {}}],
+        [{ type: 'tool_use', id: 'tu1', name: 'vfs.list', input: {} }],
         1,
         true,
       ),
@@ -346,12 +486,18 @@ describe('message-blocks', () => {
 
   it('omits tool_results-only user messages from list', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} }],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
     ];
     const items = buildChatListItems(messages);
     expect(items).toHaveLength(1);
@@ -360,14 +506,24 @@ describe('message-blocks', () => {
 
   it('resolveToolResultsMessageId pairs adjacent assistant and user', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}},
-        {type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'a'},
-        {type: 'tool_result', toolUseId: 'tu2', content: 'b'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          { type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} },
+          { type: 'tool_use', id: 'tu2', name: 'vfs.list', input: {} },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [
+          { type: 'tool_result', toolUseId: 'tu1', content: 'a' },
+          { type: 'tool_result', toolUseId: 'tu2', content: 'b' },
+        ],
+        2,
+      ),
     ];
     const assistant = messages[0]!;
     expect(toolUseIdsFromMessage(assistant)).toEqual(['tu1', 'tu2']);
@@ -377,27 +533,41 @@ describe('message-blocks', () => {
 
   it('resolveToolResultsMessageId skips non-matching later user messages', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {}},
-      ], 1),
-      msg('u1', 'user', [{type: 'text', text: 'hi'}], 2),
-      msg('u2', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 3),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'vfs.read', input: {} }],
+        1,
+      ),
+      msg('u1', 'user', [{ type: 'text', text: 'hi' }], 2),
+      msg(
+        'u2',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        3,
+      ),
     ];
     expect(resolveToolResultsMessageId(messages, messages[0]!)).toBe('u2');
   });
 
   it('buildChatListItems keeps thinking, text, then tools block order', () => {
     const messages = [
-      msg('a1', 'assistant', [
-        {type: 'thinking', text: 'hmm'},
-        {type: 'text', text: 'reply'},
-        {type: 'tool_use', id: 'tu1', name: 'read', input: {path: '/a'}},
-      ], 1),
-      msg('u1', 'user', [
-        {type: 'tool_result', toolUseId: 'tu1', content: 'ok'},
-      ], 2),
+      msg(
+        'a1',
+        'assistant',
+        [
+          { type: 'thinking', text: 'hmm' },
+          { type: 'text', text: 'reply' },
+          { type: 'tool_use', id: 'tu1', name: 'read', input: { path: '/a' } },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
     ];
     const item = buildChatListItems(messages)[0];
     expect(item?.kind).toBe('message');
@@ -413,7 +583,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't1',
         name: 'edit',
-        input: {path: '/续写/a.md'},
+        input: { path: '/续写/a.md' },
         status: 'success',
       }),
     ).toBe('/续写/a.md');
@@ -421,7 +591,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't2',
         name: 'fs',
-        input: {command: 'ls /'},
+        input: { command: 'ls /' },
         status: 'success',
       }),
     ).toBeUndefined();
@@ -432,7 +602,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't3',
         name: 'write',
-        input: {path: 'chapter.md'},
+        input: { path: 'chapter.md' },
         status: 'success',
       }),
     ).toBe('/chapter.md');
@@ -440,7 +610,7 @@ describe('message-blocks', () => {
       vfsToolFilePath({
         toolUseId: 't4',
         name: 'read',
-        input: {path: 'notes/a.md'},
+        input: { path: 'notes/a.md' },
         status: 'success',
       }),
     ).toBe('/notes/a.md');
@@ -452,18 +622,24 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
         1,
         true,
-        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+        {
+          metadata: {
+            kind: 'user_vfs_action',
+            source: 'user',
+            synthetic: true,
+          },
+        },
       ),
       msg(
         'a1',
         'assistant',
-        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
+        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
         2,
         true,
-        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
+        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
       ),
     ];
     const items = buildChatListItems(messages);
@@ -480,18 +656,24 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: wrapUserVfsActionsForStorage(actionXml)}],
+        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
         1,
         false,
-        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+        {
+          metadata: {
+            kind: 'user_vfs_action',
+            source: 'user',
+            synthetic: true,
+          },
+        },
       ),
       msg(
         'a1',
         'assistant',
-        [{type: 'text', text: USER_VFS_TURN_ACK_TEXT}],
+        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
         2,
         false,
-        {metadata: {kind: 'user_vfs_ack', synthetic: true}},
+        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
       ),
     ];
     const items = buildChatListItems(messages);
@@ -509,35 +691,47 @@ describe('message-blocks', () => {
       msg(
         'u1',
         'user',
-        [{type: 'text', text: '<user-vfs-action kind="delete" path="/a.md" />'}],
+        [
+          {
+            type: 'text',
+            text: '<user-vfs-action kind="delete" path="/a.md" />',
+          },
+        ],
         1,
         false,
-        {metadata: {kind: 'user_vfs_action', source: 'user', synthetic: true}},
+        {
+          metadata: {
+            kind: 'user_vfs_action',
+            source: 'user',
+            synthetic: true,
+          },
+        },
       ),
       msg(
         'a1',
         'assistant',
-        [{type: 'tool_use', id: 'tu1', name: 'fs', input: {command: '…'}}],
+        [{ type: 'tool_use', id: 'tu1', name: 'fs', input: { command: '…' } }],
         2,
         false,
-        {metadata: {synthetic: true, actor: 'user', toolInputCompressed: true}},
+        {
+          metadata: {
+            synthetic: true,
+            actor: 'user',
+            toolInputCompressed: true,
+          },
+        },
       ),
       msg(
         'u2',
         'user',
-        [{type: 'tool_result', toolUseId: 'tu1', content: 'ok', ok: true}],
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok', ok: true }],
         3,
         false,
-        {metadata: {source: 'user', synthetic: true}},
+        { metadata: { source: 'user', synthetic: true } },
       ),
-      msg(
-        'a2',
-        'assistant',
-        [{type: 'text', text: '【done】'}],
-        4,
-        false,
-        {metadata: {kind: 'tool_turn_bridge', synthetic: true}},
-      ),
+      msg('a2', 'assistant', [{ type: 'text', text: '【done】' }], 4, false, {
+        metadata: { kind: 'tool_turn_bridge', synthetic: true },
+      }),
     ];
     const items = buildChatListItems(messages);
     expect(items.every(i => i.kind !== 'user_vfs_turn')).toBe(true);

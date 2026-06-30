@@ -1,8 +1,8 @@
 /**
  * Inline HTML bundle for ChatTranscriptWebView (template + boot IIFE).
  */
-import {CHAT_TRANSCRIPT_RICH_CSS} from '../rich-content-styles';
-import {buildTranscriptBootScript} from './main';
+import { CHAT_TRANSCRIPT_RICH_CSS } from '../rich-content-styles';
+import { buildTranscriptBootScript } from './main';
 
 const HTML_TEMPLATE = `<!DOCTYPE html>
 <html lang="en">

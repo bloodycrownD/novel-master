@@ -1,8 +1,8 @@
 /**
  * Chat tab 流式 runtime：独占 Bus 订阅，FIFO wire → 64ms apply → 双引擎。
  */
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import type {RefObject} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { RefObject } from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
@@ -19,12 +19,12 @@ import {
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import {flushAgentStepUi, flushRunUi} from '@/components/chat/flush-run-ui';
-import {useStreamMetricsAcc} from '@/hooks/useAgentStreamMetrics';
-import {useRuntime} from '@/hooks/useRuntime';
-import {decrementAgentActive} from '@/runtime/agent-activity';
-import {createStreamApplyBuffer} from '@/services/stream-apply-buffer';
+import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
+import { flushAgentStepUi, flushRunUi } from '@/components/chat/flush-run-ui';
+import { useStreamMetricsAcc } from '@/hooks/useAgentStreamMetrics';
+import { useRuntime } from '@/hooks/useRuntime';
+import { decrementAgentActive } from '@/runtime/agent-activity';
+import { createStreamApplyBuffer } from '@/services/stream-apply-buffer';
 import {
   appendWireChunk,
   coalesceWireQueue,
@@ -104,8 +104,8 @@ export function useChatStreamRuntime({
     onStepCommitted,
   };
 
-  const streamClockRef = useRef({noteStreamDelta, resetStreamClock});
-  streamClockRef.current = {noteStreamDelta, resetStreamClock};
+  const streamClockRef = useRef({ noteStreamDelta, resetStreamClock });
+  streamClockRef.current = { noteStreamDelta, resetStreamClock };
 
   const metricsRef = useRef({
     noteMetricsTextDelta,
@@ -126,7 +126,7 @@ export function useChatStreamRuntime({
         return;
       }
       if (batchEnabledRef.current) {
-        web.pushStreamBatch({segments});
+        web.pushStreamBatch({ segments });
       } else {
         for (const seg of segments) {
           web.pushStreamDelta(seg.kind, seg.delta);
@@ -144,8 +144,7 @@ export function useChatStreamRuntime({
   }, []);
 
   const applyBuffer = useMemo(
-    () =>
-      createStreamApplyBuffer(applySegments, {flushIntervalMs: 64}),
+    () => createStreamApplyBuffer(applySegments, { flushIntervalMs: 64 }),
     [applySegments],
   );
 
@@ -208,7 +207,7 @@ export function useChatStreamRuntime({
       }
       streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsTextDelta(delta);
-      ingestWireChunk({kind: 'text', delta});
+      ingestWireChunk({ kind: 'text', delta });
     },
     [ingestWireChunk],
   );
@@ -220,7 +219,7 @@ export function useChatStreamRuntime({
       }
       streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsThinkingDelta(delta);
-      ingestWireChunk({kind: 'thinking', delta});
+      ingestWireChunk({ kind: 'thinking', delta });
     },
     [ingestWireChunk],
   );
@@ -362,4 +361,6 @@ export function useChatStreamRuntime({
   };
 }
 
-export type UseChatStreamRuntimeResult = ReturnType<typeof useChatStreamRuntime>;
+export type UseChatStreamRuntimeResult = ReturnType<
+  typeof useChatStreamRuntime
+>;

@@ -1,12 +1,24 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import { type ChatMessage, type ContentBlock, type ParsedUserVfsAction, type ToolResultBlock, type ToolUseBlock } from "@novel-master/core/chat";
-import { resolveToolResultOk } from "@novel-master/core";
+import {
+  type ChatMessage,
+  type ContentBlock,
+  type ParsedUserVfsAction,
+  type ToolResultBlock,
+  type ToolUseBlock,
+} from '@novel-master/core/chat';
+import { resolveToolResultOk } from '@novel-master/core';
 
-import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAtForDisplay, resolveVfsToolFilePath, USER_VFS_TURN_SPAN } from "@novel-master/core/chat";
-import type {TranscriptRow} from './ChatTranscriptBridge';
-import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
+import {
+  buildUserVfsTurnView,
+  deriveToolUsesFromVfsActions,
+  matchUserVfsTurnAtForDisplay,
+  resolveVfsToolFilePath,
+  USER_VFS_TURN_SPAN,
+} from '@novel-master/core/chat';
+import type { TranscriptRow } from './ChatTranscriptBridge';
+import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
 
 export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
 
@@ -17,7 +29,6 @@ export interface ToolCallView {
   readonly status: ToolCallStatus;
   readonly resultContent?: string;
 }
-
 
 export interface MessageListItem {
   readonly kind: 'message';
@@ -185,7 +196,10 @@ export function toolCallViewFromUse(
   };
 }
 
-function summarizeToolInput(name: string, input: Record<string, unknown>): string {
+function summarizeToolInput(
+  name: string,
+  input: Record<string, unknown>,
+): string {
   const path = input.path ?? input.dir ?? input.from;
   if (typeof path === 'string') {
     return path;
@@ -304,16 +318,12 @@ export function buildChatListItems(
     const tools = toolUses.map(use => {
       const view = toolCallViewFromUse(use, results);
       if (view.status === 'pending' && unpairedStatus != null) {
-        return {...view, status: unpairedStatus};
+        return { ...view, status: unpairedStatus };
       }
       return view;
     });
 
-    if (
-      textParts.length > 0 ||
-      thinkingParts.length > 0 ||
-      hasToolUse
-    ) {
+    if (textParts.length > 0 || thinkingParts.length > 0 || hasToolUse) {
       items.push({
         kind: 'message',
         message,

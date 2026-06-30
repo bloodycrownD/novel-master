@@ -1,7 +1,7 @@
 /**
  * Stream tail「生成中」：uiRunning 且距上次 text/thinking delta 空闲 ≥300ms。
  */
-import {useCallback, useEffect, useRef, useState} from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   computeStreamTailGenerating,
   DEFAULT_STREAM_TAIL_IDLE_MS,
@@ -14,7 +14,9 @@ export type StreamTailGenerating = {
   resetStreamClock(): void;
 };
 
-export function useStreamTailGenerating(uiRunning: boolean): StreamTailGenerating {
+export function useStreamTailGenerating(
+  uiRunning: boolean,
+): StreamTailGenerating {
   const lastDeltaAtRef = useRef(0);
   const [streamTailGenerating, setStreamTailGenerating] = useState(false);
 
@@ -50,5 +52,5 @@ export function useStreamTailGenerating(uiRunning: boolean): StreamTailGeneratin
     return () => clearInterval(id);
   }, [uiRunning, resetStreamClock]);
 
-  return {streamTailGenerating, noteStreamDelta, resetStreamClock};
+  return { streamTailGenerating, noteStreamDelta, resetStreamClock };
 }

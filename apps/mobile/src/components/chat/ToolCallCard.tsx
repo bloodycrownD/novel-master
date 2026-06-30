@@ -2,8 +2,8 @@
  * Tool invocation card with status from paired tool_result.
  */
 import React from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {useTheme} from '@/theme/ThemeProvider';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '@/theme/ThemeProvider';
 import {
   toolCallSummary,
   vfsToolFilePath,
@@ -36,7 +36,7 @@ function statusLabel(status: ToolCallView['status']): string {
 
 function statusColor(
   status: ToolCallView['status'],
-  tokens: {primary: string; danger: string; textSecondary: string},
+  tokens: { primary: string; danger: string; textSecondary: string },
 ): string {
   if (status === 'error') {
     return tokens.danger;
@@ -53,35 +53,31 @@ export function ToolCallCard({
   groupItem = false,
   onOpenFile,
 }: Props) {
-  const {tokens} = useTheme();
+  const { tokens } = useTheme();
   const filePath = vfsToolFilePath(tool);
   const canOpen = filePath != null && onOpenFile != null;
   const summary = toolCallSummary(tool);
-  const detail = showFullParams
-    ? JSON.stringify(tool.input, null, 2)
-    : summary;
+  const detail = showFullParams ? JSON.stringify(tool.input, null, 2) : summary;
 
   const card = (
     <>
       <View style={styles.header}>
-        <Text style={[styles.name, {color: tokens.text}]} numberOfLines={1}>
+        <Text style={[styles.name, { color: tokens.text }]} numberOfLines={1}>
           {tool.name}
         </Text>
         <Text
-          style={[
-            styles.status,
-            {color: statusColor(tool.status, tokens)},
-          ]}>
+          style={[styles.status, { color: statusColor(tool.status, tokens) }]}
+        >
           {statusLabel(tool.status)}
         </Text>
       </View>
       {detail ? (
-        <Text style={[styles.summary, {color: tokens.textSecondary}]}>
+        <Text style={[styles.summary, { color: tokens.textSecondary }]}>
           {detail}
         </Text>
       ) : null}
       {canOpen ? (
-        <Text style={[styles.openHint, {color: tokens.primary}]}>
+        <Text style={[styles.openHint, { color: tokens.primary }]}>
           点击查看 · 聊天工作区
         </Text>
       ) : null}
@@ -94,14 +90,15 @@ export function ToolCallCard({
         accessibilityRole="button"
         accessibilityLabel={`打开文件 ${filePath}`}
         onPress={() => onOpenFile(filePath)}
-        style={({pressed}) => [
+        style={({ pressed }) => [
           groupItem ? styles.groupItem : styles.card,
           {
             backgroundColor: tokens.surface,
             borderColor: canOpen ? tokens.primary : tokens.border,
             opacity: pressed ? 0.85 : 1,
           },
-        ]}>
+        ]}
+      >
         {card}
       </Pressable>
     );
@@ -111,8 +108,9 @@ export function ToolCallCard({
     <View
       style={[
         groupItem ? styles.groupItem : styles.card,
-        {backgroundColor: tokens.surface, borderColor: tokens.border},
-      ]}>
+        { backgroundColor: tokens.surface, borderColor: tokens.border },
+      ]}
+    >
       {card}
     </View>
   );
@@ -139,8 +137,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  name: {flex: 1, fontWeight: '600', fontSize: 14},
-  status: {fontSize: 12, fontWeight: '500'},
-  summary: {marginTop: 6, fontSize: 13},
-  openHint: {marginTop: 8, fontSize: 12, fontWeight: '500'},
+  name: { flex: 1, fontWeight: '600', fontSize: 14 },
+  status: { fontSize: 12, fontWeight: '500' },
+  summary: { marginTop: 6, fontSize: 13 },
+  openHint: { marginTop: 8, fontSize: 12, fontWeight: '500' },
 });

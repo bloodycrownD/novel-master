@@ -1,27 +1,31 @@
 /**
  * Chat tab: session list / template sub-tabs, conversation workspace (M1 skeleton).
  */
-import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Alert, StyleSheet, View} from 'react-native';
-import {useFocusEffect, useNavigation} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type ChatMessage } from "@novel-master/core/chat";
-import {AppHeader} from '@/components/chrome/AppHeader';
-import {useToast} from '@/components/chrome/ToastHost';
-import {
-  buildMessageActionItems,
-} from '@/components/chat/message-edit';
-import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
-import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
-import {ProjectDrawer} from '@/components/chrome/ProjectDrawer';
-import {useHeaderContext} from '@/navigation/HeaderContext';
-import type {RootStackParamList} from '@/navigation/types';
-import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
-import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
-import {useStreamTailGenerating} from '@/hooks/useStreamTailGenerating';
-import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
-import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
-import {useBatchSelection} from '@/hooks/useBatchSelection';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { Alert, StyleSheet, View } from 'react-native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { type ChatMessage } from '@novel-master/core/chat';
+import { AppHeader } from '@/components/chrome/AppHeader';
+import { useToast } from '@/components/chrome/ToastHost';
+import { buildMessageActionItems } from '@/components/chat/message-edit';
+import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
+import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
+import { ProjectDrawer } from '@/components/chrome/ProjectDrawer';
+import { useHeaderContext } from '@/navigation/HeaderContext';
+import type { RootStackParamList } from '@/navigation/types';
+import { useAndroidChatBackHandler } from '@/hooks/useAndroidChatBackHandler';
+import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
+import { useStreamTailGenerating } from '@/hooks/useStreamTailGenerating';
+import type { VfsFileManagerHandle } from '@/components/vfs/VfsFileManager';
+import { useDismissOverlaysOnBlur } from '@/hooks/useDismissOverlaysOnBlur';
+import { useBatchSelection } from '@/hooks/useBatchSelection';
 import {
   isTranscriptRowSelectable,
   selectVisibilityBatchEligibleIdsFromAnchor,
@@ -32,46 +36,51 @@ import {
   isTailBatchMode,
   selectTailBatchEligibleIdsFromAnchor,
 } from '@/components/chat/transcript-selectable-role';
-import {TextPromptModal} from '@/components/ui/TextPromptModal';
-import {useRuntime} from '@/hooks/useRuntime';
-import {invalidateSessionWorktreeSnapshot} from '@/services/worktree-snapshot.service';
-import {useMobileScope} from '@/hooks/useMobileScope';
-import {readChatRichTextEnabled} from '@/storage/chat-rich-text-pref';
+import { TextPromptModal } from '@/components/ui/TextPromptModal';
+import { useRuntime } from '@/hooks/useRuntime';
+import { invalidateSessionWorktreeSnapshot } from '@/services/worktree-snapshot.service';
+import { useMobileScope } from '@/hooks/useMobileScope';
+import { readChatRichTextEnabled } from '@/storage/chat-rich-text-pref';
 import {
   defaultChatTranscriptEngine,
   readChatTranscriptEngine,
   type ChatTranscriptEngine,
 } from '@/storage/chat-transcript-engine';
-import {useNovelMaster} from '@/runtime/novel-master-context';
+import { useNovelMaster } from '@/runtime/novel-master-context';
 import {
   isMobileAgentActive,
   subscribeMobileAgentActivity,
 } from '@/runtime/agent-activity';
-import {useTheme} from '@/theme/ThemeProvider';
-import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
-import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
+import { useTheme } from '@/theme/ThemeProvider';
+import { ChatConversationPanel } from './chat-tab/ChatConversationPanel';
+import { ChatSessionListPanel } from './chat-tab/ChatSessionListPanel';
 import {
   useChatTabMessageActions,
   useChatTabMessages,
 } from './chat-tab/useChatTabMessages';
-import {useChatTabScope} from './chat-tab/useChatTabScope';
-import {useChatTabScrollCache} from './chat-tab/useChatTabStream';
-import {useChatStreamRuntime} from './chat-tab/useChatStreamRuntime';
-import {readChatStreamBatchEnabled} from '@/storage/chat-stream-batch-pref';
+import { useChatTabScope } from './chat-tab/useChatTabScope';
+import { useChatTabScrollCache } from './chat-tab/useChatTabStream';
+import { useChatStreamRuntime } from './chat-tab/useChatStreamRuntime';
+import { readChatStreamBatchEnabled } from '@/storage/chat-stream-batch-pref';
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 export function ChatTabScreen() {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
+  const { tokens } = useTheme();
+  const { showToast } = useToast();
   const runtime = useRuntime();
-  const {projectId, sessionId, setCurrentProject, setCurrentSession, refreshScope} =
-    useMobileScope();
-  const {setChat} = useHeaderContext();
+  const {
+    projectId,
+    sessionId,
+    setCurrentProject,
+    setCurrentSession,
+    refreshScope,
+  } = useMobileScope();
+  const { setChat } = useHeaderContext();
   const navigation = useNavigation<Nav>();
 
   const sessionBatch = useBatchSelection();
   const messageBatch = useBatchSelection();
-  const {appUi, richRenderEpoch} = useNovelMaster();
+  const { appUi, richRenderEpoch } = useNovelMaster();
 
   const scope = useChatTabScope({
     runtime,
@@ -91,7 +100,7 @@ export function ChatTabScreen() {
     chatSubview: scope.chatSubview,
   });
 
-  const {refreshChatMeta} = scope;
+  const { refreshChatMeta } = scope;
   useEffect(() => {
     if (scope.chatSubview === 'conversation' && sessionId != null) {
       refreshChatMeta().catch(() => undefined);
@@ -117,7 +126,7 @@ export function ChatTabScreen() {
   const [webMenuOpen, setWebMenuOpen] = useState(false);
   const [webMenuCloseSignal, setWebMenuCloseSignal] = useState(0);
   const [messageEditPrompt, setMessageEditPrompt] = useState<
-    {messageId: string; initialText: string} | undefined
+    { messageId: string; initialText: string } | undefined
   >();
 
   const [chatTranscriptEngine, setChatTranscriptEngine] =
@@ -308,9 +317,13 @@ export function ChatTabScreen() {
       sessionListPanel: scope.sessionListPanel,
       sessionTitle: scope.currentSession?.title ?? scope.currentSession?.id,
       agentName:
-        scope.chatSubview === 'conversation' ? scope.agentMeta.agentName : undefined,
+        scope.chatSubview === 'conversation'
+          ? scope.agentMeta.agentName
+          : undefined,
       modelLabel:
-        scope.chatSubview === 'conversation' ? scope.agentMeta.modelLabel : undefined,
+        scope.chatSubview === 'conversation'
+          ? scope.agentMeta.modelLabel
+          : undefined,
       onBackFromConversation: scope.backFromConversation,
       onOpenDrawer: () => {
         if (scope.chatSubview === 'conversation') {
@@ -349,21 +362,17 @@ export function ChatTabScreen() {
     if (count === 0) {
       return;
     }
-    Alert.alert(
-      '确认删除',
-      `确定删除选中的 ${count} 个会话？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () =>
-            scope
-              .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
-              .catch(() => undefined),
-        },
-      ],
-    );
+    Alert.alert('确认删除', `确定删除选中的 ${count} 个会话？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () =>
+          scope
+            .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
+            .catch(() => undefined),
+      },
+    ]);
   }, [sessionBatch, scope]);
 
   const refreshChatRichTextPref = useCallback(async () => {
@@ -396,7 +405,12 @@ export function ChatTabScreen() {
       refreshChatStreamBatchPref().catch(() => undefined);
       // Re-read KKV currentModelId when returning from Profile tab.
       refreshChatMeta().catch(() => undefined);
-    }, [refreshChatRichTextPref, refreshChatTranscriptEngine, refreshChatStreamBatchPref, refreshChatMeta]),
+    }, [
+      refreshChatRichTextPref,
+      refreshChatTranscriptEngine,
+      refreshChatStreamBatchPref,
+      refreshChatMeta,
+    ]),
   );
 
   const sessionRenameModal = (
@@ -419,139 +433,145 @@ export function ChatTabScreen() {
   );
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
+    <View style={[styles.root, { backgroundColor: tokens.background }]}>
       <AppHeader pageKey="chat" />
       {scope.chatSubview === 'conversation' ? (
-      <ChatConversationPanel
-        tokens={tokens}
-        visible
-        conversationPanel={scope.conversationPanel}
-        onConversationPanelChange={scope.setConversationPanel}
-        projectId={projectId}
-        sessionId={sessionId}
-        agentMeta={scope.agentMeta}
-        streamMetricsAccRef={stream.streamMetricsAccRef}
-        streamMetricsLastRun={stream.streamMetricsLastRun}
-        streamTailGenerating={streamTail.streamTailGenerating}
-        uiRunning={lifecycle.uiRunning}
-        agentActive={agentActive}
-        messageBatchActive={messageBatch.active}
-        messageBatchMode={messageBatch.mode}
-        messageBatchSelectedCount={messageBatch.selectedCount}
-        messageBatchSelectedIds={messageBatch.selectedIds}
-        onExitMessageBatch={messageActions.exitMessageBatch}
-        onConfirmVisibilityBatch={messageActions.confirmVisibilityBatch}
-        useWebviewTranscript={useWebviewTranscript}
-        transcriptWebRef={transcriptWebRef}
-        chatScrollKey={scroll.chatScrollKey}
-        chatMessages={messages.chatMessages}
-        hasMoreMessages={messages.hasMoreMessages}
-        transcriptFlags={transcriptFlags}
-        webMenuCloseSignal={webMenuCloseSignal}
-        restoredTranscriptScroll={scroll.restoredTranscriptScroll}
-        defaultChatScrollToBottom={scroll.defaultChatScrollToBottom}
-        cachedChatScroll={scroll.cachedChatScroll}
-        streamingText={stream.streamingText}
-        streamingThinking={stream.streamingThinking}
-        chatRichTextEnabled={chatRichTextEnabled}
-        richRenderEpoch={richRenderEpoch}
-        loadingMoreMessages={messages.loadingMoreMessages}
-        hasWorkspaceModel={scope.hasWorkspaceModel}
-        canResumeWithoutInput={messages.canResumeWithoutInput}
-        lastMessageHasToolResult={messages.lastMessageHasToolResult}
-        lastMessageIsPlainUserText={messages.lastMessageIsPlainUserText}
-        vfsRefreshKey={scope.vfsRefreshKey}
-        sessionVfs={scope.sessionVfs}
-        sessionWorktree={scope.sessionWorktree}
-        sessionDrawerOpen={scope.sessionDrawerOpen}
-        onCloseSessionDrawer={() => scope.setSessionDrawerOpen(false)}
-        onOpenSessionRename={() => {
-          if (sessionId != null) {
+        <ChatConversationPanel
+          tokens={tokens}
+          visible
+          conversationPanel={scope.conversationPanel}
+          onConversationPanelChange={scope.setConversationPanel}
+          projectId={projectId}
+          sessionId={sessionId}
+          agentMeta={scope.agentMeta}
+          streamMetricsAccRef={stream.streamMetricsAccRef}
+          streamMetricsLastRun={stream.streamMetricsLastRun}
+          streamTailGenerating={streamTail.streamTailGenerating}
+          uiRunning={lifecycle.uiRunning}
+          agentActive={agentActive}
+          messageBatchActive={messageBatch.active}
+          messageBatchMode={messageBatch.mode}
+          messageBatchSelectedCount={messageBatch.selectedCount}
+          messageBatchSelectedIds={messageBatch.selectedIds}
+          onExitMessageBatch={messageActions.exitMessageBatch}
+          onConfirmVisibilityBatch={messageActions.confirmVisibilityBatch}
+          useWebviewTranscript={useWebviewTranscript}
+          transcriptWebRef={transcriptWebRef}
+          chatScrollKey={scroll.chatScrollKey}
+          chatMessages={messages.chatMessages}
+          hasMoreMessages={messages.hasMoreMessages}
+          transcriptFlags={transcriptFlags}
+          webMenuCloseSignal={webMenuCloseSignal}
+          restoredTranscriptScroll={scroll.restoredTranscriptScroll}
+          defaultChatScrollToBottom={scroll.defaultChatScrollToBottom}
+          cachedChatScroll={scroll.cachedChatScroll}
+          streamingText={stream.streamingText}
+          streamingThinking={stream.streamingThinking}
+          chatRichTextEnabled={chatRichTextEnabled}
+          richRenderEpoch={richRenderEpoch}
+          loadingMoreMessages={messages.loadingMoreMessages}
+          hasWorkspaceModel={scope.hasWorkspaceModel}
+          canResumeWithoutInput={messages.canResumeWithoutInput}
+          lastMessageHasToolResult={messages.lastMessageHasToolResult}
+          lastMessageIsPlainUserText={messages.lastMessageIsPlainUserText}
+          vfsRefreshKey={scope.vfsRefreshKey}
+          sessionVfs={scope.sessionVfs}
+          sessionWorktree={scope.sessionWorktree}
+          sessionDrawerOpen={scope.sessionDrawerOpen}
+          onCloseSessionDrawer={() => scope.setSessionDrawerOpen(false)}
+          onOpenSessionRename={() => {
+            if (sessionId != null) {
+              scope.setSessionDrawerOpen(false);
+              scope.openSessionRenamePrompt(sessionId);
+            }
+          }}
+          onCompactSession={() => {
             scope.setSessionDrawerOpen(false);
-            scope.openSessionRenamePrompt(sessionId);
+            messageActions.handleCompactSession();
+          }}
+          onNavigateRealPrompt={() => navigation.navigate('RealPrompt')}
+          onEnterHideMessageBatch={() => {
+            scope.setSessionDrawerOpen(false);
+            messageActions.enterHideMessageBatch();
+          }}
+          onEnterRestoreMessageBatch={() => {
+            scope.setSessionDrawerOpen(false);
+            messageActions.enterRestoreMessageBatch();
+          }}
+          onEnterDeleteMessageBatch={() => {
+            scope.setSessionDrawerOpen(false);
+            messageActions.enterDeleteMessageBatch();
+          }}
+          onRefreshWorktree={() => {
+            scope.setSessionDrawerOpen(false);
+            handleRefreshWorktree();
+          }}
+          modelPickerOpen={modelPickerOpen}
+          agentPickerOpen={agentPickerOpen}
+          onCloseModelPicker={() => setModelPickerOpen(false)}
+          onCloseAgentPicker={() => setAgentPickerOpen(false)}
+          onRefreshChatMeta={() =>
+            scope.refreshChatMeta().catch(() => undefined)
           }
-        }}
-        onCompactSession={() => {
-          scope.setSessionDrawerOpen(false);
-          messageActions.handleCompactSession();
-        }}
-        onNavigateRealPrompt={() => navigation.navigate('RealPrompt')}
-        onEnterHideMessageBatch={() => {
-          scope.setSessionDrawerOpen(false);
-          messageActions.enterHideMessageBatch();
-        }}
-        onEnterRestoreMessageBatch={() => {
-          scope.setSessionDrawerOpen(false);
-          messageActions.enterRestoreMessageBatch();
-        }}
-        onEnterDeleteMessageBatch={() => {
-          scope.setSessionDrawerOpen(false);
-          messageActions.enterDeleteMessageBatch();
-        }}
-        onRefreshWorktree={() => {
-          scope.setSessionDrawerOpen(false);
-          handleRefreshWorktree();
-        }}
-        modelPickerOpen={modelPickerOpen}
-        agentPickerOpen={agentPickerOpen}
-        onCloseModelPicker={() => setModelPickerOpen(false)}
-        onCloseAgentPicker={() => setAgentPickerOpen(false)}
-        onRefreshChatMeta={() => scope.refreshChatMeta().catch(() => undefined)}
-        messageMenuTarget={messageMenuTarget}
-        messageMenuAnchor={messageMenuAnchor}
-        messageMenuItems={
-          messageMenuTarget != null
-            ? buildMessageActionItems(messageMenuTarget)
-            : []
-        }
-        useWebviewMessageMenu={!useWebviewTranscript}
-        onCloseMessageMenu={closeMessageMenu}
-        onMessageMenuSelect={action => {
-          const target = messageMenuTarget;
-          closeMessageMenu();
-          if (target == null) {
-            return;
+          messageMenuTarget={messageMenuTarget}
+          messageMenuAnchor={messageMenuAnchor}
+          messageMenuItems={
+            messageMenuTarget != null
+              ? buildMessageActionItems(messageMenuTarget)
+              : []
           }
-          messageActions.handleMessageMenuAction(target, action);
-        }}
-        messageEditPrompt={messageEditPrompt}
-        onCloseMessageEdit={() => setMessageEditPrompt(undefined)}
-        onSaveMessageEdit={messageActions.handleSaveMessageEdit}
-        onChatScrollSnapshot={scroll.handleChatScrollSnapshot}
-        onLoadOlderMessages={() => messages.loadOlderMessages().catch(() => undefined)}
-        onOpenSessionFilePreview={scope.openSessionFilePreview}
-        onWebMenuOpenChange={open => {
-          setWebMenuOpen(open);
-          if (!open) {
-            setMessageMenuTarget(undefined);
-            setMessageMenuAnchor(undefined);
+          useWebviewMessageMenu={!useWebviewTranscript}
+          onCloseMessageMenu={closeMessageMenu}
+          onMessageMenuSelect={action => {
+            const target = messageMenuTarget;
+            closeMessageMenu();
+            if (target == null) {
+              return;
+            }
+            messageActions.handleMessageMenuAction(target, action);
+          }}
+          messageEditPrompt={messageEditPrompt}
+          onCloseMessageEdit={() => setMessageEditPrompt(undefined)}
+          onSaveMessageEdit={messageActions.handleSaveMessageEdit}
+          onChatScrollSnapshot={scroll.handleChatScrollSnapshot}
+          onLoadOlderMessages={() =>
+            messages.loadOlderMessages().catch(() => undefined)
           }
-        }}
-        onWebMessageMenuAction={(messageId, action) => {
-          const target = messages.chatMessages.find(m => m.id === messageId);
-          if (target == null) {
-            return;
+          onOpenSessionFilePreview={scope.openSessionFilePreview}
+          onWebMenuOpenChange={open => {
+            setWebMenuOpen(open);
+            if (!open) {
+              setMessageMenuTarget(undefined);
+              setMessageMenuAnchor(undefined);
+            }
+          }}
+          onWebMessageMenuAction={(messageId, action) => {
+            const target = messages.chatMessages.find(m => m.id === messageId);
+            if (target == null) {
+              return;
+            }
+            messageActions.handleMessageMenuAction(target, action);
+          }}
+          onToggleMessageSelect={handleToggleMessageSelect}
+          onMessageLongPress={(msg, anchor) => {
+            if (lifecycle.uiRunning) {
+              return;
+            }
+            setMessageMenuTarget(msg);
+            setMessageMenuAnchor(anchor);
+          }}
+          beginUiRun={lifecycle.beginUiRun}
+          abortUiRun={lifecycle.abortUiRun}
+          onStreamReset={stream.handleStreamReset}
+          onMessagesChanged={() =>
+            handleMessagesChanged().catch(() => undefined)
           }
-          messageActions.handleMessageMenuAction(target, action);
-        }}
-        onToggleMessageSelect={handleToggleMessageSelect}
-        onMessageLongPress={(msg, anchor) => {
-          if (lifecycle.uiRunning) {
-            return;
-          }
-          setMessageMenuTarget(msg);
-          setMessageMenuAnchor(anchor);
-        }}
-        beginUiRun={lifecycle.beginUiRun}
-        abortUiRun={lifecycle.abortUiRun}
-        onStreamReset={stream.handleStreamReset}
-        onMessagesChanged={() => handleMessagesChanged().catch(() => undefined)}
-        onNeedModel={() => setModelPickerOpen(true)}
-        bumpWorktreeUiToken={scope.bumpWorktreeUiToken}
-        onOpenFileEditor={scope.openFileEditor}
-        workspaceVfsRef={workspaceVfsRef}
-        onWorkspaceBackStateChange={setWorkspaceBackState}
-      />
+          onNeedModel={() => setModelPickerOpen(true)}
+          bumpWorktreeUiToken={scope.bumpWorktreeUiToken}
+          onOpenFileEditor={scope.openFileEditor}
+          workspaceVfsRef={workspaceVfsRef}
+          onWorkspaceBackStateChange={setWorkspaceBackState}
+        />
       ) : null}
       <ChatSessionListPanel
         tokens={tokens}
@@ -571,14 +591,18 @@ export function ChatTabScreen() {
         onEnterSessionBatch={sessionBatch.enter}
         onExitSessionBatch={sessionBatch.exit}
         onConfirmBatchDelete={confirmBatchDelete}
-        onCreateSession={() => scope.handleCreateSession().catch(() => undefined)}
+        onCreateSession={() =>
+          scope.handleCreateSession().catch(() => undefined)
+        }
         onOpenConversation={sid => openConversation(sid).catch(() => undefined)}
         onToggleSessionSelect={sessionBatch.toggle}
         isSessionSelected={sessionBatch.isSelected}
         menuSessionId={scope.menuSessionId}
         onMenuSessionIdChange={scope.setMenuSessionId}
         onOpenSessionRename={scope.openSessionRenamePrompt}
-        onCopySession={sid => scope.handleCopySession(sid).catch(() => undefined)}
+        onCopySession={sid =>
+          scope.handleCopySession(sid).catch(() => undefined)
+        }
         onConfirmDeleteSession={scope.confirmDeleteSession}
         bumpWorktreeUiToken={scope.bumpWorktreeUiToken}
         onOpenFileEditor={scope.openFileEditor}
@@ -598,7 +622,7 @@ export function ChatTabScreen() {
         onDeleteSelected={scope.handleDeleteProjects}
         onOpenAgentConfig={id => {
           scope.setProjectDrawerOpen(false);
-          navigation.navigate('ProjectAgentConfig', {projectId: id});
+          navigation.navigate('ProjectAgentConfig', { projectId: id });
         }}
       />
     </View>
@@ -606,5 +630,5 @@ export function ChatTabScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
+  root: { flex: 1 },
 });

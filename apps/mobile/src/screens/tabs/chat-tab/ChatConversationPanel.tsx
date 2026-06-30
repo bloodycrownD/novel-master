@@ -1,17 +1,17 @@
 /**
  * Chat tab conversation subview: transcript, composer, session workspace.
  */
-import React, {useCallback, useEffect, useMemo} from 'react';
-import {Pressable, StyleSheet, Text, View} from 'react-native';
-import { type ChatMessage } from "@novel-master/core/chat";
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { type ChatMessage } from '@novel-master/core/chat';
 
-import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
+import { type VfsScope, type VfsService } from '@novel-master/core/vfs';
 
-import { type WorktreeService } from "@novel-master/core/worktree";
-import {AgentPickerModal} from '@/components/agent/AgentPickerModal';
-import {ChatComposer} from '@/components/chat/ChatComposer';
-import {ChatMetaBar} from '@/components/chat/ChatMetaBar';
-import {ChatStreamMetricsBarLive} from '@/components/chat/ChatStreamMetricsBarLive';
+import { type WorktreeService } from '@novel-master/core/worktree';
+import { AgentPickerModal } from '@/components/agent/AgentPickerModal';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
+import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
 import type {
   AgentStreamMetricsSnapshot,
   StreamMetricsAccRef,
@@ -20,14 +20,14 @@ import {
   ChatTranscriptWebView,
   type ChatTranscriptWebViewHandle,
 } from '@/components/chat/ChatTranscriptWebView';
-import type {ChatTranscriptScrollSnapshot} from '@/components/chat/ChatTranscriptBridge';
+import type { ChatTranscriptScrollSnapshot } from '@/components/chat/ChatTranscriptBridge';
 import {
   MessageActionMenu,
   type MessageActionMenuItem,
 } from '@/components/chat/MessageActionMenu';
-import {MessageEditModal} from '@/components/chat/MessageEditModal';
-import {MessageList} from '@/components/chat/MessageList';
-import {MessageBatchHeader} from '@/components/batch/MessageBatchHeader';
+import { MessageEditModal } from '@/components/chat/MessageEditModal';
+import { MessageList } from '@/components/chat/MessageList';
+import { MessageBatchHeader } from '@/components/batch/MessageBatchHeader';
 import {
   computeHideRangeFromSelection,
   computeVisibilityBatchAffectedIds,
@@ -38,18 +38,18 @@ import {
   computeTailBatchRangeFromSelection,
   type MessageBatchMode,
 } from '@/components/chat/transcript-selectable-role';
-import {ModelPickerModal} from '@/components/provider/ModelPickerModal';
-import {SessionActionsDrawer} from '@/components/chrome/SessionActionsDrawer';
+import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
+import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
 import {
   VfsFileManager,
   type VfsFileManagerHandle,
 } from '@/components/vfs/VfsFileManager';
-import {SegmentedControl} from '@/components/ui/SegmentedControl';
-import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
-import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
-import type {ChatAgentMeta} from '@/services/chat-agent-meta';
-import type {ThemeTokens} from '@/theme/tokens';
-import type {ConversationPanel} from './useChatTabScope';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
+import type { MessageMenuAnchor } from '@/components/chat/MessageActionMenu';
+import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
+import type { ChatAgentMeta } from '@/services/chat-agent-meta';
+import type { ThemeTokens } from '@/theme/tokens';
+import type { ConversationPanel } from './useChatTabScope';
 
 export type ChatConversationPanelProps = {
   tokens: ThemeTokens;
@@ -83,7 +83,10 @@ export type ChatConversationPanelProps = {
   webMenuCloseSignal: number;
   restoredTranscriptScroll: ChatTranscriptScrollSnapshot | undefined;
   defaultChatScrollToBottom: boolean;
-  cachedChatScroll: ChatListScrollSnapshot | ChatTranscriptScrollSnapshot | undefined;
+  cachedChatScroll:
+    | ChatListScrollSnapshot
+    | ChatTranscriptScrollSnapshot
+    | undefined;
   streamingText: string;
   streamingThinking: string;
   chatRichTextEnabled: boolean;
@@ -116,7 +119,7 @@ export type ChatConversationPanelProps = {
   useWebviewMessageMenu: boolean;
   onCloseMessageMenu: () => void;
   onMessageMenuSelect: (action: string) => void;
-  messageEditPrompt: {messageId: string; initialText: string} | undefined;
+  messageEditPrompt: { messageId: string; initialText: string } | undefined;
   onCloseMessageEdit: () => void;
   onSaveMessageEdit: (messageId: string, value: string) => Promise<void>;
   onChatScrollSnapshot: (
@@ -137,7 +140,7 @@ export type ChatConversationPanelProps = {
   onOpenFileEditor: (path: string, scopeKind: 'project' | 'session') => void;
   workspaceVfsRef?: React.RefObject<VfsFileManagerHandle | null>;
   onWorkspaceBackStateChange?: (
-    state: {canGoUp: boolean; goUp: () => void} | null,
+    state: { canGoUp: boolean; goUp: () => void } | null,
   ) => void;
 };
 
@@ -226,7 +229,7 @@ export function ChatConversationPanel({
     if (projectId == null || sessionId == null) {
       return null;
     }
-    return {kind: 'session', projectId, sessionId};
+    return { kind: 'session', projectId, sessionId };
   }, [projectId, sessionId]);
 
   const visibilityBatchPreview = useMemo(() => {
@@ -238,9 +241,7 @@ export function ChatConversationPanel({
       };
     }
     const sessionMaxSeq =
-      chatMessages.length > 0
-        ? Math.max(...chatMessages.map(m => m.seq))
-        : 0;
+      chatMessages.length > 0 ? Math.max(...chatMessages.map(m => m.seq)) : 0;
     if (messageBatchMode === 'hide') {
       const affectedIds = computeVisibilityBatchAffectedIds(
         chatMessages,
@@ -249,7 +250,7 @@ export function ChatConversationPanel({
         sessionMaxSeq,
       );
       if (affectedIds.size === 0) {
-        return {affectedIds, affectedCount: 0, rangeLabel: null};
+        return { affectedIds, affectedCount: 0, rangeLabel: null };
       }
       const range = computeHideRangeFromSelection(
         chatMessages,
@@ -268,7 +269,7 @@ export function ChatConversationPanel({
       sessionMaxSeq,
     );
     if (affectedIds.size === 0) {
-      return {affectedIds, affectedCount: 0, rangeLabel: null};
+      return { affectedIds, affectedCount: 0, rangeLabel: null };
     }
     const range = computeTailBatchRangeFromSelection(
       tailRows,
@@ -315,14 +316,15 @@ export function ChatConversationPanel({
   return (
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
-      pointerEvents={visible ? 'auto' : 'none'}>
+      pointerEvents={visible ? 'auto' : 'none'}
+    >
       <SegmentedControl
         tokens={tokens}
         value={conversationPanel}
         onChange={onConversationPanelChange}
         options={[
-          {value: 'chat', label: '聊天', testID: 'tab-chat'},
-          {value: 'workspace', label: '聊天工作区', testID: 'tab-workspace'},
+          { value: 'chat', label: '聊天', testID: 'tab-chat' },
+          { value: 'workspace', label: '聊天工作区', testID: 'tab-workspace' },
         ]}
       />
       {projectId != null && sessionId != null ? (
@@ -332,7 +334,8 @@ export function ChatConversationPanel({
               styles.chatPanel,
               conversationPanel !== 'chat' && styles.panelHidden,
             ]}
-            pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
+            pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}
+          >
             <ChatMetaBar meta={agentMeta} />
             <ChatStreamMetricsBarLive
               agentRunning={uiRunning}
@@ -397,8 +400,9 @@ export function ChatConversationPanel({
                   hasMoreMessages ? (
                     <Pressable
                       style={styles.loadMoreBtn}
-                      onPress={onLoadOlderMessages}>
-                      <Text style={{color: tokens.primary}}>
+                      onPress={onLoadOlderMessages}
+                    >
+                      <Text style={{ color: tokens.primary }}>
                         {loadingMoreMessages ? '加载中…' : '加载更早消息'}
                       </Text>
                     </Pressable>
@@ -407,7 +411,7 @@ export function ChatConversationPanel({
               />
             )}
             <ChatComposer
-              scope={{projectId, sessionId}}
+              scope={{ projectId, sessionId }}
               hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
               running={uiRunning}
               beginUiRun={beginUiRun}
@@ -428,7 +432,8 @@ export function ChatConversationPanel({
               ]}
               pointerEvents={
                 conversationPanel === 'workspace' ? 'auto' : 'none'
-              }>
+              }
+            >
               <VfsFileManager
                 ref={workspaceVfsRef}
                 key={`session-vfs-${vfsRefreshKey}`}
@@ -437,7 +442,7 @@ export function ChatConversationPanel({
                 worktree={sessionWorktree}
                 rootPath="/"
                 pullFromParent={{
-                  scope: {kind: 'session', sessionId},
+                  scope: { kind: 'session', sessionId },
                   onPulled: bumpWorktreeUiToken,
                 }}
                 onOpenFile={path => onOpenFileEditor(path, 'session')}
@@ -446,7 +451,7 @@ export function ChatConversationPanel({
             </View>
           ) : conversationPanel === 'workspace' ? (
             <View style={styles.placeholder}>
-              <Text style={{color: tokens.textSecondary}}>
+              <Text style={{ color: tokens.textSecondary }}>
                 聊天工作区不可用
               </Text>
             </View>
@@ -454,7 +459,7 @@ export function ChatConversationPanel({
         </>
       ) : (
         <View style={styles.placeholder}>
-          <Text style={{color: tokens.textSecondary}}>请先选择会话</Text>
+          <Text style={{ color: tokens.textSecondary }}>请先选择会话</Text>
         </View>
       )}
       <SessionActionsDrawer
@@ -506,11 +511,11 @@ export function ChatConversationPanel({
 }
 
 const styles = StyleSheet.create({
-  subviewFill: {flex: 1, minHeight: 0},
-  panelHidden: {display: 'none'},
-  chatPanel: {flex: 1},
-  flexFill: {flex: 1},
-  placeholder: {flex: 1, justifyContent: 'center', alignItems: 'center'},
+  subviewFill: { flex: 1, minHeight: 0 },
+  panelHidden: { display: 'none' },
+  chatPanel: { flex: 1 },
+  flexFill: { flex: 1 },
+  placeholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadMoreBtn: {
     alignSelf: 'center',
     paddingHorizontal: 12,
