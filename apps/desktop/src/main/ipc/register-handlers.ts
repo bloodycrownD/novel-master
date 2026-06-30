@@ -13,6 +13,7 @@ import {
   handleModelListPicker,
   handleModelSetCurrent,
 } from "./handlers/agent.js";
+import { isDesktopAgentActive } from "../runtime/agent-activity.js";
 import {
   handleBootstrapRebootstrap,
   handleBootstrapStatus,
@@ -279,6 +280,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.AGENT_ABORT, (_event, req) =>
     handleAgentAbort(req),
   );
+  ipcMain.handle(IPC_CHANNELS.AGENT_ACTIVITY_GET, () => ({
+    active: isDesktopAgentActive(),
+  }));
   ipcMain.handle(IPC_CHANNELS.AGENT_RESOLVE_CURRENT, () =>
     handleAgentResolveCurrent(),
   );

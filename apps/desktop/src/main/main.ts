@@ -10,6 +10,10 @@ import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
 } from "./ipc/forward-event-bus.js";
+import {
+  attachAgentActivityForwarder,
+  setAgentActivityForwardTarget,
+} from "./ipc/forward-agent-activity.js";
 import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
@@ -24,6 +28,7 @@ const DEV_SERVER_URL = "http://localhost:5173";
 const isDev = !app.isPackaged;
 
 let detachEventBusForwarder: (() => void) | undefined;
+let detachAgentActivityForwarder: (() => void) | undefined;
 
 function resolvePreloadPath(): string {
   // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
@@ -117,6 +122,10 @@ function createMainWindow(): BrowserWindow {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   });
+  setAgentActivityForwardTarget(() => {
+    const focused = BrowserWindow.getFocusedWindow();
+    return (focused ?? window).webContents;
+  });
 
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);
@@ -130,6 +139,8 @@ function createMainWindow(): BrowserWindow {
 function detachMainEventBusListeners(): void {
   detachEventBusForwarder?.();
   detachEventBusForwarder = undefined;
+  detachAgentActivityForwarder?.();
+  detachAgentActivityForwarder = undefined;
 }
 
 async function bootstrapMainServices(): Promise<void> {
@@ -137,6 +148,7 @@ async function bootstrapMainServices(): Promise<void> {
   const runtime = await getDesktopRuntime();
   detachMainEventBusListeners();
   detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
+  detachAgentActivityForwarder = attachAgentActivityForwarder();
 }
 
 app.whenReady().then(async () => {

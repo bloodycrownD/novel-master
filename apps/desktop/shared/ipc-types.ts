@@ -8,6 +8,9 @@ export const IPC_CHANNELS = {
   BOOTSTRAP_REBOOTSTRAP: "nm:bootstrap/rebootstrap",
   EVENT_BUS: "nm:event-bus",
   AGENT_STREAM: "nm:agent-stream",
+  /** Main → renderer：agentActive refcount 变化（工具卡「执行中」等） */
+  AGENT_ACTIVITY: "nm:agent/activity",
+  AGENT_ACTIVITY_GET: "nm:agent/activity/get",
   /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
   WORKSPACE_MUTATED: "nm:workspace/mutated",
 
@@ -586,6 +589,11 @@ export type CompactionManualRequest = PromptScopeRequest;
 export type AgentStreamEventPayload = {
   readonly type: string;
   readonly payload: unknown;
+};
+
+/** Main 进程 agentActive refcount 推送给 renderer 的载荷。 */
+export type AgentActivityPayload = {
+  readonly active: boolean;
 };
 
 /** Main 进程在 VFS / worktree 规则变更成功后推送给 renderer 的载荷。 */
