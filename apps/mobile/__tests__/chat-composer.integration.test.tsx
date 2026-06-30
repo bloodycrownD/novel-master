@@ -59,7 +59,10 @@ jest.mock('../src/services/agent-run.service', () => ({
 
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
-import {setMobileAgentActive} from '../src/runtime/agent-activity';
+import {
+  isMobileAgentActive,
+  setMobileAgentActive,
+} from '../src/runtime/agent-activity';
 import {ThemeProvider} from '../src/theme/ThemeProvider';
 
 function Harness(props: {
@@ -144,6 +147,42 @@ describe('ChatComposer integration', () => {
       node => node.props?.accessibilityLabel === '发送',
     );
     expect(sendBtn.props.disabled).toBe(true);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T22: agentActive 时第二次发送被拒绝', async () => {
+    setMobileAgentActive(true);
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).not.toHaveBeenCalled();
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T23: run 早退时 agentActive 回落', async () => {
+    mockRunAgentTurn.mockRejectedValueOnce(new Error('early fail'));
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(isMobileAgentActive()).toBe(false);
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

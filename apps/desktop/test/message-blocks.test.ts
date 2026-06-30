@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { vfsToolFilePath } from "@/features/chat/message-blocks";
+import type { ChatMessageDto } from "@shared/ipc-types";
+import {
+  isTurnToolExecuting,
+  vfsToolFilePath,
+} from "@/features/chat/message-blocks";
+
+function assistantWithTool(id: string, seq: number): ChatMessageDto {
+  return {
+    id,
+    sessionId: "s1",
+    seq,
+    role: "assistant",
+    hidden: false,
+    createdAtMs: seq,
+    bodyText: "",
+    contentBlocks: [
+      { type: "tool_use", id: "tu1", name: "read", input: { path: "/a.md" } },
+    ],
+  };
+}
+
+test("T13: 工具卡执行中仅绑 agentRunning（agentActive），与 uiRunning 分离", () => {
+  const assistant = assistantWithTool("a1", 1);
+  assert.equal(isTurnToolExecuting(assistant, [assistant], true), true);
+  assert.equal(isTurnToolExecuting(assistant, [assistant], false), false);
+});
 
 test("vfsToolFilePath：read/write/edit 与 vfs.* 前缀返回绝对路径", () => {
   assert.equal(

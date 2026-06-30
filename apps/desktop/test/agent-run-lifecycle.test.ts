@@ -11,6 +11,7 @@ import {
   isDesktopAgentActive,
 } from "../src/main/runtime/agent-activity.js";
 import {
+  abortAgentRun,
   onCoreRunFinished,
   onCoreRunStarted,
 } from "../src/main/ipc/handlers/agent.js";
@@ -42,6 +43,24 @@ describe("agent run lifecycle", () => {
     });
     assert.equal(isDesktopAgentActive(), false);
     decrementDesktopAgentActive();
+    assert.equal(isDesktopAgentActive(), false);
+  });
+
+  it("T14: abort 后 refcount 保持 busy 直至 RUN_FINISHED", () => {
+    incrementDesktopAgentActive();
+    onCoreRunStarted({
+      sessionId: "s-abort",
+      projectId: "p1",
+      runId: "run-abort",
+    });
+    abortAgentRun("s-abort");
+    assert.equal(isDesktopAgentActive(), true);
+    onCoreRunFinished({
+      sessionId: "s-abort",
+      projectId: "p1",
+      runId: "run-abort",
+      stopReason: "cancelled",
+    });
     assert.equal(isDesktopAgentActive(), false);
   });
 
