@@ -39,28 +39,42 @@ export function shouldAcceptRunEvent(
   return activeRunId === runId;
 }
 
+/** 纯函数：abort 后迟到 RUN_STARTED 是否应被忽略。 */
+export function shouldIgnoreStaleRunStarted(
+  uiRunning: boolean,
+  activeRunId: string | null,
+): boolean {
+  return !uiRunning && activeRunId == null;
+}
+
 export function useAgentRunLifecycle(
   onStreamReset?: () => void,
 ): AgentRunLifecycle {
   const [uiRunning, setUiRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
+  const uiRunningRef = useRef(false);
 
   const syncActiveRunId = useCallback((runId: string | null) => {
     activeRunIdRef.current = runId;
     setActiveRunId(runId);
   }, []);
 
+  const setUiRunningSynced = useCallback((next: boolean) => {
+    uiRunningRef.current = next;
+    setUiRunning(next);
+  }, []);
+
   const beginUiRun = useCallback(() => {
     syncActiveRunId(null);
-    setUiRunning(true);
-  }, [syncActiveRunId]);
+    setUiRunningSynced(true);
+  }, [syncActiveRunId, setUiRunningSynced]);
 
   const abortUiRun = useCallback(() => {
-    setUiRunning(false);
+    setUiRunningSynced(false);
     syncActiveRunId(null);
     onStreamReset?.();
-  }, [onStreamReset, syncActiveRunId]);
+  }, [onStreamReset, syncActiveRunId, setUiRunningSynced]);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
     return shouldAcceptRunEvent(activeRunIdRef.current, runId);
@@ -68,10 +82,14 @@ export function useAgentRunLifecycle(
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
+      // abort 后迟到 RUN_STARTED 不得复活 uiRunning（与 Mobile 对称）
+      if (shouldIgnoreStaleRunStarted(uiRunningRef.current, activeRunIdRef.current)) {
+        return;
+      }
       syncActiveRunId(payload.runId);
-      setUiRunning(true);
+      setUiRunningSynced(true);
     },
-    [syncActiveRunId],
+    [syncActiveRunId, setUiRunningSynced],
   );
 
   const onRunFinished = useCallback(
@@ -80,10 +98,10 @@ export function useAgentRunLifecycle(
         return false;
       }
       syncActiveRunId(null);
-      setUiRunning(false);
+      setUiRunningSynced(false);
       return true;
     },
-    [syncActiveRunId],
+    [syncActiveRunId, setUiRunningSynced],
   );
 
   const onRunFailed = useCallback(
@@ -92,16 +110,16 @@ export function useAgentRunLifecycle(
         return false;
       }
       syncActiveRunId(null);
-      setUiRunning(false);
+      setUiRunningSynced(false);
       return true;
     },
-    [syncActiveRunId],
+    [syncActiveRunId, setUiRunningSynced],
   );
 
   const resetUiForSessionChange = useCallback(() => {
-    setUiRunning(false);
+    setUiRunningSynced(false);
     syncActiveRunId(null);
-  }, [syncActiveRunId]);
+  }, [syncActiveRunId, setUiRunningSynced]);
 
   return {
     uiRunning,
