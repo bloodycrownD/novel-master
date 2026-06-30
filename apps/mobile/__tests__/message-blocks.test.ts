@@ -157,7 +157,7 @@ describe('message-blocks', () => {
     expect(view.resultContent).toBe('ok');
   });
 
-  it('orphan tool_use without result → pending tool cards', () => {
+  it('orphan tool_use without result → interrupted when agent inactive', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'list', input: {}},
@@ -167,7 +167,7 @@ describe('message-blocks', () => {
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
-      expect(items[0].tools[0]?.status).toBe('pending');
+      expect(items[0].tools[0]?.status).toBe('interrupted');
     }
   });
 
@@ -200,7 +200,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('incomplete turns always render pending tool cards', () => {
+  it('incomplete turns: only last assistant pending when agentRunning', () => {
     const messages = [
       msg('a1', 'assistant', [
         {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
@@ -213,8 +213,21 @@ describe('message-blocks', () => {
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
-    expect(byId.get('a1')?.tools[0]?.status).toBe('pending');
+    expect(byId.get('a1')?.tools[0]?.status).toBe('interrupted');
     expect(byId.get('a2')?.tools[0]?.status).toBe('pending');
+  });
+
+  it('abort 后无 result 的工具卡不为执行中', () => {
+    const messages = [
+      msg('a1', 'assistant', [
+        {type: 'tool_use', id: 'tu1', name: 'read', input: {}},
+      ], 1),
+    ];
+    const items = buildChatListItems(messages, {agentRunning: false});
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools[0]?.status).toBe('interrupted');
+      expect(items[0].tools[0]?.status).not.toBe('pending');
+    }
   });
 
   it('turnToolResultsComplete detects paired results', () => {
@@ -312,7 +325,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('hidden assistant with incomplete tools shows pending cards', () => {
+  it('hidden assistant with incomplete tools shows interrupted when agent inactive', () => {
     const messages = [
       msg(
         'a1',
@@ -327,7 +340,7 @@ describe('message-blocks', () => {
     if (items[0]?.kind === 'message') {
       expect(items[0].message.hidden).toBe(true);
       expect(items[0].tools).toHaveLength(1);
-      expect(items[0].tools[0]?.status).toBe('pending');
+      expect(items[0].tools[0]?.status).toBe('interrupted');
     }
   });
 

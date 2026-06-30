@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import {
+  buildChatListItems,
   isTurnToolExecuting,
   vfsToolFilePath,
 } from "@/features/chat/message-blocks";
@@ -25,6 +26,24 @@ test("T13: 工具卡执行中仅绑 agentRunning（agentActive），与 uiRunnin
   const assistant = assistantWithTool("a1", 1);
   assert.equal(isTurnToolExecuting(assistant, [assistant], true), true);
   assert.equal(isTurnToolExecuting(assistant, [assistant], false), false);
+});
+
+test("abort 后无 result 的工具卡显示已中断而非执行中", () => {
+  const assistant = assistantWithTool("a1", 1);
+  const items = buildChatListItems([assistant], { agentRunning: false });
+  assert.equal(items.length, 1);
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].tools.length, 1);
+    assert.equal(items[0].tools[0]?.status, "interrupted");
+  }
+});
+
+test("agentRunning 时当前未完成回合工具卡为 pending", () => {
+  const assistant = assistantWithTool("a1", 1);
+  const items = buildChatListItems([assistant], { agentRunning: true });
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].tools[0]?.status, "pending");
+  }
 });
 
 test("vfsToolFilePath：read/write/edit 与 vfs.* 前缀返回绝对路径", () => {
