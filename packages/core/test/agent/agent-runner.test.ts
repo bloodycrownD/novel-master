@@ -199,11 +199,14 @@ describe("AgentRunner", () => {
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 1);
+    assert.equal(msgs.length, 2);
     assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
+    const toolUse = msgs[1]!.content.blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolUse);
   });
 
-  it("abort 后 request 返回文本块不落库 assistant", async () => {
+  it("abort 后 request 返回文本块仍落库 assistant partial", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -240,8 +243,12 @@ describe("AgentRunner", () => {
 
     assert.equal(result.stopReason, "cancelled");
     const msgs = await session.list();
-    assert.equal(msgs.length, 1);
+    assert.equal(msgs.length, 2);
     assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
+    const textBlock = msgs[1]!.content.blocks.find((b) => b.type === "text");
+    assert.ok(textBlock && textBlock.type === "text");
+    assert.equal(textBlock.text, "late");
   });
 
   it("生命周期与 stream 事件携带一致 runId", async () => {
