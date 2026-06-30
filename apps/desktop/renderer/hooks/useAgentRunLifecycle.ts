@@ -42,9 +42,9 @@ export function shouldAcceptRunEvent(
 /** 纯函数：abort 后迟到 RUN_STARTED 是否应被忽略。 */
 export function shouldIgnoreStaleRunStarted(
   uiRunning: boolean,
-  activeRunId: string | null,
+  _activeRunId: string | null,
 ): boolean {
-  return !uiRunning && activeRunId == null;
+  return !uiRunning;
 }
 
 export function useAgentRunLifecycle(
@@ -72,9 +72,8 @@ export function useAgentRunLifecycle(
 
   const abortUiRun = useCallback(() => {
     setUiRunningSynced(false);
-    syncActiveRunId(null);
     onStreamReset?.();
-  }, [onStreamReset, syncActiveRunId, setUiRunningSynced]);
+  }, [onStreamReset, setUiRunningSynced]);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
     return shouldAcceptRunEvent(activeRunIdRef.current, runId);

@@ -23,18 +23,20 @@ describe("shouldAcceptRunEvent", () => {
   it("stale runId 不匹配时拒绝", () => {
     assert.equal(shouldAcceptRunEvent("run-a", "run-b"), false);
   });
+
+  it("abort 后保留 activeRunId 时 RUN_FINISHED 仍可 accept", () => {
+    assert.equal(shouldAcceptRunEvent("run-abort", "run-abort"), true);
+  });
 });
 
 describe("shouldIgnoreStaleRunStarted", () => {
-  it("abort 后 uiRunning=false 且 activeRunId=null 时忽略 RUN_STARTED", () => {
+  it("abort 后 uiRunning=false 时忽略 RUN_STARTED（保留 activeRunId 亦然）", () => {
     assert.equal(shouldIgnoreStaleRunStarted(false, null), true);
+    assert.equal(shouldIgnoreStaleRunStarted(false, "run-1"), true);
   });
 
   it("beginUiRun 窗口内 uiRunning=true 时接受 RUN_STARTED", () => {
     assert.equal(shouldIgnoreStaleRunStarted(true, null), false);
-  });
-
-  it("已有 activeRunId 时接受 RUN_STARTED", () => {
-    assert.equal(shouldIgnoreStaleRunStarted(false, "run-1"), false);
+    assert.equal(shouldIgnoreStaleRunStarted(true, "run-1"), false);
   });
 });

@@ -184,7 +184,7 @@ export function buildTranscriptBootScript(): string {
     return (
       '<div class="tool-invoking-bar">' +
       '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
-      '<span class="tool-invoking-label">工具调用中</span></div>'
+      '<span class="tool-invoking-label">生成中</span></div>'
     );
   }
 

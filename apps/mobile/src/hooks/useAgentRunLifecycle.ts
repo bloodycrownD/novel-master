@@ -58,9 +58,8 @@ export function useAgentRunLifecycle({
 
   const abortUiRun = useCallback(() => {
     setUiRunningSynced(false);
-    syncActiveRunId(null);
     onStreamResetRef.current?.();
-  }, [setUiRunningSynced, syncActiveRunId]);
+  }, [setUiRunningSynced]);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
     if (runId == null || runId.length === 0) {
@@ -75,7 +74,7 @@ export function useAgentRunLifecycle({
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
-      if (!uiRunningRef.current && activeRunIdRef.current == null) {
+      if (!uiRunningRef.current) {
         return;
       }
       syncActiveRunId(payload.runId);

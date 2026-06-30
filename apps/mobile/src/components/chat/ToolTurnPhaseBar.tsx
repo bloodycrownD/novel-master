@@ -7,13 +7,13 @@ import {useTheme} from '@/theme/ThemeProvider';
 
 type Props = {
   embedded?: boolean;
-  /** 默认「工具调用中」。 */
+  /** 默认「生成中」。 */
   label?: string;
 };
 
 export function ToolTurnPhaseBar({
   embedded = true,
-  label = '工具调用中',
+  label = '生成中',
 }: Props) {
   const {tokens} = useTheme();
   return (

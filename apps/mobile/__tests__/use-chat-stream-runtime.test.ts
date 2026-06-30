@@ -272,4 +272,26 @@ describe('useChatStreamRuntime', () => {
     expect(api.lifecycle!.uiRunning).toBe(false);
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
   });
+
+  it('abort 后保留 activeRunId，cancelled RUN_FINISHED 仍 flushRunUi', async () => {
+    const {api, startRun} = mountRuntime({beginUiRun: true});
+    startRun();
+    act(() => {
+      api.lifecycle!.abortUiRun();
+    });
+    expect(api.lifecycle!.uiRunning).toBe(false);
+    expect(api.lifecycle!.activeRunId).toBe(RUN_ID);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        stopReason: 'cancelled',
+      });
+      await Promise.resolve();
+    });
+    expect(api.lifecycle!.activeRunId).toBe(null);
+    expect(api.lifecycle!.uiRunning).toBe(false);
+    expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
+  });
 });

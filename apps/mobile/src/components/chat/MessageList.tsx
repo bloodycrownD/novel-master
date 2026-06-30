@@ -411,7 +411,7 @@ export function MessageList({
             )
           : null}
         {showToolInvoking ? (
-          <ToolTurnPhaseBar embedded label="工具调用中" />
+          <ToolTurnPhaseBar embedded label="生成中" />
         ) : null}
         {tools.length > 0 ? (
           <ToolCallGroupCard
