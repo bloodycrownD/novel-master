@@ -1,29 +1,27 @@
 ---
 createdAt: '2026-06-23 21:39:57'
-updatedAt: '2026-06-28 17:00:00'
+updatedAt: '2026-06-28 18:30:00'
 ---
-# agent-run-lifecycle-unify — code-dev-loop 复检
+# abort-partial-persist — code-dev-loop CR
 
 ## 状态
-**merge-ready**（fix-final 闭合 P1 后）
+phase-1/2 CR + verify-final 进行中
 
 ## 分支
 `fix/agent-run-lifecycle-unify`
 
-## HEAD
-待 fix-final commit
+## Spec/PRD
+- SPEC: `.apm/kb/docs/Iterations/chat-workspace-agent-sync/bugs/abort-partial-persist/spec.md`
+- PRD: `.apm/kb/docs/Iterations/chat-workspace-agent-sync/bugs/abort-partial-persist/prd.md`
 
-## outer loop
-- cleanup ✅ d186af29
-- verify-final ✅ lifecycle 243/243
-- cr-final 首轮 not merge-ready → fix-final Desktop onRunStarted stale 守卫
+## Phase DAG
+| phase | 范围 | BASE → HEAD |
+|-------|------|-------------|
+| phase-1 Core | agent-runner partial append | 1ecf5d07 → 495401ac |
+| phase-2 双端+文案 | lifecycle + tail copy | 495401ac → d57c70ba |
+| 文档 | prd/spec 留痕 | d57c70ba → 797c5a2a |
 
-## 验证
-- Core lifecycle+allowlist：97/97
-- Desktop（无 packaging）：97/97
-- Mobile lifecycle：52/52
-- 根 build：mobile Buffer TS（无关）
-
-## 集成
-- PR → main
-- 手工：T8 abort 300ms、T9 跨 run stale
+## 波次
+- p1-verify + p1-cr-stage（并行）
+- p2-verify + p2-cr-stage（并行）
+- cleanup → verify-final → cr-final
