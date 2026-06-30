@@ -33,11 +33,13 @@ export type NovelMasterEventType =
 export interface AgentRunStartedPayload {
   readonly sessionId: string;
   readonly projectId: string;
+  readonly runId: string;
 }
 
 export interface AgentRunFinishedPayload {
   readonly sessionId: string;
   readonly projectId: string;
+  readonly runId: string;
   readonly stopReason: string;
   /** 本次 run 内是否曾突变 session VFS（任意 tool 轮） */
   readonly vfsMutated?: boolean;
@@ -46,21 +48,25 @@ export interface AgentRunFinishedPayload {
 export interface AgentRunFailedPayload {
   readonly sessionId: string;
   readonly projectId: string;
+  readonly runId: string;
   readonly error: string;
 }
 
 export interface AgentStreamTextDeltaPayload {
   readonly sessionId: string;
+  readonly runId: string;
   readonly text: string;
 }
 
 export interface AgentStreamThinkingDeltaPayload {
   readonly sessionId: string;
+  readonly runId: string;
   readonly text: string;
 }
 
 export interface AgentStreamToolUsePayload {
   readonly sessionId: string;
+  readonly runId: string;
   readonly id: string;
   readonly name: string;
   readonly input: Record<string, unknown>;
@@ -71,6 +77,7 @@ export type AgentStepCommittedPhase = "assistant" | "tool_results";
 export interface AgentStepCommittedPayload {
   readonly sessionId: string;
   readonly projectId: string;
+  readonly runId: string;
   readonly phase: AgentStepCommittedPhase;
   /** 仅 phase === 'tool_results' 时存在；本轮是否突变 session VFS */
   readonly vfsMutated?: boolean;

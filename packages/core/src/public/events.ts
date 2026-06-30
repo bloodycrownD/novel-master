@@ -13,7 +13,9 @@ export {
 } from "../domain/events/model/event-types.js";
 export type {
   NovelMasterEventType,
+  AgentRunStartedPayload,
   AgentRunFinishedPayload,
+  AgentRunFailedPayload,
   AgentStreamTextDeltaPayload,
   AgentStreamThinkingDeltaPayload,
   AgentStreamToolUsePayload,

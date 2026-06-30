@@ -9,7 +9,8 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload } from "@novel-master/core/events";
+import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
+import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
 import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
@@ -200,6 +201,115 @@ describe("AgentRunner", () => {
     const msgs = await session.list();
     assert.equal(msgs.length, 1);
     assert.equal(msgs[0]!.role, "user");
+  });
+
+  it("abort 后 request 返回文本块不落库 assistant", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const controller = new AbortController();
+    const model: ModelRequestService & { callCount: () => number } = {
+      callCount: () => 1,
+      request: async () => {
+        controller.abort();
+        return {
+          assistantText: "late",
+          blocks: [{ type: "text", text: "late" }],
+          raw: {},
+        };
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      signal: controller.signal,
+    });
+
+    assert.equal(result.stopReason, "cancelled");
+    const msgs = await session.list();
+    assert.equal(msgs.length, 1);
+    assert.equal(msgs[0]!.role, "user");
+  });
+
+  it("生命周期与 stream 事件携带一致 runId", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("hi"));
+    const bus = new SimpleEventBus();
+    let started: AgentRunStartedPayload | undefined;
+    const runIds: string[] = [];
+
+    bus.subscribe(EVENT_AGENT_RUN_STARTED, (p: AgentRunStartedPayload) => {
+      started = p;
+      runIds.push(p.runId);
+    });
+    bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
+      runIds.push(p.runId);
+    });
+    bus.subscribe(EVENT_AGENT_RUN_FINISHED, (p: AgentRunFinishedPayload) => {
+      runIds.push(p.runId);
+    });
+    bus.subscribe(EVENT_AGENT_STREAM_TEXT_DELTA, (p: AgentStreamTextDeltaPayload) => {
+      runIds.push(p.runId);
+    });
+
+    const model: ModelRequestService & {
+      callCount: () => number;
+      request: ModelRequestService["request"];
+    } = {
+      callCount: () => 0,
+      request: async (_id, _prompt, options) => {
+        options.onStream?.({ type: "text-delta", text: "stream" });
+        return {
+          assistantText: "ok",
+          blocks: [{ type: "text", text: "ok" }],
+          raw: {},
+        };
+      },
+    };
+
+    const registry = new ToolRegistry();
+    const runner = createAgentRunner({
+      session,
+      modelRequests: model,
+      registry,
+      toolCtx: mockToolCtx(mockVfs()),
+      eventBus: bus,
+      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktree: () =>
+        ({
+          scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
+          renderDisplay: async () => "WT",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "WT" }),
+        }) as never,
+    });
+
+    await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      stream: true,
+    });
+
+    await Promise.resolve();
+
+    assert.ok(started);
+    assert.ok(isRandomUuidV4(started.runId));
+    assert.equal(runIds.length, 4);
+    assert.ok(runIds.every((id) => id === started!.runId));
   });
 
   it("maxSteps=1: runs tool once, no second model call", async () => {

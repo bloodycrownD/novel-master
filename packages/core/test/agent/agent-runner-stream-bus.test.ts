@@ -4,9 +4,14 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  type AgentStreamTextDeltaPayload,
+  type AgentStreamThinkingDeltaPayload,
+  type AgentStreamToolUsePayload,
 } from "../../src/domain/events/model/event-types.js";
 import { SimpleEventBus } from "../../src/infra/events/simple-event-bus.js";
 import { wrapStreamForBus } from "../../src/service/agent/impl/agent-runner.js";
+
+const RUN_ID = "run-test-uuid";
 
 describe("agent-runner stream bus", () => {
   it("defers STREAM_* bus.publish via queueMicrotask", async () => {
@@ -25,7 +30,7 @@ describe("agent-runner stream bus", () => {
       published.push("tool-use");
     });
 
-    const onStream = wrapStreamForBus(bus, sessionId, () => {
+    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID, () => {
       userCalled = true;
       assert.equal(published.length, 0, "bus.publish must not run synchronously");
     });
@@ -60,7 +65,7 @@ describe("agent-runner stream bus", () => {
       published.push("text-delta");
     });
 
-    const onStream = wrapStreamForBus(bus, "sess-2");
+    const onStream = wrapStreamForBus(bus, "sess-2", RUN_ID);
     assert.ok(onStream);
 
     onStream!({ type: "text-delta", text: "x" });
@@ -68,5 +73,37 @@ describe("agent-runner stream bus", () => {
 
     await Promise.resolve();
     assert.deepEqual(published, ["text-delta"]);
+  });
+
+  it("STREAM_* payload 携带 runId", async () => {
+    const bus = new SimpleEventBus();
+    const sessionId = "sess-run-id";
+    const payloads: Array<
+      | AgentStreamTextDeltaPayload
+      | AgentStreamThinkingDeltaPayload
+      | AgentStreamToolUsePayload
+    > = [];
+
+    bus.subscribe(EVENT_AGENT_STREAM_TEXT_DELTA, (p) => payloads.push(p));
+    bus.subscribe(EVENT_AGENT_STREAM_THINKING_DELTA, (p) => payloads.push(p));
+    bus.subscribe(EVENT_AGENT_STREAM_TOOL_USE, (p) => payloads.push(p));
+
+    const onStream = wrapStreamForBus(bus, sessionId, RUN_ID);
+    onStream!({ type: "text-delta", text: "a" });
+    onStream!({ type: "thinking-delta", text: "b" });
+    onStream!({
+      type: "tool-use",
+      id: "t1",
+      name: "read",
+      input: { path: "x" },
+    });
+
+    await Promise.resolve();
+
+    assert.equal(payloads.length, 3);
+    for (const p of payloads) {
+      assert.equal(p.sessionId, sessionId);
+      assert.equal(p.runId, RUN_ID);
+    }
   });
 });

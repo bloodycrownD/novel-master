@@ -52,6 +52,7 @@ import {
   EVENT_SESSION_MESSAGE_RECEIVED,
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
+import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
 
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
@@ -95,8 +96,10 @@ export class DefaultAgentRunner implements AgentRunner {
         ? this.deps.session
         : new EphemeralOverlayAgentSession(this.deps.session, sessionId);
 
+    const runId = generateAgentRunId();
+
     if (publishRunLifecycle) {
-      bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId });
+      bus.publish(EVENT_AGENT_RUN_STARTED, { sessionId, projectId, runId });
     }
 
     const rounds: ModelRoundSummary[] = [];
@@ -225,7 +228,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const onStream =
           options.stream && publishRunLifecycle
-            ? wrapStreamForBus(bus, sessionId, options.onStream)
+            ? wrapStreamForBus(bus, sessionId, runId, options.onStream)
             : options.stream
               ? options.onStream
               : undefined;
@@ -273,6 +276,7 @@ export class DefaultAgentRunner implements AgentRunner {
             bus.publish(EVENT_AGENT_STEP_COMMITTED, {
               sessionId,
               projectId,
+              runId,
               phase: "assistant",
             });
           }
@@ -365,6 +369,7 @@ export class DefaultAgentRunner implements AgentRunner {
           bus.publish(EVENT_AGENT_STEP_COMMITTED, {
             sessionId,
             projectId,
+            runId,
             phase: "tool_results",
             vfsMutated,
           });
@@ -384,6 +389,7 @@ export class DefaultAgentRunner implements AgentRunner {
         bus.publish(EVENT_AGENT_RUN_FAILED, {
           sessionId,
           projectId,
+          runId,
           error: runError,
         });
       }
@@ -403,6 +409,7 @@ export class DefaultAgentRunner implements AgentRunner {
       bus.publish(EVENT_AGENT_RUN_FINISHED, {
         sessionId,
         projectId,
+        runId,
         stopReason,
         vfsMutated: vfsMutatedInRun,
       });
@@ -450,6 +457,7 @@ async function applyLlmRegexChannelToVisible(
 export function wrapStreamForBus(
   bus: SimpleEventBus,
   sessionId: string,
+  runId: string,
   userOnStream?: (event: LlmStreamEvent) => void,
 ): ((event: LlmStreamEvent) => void) | undefined {
   const scheduleStreamPublish = (ev: LlmStreamEvent): void => {
@@ -457,6 +465,7 @@ export function wrapStreamForBus(
       queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
           sessionId,
+          runId,
           text: ev.text,
         }),
       );
@@ -464,6 +473,7 @@ export function wrapStreamForBus(
       queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
           sessionId,
+          runId,
           text: ev.text,
         }),
       );
@@ -471,6 +481,7 @@ export function wrapStreamForBus(
       queueMicrotask(() =>
         bus.publish(EVENT_AGENT_STREAM_TOOL_USE, {
           sessionId,
+          runId,
           id: ev.id,
           name: ev.name,
           input: ev.input,
