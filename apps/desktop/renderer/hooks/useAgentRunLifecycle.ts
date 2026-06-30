@@ -13,7 +13,7 @@ export type AgentRunLifecycle = {
   readonly activeRunId: string | null;
   /** 发 run 前：uiRunning=true；Desktop 不 increment agentActive */
   beginUiRun(): void;
-  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive */
+  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除 */
   abortUiRun(): void;
   /** runId 不匹配则丢弃；匹配则通过 */
   acceptRunEvent(runId: string | undefined): boolean;

@@ -15,7 +15,7 @@ export type AgentRunLifecycle = {
   readonly activeRunId: string | null;
   /** 发 run 前：uiRunning=true 并 incrementAgentActive。 */
   beginUiRun(): void;
-  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive。 */
+  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除。 */
   abortUiRun(): void;
   /** runId 不匹配则丢弃。 */
   acceptRunEvent(runId: string | undefined): boolean;
@@ -74,6 +74,7 @@ export function useAgentRunLifecycle({
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
+      // abort 后 uiRunning=false 时忽略迟到 RUN_STARTED（与 Desktop 对称）
       if (!uiRunningRef.current) {
         return;
       }
