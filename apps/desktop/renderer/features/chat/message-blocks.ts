@@ -12,7 +12,7 @@ import { resolveToolResultOk } from "@novel-master/core";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
 import { chatMessageFromDto } from "./composer-send-state";
 
-export type ToolCallStatus = "success" | "error" | "pending";
+export type ToolCallStatus = "success" | "error" | "pending" | "interrupted";
 
 export interface ToolCallView {
   readonly toolUseId: string;
@@ -210,10 +210,21 @@ export function toolCallSummary(tool: ToolCallView): string {
   return "";
 }
 
+function resolveUnpairedToolStatus(
+  assistant: ChatMessageDto,
+  messages: readonly ChatMessageDto[],
+  agentRunning: boolean,
+): ToolCallStatus {
+  return isTurnToolExecuting(assistant, messages, agentRunning)
+    ? "pending"
+    : "interrupted";
+}
+
 export function buildChatListItems(
   messages: readonly ChatMessageDto[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
+  const agentRunning = options.agentRunning ?? false;
   const results = buildToolResultByUseId(messages);
   const coreMessages = messages.map(chatMessageFromDto);
   const items: ChatListItem[] = [];
@@ -274,7 +285,16 @@ export function buildChatListItems(
     }
 
     const hasToolUse = toolUses.length > 0;
-    const tools = toolUses.map((use) => toolCallViewFromUse(use, results));
+    const unpairedStatus = hasToolUse
+      ? resolveUnpairedToolStatus(message, messages, agentRunning)
+      : undefined;
+    const tools = toolUses.map((use) => {
+      const view = toolCallViewFromUse(use, results);
+      if (view.status === "pending" && unpairedStatus != null) {
+        return { ...view, status: unpairedStatus };
+      }
+      return view;
+    });
 
     if (
       textParts.length > 0 ||

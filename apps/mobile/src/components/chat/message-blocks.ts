@@ -8,7 +8,7 @@ import { buildUserVfsTurnView, deriveToolUsesFromVfsActions, matchUserVfsTurnAtF
 import type {TranscriptRow} from './ChatTranscriptBridge';
 import {decodeLiteralHtmlEntities} from '@/components/rich-content/decode-literal-html-entities';
 
-export type ToolCallStatus = 'success' | 'error' | 'pending';
+export type ToolCallStatus = 'success' | 'error' | 'pending' | 'interrupted';
 
 export interface ToolCallView {
   readonly toolUseId: string;
@@ -25,7 +25,7 @@ export interface MessageListItem {
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
-  /** 有 tool_use 即渲染（无 result 时为 pending）。 */
+  /** 有 tool_use 即渲染（无 result 时由 agentRunning + isTurnToolExecuting 决定 pending / interrupted）。 */
   readonly tools: readonly ToolCallView[];
 }
 
@@ -220,10 +220,21 @@ export function toolCallSummary(tool: ToolCallView): string {
 }
 
 /** Flattens session messages into chat bubbles (tool_use embedded on assistant rows). */
+function resolveUnpairedToolStatus(
+  assistant: ChatMessage,
+  messages: readonly ChatMessage[],
+  agentRunning: boolean,
+): ToolCallStatus {
+  return isTurnToolExecuting(assistant, messages, agentRunning)
+    ? 'pending'
+    : 'interrupted';
+}
+
 export function buildChatListItems(
   messages: readonly ChatMessage[],
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
+  const agentRunning = options.agentRunning ?? false;
   const results = buildToolResultByUseId(messages);
   const items: ChatListItem[] = [];
 
@@ -287,7 +298,16 @@ export function buildChatListItems(
     }
 
     const hasToolUse = toolUses.length > 0;
-    const tools = toolUses.map(use => toolCallViewFromUse(use, results));
+    const unpairedStatus = hasToolUse
+      ? resolveUnpairedToolStatus(message, messages, agentRunning)
+      : undefined;
+    const tools = toolUses.map(use => {
+      const view = toolCallViewFromUse(use, results);
+      if (view.status === 'pending' && unpairedStatus != null) {
+        return {...view, status: unpairedStatus};
+      }
+      return view;
+    });
 
     if (
       textParts.length > 0 ||
