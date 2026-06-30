@@ -9,6 +9,7 @@ import {
   type AgentRunRequest,
   type AgentSetCurrentRequest,
   type AgentStreamEventPayload,
+  type AgentActivityPayload,
   type AppCheckForUpdatesResponse,
   type AppGetInfoResponse,
   type AppOpenExternalRequest,
@@ -103,6 +104,18 @@ export function onAgentStream(
   callback: (payload: AgentStreamEventPayload) => void,
 ): () => void {
   return bridge().on(IPC_CHANNELS.AGENT_STREAM, callback as (p: unknown) => void);
+}
+
+/** 订阅 main 进程 agentActive refcount 变化。 */
+export function onAgentActivity(
+  callback: (payload: AgentActivityPayload) => void,
+): () => void {
+  return bridge().on(IPC_CHANNELS.AGENT_ACTIVITY, callback as (p: unknown) => void);
+}
+
+/** 查询当前 agentActive 状态（挂载时同步初始值）。 */
+export async function ipcAgentActivityGet(): Promise<AgentActivityPayload> {
+  return bridge().invoke<AgentActivityPayload>(IPC_CHANNELS.AGENT_ACTIVITY_GET);
 }
 
 /** 订阅 main 进程推送的工作区变更通知（VFS / 规则变更后 Explorer 刷新）。 */

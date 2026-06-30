@@ -11,6 +11,7 @@ import { useAgentRunLifecycle } from "@/hooks/useAgentRunLifecycle";
 import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
 import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
 import { useStreamTailGenerating } from "@/hooks/useStreamTailGenerating";
+import { useDesktopAgentActive } from "@/hooks/useDesktopAgentActive";
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -92,6 +93,8 @@ export function ConversationPanel({
     noteStreamDelta,
     resetStreamClock,
   } = useStreamTailGenerating(running);
+
+  const agentActive = useDesktopAgentActive();
 
   const onStreamReset = useCallback(() => {
     setStreamingText("");
@@ -719,7 +722,7 @@ export function ConversationPanel({
             streamingText={running ? streamingText : undefined}
             streamingThinking={running ? streamingThinking : undefined}
             streamTailGenerating={running ? streamTailGenerating : false}
-            agentRunning={running}
+            agentRunning={agentActive}
             batchMode={messageBatch.mode}
             selectedIds={messageBatch.selectedIds}
             affectedIds={visibilityBatchPreview.affectedIds}
