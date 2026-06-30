@@ -60,6 +60,7 @@ jest.mock('../src/services/agent-run.service', () => ({
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
 import {
+  decrementAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
 } from '../src/runtime/agent-activity';
@@ -172,6 +173,27 @@ describe('ChatComposer integration', () => {
 
   it('T23: run 早退时 agentActive 回落', async () => {
     mockRunAgentTurn.mockRejectedValueOnce(new Error('early fail'));
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(isMobileAgentActive()).toBe(false);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T23: RUN_FINISHED 已递减时 finally 不再双减', async () => {
+    mockRunAgentTurn.mockImplementationOnce(async () => {
+      // 模拟 useChatStreamRuntime 在 runAgentTurn 结束前已处理 FINISHED
+      decrementAgentActive();
+    });
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
