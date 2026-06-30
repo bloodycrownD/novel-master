@@ -176,6 +176,7 @@ export function buildTranscriptBootScript(): string {
     if (status === 'success') return '成功';
     if (status === 'error') return '失败';
     if (status === 'pending') return '执行中';
+    if (status === 'interrupted') return '已中断';
     return '';
   }
 
@@ -220,7 +221,11 @@ export function buildTranscriptBootScript(): string {
     var filePath = vfsToolFilePath(tool.name, tool.input || {});
     var canOpen = filePath != null;
     var summary = toolCallSummary(tool);
-    var statusClass = tool.status === 'error' ? 'error' : (tool.status === 'pending' ? 'pending' : 'success');
+    var statusClass = tool.status === 'error'
+      ? 'error'
+      : (tool.status === 'pending'
+        ? 'pending'
+        : (tool.status === 'interrupted' ? 'interrupted' : 'success'));
     var statusInner = toolStatusLabel(tool.status);
     var html =
       '<div class="tool-group-item tool-card' + (canOpen ? ' tappable' : '') + '"' +

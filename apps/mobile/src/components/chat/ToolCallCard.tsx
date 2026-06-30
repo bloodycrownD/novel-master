@@ -27,6 +27,8 @@ function statusLabel(status: ToolCallView['status']): string {
       return '失败';
     case 'pending':
       return '执行中';
+    case 'interrupted':
+      return '已中断';
     default:
       return '';
   }
@@ -39,7 +41,7 @@ function statusColor(
   if (status === 'error') {
     return tokens.danger;
   }
-  if (status === 'pending') {
+  if (status === 'pending' || status === 'interrupted') {
     return tokens.textSecondary;
   }
   return tokens.primary;

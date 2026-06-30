@@ -44,6 +44,7 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .tool-status.success { color: var(--primary, #007aff); }
     .tool-status.error { color: #ff3b30; }
     .tool-status.pending { color: var(--text-secondary, #888); }
+    .tool-status.interrupted { color: var(--text-secondary, #888); }
     .tool-phase-bar { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary, #888); }
     .tool-invoking-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #e5e5ea); font-size: 12px; font-weight: 600; color: var(--primary, #007aff); }
     .tool-invoking-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 4px; background: var(--primary, #007aff); animation: tool-invoking-pulse 1.2s ease-in-out infinite; }

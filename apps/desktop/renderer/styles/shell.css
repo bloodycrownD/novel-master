@@ -4930,6 +4930,11 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--danger);
 }
 
+.tool-call-card__status--pending,
+.tool-call-card__status--interrupted {
+  color: var(--text-secondary);
+}
+
 .tool-call-card__summary {
   margin: 6px 0 0;
   font-size: 13px;
