@@ -6,11 +6,14 @@ import type {RefObject} from 'react';
 import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
   EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
+  type AgentRunFailedPayload,
   type AgentRunFinishedPayload,
+  type AgentRunStartedPayload,
   type AgentStepCommittedPayload,
   type AgentStreamTextDeltaPayload,
   type AgentStreamThinkingDeltaPayload,
@@ -19,8 +22,8 @@ import {
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
 import {flushAgentStepUi, flushRunUi} from '@/components/chat/flush-run-ui';
 import {useStreamMetricsAcc} from '@/hooks/useAgentStreamMetrics';
-import {useStreamToolInvokingDisplay} from '@/hooks/useStreamToolInvokingDisplay';
 import {useRuntime} from '@/hooks/useRuntime';
+import {decrementAgentActive} from '@/runtime/agent-activity';
 import {createStreamApplyBuffer} from '@/services/stream-apply-buffer';
 import {
   appendWireChunk,
@@ -30,47 +33,47 @@ import {
 
 const INGRESS_COALESCE_MS = 32;
 
-/** Bus `agent.run.failed` 载荷（core public 尚未导出类型）。 */
-type AgentRunFailedPayload = {
-  readonly sessionId: string;
-  readonly projectId: string;
-  readonly error: string;
-};
-
 export type UseChatStreamRuntimeParams = {
   sessionId: string | undefined;
+  uiRunning: boolean;
   useWebviewTranscript: boolean;
   chatStreamBatchEnabled: boolean;
   transcriptWebRef: RefObject<ChatTranscriptWebViewHandle | null>;
   onMessagesChanged: () => void | Promise<void>;
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
+  acceptRunEvent: (runId: string | undefined) => boolean;
+  onRunStarted: (payload: AgentRunStartedPayload) => void;
   onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onRunFailed?: (payload: AgentRunFailedPayload) => void;
+  noteStreamDelta: () => void;
+  resetStreamClock: () => void;
 };
 
 export function useChatStreamRuntime({
   sessionId,
+  uiRunning,
   useWebviewTranscript,
   chatStreamBatchEnabled,
   transcriptWebRef,
   onMessagesChanged,
   onStepCommitted,
+  acceptRunEvent,
+  onRunStarted,
   onRunFinished,
   onRunFailed,
+  noteStreamDelta,
+  resetStreamClock,
 }: UseChatStreamRuntimeParams) {
   const runtime = useRuntime();
-  const [agentRunning, setAgentRunning] = useState(false);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
-  const hasSeenStreamTextRef = useRef(false);
 
-  const toolDisplay = useStreamToolInvokingDisplay(agentRunning);
   const {
     accRef: streamMetricsAccRef,
     lastRun: streamMetricsLastRun,
     noteTextDelta: noteMetricsTextDelta,
     noteThinkingDelta: noteMetricsThinkingDelta,
-  } = useStreamMetricsAcc(agentRunning);
+  } = useStreamMetricsAcc(uiRunning);
 
   const useWebviewRef = useRef(useWebviewTranscript);
   useWebviewRef.current = useWebviewTranscript;
@@ -79,21 +82,31 @@ export function useChatStreamRuntime({
   const transcriptWebRefRef = useRef(transcriptWebRef);
   transcriptWebRefRef.current = transcriptWebRef;
 
-  const callbacksRef = useRef({
-    onMessagesChanged,
-    onStepCommitted,
+  const lifecycleRef = useRef({
+    acceptRunEvent,
+    onRunStarted,
     onRunFinished,
     onRunFailed,
   });
-  callbacksRef.current = {
-    onMessagesChanged,
-    onStepCommitted,
+  lifecycleRef.current = {
+    acceptRunEvent,
+    onRunStarted,
     onRunFinished,
     onRunFailed,
   };
 
-  const toolRef = useRef(toolDisplay);
-  toolRef.current = toolDisplay;
+  const callbacksRef = useRef({
+    onMessagesChanged,
+    onStepCommitted,
+  });
+  callbacksRef.current = {
+    onMessagesChanged,
+    onStepCommitted,
+  };
+
+  const streamClockRef = useRef({noteStreamDelta, resetStreamClock});
+  streamClockRef.current = {noteStreamDelta, resetStreamClock};
+
   const metricsRef = useRef({
     noteMetricsTextDelta,
     noteMetricsThinkingDelta,
@@ -173,8 +186,7 @@ export function useChatStreamRuntime({
       ingressTimerRef.current = null;
     }
     ingressQueueRef.current = [];
-    hasSeenStreamTextRef.current = false;
-    toolRef.current.resetAll();
+    streamClockRef.current.resetStreamClock();
     applyBuffer.reset();
     if (useWebviewRef.current) {
       transcriptWebRefRef.current.current?.resetStream();
@@ -194,11 +206,7 @@ export function useChatStreamRuntime({
       if (delta.length === 0) {
         return;
       }
-      if (!hasSeenStreamTextRef.current) {
-        hasSeenStreamTextRef.current = true;
-        toolRef.current.clearToolUseLatch();
-      }
-      toolRef.current.noteTextDelta(delta);
+      streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsTextDelta(delta);
       ingestWireChunk({kind: 'text', delta});
     },
@@ -210,7 +218,7 @@ export function useChatStreamRuntime({
       if (delta.length === 0) {
         return;
       }
-      toolRef.current.noteThinkingDelta(delta);
+      streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsThinkingDelta(delta);
       ingestWireChunk({kind: 'thinking', delta});
     },
@@ -224,34 +232,55 @@ export function useChatStreamRuntime({
     const sid = sessionId;
     const bus = runtime.eventBus;
 
+    const subStarted = bus.subscribe(
+      EVENT_AGENT_RUN_STARTED,
+      (payload: AgentRunStartedPayload) => {
+        if (payload.sessionId !== sid) {
+          return;
+        }
+        lifecycleRef.current.onRunStarted(payload);
+      },
+    );
     const subText = bus.subscribe(
       EVENT_AGENT_STREAM_TEXT_DELTA,
       (payload: AgentStreamTextDeltaPayload) => {
-        if (payload.sessionId === sid) {
-          handleIngressText(payload.text);
+        if (payload.sessionId !== sid) {
+          return;
         }
+        if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
+          return;
+        }
+        handleIngressText(payload.text);
       },
     );
     const subThinking = bus.subscribe(
       EVENT_AGENT_STREAM_THINKING_DELTA,
       (payload: AgentStreamThinkingDeltaPayload) => {
-        if (payload.sessionId === sid) {
-          handleIngressThinking(payload.text);
+        if (payload.sessionId !== sid) {
+          return;
         }
+        if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
+          return;
+        }
+        handleIngressThinking(payload.text);
       },
     );
     const subToolUse = bus.subscribe(
       EVENT_AGENT_STREAM_TOOL_USE,
       (payload: AgentStreamToolUsePayload) => {
-        if (payload.sessionId === sid) {
-          toolRef.current.latchToolUse();
+        if (payload.sessionId !== sid) {
+          return;
         }
+        lifecycleRef.current.acceptRunEvent(payload.runId);
       },
     );
     const subStep = bus.subscribe(
       EVENT_AGENT_STEP_COMMITTED,
       (payload: AgentStepCommittedPayload) => {
         if (payload.sessionId !== sid) {
+          return;
+        }
+        if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
         const cb = callbacksRef.current;
@@ -270,9 +299,13 @@ export function useChatStreamRuntime({
         if (payload.sessionId !== sid) {
           return;
         }
+        if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
+          return;
+        }
+        decrementAgentActive();
         const cb = callbacksRef.current;
         flushRunUi(cb.onMessagesChanged, handleStreamReset)
-          .then(() => cb.onRunFinished?.(payload))
+          .then(() => lifecycleRef.current.onRunFinished?.(payload))
           .catch(() => undefined);
       },
     );
@@ -282,14 +315,19 @@ export function useChatStreamRuntime({
         if (payload.sessionId !== sid) {
           return;
         }
+        if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
+          return;
+        }
+        decrementAgentActive();
         const cb = callbacksRef.current;
         flushRunUi(cb.onMessagesChanged, handleStreamReset)
-          .then(() => cb.onRunFailed?.(payload))
+          .then(() => lifecycleRef.current.onRunFailed?.(payload))
           .catch(() => undefined);
       },
     );
 
     return () => {
+      subStarted.unsubscribe();
       subText.unsubscribe();
       subThinking.unsubscribe();
       subToolUse.unsubscribe();
@@ -315,9 +353,6 @@ export function useChatStreamRuntime({
   }, [applyBuffer]);
 
   return {
-    agentRunning,
-    setAgentRunning,
-    toolInvoking: toolDisplay.toolInvoking,
     streamMetricsAccRef,
     streamMetricsLastRun,
     streamingText,
