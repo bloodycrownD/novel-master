@@ -60,6 +60,8 @@ export type ChatTranscriptWebViewProps = {
   /** No cached snapshot: open pinned to bottom. */
   readonly defaultScrollToBottom?: boolean;
   readonly agentRunning?: boolean;
+  /** 菜单禁用与流式快照推迟；未传时回退 agentRunning。 */
+  readonly uiRunning?: boolean;
   readonly toolInvoking?: boolean;
   readonly selectedMessageIds?: ReadonlySet<string>;
   readonly affectedMessageIds?: ReadonlySet<string>;
@@ -101,6 +103,8 @@ function chatTranscriptWebViewPropsEqual(
     prev.streamingThinking === next.streamingThinking &&
     prev.hasMore === next.hasMore &&
     prev.agentRunning === next.agentRunning &&
+    (prev.uiRunning ?? prev.agentRunning) ===
+      (next.uiRunning ?? next.agentRunning) &&
     prev.toolInvoking === next.toolInvoking &&
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
@@ -187,6 +191,7 @@ export const ChatTranscriptWebView = memo(
     initialScroll = null,
     defaultScrollToBottom = true,
     agentRunning = false,
+    uiRunning: uiRunningProp,
     toolInvoking = false,
     selectedMessageIds,
     affectedMessageIds,
@@ -202,6 +207,7 @@ export const ChatTranscriptWebView = memo(
   },
   ref,
 ) {
+  const uiRunning = uiRunningProp ?? agentRunning;
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
@@ -359,7 +365,7 @@ export const ChatTranscriptWebView = memo(
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
       batchModeKind: flags?.batchModeKind ?? null,
-      menuDisabled: agentRunning,
+      menuDisabled: uiRunning,
     };
     postToWeb({
       v: 1,
@@ -372,7 +378,7 @@ export const ChatTranscriptWebView = memo(
     flags?.batchModeKind,
     postToWeb,
     tokens,
-    agentRunning,
+    uiRunning,
   ]);
 
   // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
@@ -420,7 +426,7 @@ export const ChatTranscriptWebView = memo(
       intent: TranscriptScrollIntent,
       restoreScroll?: TranscriptRestoreScroll,
     ) => {
-      if (!agentRunning) {
+      if (!uiRunning) {
         sendSessionSnapshotNow(intent, restoreScroll);
         return;
       }
@@ -443,7 +449,7 @@ export const ChatTranscriptWebView = memo(
         }
       }, 0);
     },
-    [agentRunning, sendSessionSnapshotNow],
+    [uiRunning, sendSessionSnapshotNow],
   );
 
   const sendAppendTailRows = useCallback(
@@ -548,7 +554,7 @@ export const ChatTranscriptWebView = memo(
         return;
       }
       if (message.type === 'openMessageMenu') {
-        if (agentRunning) {
+        if (uiRunning) {
           return;
         }
         emitChatTranscriptTelemetry({name: 'menu_open'});
@@ -588,7 +594,7 @@ export const ChatTranscriptWebView = memo(
       onMessageMenuAction,
       onWebMenuOpenChange,
       onToggleMessageSelect,
-      agentRunning,
+      uiRunning,
     ],
   );
 
@@ -607,7 +613,7 @@ export const ChatTranscriptWebView = memo(
       richText: flags?.richText ?? false,
       batchMode: flags?.batchMode ?? false,
       batchModeKind: flags?.batchModeKind ?? null,
-      menuDisabled: agentRunning,
+      menuDisabled: uiRunning,
     };
     const prev = prevSentFlagsRef.current;
     if (
@@ -630,7 +636,7 @@ export const ChatTranscriptWebView = memo(
     flags?.richText,
     flags?.batchMode,
     flags?.batchModeKind,
-    agentRunning,
+    uiRunning,
     postToWeb,
   ]);
 
@@ -751,7 +757,7 @@ export const ChatTranscriptWebView = memo(
         offsetYBefore: lastScrollRef.current.offsetY,
       });
       sendPrependPage(prependedCount);
-    } else if (agentRunning && grew) {
+    } else if (uiRunning && grew) {
       const added = messages.slice(prevCount);
       // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
       const needsFullSnapshot =
@@ -775,7 +781,7 @@ export const ChatTranscriptWebView = memo(
     webReady,
     sessionKey,
     messages,
-    agentRunning,
+    uiRunning,
     sendSessionSnapshot,
     sendPrependPage,
     sendAppendTailRows,

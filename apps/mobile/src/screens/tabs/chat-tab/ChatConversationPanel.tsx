@@ -48,7 +48,6 @@ import {SegmentedControl} from '@/components/ui/SegmentedControl';
 import type {MessageMenuAnchor} from '@/components/chat/MessageActionMenu';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
 import type {ChatAgentMeta} from '@/services/chat-agent-meta';
-import {setMobileAgentActive} from '@/runtime/agent-activity';
 import type {ThemeTokens} from '@/theme/tokens';
 import type {ConversationPanel} from './useChatTabScope';
 
@@ -62,7 +61,9 @@ export type ChatConversationPanelProps = {
   agentMeta: ChatAgentMeta;
   streamMetricsAccRef: StreamMetricsAccRef;
   streamMetricsLastRun: AgentStreamMetricsSnapshot | null;
-  toolInvoking: boolean;
+  streamTailGenerating: boolean;
+  uiRunning: boolean;
+  agentActive: boolean;
   messageBatchActive: boolean;
   messageBatchMode: MessageBatchMode | null;
   messageBatchSelectedCount: number;
@@ -74,7 +75,6 @@ export type ChatConversationPanelProps = {
   chatScrollKey: string | null;
   chatMessages: ChatMessage[];
   hasMoreMessages: boolean;
-  agentRunning: boolean;
   transcriptFlags: {
     richText: boolean;
     batchMode: boolean;
@@ -128,7 +128,8 @@ export type ChatConversationPanelProps = {
   onWebMessageMenuAction: (messageId: string, action: string) => void;
   onToggleMessageSelect: (messageId: string) => void;
   onMessageLongPress: (msg: ChatMessage, anchor: MessageMenuAnchor) => void;
-  onAgentRunningChange: (running: boolean) => void;
+  beginUiRun: () => void;
+  abortUiRun: () => void;
   onStreamReset: () => void;
   onMessagesChanged: () => void;
   onNeedModel: () => void;
@@ -150,7 +151,9 @@ export function ChatConversationPanel({
   agentMeta,
   streamMetricsAccRef,
   streamMetricsLastRun,
-  toolInvoking,
+  streamTailGenerating,
+  uiRunning,
+  agentActive,
   messageBatchActive,
   messageBatchMode,
   messageBatchSelectedCount,
@@ -162,7 +165,6 @@ export function ChatConversationPanel({
   chatScrollKey,
   chatMessages,
   hasMoreMessages,
-  agentRunning,
   transcriptFlags,
   webMenuCloseSignal,
   restoredTranscriptScroll,
@@ -210,7 +212,8 @@ export function ChatConversationPanel({
   onWebMessageMenuAction,
   onToggleMessageSelect,
   onMessageLongPress,
-  onAgentRunningChange,
+  beginUiRun,
+  abortUiRun,
   onStreamReset,
   onMessagesChanged,
   onNeedModel,
@@ -332,7 +335,7 @@ export function ChatConversationPanel({
             pointerEvents={conversationPanel === 'chat' ? 'auto' : 'none'}>
             <ChatMetaBar meta={agentMeta} />
             <ChatStreamMetricsBarLive
-              agentRunning={agentRunning}
+              agentRunning={uiRunning}
               accRef={streamMetricsAccRef}
               lastRun={streamMetricsLastRun}
             />
@@ -354,8 +357,9 @@ export function ChatConversationPanel({
                 sessionKey={chatScrollKey ?? 'no-session'}
                 messages={chatMessages}
                 hasMore={hasMoreMessages}
-                agentRunning={agentRunning}
-                toolInvoking={toolInvoking}
+                agentRunning={agentActive}
+                uiRunning={uiRunning}
+                toolInvoking={streamTailGenerating}
                 flags={transcriptFlags}
                 selectedMessageIds={messageBatchSelectedIds}
                 affectedMessageIds={visibilityBatchPreview.affectedIds}
@@ -376,8 +380,8 @@ export function ChatConversationPanel({
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
-                toolInvoking={toolInvoking}
-                agentRunning={agentRunning}
+                toolInvoking={streamTailGenerating}
+                agentRunning={agentActive}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
                 initialScroll={cachedChatScroll ?? null}
@@ -405,11 +409,9 @@ export function ChatConversationPanel({
             <ChatComposer
               scope={{projectId, sessionId}}
               hasModel={hasWorkspaceModel || agentMeta.hasDedicatedModel}
-              running={agentRunning}
-              onRunningChange={running => {
-                onAgentRunningChange(running);
-                setMobileAgentActive(running);
-              }}
+              running={uiRunning}
+              beginUiRun={beginUiRun}
+              abortUiRun={abortUiRun}
               onStreamReset={onStreamReset}
               onMessagesChanged={onMessagesChanged}
               onNeedModel={onNeedModel}

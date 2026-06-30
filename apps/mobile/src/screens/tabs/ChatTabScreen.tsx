@@ -17,6 +17,8 @@ import {ProjectDrawer} from '@/components/chrome/ProjectDrawer';
 import {useHeaderContext} from '@/navigation/HeaderContext';
 import type {RootStackParamList} from '@/navigation/types';
 import {useAndroidChatBackHandler} from '@/hooks/useAndroidChatBackHandler';
+import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
+import {useStreamTailGenerating} from '@/hooks/useStreamTailGenerating';
 import type {VfsFileManagerHandle} from '@/components/vfs/VfsFileManager';
 import {useDismissOverlaysOnBlur} from '@/hooks/useDismissOverlaysOnBlur';
 import {useBatchSelection} from '@/hooks/useBatchSelection';
@@ -41,6 +43,10 @@ import {
   type ChatTranscriptEngine,
 } from '@/storage/chat-transcript-engine';
 import {useNovelMaster} from '@/runtime/novel-master-context';
+import {
+  isMobileAgentActive,
+  subscribeMobileAgentActivity,
+} from '@/runtime/agent-activity';
 import {useTheme} from '@/theme/ThemeProvider';
 import {ChatConversationPanel} from './chat-tab/ChatConversationPanel';
 import {ChatSessionListPanel} from './chat-tab/ChatSessionListPanel';
@@ -126,6 +132,20 @@ export function ChatTabScreen() {
   });
 
   const agentRunningRef = useRef(false);
+  const streamResetRef = useRef<() => void>(() => undefined);
+
+  const lifecycle = useAgentRunLifecycle({
+    onStreamReset: () => streamResetRef.current(),
+  });
+  const streamTail = useStreamTailGenerating(lifecycle.uiRunning);
+
+  const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
+  useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
+
+  useEffect(() => {
+    lifecycle.resetUiForSessionChange();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 session 切换时重置 UI
+  }, [sessionId]);
 
   const handleMessagesChanged = useCallback(
     () =>
@@ -138,13 +158,21 @@ export function ChatTabScreen() {
 
   const stream = useChatStreamRuntime({
     sessionId,
+    uiRunning: lifecycle.uiRunning,
     useWebviewTranscript,
     chatStreamBatchEnabled,
     transcriptWebRef,
     onMessagesChanged: handleMessagesChanged,
+    acceptRunEvent: lifecycle.acceptRunEvent,
+    onRunStarted: lifecycle.onRunStarted,
+    onRunFinished: lifecycle.onRunFinished,
+    onRunFailed: lifecycle.onRunFailed,
+    noteStreamDelta: streamTail.noteStreamDelta,
+    resetStreamClock: streamTail.resetStreamClock,
   });
+  streamResetRef.current = stream.handleStreamReset;
 
-  agentRunningRef.current = stream.agentRunning;
+  agentRunningRef.current = agentActive;
 
   const messageActions = useChatTabMessageActions({
     runtime,
@@ -152,7 +180,7 @@ export function ChatTabScreen() {
     sessionId,
     messages,
     messageBatch,
-    agentRunning: stream.agentRunning,
+    agentRunning: lifecycle.uiRunning,
     resetStreamingDisplay: stream.resetStreamingDisplay,
     showToast,
     refreshChatTokenLabel: scope.refreshChatTokenLabel,
@@ -404,7 +432,9 @@ export function ChatTabScreen() {
         agentMeta={scope.agentMeta}
         streamMetricsAccRef={stream.streamMetricsAccRef}
         streamMetricsLastRun={stream.streamMetricsLastRun}
-        toolInvoking={stream.toolInvoking}
+        streamTailGenerating={streamTail.streamTailGenerating}
+        uiRunning={lifecycle.uiRunning}
+        agentActive={agentActive}
         messageBatchActive={messageBatch.active}
         messageBatchMode={messageBatch.mode}
         messageBatchSelectedCount={messageBatch.selectedCount}
@@ -416,7 +446,6 @@ export function ChatTabScreen() {
         chatScrollKey={scroll.chatScrollKey}
         chatMessages={messages.chatMessages}
         hasMoreMessages={messages.hasMoreMessages}
-        agentRunning={stream.agentRunning}
         transcriptFlags={transcriptFlags}
         webMenuCloseSignal={webMenuCloseSignal}
         restoredTranscriptScroll={scroll.restoredTranscriptScroll}
@@ -507,13 +536,14 @@ export function ChatTabScreen() {
         }}
         onToggleMessageSelect={handleToggleMessageSelect}
         onMessageLongPress={(msg, anchor) => {
-          if (stream.agentRunning) {
+          if (lifecycle.uiRunning) {
             return;
           }
           setMessageMenuTarget(msg);
           setMessageMenuAnchor(anchor);
         }}
-        onAgentRunningChange={stream.setAgentRunning}
+        beginUiRun={lifecycle.beginUiRun}
+        abortUiRun={lifecycle.abortUiRun}
         onStreamReset={stream.handleStreamReset}
         onMessagesChanged={() => handleMessagesChanged().catch(() => undefined)}
         onNeedModel={() => setModelPickerOpen(true)}
