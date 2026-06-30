@@ -51,6 +51,7 @@ export type {
   UserVfsPendingTool,
 } from "../domain/chat/model/user-vfs-pending.schema.js";
 export { computeStreamTailGenerating, DEFAULT_STREAM_TAIL_IDLE_MS } from "../domain/chat/logic/compute-stream-tail-generating.js";
+export { mergePendingVfsTurns } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export type { MergedPendingVfsTurn } from "../domain/chat/logic/merge-pending-vfs-turns.js";
 export type { WorkspaceFlushSnapshot } from "../domain/chat/logic/workspace-flush-snapshot.js";
 export {
