@@ -324,6 +324,7 @@ export function ChatTabScreen() {
     setChat({
       chatSubview: scope.chatSubview,
       sessionListPanel: scope.sessionListPanel,
+      projectName: scope.currentProject?.name,
       sessionTitle: scope.currentSession?.title ?? scope.currentSession?.id,
       agentName:
         scope.chatSubview === 'conversation'
@@ -345,6 +346,7 @@ export function ChatTabScreen() {
   }, [
     scope.chatSubview,
     scope.sessionListPanel,
+    scope.currentProject,
     scope.currentSession,
     scope.agentMeta,
     setChat,
@@ -585,10 +587,8 @@ export function ChatTabScreen() {
       <ChatSessionListPanel
         tokens={tokens}
         visible={scope.chatSubview === 'sessions'}
-        currentProject={scope.currentProject}
         sessionListPanel={scope.sessionListPanel}
         onSessionListPanelChange={scope.setSessionListPanel}
-        onOpenProjectDrawer={() => scope.setProjectDrawerOpen(true)}
         projectId={projectId}
         sessionId={sessionId}
         sessions={scope.sessions}

@@ -1,5 +1,5 @@
 /**
- * Chat tab sessions subview: project banner, session list, template workspace.
+ * Chat tab sessions subview: session list, template workspace.
  */
 import React, {useMemo} from 'react';
 import {
@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { type ChatProject, type ChatSession } from "@novel-master/core/chat";
+import { type ChatSession } from "@novel-master/core/chat";
 
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
 
@@ -27,10 +27,8 @@ import type {SessionListPanel} from './useChatTabScope';
 export type ChatSessionListPanelProps = {
   tokens: ThemeTokens;
   visible: boolean;
-  currentProject: ChatProject | undefined;
   sessionListPanel: SessionListPanel;
   onSessionListPanelChange: (panel: SessionListPanel) => void;
-  onOpenProjectDrawer: () => void;
   projectId: string | undefined;
   sessionId: string | undefined;
   sessions: ChatSession[];
@@ -58,10 +56,8 @@ export type ChatSessionListPanelProps = {
 function ChatSessionListPanelInner({
   tokens,
   visible,
-  currentProject,
   sessionListPanel,
   onSessionListPanelChange,
-  onOpenProjectDrawer,
   projectId,
   sessionId,
   sessions,
@@ -106,24 +102,6 @@ function ChatSessionListPanelInner({
     <View
       style={[styles.subviewFill, !visible && styles.panelHidden]}
       pointerEvents={visible ? 'auto' : 'none'}>
-      {currentProject ? (
-        <Pressable
-          style={[
-            styles.projectBanner,
-            {
-              backgroundColor: tokens.surfaceElevated,
-              borderBottomColor: tokens.borderLight,
-            },
-          ]}
-          onPress={onOpenProjectDrawer}>
-          <Text style={[styles.bannerLabel, {color: tokens.textSecondary}]}>
-            当前项目
-          </Text>
-          <Text style={[styles.bannerName, {color: tokens.primary}]}>
-            {currentProject.name}
-          </Text>
-        </Pressable>
-      ) : null}
       <SegmentedControl
         tokens={tokens}
         value={sessionListPanel}
@@ -294,16 +272,6 @@ export const ChatSessionListPanel = React.memo(ChatSessionListPanelInner);
 const styles = StyleSheet.create({
   subviewFill: {flex: 1, minHeight: 0},
   panelHidden: {display: 'none'},
-  projectBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  bannerLabel: {fontSize: 12},
-  bannerName: {fontSize: 15, fontWeight: '600'},
   sessionList: {flex: 1},
   sessionListContent: {paddingBottom: 16},
   flexFill: {flex: 1},

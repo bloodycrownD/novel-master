@@ -39,6 +39,11 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
         showBack = true;
       } else if (chat.sessionListPanel === 'template') {
         title = '项目工作区';
+      } else if (
+        chat.chatSubview === 'sessions' &&
+        chat.sessionListPanel === 'sessions'
+      ) {
+        title = chat.projectName ?? base.title;
       }
       return {
         title,

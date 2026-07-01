@@ -46,6 +46,8 @@ export type RootStackParamList = {
 export type ChatHeaderContext = {
   chatSubview: 'sessions' | 'conversation';
   sessionListPanel: 'sessions' | 'template';
+  /** 会话列表态顶栏标题：当前项目名称 */
+  projectName?: string;
   sessionTitle?: string;
   agentName?: string;
   modelLabel?: string;
