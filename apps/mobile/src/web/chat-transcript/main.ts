@@ -188,6 +188,54 @@ export function buildTranscriptBootScript(): string {
     );
   }
 
+  function streamHasContent() {
+    return (
+      (state.stream.text && String(state.stream.text).trim().length > 0) ||
+      (state.stream.thinking && String(state.stream.thinking).trim().length > 0)
+    );
+  }
+
+  /** active | waiting-first | idle-after-content */
+  function getStreamTailPhase() {
+    if (!state.stream.toolInvoking) {
+      return 'active';
+    }
+    return streamHasContent() ? 'idle-after-content' : 'waiting-first';
+  }
+
+  function renderStreamWaitingFirstRow() {
+    return (
+      '<div class="row stream stream--waiting-first" id="stream-tail">' +
+      '<div class="stream-waiting-indicator">' +
+      '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
+      '<span class="tool-invoking-label">生成中</span></div></div>'
+    );
+  }
+
+  function shouldRenderStreamTail() {
+    return streamHasContent() || state.stream.toolInvoking;
+  }
+
+  function renderStreamTailRow() {
+    if (!shouldRenderStreamTail()) {
+      return '';
+    }
+    if (getStreamTailPhase() === 'waiting-first') {
+      return renderStreamWaitingFirstRow();
+    }
+    return (
+      '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
+      assistantBubbleExtraClasses(
+        state.stream.textHtml,
+        [],
+        state.stream.text,
+        state.stream.thinking
+      ) + '">' +
+      renderStreamBubbleInner() +
+      '</div></div>'
+    );
+  }
+
   function thinkingBodyInner(text, thinkingHtml) {
     var trimmed = String(text || '').trim();
     if (!trimmed) return '';
@@ -300,9 +348,8 @@ export function buildTranscriptBootScript(): string {
       var richBubble = state.flags.richText && textHtml ? ' rich' : '';
       var inner = textHtml || escapeHtml(text || '');
       html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
-    } else if (hasThinking || hasInvoking) {
-      // WHY: thinking / toolInvoking 阶段可能没有正文文本，此时也要预置空 .bubble-body，
-      // 让后续 streamDelta(kind === 'text') 的增量路径拥有稳定容器，同时保留 data-text-shell 方便 UAUA 调试与语义标记。
+    } else if (hasThinking) {
+      // WHY: 仅有 thinking、正文为空时预置空 .bubble-body，供后续 text 增量挂载。
       var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';
       html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';
     }
@@ -806,6 +853,7 @@ export function buildTranscriptBootScript(): string {
   }
 
   function renderStreamBubbleInner() {
+    var showIdleBar = getStreamTailPhase() === 'idle-after-content';
     return renderAssistantBubbleInner(
       state.stream.text,
       state.stream.textHtml,
@@ -816,7 +864,7 @@ export function buildTranscriptBootScript(): string {
       [],
       'stream:tools',
       false,
-      state.stream.toolInvoking
+      showIdleBar
     );
   }
 
@@ -871,15 +919,7 @@ export function buildTranscriptBootScript(): string {
         html += renderRow(row);
       }
     }
-    if (state.stream.thinking || state.stream.text || state.stream.toolInvoking) {
-      html += '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
-        assistantBubbleExtraClasses(
-          state.stream.textHtml,
-          [],
-          state.stream.text,
-          state.stream.thinking
-        ) + '">' + renderStreamBubbleInner() + '</div></div>';
-    }
+    html += renderStreamTailRow();
     html += renderEmptyState();
     list.innerHTML = html;
   }
@@ -1144,14 +1184,38 @@ export function buildTranscriptBootScript(): string {
   }
 
   function setStreamToolInvokingDom(active) {
+    state.stream.toolInvoking = !!active;
     var tail = document.getElementById('stream-tail');
     if (!tail) {
-      state.stream.toolInvoking = !!active;
+      if (shouldRenderStreamTail()) {
+        renderRows();
+        scheduleStickIfNearBottom();
+      }
+      return;
+    }
+    var isWaitingShell = tail.classList.contains('stream--waiting-first');
+    var phase = getStreamTailPhase();
+    if (isWaitingShell && phase !== 'waiting-first') {
+      renderRows();
+      scheduleStickIfNearBottom();
+      return;
+    }
+    if (!isWaitingShell && phase === 'waiting-first') {
+      renderRows();
+      scheduleStickIfNearBottom();
+      return;
+    }
+    if (phase === 'waiting-first') {
+      if (!active && !streamHasContent()) {
+        renderRows();
+        scheduleStickIfNearBottom();
+      }
       return;
     }
     var bubble = tail.querySelector('.bubble');
     if (!bubble) {
-      state.stream.toolInvoking = !!active;
+      renderRows();
+      scheduleStickIfNearBottom();
       return;
     }
     var existing = bubble.querySelector('.tool-invoking-bar');
@@ -1172,7 +1236,10 @@ export function buildTranscriptBootScript(): string {
     } else if (existing) {
       existing.remove();
     }
-    state.stream.toolInvoking = !!active;
+    if (!shouldRenderStreamTail()) {
+      renderRows();
+      scheduleStickIfNearBottom();
+    }
   }
 
   function appendStreamDelta(kind, delta, html) {
@@ -1193,6 +1260,11 @@ export function buildTranscriptBootScript(): string {
     }
     var tail = document.getElementById('stream-tail');
     if (!tail) {
+      renderRows();
+      scheduleStickIfNearBottom();
+      return;
+    }
+    if (tail.classList.contains('stream--waiting-first') || !tail.querySelector('.bubble')) {
       renderRows();
       scheduleStickIfNearBottom();
       return;

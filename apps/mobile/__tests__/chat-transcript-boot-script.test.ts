@@ -34,13 +34,28 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('hasTools');
   });
 
-  it('pre-seeds empty bubble body for thinking/tool-invoking only stream bubbles', () => {
+  it('pre-seeds empty bubble body for thinking-only stream bubbles', () => {
     const script = buildTranscriptBootScript();
-    // 守护 spec：当仅有 thinking/toolInvoking、正文为空时，也要预置 .bubble-body，避免后续 text 增量时退回整泡重建。
-    expect(script).toContain('} else if (hasThinking || hasInvoking) {');
+    // 守护 spec：当仅有 thinking、正文为空时预置 .bubble-body，避免后续 text 增量时退回整泡重建。
+    expect(script).toContain('} else if (hasThinking) {');
     expect(script).toContain("var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';");
     expect(script).toContain("html += '<div class=\"bubble-body' + richShellBubble + '\" data-text-shell=\"1\"></div>';");
-    expect(script).toContain("var hasInvoking = !!showToolInvoking;");
+    expect(script).toContain("var showIdleBar = getStreamTailPhase() === 'idle-after-content'");
+  });
+
+  it('renders compact waiting-first stream tail when idle without content', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain('stream--waiting-first');
+    expect(script).toContain('stream-waiting-indicator');
+    expect(script).toContain('renderStreamWaitingFirstRow');
+    expect(script).toContain('getStreamTailPhase');
+    expect(script).toContain('streamHasContent');
+  });
+
+  it('rebuilds stream tail from waiting-first shell on delta', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain("tail.classList.contains('stream--waiting-first')");
+    expect(script).toContain('!tail.querySelector(\'.bubble\')');
   });
 
   it('renders stream tail with rich HTML when streamDelta.html is present', () => {

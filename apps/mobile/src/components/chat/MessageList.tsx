@@ -310,11 +310,11 @@ export function MessageList({
   ]);
 
   useEffect(() => {
-    if (!streamingText && !streamingThinking) {
+    if (!streamingText && !streamingThinking && !toolInvoking) {
       return;
     }
     scheduleScrollToEnd();
-  }, [streamingText, streamingThinking, scheduleScrollToEnd]);
+  }, [streamingText, streamingThinking, toolInvoking, scheduleScrollToEnd]);
 
   useEffect(() => {
     return () => {
@@ -327,6 +327,13 @@ export function MessageList({
       onScrollSnapshot?.(currentScrollSnapshot());
     };
   }, [onScrollSnapshot, currentScrollSnapshot]);
+
+  const hasStreamContent = useMemo(
+    () =>
+      !!(streamingText && streamingText.trim().length > 0) ||
+      !!(streamingThinking && streamingThinking.trim().length > 0),
+    [streamingText, streamingThinking],
+  );
 
   const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
     const list: (ChatListItem | {kind: 'stream'})[] = [...items];
@@ -535,6 +542,13 @@ export function MessageList({
       }
       renderItem={({item}) => {
         if ('kind' in item && item.kind === 'stream') {
+          if (toolInvoking && !hasStreamContent) {
+            return (
+              <View style={styles.rowAlignAssistant}>
+                <ToolTurnPhaseBar embedded={false} label="生成中" />
+              </View>
+            );
+          }
           return (
             <View style={styles.rowAlignAssistant}>
               {renderAssistantBubble(
@@ -548,7 +562,7 @@ export function MessageList({
                 {
                   defaultExpandedThinking: true,
                   forcePlainText: true,
-                  showToolInvoking: toolInvoking,
+                  showToolInvoking: toolInvoking && hasStreamContent,
                 },
               )}
             </View>
