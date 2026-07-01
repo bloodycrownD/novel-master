@@ -113,6 +113,13 @@ export type HostToTranscriptMessage =
     >
   | BridgeEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
   | BridgeEnvelope<
+      'streamCommit',
+      {
+        rows: readonly TranscriptRow[];
+        scrollIntent?: 'preserve' | 'none';
+      }
+    >
+  | BridgeEnvelope<
       'streamDelta',
       {
         kind: 'text' | 'thinking';

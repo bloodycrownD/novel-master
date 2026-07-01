@@ -20,7 +20,12 @@ import {
   type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
-import { flushAgentStepUi, flushRunUi } from '@/components/chat/flush-run-ui';
+import {
+  flushAgentStepUi,
+  flushRunUi,
+  type FlushMessagesChanged,
+  type FlushStreamEndContext,
+} from '@/components/chat/flush-run-ui';
 import { useStreamMetricsAcc } from '@/hooks/useAgentStreamMetrics';
 import { useRuntime } from '@/hooks/useRuntime';
 import { decrementAgentActive } from '@/runtime/agent-activity';
@@ -39,7 +44,8 @@ export type UseChatStreamRuntimeParams = {
   useWebviewTranscript: boolean;
   chatStreamBatchEnabled: boolean;
   transcriptWebRef: RefObject<ChatTranscriptWebViewHandle | null>;
-  onMessagesChanged: () => void | Promise<void>;
+  onMessagesChanged: FlushMessagesChanged;
+  getMessageCount: () => number;
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   acceptRunEvent: (runId: string | undefined) => boolean;
   onRunStarted: (payload: AgentRunStartedPayload) => void;
@@ -56,6 +62,7 @@ export function useChatStreamRuntime({
   chatStreamBatchEnabled,
   transcriptWebRef,
   onMessagesChanged,
+  getMessageCount,
   onStepCommitted,
   acceptRunEvent,
   onRunStarted,
@@ -179,7 +186,12 @@ export function useChatStreamRuntime({
     [scheduleIngressFlush],
   );
 
-  const handleStreamReset = useCallback(() => {
+  const getMessageCountRef = useRef(getMessageCount);
+  getMessageCountRef.current = getMessageCount;
+  /** 本 run 内已成功 streamCommit 的消息 id，防止 step + RUN_FINISHED 双次提交。 */
+  const committedTailIdsRef = useRef<Set<string>>(new Set());
+
+  const clearStreamBuffers = useCallback(() => {
     if (ingressTimerRef.current != null) {
       clearTimeout(ingressTimerRef.current);
       ingressTimerRef.current = null;
@@ -187,13 +199,58 @@ export function useChatStreamRuntime({
     ingressQueueRef.current = [];
     streamClockRef.current.resetStreamClock();
     applyBuffer.reset();
+  }, [applyBuffer]);
+
+  const handleStreamEndAfterReload = useCallback(
+    ({ messages, prevCount }: FlushStreamEndContext) => {
+      clearStreamBuffers();
+      const added = messages.slice(prevCount);
+      if (added.length === 0) {
+        if (committedTailIdsRef.current.size > 0) {
+          return;
+        }
+        if (useWebviewRef.current) {
+          transcriptWebRefRef.current.current?.resetStream();
+        } else {
+          setStreamingText('');
+          setStreamingThinking('');
+        }
+        return;
+      }
+      const addedIds = added.map(message => message.id);
+      const alreadyCommitted =
+        addedIds.length > 0 &&
+        addedIds.every(id => committedTailIdsRef.current.has(id));
+      if (alreadyCommitted) {
+        return;
+      }
+      if (useWebviewRef.current) {
+        const web = transcriptWebRefRef.current.current;
+        const committed = web?.tryCommitStreamTail(messages, prevCount) ?? false;
+        if (committed) {
+          for (const id of addedIds) {
+            committedTailIdsRef.current.add(id);
+          }
+          return;
+        }
+        web?.resetStream();
+        return;
+      }
+      setStreamingText('');
+      setStreamingThinking('');
+    },
+    [clearStreamBuffers],
+  );
+
+  const handleStreamReset = useCallback(() => {
+    clearStreamBuffers();
     if (useWebviewRef.current) {
       transcriptWebRefRef.current.current?.resetStream();
     } else {
       setStreamingText('');
       setStreamingThinking('');
     }
-  }, [applyBuffer]);
+  }, [clearStreamBuffers]);
 
   const resetStreamingDisplay = useCallback(() => {
     setStreamingText('');
@@ -237,6 +294,7 @@ export function useChatStreamRuntime({
         if (payload.sessionId !== sid) {
           return;
         }
+        committedTailIdsRef.current.clear();
         lifecycleRef.current.onRunStarted(payload);
       },
     );
@@ -284,10 +342,17 @@ export function useChatStreamRuntime({
         }
         const cb = callbacksRef.current;
         if (payload.phase === 'tool_results') {
-          void Promise.resolve(cb.onMessagesChanged()).catch(() => undefined);
+          void Promise.resolve(
+            cb.onMessagesChanged({ immediate: true }),
+          ).catch(() => undefined);
           return;
         }
-        flushAgentStepUi(payload.phase, cb.onMessagesChanged, handleStreamReset)
+        flushAgentStepUi(
+          payload.phase,
+          cb.onMessagesChanged,
+          handleStreamEndAfterReload,
+          getMessageCountRef.current(),
+        )
           .then(() => cb.onStepCommitted?.(payload))
           .catch(() => undefined);
       },
@@ -303,7 +368,11 @@ export function useChatStreamRuntime({
         }
         decrementAgentActive();
         const cb = callbacksRef.current;
-        flushRunUi(cb.onMessagesChanged, handleStreamReset)
+        flushRunUi(
+          cb.onMessagesChanged,
+          handleStreamEndAfterReload,
+          getMessageCountRef.current(),
+        )
           .then(() => lifecycleRef.current.onRunFinished?.(payload))
           .catch(() => undefined);
       },
@@ -319,7 +388,11 @@ export function useChatStreamRuntime({
         }
         decrementAgentActive();
         const cb = callbacksRef.current;
-        flushRunUi(cb.onMessagesChanged, handleStreamReset)
+        flushRunUi(
+          cb.onMessagesChanged,
+          handleStreamEndAfterReload,
+          getMessageCountRef.current(),
+        )
           .then(() => lifecycleRef.current.onRunFailed?.(payload))
           .catch(() => undefined);
       },
@@ -339,7 +412,7 @@ export function useChatStreamRuntime({
     sessionId,
     handleIngressText,
     handleIngressThinking,
-    handleStreamReset,
+    handleStreamEndAfterReload,
   ]);
 
   useEffect(() => {

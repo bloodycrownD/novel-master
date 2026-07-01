@@ -21,6 +21,7 @@ import {
   type HostToTranscriptMessage,
   type TranscriptFlags,
   type TranscriptRestoreScroll,
+  type TranscriptRow,
   type TranscriptScrollIntent,
   type TranscriptTheme,
 } from './ChatTranscriptBridge';
@@ -45,6 +46,11 @@ export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
   pushStreamBatch: (payload: { segments: readonly StreamWireChunk[] }) => void;
   resetStream: () => void;
+  /** 流式结束：单次 DOM 提交落库行并清 stream tail（纯文本 assistant）。成功返回 true。 */
+  tryCommitStreamTail: (
+    allMessages: readonly ChatMessage[],
+    prevCount: number,
+  ) => boolean;
 };
 
 export type ChatTranscriptWebViewProps = {
@@ -176,6 +182,22 @@ function emitScrollRestoreTelemetry(
   }
 }
 
+/** streamCommit 已同步的行，跳过 messages effect 重复 snapshot/append。 */
+function shouldSkipSnapshotAfterStreamCommit(
+  messages: readonly ChatMessage[],
+  prevCount: number,
+  committedIds: readonly string[],
+): boolean {
+  if (committedIds.length === 0 || messages.length <= prevCount) {
+    return false;
+  }
+  const addedIds = messages.slice(prevCount).map(message => message.id);
+  return (
+    addedIds.length > 0 &&
+    addedIds.every(id => committedIds.includes(id))
+  );
+}
+
 export const ChatTranscriptWebView = memo(
   forwardRef<ChatTranscriptWebViewHandle, ChatTranscriptWebViewProps>(
     function ChatTranscriptWebView(
@@ -236,6 +258,21 @@ export const ChatTranscriptWebView = memo(
       const streamThinkingAccumRef = useRef('');
       const richTextRef = useRef(flags?.richText ?? false);
       const streamActiveRef = useRef(false);
+      /** streamCommit 已写入的行 id，用于 messages effect 去重 snapshot。 */
+      const lastStreamCommitIdsRef = useRef<readonly string[]>([]);
+
+      const clearLocalStreamBuffers = useCallback(() => {
+        if (streamRafRef.current != null) {
+          cancelAnimationFrame(streamRafRef.current);
+          streamRafRef.current = null;
+        }
+        pendingStreamDeltaSegmentsRef.current = [];
+        pendingStreamSegmentsRef.current = [];
+        streamTextAccumRef.current = '';
+        streamThinkingAccumRef.current = '';
+        prevStreamTextRef.current = '';
+        prevStreamThinkingRef.current = '';
+      }, []);
 
       useEffect(() => {
         richTextRef.current = flags?.richText ?? false;
@@ -491,23 +528,83 @@ export const ChatTranscriptWebView = memo(
         [postToWeb, flags?.richText, agentRunning, messages],
       );
 
+      const commitStreamTail = useCallback(
+        (
+          rows: readonly TranscriptRow[],
+          scrollIntent: 'preserve' | 'none' = 'preserve',
+        ) => {
+          if (!webReady || rows.length === 0) {
+            return;
+          }
+          clearLocalStreamBuffers();
+          streamActiveRef.current = false;
+          pendingSnapshotRef.current = null;
+          if (snapshotDeferTimerRef.current != null) {
+            clearTimeout(snapshotDeferTimerRef.current);
+            snapshotDeferTimerRef.current = null;
+          }
+          lastStreamCommitIdsRef.current = rows
+            .filter(row => row.kind === 'message')
+            .map(row => row.id);
+          postToWeb({
+            v: 1,
+            type: 'streamCommit',
+            payload: { rows, scrollIntent },
+          });
+        },
+        [webReady, postToWeb, clearLocalStreamBuffers],
+      );
+
+      const tryCommitStreamTail = useCallback(
+        (allMessages: readonly ChatMessage[], prevCount: number): boolean => {
+          if (!webReady) {
+            return false;
+          }
+          const added = allMessages.slice(prevCount);
+          if (added.length === 0) {
+            return false;
+          }
+          const addedIds = added.map(message => message.id);
+          if (
+            addedIds.every(id => lastStreamCommitIdsRef.current.includes(id))
+          ) {
+            return true;
+          }
+          const needsFullSnapshot =
+            added.some(messageIsToolResultsOnly) ||
+            added.some(
+              message =>
+                message.role === 'assistant' && messageHasToolUse(message),
+            );
+          if (needsFullSnapshot) {
+            return false;
+          }
+          const richText = flags?.richText ?? false;
+          const rows = enrichTranscriptRows(
+            selectTailTranscriptRows(allMessages, added, { agentRunning }),
+            richText,
+          );
+          if (rows.length === 0) {
+            return false;
+          }
+          commitStreamTail(rows, 'preserve');
+          prevMessagesRef.current = allMessages;
+          prevMessageCountRef.current = allMessages.length;
+          prevFirstMessageIdRef.current = allMessages[0]?.id;
+          return true;
+        },
+        [webReady, flags?.richText, agentRunning, commitStreamTail],
+      );
+
       const resetStreamTail = useCallback(() => {
-        if (streamRafRef.current != null) {
-          cancelAnimationFrame(streamRafRef.current);
-          streamRafRef.current = null;
-        }
-        pendingStreamDeltaSegmentsRef.current = [];
-        pendingStreamSegmentsRef.current = [];
-        streamTextAccumRef.current = '';
-        streamThinkingAccumRef.current = '';
-        prevStreamTextRef.current = '';
-        prevStreamThinkingRef.current = '';
+        clearLocalStreamBuffers();
+        const wasActive = streamActiveRef.current;
         streamActiveRef.current = false;
-        if (webReady) {
+        if (webReady && wasActive) {
           postToWeb({ v: 1, type: 'streamReset', payload: {} });
+          flushPendingSnapshot();
         }
-        flushPendingSnapshot();
-      }, [webReady, postToWeb, flushPendingSnapshot]);
+      }, [webReady, postToWeb, flushPendingSnapshot, clearLocalStreamBuffers]);
 
       useImperativeHandle(
         ref,
@@ -515,8 +612,9 @@ export const ChatTranscriptWebView = memo(
           pushStreamDelta: queueStreamDelta,
           pushStreamBatch: queueStreamBatch,
           resetStream: resetStreamTail,
+          tryCommitStreamTail,
         }),
-        [queueStreamDelta, queueStreamBatch, resetStreamTail],
+        [queueStreamDelta, queueStreamBatch, resetStreamTail, tryCommitStreamTail],
       );
 
       const sendPrependPage = useCallback(
@@ -774,6 +872,14 @@ export const ChatTranscriptWebView = memo(
             offsetYBefore: lastScrollRef.current.offsetY,
           });
           sendPrependPage(prependedCount);
+        } else if (grew && shouldSkipSnapshotAfterStreamCommit(
+          messages,
+          prevCount,
+          lastStreamCommitIdsRef.current,
+        )) {
+          lastStreamCommitIdsRef.current = [];
+          prevFirstMessageIdRef.current = firstId;
+          prevMessageCountRef.current = messages.length;
         } else if (uiRunning && grew) {
           const added = messages.slice(prevCount);
           // WHY: appendTail 无法刷新既有行的 toolPhase；含 tool_use / tool_result 落库需全量 snapshot。
@@ -788,6 +894,13 @@ export const ChatTranscriptWebView = memo(
           } else {
             sendAppendTailRows(added);
           }
+        } else if (
+          lastStreamCommitIdsRef.current.length > 0 &&
+          messages.length === prevMessageCountRef.current
+        ) {
+          lastStreamCommitIdsRef.current = [];
+          prevFirstMessageIdRef.current = firstId;
+          prevMessageCountRef.current = messages.length;
         } else {
           sendSessionSnapshot('preserve');
         }

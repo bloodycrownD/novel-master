@@ -1030,6 +1030,78 @@ export function buildTranscriptBootScript(): string {
   }
 
   /**
+   * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
+   */
+  function promoteStreamTailToRow(row) {
+    if (!row || row.kind !== 'message') {
+      return false;
+    }
+    var streamTail = document.getElementById('stream-tail');
+    if (!streamTail) {
+      return false;
+    }
+    var rowHtml = renderRow(row);
+    if (!rowHtml) {
+      return false;
+    }
+    streamTail.outerHTML = rowHtml;
+    return true;
+  }
+
+  function applyStreamCommit(payload) {
+    var newRows = (payload.rows || []).slice();
+    var toAppend = [];
+    for (var i = 0; i < newRows.length; i++) {
+      var row = newRows[i];
+      if (row.kind !== 'message' && row.kind !== 'user_vfs_turn') {
+        continue;
+      }
+      var dup = false;
+      for (var j = 0; j < state.rows.length; j++) {
+        var existing = state.rows[j];
+        if (
+          (existing.kind === 'message' || existing.kind === 'user_vfs_turn') &&
+          existing.id === row.id
+        ) {
+          dup = true;
+          break;
+        }
+      }
+      if (!dup) {
+        toAppend.push(row);
+      }
+    }
+    if (toAppend.length === 0) {
+      renderRows();
+      return;
+    }
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
+    state.rows = state.rows.concat(toAppend);
+    var promoted =
+      toAppend.length === 1 &&
+      toAppend[0].kind === 'message' &&
+      promoteStreamTailToRow(toAppend[0]);
+    if (!promoted) {
+      renderRows();
+    }
+    var scrollIntent = payload.scrollIntent || 'preserve';
+    if (scroller) {
+      if (scrollIntent === 'preserve' && wasNearBottom) {
+        stickToBottom(scroller);
+      } else if (scrollIntent === 'preserve') {
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+        );
+      }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
+    }
+  }
+
+  /**
    * prependPage: only new older rows — NOT a full sessionSnapshot reload.
    * Anchor reading position: scrollTop += scrollHeight - prependedScrollHeight.
    */
@@ -1397,6 +1469,11 @@ export function buildTranscriptBootScript(): string {
         clearStreamRichUpgrade();
         state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
         renderRows();
+        break;
+      case 'streamCommit':
+        clearStreamRichUpgrade();
+        state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
+        applyStreamCommit(p);
         break;
       case 'streamToolInvoking':
         setStreamToolInvokingDom(!!p.active);

@@ -5,6 +5,7 @@ import {
   EVENT_AGENT_RUN_FAILED,
   EVENT_AGENT_RUN_FINISHED,
   EVENT_AGENT_RUN_STARTED,
+  EVENT_AGENT_STEP_COMMITTED,
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
@@ -58,10 +59,12 @@ describe('useChatStreamRuntime', () => {
       pushStreamDelta: jest.fn(),
       pushStreamBatch: jest.fn(),
       resetStream: jest.fn(),
+      tryCommitStreamTail: jest.fn(() => false),
       ...options?.web,
     };
-    const onMessagesChanged = jest.fn(async () => undefined);
+    const onMessagesChanged = jest.fn(async () => []);
     const onRunFailed = jest.fn();
+    let messageCount = 0;
     const api: {
       stream?: ReturnType<typeof useChatStreamRuntime>;
       lifecycle?: ReturnType<typeof useAgentRunLifecycle>;
@@ -79,6 +82,7 @@ describe('useChatStreamRuntime', () => {
         chatStreamBatchEnabled: options?.batchEnabled ?? true,
         transcriptWebRef: ref,
         onMessagesChanged,
+        getMessageCount: () => messageCount,
         acceptRunEvent: lifecycle.acceptRunEvent,
         onRunStarted: lifecycle.onRunStarted,
         onRunFinished: lifecycle.onRunFinished,
@@ -118,6 +122,9 @@ describe('useChatStreamRuntime', () => {
       onMessagesChanged,
       onRunFailed,
       startRun,
+      setMessageCount: (n: number) => {
+        messageCount = n;
+      },
     };
   }
 
@@ -293,5 +300,86 @@ describe('useChatStreamRuntime', () => {
     expect(api.lifecycle!.activeRunId).toBe(null);
     expect(api.lifecycle!.uiRunning).toBe(false);
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
+  });
+
+  it('STEP_COMMITTED(assistant) 触发 flushAgentStepUi 并尝试 commit', async () => {
+    const tryCommit = jest.fn(() => true);
+    const {startRun, setMessageCount} = mountRuntime({
+      beginUiRun: true,
+      web: { tryCommitStreamTail: tryCommit },
+    });
+    startRun();
+    setMessageCount(1);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    expect(mockFlushAgentStepUi).toHaveBeenCalledTimes(1);
+  });
+
+  it('STEP_COMMITTED(tool_results) 仅 immediate reload，不 flushAgentStepUi', async () => {
+    const {startRun, onMessagesChanged} = mountRuntime({beginUiRun: true});
+    startRun();
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'tool_results',
+      });
+      await Promise.resolve();
+    });
+    expect(mockFlushAgentStepUi).not.toHaveBeenCalled();
+    expect(onMessagesChanged).toHaveBeenCalledWith({ immediate: true });
+  });
+
+  it('RUN_FINISHED 在 tryCommit 已成功时不再 resetStream', async () => {
+    const assistantMsg = { id: 'assistant-1', role: 'assistant' as const };
+    const tryCommit = jest.fn(() => true);
+    const {startRun, webHandle, setMessageCount, onMessagesChanged} = mountRuntime({
+      beginUiRun: true,
+      web: { tryCommitStreamTail: tryCommit },
+    });
+    onMessagesChanged.mockResolvedValue([assistantMsg]);
+    startRun();
+    setMessageCount(0);
+    mockFlushRunUi.mockImplementation(async (reload, onEnd, prevCount) => {
+      const messages = (await reload({ immediate: true })) ?? [];
+      onEnd({ messages, prevCount });
+    });
+    mockFlushAgentStepUi.mockImplementation(
+      async (phase, reload, onEnd, prevCount) => {
+        const messages = (await reload({ immediate: true })) ?? [];
+        if (phase === 'assistant') {
+          onEnd({ messages, prevCount });
+        }
+      },
+    );
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    setMessageCount(1);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        stopReason: 'end_turn',
+      });
+      await Promise.resolve();
+    });
+    expect(tryCommit).toHaveBeenCalledTimes(1);
+    expect(webHandle.resetStream).not.toHaveBeenCalled();
   });
 });

@@ -64,6 +64,36 @@ function assistantWithToolUse(id: string, seq: number): ChatMessage {
   };
 }
 
+function assistantTextMessage(id: string, seq: number, text: string): ChatMessage {
+  return {
+    id,
+    sessionId: 's1',
+    seq,
+    role: 'assistant',
+    content: {blocks: [{type: 'text', text}]},
+    provider: null,
+    raw: null,
+    createdAtMs: seq,
+    hidden: false,
+  };
+}
+
+function toolResultsUserMessage(id: string, seq: number, toolUseId: string): ChatMessage {
+  return {
+    id,
+    sessionId: 's1',
+    seq,
+    role: 'user',
+    content: {
+      blocks: [{type: 'tool_result', tool_use_id: toolUseId, content: 'ok'}],
+    },
+    provider: null,
+    raw: null,
+    createdAtMs: seq,
+    hidden: false,
+  };
+}
+
 function messageTypesSince(clearAfterIndex: number): string[] {
   return mockWebViewPostMessages.slice(clearAfterIndex).map(raw => {
     const parsed = decodeHostToTranscript(raw);
@@ -585,5 +615,172 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterCommit = messageTypesSince(baseline);
     expect(typesAfterCommit).toContain('sessionSnapshot');
     expect(typesAfterCommit).not.toContain('appendTailRows');
+  });
+
+  it('T-W1: tool_results-only user 落库走 sessionSnapshot', async () => {
+    const initialMessages = [
+      sampleMessage('u1', 1),
+      assistantWithToolUse('a1', 2),
+    ];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={[
+            ...initialMessages,
+            toolResultsUserMessage('tr1', 3, 'tu-a1'),
+          ]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const typesAfterCommit = messageTypesSince(baseline);
+    expect(typesAfterCommit).toContain('sessionSnapshot');
+    expect(typesAfterCommit).not.toContain('appendTailRows');
+  });
+
+  it('T-W2: 纯 text assistant 运行中落库走 appendTailRows', async () => {
+    const initialMessages = [sampleMessage('u1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistantTextMessage('a1', 2, 'hello')]}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const typesAfterCommit = messageTypesSince(baseline);
+    expect(typesAfterCommit).toContain('appendTailRows');
+    expect(typesAfterCommit).not.toContain('sessionSnapshot');
+  });
+
+  it('T-W3: streamCommit 后 messages 更新不再重复 sessionSnapshot', async () => {
+    const initialMessages = [sampleMessage('u1', 1)];
+    const assistant = assistantTextMessage('a1', 2, 'stream done');
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={initialMessages}
+          agentRunning
+          uiRunning
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'stream done');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+    const committed = ref.current?.tryCommitStreamTail(
+      [...initialMessages, assistant],
+      initialMessages.length,
+    );
+    expect(committed).toBe(true);
+
+    const typesAfterCommit = messageTypesSince(baseline);
+    expect(typesAfterCommit).toContain('streamCommit');
+    expect(typesAfterCommit).not.toContain('streamReset');
+
+    const baseline2 = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={[...initialMessages, assistant]}
+          agentRunning={false}
+          uiRunning={false}
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const typesAfterReload = messageTypesSince(baseline2);
+    expect(typesAfterReload).not.toContain('sessionSnapshot');
+    expect(typesAfterReload).not.toContain('appendTailRows');
+  });
+
+  it('T-W4: abort resetStream 仍清 stream tail', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={messages} />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial');
+    });
+    await flushAnimationFrame();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.resetStream();
+    });
+
+    const typesAfterReset = messageTypesSince(baseline);
+    expect(typesAfterReset).toContain('streamReset');
+    expect(typesAfterReset).not.toContain('streamCommit');
   });
 });

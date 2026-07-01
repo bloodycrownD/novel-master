@@ -107,4 +107,12 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('resolveLogicalPathForToolCard');
     expect(script).toContain("return normalizePathForToolCard('/' + trimmed);");
   });
+
+  it('handles streamCommit for end-of-stream single renderRows', () => {
+    const script = buildTranscriptBootScript();
+    expect(script).toContain("case 'streamCommit':");
+    expect(script).toContain('function applyStreamCommit(payload)');
+    expect(script).toContain('function promoteStreamTailToRow(row)');
+    expect(script).toContain('state.rows = state.rows.concat(toAppend)');
+  });
 });

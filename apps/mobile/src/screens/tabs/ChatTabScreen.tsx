@@ -142,6 +142,11 @@ export function ChatTabScreen() {
 
   const agentRunningRef = useRef(false);
   const streamResetRef = useRef<() => void>(() => undefined);
+  const chatMessageCountRef = useRef(0);
+
+  useEffect(() => {
+    chatMessageCountRef.current = messages.chatMessages.length;
+  }, [messages.chatMessages.length]);
 
   const lifecycle = useAgentRunLifecycle({
     onStreamReset: () => streamResetRef.current(),
@@ -157,11 +162,14 @@ export function ChatTabScreen() {
   }, [sessionId]);
 
   const handleMessagesChanged = useCallback(
-    () =>
-      messages.handleMessagesChanged(
-        scope.refreshChatTokenLabel,
-        agentRunningRef.current,
-      ),
+    (options?: { immediate?: boolean }) =>
+      messages.handleMessagesChanged(scope.refreshChatTokenLabel, {
+        agentRunning: agentRunningRef.current,
+        immediate: options?.immediate,
+      }).then(list => {
+        chatMessageCountRef.current = list.length;
+        return list;
+      }),
     [messages, scope.refreshChatTokenLabel],
   );
 
@@ -172,6 +180,7 @@ export function ChatTabScreen() {
     chatStreamBatchEnabled,
     transcriptWebRef,
     onMessagesChanged: handleMessagesChanged,
+    getMessageCount: () => chatMessageCountRef.current,
     acceptRunEvent: lifecycle.acceptRunEvent,
     onRunStarted: lifecycle.onRunStarted,
     onRunFinished: lifecycle.onRunFinished,

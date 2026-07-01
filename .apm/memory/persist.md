@@ -77,3 +77,12 @@ updatedAt: '2026-06-24 00:00:00'
 **缺陷 B**：`PromptPreviewSegmentCard` 折叠字数与预览分开展示
 
 **分支建议**：`fix/hide-vfs-turn-prompt-char-count`
+
+## mobile-stream-end-flicker（已合并 main）
+
+| 文档 | 路径 |
+|------|------|
+| PRD | Iterations/mobile-stream-end-flicker/prd.md |
+| SPEC | Iterations/mobile-stream-end-flicker/spec.md |
+
+**方案**：immediate reload → streamCommit bridge；promoteStreamTailToRow；防 step+RUN_FINISHED 双提交

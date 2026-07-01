@@ -86,22 +86,22 @@ export function useChatTabMessages({
     [projectId, sessionId],
   );
 
-  const reloadInFlightRef = useRef<Promise<void> | null>(null);
+  const reloadInFlightRef = useRef<Promise<ChatMessage[]> | null>(null);
   const reloadCoalesceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const pendingForceReloadRef = useRef(false);
 
   const reloadMessages = useCallback(
-    async (force = false) => {
+    async (force = false): Promise<ChatMessage[]> => {
       if (force && reloadInFlightRef.current != null) {
         return reloadInFlightRef.current;
       }
-      const run = async () => {
+      const run = async (): Promise<ChatMessage[]> => {
         if (sessionId == null || projectId == null) {
           setChatMessages([]);
           setHasMoreMessages(false);
-          return;
+          return [];
         }
         const cacheKey = sessionViewCacheKey(projectId, sessionId);
         if (!force) {
@@ -109,7 +109,7 @@ export function useChatTabMessages({
           if (cached != null) {
             setChatMessages([...cached.messages]);
             setHasMoreMessages(cached.hasMoreMessages);
-            return;
+            return [...cached.messages];
           }
         }
         const list = await loadSessionMessagesTailForDisplay(
@@ -132,15 +132,15 @@ export function useChatTabMessages({
           messages: list,
           hasMoreMessages: hasMore,
         });
+        return list;
       };
       if (!force) {
-        await run();
-        return;
+        return run();
       }
       const task = run();
       reloadInFlightRef.current = task;
       try {
-        await task;
+        return await task;
       } finally {
         if (reloadInFlightRef.current === task) {
           reloadInFlightRef.current = null;
@@ -203,13 +203,22 @@ export function useChatTabMessages({
   const handleMessagesChanged = useCallback(
     async (
       refreshChatTokenLabel: () => Promise<void>,
-      agentRunning = false,
-    ) => {
+      options?: { agentRunning?: boolean; immediate?: boolean },
+    ): Promise<ChatMessage[]> => {
+      const agentRunning = options?.agentRunning ?? false;
+      const immediate = options?.immediate ?? false;
+
+      if (immediate) {
+        const list = await reloadMessages(true);
+        void refreshChatTokenLabel();
+        return list;
+      }
+
       if (agentRunning) {
         pendingForceReloadRef.current = true;
         if (reloadCoalesceTimerRef.current != null) {
           void refreshChatTokenLabel();
-          return;
+          return chatMessages;
         }
         reloadCoalesceTimerRef.current = setTimeout(() => {
           reloadCoalesceTimerRef.current = null;
@@ -218,12 +227,13 @@ export function useChatTabMessages({
           void reloadMessages(force).then(() => refreshChatTokenLabel());
         }, 200);
         void refreshChatTokenLabel();
-        return;
+        return chatMessages;
       }
-      await reloadMessages(true);
+      const list = await reloadMessages(true);
       void refreshChatTokenLabel();
+      return list;
     },
-    [reloadMessages],
+    [reloadMessages, chatMessages],
   );
 
   useEffect(() => {
