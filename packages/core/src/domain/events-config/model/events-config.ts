@@ -8,7 +8,7 @@ import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 
 export type EventActionType = "hide-message" | "run-agent";
 
-export interface HideMessageActionParams extends DepthSlice {}
+export type HideMessageActionParams = DepthSlice;
 
 export interface RunAgentActionParams {
   readonly agentId: string;

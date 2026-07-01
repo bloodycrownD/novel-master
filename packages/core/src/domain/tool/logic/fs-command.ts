@@ -68,19 +68,19 @@ export function parseFsCommand(command: string): FsCommand {
       if (tokens.length === 3 && tokens[1] === "-r") {
         return { kind: "rm", path: tokens[2]!, recursive: true };
       }
-      invalidCommand(command, "expected `rm <path>` or `rm -r <path>`");
+      return invalidCommand(command, "expected `rm <path>` or `rm -r <path>`");
     }
     case "rmdir": {
       if (tokens.length === 2) {
         return { kind: "rmdir", path: tokens[1]! };
       }
-      invalidCommand(command, "expected `rmdir <path>`");
+      return invalidCommand(command, "expected `rmdir <path>`");
     }
     case "mv": {
       if (tokens.length === 3) {
         return { kind: "mv", from: tokens[1]!, to: tokens[2]! };
       }
-      invalidCommand(command, "expected `mv <from> <to>`");
+      return invalidCommand(command, "expected `mv <from> <to>`");
     }
     case "cp": {
       if (tokens.length === 3) {
@@ -94,13 +94,16 @@ export function parseFsCommand(command: string): FsCommand {
           recursive: true,
         };
       }
-      invalidCommand(command, "expected `cp <from> <to>` or `cp -r <from> <to>`");
+      return invalidCommand(
+        command,
+        "expected `cp <from> <to>` or `cp -r <from> <to>`",
+      );
     }
     case "mkdir": {
       if (tokens.length === 2) {
         return { kind: "mkdir", path: tokens[1]! };
       }
-      invalidCommand(command, "expected `mkdir <path>`");
+      return invalidCommand(command, "expected `mkdir <path>`");
     }
     case "ls": {
       if (tokens.length === 1) {
@@ -112,13 +115,13 @@ export function parseFsCommand(command: string): FsCommand {
       if (tokens.length === 3 && tokens[1] === "-r") {
         return { kind: "ls", dir: tokens[2]!, recursive: true };
       }
-      invalidCommand(
+      return invalidCommand(
         command,
         "expected `ls [dir]`, `ls <dir>`, or `ls -r <dir>`",
       );
     }
     default:
-      invalidCommand(command, `unknown subcommand: ${head}`);
+      return invalidCommand(command, `unknown subcommand: ${head}`);
   }
 }
 

@@ -16,7 +16,7 @@ export function normalizePath(path: string): string {
     throw vfsInvalidPath(String(path), "path must be a non-empty string");
   }
 
-  let normalized = path.replace(/\\/g, "/");
+  const normalized = path.replace(/\\/g, "/");
   if (!normalized.startsWith("/")) {
     throw vfsInvalidPath(path, "path must start with /");
   }
