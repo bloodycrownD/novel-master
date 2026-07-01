@@ -354,7 +354,7 @@ export interface ToolUseBlock {
 
 1. `apps/desktop/README.md`：强调 preload **必须** CJS。
 2. `llm-sse-transport.ts` 模块头：注明 fetch 路径不使用 `SseChunkEmitter` 的原因（链到 `mobile-sse-stream-resilience` spec）。
-3. `AGENT.md` 或 `.apm/kb/docs/monorepo.md`：repository impl 目标目录为 `infra/*/repositories`（增量迁移）。
+3. `.apm/kb/docs/monorepo.md`：repository impl 目标目录为 `infra/*/repositories`（增量迁移）。
 
 ### 明确不做（本迭代）
 

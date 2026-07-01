@@ -144,7 +144,7 @@
 
 - **Core 变更**：thinking signature 涉及 `ContentBlock` schema、Gemini / Anthropic mapper 与 SSE parser；需评估 SQLite 已有消息兼容性（缺字段视为无 signature）。
 - **Anthropic 文档**：[Extended thinking](https://platform.claude.com/docs/en/build-with-claude/extended-thinking)、[Thinking + tool use](https://platform.claude.com/cookbook/extended-thinking-extended-thinking-with-tool-use) — tool 场景下 **必须**回传 thinking 块及 `signature`。
-- **发版**：本迭代可不单独发版；若含 schema 变更，需在 AGENT.md 发版流程中注明。
+- **发版**：本迭代可不单独发版；若含 schema 变更，需在 novel-master-publish skill 发版流程中注明。
 - **CI 分钟数**：PR workflow 应缓存 npm；Android 完整构建 **不**纳入默认 PR job。
 
 ## 风险与待确认项
