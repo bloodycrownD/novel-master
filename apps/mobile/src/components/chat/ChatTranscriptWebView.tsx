@@ -902,7 +902,9 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = firstId;
           prevMessageCountRef.current = messages.length;
         } else {
-          sendSessionSnapshot('preserve');
+          // WHY: 列表缩短（回滚/批量删除）时 preserve 在 flex-end 下视口会跳到中间；改 stick 贴底。
+          const shrink = messages.length < prevCount;
+          sendSessionSnapshot(shrink ? 'stick' : 'preserve');
         }
 
         prevFirstMessageIdRef.current = firstId;
