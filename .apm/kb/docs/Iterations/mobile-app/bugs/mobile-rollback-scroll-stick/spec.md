@@ -12,7 +12,7 @@ date: 2026-07-03
 
 **根因**：`ChatTranscriptWebView` messages effect 在列表缩短（`messages.length < prevCount`）时仍调用 `sendSessionSnapshot('preserve')`。WebView `applySnapshot` 的 preserve 分支按距底偏移恢复 scroll，在 flex-end 布局 + tail 大幅缩短时视口落在错误位置。
 
-**方案**：列表缩短时改发 `scrollIntent: 'stick'`，WebView 侧已有 `stickToBottom` 分支，无需改动 `main.ts`。
+**方案**：列表缩短时改发 `scrollIntent: 'stick'`；**同长度但 firstId 变化**（满页 tail 回滚，`reloadMessages` 仍返回 40 条）同样 stick。WebView 侧 stick 用双 rAF + `overflow-anchor: none` 避免布局/锚定抢 scroll。
 
 数据层 `reloadMessages(true)` 已正确，本次仅改 RN 编排层 scroll intent。
 
@@ -31,7 +31,9 @@ date: 2026-07-03
 
 ```typescript
 const shrink = messages.length < prevCount;
-sendSessionSnapshot(shrink ? 'stick' : 'preserve');
+const tailWindowReplaced =
+  !grew && prevFirstId != null && firstId != null && firstId !== prevFirstId;
+sendSessionSnapshot(shrink || tailWindowReplaced ? 'stick' : 'preserve');
 ```
 
 **触发 shrink 的路径**：

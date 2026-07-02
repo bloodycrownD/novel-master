@@ -836,6 +836,38 @@ describe('ChatTranscriptWebView', () => {
     expect(intentsAfterShrink).not.toContain('preserve');
   });
 
+  it('同长度但 firstId 变化（满页回滚）时 sessionSnapshot 使用 stick', async () => {
+    const initialMessages = Array.from({length: 40}, (_, i) =>
+      sampleMessage(`old-${i + 1}`, i + 1),
+    );
+    const afterRollback = Array.from({length: 40}, (_, i) =>
+      sampleMessage(`new-${i + 1}`, i + 1),
+    );
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={initialMessages} />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={afterRollback} />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const intentsAfterReplace = snapshotScrollIntentsSince(baseline);
+    expect(intentsAfterReplace).toContain('stick');
+    expect(intentsAfterReplace).not.toContain('preserve');
+  });
+
   it('同长度消息变更时 sessionSnapshot 仍使用 preserve', async () => {
     const initialMessages = [
       sampleMessage('m1', 1),

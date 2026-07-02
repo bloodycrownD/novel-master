@@ -974,8 +974,17 @@ export function buildTranscriptBootScript(): string {
       emitScrollSnapshot();
     };
     requestAnimationFrame(function () {
+      if (intent === 'stick' && scroller) {
+        scroller.scrollTop = 0;
+      }
       renderRows();
-      scrollAfterRender();
+      if (intent === 'stick') {
+        requestAnimationFrame(function () {
+          scrollAfterRender();
+        });
+      } else {
+        scrollAfterRender();
+      }
     });
   }
 

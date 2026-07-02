@@ -902,9 +902,14 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = firstId;
           prevMessageCountRef.current = messages.length;
         } else {
-          // WHY: 列表缩短（回滚/批量删除）时 preserve 在 flex-end 下视口会跳到中间；改 stick 贴底。
+          // WHY: 回滚后 tail 仍满页（length 不变但 firstId 变）时 preserve 会保留中间读位；须 stick。
           const shrink = messages.length < prevCount;
-          sendSessionSnapshot(shrink ? 'stick' : 'preserve');
+          const tailWindowReplaced =
+            !grew &&
+            prevFirstId != null &&
+            firstId != null &&
+            firstId !== prevFirstId;
+          sendSessionSnapshot(shrink || tailWindowReplaced ? 'stick' : 'preserve');
         }
 
         prevFirstMessageIdRef.current = firstId;
