@@ -101,6 +101,24 @@ function messageTypesSince(clearAfterIndex: number): string[] {
   });
 }
 
+function snapshotScrollIntentsSince(
+  clearAfterIndex: number,
+): Array<'stick' | 'restore' | 'preserve'> {
+  return mockWebViewPostMessages
+    .slice(clearAfterIndex)
+    .map(raw => decodeHostToTranscript(raw))
+    .filter(msg => msg.type === 'sessionSnapshot')
+    .map(msg => {
+      if (msg.type === 'sessionSnapshot') {
+        return msg.payload.scrollIntent;
+      }
+      return undefined;
+    })
+    .filter(
+      (intent): intent is 'stick' | 'restore' | 'preserve' => intent != null,
+    );
+}
+
 function simulateWebMessage(
   root: TestRenderer.ReactTestInstance,
   type: string,
@@ -782,5 +800,77 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterReset = messageTypesSince(baseline);
     expect(typesAfterReset).toContain('streamReset');
     expect(typesAfterReset).not.toContain('streamCommit');
+  });
+
+  it('列表缩短（回滚/删除）时 sessionSnapshot 使用 stick', async () => {
+    const initialMessages = [
+      sampleMessage('m1', 1),
+      sampleMessage('m2', 2),
+      sampleMessage('m3', 3),
+    ];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={initialMessages} />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={[initialMessages[0]!]}
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const intentsAfterShrink = snapshotScrollIntentsSince(baseline);
+    expect(intentsAfterShrink).toContain('stick');
+    expect(intentsAfterShrink).not.toContain('preserve');
+  });
+
+  it('同长度消息变更时 sessionSnapshot 仍使用 preserve', async () => {
+    const initialMessages = [
+      sampleMessage('m1', 1),
+      sampleMessage('m2', 2),
+    ];
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView sessionKey="p1:s1" messages={initialMessages} />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    const updatedSameLength = [
+      {...initialMessages[0]!, hidden: true},
+      initialMessages[1]!,
+    ];
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={updatedSameLength}
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const intentsAfterSameLength = snapshotScrollIntentsSince(baseline);
+    expect(intentsAfterSameLength).toContain('preserve');
+    expect(intentsAfterSameLength).not.toContain('stick');
   });
 });
