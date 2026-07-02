@@ -9,7 +9,7 @@ import {
   openFixtureSession,
 } from '../helpers/fixture-session';
 import {
-  assertAnchorStableAfterRollback,
+  assertBottomAfterRollback,
   sampleScrollAnchor,
 } from '../helpers/scroll-anchor';
 import {alertPage} from '../pageobjects/alert.page';
@@ -34,7 +34,7 @@ describe('E2 chat rollback', () => {
     await chatTranscriptPage.scrollTranscriptUp(500);
   });
 
-  it('rolls back tail messages without jumping to page top', async () => {
+  it('上滚后回滚贴底（stick，不保留中间阅读位置）', async () => {
     const before = await sampleScrollAnchor(anchorMessageId);
     expect(before.anchorVisible).toBe(true);
 
@@ -50,7 +50,30 @@ describe('E2 chat rollback', () => {
     expect(idsAfter.length).toBe(messageCountBeforeRollback - 2);
     expect(idsAfter[0]).toBe(anchorMessageId);
 
-    await assertAnchorStableAfterRollback(before, anchorMessageId);
+    await assertBottomAfterRollback();
+  });
+
+  it('贴底时回滚后仍贴底', async () => {
+    await chatTranscriptPage.sendComposerMessage('bottom-four');
+    await chatTranscriptPage.sendComposerMessage('bottom-five');
+
+    const idsBefore = await chatTranscriptPage.getMessageIds();
+    expect(idsBefore.length).toBeGreaterThanOrEqual(2);
+    const rollbackTargetId = idsBefore[idsBefore.length - 2]!;
+
+    await assertBottomAfterRollback();
+
+    await chatTranscriptPage.longPressMessage(rollbackTargetId);
+    await chatTranscriptPage.tapMenuAction('rollback');
+    await alertPage.acceptRollback();
+
+    const toast = await vfsPage.readToastMessage();
+    expect(toast).toContain('回滚成功');
+
+    const idsAfter = await chatTranscriptPage.getMessageIds();
+    expect(idsAfter.length).toBe(idsBefore.length - 1);
+
+    await assertBottomAfterRollback();
   });
 
   it('keeps tool_result turn when rolling back on assistant with tool_use', async function () {

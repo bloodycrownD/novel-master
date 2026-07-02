@@ -40,18 +40,25 @@ export async function sampleScrollAnchor(
   );
 }
 
+/** 与 WebView transcript NEAR_BOTTOM_THRESHOLD_PX 对齐。 */
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
+
 /**
- * Assert anchor stayed in viewport and scroll did not jump to page top after tail shrink.
+ * 断言回滚后 transcript 贴底（stick intent 生效）。
  */
-export async function assertAnchorStableAfterRollback(
-  before: ScrollAnchorSample,
-  messageId: string,
-  maxScrollDelta = 80,
+export async function assertBottomAfterRollback(
+  maxOffsetFromBottom = NEAR_BOTTOM_THRESHOLD_PX,
 ): Promise<void> {
-  const after = await sampleScrollAnchor(messageId);
-  expect(after.anchorVisible).toBe(true);
-  expect(after.scrollTop).toBeGreaterThan(0);
-  expect(Math.abs(after.scrollTop - before.scrollTop)).toBeLessThan(
-    maxScrollDelta + Math.max(0, before.anchorTop - after.anchorTop),
-  );
+  await switchToWebView();
+  const offset = await browser.execute(() => {
+    const scroller = document.getElementById('scroller');
+    if (scroller == null) {
+      return Number.POSITIVE_INFINITY;
+    }
+    return Math.max(
+      0,
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+    );
+  });
+  expect(offset).toBeLessThanOrEqual(maxOffsetFromBottom);
 }
