@@ -9,6 +9,9 @@ import {PAGE_HEADER_CONFIG} from '../../navigation/header-config';
 import {useHeaderContext} from '../../navigation/HeaderContext';
 import {useTheme} from '../../theme/ThemeProvider';
 
+/** 顶栏内容区高度：48 minHeight + 10 paddingBottom */
+export const APP_HEADER_CONTENT_HEIGHT = 58;
+
 type Props = {
   pageKey: keyof typeof PAGE_HEADER_CONFIG;
   onBack?: () => void;

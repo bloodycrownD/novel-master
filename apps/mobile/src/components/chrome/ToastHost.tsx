@@ -12,6 +12,7 @@ import React, {
 } from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import {APP_HEADER_CONTENT_HEIGHT} from './AppHeader';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export type ToastOptions = {
@@ -82,7 +83,7 @@ export function ToastHost({children}: {children: ReactNode}) {
           style={[
             styles.toast,
             {
-              bottom: insets.bottom + 16,
+              top: insets.top + APP_HEADER_CONTENT_HEIGHT + 10,
               backgroundColor: tokens.surfaceElevated,
               borderColor: tokens.border,
             },
@@ -122,6 +123,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 24,
     right: 24,
+    zIndex: 999,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
