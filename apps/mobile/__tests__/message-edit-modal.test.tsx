@@ -210,6 +210,39 @@ describe('MessageEditModal', () => {
     expect(onConfirm).toHaveBeenCalledWith('line1\nline2');
   });
 
+  it('T6: backdrop uses column layout with top spacer for vertical centering', () => {
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <MessageEditModal
+          visible
+          title="编辑消息"
+          confirmLabel="保存"
+          onClose={jest.fn()}
+          onConfirm={jest.fn()}
+        />,
+      );
+    });
+    const spacer = tree.root.findByProps({testID: 'message-edit-top-spacer'});
+    expect(spacer).toBeTruthy();
+    expect(spacer.props.style).toEqual(
+      expect.objectContaining({
+        flex: 1,
+        flexShrink: 1,
+        minHeight: 0,
+      }),
+    );
+    let backdrop: TestRenderer.ReactTestInstance | null = spacer.parent;
+    while (backdrop && backdrop.type !== 'Pressable') {
+      backdrop = backdrop.parent;
+    }
+    expect(backdrop?.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({flexDirection: 'column'}),
+      ]),
+    );
+  });
+
   it('T5: no ScrollView wraps TextInput in the tree', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {

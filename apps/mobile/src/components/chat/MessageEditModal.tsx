@@ -77,6 +77,7 @@ export function MessageEditModal({
     <Pressable
       style={[styles.backdrop, {paddingBottom: 24 + insets.bottom}]}
       onPress={onClose}>
+      <View style={styles.topSpacer} testID="message-edit-top-spacer" />
       <Pressable
         style={[styles.panel, {backgroundColor: tokens.surface}]}
         onPress={e => e.stopPropagation()}>
@@ -156,10 +157,15 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
+    flexDirection: 'column',
     alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.4)',
     paddingHorizontal: 24,
+  },
+  topSpacer: {
+    flex: 1,
+    flexShrink: 1,
+    minHeight: 0,
   },
   panel: {
     width: '100%',
