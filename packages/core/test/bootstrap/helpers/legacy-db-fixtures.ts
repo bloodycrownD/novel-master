@@ -56,3 +56,32 @@ export async function execLegacyVfsEntryTable(conn: TdbcConnection): Promise<voi
     CREATE INDEX IF NOT EXISTS idx_vfs_entry_path_prefix ON vfs_entry(path)
   `);
 }
+
+/** legacy llm_saved_model（复合主键，无 id / model_name）。 */
+export async function execLegacySavedModelTable(conn: TdbcConnection): Promise<void> {
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS llm_provider (
+      id TEXT PRIMARY KEY,
+      protocol TEXT NOT NULL CHECK (protocol IN ('openai', 'anthropic', 'gemini')),
+      base_url TEXT NOT NULL,
+      display_name TEXT,
+      secret_ref TEXT,
+      headers_json TEXT NOT NULL DEFAULT '{}',
+      is_builtin INTEGER NOT NULL DEFAULT 0,
+      created_at_ms INTEGER NOT NULL,
+      updated_at_ms INTEGER NOT NULL
+    )
+  `);
+  await conn.execute(`
+    CREATE TABLE IF NOT EXISTS llm_saved_model (
+      provider_id TEXT NOT NULL,
+      vendor_model_id TEXT NOT NULL,
+      display_name TEXT,
+      settings_json TEXT NOT NULL,
+      created_at_ms INTEGER NOT NULL,
+      updated_at_ms INTEGER NOT NULL,
+      PRIMARY KEY (provider_id, vendor_model_id),
+      FOREIGN KEY (provider_id) REFERENCES llm_provider(id) ON DELETE CASCADE
+    )
+  `);
+}
