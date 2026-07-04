@@ -7,7 +7,6 @@
  */
 import {
   CHARACTERS_PER_TOKEN_RATIO,
-  parseApplicationModelId,
   resolveTokenizerFamily,
   mapVendorModelIdToTiktokenModel,
   serializePromptLlmInput,
@@ -139,12 +138,24 @@ async function countSerialized(
   };
 }
 
+async function resolveVendorModelId(
+  params: CountPromptLlmInputParams,
+): Promise<string> {
+  if (params.savedModels != null) {
+    const saved = await params.savedModels.findById(params.savedModelId.trim());
+    if (saved != null) {
+      return saved.vendorModelId;
+    }
+  }
+  return params.savedModelId;
+}
+
 /** RN NMTP driver entry: model-aware prompt token counting. */
 export async function countPromptLlmInputRn(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { layout, ctx, applicationModelId, registry } = params;
-  const { vendorModelId } = parseApplicationModelId(applicationModelId);
+  const { layout, ctx, savedModelId, registry } = params;
+  const vendorModelId = await resolveVendorModelId(params);
   const override =
     params.tokenizerOverride ??
     (await registry.getTokenizerOverride?.()) ??
@@ -160,7 +171,7 @@ export async function countPromptLlmInputRn(
     tokenCount: count,
     counterKind,
     estimated,
-    applicationModelId,
+    savedModelId,
     vendorModelId,
     tokenizerFamily: family,
   };

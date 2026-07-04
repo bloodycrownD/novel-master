@@ -31,6 +31,8 @@ async function openMemoryDb(): Promise<TdbcConnection> {
   return conn;
 }
 
+const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000001";
+
 /** 写入测试用服务商与密钥行（与 bootstrap DDL 列对齐）。 */
 async function seedTestProviderData(conn: TdbcConnection): Promise<void> {
   await conn.execute(
@@ -52,10 +54,11 @@ async function seedTestProviderData(conn: TdbcConnection): Promise<void> {
   );
   await conn.execute(
     `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name,
+      id, provider_id, vendor_model_id, model_name,
       settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
+      TEST_SAVED_MODEL_ID,
       "custom-openai",
       "gpt-test",
       "GPT Test",
