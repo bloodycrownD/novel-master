@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import {
   bootstrapNovelMaster,
   NOVEL_MASTER_SCHEMA_STATEMENTS,
@@ -19,17 +19,37 @@ import {
   SCHEMA_MIGRATIONS,
 } from "../../src/bootstrap/schema-migrations/index.js";
 import { SAVED_MODEL_IDENTITY_V1_ID } from "../../src/bootstrap/schema-migrations/saved-model-identity-v1.js";
-import { execLegacySavedModelTable } from "./helpers/legacy-db-fixtures.js";
+import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
+import type { SecretStore } from "@/infra/sksp/ports/secret-store.port.js";
+import {
+  clearProtocolAdapters,
+  getProtocolAdapter,
+} from "../../src/infra/llm-protocol/logic/registry.js";
+import {
+  execLegacySavedModelTable,
+  LEGACY_DB_NOW_MS,
+  seedLegacySavedModelRows,
+} from "./helpers/legacy-db-fixtures.js";
 
-const NOW_MS = 1_700_000_000_000;
-const DEFAULT_SETTINGS_JSON = JSON.stringify({
-  temperature: 1,
-  topP: 1,
-  maxOutputTokens: null,
-  thinkingLevel: "high",
-  tokenCounterMode: "auto",
-  contextWindow: null,
-});
+const NOW_MS = LEGACY_DB_NOW_MS;
+
+function memorySecretStore(): SecretStore {
+  const map = new Map<string, string>();
+  return {
+    async get(ref) {
+      return map.get(ref) ?? null;
+    },
+    async has(ref) {
+      return map.has(ref);
+    },
+    async set(ref, plain) {
+      map.set(ref, plain);
+    },
+    async delete(ref) {
+      return map.delete(ref);
+    },
+  };
+}
 
 async function openMemoryConn() {
   registerBetterSqlite3Driver();
@@ -65,36 +85,53 @@ function unwrapProviderError(error: unknown): ProviderError | null {
   return null;
 }
 
-async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<void> {
-  await conn.execute(
-    `INSERT INTO llm_provider (
-      id, protocol, base_url, display_name, secret_ref, headers_json,
-      is_builtin, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      "openai",
-      "openai",
-      "https://api.openai.com/v1",
-      "OpenAI",
-      null,
-      "{}",
-      1,
-      NOW_MS,
-      NOW_MS,
-    ],
+/** B3：迁移后 KKV / agent / project 不应残留含 `/` 的 legacy 模型指针。 */
+async function assertNoLegacyModelPointers(conn: TdbcConnection): Promise<void> {
+  const kkv = await conn.query<{ value: string }>(
+    `SELECT value FROM kkv_entry WHERE module = ? AND key = ?`,
+    ["nm-workspace-state", "currentModelId"],
   );
-  await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["openai", "gpt-4o", "openai/gpt-4o", DEFAULT_SETTINGS_JSON, NOW_MS, NOW_MS],
+  for (const row of kkv) {
+    const value = row.value.trim();
+    if (value.length > 0) {
+      assert.equal(value.includes("/"), false, `kkv currentModelId: ${value}`);
+    }
+  }
+
+  const agents = await conn.query<{ agent_id: string; prompts_json: string }>(
+    `SELECT agent_id, prompts_json FROM agent_definition`,
   );
-  await conn.execute(
-    `INSERT INTO llm_saved_model (
-      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-    ) VALUES (?, ?, ?, ?, ?, ?)`,
-    ["openai", "gpt-4o-mini", "写作专用", DEFAULT_SETTINGS_JSON, NOW_MS, NOW_MS],
-  );
+  for (const row of agents) {
+    const wire = JSON.parse(row.prompts_json) as { model?: string };
+    if (typeof wire.model === "string" && wire.model.trim().length > 0) {
+      assert.equal(
+        wire.model.includes("/"),
+        false,
+        `agent_definition:${row.agent_id}: ${wire.model}`,
+      );
+    }
+  }
+
+  const projects = await conn.query<{
+    id: string;
+    agent_config_json: string | null;
+  }>(`SELECT id, agent_config_json FROM chat_project`);
+  for (const row of projects) {
+    if (row.agent_config_json == null) {
+      continue;
+    }
+    const config = JSON.parse(row.agent_config_json) as {
+      definition?: { model?: string };
+    };
+    const model = config.definition?.model;
+    if (typeof model === "string" && model.trim().length > 0) {
+      assert.equal(
+        model.includes("/"),
+        false,
+        `chat_project:${row.id}: ${model}`,
+      );
+    }
+  }
 }
 
 describe("schema migrations（T-SM1 / T-SM2 框架）", () => {
@@ -250,8 +287,10 @@ describe("saved-model-identity-v1 migration", () => {
     }
   });
 
-  it("legacy currentModelId 迁移后为 UUID（T-SM4 前置）", async () => {
+  it("T-SM4：legacy currentModelId 迁移后为 UUID 且 request 可解析", async () => {
     const conn = await openMemoryConn();
+    const agentId = randomUUID();
+    const projectId = randomUUID();
     try {
       await execLegacySavedModelTable(conn);
       await seedLegacySavedModelRows(conn);
@@ -259,6 +298,39 @@ describe("saved-model-identity-v1 migration", () => {
       await conn.execute(
         `INSERT INTO kkv_entry (module, key, value) VALUES (?, ?, ?)`,
         ["nm-workspace-state", "currentModelId", "openai/gpt-4o"],
+      );
+      await conn.execute(
+        `INSERT INTO agent_definition (agent_id, prompts_json, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?)`,
+        [
+          agentId,
+          JSON.stringify({
+            schemaVersion: 1,
+            name: "test-agent",
+            prompts: { persist: {}, dynamic: {} },
+            model: "openai/gpt-4o-mini",
+          }),
+          NOW_MS,
+          NOW_MS,
+        ],
+      );
+      await conn.execute(
+        `INSERT INTO chat_project (id, name, agent_config_json, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          projectId,
+          "legacy-project",
+          JSON.stringify({
+            mode: "custom",
+            definition: {
+              name: "项目助手",
+              prompts: { persist: {}, dynamic: {} },
+              model: "openai/gpt-4o",
+            },
+          }),
+          NOW_MS,
+          NOW_MS,
+        ],
       );
 
       await bootstrapNovelMaster(conn);
@@ -276,6 +348,75 @@ describe("saved-model-identity-v1 migration", () => {
         ["gpt-4o"],
       );
       assert.equal(saved[0]!.id, currentModelId);
+
+      await assertNoLegacyModelPointers(conn);
+
+      clearProtocolAdapters();
+      const fetchFn = mock.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            choices: [{ message: { content: "ok" } }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      });
+      getProtocolAdapter("openai", fetchFn as typeof fetch);
+
+      const secrets = memorySecretStore();
+      await secrets.set("provider/openai/apiKey", "sk-test");
+      const bundle = createProviderServices(conn, secrets);
+      const out = await bundle.modelRequests.request(currentModelId, "hi");
+      assert.equal(out.assistantText, "ok");
+      clearProtocolAdapters();
+    } finally {
+      await conn.close();
+    }
+  });
+
+  it("T-SM7：chat_project.agent_config_json legacy model 迁移后为 UUID", async () => {
+    const conn = await openMemoryConn();
+    const projectId = randomUUID();
+    try {
+      await execLegacySavedModelTable(conn);
+      await seedLegacySavedModelRows(conn);
+      await execBootstrapSchemaDdl(conn);
+      await conn.execute(
+        `INSERT INTO chat_project (id, name, agent_config_json, created_at_ms, updated_at_ms)
+         VALUES (?, ?, ?, ?, ?)`,
+        [
+          projectId,
+          "legacy-project",
+          JSON.stringify({
+            mode: "custom",
+            definition: {
+              name: "项目助手",
+              prompts: { persist: {}, dynamic: {} },
+              model: "openai/gpt-4o-mini",
+            },
+          }),
+          NOW_MS,
+          NOW_MS,
+        ],
+      );
+
+      await bootstrapNovelMaster(conn);
+
+      const rows = await conn.query<{ agent_config_json: string }>(
+        `SELECT agent_config_json FROM chat_project WHERE id = ?`,
+        [projectId],
+      );
+      const config = JSON.parse(rows[0]!.agent_config_json) as {
+        definition?: { model?: string };
+      };
+      const model = config.definition?.model ?? "";
+      assert.match(model, /^[0-9a-f-]{36}$/i);
+      assert.equal(model.includes("/"), false);
+
+      const saved = await conn.query<{ id: string }>(
+        `SELECT id FROM llm_saved_model WHERE vendor_model_id = ?`,
+        ["gpt-4o-mini"],
+      );
+      assert.equal(saved[0]!.id, model);
     } finally {
       await conn.close();
     }

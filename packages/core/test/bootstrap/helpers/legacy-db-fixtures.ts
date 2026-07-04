@@ -4,6 +4,61 @@
 
 import type { TdbcConnection } from "@novel-master/core";
 
+export const LEGACY_DB_NOW_MS = 1_700_000_000_000;
+
+const DEFAULT_SETTINGS_JSON = JSON.stringify({
+  schemaVersion: 1,
+  contextWindowTokens: 128_000,
+  sampling: { enabled: false },
+});
+
+/** 向 legacy llm_saved_model 写入 openai 两行测试数据。 */
+export async function seedLegacySavedModelRows(conn: TdbcConnection): Promise<void> {
+  await conn.execute(
+    `INSERT INTO llm_provider (
+      id, protocol, base_url, display_name, secret_ref, headers_json,
+      is_builtin, created_at_ms, updated_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      "openai",
+      "openai",
+      "https://api.openai.com/v1",
+      "OpenAI",
+      null,
+      "{}",
+      1,
+      LEGACY_DB_NOW_MS,
+      LEGACY_DB_NOW_MS,
+    ],
+  );
+  await conn.execute(
+    `INSERT INTO llm_saved_model (
+      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      "openai",
+      "gpt-4o",
+      "openai/gpt-4o",
+      DEFAULT_SETTINGS_JSON,
+      LEGACY_DB_NOW_MS,
+      LEGACY_DB_NOW_MS,
+    ],
+  );
+  await conn.execute(
+    `INSERT INTO llm_saved_model (
+      provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      "openai",
+      "gpt-4o-mini",
+      "写作专用",
+      DEFAULT_SETTINGS_JSON,
+      LEGACY_DB_NOW_MS,
+      LEGACY_DB_NOW_MS,
+    ],
+  );
+}
+
 /** v1.0.7 风格 chat_session（无 user_vfs_pending_json）。 */
 export async function execLegacyV107ChatDdl(conn: TdbcConnection): Promise<void> {
   await conn.execute(`
