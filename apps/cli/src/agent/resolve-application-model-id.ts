@@ -1,11 +1,10 @@
 /**
- * CLI wrapper: resolves applicationModelId from flags, agent pin, and workspace state.
+ * CLI wrapper: resolves savedModelId from flags, agent pin, and workspace state.
  *
  * @module agent/resolve-application-model-id
  */
 
 import { type PersistentState } from "@novel-master/core";
-
 
 import { resolveApplicationModelId, type AgentDefinition } from "@novel-master/core/agent";
 
@@ -17,20 +16,20 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
-export interface ResolveCliApplicationModelIdInput {
+export interface ResolveCliSavedModelIdInput {
   readonly flags: ReadonlyMap<string, string | true>;
   readonly definition: AgentDefinition;
   readonly state: PersistentState;
 }
 
 /**
- * Resolves model id for agent run: `--modelId` → agent `model` pin → workspace current model.
+ * Resolves saved model UUID for agent run: `--modelId` → agent `model` pin → workspace current model.
  * @throws when no source is available for dialogue model
  */
-export async function resolveCliApplicationModelId(
-  input: ResolveCliApplicationModelIdInput,
+export async function resolveCliSavedModelId(
+  input: ResolveCliSavedModelIdInput,
 ): Promise<{
-  applicationModelId: string;
+  savedModelId: string;
   workspaceModelId: string;
   cliModelId?: string;
 }> {
@@ -43,11 +42,11 @@ export async function resolveCliApplicationModelId(
   });
   if (resolved == null || resolved === "") {
     throw new Error(
-      "No model selected. Use --modelId <provider>/<vendor>, set model on the agent, or run: nm model use --modelId <id>",
+      "No model selected. Use --modelId <uuid>, set model on the agent, or run: nm model use --modelId <uuid>",
     );
   }
   return {
-    applicationModelId: resolved,
+    savedModelId: resolved,
     workspaceModelId,
     ...(cliModelId != null ? { cliModelId } : {}),
   };

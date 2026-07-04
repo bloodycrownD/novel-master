@@ -7,7 +7,11 @@
 import { readFile } from "node:fs/promises";
 import { formatPromptLlmInputForCliFromLayout } from "@novel-master/core/prompt";
 
-import { countPromptLlmInput, parseApplicationModelId, serializePromptLlmInput } from "@novel-master/core/provider";
+import {
+  countPromptLlmInput,
+  isSavedModelUuidFormat,
+  serializePromptLlmInput,
+} from "@novel-master/core/provider";
 
 import { applyRegexChannelForLlm } from "@novel-master/core/regex";
 import type { NovelMasterRuntime } from "../runtime.js";
@@ -26,13 +30,14 @@ export async function runPrompt(
     | "regexConfig"
     | "tokenCounters"
     | "providerModels"
+    | "savedModels"
   >,
   subcommand: string,
   args: readonly string[],
 ): Promise<void> {
   if (subcommand !== "render") {
     throw new Error(
-      "Usage: novel-master prompt render --path <file> [--tokens] [--model <applicationModelId>] [--project <id>] [--session <id>] [--db <path>]",
+      "Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]",
     );
   }
 
@@ -40,7 +45,7 @@ export async function runPrompt(
   const path = flags.get("path");
   if (typeof path !== "string") {
     throw new Error(
-      "Usage: novel-master prompt render --path <file> [--tokens] [--model <applicationModelId>] [--project <id>] [--session <id>] [--db <path>]",
+      "Usage: novel-master prompt render --path <file> [--tokens] [--model <savedModelId>] [--project <id>] [--session <id>] [--db <path>]",
     );
   }
 
@@ -70,14 +75,14 @@ export async function runPrompt(
 
   if (flags.get("tokens") === true) {
     const modelFlag = flags.get("model");
-    let applicationModelId: string | undefined;
+    let savedModelId: string | undefined;
     if (typeof modelFlag === "string") {
-      applicationModelId = modelFlag;
+      savedModelId = modelFlag;
     } else {
-      applicationModelId = (await rt.state.getCurrentModelId()) ?? undefined;
+      savedModelId = (await rt.state.getCurrentModelId()) ?? undefined;
     }
 
-    if (applicationModelId == null) {
+    if (savedModelId == null) {
       const serialized = await serializePromptLlmInput(layout, ctx);
       const tokenCount = rt.tokenCounters.heuristic.countText(serialized);
       console.error(
@@ -92,29 +97,28 @@ export async function runPrompt(
       return;
     }
 
-    try {
-      parseApplicationModelId(applicationModelId);
-    } catch {
+    if (!isSavedModelUuidFormat(savedModelId)) {
       console.error(
-        `warning: invalid model id ${applicationModelId}; using heuristic counter`,
+        `warning: invalid saved model id ${savedModelId}; using heuristic counter`,
       );
     }
 
     const tokenizerOverride = await rt.providerModels.getTokenCounterMode(
-      applicationModelId,
+      savedModelId,
     );
     const result = await countPromptLlmInput({
       layout,
       ctx,
-      applicationModelId,
+      savedModelId,
       registry: rt.tokenCounters,
       tokenizerOverride,
+      savedModels: rt.savedModels,
     });
 
     console.error(
       JSON.stringify({
         tokenCount: result.tokenCount,
-        model: applicationModelId,
+        model: savedModelId,
         counter: result.counterKind,
         estimated: result.estimated,
         tokenizerFamily: result.tokenizerFamily,

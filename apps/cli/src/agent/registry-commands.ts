@@ -10,7 +10,7 @@ import { encode, registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
 import { agentDefinitionSchema, type AgentRegistryService } from "@novel-master/core/agent";
 
-import { parseApplicationModelId } from "@novel-master/core/provider";
+import { assertSavedModelUuid } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { resolveNovelMasterHome } from "../compaction/novel-master-home.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -26,13 +26,9 @@ function flagString(
 
 async function assertSavedModel(
   rt: NovelMasterRuntime,
-  applicationModelId: string,
+  savedModelId: string,
 ): Promise<void> {
-  const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
-  const list = await rt.providerModels.savedList(providerId);
-  if (!list.some((m) => m.vendorModelId === vendorModelId)) {
-    throw new Error(`unknown model: ${applicationModelId}`);
-  }
+  await assertSavedModelUuid(savedModelId, rt.savedModels);
 }
 
 export async function runAgentRegistryCommand(

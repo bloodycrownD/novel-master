@@ -11,12 +11,12 @@ import { ChatAgentSession, createAgentRunner, resolveAgentToolRegistry, validate
 
 import { textBlocks } from "@novel-master/core/chat";
 
-import { parseApplicationModelId, type LlmStreamEvent } from "@novel-master/core/provider";
+import { assertSavedModelUuid, type LlmStreamEvent } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
-import { resolveCliApplicationModelId } from "./resolve-application-model-id.js";
+import { resolveCliSavedModelId } from "./resolve-application-model-id.js";
 import {
   createRegistryValidateOptions,
   runAgentRegistryCommand,
@@ -81,13 +81,8 @@ async function resolveDefinition(
   const toolProbe = new ToolRegistry();
   registerBuiltinTools(toolProbe);
   await validateAgentDefinition(definition, {
-    assertSavedModel: async (applicationModelId) => {
-      const { providerId, vendorModelId } =
-        parseApplicationModelId(applicationModelId);
-      const list = await rt.providerModels.savedList(providerId);
-      if (!list.some((m) => m.vendorModelId === vendorModelId)) {
-        throw new Error(`unknown model: ${applicationModelId}`);
-      }
+    assertSavedModel: async (savedModelId) => {
+      await assertSavedModelUuid(savedModelId, rt.savedModels);
     },
     registeredToolNames: toolProbe.list(),
   });
@@ -154,8 +149,8 @@ export async function runAgent(
         );
       }
 
-      const { applicationModelId, workspaceModelId, cliModelId } =
-        await resolveCliApplicationModelId({
+      const { savedModelId, workspaceModelId, cliModelId } =
+        await resolveCliSavedModelId({
           flags,
           definition,
           state: rt.state,
@@ -195,6 +190,7 @@ export async function runAgent(
       const runner = createAgentRunner({
         session,
         modelRequests: rt.modelRequests,
+        savedModels: rt.savedModels,
         registry,
         toolCtx: {
           vfs,
@@ -225,7 +221,7 @@ export async function runAgent(
         definition,
         sessionId,
         projectId,
-        applicationModelId,
+        savedModelId,
         workspaceModelId,
         cliModelId,
         maxSteps,
