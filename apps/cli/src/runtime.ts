@@ -41,6 +41,7 @@ import {
   type ModelRequestService,
   type ProviderModelService,
   type ProviderService,
+  type ProviderServiceBundle,
   type SecretStore,
   type TokenCounterRegistry,
 } from "@novel-master/core/provider";
@@ -117,6 +118,7 @@ export interface NovelMasterRuntime {
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
+  readonly savedModels: ProviderServiceBundle["savedModelRepo"];
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;
@@ -194,6 +196,7 @@ export async function createNovelMasterRuntime(
       messages,
       agentRegistry,
       modelRequests,
+      savedModels: providerBundle.savedModelRepo,
       worktreeSnapshot,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
@@ -239,6 +242,7 @@ export async function createNovelMasterRuntime(
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
     modelRequests,
+    savedModels: providerBundle.savedModelRepo,
     regexConfig,
   };
 }
