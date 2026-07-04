@@ -66,6 +66,115 @@ export interface CliState {
   readonly currentRegexGroupId?: string;
 }
 
+export interface SavedModelListRow {
+  readonly id: string;
+  readonly displayName: string;
+  readonly vendorModelId: string;
+}
+
+/** 解析 `nm provider model list` TSV：`uuid\\tdisplayName\\tvendorModelId`。 */
+export function parseSavedModelList(stdout: string): SavedModelListRow[] {
+  return stdout
+    .trim()
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [id, displayName, vendorModelId] = line.split("\t");
+      if (id == null || vendorModelId == null) {
+        throw new Error(`invalid saved model list line: ${line}`);
+      }
+      return {
+        id,
+        displayName: displayName ?? "",
+        vendorModelId,
+      };
+    });
+}
+
+/** 在当前 provider 下创建 saved model 并返回其 UUID。 */
+export function createSavedModelId(
+  dbPath: string,
+  vendorModelId: string,
+  providerId?: string,
+): string {
+  if (providerId != null) {
+    runNm(["provider", "use", "--providerId", providerId, "--db", dbPath]);
+  }
+  const create = runNm([
+    "provider",
+    "model",
+    "create",
+    "--vendorModelId",
+    vendorModelId,
+    "--db",
+    dbPath,
+  ]);
+  if (create.status !== 0) {
+    throw new Error(create.stderr || "provider model create failed");
+  }
+  const list = runNm(["provider", "model", "list", "--db", dbPath]);
+  if (list.status !== 0) {
+    throw new Error(list.stderr || "provider model list failed");
+  }
+  const row = parseSavedModelList(list.stdout).find(
+    (item) => item.vendorModelId === vendorModelId,
+  );
+  if (row == null) {
+    throw new Error(`saved model not found after create: ${vendorModelId}`);
+  }
+  return row.id;
+}
+
+/** 查询已保存模型的 UUID（须已 `provider use` 到目标服务商）。 */
+export function savedModelIdByVendor(
+  dbPath: string,
+  vendorModelId: string,
+): string {
+  const list = runNm(["provider", "model", "list", "--db", dbPath]);
+  if (list.status !== 0) {
+    throw new Error(list.stderr || "provider model list failed");
+  }
+  const row = parseSavedModelList(list.stdout).find(
+    (item) => item.vendorModelId === vendorModelId,
+  );
+  if (row == null) {
+    throw new Error(`saved model not found: ${vendorModelId}`);
+  }
+  return row.id;
+}
+
+/** 创建 mock 服务商并批量 save 模型，返回 vendor → UUID 映射。 */
+export function seedMockProviderModels(
+  dbPath: string,
+  vendorIds: readonly string[],
+  env?: NodeJS.ProcessEnv,
+): Map<string, string> {
+  const runOpts = env != null ? { env } : undefined;
+  runNm(
+    [
+      "provider",
+      "create",
+      "--providerId",
+      "mock",
+      "--protocol",
+      "openai",
+      "--baseUrl",
+      "http://127.0.0.1/v1",
+      "--apiKey",
+      "test",
+      "--db",
+      dbPath,
+    ],
+    runOpts,
+  );
+  runNm(["provider", "use", "--providerId", "mock", "--db", dbPath], runOpts);
+  const ids = new Map<string, string>();
+  for (const vendorModelId of vendorIds) {
+    ids.set(vendorModelId, createSavedModelId(dbPath, vendorModelId));
+  }
+  return ids;
+}
+
 async function openConn(dbPath: string): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
   const conn = await open(`tdbc:sqlite:file:${dbPath}`, { driver: "better-sqlite3" });

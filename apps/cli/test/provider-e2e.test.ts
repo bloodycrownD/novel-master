@@ -9,8 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliState } from "./helpers.js";
-import { runNm } from "./helpers.js";
+import { createSavedModelId, readCliState, runNm, savedModelIdByVendor } from "./helpers.js";
 
 describe("provider CLI e2e", () => {
   it("lists five built-in providers on fresh db", async () => {
@@ -94,7 +93,7 @@ describe("provider CLI e2e", () => {
         dbPath,
       ]);
       assert.notEqual(req.status, 0);
-      assert.match(req.stderr, /not saved/i);
+      assert.match(req.stderr, /INVALID_SAVED_MODEL_ID|legacy path|Invalid saved model/i);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -185,28 +184,24 @@ describe("provider CLI e2e", () => {
         "--db",
         dbPath,
       ]);
-      runNm([
-        "provider",
-        "model",
-        "create",
-        "--vendorModelId",
-        "gpt-test",
-        "--db",
-        dbPath,
-      ]);
+      createSavedModelId(dbPath, "gpt-test");
+      const savedModelId = savedModelIdByVendor(dbPath, "gpt-test");
       const use = runNm([
         "model",
         "use",
         "--modelId",
-        "openai/gpt-test",
+        savedModelId,
         "--db",
         dbPath,
       ]);
       assert.equal(use.status, 0, use.stderr);
       const cur = runNm(["model", "current", "--db", dbPath]);
       assert.equal(cur.stdout.trim(), "openai/gpt-test");
+      const topList = runNm(["model", "list", "--db", dbPath]);
+      assert.equal(topList.status, 0, topList.stderr);
+      assert.match(topList.stdout, new RegExp(`${savedModelId}\\topenai/gpt-test\\tgpt-test`));
       const saved = runNm(["provider", "model", "list", "--db", dbPath]);
-      assert.match(saved.stdout, /openai\/gpt-test/);
+      assert.match(saved.stdout, new RegExp(`${savedModelId}\\topenai/gpt-test\\tgpt-test`));
       const suggest = runNm([
         "provider",
         "model",

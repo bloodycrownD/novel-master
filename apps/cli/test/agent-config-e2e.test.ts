@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliState, runNm } from "./helpers.js";
+import { readCliState, runNm, seedMockProviderModels } from "./helpers.js";
 
 const MOCK_ENV = {
   NM_AGENT_MOCK_LLM: "1",
@@ -18,57 +18,20 @@ prompts:
   dynamic: {}
 `;
 
-const AGENT_WITH_PINNED_MODEL = `
-schemaVersion: 1
-name: e2e-pin
-model: mock/pinned
-prompts:
-  persist: {}
-  dynamic: {}
-`;
-
 const MOCK_ENV_REPORT_MODEL = {
   ...MOCK_ENV,
   NM_AGENT_MOCK_REPORT_MODEL: "1",
 };
 
-function seedMockProviderAndModels(
-  dbPath: string,
-  vendorIds: readonly string[],
-): void {
-  runNm(
-    [
-      "provider",
-      "create",
-      "--providerId",
-      "mock",
-      "--protocol",
-      "openai",
-      "--baseUrl",
-      "http://127.0.0.1/v1",
-      "--apiKey",
-      "test",
-      "--db",
-      dbPath,
-    ],
-    { env: MOCK_ENV },
-  );
-  for (const vendorModelId of vendorIds) {
-    runNm(
-      [
-        "provider",
-        "model",
-        "create",
-        "--providerId",
-        "mock",
-        "--vendorModelId",
-        vendorModelId,
-        "--db",
-        dbPath,
-      ],
-      { env: MOCK_ENV },
-    );
-  }
+function agentYamlWithPinnedModel(savedModelId: string): string {
+  return `
+schemaVersion: 1
+name: e2e-pin
+model: ${savedModelId}
+prompts:
+  persist: {}
+  dynamic: {}
+`;
 }
 
 function parseE2eRequestBody(stderr: string): Record<string, unknown> {
@@ -103,41 +66,12 @@ describe("agent config CLI", () => {
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV,
       });
-      const mockProvider = runNm(
-        [
-          "provider",
-          "create",
-          "--providerId",
-          "mock",
-          "--protocol",
-          "openai",
-          "--baseUrl",
-          "http://127.0.0.1/v1",
-          "--apiKey",
-          "test",
-          "--db",
-          dbPath,
-        ],
+      const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
+      const savedModelId = mockModels.get("test")!;
+      const modelUse = runNm(
+        ["model", "use", "--modelId", savedModelId, "--db", dbPath],
         { env: MOCK_ENV },
       );
-      assert.equal(mockProvider.status, 0, mockProvider.stderr);
-      runNm(
-        [
-          "provider",
-          "model",
-          "create",
-          "--providerId",
-          "mock",
-          "--vendorModelId",
-          "test",
-          "--db",
-          dbPath,
-        ],
-        { env: MOCK_ENV },
-      );
-      const modelUse = runNm(["model", "use", "--modelId", "mock/test", "--db", dbPath], {
-        env: MOCK_ENV,
-      });
       assert.equal(modelUse.status, 0, modelUse.stderr);
 
       const agent = runNm(
@@ -190,6 +124,8 @@ describe("agent config CLI", () => {
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV,
       });
+      const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
+      const savedModelId = mockModels.get("test")!;
 
       const agent = runNm(
         [
@@ -200,7 +136,7 @@ describe("agent config CLI", () => {
           "--prompt-path",
           promptPath,
           "--modelId",
-          "mock/test",
+          savedModelId,
           "--db",
           dbPath,
         ],
@@ -217,7 +153,16 @@ describe("agent config CLI", () => {
     const dbPath = join(dir, "novel.db");
     const agentPath = join(dir, "agent.yaml");
     try {
-      await writeFile(agentPath, AGENT_WITH_PINNED_MODEL, "utf8");
+      const mockModels = seedMockProviderModels(
+        dbPath,
+        ["pinned", "override", "workspace"],
+        MOCK_ENV_REPORT_MODEL,
+      );
+      const pinnedId = mockModels.get("pinned")!;
+      const overrideId = mockModels.get("override")!;
+      const workspaceId = mockModels.get("workspace")!;
+
+      await writeFile(agentPath, agentYamlWithPinnedModel(pinnedId), "utf8");
 
       const projectId = runNm(
         ["project", "create", "--name", "E2", "--db", dbPath],
@@ -235,10 +180,10 @@ describe("agent config CLI", () => {
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV_REPORT_MODEL,
       });
-      seedMockProviderAndModels(dbPath, ["pinned", "override", "workspace"]);
-      runNm(["model", "use", "--modelId", "mock/workspace", "--db", dbPath], {
-        env: MOCK_ENV_REPORT_MODEL,
-      });
+      runNm(
+        ["model", "use", "--modelId", workspaceId, "--db", dbPath],
+        { env: MOCK_ENV_REPORT_MODEL },
+      );
 
       const agent = runNm(
         [
@@ -249,14 +194,14 @@ describe("agent config CLI", () => {
           "--agent-config",
           agentPath,
           "--modelId",
-          "mock/override",
+          overrideId,
           "--db",
           dbPath,
         ],
         { env: MOCK_ENV_REPORT_MODEL },
       );
       assert.equal(agent.status, 0, agent.stderr);
-      assert.match(agent.stdout, /model: mock\/override/);
+      assert.match(agent.stdout, new RegExp(`model: ${overrideId}`));
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -289,6 +234,8 @@ describe("agent config CLI", () => {
       runNm(["session", "use", "--session", sessionId, "--db", dbPath], {
         env: MOCK_ENV,
       });
+      const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
+      const savedModelId = mockModels.get("test")!;
 
       const agent = runNm(
         [
@@ -299,7 +246,7 @@ describe("agent config CLI", () => {
           "--agent-config",
           agentPath,
           "--modelId",
-          "mock/test",
+          savedModelId,
           "--db",
           dbPath,
         ],

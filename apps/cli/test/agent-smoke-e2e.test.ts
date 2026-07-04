@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { readCliState, runNm } from "./helpers.js";
+import { readCliState, runNm, seedMockProviderModels } from "./helpers.js";
 
 const MOCK_ENV = {
   NM_AGENT_MOCK_LLM: "1",
@@ -36,6 +36,9 @@ describe("agent CLI smoke", () => {
         env: MOCK_ENV,
       });
 
+      const mockModels = seedMockProviderModels(dbPath, ["test"], MOCK_ENV);
+      const savedModelId = mockModels.get("test")!;
+
       const agent = runNm(
         [
           "agent",
@@ -43,7 +46,7 @@ describe("agent CLI smoke", () => {
           "--content",
           "step one",
           "--modelId",
-          "mock/test",
+          savedModelId,
           "--db",
           dbPath,
         ],
@@ -87,6 +90,13 @@ describe("agent CLI smoke", () => {
         env: { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" },
       });
 
+      const mockModels = seedMockProviderModels(
+        dbPath,
+        ["test"],
+        { ...MOCK_ENV, NM_AGENT_MOCK_SCENARIO: "doom" },
+      );
+      const savedModelId = mockModels.get("test")!;
+
       const agent = runNm(
         [
           "agent",
@@ -94,7 +104,7 @@ describe("agent CLI smoke", () => {
           "--content",
           "trigger doom",
           "--modelId",
-          "mock/test",
+          savedModelId,
           "--db",
           dbPath,
         ],

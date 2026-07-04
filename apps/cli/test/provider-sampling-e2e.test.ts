@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { runNm } from "./helpers.js";
+import { runNm, seedMockProviderModels } from "./helpers.js";
 
 const FETCH_CAPTURE_ENV = {
   NM_LLM_E2E_FETCH: "1",
@@ -15,40 +15,6 @@ function parseE2eRequestBody(stderr: string): Record<string, unknown> {
   assert.ok(line, `expected ${prefix} in stderr`);
   const json = line!.slice(line!.indexOf(prefix) + prefix.length);
   return JSON.parse(json) as Record<string, unknown>;
-}
-
-async function seedOpenAiMockModel(dbPath: string): Promise<void> {
-  runNm(
-    [
-      "provider",
-      "create",
-      "--providerId",
-      "mock",
-      "--protocol",
-      "openai",
-      "--baseUrl",
-      "http://127.0.0.1/v1",
-      "--apiKey",
-      "test",
-      "--db",
-      dbPath,
-    ],
-    { env: FETCH_CAPTURE_ENV },
-  );
-  runNm(
-    [
-      "provider",
-      "model",
-      "create",
-      "--providerId",
-      "mock",
-      "--vendorModelId",
-      "sampling",
-      "--db",
-      dbPath,
-    ],
-    { env: FETCH_CAPTURE_ENV },
-  );
 }
 
 describe("provider model sampling CLI e2e", () => {
@@ -66,7 +32,8 @@ describe("provider model sampling CLI e2e", () => {
         }),
         "utf8",
       );
-      await seedOpenAiMockModel(dbPath);
+      const models = seedMockProviderModels(dbPath, ["sampling"], FETCH_CAPTURE_ENV);
+      const savedModelId = models.get("sampling")!;
 
       const set = runNm(
         [
@@ -75,7 +42,7 @@ describe("provider model sampling CLI e2e", () => {
           "sampling",
           "set",
           "--modelId",
-          "mock/sampling",
+          savedModelId,
           "--file",
           profilePath,
           "--db",
@@ -90,7 +57,7 @@ describe("provider model sampling CLI e2e", () => {
           "model",
           "request",
           "--modelId",
-          "mock/sampling",
+          savedModelId,
           "--content",
           "hi",
           "--db",
@@ -120,7 +87,8 @@ describe("provider model sampling CLI e2e", () => {
         }),
         "utf8",
       );
-      await seedOpenAiMockModel(dbPath);
+      const models = seedMockProviderModels(dbPath, ["sampling"], FETCH_CAPTURE_ENV);
+      const savedModelId = models.get("sampling")!;
       runNm(
         [
           "provider",
@@ -128,7 +96,7 @@ describe("provider model sampling CLI e2e", () => {
           "sampling",
           "set",
           "--modelId",
-          "mock/sampling",
+          savedModelId,
           "--file",
           profilePath,
           "--db",
@@ -143,7 +111,7 @@ describe("provider model sampling CLI e2e", () => {
           "sampling",
           "clear",
           "--modelId",
-          "mock/sampling",
+          savedModelId,
           "--db",
           dbPath,
         ],
@@ -156,7 +124,7 @@ describe("provider model sampling CLI e2e", () => {
           "model",
           "request",
           "--modelId",
-          "mock/sampling",
+          savedModelId,
           "--content",
           "hi",
           "--db",

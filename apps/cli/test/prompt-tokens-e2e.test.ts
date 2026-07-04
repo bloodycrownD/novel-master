@@ -9,7 +9,7 @@ import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { runNm } from "./helpers.js";
+import { createSavedModelId, runNm, savedModelIdByVendor } from "./helpers.js";
 
 const PROMPT_YAML = `
 persist: {}
@@ -148,15 +148,8 @@ describe("prompt render --tokens CLI e2e", () => {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
       runNm(["provider", "list", "--db", dbPath]);
       runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
-      runNm([
-        "provider",
-        "model",
-        "create",
-        "--vendorModelId",
-        "gpt-4o",
-        "--db",
-        dbPath,
-      ]);
+      createSavedModelId(dbPath, "gpt-4o");
+      const savedModelId = savedModelIdByVendor(dbPath, "gpt-4o");
 
       const { projectId, sessionId } = await setupSession(dbPath);
       runNm([
@@ -179,7 +172,7 @@ describe("prompt render --tokens CLI e2e", () => {
         promptPath,
         "--tokens",
         "--model",
-        "openai/gpt-4o",
+        savedModelId,
         "--project",
         projectId,
         "--session",
@@ -193,7 +186,7 @@ describe("prompt render --tokens CLI e2e", () => {
       const tokens = parseTokenJsonLine(render.stderr);
       assert.ok(tokens.tokenCount > 0);
       assert.equal(tokens.counter, "tiktoken");
-      assert.equal(tokens.model, "openai/gpt-4o");
+      assert.equal(tokens.model, savedModelId);
       assert.equal(tokens.estimated, false);
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -207,21 +200,14 @@ describe("prompt render --tokens CLI e2e", () => {
     try {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
       runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
-      runNm([
-        "provider",
-        "model",
-        "create",
-        "--vendorModelId",
-        "gpt-4o",
-        "--db",
-        dbPath,
-      ]);
+      createSavedModelId(dbPath, "gpt-4o");
+      const savedModelId = savedModelIdByVendor(dbPath, "gpt-4o");
       runNm([
         "provider",
         "model",
         "edit",
         "--modelId",
-        "openai/gpt-4o",
+        savedModelId,
         "--tokenCounterMode",
         "claude",
         "--db",
@@ -249,7 +235,7 @@ describe("prompt render --tokens CLI e2e", () => {
         promptPath,
         "--tokens",
         "--model",
-        "openai/gpt-4o",
+        savedModelId,
         "--project",
         projectId,
         "--session",
@@ -274,15 +260,8 @@ describe("prompt render --tokens CLI e2e", () => {
     try {
       await writeFile(promptPath, PROMPT_YAML, "utf8");
       runNm(["provider", "use", "--providerId", "openai", "--db", dbPath]);
-      runNm([
-        "provider",
-        "model",
-        "create",
-        "--vendorModelId",
-        "claude-3-5-sonnet",
-        "--db",
-        dbPath,
-      ]);
+      createSavedModelId(dbPath, "claude-3-5-sonnet");
+      const savedModelId = savedModelIdByVendor(dbPath, "claude-3-5-sonnet");
 
       const { projectId, sessionId } = await setupSession(dbPath);
       runNm([
@@ -305,7 +284,7 @@ describe("prompt render --tokens CLI e2e", () => {
         promptPath,
         "--tokens",
         "--model",
-        "openai/claude-3-5-sonnet",
+        savedModelId,
         "--project",
         projectId,
         "--session",
