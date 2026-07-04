@@ -28,6 +28,7 @@ export interface ToolCallView {
   readonly input: Record<string, unknown>;
   readonly status: ToolCallStatus;
   readonly resultContent?: string;
+  readonly summary?: string;
 }
 
 export interface MessageListItem {
@@ -193,6 +194,7 @@ export function toolCallViewFromUse(
     input: use.input,
     status: toolStatusFromResult(result),
     resultContent: result.content,
+    ...(result.summary != null ? { summary: result.summary } : {}),
   };
 }
 
@@ -222,6 +224,9 @@ export function vfsToolFilePath(tool: ToolCallView): string | undefined {
 }
 
 export function toolCallSummary(tool: ToolCallView): string {
+  if (tool.status === 'error' && tool.summary) {
+    return tool.summary;
+  }
   const fromInput = summarizeToolInput(tool.name, tool.input);
   if (fromInput) {
     return fromInput;

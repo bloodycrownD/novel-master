@@ -10,12 +10,12 @@ import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-
 import { SqliteVfsRevisionRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-revision.repository.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
   VfsError,
   vfsInvalidPath,
   vfsIsDirectory,
   vfsNotFound,
-  vfsReplaceNotFound,
 } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
@@ -83,7 +83,7 @@ export class RevisionAwareVfsService implements VfsService {
 
     if (options?.replaceAll) {
       if (!current.content.includes(oldString)) {
-        throw vfsReplaceNotFound(path);
+        throw buildReplaceNotFoundError(path, current.content, oldString);
       }
       const parts = current.content.split(oldString);
       replacements = parts.length - 1;
@@ -91,7 +91,7 @@ export class RevisionAwareVfsService implements VfsService {
     } else {
       const index = current.content.indexOf(oldString);
       if (index === -1) {
-        throw vfsReplaceNotFound(path);
+        throw buildReplaceNotFoundError(path, current.content, oldString);
       }
       replacements = 1;
       nextContent =

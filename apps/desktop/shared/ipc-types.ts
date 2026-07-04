@@ -326,6 +326,8 @@ export type VfsWriteRequest = VfsScopeRequest & {
   readonly content: string;
   readonly expectedVersion?: number;
   readonly versionCheck?: boolean;
+  /** 编辑器上次读盘快照，仅用于漂移诊断日志，不作 baseline。 */
+  readonly lastKnownContent?: string | null;
 };
 
 export type VfsMkdirRequest = VfsScopeRequest & {

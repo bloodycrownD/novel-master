@@ -4,9 +4,15 @@
  * @module domain/tool/logic/format-tool-output
  */
 
+import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
+import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { ToolError } from "@/errors/tool-errors.js";
 import { VfsError } from "@/errors/vfs-errors.js";
 import type { ZodIssue } from "zod";
+
+export type FormatToolErrorForLlmOptions = {
+  readonly vfsScope?: VfsScope;
+};
 
 function isTruncatedReadOutput(rec: Record<string, unknown>): boolean {
   return (
@@ -114,7 +120,10 @@ export function formatToolOutputForLlm(out: unknown): string {
  *
  * @remarks Unwraps {@link ToolError} `cause` (e.g. {@link VfsError}) so the model sees actionable detail.
  */
-export function formatToolErrorForLlm(error: unknown): string {
+export function formatToolErrorForLlm(
+  error: unknown,
+  options?: FormatToolErrorForLlmOptions,
+): string {
   let message: string;
   if (error instanceof ToolError) {
     if (
@@ -126,7 +135,7 @@ export function formatToolErrorForLlm(error: unknown): string {
       const summary = issues.map((i) => i.message).join("; ");
       message = summary.length > 0 ? summary : error.message;
     } else if (error.cause != null) {
-      message = formatToolErrorCause(error.cause);
+      message = formatToolErrorCause(error.cause, options?.vfsScope);
     } else {
       message = error.message;
     }
@@ -138,9 +147,12 @@ export function formatToolErrorForLlm(error: unknown): string {
   return `Error: ${message}`;
 }
 
-function formatToolErrorCause(cause: unknown): string {
+function formatToolErrorCause(
+  cause: unknown,
+  vfsScope?: VfsScope,
+): string {
   if (cause instanceof VfsError) {
-    return cause.message;
+    return formatVfsErrorForLlm(cause, vfsScope);
   }
   if (cause instanceof Error) {
     return cause.message;

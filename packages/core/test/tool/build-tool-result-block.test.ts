@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ToolError } from "../../src/errors/tool-errors.js";
+import { VfsError } from "../../src/errors/vfs-errors.js";
 import {
   buildToolResultBlock,
   resolveToolResultOk,
@@ -28,6 +29,26 @@ describe("buildToolResultBlock", () => {
     assert.equal(block.ok, false);
     assert.ok(block.content.startsWith("Error:"));
     assert.ok(block.summary?.includes("Path not found"));
+  });
+
+  it("T-BTRB-01: error with vfsScope summary uses classified message", () => {
+    const cause = new VfsError("NOT_FOUND", "Path not found: /projects/p/sessions/s/f.txt", {
+      path: "/projects/p/sessions/s/f.txt",
+    });
+    const block = buildToolResultBlock(
+      "tu4",
+      {
+        ok: false,
+        error: new ToolError("FAILED", "Tool failed: read", { cause }),
+      },
+      {
+        toolName: "read",
+        vfsScope: { kind: "session", projectId: "p", sessionId: "s" },
+      },
+    );
+    assert.ok(block.summary?.includes("[NOT_FOUND]"));
+    assert.ok(block.summary?.includes("/f.txt"));
+    assert.ok(!block.summary?.includes("/projects/"));
   });
 
   it("R2: read output with terrors in body stays ok true", () => {

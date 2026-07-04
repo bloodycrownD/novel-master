@@ -331,7 +331,10 @@ export class DefaultAgentRunner implements AgentRunner {
         const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
-          buildToolResultBlock(tu.id, parallelOutcomes[i]!, { toolName: tu.name }),
+          buildToolResultBlock(tu.id, parallelOutcomes[i]!, {
+            toolName: tu.name,
+            vfsScope: { kind: "session", projectId, sessionId },
+          }),
         );
 
         if (

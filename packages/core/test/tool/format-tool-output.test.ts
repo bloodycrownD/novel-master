@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { VfsError } from "../../src/errors/vfs-errors.js";
+import { VfsError, vfsReplaceNotFound } from "../../src/errors/vfs-errors.js";
 import { ToolError } from "../../src/errors/tool-errors.js";
 import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
   formatToolResultContentForDisplay,
 } from "../../src/domain/tool/logic/format-tool-output.js";
+import type { VfsScope } from "../../src/domain/vfs/logic/vfs-path-mapper.js";
+
+const sessionScope: VfsScope = {
+  kind: "session",
+  projectId: "proj-1",
+  sessionId: "sess-1",
+};
+
+const physicalPath = "/projects/proj-1/sessions/sess-1/missing.txt";
 
 describe("formatToolOutputForLlm", () => {
   it("returns ok for version-only write result", () => {
@@ -71,8 +80,82 @@ describe("formatToolErrorForLlm", () => {
     });
     assert.equal(
       formatToolErrorForLlm(err),
-      "Error: Path not found: /missing",
+      "Error: [NOT_FOUND] Path not found: /missing",
     );
+  });
+
+  it("T-ERR-01: session scope maps physical path to logical", () => {
+    const cause = new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
+      path: physicalPath,
+    });
+    const err = new ToolError("FAILED", "Tool failed: read", {
+      toolName: "read",
+      cause,
+    });
+    const content = formatToolErrorForLlm(err, { vfsScope: sessionScope });
+    assert.ok(content.includes("[NOT_FOUND]"));
+    assert.ok(content.includes("/missing.txt"));
+    assert.ok(!content.includes("/projects/"));
+    assert.ok(!content.includes("/sessions/"));
+  });
+
+  it("T-ERR-02: CONFLICT includes category and versions", () => {
+    const cause = new VfsError(
+      "CONFLICT",
+      `Version conflict for ${physicalPath}: expected 1, actual 2`,
+      {
+        path: physicalPath,
+        expectedVersion: 1,
+        actualVersion: 2,
+      },
+    );
+    const content = formatToolErrorForLlm(
+      new ToolError("FAILED", "Tool failed: write", { cause }),
+      { vfsScope: sessionScope },
+    );
+    assert.ok(content.includes("[CONFLICT]"));
+    assert.ok(content.includes("expected 1, actual 2"));
+  });
+
+  it("T-ERR-03: NOT_FOUND category", () => {
+    const cause = new VfsError("NOT_FOUND", `Path not found: ${physicalPath}`, {
+      path: physicalPath,
+    });
+    const content = formatToolErrorForLlm(
+      new ToolError("FAILED", "x", { cause }),
+      { vfsScope: sessionScope },
+    );
+    assert.ok(content.includes("[NOT_FOUND]"));
+  });
+
+  it("T-ERR-04: REPLACE_NOT_FOUND includes LCS snippet", () => {
+    const cause = vfsReplaceNotFound(physicalPath, {
+      oldStringLength: 10,
+      longestCommonSubstring: "function hello()",
+      lcsLength: 16,
+      lcsOccurrences: 1,
+    });
+    const content = formatToolErrorForLlm(
+      new ToolError("FAILED", "x", { cause }),
+      { vfsScope: sessionScope },
+    );
+    assert.ok(content.includes("[REPLACE_NOT_FOUND]"));
+    assert.ok(content.includes("function hello()"));
+    assert.ok(content.includes("occurrences=1"));
+  });
+
+  it("T-ERR-05: short LCS suggests re-read", () => {
+    const cause = vfsReplaceNotFound(physicalPath, {
+      oldStringLength: 10,
+      longestCommonSubstring: "ab",
+      lcsLength: 2,
+      lcsOccurrences: 1,
+    });
+    const content = formatToolErrorForLlm(
+      new ToolError("FAILED", "x", { cause }),
+      { vfsScope: sessionScope },
+    );
+    assert.ok(content.includes("Almost no matching text"));
   });
 
   it("summarizes INVALID_ARGUMENT zod issues", () => {

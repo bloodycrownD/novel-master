@@ -4,6 +4,14 @@
  * @module errors/vfs-errors
  */
 
+/** edit REPLACE_NOT_FOUND 时的 LCS 诊断字段。 */
+export type VfsReplaceNotFoundDetails = {
+  readonly oldStringLength: number;
+  readonly longestCommonSubstring: string;
+  readonly lcsLength: number;
+  readonly lcsOccurrences: number;
+};
+
 /** Discriminant codes for {@link VfsError}. */
 export type VfsErrorCode =
   | "NOT_FOUND"
@@ -24,6 +32,7 @@ export class VfsError extends Error {
   readonly path?: string;
   readonly expectedVersion?: number;
   readonly actualVersion?: number;
+  readonly details?: unknown;
 
   constructor(
     code: VfsErrorCode,
@@ -32,6 +41,7 @@ export class VfsError extends Error {
       path?: string;
       expectedVersion?: number;
       actualVersion?: number;
+      details?: unknown;
     },
   ) {
     super(message);
@@ -40,6 +50,7 @@ export class VfsError extends Error {
     this.path = options?.path;
     this.expectedVersion = options?.expectedVersion;
     this.actualVersion = options?.actualVersion;
+    this.details = options?.details;
   }
 }
 
@@ -87,11 +98,14 @@ export function vfsConflict(
 }
 
 /** Replace oldString not found in content. */
-export function vfsReplaceNotFound(path: string): VfsError {
+export function vfsReplaceNotFound(
+  path: string,
+  details?: VfsReplaceNotFoundDetails,
+): VfsError {
   return new VfsError(
     "REPLACE_NOT_FOUND",
     `Replace string not found in ${path}`,
-    { path },
+    { path, ...(details != null ? { details } : {}) },
   );
 }
 

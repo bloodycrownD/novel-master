@@ -858,7 +858,10 @@ describe("AgentRunner", () => {
     assert.ok(resultBlock && resultBlock.type === "tool_result");
     assert.equal(resultBlock.ok, false);
     assert.ok(resultBlock.content.includes("Error:"));
+    assert.ok(resultBlock.content.includes("[NOT_FOUND]"));
     assert.ok(resultBlock.content.includes("/missing.txt"));
+    assert.ok(!resultBlock.content.includes("/projects/"));
+    assert.ok(!resultBlock.content.includes("/sessions/"));
     assert.notEqual(resultBlock.content, "Error: Tool failed: read");
   });
 

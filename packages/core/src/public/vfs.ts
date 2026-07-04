@@ -56,6 +56,8 @@ export {
   buildUserVfsSaveWriteActionXml,
   buildUserVfsSimpleActionXml,
 } from "../domain/vfs/logic/user-vfs-save-mapping.js";
+export { readUserVfsSaveBaseline } from "../domain/vfs/logic/read-user-vfs-save-baseline.js";
+export { formatVfsErrorForUser } from "../domain/vfs/logic/format-vfs-error-for-user.js";
 export type {
   UserVfsSaveMappingOptions,
   UserVfsEditHunk,

@@ -11,7 +11,12 @@ import { ProviderError } from "@novel-master/core/provider";
 
 import { SessionFsError } from "@novel-master/core/session-fs";
 
-import { VfsError, VfsZipError } from "@novel-master/core/vfs";
+import {
+  VfsError,
+  VfsZipError,
+  formatVfsErrorForUser,
+  isVfsError,
+} from "@novel-master/core/vfs";
 
 function formatCause(cause: unknown): string | undefined {
   if (cause instanceof Error && cause.message) {
@@ -24,7 +29,7 @@ function formatCause(cause: unknown): string | undefined {
 }
 
 function readCause(error: Error): unknown {
-  return (error as Error & {cause?: unknown}).cause;
+  return (error as Error & { cause?: unknown }).cause;
 }
 
 function formatProviderError(error: ProviderError): string {
@@ -43,8 +48,10 @@ export function formatError(error: unknown): string {
   if (error instanceof ProviderError) {
     return formatProviderError(error);
   }
+  if (error instanceof VfsError) {
+    return formatVfsErrorForUser(error);
+  }
   if (
-    error instanceof VfsError ||
     error instanceof VfsZipError ||
     error instanceof ChatError ||
     error instanceof AgentError ||
@@ -54,8 +61,12 @@ export function formatError(error: unknown): string {
     return error.message;
   }
   if (error instanceof ToolError) {
-    const cause = formatCause(readCause(error));
-    return cause ? `${error.message}\n${cause}` : error.message;
+    const cause = readCause(error);
+    if (cause instanceof VfsError || isVfsError(cause)) {
+      return formatVfsErrorForUser(cause);
+    }
+    const causeText = formatCause(cause);
+    return causeText ? `${error.message}\n${causeText}` : error.message;
   }
   if (error instanceof TdbcError) {
     const inner = formatCause(readCause(error));

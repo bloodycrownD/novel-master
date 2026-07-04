@@ -129,10 +129,18 @@ export function FileEditorScreen() {
         sessionId &&
         isUserVfsUnifiedToolTurnEnabled()
       ) {
-        await sessionSaveVfsFile(runtime, sessionId, savedContent, path, content, {
-          expectedVersion: version,
-          versionCheck: version != null,
-        });
+        await sessionSaveVfsFile(
+          runtime,
+          sessionId,
+          vfs,
+          path,
+          content,
+          {
+            expectedVersion: version,
+            versionCheck: version != null,
+          },
+          savedContent,
+        );
         setSavedContent(content);
         const refreshed = await vfs.read(path);
         setVersion(refreshed.version);

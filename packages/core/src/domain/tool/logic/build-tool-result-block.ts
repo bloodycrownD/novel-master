@@ -13,10 +13,12 @@ import {
   formatToolErrorForLlm,
   formatToolOutputForLlm,
 } from "./format-tool-output.js";
+import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { ParallelToolOutcome } from "./tool-runner.js";
 
 export interface BuildToolResultBlockMeta {
   readonly toolName?: string;
+  readonly vfsScope?: VfsScope;
 }
 
 /** UI / legacy: explicit `ok` wins; otherwise infer from `Error:` prefix only. */
@@ -118,7 +120,9 @@ export function buildToolResultBlock(
     };
   }
 
-  const content = formatToolErrorForLlm(outcome.error);
+  const content = formatToolErrorForLlm(outcome.error, {
+    vfsScope: meta?.vfsScope,
+  });
   const summary = summarizeToolError(content);
   return {
     type: "tool_result",

@@ -10,6 +10,7 @@ import {
   parentDir,
 } from "@/domain/vfs/logic/parent-dir.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
+import { buildReplaceNotFoundError } from "@/domain/vfs/logic/compute-replace-not-found-error.js";
 import {
   VfsError,
   vfsAlreadyExists,
@@ -18,7 +19,6 @@ import {
   vfsNotADirectory,
   vfsNotFound,
   vfsParentNotFound,
-  vfsReplaceNotFound,
 } from "@/errors/vfs-errors.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import { matchGlob } from "../glob-match.js";
@@ -134,7 +134,7 @@ export class DefaultVfsService implements VfsService {
 
     if (options?.replaceAll) {
       if (!current.content.includes(oldString)) {
-        throw vfsReplaceNotFound(path);
+        throw buildReplaceNotFoundError(path, current.content, oldString);
       }
       const parts = current.content.split(oldString);
       replacements = parts.length - 1;
@@ -142,7 +142,7 @@ export class DefaultVfsService implements VfsService {
     } else {
       const index = current.content.indexOf(oldString);
       if (index === -1) {
-        throw vfsReplaceNotFound(path);
+        throw buildReplaceNotFoundError(path, current.content, oldString);
       }
       replacements = 1;
       nextContent =

@@ -8,7 +8,19 @@ import {formatError} from '../src/errors/format-error';
 describe('formatError (T4)', () => {
   it('formats VfsError message', () => {
     const err = new VfsError('NOT_FOUND', 'Path not found: /x', {path: '/x'});
-    expect(formatError(err)).toBe('Path not found: /x');
+    expect(formatError(err)).toBe('文件不存在或已被删除。');
+  });
+
+  it('T-M-TOAST-01: REPLACE_NOT_FOUND uses Chinese refresh hint', () => {
+    const err = new VfsError('REPLACE_NOT_FOUND', 'Replace string not found in /x', {
+      path: '/x',
+    });
+    expect(formatError(err)).toContain('刷新');
+  });
+
+  it('T-M-TOAST-02: CONFLICT uses Chinese version conflict', () => {
+    const err = new VfsError('CONFLICT', 'Version conflict', { path: '/x' });
+    expect(formatError(err)).toContain('版本冲突');
   });
 
   it('formats ProviderError API_KEY_NOT_SET for mobile', () => {

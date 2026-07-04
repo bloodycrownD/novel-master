@@ -6,7 +6,7 @@ import {
   type VfsScope,
   type VfsService,
 } from "@novel-master/core/vfs";
-import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
+import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, readUserVfsSaveBaseline, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {executeSessionUserVfsOp} from './user-vfs-turn-execute.service';
 import {invalidateSessionWorktreeSnapshot} from './worktree-snapshot.service';
@@ -163,11 +163,20 @@ export async function sessionRenameVfsDirectory(
 export async function sessionSaveVfsFile(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
-  baseline: string | null,
+  vfs: VfsService,
   path: string,
   content: string,
   versionOptions?: UserVfsSaveVersionOptions,
+  lastKnownContent?: string | null,
 ): Promise<void> {
+  const baseline = await readUserVfsSaveBaseline(vfs, path);
+  if (
+    lastKnownContent != null &&
+    baseline != null &&
+    lastKnownContent !== baseline
+  ) {
+    console.info("[user-vfs-turn] external_drift_detected", { path });
+  }
   const op = buildUserVfsSaveOp(
     baseline,
     content,
