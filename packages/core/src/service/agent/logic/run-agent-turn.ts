@@ -23,6 +23,7 @@ import type { EventOrchestrator } from "@/service/events/event-orchestrator.port
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
@@ -50,6 +51,7 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly messages: MessageService;
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
+  readonly savedModelRepo: SavedModelRepository;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly eventBus: SimpleEventBus;
   readonly regexConfig: RegexConfigService;
@@ -74,7 +76,7 @@ export class AgentTurnError extends Error {
 export interface RunAgentTurnAfterResolveContext {
   readonly scope: AgentTurnScope;
   readonly definition: AgentDefinition;
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
   readonly workspaceModelId: string;
   readonly stream: boolean;
 }
@@ -91,7 +93,7 @@ export interface RunAgentTurnOptions {
     readonly stage: string;
     readonly error: unknown;
     readonly scope: AgentTurnScope;
-    readonly applicationModelId?: string;
+    readonly savedModelId?: string;
     readonly stream: boolean;
   }) => void;
 }
@@ -180,14 +182,14 @@ export async function runAgentTurn(
     resolveAgentForProject(runtime, scope.projectId),
   );
   stage = "resolve-model";
-  const { applicationModelId, workspaceModelId } = await mapResolveError(() =>
+  const { savedModelId, workspaceModelId } = await mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition),
   );
 
   await options?.onAfterResolveModel?.({
     scope,
     definition,
-    applicationModelId,
+    savedModelId,
     workspaceModelId,
     stream,
   });
@@ -236,6 +238,7 @@ export async function runAgentTurn(
   const runner = createAgentRunner({
     session,
     modelRequests: runtime.modelRequests,
+    savedModels: runtime.savedModelRepo,
     registry,
     toolCtx: {
       vfs,
@@ -261,7 +264,7 @@ export async function runAgentTurn(
       definition,
       sessionId: scope.sessionId,
       projectId: scope.projectId,
-      applicationModelId,
+      savedModelId,
       workspaceModelId,
       maxSteps: definition.runtime?.maxSteps ?? 20,
       activeRegexGroupId: activeRegexGroupId ?? undefined,
@@ -273,7 +276,7 @@ export async function runAgentTurn(
       stage,
       error,
       scope,
-      applicationModelId,
+      savedModelId,
       stream,
     });
     throw error;

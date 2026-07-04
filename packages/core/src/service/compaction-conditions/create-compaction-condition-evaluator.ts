@@ -48,11 +48,11 @@ function triggersFromConditions(
           tokenRatio: conditions.tokenRatio,
           resolveContextWindow: async (evaluation) =>
             deps.providerModels.getContextWindow(
-              evaluation.modelContext.applicationModelId,
+              evaluation.modelContext.savedModelId,
             ),
           resolveTokenizerOverride: async (evaluation) =>
             deps.providerModels.getTokenCounterMode(
-              evaluation.modelContext.applicationModelId,
+              evaluation.modelContext.savedModelId,
             ),
         },
         deps.tokenCounters,

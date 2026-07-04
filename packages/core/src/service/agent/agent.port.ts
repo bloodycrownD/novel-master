@@ -12,8 +12,8 @@ export interface AgentRunOptions {
   readonly definition: AgentDefinition;
   readonly sessionId: string;
   readonly projectId: string;
-  /** Resolved applicationModelId (host reads state/flags; Core does not). */
-  readonly applicationModelId: string;
+  /** Resolved saved model UUID (host reads state/flags; Core does not). */
+  readonly savedModelId: string;
   /** Workspace current model id. */
   readonly workspaceModelId: string;
   /** When set, CLI `--modelId` as highest priority for model resolution. */

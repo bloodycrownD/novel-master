@@ -4,7 +4,7 @@
  * @module count-prompt-llm-input
  */
 
-import { HeuristicTokenCounter, mapVendorModelIdToTiktokenModel, parseApplicationModelId, resolveTokenizerFamily, serializePromptLlmInput, type CountPromptLlmInputParams, type PromptTokenCountResult, type TokenCounterKind, type TokenizerFamily } from "@novel-master/core/provider";
+import { HeuristicTokenCounter, mapVendorModelIdToTiktokenModel, resolveTokenizerFamily, serializePromptLlmInput, type CountPromptLlmInputParams, type PromptTokenCountResult, type TokenCounterKind, type TokenizerFamily } from "@novel-master/core/provider";
 import { encoding_for_model, type Tiktoken } from "tiktoken";
 import { countSentencePieceFamilyPrompt } from "./impl/sentencepiece-token-counter.js";
 import { countWebFamilyPrompt } from "./impl/web-tokenizer-counter.js";
@@ -31,12 +31,24 @@ const SP_FAMILIES: ReadonlySet<TokenizerFamily> = new Set([
   "jamba",
 ]);
 
+async function resolveVendorModelId(
+  params: CountPromptLlmInputParams,
+): Promise<string> {
+  if (params.savedModels != null) {
+    const saved = await params.savedModels.findById(params.savedModelId.trim());
+    if (saved != null) {
+      return saved.vendorModelId;
+    }
+  }
+  return params.savedModelId;
+}
+
 /** Full model-aware count using Node tokenizer libraries. */
 export async function countPromptLlmInput(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { layout, ctx, applicationModelId, registry } = params;
-  const { vendorModelId } = parseApplicationModelId(applicationModelId);
+  const { layout, ctx, savedModelId, registry } = params;
+  const vendorModelId = await resolveVendorModelId(params);
   const override =
     params.tokenizerOverride ??
     (await registry.getTokenizerOverride?.()) ??
@@ -64,7 +76,7 @@ export async function countPromptLlmInput(
         tokenCount = registry.heuristic.countText(serialized);
         counterKind = "heuristic";
         estimated = true;
-        return pack(applicationModelId, vendorModelId, family, tokenCount, counterKind, estimated);
+        return pack(savedModelId, vendorModelId, family, tokenCount, counterKind, estimated);
       }
       tokenCount = countOpenAiStyleMessages(
         encoding,
@@ -95,7 +107,7 @@ export async function countPromptLlmInput(
   }
 
   return pack(
-    applicationModelId,
+    savedModelId,
     vendorModelId,
     family,
     tokenCount,
@@ -105,7 +117,7 @@ export async function countPromptLlmInput(
 }
 
 function pack(
-  applicationModelId: string,
+  savedModelId: string,
   vendorModelId: string,
   tokenizerFamily: TokenizerFamily,
   tokenCount: number,
@@ -116,7 +128,7 @@ function pack(
     tokenCount,
     counterKind,
     estimated,
-    applicationModelId,
+    savedModelId,
     vendorModelId,
     tokenizerFamily,
   };

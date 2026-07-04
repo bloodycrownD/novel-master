@@ -94,7 +94,7 @@ export const agentDefinitionDocumentSchema = z
     schemaVersion: z.literal(1),
     name: z.string().min(1),
     prompts: promptsDocumentSchema,
-    model: z.string().min(1).optional(),
+    model: z.string().uuid().optional(),
     runtime: z
       .object({
         maxSteps: z.number().int().positive().optional(),
@@ -117,7 +117,7 @@ function assertNoLegacyAgentFields(raw: unknown): void {
   if ("preferredModelId" in record) {
     throw new AgentConfigError(
       "INVALID_SCHEMA",
-      "preferredModelId is removed; use optional model: <applicationModelId>",
+      "preferredModelId is removed; use optional model: <savedModelId UUID>",
     );
   }
   const model = record.model;

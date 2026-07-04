@@ -25,7 +25,7 @@ export interface ModelRequestOptions {
 /** Sends chat requests via protocol adapters. */
 export interface ModelRequestService {
   request(
-    applicationModelId: string,
+    savedModelId: string,
     userContent: string,
     options?: ModelRequestOptions,
   ): Promise<LlmChatResult>;

@@ -5,7 +5,7 @@
  */
 
 import { ProviderError, providerModelNotSavedMessage } from "@/errors/provider-errors.js";
-import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
+import { assertSavedModelUuid } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import { resolveThinkingParamsForLevel } from "@/domain/provider/logic/resolve-thinking-wire.js";
 import { resolveProviderApiKey } from "@/domain/provider/logic/resolve-provider-api-key.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
@@ -117,20 +117,24 @@ export class DefaultModelRequestService implements ModelRequestService {
   constructor(private readonly deps: DefaultModelRequestServiceDeps) {}
 
   async request(
-    applicationModelId: string,
+    savedModelId: string,
     userContent: string,
     options?: ModelRequestOptions,
   ): Promise<LlmChatResult> {
-    const { providerId, vendorModelId } =
-      parseApplicationModelId(applicationModelId);
-    const saved = await this.deps.savedModels.find(providerId, vendorModelId);
-    if (!saved) {
-      throw new ProviderError(
-        "MODEL_NOT_SAVED",
-        providerModelNotSavedMessage(applicationModelId),
-        { modelId: applicationModelId, providerId },
-      );
+    let saved;
+    try {
+      saved = await assertSavedModelUuid(savedModelId, this.deps.savedModels);
+    } catch (error) {
+      if (error instanceof ProviderError && error.code === "INVALID_SAVED_MODEL_ID") {
+        throw new ProviderError(
+          "MODEL_NOT_SAVED",
+          providerModelNotSavedMessage(savedModelId),
+          { modelId: savedModelId, providerId: error.providerId },
+        );
+      }
+      throw error;
     }
+    const { providerId, vendorModelId } = saved;
     const provider = await this.deps.providers.findById(providerId);
     if (!provider) {
       throw new ProviderError("NOT_FOUND", `Provider not found: ${providerId}`, {

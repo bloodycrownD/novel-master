@@ -4,7 +4,7 @@
  * @module infra/tokenizer/logic/count-prompt-llm-input
  */
 
-import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layout.js";
 import type { PromptRenderContext } from "@/domain/prompt/model/prompt-render-context.js";
 import { resolveTokenizerDriver } from "../../nmtp/logic/registry.js";
@@ -17,16 +17,18 @@ import { serializePromptLlmInput } from "./serialize-prompt-input.js";
 export interface CountPromptLlmInputParams {
   readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
   readonly registry: TokenCounterRegistry;
   readonly tokenizerOverride?: TokenizerOverride;
+  /** When set, resolves vendor model id via {@link findById}. */
+  readonly savedModels?: Pick<SavedModelRepository, "findById">;
 }
 
 export interface PromptTokenCountResult {
   readonly tokenCount: number;
   readonly counterKind: TokenCounterKind;
   readonly estimated: boolean;
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
   readonly vendorModelId: string;
   readonly tokenizerFamily: TokenizerFamily;
 }
@@ -40,12 +42,26 @@ export async function countPromptLlmInput(
   return resolveTokenizerDriver().countPromptLlmInput(params);
 }
 
+async function resolveVendorModelIdFromSaved(
+  savedModelId: string,
+  savedModels?: Pick<SavedModelRepository, "findById">,
+): Promise<string> {
+  if (savedModels == null) {
+    return savedModelId;
+  }
+  const saved = await savedModels.findById(savedModelId.trim());
+  return saved?.vendorModelId ?? savedModelId;
+}
+
 /** Minimal fallback without a registered driver (tests / documentation). */
 export async function countPromptLlmInputHeuristicOnly(
   params: CountPromptLlmInputParams,
 ): Promise<PromptTokenCountResult> {
-  const { applicationModelId, registry, layout, ctx } = params;
-  const { vendorModelId } = parseApplicationModelId(applicationModelId);
+  const { savedModelId, registry, layout, ctx } = params;
+  const vendorModelId = await resolveVendorModelIdFromSaved(
+    savedModelId,
+    params.savedModels,
+  );
   const family = resolveTokenizerFamily(vendorModelId, "auto");
   const serialized = await serializePromptLlmInput(layout, ctx);
   const tokenCount = registry.heuristic.countText(serialized);
@@ -53,7 +69,7 @@ export async function countPromptLlmInputHeuristicOnly(
     tokenCount,
     counterKind: "heuristic",
     estimated: true,
-    applicationModelId,
+    savedModelId,
     vendorModelId,
     tokenizerFamily: family,
   };

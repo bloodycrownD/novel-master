@@ -13,7 +13,7 @@ import type {
 
 export interface CompactionConditionModelContext {
   readonly workspaceModelId: string;
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
 }
 
 export interface CompactionEvaluationContext {

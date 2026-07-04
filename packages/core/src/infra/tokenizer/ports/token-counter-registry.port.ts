@@ -17,11 +17,11 @@ export interface TokenCounterRegistry {
   /** Optional override for tokenizer drivers when caller passes no explicit mode. */
   getTokenizerOverride?(): Promise<TokenizerOverride>;
   /**
-   * Resolve counter for `applicationModelId` (`providerId/vendorModelId`).
-   * Routes by vendor model name only.
+   * Resolve counter for saved model UUID.
+   * Routes by resolved vendor model name.
    */
-  forApplicationModel(
-    applicationModelId: string,
+  forSavedModel(
+    savedModelId: string,
     options?: ForVendorModelOptions,
   ): Promise<TokenCounter>;
   /** Primary path: vendor model id substring → tokenizer family (heuristic in core). */

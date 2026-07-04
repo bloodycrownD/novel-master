@@ -1,24 +1,35 @@
 /**
- * Infers LLM protocol from application model id (export path).
+ * Infers LLM protocol from saved model UUID (export path).
  *
  * @module domain/provider/logic/infer-llm-protocol-from-model-id
  */
 
 import type { LlmProtocolKind } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { BUILTIN_PROVIDER_PROTOCOLS } from "./builtin-providers.js";
-import { parseApplicationModelId } from "./application-model-id.js";
+import type { SavedModelRepository } from "../repositories/saved-model.port.js";
 
 /**
- * Parses providerId from `providerId/vendorModelId`; falls back to anthropic for unknown built-in gaps or parse errors.
- * Only built-in provider ids are mapped; custom providers may still mis-infer on the export path.
+ * Looks up provider by saved model id; falls back to anthropic for unknown/missing rows.
  */
-export function inferLlmProtocolFromApplicationModelId(
-  applicationModelId: string,
-): LlmProtocolKind {
+export async function inferLlmProtocolFromSavedModelId(
+  savedModelId: string,
+  savedModels: Pick<SavedModelRepository, "findById">,
+): Promise<LlmProtocolKind> {
   try {
-    const { providerId } = parseApplicationModelId(applicationModelId);
-    return BUILTIN_PROVIDER_PROTOCOLS[providerId] ?? "anthropic";
+    const saved = await savedModels.findById(savedModelId.trim());
+    if (saved == null) {
+      return "anthropic";
+    }
+    return BUILTIN_PROVIDER_PROTOCOLS[saved.providerId] ?? "anthropic";
   } catch {
     return "anthropic";
   }
+}
+
+/** @deprecated Use {@link inferLlmProtocolFromSavedModelId} with UUID saved model id. */
+export async function inferLlmProtocolFromApplicationModelId(
+  savedModelId: string,
+  savedModels: Pick<SavedModelRepository, "findById">,
+): Promise<LlmProtocolKind> {
+  return inferLlmProtocolFromSavedModelId(savedModelId, savedModels);
 }

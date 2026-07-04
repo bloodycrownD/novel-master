@@ -10,7 +10,7 @@ import type { AgentDefinition } from "../model/agent-definition.js";
 export interface ValidateAgentDefinitionOptions {
   /** Ensures model pin refers to a saved model (CLI injects). */
   readonly assertSavedModel?: (
-    applicationModelId: string,
+    savedModelId: string,
   ) => void | Promise<void>;
   /** Registered tool names for tools policy validation (host injects after registerVfsTools). */
   readonly registeredToolNames?: readonly string[];

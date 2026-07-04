@@ -16,6 +16,7 @@ import { createAgentRunner } from "@/service/agent/create-agent-runner.js";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -29,6 +30,7 @@ export interface RunAgentHandlerDeps {
   readonly messages: MessageService;
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
+  readonly savedModels: SavedModelRepository;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
@@ -51,11 +53,11 @@ export async function runRunAgentAction(
 
   const definition = await deps.agentRegistry.get(agentId);
   const workspaceModelId = (await deps.getWorkspaceModelId()) ?? "";
-  const applicationModelId = resolveApplicationModelId({
+  const savedModelId = resolveApplicationModelId({
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });
-  if (applicationModelId == null || applicationModelId === "") {
+  if (savedModelId == null || savedModelId === "") {
     throw new Error(`run-agent: no model resolved for agent "${agentId}"`);
   }
 
@@ -72,6 +74,7 @@ export async function runRunAgentAction(
   const runner = createAgentRunner({
     session,
     modelRequests: deps.modelRequests,
+    savedModels: deps.savedModels,
     registry,
     toolCtx: {
       vfs,
@@ -93,7 +96,7 @@ export async function runRunAgentAction(
     definition,
     sessionId: ctx.sessionId,
     projectId: ctx.projectId,
-    applicationModelId,
+    savedModelId,
     workspaceModelId,
     maxSteps: definition.runtime?.maxSteps ?? 20,
     activeRegexGroupId,

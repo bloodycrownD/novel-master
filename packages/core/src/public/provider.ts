@@ -15,7 +15,15 @@ export {
   formatApplicationModelId,
   normalizeVendorModelId,
 } from "../domain/provider/logic/application-model-id.js";
-export { inferLlmProtocolFromApplicationModelId } from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
+export {
+  assertSavedModelUuid,
+  isSavedModelUuidFormat,
+} from "../domain/provider/logic/assert-saved-model-uuid.js";
+export { formatSavedModelDisplayName } from "../domain/provider/logic/format-saved-model-display-name.js";
+export {
+  inferLlmProtocolFromSavedModelId,
+  inferLlmProtocolFromApplicationModelId,
+} from "../domain/provider/logic/infer-llm-protocol-from-model-id.js";
 export type { LlmProvider } from "../domain/provider/model/provider.js";
 export { providerApiKeyRef } from "../domain/provider/model/provider.js";
 export type {
@@ -33,6 +41,11 @@ export {
   GEMINI_SAMPLING_DEFAULTS,
 } from "../domain/provider/model/protocol-sampling-defaults.js";
 export type { SavedModel } from "../domain/provider/model/saved-model.js";
+export {
+  savedModelDisplayName,
+  toSavedModelView,
+  type SavedModelView,
+} from "../domain/provider/model/saved-model.js";
 export type {
   SavedModelSettings,
   SavedModelSamplingSettings,

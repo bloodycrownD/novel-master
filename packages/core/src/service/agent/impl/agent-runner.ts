@@ -30,7 +30,8 @@ import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
-import { inferLlmProtocolFromApplicationModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
+import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
@@ -57,6 +58,7 @@ import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.j
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
   readonly modelRequests: ModelRequestService;
+  readonly savedModels: SavedModelRepository;
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
@@ -180,7 +182,7 @@ export class DefaultAgentRunner implements AgentRunner {
               {
                 modelContext: {
                   workspaceModelId: options.workspaceModelId,
-                  applicationModelId: options.applicationModelId,
+                  savedModelId: options.savedModelId,
                 },
                 promptInput,
                 layout: options.definition.prompts,
@@ -211,8 +213,9 @@ export class DefaultAgentRunner implements AgentRunner {
         const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
           agentStepIndex: step,
         });
-        const protocol = inferLlmProtocolFromApplicationModelId(
-          options.applicationModelId,
+        const protocol = await inferLlmProtocolFromSavedModelId(
+          options.savedModelId,
+          this.deps.savedModels,
         );
         const exportMessages = normalizeForLlmExport(
           llmInput.messages,
@@ -236,7 +239,7 @@ export class DefaultAgentRunner implements AgentRunner {
         let result;
         try {
           result = await this.deps.modelRequests.request(
-            options.applicationModelId,
+            options.savedModelId,
             "",
             {
               history: llmMessages,

@@ -10,10 +10,10 @@ import type { ProviderModelService } from "../provider-model.port.js";
 /** Returns saved model token counter mode, or `"auto"` when model is unknown. */
 export async function resolveTokenCounterModeForModel(
   providerModels: Pick<ProviderModelService, "getTokenCounterMode">,
-  applicationModelId: string | null | undefined,
+  savedModelId: string | null | undefined,
 ): Promise<TokenizerOverride> {
-  if (applicationModelId == null || applicationModelId === "") {
+  if (savedModelId == null || savedModelId === "") {
     return "auto";
   }
-  return providerModels.getTokenCounterMode(applicationModelId);
+  return providerModels.getTokenCounterMode(savedModelId);
 }

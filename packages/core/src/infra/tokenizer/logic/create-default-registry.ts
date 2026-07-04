@@ -4,7 +4,7 @@
  * @module infra/tokenizer/logic/create-default-registry
  */
 
-import { parseApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
+import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import { HeuristicTokenCounter } from "../impl/heuristic-token-counter.js";
 import type { TokenCounter } from "../ports/token-counter.port.js";
 import type {
@@ -17,26 +17,31 @@ import type { TokenizerOverride } from "./resolve-tokenizer-family.js";
 export interface CreateDefaultTokenCounterRegistryDeps {
   /** Optional override hook for tokenizer drivers/tests; product runtimes do not inject. */
   readonly getTokenizerOverride?: () => Promise<TokenizerOverride>;
+  /** When set, resolves vendor model id from saved model UUID. */
+  readonly savedModels?: Pick<SavedModelRepository, "findById">;
 }
 
 class DefaultTokenCounterRegistry implements TokenCounterRegistry {
   readonly heuristic: TokenCounter = new HeuristicTokenCounter();
   readonly getTokenizerOverride: (() => Promise<TokenizerOverride>) | undefined;
+  private readonly savedModels: Pick<SavedModelRepository, "findById"> | undefined;
 
   constructor(deps: CreateDefaultTokenCounterRegistryDeps) {
     this.getTokenizerOverride = deps.getTokenizerOverride;
+    this.savedModels = deps.savedModels;
   }
 
-  async forApplicationModel(
-    applicationModelId: string,
+  async forSavedModel(
+    savedModelId: string,
     _options?: ForVendorModelOptions,
   ): Promise<TokenCounter> {
-    try {
-      parseApplicationModelId(applicationModelId);
-      return this.heuristic;
-    } catch {
-      return this.heuristic;
+    if (this.savedModels != null) {
+      const saved = await this.savedModels.findById(savedModelId.trim());
+      if (saved != null) {
+        return this.forVendorModel(saved.vendorModelId, _options);
+      }
     }
+    return this.heuristic;
   }
 
   forVendorModel(

@@ -60,11 +60,11 @@ export async function resolveCurrentAgentDefinition(
   }
 }
 
-/** Resolves dialogue applicationModelId (agent pin → workspace current model). */
+/** Resolves dialogue savedModelId (agent pin → workspace current model). */
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,
   definition: AgentDefinition,
-): Promise<{ applicationModelId: string; workspaceModelId: string }> {
+): Promise<{ savedModelId: string; workspaceModelId: string }> {
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
   const resolved = resolveApplicationModelId({
     agentModelId: definition.model,
@@ -75,5 +75,5 @@ export async function resolveApplicationModelIdForRun(
       "未选择模型。请先选择工作区模型，或为 Agent 设置专属模型。",
     );
   }
-  return { applicationModelId: resolved, workspaceModelId };
+  return { savedModelId: resolved, workspaceModelId };
 }
