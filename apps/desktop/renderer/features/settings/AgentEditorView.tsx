@@ -16,12 +16,10 @@ import {
   createDefaultPersistTextBlock,
   definitionToForm,
   deletePersistTextBlock,
-  formatApplicationModelId,
   formSnapshotJson,
   hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistBlock,
-  parseApplicationModelId,
   removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   updatePersistWorktreeRole,
@@ -105,7 +103,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [maxSteps, setMaxSteps] = useState("20");
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState("");
-  const [vendorModelId, setVendorModelId] = useState("");
+  const [savedModelId, setSavedModelId] = useState("");
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
@@ -116,7 +114,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
   const [savedModels, setSavedModels] = useState<
-    Array<{ vendorModelId: string; displayName: string }>
+    Array<{ id: string; vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +140,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         maxSteps,
         modelEnabled,
         providerId,
-        vendorModelId,
+        vendorModelId: savedModelId,
         toolsMode,
         toolsSelected,
         systemEnabled,
@@ -157,7 +155,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       maxSteps,
       modelEnabled,
       providerId,
-      vendorModelId,
+      savedModelId,
       toolsMode,
       toolsSelected,
       systemEnabled,
@@ -174,12 +172,29 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     if (res.ok) {
       setSavedModels(
         res.data.map((m) => ({
+          id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
         })),
       );
     }
   }, []);
+
+  const resolveSavedModelPin = useCallback(
+    async (modelPin: string | undefined, providerRows: Array<{ id: string }>) => {
+      if (modelPin == null || modelPin === "") {
+        return { modelOn: false, providerId: "", savedModelId: "" };
+      }
+      for (const provider of providerRows) {
+        const res = await ipcProviderModelsSavedList({ providerId: provider.id });
+        if (res.ok && res.data.some((m) => m.id === modelPin)) {
+          return { modelOn: true, providerId: provider.id, savedModelId: modelPin };
+        }
+      }
+      return { modelOn: false, providerId: "", savedModelId: "" };
+    },
+    [],
+  );
 
   const loadAgent = useCallback(async () => {
     if (!agentId) return;
@@ -226,21 +241,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setProviders(providerRows);
 
       let baselineProviderId = "";
-      let baselineVendorModelId = "";
+      let baselineSavedModelId = "";
       let modelOn = false;
-      if (def.model) {
-        try {
-          const parsed = parseApplicationModelId(def.model);
-          modelOn = true;
-          setModelEnabled(true);
-          setProviderId(parsed.providerId);
-          baselineProviderId = parsed.providerId;
-          baselineVendorModelId = parsed.vendorModelId;
-          setVendorModelId(parsed.vendorModelId);
-          await loadSavedModels(parsed.providerId);
-        } catch {
-          setModelEnabled(false);
-        }
+      const resolved = await resolveSavedModelPin(def.model, providerRows);
+      modelOn = resolved.modelOn;
+      if (modelOn) {
+        setModelEnabled(true);
+        setProviderId(resolved.providerId);
+        baselineProviderId = resolved.providerId;
+        baselineSavedModelId = resolved.savedModelId;
+        setSavedModelId(resolved.savedModelId);
+        await loadSavedModels(resolved.providerId);
       } else {
         setModelEnabled(false);
         if (providerRows.length > 0) {
@@ -255,7 +266,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           maxSteps: String(def.runtime?.maxSteps ?? 20),
           modelEnabled: modelOn,
           providerId: baselineProviderId,
-          vendorModelId: baselineVendorModelId,
+          vendorModelId: baselineSavedModelId,
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
@@ -265,7 +276,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     } finally {
       setLoading(false);
     }
-  }, [agentId, loadSavedModels]);
+  }, [agentId, loadSavedModels, resolveSavedModelPin]);
 
   useEffect(() => {
     void loadAgent();
@@ -358,18 +369,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     );
   }
 
-  const preferredModelId =
-    modelEnabled && providerId && vendorModelId
-      ? formatApplicationModelId(providerId, vendorModelId)
-      : undefined;
+  const modelHint =
+    savedModels.find((m) => m.id === savedModelId)?.displayName ?? savedModelId ?? "—";
 
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
       name,
       maxSteps,
-      modelEnabled,
-      providerId,
-      vendorModelId,
+      modelEnabled: false,
+      providerId: "",
+      vendorModelId: "",
       toolsMode,
       toolsSelected,
       systemEnabled,
@@ -383,11 +392,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       showToast(built.message);
       return;
     }
+    const definition: AgentDefinition = { ...built.definition };
+    if (modelEnabled && savedModelId) {
+      definition.model = savedModelId;
+    } else {
+      delete definition.model;
+    }
     setSaving(true);
     try {
       const saveRes = await ipcAgentRegistryUpsert({
         agentId,
-        definition: built.definition,
+        definition,
       });
       if (saveRes.ok) {
         setSavedBaseline(snapshot);
@@ -491,15 +506,16 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     setProviderId(pid);
     const res = await ipcProviderModelsSavedList({ providerId: pid });
     if (res.ok && res.data.length > 0) {
-      setVendorModelId(res.data[0]!.vendorModelId);
+      setSavedModelId(res.data[0]!.id);
       setSavedModels(
         res.data.map((m) => ({
+          id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
         })),
       );
     } else {
-      setVendorModelId("");
+      setSavedModelId("");
       setSavedModels([]);
     }
   };
@@ -598,18 +614,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               </SettingsField>
               <SettingsField label="模型">
                 <select
-                  value={vendorModelId}
-                  onChange={(e) => setVendorModelId(e.target.value)}
+                  value={savedModelId}
+                  onChange={(e) => setSavedModelId(e.target.value)}
                   disabled={!providerId}
                 >
                   {savedModels.map((m) => (
-                    <option key={m.vendorModelId} value={m.vendorModelId}>
+                    <option key={m.id} value={m.id}>
                       {m.displayName}
                     </option>
                   ))}
                 </select>
               </SettingsField>
-              <p className="settings-hint">model: {preferredModelId ?? "—"}</p>
+              <p className="settings-hint">model: {modelHint}</p>
             </>
           )}
         </SettingsSection>

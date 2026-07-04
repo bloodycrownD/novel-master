@@ -45,6 +45,7 @@ export default defineConfig({
     alias: {
       "@shared": path.resolve(__dirname, "shared"),
       "@assets": path.resolve(__dirname, "../../assets"),
+      "node:crypto": path.resolve(__dirname, "renderer/shims/node-crypto.ts"),
     },
   },
   plugins: [rendererScopedAtAlias(), react()],

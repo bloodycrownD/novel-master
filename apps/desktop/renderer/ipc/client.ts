@@ -535,8 +535,15 @@ export async function ipcProviderModelsDeleteSaved(req: unknown) {
   return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, req);
 }
 
-export async function ipcProviderModelsGetSaved(req: { applicationModelId: string }) {
+export async function ipcProviderModelsGetSaved(req: { savedModelId: string }) {
   return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, req);
+}
+
+export async function ipcProviderModelsEditSaved(req: {
+  savedModelId: string;
+  modelName?: string;
+}) {
+  return bridge().invoke(IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED, req);
 }
 
 export async function ipcProviderModelsUpdateSettings(req: unknown) {

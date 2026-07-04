@@ -39,6 +39,7 @@ import {
   ipcEventsImportYaml,
   ipcEventsSetConfig,
   ipcProviderModelsDeleteSaved,
+  ipcProviderModelsEditSaved,
   ipcProviderModelsSavedList,
   ipcProviderModelsSave,
   ipcProvidersCreate,
@@ -1144,14 +1145,20 @@ export function ProviderFormView({
 export function ProviderDetailView({ nav }: { nav: Nav }) {
   const batch = useBatchSelection();
   const providerId = nav.navState.editingProviderId;
-  const [models, setModels] = useState<Array<{ vendorModelId: string; displayName: string; applicationModelId: string }>>([]);
+  const [models, setModels] = useState<
+    Array<{ id: string; vendorModelId: string; modelName: string; displayName: string }>
+  >([]);
   const [modelMenu, setModelMenu] = useState<{
-    vendorModelId: string;
+    savedModelId: string;
     x: number;
     y: number;
   } | null>(null);
+  const [renamePrompt, setRenamePrompt] = useState<{
+    savedModelId: string;
+    initialName: string;
+  } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<
-    | { kind: "single"; vendorModelId: string; label: string }
+    | { kind: "single"; savedModelId: string; label: string }
     | { kind: "batch"; count: number }
     | null
   >(null);
@@ -1170,9 +1177,9 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
 
   if (!providerId) return <p className="settings-hint">缺少 providerId</p>;
 
-  const deleteModels = async (vendorModelIds: readonly string[]) => {
-    for (const vendorModelId of vendorModelIds) {
-      const res = await ipcProviderModelsDeleteSaved({ providerId, vendorModelId });
+  const deleteModels = async (savedModelIds: readonly string[]) => {
+    for (const savedModelId of savedModelIds) {
+      const res = await ipcProviderModelsDeleteSaved({ savedModelId, providerId });
       if (!res.ok) {
         toastSettingsError(res.error.message);
         return;
@@ -1180,17 +1187,39 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     }
     batch.exit();
     toastSettingsSuccess(
-      vendorModelIds.length > 1
-        ? `已删除 ${vendorModelIds.length} 个模型`
+      savedModelIds.length > 1
+        ? `已删除 ${savedModelIds.length} 个模型`
         : "已删除模型",
     );
     await reload();
   };
 
-  const openModelEditor = (vendorModelId: string, applicationModelId: string) => {
-    nav.navState.editingVendorModelId = vendorModelId;
-    nav.navState.editingApplicationModelId = applicationModelId;
+  const openModelEditor = (savedModelId: string) => {
+    nav.navState.editingSavedModelId = savedModelId;
     nav.push("modelSampling");
+  };
+
+  const handleRename = async (name: string) => {
+    const target = renamePrompt;
+    setRenamePrompt(null);
+    if (!target) {
+      return;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toastSettingsError("模型名称不能为空");
+      return;
+    }
+    const res = await ipcProviderModelsEditSaved({
+      savedModelId: target.savedModelId,
+      modelName: trimmed,
+    });
+    if (!res.ok) {
+      toastSettingsError(res.error.message);
+      return;
+    }
+    toastSettingsSuccess("已更新模型名称");
+    await reload();
   };
 
   const handleModelMenuSelect = (action: string) => {
@@ -1199,28 +1228,35 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     if (!menu) {
       return;
     }
-    const model = models.find((m) => m.vendorModelId === menu.vendorModelId);
+    const model = models.find((m) => m.id === menu.savedModelId);
     if (!model) {
       return;
     }
     if (action === "edit") {
-      openModelEditor(model.vendorModelId, model.applicationModelId);
+      openModelEditor(model.id);
+      return;
+    }
+    if (action === "rename") {
+      setRenamePrompt({
+        savedModelId: model.id,
+        initialName: model.modelName,
+      });
       return;
     }
     if (action === "delete") {
       setDeleteConfirm({
         kind: "single",
-        vendorModelId: model.vendorModelId,
+        savedModelId: model.id,
         label: model.displayName || model.vendorModelId,
       });
     }
   };
 
-  const handleAddModel = async (vendorModelId: string, displayName?: string) => {
+  const handleAddModel = async (vendorModelId: string, modelName?: string) => {
     const res = await ipcProviderModelsSave({
       providerId,
       vendorModelId,
-      displayName,
+      modelName,
     });
     if (!res.ok) {
       toastSettingsError(res.error.message);
@@ -1229,6 +1265,11 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
     showToast("已添加模型");
     await reload();
   };
+
+  const duplicateVendorCount = models.reduce<Record<string, number>>((acc, m) => {
+    acc[m.vendorModelId] = (acc[m.vendorModelId] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <SettingsPanel>
@@ -1270,17 +1311,23 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
       >
         {models.map((m) => (
           <SettingsListItem
-            key={m.vendorModelId}
+            key={m.id}
             title={m.displayName || m.vendorModelId}
-            meta={m.applicationModelId}
+            meta={
+              duplicateVendorCount[m.vendorModelId]! > 1
+                ? m.vendorModelId
+                : m.modelName !== m.vendorModelId
+                  ? m.vendorModelId
+                  : undefined
+            }
             batchMode={batch.active}
-            selected={batch.isSelected(m.vendorModelId)}
-            onToggleSelect={() => batch.toggle(m.vendorModelId)}
-            onClick={() => openModelEditor(m.vendorModelId, m.applicationModelId)}
+            selected={batch.isSelected(m.id)}
+            onToggleSelect={() => batch.toggle(m.id)}
+            onClick={() => openModelEditor(m.id)}
             onMenu={(e) => {
               const rect = e.currentTarget.getBoundingClientRect();
               setModelMenu({
-                vendorModelId: m.vendorModelId,
+                savedModelId: m.id,
                 x: Math.max(8, rect.left),
                 y: Math.max(8, rect.bottom + 4),
               });
@@ -1310,10 +1357,18 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
         y={modelMenu?.y ?? 0}
         items={[
           { label: "编辑", action: "edit" },
+          { label: "重命名", action: "rename" },
           { label: "删除", action: "delete", danger: true },
         ]}
         onSelect={(action) => handleModelMenuSelect(action)}
         onClose={() => setModelMenu(null)}
+      />
+      <TextPromptModal
+        open={renamePrompt != null}
+        title="重命名模型"
+        initialValue={renamePrompt?.initialName ?? ""}
+        onClose={() => setRenamePrompt(null)}
+        onConfirm={handleRename}
       />
       <ConfirmModal
         open={deleteConfirm != null}
@@ -1334,7 +1389,7 @@ export function ProviderDetailView({ nav }: { nav: Nav }) {
             void deleteModels([...batch.selectedIds]);
             return;
           }
-          void deleteModels([target.vendorModelId]);
+          void deleteModels([target.savedModelId]);
         }}
         onCancel={() => setDeleteConfirm(null)}
       />

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  parseApplicationModelId,
   THINKING_LEVEL_SELECT_OPTIONS,
   TOKEN_COUNTER_MODE_SELECT_OPTIONS,
   type LlmProtocolKind,
@@ -12,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
+  ipcProviderModelsEditSaved,
   ipcProviderModelsGetSaved,
   ipcProviderModelsResetContextWindow,
   ipcProviderModelsUpdateSettings,
@@ -64,7 +64,10 @@ function paramsEmpty(params: ModelSamplingParams | undefined): boolean {
 }
 
 export function ModelSamplingView({ nav }: { nav: Nav }) {
-  const applicationModelId = nav.navState.editingApplicationModelId;
+  const savedModelId = nav.navState.editingSavedModelId;
+  const [modelName, setModelName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [vendorModelId, setVendorModelId] = useState("");
   const [protocol, setProtocol] = useState<LlmProtocolKind>("openai");
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
   const [contextWindowTokens, setContextWindowTokens] = useState("");
@@ -72,26 +75,30 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("off");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!applicationModelId) {
+    if (!savedModelId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const { providerId } = parseApplicationModelId(applicationModelId);
-      const providerRes = await ipcProvidersGet({ providerId });
-      if (providerRes.ok && providerRes.data) {
-        setProtocol(providerRes.data.protocol as LlmProtocolKind);
-      }
-      const savedRes = await ipcProviderModelsGetSaved({ applicationModelId });
+      const savedRes = await ipcProviderModelsGetSaved({ savedModelId });
       if (!savedRes.ok || !savedRes.data) {
         return;
       }
-      const saved = savedRes.data as { settings: SavedModelSettingsV2 };
-      const { internal, generation } = saved.settings;
+      const saved = savedRes.data;
+      setModelName(saved.modelName);
+      setDisplayName(saved.displayName);
+      setVendorModelId(saved.vendorModelId);
+      const providerRes = await ipcProvidersGet({ providerId: saved.providerId });
+      if (providerRes.ok && providerRes.data) {
+        setProtocol(providerRes.data.protocol as LlmProtocolKind);
+      }
+      const { settings } = saved as { settings: SavedModelSettingsV2 };
+      const { internal, generation } = settings;
       setContextWindowTokens(String(internal.contextWindowTokens));
       setTokenCounterMode(internal.tokenCounterMode);
       const stored =
@@ -103,18 +110,41 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
     } finally {
       setLoading(false);
     }
-  }, [applicationModelId]);
+  }, [savedModelId]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  if (!applicationModelId) {
+  if (!savedModelId) {
     return <p className="settings-hint">缺少模型</p>;
   }
 
+  const saveModelName = async () => {
+    const trimmed = modelName.trim();
+    if (!trimmed) {
+      toastSettingsError("模型名称不能为空");
+      return;
+    }
+    setRenaming(true);
+    try {
+      const res = await ipcProviderModelsEditSaved({
+        savedModelId,
+        modelName: trimmed,
+      });
+      if (!res.ok) {
+        toastSettingsError(res.error.message);
+        return;
+      }
+      setModelName(res.data.modelName);
+      setDisplayName(res.data.displayName);
+      toastSettingsSuccess("已更新模型名称");
+    } finally {
+      setRenaming(false);
+    }
+  };
+
   const save = async () => {
-    const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
     const contextWindow = Number(contextWindowTokens);
     if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
       toastSettingsError("上下文上限须为正整数");
@@ -127,8 +157,7 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
           ? { enabled: false as const }
           : { enabled: true as const, params };
       const res = await ipcProviderModelsUpdateSettings({
-        providerId,
-        vendorModelId,
+        savedModelId,
         contextWindowTokens: contextWindow,
         tokenCounterMode,
         sampling,
@@ -145,17 +174,15 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
   };
 
   const resetDefaults = async () => {
-    const { providerId, vendorModelId } = parseApplicationModelId(applicationModelId);
     setResetting(true);
     try {
-      const resetRes = await ipcProviderModelsResetContextWindow({ providerId, vendorModelId });
+      const resetRes = await ipcProviderModelsResetContextWindow({ savedModelId });
       if (!resetRes.ok) {
         toastSettingsError(resetRes.error.message);
         return;
       }
       const clearRes = await ipcProviderModelsUpdateSettings({
-        providerId,
-        vendorModelId,
+        savedModelId,
         sampling: { enabled: false },
       });
       if (!clearRes.ok) {
@@ -173,11 +200,36 @@ export function ModelSamplingView({ nav }: { nav: Nav }) {
     }
   };
 
-  const sectionHint = `${applicationModelId}\n展示协议推荐默认值；保存后以本页为准。`;
+  const sectionHint = `${displayName || savedModelId}\n厂商 ID：${vendorModelId}\n展示协议推荐默认值；保存后以本页为准。`;
 
   return (
     <SettingsPanel>
       {loading ? <p className="settings-hint">加载中…</p> : null}
+
+      <SettingsSection
+        title="模型名称"
+        desc="用于列表与选择器展示；派生 displayName 为 服务商/模型名称。"
+      >
+        <div className="settings-fields">
+          <SettingsField label="模型名称">
+            <input
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+              placeholder="默认同厂商模型 ID"
+            />
+          </SettingsField>
+          <SettingsField label="展示名称（派生）">
+            <input value={displayName} readOnly disabled />
+          </SettingsField>
+        </div>
+        <Button
+          variant="secondary"
+          disabled={renaming || loading}
+          onClick={() => void saveModelName()}
+        >
+          {renaming ? "保存中…" : "保存名称"}
+        </Button>
+      </SettingsSection>
 
       <SettingsSection
         title="内部预算"

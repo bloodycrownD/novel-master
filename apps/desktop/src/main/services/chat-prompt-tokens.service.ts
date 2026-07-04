@@ -62,12 +62,12 @@ export async function loadChatPromptTokenStats(
   );
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const applicationModelId = resolveApplicationModelId({
+  const savedModelId = resolveApplicationModelId({
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });
 
-  if (!applicationModelId) {
+  if (!savedModelId) {
     const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return buildTokenStats(count, true, "heuristic", undefined);
@@ -75,19 +75,20 @@ export async function loadChatPromptTokenStats(
 
   const tokenizerOverride = await resolveTokenCounterModeForModel(
     runtime.providerModels,
-    applicationModelId,
+    savedModelId,
   );
 
   const result = await countPromptLlmInput({
     layout,
     ctx,
-    applicationModelId,
+    savedModelId,
     registry: runtime.tokenCounters,
     tokenizerOverride,
+    savedModels: runtime.savedModelRepo,
   });
 
   const contextWindow =
-    await runtime.providerModels.getContextWindow(applicationModelId);
+    await runtime.providerModels.getContextWindow(savedModelId);
 
   return buildTokenStats(
     result.tokenCount,
@@ -107,12 +108,12 @@ async function loadChatPromptTokenStatsFallback(
   );
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const applicationModelId = resolveApplicationModelId({
+  const savedModelId = resolveApplicationModelId({
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });
 
-  if (!applicationModelId) {
+  if (!savedModelId) {
     const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return buildTokenStats(count, true, "heuristic", undefined);
@@ -121,14 +122,15 @@ async function loadChatPromptTokenStatsFallback(
   const result = await countPromptLlmInputHeuristicOnly({
     layout,
     ctx,
-    applicationModelId,
+    savedModelId,
     registry: runtime.tokenCounters,
+    savedModels: runtime.savedModelRepo,
   });
 
   let contextWindow: number | undefined;
   try {
     const cw =
-      await runtime.providerModels.getContextWindow(applicationModelId);
+      await runtime.providerModels.getContextWindow(savedModelId);
     contextWindow = cw ?? undefined;
   } catch {
     contextWindow = undefined;

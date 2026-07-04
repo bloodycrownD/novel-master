@@ -87,7 +87,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   });
 
   const providerBundle = createProviderServices(conn, secretStore);
-  const tokenCounters = createDefaultTokenCounterRegistry({});
+  const tokenCounters = createDefaultTokenCounterRegistry({
+    savedModels: providerBundle.savedModelRepo,
+  });
 
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
@@ -117,6 +119,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
+      savedModels: providerBundle.savedModelRepo,
       worktreeSnapshot,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
@@ -166,6 +169,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
+    savedModelRepo: providerBundle.savedModelRepo,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
     userVfsTurn,

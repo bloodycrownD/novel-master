@@ -6,6 +6,7 @@ import {
   resolveAgentForProject,
   resolveApplicationModelId,
 } from "@novel-master/core/agent";
+import { savedModelDisplayName } from "@novel-master/core/provider";
 import { PROJECT_AGENT_META_DISPLAY_LABEL } from "@novel-master/core/chat";
 import type {
   IpcResult,
@@ -66,13 +67,14 @@ export async function handlePromptAgentMeta(
       const resolved = await resolveAgentForProject(rt, req.projectId);
       const { definition } = resolved;
       const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
-      const applicationModelId = resolveApplicationModelId({
+      const savedModelId = resolveApplicationModelId({
         agentModelId: definition.model,
         workspaceModelId: workspaceModelId || undefined,
       });
       let modelLabel = "未选择模型";
-      if (applicationModelId) {
-        modelLabel = applicationModelId;
+      if (savedModelId) {
+        const saved = await rt.providerModels.getSavedById(savedModelId);
+        modelLabel = saved != null ? savedModelDisplayName(saved) : savedModelId;
       }
       const hasDedicatedModel =
         definition.model != null && definition.model !== "";

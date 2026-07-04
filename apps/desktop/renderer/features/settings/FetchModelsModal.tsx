@@ -98,7 +98,7 @@ export function FetchModelsModal({
         const res = await ipcProviderModelsSave({
           providerId,
           vendorModelId: row.vendorModelId,
-          displayName: row.displayName !== row.vendorModelId ? row.displayName : undefined,
+          modelName: row.displayName !== row.vendorModelId ? row.displayName : undefined,
         });
         if (!res.ok) {
           onError?.(res.error.message);

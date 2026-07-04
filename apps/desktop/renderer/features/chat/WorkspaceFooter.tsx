@@ -43,7 +43,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
   const [agentPickerOpen, setAgentPickerOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [agentRows, setAgentRows] = useState<Array<{ agentId: string; label: string }>>([]);
-  const [modelRows, setModelRows] = useState<Array<{ applicationModelId: string; label: string }>>([]);
+  const [modelRows, setModelRows] = useState<Array<{ savedModelId: string; label: string }>>([]);
 
   const reload = useCallback(async () => {
     const [meta, tokens] = await Promise.all([
@@ -187,10 +187,10 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
       <PickerModal
         open={modelPickerOpen}
         title={`选择模型（当前：${modelLabel}）`}
-        rows={modelRows.map((r) => ({ id: r.applicationModelId, label: r.label }))}
+        rows={modelRows.map((r) => ({ id: r.savedModelId, label: r.label }))}
         onClose={() => setModelPickerOpen(false)}
-        onSelect={(applicationModelId) => {
-          void ipcModelSetCurrent({ applicationModelId }).then(() => {
+        onSelect={(savedModelId) => {
+          void ipcModelSetCurrent({ savedModelId }).then(() => {
             void reload();
             notifyAgentConfigChanged();
           });

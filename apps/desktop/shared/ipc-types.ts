@@ -102,6 +102,7 @@ export const IPC_CHANNELS = {
   PROVIDER_MODELS_UPDATE_SETTINGS: "nm:providerModels/updateSettings",
   PROVIDER_MODELS_RESET_CONTEXT_WINDOW:
     "nm:providerModels/resetContextWindow",
+  PROVIDER_MODELS_EDIT_SAVED: "nm:providerModels/editSaved",
 
   AGENT_REGISTRY_LIST: "nm:agentRegistry/list",
   AGENT_REGISTRY_GET: "nm:agentRegistry/get",
@@ -542,7 +543,7 @@ export type AgentSetCurrentRequest = {
 };
 
 export type ModelPickerRowDto = {
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
   readonly label: string;
 };
 
@@ -552,7 +553,7 @@ export type ModelListPickerResponse = {
 };
 
 export type ModelSetCurrentRequest = {
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
 };
 
 export type PromptScopeRequest = {
@@ -654,9 +655,28 @@ export type ProviderIdRequest = {
 };
 
 export type ProviderModelSavedDto = {
+  readonly id: string;
+  readonly vendorModelId: string;
+  readonly modelName: string;
+  /** handler 派生：provider/modelName */
+  readonly displayName: string;
+};
+
+export type ProviderModelSuggestionDto = {
   readonly vendorModelId: string;
   readonly displayName: string;
-  readonly applicationModelId: string;
+  readonly stale: boolean;
+};
+
+export type ProviderModelSavedDetailDto = {
+  readonly id: string;
+  readonly providerId: string;
+  readonly vendorModelId: string;
+  readonly modelName: string;
+  readonly displayName: string;
+  readonly settings: unknown;
+  readonly createdAtMs: number;
+  readonly updatedAtMs: number;
 };
 
 export type ProviderModelsSavedListRequest = ProviderIdRequest;
@@ -665,27 +685,33 @@ export type ProviderModelsFetchRequest = ProviderIdRequest;
 
 export type ProviderModelsSaveRequest = ProviderIdRequest & {
   readonly vendorModelId: string;
-  readonly displayName?: string;
+  readonly modelName?: string;
 };
 
-export type ProviderModelsDeleteSavedRequest = ProviderIdRequest & {
-  readonly vendorModelId: string;
+export type ProviderModelsDeleteSavedRequest = {
+  readonly savedModelId: string;
+  readonly providerId?: string;
 };
 
 export type ProviderModelsGetSavedRequest = {
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
 };
 
-export type ProviderModelsUpdateSettingsRequest = ProviderIdRequest & {
-  readonly vendorModelId: string;
+export type ProviderModelsEditSavedRequest = {
+  readonly savedModelId: string;
+  readonly modelName?: string;
+};
+
+export type ProviderModelsUpdateSettingsRequest = {
+  readonly savedModelId: string;
   readonly contextWindowTokens?: number;
   readonly tokenCounterMode?: string;
   readonly sampling?: unknown;
   readonly thinkingLevel?: "off" | "low" | "medium" | "high";
 };
 
-export type ProviderModelsResetContextWindowRequest = ProviderIdRequest & {
-  readonly vendorModelId: string;
+export type ProviderModelsResetContextWindowRequest = {
+  readonly savedModelId: string;
 };
 
 /** 存储配置失效摘要（列表/编辑 assess 结果）。 */

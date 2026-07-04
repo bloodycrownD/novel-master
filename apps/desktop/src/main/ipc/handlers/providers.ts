@@ -97,8 +97,11 @@ export async function handleProvidersDelete(
       await rt.state.resetCurrentProviderId();
     }
     const currentModelId = await rt.state.getCurrentModelId();
-    if (currentModelId?.startsWith(`${req.providerId}/`)) {
-      await rt.state.resetCurrentModelId();
+    if (currentModelId != null && currentModelId !== "") {
+      const saved = await rt.providerModels.getSavedById(currentModelId);
+      if (saved?.providerId === req.providerId) {
+        await rt.state.resetCurrentModelId();
+      }
     }
     return { ok: true, data: undefined };
   } catch (err) {

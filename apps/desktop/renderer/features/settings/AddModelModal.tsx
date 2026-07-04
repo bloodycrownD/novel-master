@@ -4,18 +4,18 @@ import { handleSingleLineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts"
 type AddModelModalProps = {
   open: boolean;
   onClose: () => void;
-  onConfirm: (vendorModelId: string, displayName?: string) => void | Promise<void>;
+  onConfirm: (vendorModelId: string, modelName?: string) => void | Promise<void>;
 };
 
 export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) {
   const [vendorModelId, setVendorModelId] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [modelName, setModelName] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setVendorModelId("");
-      setDisplayName("");
+      setModelName("");
     }
   }, [open]);
 
@@ -32,7 +32,7 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
     }
     setSaving(true);
     try {
-      const label = displayName.trim() || undefined;
+      const label = modelName.trim() || undefined;
       await onConfirm(vendor, label);
       onClose();
     } finally {
@@ -68,12 +68,12 @@ export function AddModelModal({ open, onClose, onConfirm }: AddModelModalProps) 
             });
           }}
         />
-        <p className="text-prompt-modal__label">显示名称（可选）</p>
+        <p className="text-prompt-modal__label">模型名称（可选）</p>
         <input
           className="text-prompt-modal__input"
           type="text"
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
+          value={modelName}
+          onChange={(e) => setModelName(e.target.value)}
           placeholder="留空则使用厂商 ID"
           onKeyDown={(e) => {
             handleSingleLineSubmitKeyDown(e, () => {

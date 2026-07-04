@@ -86,8 +86,7 @@ export interface SettingsNavState {
   /** Agent 编辑页顶栏展示用名称（非 agentId） */
   editingAgentDisplayName?: string;
   readonly editingProviderId?: string;
-  readonly editingVendorModelId?: string;
-  readonly editingApplicationModelId?: string;
+  readonly editingSavedModelId?: string;
   readonly editingRegexGroupId?: string;
   readonly editingRegexRuleId?: string;
 }

@@ -66,6 +66,7 @@ import {
 } from "./handlers/preferences.js";
 import {
   handleProviderModelsDeleteSaved,
+  handleProviderModelsEditSaved,
   handleProviderModelsFetch,
   handleProviderModelsGetSaved,
   handleProviderModelsResetContextWindow,
@@ -365,6 +366,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW,
     (_event, req) => handleProviderModelsResetContextWindow(req),
+  );
+  ipcMain.handle(IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED, (_event, req) =>
+    handleProviderModelsEditSaved(req),
   );
 
   ipcMain.handle(IPC_CHANNELS.AGENT_REGISTRY_LIST, () =>

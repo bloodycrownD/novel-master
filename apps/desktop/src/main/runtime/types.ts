@@ -31,6 +31,7 @@ import type {
   ModelRequestService,
   ProviderModelService,
   ProviderService,
+  ProviderServiceBundle,
   TokenCounterRegistry,
 } from "@novel-master/core/provider";
 import type { MessageCheckpointService } from "@novel-master/core/message-checkpoint";
@@ -70,6 +71,7 @@ export interface DesktopNovelMasterRuntime {
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
+  readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
   readonly modelRequests: ModelRequestService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;

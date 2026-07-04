@@ -5,7 +5,7 @@
  */
 import { resolveApplicationModelId } from "@novel-master/core/agent";
 
-import { formatApplicationModelId } from "@novel-master/core/provider";
+import { savedModelDisplayName } from "@novel-master/core/provider";
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
@@ -26,7 +26,7 @@ import {
   AgentRunError,
   resolveCurrentAgentDefinition,
   resolveCurrentAgentId,
-  resolveDesktopApplicationModelId,
+  resolveDesktopSavedModelId,
   runAgentTurn,
 } from "../../services/agent-run.service.js";
 import {
@@ -47,10 +47,14 @@ function formatError(err: unknown): { code: string; message: string } {
 }
 
 async function resolveModelLabel(
-  _rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
-  applicationModelId: string,
+  rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
+  savedModelId: string,
 ): Promise<string> {
-  return applicationModelId;
+  const saved = await rt.providerModels.getSavedById(savedModelId);
+  if (saved == null) {
+    return savedModelId;
+  }
+  return savedModelDisplayName(saved);
 }
 
 export async function handleAgentResolveCurrent(): Promise<
@@ -74,13 +78,13 @@ export async function handleAgentResolveCurrent(): Promise<
     const hasDedicatedModel =
       definition.model != null && definition.model !== "";
     const workspaceModelId = (await rt.state.getCurrentModelId()) ?? "";
-    const applicationModelId = resolveApplicationModelId({
+    const savedModelId = resolveApplicationModelId({
       agentModelId: definition.model,
       workspaceModelId: workspaceModelId || undefined,
     });
     let modelLabel = "未选择模型";
-    if (applicationModelId) {
-      modelLabel = await resolveModelLabel(rt, applicationModelId);
+    if (savedModelId) {
+      modelLabel = await resolveModelLabel(rt, savedModelId);
     }
     return {
       ok: true,
@@ -143,17 +147,14 @@ export async function handleModelListPicker(): Promise<
     for (const provider of providers) {
       const saved = await rt.providerModels.savedList(provider.id);
       for (const model of saved) {
-        const applicationModelId = formatApplicationModelId(
-          provider.id,
-          model.vendorModelId,
-        );
-        let label = applicationModelId;
+        const savedModelId = model.id;
+        let label = savedModelDisplayName(model);
         try {
-          label = await resolveModelLabel(rt, applicationModelId);
+          label = await resolveModelLabel(rt, savedModelId);
         } catch {
-          /* keep id */
+          /* keep derived label */
         }
-        rows.push({ applicationModelId, label });
+        rows.push({ savedModelId, label });
       }
     }
     rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
@@ -168,7 +169,7 @@ export async function handleModelSetCurrent(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.state.setCurrentModelId(req.applicationModelId);
+    await rt.state.setCurrentModelId(req.savedModelId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };
@@ -238,7 +239,7 @@ export async function handleAgentRun(
 
   try {
     const rt = await getDesktopRuntime();
-    await resolveDesktopApplicationModelId(
+    await resolveDesktopSavedModelId(
       rt,
       (await resolveCurrentAgentDefinition(rt)).definition,
     );

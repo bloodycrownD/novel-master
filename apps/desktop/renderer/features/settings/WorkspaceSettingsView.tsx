@@ -70,13 +70,13 @@ export function WorkspaceSettingsView() {
     if (modelRes.ok) {
       setModelRows(
         modelRes.data.rows.map((r) => ({
-          id: r.applicationModelId,
+          id: r.savedModelId,
           label: r.label,
         })),
       );
       setCurrentModelId(modelRes.data.currentId);
       const current = modelRes.data.rows.find(
-        (r) => r.applicationModelId === modelRes.data.currentId,
+        (r) => r.savedModelId === modelRes.data.currentId,
       );
       setModelLabel(current?.label ?? modelRes.data.currentId ?? "—");
     }
@@ -128,7 +128,7 @@ export function WorkspaceSettingsView() {
     if (kind === "model") {
       const res = await ipcModelListPicker();
       if (res.ok) {
-        setModelRows(res.data.rows.map((r) => ({ id: r.applicationModelId, label: r.label })));
+        setModelRows(res.data.rows.map((r) => ({ id: r.savedModelId, label: r.label })));
         setCurrentModelId(res.data.currentId);
       }
     } else if (kind === "agent") {
@@ -278,7 +278,7 @@ export function WorkspaceSettingsView() {
         onSelect={async (id) => {
           setPicker(null);
           if (!id) return;
-          await ipcModelSetCurrent({ applicationModelId: id });
+          await ipcModelSetCurrent({ savedModelId: id });
           await refresh();
           notifyAgentConfigChanged();
         }}

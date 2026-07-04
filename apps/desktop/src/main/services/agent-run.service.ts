@@ -5,7 +5,6 @@
  */
 import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
 
-import { parseApplicationModelId } from "@novel-master/core/provider";
 import {
   desktopLog,
   desktopLogError,
@@ -39,10 +38,10 @@ export async function resolveCurrentAgentDefinition(
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-export async function resolveDesktopApplicationModelId(
+export async function resolveDesktopSavedModelId(
   runtime: DesktopNovelMasterRuntime,
   definition: AgentDefinition,
-): Promise<{ applicationModelId: string; workspaceModelId: string }> {
+): Promise<{ savedModelId: string; workspaceModelId: string }> {
   return mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition),
   );
@@ -65,9 +64,9 @@ export async function runAgentTurn(
       if (!isDesktopLlmDebug()) {
         return;
       }
-      const { providerId, vendorModelId } = parseApplicationModelId(
-        ctx.applicationModelId,
-      );
+      const saved = await runtime.providerModels.getSavedById(ctx.savedModelId);
+      const providerId = saved?.providerId ?? "unknown";
+      const vendorModelId = saved?.vendorModelId ?? ctx.savedModelId;
       try {
         const provider = await runtime.providers.get(providerId);
         desktopLog("agent-run start", {
@@ -77,13 +76,13 @@ export async function runAgentTurn(
           protocol: provider.protocol,
           baseUrl: provider.baseUrl,
           vendorModelId,
-          applicationModelId: ctx.applicationModelId,
+          savedModelId: ctx.savedModelId,
           stream: ctx.stream,
         });
       } catch (lookupError) {
         desktopLogWarn("agent-run provider lookup failed", {
           providerId,
-          applicationModelId: ctx.applicationModelId,
+          savedModelId: ctx.savedModelId,
           err:
             lookupError instanceof Error
               ? lookupError.message
@@ -104,7 +103,7 @@ export async function runAgentTurn(
         stage: ctx.stage,
         sessionId: ctx.scope.sessionId,
         projectId: ctx.scope.projectId,
-        applicationModelId: ctx.applicationModelId,
+        savedModelId: ctx.savedModelId,
         stream: ctx.stream,
         err,
       });

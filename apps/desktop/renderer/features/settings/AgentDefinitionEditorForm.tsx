@@ -31,12 +31,10 @@ import {
   createDefaultPersistTextBlock,
   definitionToForm,
   deletePersistTextBlock,
-  formatApplicationModelId,
   formSnapshotJson,
   hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistBlock,
-  parseApplicationModelId,
   removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   updatePersistWorktreeRole,
@@ -111,10 +109,13 @@ function applyDefinitionToFormState(
     setToolsSelected: (v: string[]) => void;
     setModelEnabled: (v: boolean) => void;
     setProviderId: (v: string) => void;
-    setVendorModelId: (v: string) => void;
+    setSavedModelId: (v: string) => void;
     setSavedBaseline: (v: string) => void;
   },
   providerRows: Array<{ id: string; label: string }>,
+  resolveSavedModelPin: (
+    modelPin: string | undefined,
+  ) => Promise<{ modelOn: boolean; providerId: string; savedModelId: string }>,
 ): void {
   const promptForm = definitionToForm(def);
   setters.setName(def.name ?? "");
@@ -131,42 +132,39 @@ function applyDefinitionToFormState(
   setters.setToolsSelected([...toolsWire.selected]);
 
   let baselineProviderId = "";
-  let baselineVendorModelId = "";
-  let modelOn = false;
-  if (def.model) {
-    try {
-      const parsed = parseApplicationModelId(def.model);
-      modelOn = true;
+  let baselineSavedModelId = "";
+  void (async () => {
+    const resolved = await resolveSavedModelPin(def.model);
+    const modelOn = resolved.modelOn;
+    if (modelOn) {
       setters.setModelEnabled(true);
-      setters.setProviderId(parsed.providerId);
-      baselineProviderId = parsed.providerId;
-      baselineVendorModelId = parsed.vendorModelId;
-      setters.setVendorModelId(parsed.vendorModelId);
-      void loadSavedModels(parsed.providerId);
-    } catch {
+      setters.setProviderId(resolved.providerId);
+      baselineProviderId = resolved.providerId;
+      baselineSavedModelId = resolved.savedModelId;
+      setters.setSavedModelId(resolved.savedModelId);
+      await loadSavedModels(resolved.providerId);
+    } else {
       setters.setModelEnabled(false);
+      if (providerRows.length > 0) {
+        setters.setProviderId(providerRows[0]!.id);
+        await loadSavedModels(providerRows[0]!.id);
+      }
     }
-  } else {
-    setters.setModelEnabled(false);
-    if (providerRows.length > 0) {
-      setters.setProviderId(providerRows[0]!.id);
-      void loadSavedModels(providerRows[0]!.id);
-    }
-  }
 
-  setters.setSavedBaseline(
-    formSnapshotJson({
-      name: def.name ?? "",
-      maxSteps: String(def.runtime?.maxSteps ?? 20),
-      modelEnabled: modelOn,
-      providerId: baselineProviderId,
-      vendorModelId: baselineVendorModelId,
-      toolsMode: toolsWire.mode,
-      toolsSelected: [...toolsWire.selected],
-      ...promptForm,
-      persist: [...promptForm.persist],
-    }),
-  );
+    setters.setSavedBaseline(
+      formSnapshotJson({
+        name: def.name ?? "",
+        maxSteps: String(def.runtime?.maxSteps ?? 20),
+        modelEnabled: modelOn,
+        providerId: baselineProviderId,
+        vendorModelId: baselineSavedModelId,
+        toolsMode: toolsWire.mode,
+        toolsSelected: [...toolsWire.selected],
+        ...promptForm,
+        persist: [...promptForm.persist],
+      }),
+    );
+  })();
 }
 
 export const AgentDefinitionEditorForm = forwardRef<
@@ -180,7 +178,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [maxSteps, setMaxSteps] = useState("20");
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState("");
-  const [vendorModelId, setVendorModelId] = useState("");
+  const [savedModelId, setSavedModelId] = useState("");
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
@@ -191,7 +189,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
   const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
   const [savedModels, setSavedModels] = useState<
-    Array<{ vendorModelId: string; displayName: string }>
+    Array<{ id: string; vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [addBlockMenu, setAddBlockMenu] = useState<{
@@ -209,7 +207,7 @@ export const AgentDefinitionEditorForm = forwardRef<
         maxSteps,
         modelEnabled,
         providerId,
-        vendorModelId,
+        vendorModelId: savedModelId,
         toolsMode,
         toolsSelected,
         systemEnabled,
@@ -224,7 +222,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       maxSteps,
       modelEnabled,
       providerId,
-      vendorModelId,
+      savedModelId,
       toolsMode,
       toolsSelected,
       systemEnabled,
@@ -236,11 +234,30 @@ export const AgentDefinitionEditorForm = forwardRef<
     ],
   );
 
+  const resolveSavedModelPin = useCallback(
+    async (modelPin: string | undefined) => {
+      if (modelPin == null || modelPin === "") {
+        return { modelOn: false, providerId: "", savedModelId: "" };
+      }
+      const providerRes = await ipcProvidersList();
+      const rows = providerRes.ok ? providerRes.data : [];
+      for (const provider of rows) {
+        const res = await ipcProviderModelsSavedList({ providerId: provider.id });
+        if (res.ok && res.data.some((m) => m.id === modelPin)) {
+          return { modelOn: true, providerId: provider.id, savedModelId: modelPin };
+        }
+      }
+      return { modelOn: false, providerId: "", savedModelId: "" };
+    },
+    [],
+  );
+
   const loadSavedModels = useCallback(async (pid: string) => {
     const res = await ipcProviderModelsSavedList({ providerId: pid });
     if (res.ok) {
       setSavedModels(
         res.data.map((m) => ({
+          id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
         })),
@@ -278,16 +295,17 @@ export const AgentDefinitionEditorForm = forwardRef<
           setToolsSelected,
           setModelEnabled,
           setProviderId,
-          setVendorModelId,
+          setSavedModelId,
           setSavedBaseline,
         },
         providerRows,
+        resolveSavedModelPin,
       );
     })();
     return () => {
       cancelled = true;
     };
-  }, [definition, resetKey, loadSavedModels]);
+  }, [definition, resetKey, loadSavedModels, resolveSavedModelPin]);
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
 
@@ -296,12 +314,12 @@ export const AgentDefinitionEditorForm = forwardRef<
   }, [dirty, onDirtyChange]);
 
   const buildDefinition = useCallback((): AgentDefinitionBuildResult => {
-    return buildAgentDefinitionFromForm({
+    const built = buildAgentDefinitionFromForm({
       name,
       maxSteps,
-      modelEnabled,
-      providerId,
-      vendorModelId,
+      modelEnabled: false,
+      providerId: "",
+      vendorModelId: "",
       toolsMode,
       toolsSelected,
       systemEnabled,
@@ -311,12 +329,21 @@ export const AgentDefinitionEditorForm = forwardRef<
       persist,
       dynamic,
     });
+    if (!built.ok) {
+      return built;
+    }
+    const next: AgentDefinition = { ...built.definition };
+    if (modelEnabled && savedModelId) {
+      next.model = savedModelId;
+    } else {
+      delete next.model;
+    }
+    return { ok: true, definition: next };
   }, [
     name,
     maxSteps,
     modelEnabled,
-    providerId,
-    vendorModelId,
+    savedModelId,
     toolsMode,
     toolsSelected,
     systemEnabled,
@@ -337,10 +364,8 @@ export const AgentDefinitionEditorForm = forwardRef<
     [buildDefinition, dirty, snapshot],
   );
 
-  const preferredModelId =
-    modelEnabled && providerId && vendorModelId
-      ? formatApplicationModelId(providerId, vendorModelId)
-      : undefined;
+  const modelHint =
+    savedModels.find((m) => m.id === savedModelId)?.displayName ?? savedModelId ?? "—";
 
   const { blocks: persistBlocks, worktree: persistWorktree } = useMemo(
     () => splitPersistBlocksForEditor(persist),
@@ -432,15 +457,16 @@ export const AgentDefinitionEditorForm = forwardRef<
     setProviderId(pid);
     const res = await ipcProviderModelsSavedList({ providerId: pid });
     if (res.ok && res.data.length > 0) {
-      setVendorModelId(res.data[0]!.vendorModelId);
+      setSavedModelId(res.data[0]!.id);
       setSavedModels(
         res.data.map((m) => ({
+          id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
         })),
       );
     } else {
-      setVendorModelId("");
+      setSavedModelId("");
       setSavedModels([]);
     }
   };
@@ -533,18 +559,18 @@ export const AgentDefinitionEditorForm = forwardRef<
             </SettingsField>
             <SettingsField label="模型">
               <select
-                value={vendorModelId}
+                value={savedModelId}
                 disabled={disabled || !providerId}
-                onChange={(e) => setVendorModelId(e.target.value)}
+                onChange={(e) => setSavedModelId(e.target.value)}
               >
                 {savedModels.map((m) => (
-                  <option key={m.vendorModelId} value={m.vendorModelId}>
+                  <option key={m.id} value={m.id}>
                     {m.displayName}
                   </option>
                 ))}
               </select>
             </SettingsField>
-            <p className="settings-hint">model: {preferredModelId ?? "—"}</p>
+            <p className="settings-hint">model: {modelHint}</p>
           </>
         )}
       </SettingsSection>
