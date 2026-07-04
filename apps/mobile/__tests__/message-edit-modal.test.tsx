@@ -210,7 +210,7 @@ describe('MessageEditModal', () => {
     expect(onConfirm).toHaveBeenCalledWith('line1\nline2');
   });
 
-  it('T6: backdrop uses column layout with top spacer for vertical centering', () => {
+  it('T6: backdrop uses symmetric spacers for vertical centering', () => {
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
@@ -223,16 +223,25 @@ describe('MessageEditModal', () => {
         />,
       );
     });
-    const spacer = tree.root.findByProps({testID: 'message-edit-top-spacer'});
-    expect(spacer).toBeTruthy();
-    expect(spacer.props.style).toEqual(
+    const topSpacer = tree.root.findByProps({testID: 'message-edit-top-spacer'});
+    const bottomSpacer = tree.root.findByProps({
+      testID: 'message-edit-bottom-spacer',
+    });
+    expect(topSpacer.props.style).toEqual(
+      expect.objectContaining({
+        flex: 1,
+        flexShrink: 0,
+        minHeight: 0,
+      }),
+    );
+    expect(bottomSpacer.props.style).toEqual(
       expect.objectContaining({
         flex: 1,
         flexShrink: 1,
         minHeight: 0,
       }),
     );
-    let backdrop: TestRenderer.ReactTestInstance | null = spacer.parent;
+    let backdrop: TestRenderer.ReactTestInstance | null = topSpacer.parent;
     while (backdrop && backdrop.type !== 'Pressable') {
       backdrop = backdrop.parent;
     }

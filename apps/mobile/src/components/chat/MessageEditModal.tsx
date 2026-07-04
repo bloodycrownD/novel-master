@@ -1,6 +1,7 @@
 /**
  * 聊天消息编辑弹窗。回车换行；仅按钮保存。
  * 多行输入对齐 ChatComposer 模式（TextInput 直挂 min/maxHeight），禁止 ScrollView 包裹。
+ * 垂直位置：上下对称 flex spacer 实现相对居中；键盘压缩窗口时 bottomSpacer 优先收缩。
  */
 import React, {useEffect, useMemo, useState} from 'react';
 import {
@@ -126,6 +127,7 @@ export function MessageEditModal({
           </Pressable>
         </View>
       </Pressable>
+      <View style={styles.bottomSpacer} testID="message-edit-bottom-spacer" />
     </Pressable>
   );
 
@@ -163,6 +165,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   topSpacer: {
+    flex: 1,
+    // 键盘压缩窗口时保留上方空白，仅收缩 bottomSpacer
+    flexShrink: 0,
+    minHeight: 0,
+  },
+  bottomSpacer: {
     flex: 1,
     flexShrink: 1,
     minHeight: 0,
