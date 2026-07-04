@@ -17,6 +17,9 @@ import {
 
 novelMasterTestFixture();
 
+const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000088";
+const PROJECT_MODEL_ID = "00000000-0000-4000-8000-000000000089";
+
 const customDefinition: AgentDefinition = {
   name: "项目专属 Agent",
   prompts: {
@@ -30,7 +33,7 @@ const customDefinition: AgentDefinition = {
     ],
     dynamic: [],
   },
-  model: "provider:custom",
+  model: PROJECT_MODEL_ID,
 };
 
 function mockUserVfsTurn(): UserVfsTurnService {
@@ -48,7 +51,7 @@ function makeRuntime(
   return {
     state: {
       getCurrentAgentId: () => ctx.state.getCurrentAgentId(),
-      getCurrentModelId: async () => "openai/gpt",
+      getCurrentModelId: async () => TEST_SAVED_MODEL_ID,
       getCurrentRegexGroupId: async () => undefined,
     },
     agentRegistry: registry,
@@ -104,13 +107,13 @@ describe("runAgentTurn project agent config", () => {
             },
             dynamic: {},
           },
-          model: "provider:global",
+          model: "00000000-0000-4000-8000-000000000087",
         },
         agentDefinitionSchema,
       ),
     );
     await ctx.state.setCurrentAgentId("global-agent");
-    await ctx.state.setCurrentModelId("openai/gpt");
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     await ctx.projects.updateAgentConfig(project.id, {

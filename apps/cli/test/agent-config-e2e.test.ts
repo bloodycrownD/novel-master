@@ -34,14 +34,6 @@ prompts:
 `;
 }
 
-function parseE2eRequestBody(stderr: string): Record<string, unknown> {
-  const prefix = "NM_LLM_E2E_BODY:";
-  const line = stderr.split(/\r?\n/).find((l) => l.includes(prefix));
-  assert.ok(line, `expected ${prefix} in stderr`);
-  const json = line!.slice(line!.indexOf(prefix) + prefix.length);
-  return JSON.parse(json) as Record<string, unknown>;
-}
-
 describe("agent config CLI", () => {
   it("E1: --agent-config without model runs after model use", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-agent-cfg-"));

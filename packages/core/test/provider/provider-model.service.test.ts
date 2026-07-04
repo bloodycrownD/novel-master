@@ -295,4 +295,27 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
       (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
     );
   });
+
+  it("chat_project.agent_config_json.model pin 引用时拒绝删除", async () => {
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create("openai", "gpt-4o");
+    const project = await ctx.projects.create(`proj-pin-${Date.now()}`);
+    await ctx.projects.updateAgentConfig(project.id, {
+      mode: "custom",
+      definition: decode(
+        {
+          schemaVersion: 1,
+          name: "project-pin",
+          prompts: { persist: {}, dynamic: {} },
+          model: saved.id,
+        },
+        agentDefinitionSchema,
+      ),
+    });
+    await assert.rejects(
+      () => bundle.providerModels.deleteSaved(saved.id),
+      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+    );
+  });
 });
