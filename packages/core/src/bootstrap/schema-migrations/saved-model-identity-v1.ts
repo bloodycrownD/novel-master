@@ -4,7 +4,7 @@
  * @module bootstrap/schema-migrations/saved-model-identity-v1
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import { deriveModelNameFromLegacy } from "@/domain/provider/logic/derive-model-name-from-legacy.js";
 import { formatApplicationModelId } from "@/domain/provider/logic/application-model-id.js";
 import { ProviderError } from "@/errors/provider-errors.js";

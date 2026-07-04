@@ -4,7 +4,7 @@
  * @module service/provider/impl/provider-model.service
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ModelSuggestion } from "@/domain/provider/model/model-suggestion.js";

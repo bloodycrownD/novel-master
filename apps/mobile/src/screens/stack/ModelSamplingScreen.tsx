@@ -33,6 +33,19 @@ import {toastMessage} from '../../errors/toast-message';
 
 type SamplingRoute = RouteProp<RootStackParamList, 'ModelSampling'>;
 
+/** 生成参数区副标题：仅当 modelName 与 vendorModelId 不同时展示双行。 */
+function buildModelSubtitle(modelName: string, vendorModelId: string): string {
+  const name = modelName.trim();
+  const vendor = vendorModelId.trim();
+  if (!name) {
+    return '';
+  }
+  if (!vendor || name === vendor) {
+    return '';
+  }
+  return `${name}\n${vendor}`;
+}
+
 function paramsEmpty(params: ModelSamplingParams | undefined): boolean {
   if (!params) {
     return true;
@@ -88,7 +101,7 @@ export function ModelSamplingScreen() {
       setModelName(saved.modelName);
       setInitialModelName(saved.modelName);
       setVendorModelId(saved.vendorModelId);
-      setModelSubtitle(`${saved.modelName}\n${saved.vendorModelId}`);
+      setModelSubtitle(buildModelSubtitle(saved.modelName, saved.vendorModelId));
       setContextWindowTokens(
         String(savedModelContextWindowTokens(saved.settings)),
       );
@@ -142,7 +155,7 @@ export function ModelSamplingScreen() {
         setInitialModelName(updated.modelName);
         setModelName(updated.modelName);
         setModelSubtitle(
-          `${updated.modelName}\n${updated.vendorModelId}`,
+          buildModelSubtitle(updated.modelName, updated.vendorModelId),
         );
       }
       const sampling =
