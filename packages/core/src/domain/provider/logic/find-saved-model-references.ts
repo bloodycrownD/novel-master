@@ -5,6 +5,7 @@
  */
 
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import type { Row } from "@/infra/tdbc/types.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import {
   queryTemplate,
@@ -16,12 +17,12 @@ import {
 
 const parser = new SqlTemplateParser();
 
-interface AgentDefinitionRow {
+interface AgentDefinitionRow extends Row {
   agent_id: string;
   prompts_json: string;
 }
 
-interface ChatProjectRow {
+interface ChatProjectRow extends Row {
   id: string;
   agent_config_json: string | null;
 }

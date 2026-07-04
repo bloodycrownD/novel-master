@@ -10,6 +10,7 @@ import { formatApplicationModelId } from "@/domain/provider/logic/application-mo
 import { ProviderError } from "@/errors/provider-errors.js";
 import { SqlTemplateParser } from "@/infra/sql-template/index.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
+import type { Row } from "@/infra/tdbc/types.js";
 import {
   executeTemplate,
   queryTemplate,
@@ -24,7 +25,7 @@ export const SAVED_MODEL_IDENTITY_V1_ID = "saved-model-identity-v1";
 
 const parser = new SqlTemplateParser();
 
-interface LegacySavedModelRow {
+interface LegacySavedModelRow extends Row {
   provider_id: string;
   vendor_model_id: string;
   display_name: string | null;
@@ -33,12 +34,12 @@ interface LegacySavedModelRow {
   updated_at_ms: number;
 }
 
-interface AgentDefinitionRow {
+interface AgentDefinitionRow extends Row {
   agent_id: string;
   prompts_json: string;
 }
 
-interface ChatProjectRow {
+interface ChatProjectRow extends Row {
   id: string;
   agent_config_json: string | null;
 }
