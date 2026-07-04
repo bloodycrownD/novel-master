@@ -4,6 +4,8 @@
  * @module service/persistent-state/impl/persistent-state.service
  */
 
+import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
+import { ProviderError } from "@/errors/provider-errors.js";
 import { isKkvError } from "@/errors/kkv-errors.js";
 import type { KkvService } from "@/service/kkv/kkv.port.js";
 import type { PersistentState } from "../persistent-state.port.js";
@@ -63,7 +65,22 @@ export class DefaultPersistentState implements PersistentState {
   }
 
   setCurrentModelId(id: string): Promise<void> {
-    return this.set(KEY_CURRENT_MODEL_ID, id);
+    const trimmed = id.trim();
+    if (trimmed.includes("/")) {
+      throw new ProviderError(
+        "INVALID_SAVED_MODEL_ID",
+        `Invalid saved model id (legacy path not accepted): ${id}`,
+        { modelId: id },
+      );
+    }
+    if (!isSavedModelUuidFormat(trimmed)) {
+      throw new ProviderError(
+        "INVALID_SAVED_MODEL_ID",
+        `Invalid saved model id (expected UUID): ${id}`,
+        { modelId: id },
+      );
+    }
+    return this.set(KEY_CURRENT_MODEL_ID, trimmed);
   }
 
   resetCurrentModelId(): Promise<void> {

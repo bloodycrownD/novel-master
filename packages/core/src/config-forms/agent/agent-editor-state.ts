@@ -8,7 +8,7 @@ import type {
 } from "@/domain/prompt/model/agent-prompt-layout.js";
 import { validateAgentPromptLayout } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
 import { PromptError } from "@/errors/prompt-errors.js";
-import { formatApplicationModelId } from "../shared/application-model-id.js";
+import { isSavedModelUuidFormat } from "@/domain/provider/logic/assert-saved-model-uuid.js";
 import {
   buildToolsPolicyFromSelection,
   toolsSelectionFromDefinition,
@@ -518,13 +518,19 @@ export function buildAgentDefinitionFromForm(
   }
   const steps = Number(input.maxSteps);
   const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
+  let modelPin: string | undefined;
+  if (input.modelEnabled && input.vendorModelId.trim()) {
+    const trimmed = input.vendorModelId.trim();
+    if (!isSavedModelUuidFormat(trimmed)) {
+      return { ok: false, message: "专属模型须为已保存模型的 UUID" };
+    }
+    modelPin = trimmed;
+  }
   const def: AgentDefinition = {
     name: input.name.trim(),
     prompts: validatedLayout,
     ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
-    ...(input.modelEnabled && input.providerId && input.vendorModelId
-      ? { model: formatApplicationModelId(input.providerId, input.vendorModelId) }
-      : {}),
+    ...(modelPin != null ? { model: modelPin } : {}),
     ...(tools != null ? { tools } : {}),
   };
   return { ok: true, definition: def };

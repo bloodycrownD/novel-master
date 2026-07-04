@@ -5,7 +5,10 @@
  */
 import { resolveApplicationModelId } from "@novel-master/core/agent";
 
-import { savedModelDisplayName } from "@novel-master/core/provider";
+import {
+  assertSavedModelUuid,
+  savedModelDisplayName,
+} from "@novel-master/core/provider";
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
@@ -169,7 +172,11 @@ export async function handleModelSetCurrent(
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await rt.state.setCurrentModelId(req.savedModelId);
+    const saved = await assertSavedModelUuid(
+      req.savedModelId,
+      rt.savedModelRepo,
+    );
+    await rt.state.setCurrentModelId(saved.id);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatError(err) };

@@ -135,6 +135,13 @@ export class DefaultProviderModelService implements ProviderModelService {
       this.deps.savedModels,
     );
     let nextModelName = existing.modelName;
+    if (modelName === null) {
+      throw new ProviderError(
+        "INVALID_MODEL_NAME",
+        "modelName must not be empty",
+        { modelId: savedModelId },
+      );
+    }
     if (modelName !== undefined) {
       const trimmed = modelName.trim();
       if (trimmed.length === 0) {
