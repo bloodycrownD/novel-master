@@ -1,5 +1,8 @@
 import { describe, it, mock } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import { decode } from "@novel-master/core";
+import { agentDefinitionSchema, createAgentRegistryService } from "@novel-master/core/agent";
 import { formatSavedModelDisplayName } from "../../src/domain/provider/logic/format-saved-model-display-name.js";
 import { savedModelDisplayName } from "../../src/domain/provider/model/saved-model.js";
 import { createProviderServices } from "../../src/service/provider/create-provider-services.js";
@@ -264,6 +267,29 @@ describe("ProviderModelService deleteSaved（T-SM8）", () => {
     const saved = await bundle.providerModels.create("openai", "gpt-4o");
     const state = createPersistentState(ctx.conn);
     await state.setCurrentModelId(saved.id);
+    await assert.rejects(
+      () => bundle.providerModels.deleteSaved(saved.id),
+      (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",
+    );
+  });
+
+  it("agent_definition.model pin 引用时拒绝删除", async () => {
+    const ctx = getNovelMasterTestContext();
+    const bundle = createProviderServices(ctx.conn, memorySecretStore());
+    const saved = await bundle.providerModels.create("openai", "gpt-4o");
+    const registry = createAgentRegistryService(ctx.conn);
+    await registry.upsert(
+      `agent-pin-${randomUUID()}`,
+      decode(
+        {
+          schemaVersion: 1,
+          name: `pin-agent-${Date.now()}`,
+          prompts: { persist: {}, dynamic: {} },
+          model: saved.id,
+        },
+        agentDefinitionSchema,
+      ),
+    );
     await assert.rejects(
       () => bundle.providerModels.deleteSaved(saved.id),
       (e) => e instanceof ProviderError && e.code === "SAVED_MODEL_IN_USE",

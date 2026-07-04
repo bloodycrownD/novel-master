@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import {
   bootstrapNovelMaster,
   dumpProviderTableSnapshot,
+  NOVEL_MASTER_SCHEMA_STATEMENTS,
   open,
   restoreProviderTableSnapshot,
   scrubProviderTables,
@@ -17,16 +18,43 @@ import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
+import { isSchemaMigrationApplied } from "../../src/bootstrap/schema-migrations/index.js";
+import { SAVED_MODEL_IDENTITY_V1_ID } from "../../src/bootstrap/schema-migrations/saved-model-identity-v1.js";
+import {
+  execLegacySavedModelTable,
+  seedLegacySavedModelRows,
+} from "../bootstrap/helpers/legacy-db-fixtures.js";
 
 const NOW_MS = 1_700_000_000_000;
 
-/** 注册 better-sqlite3 驱动并打开内存库。 */
-async function openMemoryDb(): Promise<TdbcConnection> {
+/** 注册 better-sqlite3 驱动并打开内存库（不 bootstrap）。 */
+async function openRawMemoryDb(): Promise<TdbcConnection> {
   registerBetterSqlite3Driver();
-  const conn = await open("tdbc:sqlite:file::memory:", {
+  return open("tdbc:sqlite:file::memory:", {
     driver: BETTER_SQLITE3_DRIVER_NAME,
     filename: ":memory:",
   });
+}
+
+async function tableColumnNames(
+  conn: TdbcConnection,
+  table: string,
+): Promise<Set<string>> {
+  const rows = await conn.query<{ name: string }>(
+    `SELECT name FROM pragma_table_info('${table}')`,
+  );
+  return new Set(rows.map((row) => row.name));
+}
+
+async function execBootstrapSchemaDdl(conn: TdbcConnection): Promise<void> {
+  for (const sql of NOVEL_MASTER_SCHEMA_STATEMENTS) {
+    await conn.execute(sql);
+  }
+}
+
+/** 注册 better-sqlite3 驱动并打开已 bootstrap 的内存库。 */
+async function openMemoryDb(): Promise<TdbcConnection> {
+  const conn = await openRawMemoryDb();
   await bootstrapNovelMaster(conn);
   return conn;
 }
@@ -175,6 +203,42 @@ describe("provider-table-snapshot", () => {
     } finally {
       await mainConn.close();
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("T-SM9：legacy snapshot restore 后 rebootstrap 触发 v1 path A", async () => {
+    const source = await openRawMemoryDb();
+    const target = await openRawMemoryDb();
+    try {
+      await execLegacySavedModelTable(source);
+      await seedLegacySavedModelRows(source);
+      await execBootstrapSchemaDdl(source);
+      const snapshot = await dumpProviderTableSnapshot(source);
+
+      await execLegacySavedModelTable(target);
+      await execBootstrapSchemaDdl(target);
+      await scrubProviderTables(target);
+      await restoreProviderTableSnapshot(target, snapshot);
+      await bootstrapNovelMaster(target);
+
+      const columns = await tableColumnNames(target, "llm_saved_model");
+      assert.ok(columns.has("id"));
+      assert.ok(columns.has("model_name"));
+      assert.equal(columns.has("display_name"), false);
+
+      const rows = await target.query<{ id: string; model_name: string }>(
+        `SELECT id, model_name FROM llm_saved_model ORDER BY vendor_model_id`,
+      );
+      assert.equal(rows.length, 2);
+      assert.equal(new Set(rows.map((row) => row.id)).size, 2);
+      assert.match(rows[0]!.id, /^[0-9a-f-]{36}$/i);
+      assert.equal(
+        await isSchemaMigrationApplied(target, SAVED_MODEL_IDENTITY_V1_ID),
+        true,
+      );
+    } finally {
+      await source.close();
+      await target.close();
     }
   });
 });
