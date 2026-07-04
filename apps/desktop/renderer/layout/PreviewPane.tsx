@@ -5,9 +5,27 @@ import { Button } from "../components/ui/Button";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
+import { showToast } from "../components/ui/show-toast";
+import { formatVfsErrorForUser, type VfsScope } from "@novel-master/core/vfs";
+import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
+
+function toCoreVfsScope(
+  workspaceScope: WorkspacePanelScope,
+  projectId: string,
+  sessionId: string,
+): VfsScope {
+  switch (workspaceScope) {
+    case "chat":
+      return { kind: "session", projectId, sessionId };
+    case "session":
+      return { kind: "project", projectId };
+    case "global":
+      return { kind: "global" };
+  }
+}
 
 export function PreviewPane() {
   const {
@@ -99,11 +117,23 @@ export function PreviewPane() {
         content,
         expectedVersion: version,
         versionCheck: version != null,
+        lastKnownContent: savedContent,
       });
       if (result.ok) {
         setSavedContent(content);
         await loadFile();
         notifyWorkspaceMutated();
+      } else {
+        const scope = toCoreVfsScope(
+          previewFile.workspaceScope,
+          projectId,
+          sessionId,
+        );
+        const msg = formatVfsErrorForUser(
+          { code: result.error.code, message: result.error.message },
+          scope,
+        );
+        showToast(`保存失败：${msg}`);
       }
     } finally {
       setSaving(false);

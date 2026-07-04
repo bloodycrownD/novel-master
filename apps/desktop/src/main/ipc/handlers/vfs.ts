@@ -21,7 +21,14 @@ import type {
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
 import { VfsError } from "@novel-master/core/vfs";
 
-import { buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp } from "@novel-master/core/vfs";
+import {
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+  formatVfsErrorForUser,
+  readUserVfsSaveBaseline,
+} from "@novel-master/core/vfs";
 import { BrowserWindow } from "electron";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
@@ -82,12 +89,7 @@ async function readBaselineContent(
   vfs: Awaited<ReturnType<typeof getVfsForScope>>,
   path: string,
 ): Promise<string | null> {
-  try {
-    const result = await vfs.read(path);
-    return result.content;
-  } catch {
-    return null;
-  }
+  return readUserVfsSaveBaseline(vfs, path);
 }
 
 export async function handleVfsList(
@@ -141,6 +143,15 @@ export async function handleVfsWrite(
 
     if (isSessionVfsScope(scope) && isUserVfsUnifiedToolTurnEnabled()) {
       const baseline = await readBaselineContent(vfs, req.path);
+      if (
+        req.lastKnownContent != null &&
+        baseline != null &&
+        req.lastKnownContent !== baseline
+      ) {
+        console.info("[user-vfs-turn] external_drift_detected", {
+          path: req.path,
+        });
+      }
       const op = buildUserVfsSaveOp(
         baseline,
         req.content,
