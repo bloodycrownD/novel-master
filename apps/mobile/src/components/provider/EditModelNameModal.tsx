@@ -74,7 +74,7 @@ export function EditModelNameModal({
               <Text style={{color: tokens.textSecondary}}>取消</Text>
             </Pressable>
             <Pressable
-              onPress={() => handleConfirm().catch(() => undefined)}
+              onPress={() => void handleConfirm()}
               style={styles.btn}
               disabled={saving || !modelName.trim()}>
               <Text style={{color: tokens.primary, fontWeight: '600'}}>

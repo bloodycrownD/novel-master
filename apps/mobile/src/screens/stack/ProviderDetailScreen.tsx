@@ -207,8 +207,10 @@ export function ProviderDetailScreen() {
       await runtime.providerModels.editSaved(menuSavedModelId, modelName);
       await reload();
       showToast('已重命名模型');
-    } finally {
       setMenuSavedModelId(undefined);
+    } catch (error) {
+      showToast(toastMessage('重命名失败', error));
+      throw error;
     }
   };
 
@@ -308,7 +310,6 @@ export function ProviderDetailScreen() {
         <FetchModelsSheet
           visible={fetchVisible}
           providerId={providerId}
-          savedVendorIds={rows.map(r => r.vendorModelId)}
           onClose={() => setFetchVisible(false)}
           onSaved={() => reload().catch(() => undefined)}
         />

@@ -157,7 +157,7 @@ export function AgentEditorForm(props: Props) {
         maxSteps,
         modelEnabled,
         providerId,
-        vendorModelId,
+        vendorModelId: savedModelId,
         toolsMode,
         toolsSelected,
         systemEnabled,
@@ -173,7 +173,6 @@ export function AgentEditorForm(props: Props) {
       modelEnabled,
       providerId,
       savedModelId,
-      vendorModelId,
       toolsMode,
       toolsSelected,
       systemEnabled,
@@ -270,12 +269,12 @@ export function AgentEditorForm(props: Props) {
       }
       const modelEnabledWire = Boolean(def.model);
       let baselineProviderId = '';
-      let baselineVendorModelId = '';
+      let baselineSavedModelId = '';
       if (modelEnabledWire && def.model) {
         const saved = await runtime.providerModels.getSavedById(def.model);
         if (saved) {
           baselineProviderId = saved.providerId;
-          baselineVendorModelId = saved.vendorModelId;
+          baselineSavedModelId = def.model;
         }
       }
       setSavedBaseline(
@@ -284,7 +283,7 @@ export function AgentEditorForm(props: Props) {
           maxSteps: String(def.runtime?.maxSteps ?? 20),
           modelEnabled: modelEnabledWire,
           providerId: baselineProviderId,
-          vendorModelId: baselineVendorModelId,
+          vendorModelId: baselineSavedModelId,
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
@@ -613,9 +612,18 @@ export function AgentEditorForm(props: Props) {
     value: p.id,
     label: p.label,
   }));
+  const modelNameCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const model of savedModels) {
+      counts.set(model.modelName, (counts.get(model.modelName) ?? 0) + 1);
+    }
+    return counts;
+  }, [savedModels]);
   const modelSelectOptions = savedModels.map(m => ({
     value: m.id,
     label: formatSavedModelDisplayName(m.providerId, m.modelName),
+    subtitle:
+      (modelNameCounts.get(m.modelName) ?? 0) > 1 ? m.vendorModelId : undefined,
   }));
 
   if (loading) {

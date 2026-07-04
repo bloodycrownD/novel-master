@@ -23,7 +23,6 @@ type SuggestionRow = {
 type Props = {
   visible: boolean;
   providerId: string;
-  savedVendorIds: readonly string[];
   onClose: () => void;
   onSaved: () => void;
 };
@@ -31,7 +30,6 @@ type Props = {
 export function FetchModelsSheet({
   visible,
   providerId,
-  savedVendorIds,
   onClose,
   onSaved,
 }: Props) {
@@ -43,10 +41,7 @@ export function FetchModelsSheet({
   const [savingId, setSavingId] = useState<string | undefined>();
   const [addedIds, setAddedIds] = useState<Set<string>>(() => new Set());
 
-  const savedSet = useMemo(
-    () => new Set([...savedVendorIds, ...addedIds]),
-    [savedVendorIds, addedIds],
-  );
+  const addedSet = useMemo(() => new Set(addedIds), [addedIds]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,7 +66,7 @@ export function FetchModelsSheet({
   }, [visible, load]);
 
   const saveModel = async (suggestion: SuggestionRow) => {
-    if (savedSet.has(suggestion.vendorModelId) || savingId) {
+    if (addedSet.has(suggestion.vendorModelId) || savingId) {
       return;
     }
     setSavingId(suggestion.vendorModelId);
@@ -126,7 +121,7 @@ export function FetchModelsSheet({
                 </Text>
               }
               renderItem={({item}) => {
-                const saved = savedSet.has(item.vendorModelId);
+                const saved = addedSet.has(item.vendorModelId);
                 const saving = savingId === item.vendorModelId;
                 const label = item.displayName?.trim() || item.vendorModelId;
                 return (

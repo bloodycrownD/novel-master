@@ -16,6 +16,7 @@ import {useFormOverlay} from './FormOverlayHost';
 export type SelectOption = {
   value: string;
   label: string;
+  subtitle?: string;
   disabled?: boolean;
 };
 
@@ -93,7 +94,14 @@ export function FormSelectField({
                     item.disabled && !active ? {opacity: 0.45} : null,
                   ]}
                   onPress={() => select(item.value)}>
-                  <Text style={{color: tokens.text, flex: 1}}>{item.label}</Text>
+                  <View style={styles.rowText}>
+                    <Text style={{color: tokens.text}}>{item.label}</Text>
+                    {item.subtitle ? (
+                      <Text style={{color: tokens.textSecondary, fontSize: 13}}>
+                        {item.subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
                   {active ? (
                     <Text style={{color: tokens.primary}}>✓</Text>
                   ) : null}
@@ -193,6 +201,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
+  rowText: {flex: 1, gap: 2},
   cancelWrap: {
     borderTopWidth: StyleSheet.hairlineWidth,
   },
