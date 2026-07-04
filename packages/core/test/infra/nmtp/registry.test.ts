@@ -17,7 +17,7 @@ function stubDriver(name: string): TokenizerDriver {
         tokenCount: 0,
         counterKind: "heuristic",
         estimated: true,
-        applicationModelId: "openai/gpt-4o",
+        savedModelId: "openai/gpt-4o",
         vendorModelId: "gpt-4o",
         tokenizerFamily: "tiktoken",
       };

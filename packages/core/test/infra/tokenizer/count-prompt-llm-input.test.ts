@@ -12,7 +12,7 @@ import { emptyRegistryDeps } from "./registry-test-helpers.js";
 const minimalParams = {
   layout: { persist: [], dynamic: [] },
   ctx: { worktreeDisplay: "", messages: [] },
-  applicationModelId: "openai/gpt-4o",
+  savedModelId: "openai/gpt-4o",
   registry: createDefaultTokenCounterRegistry(emptyRegistryDeps()),
 } as const;
 

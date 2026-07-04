@@ -16,6 +16,7 @@ import { type LlmChatResult, type ModelRequestService } from "@novel-master/core
 import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
+import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 function minimalDefinition(): AgentDefinition {
@@ -30,9 +31,11 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+    Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
+    savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
     worktreeSnapshot: createSessionWorktreeSnapshotStore(),
@@ -49,7 +52,7 @@ function runnerDeps(
 const defaultRunScope = {
   sessionId: MOCK_SESSION_ID,
   projectId: MOCK_PROJECT_ID,
-  applicationModelId: RUN_MODEL_ID,
+  savedModelId: RUN_MODEL_ID,
   workspaceModelId: RUN_MODEL_ID,
 };
 
@@ -697,7 +700,7 @@ describe("AgentRunner", () => {
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 
@@ -773,7 +776,7 @@ describe("AgentRunner", () => {
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 
@@ -838,7 +841,7 @@ describe("AgentRunner", () => {
       definition: minimalDefinition(),
       sessionId: session.id,
       projectId: project.id,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 

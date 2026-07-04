@@ -50,15 +50,15 @@ describe("ModelRequestService saved model sampling", () => {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
       await secrets.set("provider/openai/apiKey", "sk-test");
-      await bundle.providerModels.create("openai", "profile-merge");
-      await bundle.providerModels.updateSettings("openai", "profile-merge", {
+      const saved = await bundle.providerModels.create("openai", "profile-merge");
+      await bundle.providerModels.updateSettings(saved.id, {
         sampling: {
           enabled: true,
           params: { protocol: "openai", openai: { temperature: 0.25 } },
         },
       });
 
-      await bundle.modelRequests.request("openai/profile-merge", "hi", {
+      await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
       });
       assert.equal(capturedBody?.temperature, 0.25);
@@ -86,8 +86,8 @@ describe("ModelRequestService saved model sampling", () => {
       const secrets = memorySecretStore();
       const bundle = createProviderServices(ctx.conn, secrets);
       await secrets.set("provider/openai/apiKey", "sk-test");
-      await bundle.providerModels.create("openai", "no-profile");
-      await bundle.modelRequests.request("openai/no-profile", "hi", {
+      const saved = await bundle.providerModels.create("openai", "no-profile");
+      await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
       });
       assert.equal(capturedBody?.temperature, undefined);
@@ -128,9 +128,9 @@ describe("ModelRequestService saved model sampling", () => {
         jitterRatio: 0,
       });
       await secrets.set("provider/openai/apiKey", "sk-test");
-      await bundle.providerModels.create("openai", "retry-policy");
+      const saved = await bundle.providerModels.create("openai", "retry-policy");
 
-      const out = await bundle.modelRequests.request("openai/retry-policy", "hi", {
+      const out = await bundle.modelRequests.request(saved.id, "hi", {
         system: "test",
       });
       assert.equal(out.assistantText, "ok");

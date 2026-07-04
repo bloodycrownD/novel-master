@@ -21,6 +21,8 @@ const noRetryPolicies: ModelRetryPolicyService = {
   clearPolicy: async () => undefined,
 };
 
+const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
+
 function createService(
   settings: SavedModelSettings,
   protocol: "openai" | "anthropic" | "gemini",
@@ -46,17 +48,18 @@ function createService(
 
   const savedModels: SavedModelRepository = {
     listByProvider: async () => [],
-    find: async () => ({
+    findById: async () => ({
+      id: TEST_SAVED_MODEL_ID,
       providerId: protocol,
       vendorModelId: "test-model",
-      displayName: "test-model",
+      modelName: "test-model",
       settings,
       createdAtMs: 0,
       updatedAtMs: 0,
     }),
     insert: async () => undefined,
-    update: async () => undefined,
-    delete: async () => false,
+    updateById: async () => undefined,
+    deleteById: async () => false,
     deleteByProvider: async () => undefined,
   };
 
@@ -93,7 +96,7 @@ describe("DefaultModelRequestService thinking", () => {
       captured = req;
     });
 
-    await svc.request("openai/test-model", "hello");
+    await svc.request(TEST_SAVED_MODEL_ID, "hello");
 
     assert.equal(captured?.thinking, undefined);
   });
@@ -105,7 +108,7 @@ describe("DefaultModelRequestService thinking", () => {
       captured = req;
     });
 
-    await svc.request("openai/test-model", "hello");
+    await svc.request(TEST_SAVED_MODEL_ID, "hello");
 
     assert.deepEqual(captured?.thinking, {
       protocol: "openai",
@@ -126,7 +129,7 @@ describe("DefaultModelRequestService thinking", () => {
       captured = req;
     });
 
-    await svc.request("openai/test-model", "hello");
+    await svc.request(TEST_SAVED_MODEL_ID, "hello");
 
     assert.deepEqual(captured?.thinking, {
       protocol: "openai",
@@ -147,7 +150,7 @@ describe("DefaultModelRequestService thinking", () => {
       captured = req;
     });
 
-    await svc.request("openai/test-model", "hello", {
+    await svc.request(TEST_SAVED_MODEL_ID, "hello", {
       thinking: { protocol: "openai", openai: { reasoning_effort: "high" } },
     });
 

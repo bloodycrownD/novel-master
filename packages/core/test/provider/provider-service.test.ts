@@ -67,7 +67,11 @@ describe("ProviderService", () => {
     const ctx = getNovelMasterTestContext();
     const bundle = createProviderServices(ctx.conn, memorySecretStore());
     await assert.rejects(
-      () => bundle.modelRequests.request("openai/gpt-4o", "hi"),
+      () =>
+        bundle.modelRequests.request(
+          "00000000-0000-4000-8000-000000000000",
+          "hi",
+        ),
       (e) => e instanceof ProviderError && e.code === "MODEL_NOT_SAVED",
     );
   });

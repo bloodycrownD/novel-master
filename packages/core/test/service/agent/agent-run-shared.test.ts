@@ -79,7 +79,7 @@ describe("agent-run-shared", () => {
   it("resolveApplicationModelIdForRun uses agent model pin", async () => {
     const runtime = makeRuntime({ currentModelId: "workspace-model" });
     const result = await resolveApplicationModelIdForRun(runtime, sampleDefinition);
-    assert.equal(result.applicationModelId, "provider:model");
+    assert.equal(result.savedModelId, "provider:model");
     assert.equal(result.workspaceModelId, "workspace-model");
   });
 

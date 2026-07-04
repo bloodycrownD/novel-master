@@ -55,7 +55,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
     const secrets = memorySecretStore();
     const bundle = createProviderServices(ctx.conn, secrets);
     await secrets.set("provider/anthropic/apiKey", "sk-ant-test");
-    await bundle.providerModels.create("anthropic", "claude-3-5-sonnet");
+    const model = await bundle.providerModels.create("anthropic", "claude-3-5-sonnet");
 
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -65,7 +65,7 @@ describe("ModelRequestService tool_use session round-trip", () => {
       (m) => !m.hidden,
     );
     const result = await bundle.modelRequests.request(
-      "anthropic/claude-3-5-sonnet",
+      model.id,
       "find foo",
       { history },
     );

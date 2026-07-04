@@ -27,19 +27,25 @@ const providerRepo: ProviderRepository = {
   delete: async () => false,
 };
 
+const SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000001";
+
 const savedModels: SavedModelRepository = {
   listByProvider: async () => [],
-  find: async () => ({
-    providerId: "openai",
-    vendorModelId: "gpt-4o-mini",
-    displayName: "gpt-4o-mini",
-    settings: defaultSavedModelSettings("gpt-4o-mini"),
-    createdAtMs: 0,
-    updatedAtMs: 0,
-  }),
+  findById: async (id) =>
+    id === SAVED_MODEL_ID
+      ? {
+          id: SAVED_MODEL_ID,
+          providerId: "openai",
+          vendorModelId: "gpt-4o-mini",
+          modelName: "gpt-4o-mini",
+          settings: defaultSavedModelSettings("gpt-4o-mini"),
+          createdAtMs: 0,
+          updatedAtMs: 0,
+        }
+      : null,
   insert: async () => undefined,
-  update: async () => undefined,
-  delete: async () => false,
+  updateById: async () => undefined,
+  deleteById: async () => false,
   deleteByProvider: async () => undefined,
 };
 
@@ -77,7 +83,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request("openai/gpt-4o-mini", "hello");
+    const out = await svc.request(SAVED_MODEL_ID, "hello");
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -100,7 +106,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    await assert.rejects(() => svc.request("openai/gpt-4o-mini", "hello"));
+    await assert.rejects(() => svc.request(SAVED_MODEL_ID, "hello"));
     assert.equal(calls, 1);
   });
 
@@ -125,7 +131,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 2, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request("openai/gpt-4o-mini", "hello");
+    const out = await svc.request(SAVED_MODEL_ID, "hello");
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 2);
   });
@@ -151,7 +157,7 @@ describe("DefaultModelRequestService retry", () => {
       retryPolicy: { maxRetries: 3, baseDelayMs: 0, maxDelayMs: 0, jitterRatio: 0 },
       resolveAdapter: () => adapter,
     });
-    const out = await svc.request("openai/gpt-4o-mini", "hello");
+    const out = await svc.request(SAVED_MODEL_ID, "hello");
     assert.equal(out.assistantText, "ok");
     assert.equal(calls, 3);
   });
@@ -175,7 +181,7 @@ describe("DefaultModelRequestService retry", () => {
       resolveAdapter: () => adapter,
     });
     await assert.rejects(
-      () => svc.request("openai/gpt-4o-mini", "hello"),
+      () => svc.request(SAVED_MODEL_ID, "hello"),
       (error: unknown) =>
         error instanceof ProviderError && error.code === "HTTP_ERROR",
     );
@@ -203,7 +209,7 @@ describe("DefaultModelRequestService retry", () => {
     const controller = new AbortController();
     controller.abort();
     await assert.rejects(() =>
-      svc.request("openai/gpt-4o-mini", "hello", { signal: controller.signal }),
+      svc.request(SAVED_MODEL_ID, "hello", { signal: controller.signal }),
     );
     assert.equal(calls, 1);
   });
@@ -232,7 +238,7 @@ describe("DefaultModelRequestService retry", () => {
     });
     try {
       await assert.rejects(
-        () => svc.request("openai/gpt-4o-mini", "hello"),
+        () => svc.request(SAVED_MODEL_ID, "hello"),
         (error: unknown) =>
           error instanceof ProviderError && error.code === "HTTP_ERROR",
       );

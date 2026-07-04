@@ -10,7 +10,7 @@ import { emptyRegistryDeps } from "./registry-test-helpers.js";
 describe("TokenCounterRegistry", () => {
   it("R1: unknown provider id still routes gpt-4o by model name", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = await registry.forApplicationModel("missing/gpt-4o");
+    const counter = await registry.forSavedModel("missing/gpt-4o");
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
@@ -20,15 +20,15 @@ describe("TokenCounterRegistry", () => {
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
-  it("R2b: forApplicationModel openai/gpt-4o → heuristic", async () => {
+  it("R2b: forSavedModel openai/gpt-4o → heuristic", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = await registry.forApplicationModel("openai/gpt-4o");
+    const counter = await registry.forSavedModel("openai/gpt-4o");
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
   it("R3: claude model → heuristic registry", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = await registry.forApplicationModel(
+    const counter = await registry.forSavedModel(
       "openai/claude-3-5-sonnet-20241022",
     );
     assert.ok(counter instanceof HeuristicTokenCounter);
@@ -36,13 +36,13 @@ describe("TokenCounterRegistry", () => {
 
   it("gemini model → heuristic registry", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = await registry.forApplicationModel("gemini/gemini-2.0-flash");
+    const counter = await registry.forSavedModel("gemini/gemini-2.0-flash");
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 
   it("unsaved model still routes by vendor model id", async () => {
     const registry = createDefaultTokenCounterRegistry(emptyRegistryDeps());
-    const counter = await registry.forApplicationModel("openai/gpt-4o");
+    const counter = await registry.forSavedModel("openai/gpt-4o");
     assert.ok(counter instanceof HeuristicTokenCounter);
   });
 

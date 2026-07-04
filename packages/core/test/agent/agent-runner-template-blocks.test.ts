@@ -58,12 +58,16 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
   };
 }
 
+import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+    Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
   worktreeDisplay: string,
 ): CreateAgentRunnerDeps {
   const store = createSessionWorktreeSnapshotStore();
   return {
+    savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
     worktreeSnapshot: store,
@@ -120,7 +124,7 @@ describe("AgentRunner template blocks", () => {
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 
@@ -190,7 +194,7 @@ describe("AgentRunner template blocks", () => {
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 

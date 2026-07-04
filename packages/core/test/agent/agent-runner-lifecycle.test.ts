@@ -58,10 +58,14 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
   };
 }
 
+import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+    Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
+    savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
     worktreeSnapshot: createSessionWorktreeSnapshotStore(),
@@ -133,7 +137,7 @@ describe("AgentRunner prompt block lifecycle", () => {
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
       maxSteps: 3,
     });
@@ -200,7 +204,7 @@ describe("AgentRunner prompt block lifecycle", () => {
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
       maxSteps: 3,
     });
@@ -248,7 +252,7 @@ describe("AgentRunner prompt block lifecycle", () => {
       definition,
       sessionId: SESSION_ID,
       projectId: PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 

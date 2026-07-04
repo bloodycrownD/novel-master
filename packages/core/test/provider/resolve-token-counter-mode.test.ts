@@ -7,14 +7,14 @@ function stubProviderModels(
   modes: Record<string, string>,
 ): Pick<ProviderModelService, "getTokenCounterMode"> {
   return {
-    async getTokenCounterMode(applicationModelId: string) {
-      return (modes[applicationModelId] ?? "auto") as "auto";
+    async getTokenCounterMode(savedModelId: string) {
+      return (modes[savedModelId] ?? "auto") as "auto";
     },
   };
 }
 
 describe("resolveTokenCounterModeForModel", () => {
-  it("returns auto for null or empty applicationModelId", async () => {
+  it("returns auto for null or empty savedModelId", async () => {
     const models = stubProviderModels({});
     assert.equal(await resolveTokenCounterModeForModel(models, null), "auto");
     assert.equal(await resolveTokenCounterModeForModel(models, ""), "auto");
@@ -26,10 +26,13 @@ describe("resolveTokenCounterModeForModel", () => {
 
   it("delegates to getTokenCounterMode for saved model", async () => {
     const models = stubProviderModels({
-      "openai/gpt-4o": "heuristic",
+      "00000000-0000-4000-8000-000000000010": "heuristic",
     });
     assert.equal(
-      await resolveTokenCounterModeForModel(models, "openai/gpt-4o"),
+      await resolveTokenCounterModeForModel(
+        models,
+        "00000000-0000-4000-8000-000000000010",
+      ),
       "heuristic",
     );
   });

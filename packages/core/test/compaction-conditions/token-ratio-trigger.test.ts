@@ -33,7 +33,7 @@ function systemOnlyEvaluation(systemContent: string) {
   return {
     modelContext: {
       workspaceModelId: "openai/gpt-4o",
-      applicationModelId: "openai/gpt-4o",
+      savedModelId: "openai/gpt-4o",
     },
     promptInput: { system: systemContent, messages: [] },
     layout,
@@ -81,13 +81,13 @@ describe("TokenRatioConditionTrigger", () => {
       ...systemOnlyEvaluation("x".repeat(340_004)),
       modelContext: {
         workspaceModelId: "openai/test",
-        applicationModelId: "openai/test",
+        savedModelId: "openai/test",
       },
     };
     const { tokenCount } = await countPromptLlmInput({
       layout: evaluation.layout,
       ctx: evaluation.ctx,
-      applicationModelId: evaluation.modelContext.applicationModelId,
+      savedModelId: evaluation.modelContext.savedModelId,
       registry,
     });
     assert.ok(tokenCount > 80_000);
@@ -110,7 +110,7 @@ describe("TokenRatioConditionTrigger", () => {
     const { tokenCount } = await countPromptLlmInput({
       layout: evaluation.layout,
       ctx: evaluation.ctx,
-      applicationModelId: "openai/test",
+      savedModelId: "openai/test",
       registry,
     });
     const contextWindow = tokenCount / 0.8;

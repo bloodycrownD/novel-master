@@ -28,10 +28,14 @@ const RUN_MODEL_ID = "anthropic/claude";
 const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
+import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
+
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree">,
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+    Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
+    savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: { publish: () => {}, subscribe: () => () => {} } as never,
     worktreeSnapshot: createSessionWorktreeSnapshotStore(),
@@ -129,7 +133,7 @@ describe("AgentRunner message checkpoint", () => {
           definition: minimalDefinition(),
           sessionId: MOCK_SESSION_ID,
           projectId: MOCK_PROJECT_ID,
-          applicationModelId: RUN_MODEL_ID,
+          savedModelId: RUN_MODEL_ID,
           workspaceModelId: RUN_MODEL_ID,
         }),
       (err: unknown) => err === captureError,
@@ -174,7 +178,7 @@ describe("AgentRunner message checkpoint", () => {
       definition: minimalDefinition(),
       sessionId: MOCK_SESSION_ID,
       projectId: MOCK_PROJECT_ID,
-      applicationModelId: RUN_MODEL_ID,
+      savedModelId: RUN_MODEL_ID,
       workspaceModelId: RUN_MODEL_ID,
     });
 

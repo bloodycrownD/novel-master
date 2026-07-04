@@ -57,13 +57,13 @@ describe("countPromptLlmInput", () => {
     const a = await countPromptLlmInput({
       layout,
       ctx,
-      applicationModelId: "openai/gpt-4o",
+      savedModelId: "openai/gpt-4o",
       registry,
     });
     const b = await countPromptLlmInput({
       layout,
       ctx,
-      applicationModelId: "openai/gpt-4o",
+      savedModelId: "openai/gpt-4o",
       registry,
     });
     assert.equal(a.tokenCount, b.tokenCount);
@@ -73,12 +73,12 @@ describe("countPromptLlmInput", () => {
   it("C2: larger system increases token count", async () => {
     const base = await countPromptLlmInput({
       ...fixtureParams(),
-      applicationModelId: "openai/gpt-4o",
+      savedModelId: "openai/gpt-4o",
       registry,
     });
     const larger = await countPromptLlmInput({
       ...fixtureParams({ systemContent: "You are helpful. ".repeat(20) }),
-      applicationModelId: "openai/gpt-4o",
+      savedModelId: "openai/gpt-4o",
       registry,
     });
     assert.ok(larger.tokenCount > base.tokenCount);
@@ -87,7 +87,7 @@ describe("countPromptLlmInput", () => {
   it("claude model on openai provider uses claude family", async () => {
     const result = await countPromptLlmInput({
       ...fixtureParams(),
-      applicationModelId: "openai/claude-3-5-sonnet",
+      savedModelId: "openai/claude-3-5-sonnet",
       registry,
     });
     assert.equal(result.tokenizerFamily, "claude");
@@ -98,7 +98,7 @@ describe("countPromptLlmInput", () => {
   it("unknown model uses heuristic", async () => {
     const result = await countPromptLlmInput({
       ...fixtureParams(),
-      applicationModelId: "openai/my-custom/foo",
+      savedModelId: "openai/my-custom/foo",
       registry,
     });
     assert.equal(result.tokenizerFamily, "heuristic");
