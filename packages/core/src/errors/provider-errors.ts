@@ -17,7 +17,10 @@ export type ProviderErrorCode =
   | "UNSUPPORTED"
   | "MALFORMED_SSE"
   | "INVALID_TOOL_ARGUMENTS"
-  | "MIGRATION_ORPHAN_POINTER";
+  | "MIGRATION_ORPHAN_POINTER"
+  | "SAVED_MODEL_IN_USE"
+  | "INVALID_SAVED_MODEL_ID"
+  | "INVALID_MODEL_NAME";
 
 /**
  * Unified error for provider service and LLM HTTP operations.

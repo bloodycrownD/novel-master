@@ -19,9 +19,10 @@ import type { SavedModelRepository } from "../saved-model.port.js";
 function rowToSaved(row: Row): SavedModel {
   const settingsJson = String(row.settings_json);
   return {
+    id: String(row.id),
     providerId: String(row.provider_id),
     vendorModelId: String(row.vendor_model_id),
-    displayName: row.display_name != null ? String(row.display_name) : null,
+    modelName: String(row.model_name),
     settings: savedModelSettingsFromJson(JSON.parse(settingsJson) as unknown),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
@@ -38,25 +39,21 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
+      `SELECT id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms
        FROM llm_saved_model WHERE provider_id = #{providerId}
-       ORDER BY vendor_model_id`,
+       ORDER BY vendor_model_id, model_name`,
       { providerId },
     );
     return rows.map(rowToSaved);
   }
 
-  async find(
-    providerId: string,
-    vendorModelId: string,
-  ): Promise<SavedModel | null> {
+  async findById(id: string): Promise<SavedModel | null> {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
-       FROM llm_saved_model
-       WHERE provider_id = #{providerId} AND vendor_model_id = #{vendorModelId}`,
-      { providerId, vendorModelId },
+      `SELECT id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms
+       FROM llm_saved_model WHERE id = #{id}`,
+      { id },
     );
     if (rows.length === 0) {
       return null;
@@ -69,14 +66,15 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
       this.conn,
       this.parser,
       `INSERT INTO llm_saved_model (
-        provider_id, vendor_model_id, display_name, settings_json, created_at_ms, updated_at_ms
+        id, provider_id, vendor_model_id, model_name, settings_json, created_at_ms, updated_at_ms
       ) VALUES (
-        #{providerId}, #{vendorModelId}, #{displayName}, #{settingsJson}, #{createdAtMs}, #{updatedAtMs}
+        #{id}, #{providerId}, #{vendorModelId}, #{modelName}, #{settingsJson}, #{createdAtMs}, #{updatedAtMs}
       )`,
       {
+        id: model.id,
         providerId: model.providerId,
         vendorModelId: model.vendorModelId,
-        displayName: model.displayName,
+        modelName: model.modelName,
         settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         createdAtMs: model.createdAtMs,
         updatedAtMs: model.updatedAtMs,
@@ -84,32 +82,30 @@ export class SqliteSavedModelRepository implements SavedModelRepository {
     );
   }
 
-  async update(model: SavedModel): Promise<void> {
+  async updateById(model: SavedModel): Promise<void> {
     await executeTemplate(
       this.conn,
       this.parser,
       `UPDATE llm_saved_model SET
-        display_name = #{displayName},
+        model_name = #{modelName},
         settings_json = #{settingsJson},
         updated_at_ms = #{updatedAtMs}
-       WHERE provider_id = #{providerId} AND vendor_model_id = #{vendorModelId}`,
+       WHERE id = #{id}`,
       {
-        providerId: model.providerId,
-        vendorModelId: model.vendorModelId,
-        displayName: model.displayName,
+        id: model.id,
+        modelName: model.modelName,
         settingsJson: JSON.stringify(savedModelSettingsToJson(model.settings)),
         updatedAtMs: model.updatedAtMs,
       },
     );
   }
 
-  async delete(providerId: string, vendorModelId: string): Promise<boolean> {
+  async deleteById(id: string): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM llm_saved_model
-       WHERE provider_id = #{providerId} AND vendor_model_id = #{vendorModelId}`,
-      { providerId, vendorModelId },
+      `DELETE FROM llm_saved_model WHERE id = #{id}`,
+      { id },
     );
     return result.changes > 0;
   }

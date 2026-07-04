@@ -56,6 +56,7 @@ export function createProviderServices(
     suggestions: suggestionRepo,
     savedModels: savedRepo,
     secretStore,
+    conn,
   });
 
   const modelRequests = new DefaultModelRequestService({
