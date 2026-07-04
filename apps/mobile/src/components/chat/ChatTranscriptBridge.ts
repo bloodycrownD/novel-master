@@ -16,6 +16,7 @@ export type TranscriptToolView = {
   readonly input: Record<string, unknown>;
   readonly status: string;
   readonly resultContent?: string;
+  readonly summary?: string;
 };
 
 export type TranscriptUserVfsAction = {

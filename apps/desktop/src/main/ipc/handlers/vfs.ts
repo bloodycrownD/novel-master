@@ -1,5 +1,5 @@
 /**
- * VFS IPC handlers — list/read/write/mkdir/delete/rename for global/project/session scopes.
+ * VFS IPC handlers �?list/read/write/mkdir/delete/rename for global/project/session scopes.
  *
  * @module ipc/handlers/vfs
  */
@@ -19,14 +19,13 @@ import type {
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
-import { VfsError } from "@novel-master/core/vfs";
+import { VfsError, isVfsError } from "@novel-master/core/vfs";
 
 import {
   buildUserVfsDeleteOp,
   buildUserVfsMkdirOp,
   buildUserVfsRenameOp,
   buildUserVfsSaveOp,
-  formatVfsErrorForUser,
   readUserVfsSaveBaseline,
 } from "@novel-master/core/vfs";
 import { BrowserWindow } from "electron";
@@ -62,12 +61,12 @@ function formatError(err: unknown): { code: string; message: string } {
   if (err instanceof Error && err.name === "ToolError") {
     const toolErr = err as Error & { code?: string; cause?: unknown };
     const cause = toolErr.cause;
+    if (cause instanceof VfsError || isVfsError(cause)) {
+      const vfsCause = cause as VfsError;
+      return { code: vfsCause.code, message: vfsCause.message };
+    }
     const message =
-      cause instanceof VfsError
-        ? cause.message
-        : cause instanceof Error
-          ? cause.message
-          : err.message;
+      cause instanceof Error ? cause.message : err.message;
     return { code: toolErr.code ?? err.name, message };
   }
   if (err instanceof Error) {
@@ -80,7 +79,7 @@ function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
 }
 
-/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）。 */
+/** VFS 变更成功后通知 renderer 刷新 Explorer（消费方 ①）�?*/
 function pushWorkspaceMutated(req: VfsScopeRequest): void {
   notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
 }

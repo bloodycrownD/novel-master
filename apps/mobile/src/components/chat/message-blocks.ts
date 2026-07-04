@@ -399,6 +399,7 @@ export function buildTranscriptRows(
           input: derivedTools[index]?.input ?? t.input,
           status: t.status,
           resultContent: t.resultContent,
+          ...(t.summary != null ? { summary: t.summary } : {}),
         })),
         bridgeText: item.bridgeText,
       });
@@ -419,6 +420,7 @@ export function buildTranscriptRows(
               input: t.input,
               status: t.status,
               resultContent: t.resultContent,
+              ...(t.summary != null ? { summary: t.summary } : {}),
             })),
           }
         : {}),

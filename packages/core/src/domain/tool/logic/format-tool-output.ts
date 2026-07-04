@@ -7,7 +7,8 @@
 import { formatVfsErrorForLlm } from "@/domain/vfs/logic/format-vfs-error-for-llm.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import { ToolError } from "@/errors/tool-errors.js";
-import { VfsError } from "@/errors/vfs-errors.js";
+import { VfsError, isVfsError } from "@/errors/vfs-errors.js";
+import { TdbcError } from "@/infra/tdbc/index.js";
 import type { ZodIssue } from "zod";
 
 export type FormatToolErrorForLlmOptions = {
@@ -147,12 +148,27 @@ export function formatToolErrorForLlm(
   return `Error: ${message}`;
 }
 
+
+function resolveVfsErrorFromCause(cause: unknown): VfsError | undefined {
+  if (cause instanceof TdbcError && cause.cause != null) {
+    return resolveVfsErrorFromCause(cause.cause);
+  }
+  if (cause instanceof VfsError) {
+    return cause;
+  }
+  if (isVfsError(cause)) {
+    return cause as VfsError;
+  }
+  return undefined;
+}
+
 function formatToolErrorCause(
   cause: unknown,
   vfsScope?: VfsScope,
 ): string {
-  if (cause instanceof VfsError) {
-    return formatVfsErrorForLlm(cause, vfsScope);
+  const vfsError = resolveVfsErrorFromCause(cause);
+  if (vfsError != null) {
+    return formatVfsErrorForLlm(vfsError, vfsScope);
   }
   if (cause instanceof Error) {
     return cause.message;

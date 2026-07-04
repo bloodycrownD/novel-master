@@ -163,6 +163,9 @@ export function buildTranscriptBootScript(): string {
   }
 
   function toolCallSummary(row) {
+    if (row.status === 'error' && row.summary) {
+      return row.summary;
+    }
     var fromInput = summarizeToolInput(row.name, row.input || {});
     if (fromInput) return fromInput;
     if (row.resultContent) {

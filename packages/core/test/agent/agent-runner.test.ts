@@ -209,7 +209,7 @@ describe("AgentRunner", () => {
     assert.ok(toolUse);
   });
 
-  it("abort 后 request 返回文本块仍落库 assistant partial", async () => {
+  it("abort �?request 返回文本块仍落库 assistant partial", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -254,7 +254,7 @@ describe("AgentRunner", () => {
     assert.equal(textBlock.text, "late");
   });
 
-  it("生命周期与 stream 事件携带一致 runId", async () => {
+  it("生命周期�?stream 事件携带一�?runId", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("hi"));
     const bus = new SimpleEventBus();
@@ -522,7 +522,7 @@ describe("AgentRunner", () => {
     assert.deepEqual(phases, ["assistant", "tool_results", "assistant"]);
   });
 
-  it("tool_results 与 run_finished 携带 vfsMutated", async () => {
+  it("tool_results �?run_finished 携带 vfsMutated", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
     const bus = new SimpleEventBus();
@@ -863,6 +863,299 @@ describe("AgentRunner", () => {
     assert.ok(!resultBlock.content.includes("/projects/"));
     assert.ok(!resultBlock.content.includes("/sessions/"));
     assert.notEqual(resultBlock.content, "Error: Tool failed: read");
+  });
+
+  /** 从会话消息中提取首个 tool_result block�?*/
+  async function firstToolResultBlock(sessionId: string) {
+    const ctx = getNovelMasterTestContext();
+    const messages = await ctx.messages.listBySession(sessionId);
+    const toolResultMsg = messages.find(
+      (m) =>
+        m.role === "user" &&
+        m.content.blocks?.some((b) => b.type === "tool_result"),
+    );
+    assert.ok(toolResultMsg);
+    const resultBlock = toolResultMsg.content.blocks?.find(
+      (b) => b.type === "tool_result",
+    );
+    assert.ok(resultBlock && resultBlock.type === "tool_result");
+    return resultBlock;
+  }
+
+  it("T-AR-01: edit failure tool_result has no physical path prefix", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("edit fail"));
+
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write(
+      "/edit-lcs.txt",
+      "function hello() { return 1; }",
+      { versionCheck: false },
+    );
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "e1",
+            name: "edit",
+            input: {
+              path: "/edit-lcs.txt",
+              oldString: "function hello() {    return 1; }",
+              newString: "function hello() { return 2; }",
+            },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
+        },
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const resultBlock = await firstToolResultBlock(session.id);
+    assert.equal(resultBlock.ok, false);
+    assert.ok(resultBlock.content.includes("[REPLACE_NOT_FOUND]"));
+    assert.ok(resultBlock.content.includes("/edit-lcs.txt"));
+    assert.ok(!resultBlock.content.includes("/projects/"));
+    assert.ok(!resultBlock.content.includes("/sessions/"));
+  });
+
+  it("T-AR-02: write version conflict tool_result includes [CONFLICT]", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("write conflict"));
+
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/conflict.txt", "v1", { versionCheck: false });
+    await vfs.write("/conflict.txt", "v2", { versionCheck: false });
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "w1",
+            name: "write",
+            input: {
+              path: "/conflict.txt",
+              content: "stale",
+              options: { expectedVersion: 1, versionCheck: true },
+            },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
+        },
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const resultBlock = await firstToolResultBlock(session.id);
+    assert.equal(resultBlock.ok, false);
+    assert.ok(resultBlock.content.includes("[CONFLICT]"));
+    assert.ok(resultBlock.content.includes("expected 1, actual 2"));
+    assert.ok(!resultBlock.content.includes("/projects/"));
+    assert.ok(!resultBlock.content.includes("/sessions/"));
+  });
+
+  it("T-AR-03: edit failure tool_result includes LCS snippet", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("edit lcs"));
+
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write(
+      "/edit-lcs.txt",
+      "function hello() { return 1; }",
+      { versionCheck: false },
+    );
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "e1",
+            name: "edit",
+            input: {
+              path: "/edit-lcs.txt",
+              oldString: "function hello() {    return 1; }",
+              newString: "function hello() { return 2; }",
+            },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
+        },
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const resultBlock = await firstToolResultBlock(session.id);
+    assert.equal(resultBlock.ok, false);
+    assert.ok(resultBlock.content.includes("function hello()"));
+    assert.ok(resultBlock.content.includes("occurrences="));
+  });
+
+  it("T-AR-04: edit failure must not be bare Tool failed: edit", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, session.id);
+    await chatSession.append("user", textBlocks("edit bare"));
+
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write(
+      "/edit-lcs.txt",
+      "function hello() { return 1; }",
+      { versionCheck: false },
+    );
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "e1",
+            name: "edit",
+            input: {
+              path: "/edit-lcs.txt",
+              oldString: "function hello() {    return 1; }",
+              newString: "function hello() { return 2; }",
+            },
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session: chatSession,
+        modelRequests: model,
+        registry,
+        toolCtx: {
+          vfs,
+          projectId: project.id,
+          sessionId: session.id,
+          listSessionMessages: () => ctx.messages.listBySession(session.id),
+        },
+      }),
+    );
+
+    await runner.run({
+      maxSteps: 2,
+      definition: minimalDefinition(),
+      sessionId: session.id,
+      projectId: project.id,
+      savedModelId: RUN_MODEL_ID,
+      workspaceModelId: RUN_MODEL_ID,
+    });
+
+    const resultBlock = await firstToolResultBlock(session.id);
+    assert.equal(resultBlock.ok, false);
+    assert.notEqual(resultBlock.content, "Error: Tool failed: edit");
   });
 
   it("propagates doom_loop from cross-round A-B-A-B pattern", async () => {
