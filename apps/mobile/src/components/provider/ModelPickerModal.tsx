@@ -10,22 +10,26 @@ import {
   Text,
   View,
 } from 'react-native';
-import {formatApplicationModelId} from '@novel-master/core/provider';
+import {formatSavedModelDisplayName} from '@novel-master/core/provider';
 import {AppModal} from '../ui/AppModal';
 import {useRuntime} from '../../hooks/useRuntime';
-import {resolveModelDisplayLabel} from '../../provider/model-display-label';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export interface SavedModelRow {
-  readonly applicationModelId: string;
+  readonly savedModelId: string;
   readonly label: string;
+  readonly subtitle?: string;
 }
 
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSelected?: (applicationModelId: string) => void;
+  onSelected?: (savedModelId: string) => void;
 };
+
+function modelNameKey(providerId: string, modelName: string): string {
+  return `${providerId}\0${modelName}`;
+}
 
 export function ModelPickerModal({visible, onClose, onSelected}: Props) {
   const {tokens} = useTheme();
@@ -38,25 +42,40 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
     setLoading(true);
     try {
       const workspaceId = await runtime.state.getCurrentModelId();
-      setCurrentId(workspaceId);
+      setCurrentId(workspaceId ?? undefined);
       const providers = await runtime.providers.list();
-      const collected: SavedModelRow[] = [];
+      const allModels: Array<{
+        id: string;
+        providerId: string;
+        modelName: string;
+        vendorModelId: string;
+      }> = [];
       for (const provider of providers) {
         const saved = await runtime.providerModels.savedList(provider.id);
         for (const model of saved) {
-          const applicationModelId = formatApplicationModelId(
-            provider.id,
-            model.vendorModelId,
-          );
-          let label = applicationModelId;
-          try {
-            label = await resolveModelDisplayLabel(runtime, applicationModelId);
-          } catch {
-            /* keep applicationModelId */
-          }
-          collected.push({applicationModelId, label});
+          allModels.push({
+            id: model.id,
+            providerId: model.providerId,
+            modelName: model.modelName,
+            vendorModelId: model.vendorModelId,
+          });
         }
       }
+      const nameCounts = new Map<string, number>();
+      for (const model of allModels) {
+        const key = modelNameKey(model.providerId, model.modelName);
+        nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+      }
+      const collected: SavedModelRow[] = allModels.map(model => {
+        const duplicate =
+          (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
+            0) > 1;
+        return {
+          savedModelId: model.id,
+          label: formatSavedModelDisplayName(model.providerId, model.modelName),
+          subtitle: duplicate ? model.vendorModelId : undefined,
+        };
+      });
       collected.sort((a, b) => a.label.localeCompare(b.label));
       setRows(collected);
     } finally {
@@ -71,9 +90,9 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
   }, [visible, reload]);
 
   const select = useCallback(
-    async (applicationModelId: string) => {
-      await runtime.state.setCurrentModelId(applicationModelId);
-      onSelected?.(applicationModelId);
+    async (savedModelId: string) => {
+      await runtime.state.setCurrentModelId(savedModelId);
+      onSelected?.(savedModelId);
       onClose();
     },
     [runtime, onSelected, onClose],
@@ -95,14 +114,14 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
           ) : (
             <FlatList
               data={rows}
-              keyExtractor={item => item.applicationModelId}
+              keyExtractor={item => item.savedModelId}
               ListEmptyComponent={
                 <Text style={[styles.empty, {color: tokens.textSecondary}]}>
                   暂无已保存模型。请先在「服务商」页添加模型。
                 </Text>
               }
               renderItem={({item}) => {
-                const selected = item.applicationModelId === currentId;
+                const selected = item.savedModelId === currentId;
                 return (
                   <Pressable
                     style={[
@@ -110,10 +129,19 @@ export function ModelPickerModal({visible, onClose, onSelected}: Props) {
                       {borderBottomColor: tokens.border},
                       selected && {backgroundColor: tokens.background},
                     ]}
-                    onPress={() => select(item.applicationModelId)}>
-                    <Text style={{color: tokens.text, flex: 1}}>
-                      {item.label}
-                    </Text>
+                    onPress={() => select(item.savedModelId)}>
+                    <View style={styles.rowText}>
+                      <Text style={{color: tokens.text}}>{item.label}</Text>
+                      {item.subtitle ? (
+                        <Text
+                          style={[
+                            styles.subtitle,
+                            {color: tokens.textSecondary},
+                          ]}>
+                          {item.subtitle}
+                        </Text>
+                      ) : null}
+                    </View>
                     {selected ? (
                       <Text style={{color: tokens.primary}}>当前</Text>
                     ) : null}
@@ -160,5 +188,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 8,
   },
+  rowText: {flex: 1, gap: 2},
+  subtitle: {fontSize: 12},
   cancelBtn: {alignItems: 'center', paddingTop: 12},
 });

@@ -15,10 +15,14 @@ import {
 import {useFocusEffect, useNavigation, useRoute} from '@react-navigation/native';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RouteProp} from '@react-navigation/native';
-import {formatApplicationModelId, savedModelSampling} from '@novel-master/core/provider';
+import {
+  formatSavedModelDisplayName,
+  savedModelSampling,
+} from '@novel-master/core/provider';
 import {BatchCheckbox} from '../../components/batch/BatchCheckbox';
 import {ManageHeader} from '../../components/batch/ManageHeader';
 import {AddModelModal} from '../../components/provider/AddModelModal';
+import {EditModelNameModal} from '../../components/provider/EditModelNameModal';
 import {FetchModelsSheet} from '../../components/provider/FetchModelsSheet';
 import {BottomSheetMenu} from '../../components/sheet/BottomSheetMenu';
 import {ConfigListCard} from '../../components/ui/ConfigListCard';
@@ -30,7 +34,6 @@ import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useHeaderContext} from '../../navigation/HeaderContext';
-import {resolveModelShortLabel} from '../../provider/model-display-label';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../../components/chrome/ToastHost';
@@ -40,10 +43,16 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 type DetailRoute = RouteProp<RootStackParamList, 'ProviderDetail'>;
 
 interface ModelRow {
+  savedModelId: string;
   vendorModelId: string;
-  applicationModelId: string;
+  modelName: string;
   label: string;
+  subtitle: string;
   hasSampling: boolean;
+}
+
+function modelNameKey(providerId: string, modelName: string): string {
+  return `${providerId}\0${modelName}`;
 }
 
 export function ProviderDetailScreen() {
@@ -59,13 +68,16 @@ export function ProviderDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [addVisible, setAddVisible] = useState(false);
   const [fetchVisible, setFetchVisible] = useState(false);
-  const [menuVendorId, setMenuVendorId] = useState<string | undefined>();
+  const [menuSavedModelId, setMenuSavedModelId] = useState<string | undefined>();
+  const [renameModelName, setRenameModelName] = useState('');
+  const [renameVisible, setRenameVisible] = useState(false);
   const batch = useBatchSelection();
 
   const dismissAllOverlays = useCallback(() => {
     setAddVisible(false);
     setFetchVisible(false);
-    setMenuVendorId(undefined);
+    setMenuSavedModelId(undefined);
+    setRenameVisible(false);
   }, []);
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
@@ -81,36 +93,43 @@ export function ProviderDetailScreen() {
       const provider = await runtime.providers.get(providerId);
       setStackOverride({title: provider.id});
       const saved = await runtime.providerModels.savedList(providerId);
-      const enriched: ModelRow[] = [];
+      const nameCounts = new Map<string, number>();
       for (const model of saved) {
-        const applicationModelId = formatApplicationModelId(
-          providerId,
-          model.vendorModelId,
-        );
+        const key = modelNameKey(model.providerId, model.modelName);
+        nameCounts.set(key, (nameCounts.get(key) ?? 0) + 1);
+      }
+      const enriched: ModelRow[] = saved.map(model => {
         const sampling = savedModelSampling(model.settings);
         const hasSampling = Boolean(
           sampling.enabled && sampling.params,
         );
-        let label = model.displayName?.trim() || model.vendorModelId;
-        try {
-          label = await resolveModelShortLabel(runtime, applicationModelId);
-        } catch {
-          /* fallback */
-        }
-        enriched.push({
+        const duplicate =
+          (nameCounts.get(modelNameKey(model.providerId, model.modelName)) ??
+            0) > 1;
+        const label = formatSavedModelDisplayName(
+          model.providerId,
+          model.modelName,
+        );
+        const subtitleParts = [
+          duplicate ? model.vendorModelId : undefined,
+          hasSampling ? '已配采样' : undefined,
+        ].filter(Boolean);
+        return {
+          savedModelId: model.id,
           vendorModelId: model.vendorModelId,
-          applicationModelId,
+          modelName: model.modelName,
           label,
+          subtitle: subtitleParts.join(' · '),
           hasSampling,
-        });
-      }
+        };
+      });
       setRows(enriched);
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
-  }, [runtime, providerId, setStackOverride]);
+  }, [runtime, providerId, setStackOverride, showToast]);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,25 +145,18 @@ export function ProviderDetailScreen() {
     }
   }, [providerId, navigation, showToast]);
 
-  const handleAdd = async (vendorModelId: string, displayName?: string) => {
+  const handleAdd = async (vendorModelId: string, modelName?: string) => {
     if (!providerId) {
       return;
     }
-    await runtime.providerModels.save(providerId, vendorModelId, displayName);
+    await runtime.providerModels.save(providerId, vendorModelId, modelName);
     await reload();
     showToast('已添加模型');
   };
 
-  const deleteModels = async (vendorModelIds: string[]) => {
-    if (!providerId) {
-      return;
-    }
-    for (const vendorModelId of vendorModelIds) {
-      const applicationModelId = formatApplicationModelId(
-        providerId,
-        vendorModelId,
-      );
-      await runtime.providerModels.deleteSaved(providerId, vendorModelId);
+  const deleteModels = async (savedModelIds: string[]) => {
+    for (const savedModelId of savedModelIds) {
+      await runtime.providerModels.deleteSaved(savedModelId);
     }
     await reload();
   };
@@ -172,27 +184,35 @@ export function ProviderDetailScreen() {
     ]);
   };
 
-  const handleDelete = async (vendorModelId: string) => {
-    if (!providerId) {
-      return;
-    }
-    const applicationModelId = formatApplicationModelId(
-      providerId,
-      vendorModelId,
-    );
-    Alert.alert('删除模型', `确定删除 ${applicationModelId}？`, [
+  const handleDelete = async (row: ModelRow) => {
+    Alert.alert('删除模型', `确定删除 ${row.label}？`, [
       {text: '取消', style: 'cancel'},
       {
         text: '删除',
         style: 'destructive',
         onPress: () => {
-          deleteModels([vendorModelId]).catch(err =>
+          deleteModels([row.savedModelId]).catch(err =>
             showToast(toastMessage('删除失败', err)),
           );
         },
       },
     ]);
   };
+
+  const handleRename = async (modelName: string) => {
+    if (!menuSavedModelId) {
+      return;
+    }
+    try {
+      await runtime.providerModels.editSaved(menuSavedModelId, modelName);
+      await reload();
+      showToast('已重命名模型');
+    } finally {
+      setMenuSavedModelId(undefined);
+    }
+  };
+
+  const menuRow = rows.find(r => r.savedModelId === menuSavedModelId);
 
   return (
     <View style={[styles.root, {backgroundColor: tokens.background}]}>
@@ -224,7 +244,7 @@ export function ProviderDetailScreen() {
       ) : (
         <FlatList
           data={rows}
-          keyExtractor={item => item.vendorModelId}
+          keyExtractor={item => item.savedModelId}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl refreshing={loading} onRefresh={reload} />
@@ -239,32 +259,32 @@ export function ProviderDetailScreen() {
           renderItem={({item}) => (
             <ConfigListCard
               tokens={tokens}
-              selected={batch.isSelected(item.vendorModelId)}
+              selected={batch.isSelected(item.savedModelId)}
               onPress={() => {
                 if (batch.active) {
-                  batch.toggle(item.vendorModelId);
+                  batch.toggle(item.savedModelId);
                 } else {
                   navigation.navigate('ModelSampling', {
-                    applicationModelId: item.applicationModelId,
+                    savedModelId: item.savedModelId,
                   });
                 }
               }}
               leading={
                 batch.active ? (
                   <BatchCheckbox
-                    checked={batch.isSelected(item.vendorModelId)}
-                    onToggle={() => batch.toggle(item.vendorModelId)}
+                    checked={batch.isSelected(item.savedModelId)}
+                    onToggle={() => batch.toggle(item.savedModelId)}
                   />
                 ) : (
                   <Text style={styles.modelIcon}>🧠</Text>
                 )
               }
               title={item.label}
-              subtitle={`${item.applicationModelId}${item.hasSampling ? ' · 已配采样' : ''}`}
+              subtitle={item.subtitle || undefined}
               onMenuPress={
                 batch.active
                   ? undefined
-                  : () => setMenuVendorId(item.vendorModelId)
+                  : () => setMenuSavedModelId(item.savedModelId)
               }
             />
           )}
@@ -274,6 +294,15 @@ export function ProviderDetailScreen() {
         visible={addVisible}
         onClose={() => setAddVisible(false)}
         onConfirm={handleAdd}
+      />
+      <EditModelNameModal
+        visible={renameVisible}
+        initialModelName={renameModelName}
+        onClose={() => {
+          setRenameVisible(false);
+          setMenuSavedModelId(undefined);
+        }}
+        onConfirm={handleRename}
       />
       {providerId ? (
         <FetchModelsSheet
@@ -285,12 +314,20 @@ export function ProviderDetailScreen() {
         />
       ) : null}
       <BottomSheetMenu
-        visible={menuVendorId != null}
-        items={[{label: '删除模型', action: 'delete', danger: true}]}
-        onClose={() => setMenuVendorId(undefined)}
+        visible={menuSavedModelId != null}
+        items={[
+          {label: '重命名', action: 'rename'},
+          {label: '删除模型', action: 'delete', danger: true},
+        ]}
+        onClose={() => setMenuSavedModelId(undefined)}
         onSelect={action => {
-          if (action === 'delete' && menuVendorId) {
-            handleDelete(menuVendorId).catch(() => undefined);
+          const row = menuRow;
+          if (action === 'rename' && row) {
+            setRenameModelName(row.modelName);
+            setRenameVisible(true);
+          } else if (action === 'delete' && row) {
+            setMenuSavedModelId(undefined);
+            handleDelete(row).catch(() => undefined);
           }
         }}
       />

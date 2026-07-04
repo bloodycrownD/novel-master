@@ -31,11 +31,11 @@ export async function resolveCurrentAgentDefinition(
   return mapResolveError(() => resolveCoreAgentDefinition(runtime));
 }
 
-/** Resolves dialogue applicationModelId (agent pin → workspace current model). */
-export async function resolveMobileApplicationModelId(
+/** Resolves dialogue savedModelId (agent pin → workspace current model). */
+export async function resolveMobileSavedModelId(
   runtime: MobileNovelMasterRuntime,
   definition: AgentDefinition,
-): Promise<{applicationModelId: string; workspaceModelId: string}> {
+): Promise<{savedModelId: string; workspaceModelId: string}> {
   return mapResolveError(() =>
     resolveApplicationModelIdForRun(runtime, definition),
   );

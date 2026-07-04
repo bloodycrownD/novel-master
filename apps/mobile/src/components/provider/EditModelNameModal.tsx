@@ -1,5 +1,5 @@
 /**
- * Register a saved model under a provider (vendorModelId + optional model name).
+ * Rename a saved model preset (`editSaved`).
  */
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
@@ -8,32 +8,35 @@ import {useTheme} from '../../theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
+  initialModelName: string;
   onClose: () => void;
-  onConfirm: (vendorModelId: string, modelName?: string) => Promise<void>;
+  onConfirm: (modelName: string) => Promise<void>;
 };
 
-export function AddModelModal({visible, onClose, onConfirm}: Props) {
+export function EditModelNameModal({
+  visible,
+  initialModelName,
+  onClose,
+  onConfirm,
+}: Props) {
   const {tokens} = useTheme();
-  const [vendorModelId, setVendorModelId] = useState('');
   const [modelName, setModelName] = useState('');
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      setVendorModelId('');
-      setModelName('');
+      setModelName(initialModelName);
     }
-  }, [visible]);
+  }, [visible, initialModelName]);
 
   const handleConfirm = async () => {
-    const vendor = vendorModelId.trim();
-    if (!vendor) {
+    const trimmed = modelName.trim();
+    if (!trimmed) {
       return;
     }
     setSaving(true);
     try {
-      const label = modelName.trim() || undefined;
-      await onConfirm(vendor, label);
+      await onConfirm(trimmed);
       onClose();
     } finally {
       setSaving(false);
@@ -50,24 +53,9 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
         <Pressable
           style={[styles.sheet, {backgroundColor: tokens.surface}]}
           onPress={e => e.stopPropagation()}>
-          <Text style={[styles.title, {color: tokens.text}]}>添加模型</Text>
+          <Text style={[styles.title, {color: tokens.text}]}>重命名模型</Text>
           <Text style={[styles.label, {color: tokens.textSecondary}]}>
-            厂商模型 ID
-          </Text>
-          <TextInput
-            style={[
-              styles.input,
-              {color: tokens.text, borderColor: tokens.border},
-            ]}
-            value={vendorModelId}
-            onChangeText={setVendorModelId}
-            placeholder="如 gpt-4o"
-            placeholderTextColor={tokens.textSecondary}
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <Text style={[styles.label, {color: tokens.textSecondary}]}>
-            模型名称（可选）
+            模型名称
           </Text>
           <TextInput
             style={[
@@ -78,6 +66,8 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
             onChangeText={setModelName}
             placeholder="模型名称"
             placeholderTextColor={tokens.textSecondary}
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <View style={styles.actions}>
             <Pressable onPress={onClose} style={styles.btn}>
@@ -86,9 +76,9 @@ export function AddModelModal({visible, onClose, onConfirm}: Props) {
             <Pressable
               onPress={() => handleConfirm().catch(() => undefined)}
               style={styles.btn}
-              disabled={saving || !vendorModelId.trim()}>
+              disabled={saving || !modelName.trim()}>
               <Text style={{color: tokens.primary, fontWeight: '600'}}>
-                {saving ? '保存中…' : '添加'}
+                {saving ? '保存中…' : '保存'}
               </Text>
             </Pressable>
           </View>

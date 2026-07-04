@@ -29,7 +29,7 @@ import type {
   EventsConfigStore,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import type { SecretStore, ModelRequestService, ProviderModelService, ProviderService, TokenCounterRegistry } from '@novel-master/core/provider';
+import type { SecretStore, ModelRequestService, ProviderModelService, ProviderService, ProviderServiceBundle, TokenCounterRegistry } from '@novel-master/core/provider';
 import type { RegexConfigService } from '@novel-master/core/regex';
 import type { MessageCheckpointService } from '@novel-master/core/message-checkpoint';
 import type { SessionFsService } from '@novel-master/core/session-fs';
@@ -66,6 +66,7 @@ export interface MobileNovelMasterRuntime {
   readonly secretStore: SecretStore;
   readonly providers: ProviderService;
   readonly providerModels: ProviderModelService;
+  readonly savedModelRepo: ProviderServiceBundle['savedModelRepo'];
   readonly modelRequests: ModelRequestService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;

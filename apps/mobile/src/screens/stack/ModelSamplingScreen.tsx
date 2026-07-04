@@ -6,7 +6,6 @@ import {ActivityIndicator, Pressable, StyleSheet, Text} from 'react-native';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import type {RouteProp} from '@react-navigation/native';
 import {
-  parseApplicationModelId,
   savedModelContextWindowTokens,
   savedModelSampling,
   savedModelThinkingLevel,
@@ -26,7 +25,6 @@ import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {ScreenFormLayout} from '../../components/form/ScreenFormLayout';
 import {StickyFormFooter} from '../../components/form/StickyFormFooter';
 import {SamplingForm} from '../../components/provider/SamplingForm';
-import {resolveModelShortLabel} from '../../provider/model-display-label';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -57,7 +55,7 @@ export function ModelSamplingScreen() {
   const runtime = useRuntime();
   const navigation = useNavigation();
   const route = useRoute<SamplingRoute>();
-  const applicationModelId = route.params?.applicationModelId;
+  const savedModelId = route.params?.savedModelId;
 
   const [protocol, setProtocol] = useState<LlmProtocolKind>('openai');
   const [params, setParams] = useState<ModelSamplingParams | undefined>();
@@ -65,65 +63,70 @@ export function ModelSamplingScreen() {
   const [tokenCounterMode, setTokenCounterMode] =
     useState<TokenizerOverride>('auto');
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>('off');
+  const [modelName, setModelName] = useState('');
+  const [vendorModelId, setVendorModelId] = useState('');
+  const [initialModelName, setInitialModelName] = useState('');
   const [modelSubtitle, setModelSubtitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
-    if (!applicationModelId) {
+    if (!savedModelId) {
       setLoading(false);
       return;
     }
     setLoading(true);
     try {
-      const {providerId} = parseApplicationModelId(applicationModelId);
-      const provider = await runtime.providers.get(providerId);
+      const saved = await runtime.providerModels.getSavedById(savedModelId);
+      if (saved == null) {
+        showToast(toastMessage('加载失败', '模型不存在'));
+        return;
+      }
+      const provider = await runtime.providers.get(saved.providerId);
       setProtocol(provider.protocol);
-      try {
-        const short = await resolveModelShortLabel(runtime, applicationModelId);
-        setModelSubtitle(`${short}\n${applicationModelId}`);
-      } catch {
-        setModelSubtitle(applicationModelId);
-      }
-      const saved = await runtime.providerModels.getSaved(applicationModelId);
-      if (saved) {
-        setContextWindowTokens(
-          String(savedModelContextWindowTokens(saved.settings)),
-        );
-        setTokenCounterMode(savedModelTokenCounterMode(saved.settings));
-        const sampling = savedModelSampling(saved.settings);
-        const stored =
-          sampling.enabled && sampling.params != null
-            ? sampling.params
-            : undefined;
-        setParams(stored);
-        setThinkingLevel(savedModelThinkingLevel(saved.settings));
-      }
+      setModelName(saved.modelName);
+      setInitialModelName(saved.modelName);
+      setVendorModelId(saved.vendorModelId);
+      setModelSubtitle(`${saved.modelName}\n${saved.vendorModelId}`);
+      setContextWindowTokens(
+        String(savedModelContextWindowTokens(saved.settings)),
+      );
+      setTokenCounterMode(savedModelTokenCounterMode(saved.settings));
+      const sampling = savedModelSampling(saved.settings);
+      const stored =
+        sampling.enabled && sampling.params != null
+          ? sampling.params
+          : undefined;
+      setParams(stored);
+      setThinkingLevel(savedModelThinkingLevel(saved.settings));
     } catch (error) {
       showToast(toastMessage('加载失败', error));
     } finally {
       setLoading(false);
     }
-  }, [runtime, applicationModelId, showToast]);
+  }, [runtime, savedModelId, showToast]);
 
   useEffect(() => {
     load().catch(() => undefined);
   }, [load]);
 
   useEffect(() => {
-    if (!applicationModelId) {
-      showToast(toastMessage('错误', '缺少 applicationModelId'));
+    if (!savedModelId) {
+      showToast(toastMessage('错误', '缺少 savedModelId'));
       navigation.goBack();
     }
-  }, [applicationModelId, navigation, showToast]);
+  }, [savedModelId, navigation, showToast]);
 
   const handleSave = async () => {
-    if (!applicationModelId) {
+    if (!savedModelId) {
       return;
     }
-    const {providerId, vendorModelId} =
-      parseApplicationModelId(applicationModelId);
+    const trimmedName = modelName.trim();
+    if (!trimmedName) {
+      showToast('模型名称不能为空');
+      return;
+    }
     const contextWindow = Number(contextWindowTokens);
     if (!Number.isInteger(contextWindow) || contextWindow <= 0) {
       showToast('上下文上限须为正整数');
@@ -131,11 +134,22 @@ export function ModelSamplingScreen() {
     }
     setSaving(true);
     try {
+      if (trimmedName !== initialModelName.trim()) {
+        const updated = await runtime.providerModels.editSaved(
+          savedModelId,
+          trimmedName,
+        );
+        setInitialModelName(updated.modelName);
+        setModelName(updated.modelName);
+        setModelSubtitle(
+          `${updated.modelName}\n${updated.vendorModelId}`,
+        );
+      }
       const sampling =
         paramsEmpty(params) || !params
           ? {enabled: false as const}
           : {enabled: true as const, params};
-      await runtime.providerModels.updateSettings(providerId, vendorModelId, {
+      await runtime.providerModels.updateSettings(savedModelId, {
         contextWindowTokens: contextWindow,
         sampling,
         tokenCounterMode,
@@ -151,18 +165,15 @@ export function ModelSamplingScreen() {
   };
 
   const handleResetSamplingDefaults = async () => {
-    if (!applicationModelId) {
+    if (!savedModelId) {
       return;
     }
-    const {providerId, vendorModelId} =
-      parseApplicationModelId(applicationModelId);
     setResetting(true);
     try {
       const updated = await runtime.providerModels.resetContextWindowToDefault(
-        providerId,
-        vendorModelId,
+        savedModelId,
       );
-      await runtime.providerModels.updateSettings(providerId, vendorModelId, {
+      await runtime.providerModels.updateSettings(savedModelId, {
         sampling: {enabled: false},
       });
       setContextWindowTokens(
@@ -196,6 +207,22 @@ export function ModelSamplingScreen() {
           onPress={() => handleSave().catch(() => undefined)}
         />
       }>
+      <FormSectionCard title="模型" tokens={tokens}>
+        <FormField label="模型名称" tokens={tokens}>
+          <FormTextInput
+            tokens={tokens}
+            value={modelName}
+            onChangeText={setModelName}
+            placeholder="模型名称"
+          />
+        </FormField>
+        {vendorModelId ? (
+          <Text style={[styles.vendorHint, {color: tokens.textSecondary}]}>
+            厂商 ID：{vendorModelId}
+          </Text>
+        ) : null}
+      </FormSectionCard>
+
       <FormSectionCard
         title="内部预算"
         tokens={tokens}
@@ -259,6 +286,10 @@ export function ModelSamplingScreen() {
 }
 
 const styles = StyleSheet.create({
+  vendorHint: {
+    fontSize: 13,
+    marginTop: 4,
+  },
   resetLink: {
     paddingVertical: 4,
     paddingHorizontal: 2,

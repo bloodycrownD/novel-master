@@ -86,8 +86,11 @@ export function ProvidersScreen() {
         await runtime.state.resetCurrentProviderId();
       }
       const currentModelId = await runtime.state.getCurrentModelId();
-      if (currentModelId?.startsWith(`${providerId}/`)) {
-        await runtime.state.resetCurrentModelId();
+      if (currentModelId) {
+        const saved = await runtime.providerModels.getSavedById(currentModelId);
+        if (saved?.providerId === providerId) {
+          await runtime.state.resetCurrentModelId();
+        }
       }
     }
     await reload();

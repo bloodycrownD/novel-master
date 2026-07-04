@@ -32,19 +32,16 @@ export async function loadChatAgentMeta(
     const hasDedicatedModel =
       definition.model != null && definition.model !== '';
     const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
-    const applicationModelId = resolveApplicationModelId({
+    const savedModelId = resolveApplicationModelId({
       agentModelId: definition.model,
       workspaceModelId: workspaceModelId || undefined,
     });
     let modelLabel = '未选择模型';
-    if (applicationModelId) {
+    if (savedModelId) {
       try {
-        modelLabel = await resolveModelDisplayLabel(
-          runtime,
-          applicationModelId,
-        );
+        modelLabel = await resolveModelDisplayLabel(runtime, savedModelId);
       } catch {
-        modelLabel = applicationModelId;
+        modelLabel = savedModelId;
       }
     }
     if (resolved.source === 'global') {

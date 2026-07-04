@@ -35,12 +35,12 @@ export async function loadChatPromptTokenLabel(
   const {definition, layout, ctx} = await buildSessionPromptInput(runtime, scope);
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
-  const applicationModelId = resolveApplicationModelId({
+  const savedModelId = resolveApplicationModelId({
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });
 
-  if (!applicationModelId) {
+  if (!savedModelId) {
     const serialized = await serializePromptLlmInput(layout, ctx);
     const count = runtime.tokenCounters.heuristic.countText(serialized);
     return formatChatTokenLabel(
@@ -51,19 +51,19 @@ export async function loadChatPromptTokenLabel(
 
   const tokenizerOverride = await resolveTokenCounterModeForModel(
     runtime.providerModels,
-    applicationModelId,
+    savedModelId,
   );
 
   const result = await countPromptLlmInput({
     layout,
     ctx,
-    applicationModelId,
+    savedModelId,
     registry: runtime.tokenCounters,
     tokenizerOverride,
   });
 
   const contextWindow =
-    await runtime.providerModels.getContextWindow(applicationModelId);
+    await runtime.providerModels.getContextWindow(savedModelId);
 
   return formatChatTokenLabel(result, contextWindow ?? undefined);
 }
@@ -81,22 +81,22 @@ async function loadChatPromptTokenLabelFallback(
   const count = runtime.tokenCounters.heuristic.countText(serialized);
 
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? '';
-  let applicationModelId: string | undefined;
+  let savedModelId: string | undefined;
   try {
     const {definition} = await buildSessionPromptInput(runtime, scope);
-    applicationModelId = resolveApplicationModelId({
+    savedModelId = resolveApplicationModelId({
       agentModelId: definition.model,
       workspaceModelId: workspaceModelId || undefined,
     });
   } catch {
-    applicationModelId = workspaceModelId || undefined;
+    savedModelId = workspaceModelId || undefined;
   }
 
   let contextWindow: number | undefined;
-  if (applicationModelId) {
+  if (savedModelId) {
     try {
       const cw =
-        await runtime.providerModels.getContextWindow(applicationModelId);
+        await runtime.providerModels.getContextWindow(savedModelId);
       contextWindow = cw ?? undefined;
     } catch {
       contextWindow = undefined;

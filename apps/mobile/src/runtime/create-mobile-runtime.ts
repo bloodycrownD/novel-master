@@ -102,6 +102,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
+      savedModels: providerBundle.savedModelRepo,
       worktreeSnapshot,
       worktree: s => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
@@ -142,6 +143,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     secretStore,
     providers: providerBundle.providers,
     providerModels: providerBundle.providerModels,
+    savedModelRepo: providerBundle.savedModelRepo,
     modelRequests: providerBundle.modelRequests,
     regexConfig,
     userVfsTurn,

@@ -1,26 +1,29 @@
 /**
- * Model id / label helpers for workspace applicationModelId.
+ * Saved model label helpers for workspace currentModelId (UUID).
  */
-import {parseApplicationModelId} from '@novel-master/core/provider';
+import {formatSavedModelDisplayName} from '@novel-master/core/provider';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
-/** Canonical model id for display: `providerId/vendorModelId`. */
+/** Primary row label: derived displayName (`provider/modelName`). */
 export async function resolveModelDisplayLabel(
-  _runtime: MobileNovelMasterRuntime,
-  applicationModelId: string,
+  runtime: MobileNovelMasterRuntime,
+  savedModelId: string,
 ): Promise<string> {
-  parseApplicationModelId(applicationModelId);
-  return applicationModelId;
+  const saved = await runtime.providerModels.getSavedById(savedModelId);
+  if (saved == null) {
+    return savedModelId;
+  }
+  return formatSavedModelDisplayName(saved.providerId, saved.modelName);
 }
 
-/** Compact title (displayName or vendor id without provider prefix). */
+/** Compact title: persisted modelName (not derived path). */
 export async function resolveModelShortLabel(
   runtime: MobileNovelMasterRuntime,
-  applicationModelId: string,
+  savedModelId: string,
 ): Promise<string> {
-  const {providerId, vendorModelId} =
-    parseApplicationModelId(applicationModelId);
-  const saved = await runtime.providerModels.savedList(providerId);
-  const match = saved.find(m => m.vendorModelId === vendorModelId);
-  return match?.displayName?.trim() || vendorModelId;
+  const saved = await runtime.providerModels.getSavedById(savedModelId);
+  if (saved == null) {
+    return savedModelId;
+  }
+  return saved.modelName.trim() || saved.vendorModelId;
 }

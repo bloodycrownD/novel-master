@@ -40,7 +40,7 @@ import {
 } from '@novel-master/core/config-forms/stored-config-validity';
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
-import { formatApplicationModelId, parseApplicationModelId } from "@novel-master/core/provider";
+import { formatSavedModelDisplayName } from "@novel-master/core/provider";
 import {ToolPolicyPicker} from './ToolPolicyPicker';
 import {FormField} from '../form/FormField';
 import {FormSwitchRow} from '../form/FormSwitchRow';
@@ -118,6 +118,7 @@ export function AgentEditorForm(props: Props) {
   const [maxSteps, setMaxSteps] = useState('20');
   const [modelEnabled, setModelEnabled] = useState(false);
   const [providerId, setProviderId] = useState('');
+  const [savedModelId, setSavedModelId] = useState('');
   const [vendorModelId, setVendorModelId] = useState('');
   const [systemEnabled, setSystemEnabled] = useState(false);
   const [systemContent, setSystemContent] = useState('');
@@ -171,6 +172,7 @@ export function AgentEditorForm(props: Props) {
       maxSteps,
       modelEnabled,
       providerId,
+      savedModelId,
       vendorModelId,
       toolsMode,
       toolsSelected,
@@ -228,46 +230,52 @@ export function AgentEditorForm(props: Props) {
       setToolsMode(toolsWire.mode);
       setToolsSelected([...toolsWire.selected]);
       const providerList = await loadProviders();
+      const applySavedModelSelection = (
+        saved: (typeof savedModels)[number] | undefined,
+      ) => {
+        if (saved == null) {
+          setSavedModelId('');
+          setVendorModelId('');
+          return;
+        }
+        setSavedModelId(saved.id);
+        setVendorModelId(saved.vendorModelId);
+      };
       if (def.model) {
         setModelEnabled(true);
-        try {
-          const parsed = parseApplicationModelId(def.model);
-          setProviderId(parsed.providerId);
-          await loadSavedModels(parsed.providerId);
-          setVendorModelId(parsed.vendorModelId);
-        } catch {
+        const saved = await runtime.providerModels.getSavedById(def.model);
+        if (saved) {
+          setProviderId(saved.providerId);
+          await loadSavedModels(saved.providerId);
+          applySavedModelSelection(saved);
+        } else {
           setModelEnabled(false);
+          applySavedModelSelection(undefined);
         }
       } else {
         setModelEnabled(false);
         const workspaceId = await runtime.state.getCurrentModelId();
         if (workspaceId) {
-          try {
-            const parsed = parseApplicationModelId(workspaceId);
-            setProviderId(parsed.providerId);
-            await loadSavedModels(parsed.providerId);
-            setVendorModelId(parsed.vendorModelId);
-          } catch {
-            /* ignore */
+          const saved = await runtime.providerModels.getSavedById(workspaceId);
+          if (saved) {
+            setProviderId(saved.providerId);
+            await loadSavedModels(saved.providerId);
+            applySavedModelSelection(saved);
           }
         } else if (providerList.length > 0) {
           setProviderId(providerList[0].id);
           const saved = await loadSavedModels(providerList[0].id);
-          if (saved.length > 0) {
-            setVendorModelId(saved[0].vendorModelId);
-          }
+          applySavedModelSelection(saved[0]);
         }
       }
       const modelEnabledWire = Boolean(def.model);
       let baselineProviderId = '';
       let baselineVendorModelId = '';
       if (modelEnabledWire && def.model) {
-        try {
-          const parsed = parseApplicationModelId(def.model);
-          baselineProviderId = parsed.providerId;
-          baselineVendorModelId = parsed.vendorModelId;
-        } catch {
-          /* treat as no dedicated model */
+        const saved = await runtime.providerModels.getSavedById(def.model);
+        if (saved) {
+          baselineProviderId = saved.providerId;
+          baselineVendorModelId = saved.vendorModelId;
         }
       }
       setSavedBaseline(
@@ -428,9 +436,19 @@ export function AgentEditorForm(props: Props) {
     showToast,
   ]);
 
-  const preferredModelId = modelEnabled
-    ? formatApplicationModelId(providerId, vendorModelId)
-    : undefined;
+  const pinnedModelHint = useMemo(() => {
+    if (!modelEnabled || !savedModelId) {
+      return undefined;
+    }
+    const selected = savedModels.find(m => m.id === savedModelId);
+    if (selected) {
+      return formatSavedModelDisplayName(
+        selected.providerId,
+        selected.modelName,
+      );
+    }
+    return savedModelId;
+  }, [modelEnabled, savedModelId, savedModels]);
 
   const handleSave = async () => {
     const built = buildAgentDefinitionFromForm({
@@ -452,7 +470,14 @@ export function AgentEditorForm(props: Props) {
       showToast(built.message);
       return;
     }
-    const def = built.definition;
+    let def = built.definition;
+    if (modelEnabled) {
+      if (!savedModelId) {
+        showToast('请选择专属模型');
+        return;
+      }
+      def = {...def, model: savedModelId};
+    }
     setSaving(true);
     try {
       const probe = new ToolRegistry();
@@ -573,7 +598,15 @@ export function AgentEditorForm(props: Props) {
   const handleProviderChange = async (pid: string) => {
     setProviderId(pid);
     const saved = await loadSavedModels(pid);
-    setVendorModelId(saved[0]?.vendorModelId ?? '');
+    const first = saved[0];
+    setSavedModelId(first?.id ?? '');
+    setVendorModelId(first?.vendorModelId ?? '');
+  };
+
+  const handleSavedModelChange = (id: string) => {
+    setSavedModelId(id);
+    const selected = savedModels.find(m => m.id === id);
+    setVendorModelId(selected?.vendorModelId ?? '');
   };
 
   const providerSelectOptions = providers.map(p => ({
@@ -581,8 +614,8 @@ export function AgentEditorForm(props: Props) {
     label: p.label,
   }));
   const modelSelectOptions = savedModels.map(m => ({
-    value: m.vendorModelId,
-    label: m.displayName?.trim() || m.vendorModelId,
+    value: m.id,
+    label: formatSavedModelDisplayName(m.providerId, m.modelName),
   }));
 
   if (loading) {
@@ -784,8 +817,8 @@ export function AgentEditorForm(props: Props) {
               <FormField label="模型" tokens={tokens}>
                 <FormSelectField
                   tokens={tokens}
-                  value={vendorModelId}
-                  onChange={setVendorModelId}
+                  value={savedModelId}
+                  onChange={handleSavedModelChange}
                   options={modelSelectOptions}
                   sheetTitle="选择模型"
                   placeholder="选择模型"
@@ -796,7 +829,7 @@ export function AgentEditorForm(props: Props) {
                 />
               </FormField>
               <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-                model: {preferredModelId ?? '—'}
+                model: {pinnedModelHint ?? '—'}
               </Text>
             </>
           )}
