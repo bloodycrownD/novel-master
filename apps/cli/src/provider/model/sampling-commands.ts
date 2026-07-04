@@ -6,7 +6,7 @@
 
 import { readFile } from "node:fs/promises";
 import {
-  parseApplicationModelId,
+  assertSavedModelUuid,
   savedModelSampling,
   savedModelSettingsFromJson,
   savedModelSettingsToJson,
@@ -26,7 +26,7 @@ function requireModelId(flags: ReadonlyMap<string, string | true>): string {
   const modelId = flagString(flags, "modelId");
   if (modelId == null) {
     throw new Error(
-      "Usage: nm provider model sampling <show|set|clear> --modelId <provider>/<vendor> [--file <path>]",
+      "Usage: nm provider model sampling <show|set|clear> --modelId <uuid> [--file <path>]",
     );
   }
   return modelId;
@@ -39,14 +39,7 @@ export async function runProviderModelSampling(
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
   const modelId = requireModelId(flags);
-  const { providerId, vendorModelId } = parseApplicationModelId(modelId);
-
-  const saved = await rt.providerModels.getSaved(modelId);
-  if (saved == null) {
-    throw new Error(
-      `Model not saved: ${modelId} (run: nm provider model save --vendorModelId ${vendorModelId})`,
-    );
-  }
+  const saved = await assertSavedModelUuid(modelId, rt.savedModels);
 
   switch (subcommand) {
     case "show": {
@@ -67,7 +60,7 @@ export async function runProviderModelSampling(
       const filePath = flagString(flags, "file");
       if (filePath == null) {
         throw new Error(
-          "Usage: nm provider model sampling set --modelId <id> --file <json|yaml>",
+          "Usage: nm provider model sampling set --modelId <uuid> --file <json|yaml>",
         );
       }
       const raw = await readFile(filePath, "utf8");
@@ -83,20 +76,20 @@ export async function runProviderModelSampling(
           },
         },
       });
-      await rt.providerModels.updateSettings(providerId, vendorModelId, {
+      await rt.providerModels.updateSettings(saved.id, {
         sampling: savedModelSampling(parsed),
       });
       return;
     }
     case "clear": {
-      await rt.providerModels.updateSettings(providerId, vendorModelId, {
+      await rt.providerModels.updateSettings(saved.id, {
         sampling: { enabled: false },
       });
       return;
     }
     default:
       throw new Error(
-        "Usage: nm provider model sampling <show|set|clear> --modelId <provider>/<vendor>",
+        "Usage: nm provider model sampling <show|set|clear> --modelId <uuid>",
       );
   }
 }

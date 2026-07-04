@@ -4,12 +4,16 @@
  * @module provider/model/commands
  */
 
-import { formatApplicationModelId, isValidTokenCounterModePref, type TokenizerOverride } from "@novel-master/core/provider";
+import {
+  assertSavedModelUuid,
+  isValidTokenCounterModePref,
+  savedModelDisplayName,
+  type TokenizerOverride,
+} from "@novel-master/core/provider";
 import { type SavedModelSettingsPatch } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../../runtime.js";
 import { resolveProviderId } from "../../config/resolve-provider-scope.js";
 import { parseCliArgs } from "../../vfs/parse-args.js";
-import { parseApplicationModelId } from "@novel-master/core/provider";
 import { runProviderModelSampling } from "./sampling-commands.js";
 
 function flagString(
@@ -18,6 +22,18 @@ function flagString(
 ): string | undefined {
   const v = flags.get(key);
   return typeof v === "string" ? v : undefined;
+}
+
+async function requireSavedModelId(
+  rt: NovelMasterRuntime,
+  flags: ReadonlyMap<string, string | true>,
+): Promise<string> {
+  const modelId = flagString(flags, "modelId");
+  if (modelId == null) {
+    throw new Error("Missing --modelId <uuid>");
+  }
+  const saved = await assertSavedModelUuid(modelId, rt.savedModels);
+  return saved.id;
 }
 
 export async function runProviderModel(
@@ -46,7 +62,7 @@ export async function runProviderModel(
     const samplingSub = args[0];
     if (samplingSub == null) {
       throw new Error(
-        "Usage: nm provider model sampling <show|set|clear> --modelId <provider>/<vendor>",
+        "Usage: nm provider model sampling <show|set|clear> --modelId <uuid>",
       );
     }
     await runProviderModelSampling(rt, samplingSub, args.slice(1));
@@ -64,13 +80,13 @@ export async function runProviderModel(
       const vendorModelId = flagString(flags, "vendorModelId");
       if (!vendorModelId) {
         throw new Error(
-          "Usage: nm provider model save --vendorModelId <id> [--displayName]",
+          "Usage: nm provider model save --vendorModelId <id> [--modelName <name>]",
         );
       }
       await rt.providerModels.save(
         providerId,
         vendorModelId,
-        flagString(flags, "displayName"),
+        flagString(flags, "modelName"),
       );
       return;
     }
@@ -88,27 +104,31 @@ export async function runProviderModel(
       const list = await rt.providerModels.savedList(providerId);
       for (const m of list) {
         console.log(
-          `${formatApplicationModelId(m.providerId, m.vendorModelId)}\t${m.displayName ?? ""}`,
+          `${m.id}\t${savedModelDisplayName(m)}\t${m.vendorModelId}`,
         );
       }
       return;
     }
     case "edit": {
-      const modelId = flagString(flags, "modelId");
-      if (!modelId) {
+      const savedModelId = await requireSavedModelId(rt, flags);
+      if (
+        !flags.has("modelName") &&
+        !flags.has("resetContextWindow") &&
+        flagString(flags, "contextWindowTokens") == null &&
+        flagString(flags, "tokenCounterMode") == null
+      ) {
         throw new Error(
-          "Usage: nm provider model edit --modelId <provider>/<vendor> [--displayName] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]",
+          "Usage: nm provider model edit --modelId <uuid> [--modelName <name>] [--contextWindowTokens N] [--tokenCounterMode <mode>] [--resetContextWindow]",
         );
       }
-      const { providerId: pid, vendorModelId } = parseApplicationModelId(modelId);
-      const displayName = flags.has("displayName")
-        ? (flagString(flags, "displayName") ?? null)
+      const modelName = flags.has("modelName")
+        ? (flagString(flags, "modelName") ?? null)
         : undefined;
-      if (displayName !== undefined) {
-        await rt.providerModels.editSaved(pid, vendorModelId, displayName);
+      if (modelName !== undefined) {
+        await rt.providerModels.editSaved(savedModelId, modelName ?? undefined);
       }
       if (flags.has("resetContextWindow")) {
-        await rt.providerModels.resetContextWindowToDefault(pid, vendorModelId);
+        await rt.providerModels.resetContextWindowToDefault(savedModelId);
       } else {
         const contextWindowRaw = flagString(flags, "contextWindowTokens");
         const tokenCounterModeRaw = flagString(flags, "tokenCounterMode");
@@ -133,20 +153,14 @@ export async function runProviderModel(
             ...(contextWindowTokens != null ? { contextWindowTokens } : {}),
             ...(tokenCounterMode != null ? { tokenCounterMode } : {}),
           };
-          await rt.providerModels.updateSettings(pid, vendorModelId, patch);
+          await rt.providerModels.updateSettings(savedModelId, patch);
         }
       }
       return;
     }
     case "delete": {
-      const modelId = flagString(flags, "modelId");
-      if (!modelId) {
-        throw new Error(
-          "Usage: nm provider model delete --modelId <provider>/<vendor>",
-        );
-      }
-      const { providerId: pid, vendorModelId } = parseApplicationModelId(modelId);
-      await rt.providerModels.deleteSaved(pid, vendorModelId);
+      const savedModelId = await requireSavedModelId(rt, flags);
+      await rt.providerModels.deleteSaved(savedModelId);
       return;
     }
     default:
