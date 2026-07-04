@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ProviderError } from "../../src/errors/provider-errors.js";
 import { getNovelMasterTestContext, novelMasterTestFixture } from "../helpers/novel-master-fixture.js";
 
 const TEST_SAVED_MODEL_ID = "00000000-0000-4000-8000-000000000099";
@@ -23,9 +24,16 @@ describe("PersistentState", () => {
     assert.equal(await ctx.state.getCurrentAgentId(), "agent-1");
   });
 
-  it("setCurrentModelId 拒绝 legacy provider/vendor 指针", async () => {
+  it("setCurrentModelId 拒绝 legacy provider/vendor 指针", () => {
     const ctx = getNovelMasterTestContext();
-    await assert.rejects(() => ctx.state.setCurrentModelId("prov1/model"));
+    assert.throws(
+      () => {
+        void ctx.state.setCurrentModelId("prov1/model");
+      },
+      (error: unknown) =>
+        error instanceof ProviderError &&
+        error.code === "INVALID_SAVED_MODEL_ID",
+    );
   });
 
   it("returns undefined for missing keys", async () => {
