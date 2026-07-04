@@ -17,13 +17,15 @@ export const PROVIDER_SCHEMA_STATEMENTS: readonly string[] = [
   updated_at_ms INTEGER NOT NULL
 );`,
   `CREATE TABLE IF NOT EXISTS llm_saved_model (
+  id TEXT PRIMARY KEY,
   provider_id TEXT NOT NULL,
   vendor_model_id TEXT NOT NULL,
-  display_name TEXT,
+  model_name TEXT NOT NULL,
   settings_json TEXT NOT NULL,
   created_at_ms INTEGER NOT NULL,
   updated_at_ms INTEGER NOT NULL,
-  PRIMARY KEY (provider_id, vendor_model_id),
   FOREIGN KEY (provider_id) REFERENCES llm_provider(id) ON DELETE CASCADE
 );`,
+  `CREATE INDEX IF NOT EXISTS idx_llm_saved_model_provider
+    ON llm_saved_model(provider_id);`,
 ];

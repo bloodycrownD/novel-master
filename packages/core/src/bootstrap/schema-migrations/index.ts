@@ -11,9 +11,12 @@ import {
   isSchemaMigrationApplied,
   markSchemaMigrationApplied,
 } from "./schema-migrations-table.js";
+import { savedModelIdentityV1Migration } from "./saved-model-identity-v1.js";
 
-/** 有序 migration 列表；Step 3 起注册 `saved-model-identity-v1` 等模块。 */
-export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [];
+/** 有序 migration 列表。 */
+export const SCHEMA_MIGRATIONS: readonly SchemaMigration[] = [
+  savedModelIdentityV1Migration,
+];
 
 /**
  * 按 id 顺序执行尚未 apply 的 migration。
