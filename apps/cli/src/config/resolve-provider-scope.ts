@@ -5,6 +5,10 @@
  */
 
 import type { PersistentState } from "@novel-master/core";
+import {
+  assertSavedModelUuid,
+  type ProviderServiceBundle,
+} from "@novel-master/core/provider";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -32,21 +36,24 @@ export async function resolveProviderId(
   );
 }
 
-/** Resolves model id: flag > state > error. */
+/** Resolves saved model UUID: flag > state > error. */
 export async function resolveModelId(
   flags: ReadonlyMap<string, string | true>,
   state: PersistentState,
+  savedModels: ProviderServiceBundle["savedModelRepo"],
 ): Promise<string> {
   const fromFlag = flagString(flags, "modelId");
   if (fromFlag != null) {
-    return fromFlag;
+    const saved = await assertSavedModelUuid(fromFlag, savedModels);
+    return saved.id;
   }
   const fromState = await state.getCurrentModelId();
   if (fromState != null && fromState !== "") {
-    return fromState;
+    const saved = await assertSavedModelUuid(fromState, savedModels);
+    return saved.id;
   }
   throw new Error(
-    "Missing --modelId <id> (or run: nm model use --modelId <provider>/<vendor>)",
+    "Missing --modelId <uuid> (or run: nm model use --modelId <uuid>)",
   );
 }
 
