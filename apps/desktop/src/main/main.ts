@@ -7,6 +7,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closeDesktopConnection } from "./runtime/connection.js";
 import {
+  attachAgentRunLifecycleListeners,
+} from "./ipc/handlers/agent.js";
+import {
   attachEventBusForwarder,
   setEventBusForwardTarget,
 } from "./ipc/forward-event-bus.js";
@@ -29,6 +32,7 @@ const isDev = !app.isPackaged;
 
 let detachEventBusForwarder: (() => void) | undefined;
 let detachAgentActivityForwarder: (() => void) | undefined;
+let detachAgentRunLifecycleListeners: (() => void) | undefined;
 
 function resolvePreloadPath(): string {
   // Sandboxed preload must be CommonJS; ESM preload.js fails to execute in Electron.
@@ -139,6 +143,8 @@ function createMainWindow(): BrowserWindow {
 function detachMainEventBusListeners(): void {
   detachEventBusForwarder?.();
   detachEventBusForwarder = undefined;
+  detachAgentRunLifecycleListeners?.();
+  detachAgentRunLifecycleListeners = undefined;
   detachAgentActivityForwarder?.();
   detachAgentActivityForwarder = undefined;
 }
@@ -148,6 +154,9 @@ async function bootstrapMainServices(): Promise<void> {
   const runtime = await getDesktopRuntime();
   detachMainEventBusListeners();
   detachEventBusForwarder = attachEventBusForwarder(runtime.eventBus);
+  detachAgentRunLifecycleListeners = attachAgentRunLifecycleListeners(
+    runtime.eventBus,
+  );
   detachAgentActivityForwarder = attachAgentActivityForwarder();
 }
 

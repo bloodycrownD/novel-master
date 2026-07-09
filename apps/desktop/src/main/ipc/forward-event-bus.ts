@@ -1,6 +1,6 @@
 /**
- * Forwards main-process eventBus publishes to the focused renderer window.
- * Agent stream + step events are relayed on `nm:agent-stream`.
+ * 将 main 进程 eventBus 发布的事件转发至聚焦中的 renderer 窗口。
+ * Agent 流式与 step 事件经 `nm:agent-stream` 通道推送；不含 run 生命周期登记。
  */
 import type { WebContents } from "electron";
 import {
@@ -11,16 +11,8 @@ import {
   EVENT_AGENT_STREAM_TEXT_DELTA,
   EVENT_AGENT_STREAM_THINKING_DELTA,
   EVENT_AGENT_STREAM_TOOL_USE,
-  type AgentRunFailedPayload,
-  type AgentRunFinishedPayload,
-  type AgentRunStartedPayload,
   type SimpleEventBus,
 } from "@novel-master/core/events";
-import {
-  onCoreRunFailed,
-  onCoreRunFinished,
-  onCoreRunStarted,
-} from "./handlers/agent.js";
 import { IPC_CHANNELS, type AgentStreamEventPayload } from "../../../shared/ipc-types.js";
 import { desktopLogError } from "../log/desktop-log.js";
 
@@ -37,25 +29,16 @@ const FORWARDED_EVENTS = [
   EVENT_AGENT_RUN_FAILED,
 ] as const;
 
-/** Registers how to resolve the renderer webContents for event forwarding. */
+/** 注册如何解析用于事件转发的 renderer webContents。 */
 export function setEventBusForwardTarget(
   resolver: () => WebContents | undefined,
 ): void {
   getTargetWebContents = resolver;
 }
 
-/**
- * run 生命周期登记/清理在 main 的 forward-event-bus 统一处理（agent.ts 导出钩子），
- * 不在 renderer 重复 refcount。
- */
 function forwardEvent(type: string, payload: unknown): void {
-  if (type === EVENT_AGENT_RUN_STARTED) {
-    onCoreRunStarted(payload as AgentRunStartedPayload);
-  } else if (type === EVENT_AGENT_RUN_FINISHED) {
-    onCoreRunFinished(payload as AgentRunFinishedPayload);
-  } else if (type === EVENT_AGENT_RUN_FAILED) {
-    const failed = payload as AgentRunFailedPayload;
-    onCoreRunFailed(failed);
+  if (type === EVENT_AGENT_RUN_FAILED) {
+    const failed = payload as { sessionId?: string; projectId?: string; error?: string };
     desktopLogError("agent run failed (forwarding to renderer)", {
       sessionId: failed.sessionId,
       projectId: failed.projectId,
@@ -67,8 +50,7 @@ function forwardEvent(type: string, payload: unknown): void {
 }
 
 /**
- * Attaches forwarders from runtime eventBus to renderer IPC.
- * Returns cleanup for app quit / rebootstrap.
+ * 将 runtime eventBus 订阅挂到 renderer IPC；返回 cleanup 供 quit / rebootstrap。
  */
 export function attachEventBusForwarder(eventBus: SimpleEventBus): () => void {
   detachEventBusForwarder();

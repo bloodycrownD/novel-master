@@ -12,6 +12,7 @@ import {
 } from "../src/main/runtime/agent-activity.js";
 import {
   abortAgentRun,
+  attachAgentRunLifecycleListeners,
   onCoreRunFinished,
   onCoreRunStarted,
 } from "../src/main/ipc/handlers/agent.js";
@@ -81,7 +82,7 @@ describe("agent run lifecycle", () => {
     assert.equal(isDesktopAgentActive(), true);
   });
 
-  it("forward-event-bus RUN_STARTED/FINISHED 触发登记与清理", () => {
+  it("eventBus RUN_STARTED/FINISHED 订阅触发登记与清理", () => {
     const bus = new SimpleEventBus();
     const forwarded: unknown[] = [];
     setEventBusForwardTarget(() => ({
@@ -91,6 +92,7 @@ describe("agent run lifecycle", () => {
       },
     }));
     attachEventBusForwarder(bus);
+    attachAgentRunLifecycleListeners(bus);
 
     incrementDesktopAgentActive();
     bus.publish(EVENT_AGENT_RUN_STARTED, {
