@@ -4,12 +4,14 @@ import { decode, encode, parseText, stringifyText } from "@novel-master/core";
 
 import { agentDefinitionSchema } from "@novel-master/core/agent";
 
+const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
+
 describe("agent definition serialization", () => {
   it("round-trips YAML with persist + dynamic map", () => {
     const yaml = `
 schemaVersion: 1
 name: test
-model: anthropic/claude
+model: ${TEST_SAVED_MODEL}
 prompts:
   system: hello
   persist:
@@ -21,7 +23,7 @@ prompts:
 `;
     const def = decode(parseText(yaml, "yaml"), agentDefinitionSchema);
     assert.equal(def.name, "test");
-    assert.equal(def.model, "anthropic/claude");
+    assert.equal(def.model, TEST_SAVED_MODEL);
     assert.equal(def.prompts.system, "hello");
     const out = stringifyText(encode(def, agentDefinitionSchema), "yaml");
     const again = decode(parseText(out, "yaml"), agentDefinitionSchema);

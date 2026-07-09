@@ -16,11 +16,14 @@ import {
 
 novelMasterTestFixture();
 
+const TEST_SAVED_MODEL_GLOBAL = "33333333-3333-4333-8333-333333333333";
+const TEST_SAVED_MODEL_CUSTOM = "44444444-4444-4444-8444-444444444444";
+
 function customDefinition(name: string): AgentDefinition {
   return {
     name,
     prompts: { persist: [], dynamic: [] },
-    model: "provider:custom-model",
+    model: TEST_SAVED_MODEL_CUSTOM,
   };
 }
 
@@ -33,7 +36,7 @@ describe("resolveAgentForProject", () => {
         schemaVersion: 1,
         name: "全局助手",
         prompts: { persist: {}, dynamic: {} },
-        model: "provider:global",
+        model: TEST_SAVED_MODEL_GLOBAL,
       },
       agentDefinitionSchema,
     );

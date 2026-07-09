@@ -7,6 +7,7 @@ import { agentDefinitionSchema, AgentConfigError } from "@novel-master/core/agen
 import { PromptError } from "@novel-master/core/prompt";
 
 const emptyPrompts = { persist: {}, dynamic: {} };
+const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
 
 describe("agentDefinitionSchema", () => {
   it("parses valid document with system + persist + dynamic", () => {
@@ -21,12 +22,12 @@ describe("agentDefinitionSchema", () => {
           },
           dynamic: {},
         },
-        model: "openai/gpt-4",
+        model: TEST_SAVED_MODEL,
       },
       agentDefinitionSchema,
     );
     assert.equal(def.name, "writer");
-    assert.equal(def.model, "openai/gpt-4");
+    assert.equal(def.model, TEST_SAVED_MODEL);
     assert.equal(def.prompts.system, "hi");
     assert.equal(def.prompts.persist[0]?.name, "persona");
   });
@@ -69,20 +70,20 @@ describe("agentDefinitionSchema", () => {
     );
   });
 
-  it("T3: model string round-trips via encode", () => {
+  it("T3: model UUID round-trips via encode", () => {
     const def = decode(
       {
         schemaVersion: 1,
         name: "x",
         prompts: emptyPrompts,
-        model: "mock/test",
+        model: TEST_SAVED_MODEL,
       },
       agentDefinitionSchema,
     );
     const doc = encode(def, agentDefinitionSchema);
-    assert.equal((doc as { model?: string }).model, "mock/test");
+    assert.equal((doc as { model?: string }).model, TEST_SAVED_MODEL);
     const again = decode(doc, agentDefinitionSchema);
-    assert.equal(again.model, "mock/test");
+    assert.equal(again.model, TEST_SAVED_MODEL);
   });
 
   it("T4: persist map order matches definition.prompts.persist order", () => {
@@ -137,7 +138,7 @@ describe("agentDefinitionSchema", () => {
             schemaVersion: 1,
             name: "x",
             prompts: emptyPrompts,
-            model: "a/b",
+            model: TEST_SAVED_MODEL,
             compact: {
               trigger: { tokenThreshold: 100 },
               action: { keepLastN: 3, abstract: { type: "agent", agentId: "s" } },

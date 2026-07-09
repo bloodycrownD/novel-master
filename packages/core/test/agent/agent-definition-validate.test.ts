@@ -4,6 +4,9 @@ import { decode } from "@novel-master/core";
 
 import { agentDefinitionSchema, validateAgentDefinition } from "@novel-master/core/agent";
 
+const TEST_SAVED_MODEL = "11111111-1111-4111-8111-111111111111";
+const TEST_SAVED_MODEL_GHOST = "22222222-2222-4222-8222-222222222222";
+
 describe("validateAgentDefinition", () => {
   it("D2: assertSavedModel runs for valid model pin", async () => {
     const def = decode(
@@ -11,17 +14,17 @@ describe("validateAgentDefinition", () => {
         schemaVersion: 1,
         name: "pinned",
         prompts: { persist: {}, dynamic: {} },
-      model: "mock/test",
+        model: TEST_SAVED_MODEL,
       },
       agentDefinitionSchema,
     );
     let seen = "";
     await validateAgentDefinition(def, {
-      assertSavedModel: async (applicationModelId) => {
-        seen = applicationModelId;
+      assertSavedModel: async (savedModelId) => {
+        seen = savedModelId;
       },
     });
-    assert.equal(seen, "mock/test");
+    assert.equal(seen, TEST_SAVED_MODEL);
   });
 
   it("D2: assertSavedModel failure rejects unknown pin", async () => {
@@ -30,7 +33,7 @@ describe("validateAgentDefinition", () => {
         schemaVersion: 1,
         name: "pinned",
         prompts: { persist: {}, dynamic: {} },
-      model: "mock/ghost",
+        model: TEST_SAVED_MODEL_GHOST,
       },
       agentDefinitionSchema,
     );
@@ -38,10 +41,10 @@ describe("validateAgentDefinition", () => {
       () =>
         validateAgentDefinition(def, {
           assertSavedModel: async () => {
-            throw new Error("unknown model: mock/ghost");
+            throw new Error(`unknown model: ${TEST_SAVED_MODEL_GHOST}`);
           },
         }),
-      /unknown model: mock\/ghost/,
+      new RegExp(`unknown model: ${TEST_SAVED_MODEL_GHOST}`),
     );
   });
 
