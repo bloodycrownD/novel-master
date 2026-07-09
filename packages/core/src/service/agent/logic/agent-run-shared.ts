@@ -5,7 +5,7 @@
  */
 
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
-import { resolveApplicationModelId } from "@/domain/agent/logic/resolve-application-model-id.js";
+import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 
 /** Minimal runtime surface for agent id / definition resolution. */
@@ -67,7 +67,7 @@ export async function resolveApplicationModelIdForRun(
   cliModelId?: string,
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
-  const resolved = resolveApplicationModelId({
+  const resolved = resolveSavedModelId({
     cliModelId,
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,

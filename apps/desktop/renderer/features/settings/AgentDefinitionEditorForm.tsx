@@ -48,7 +48,7 @@ import { ContextMenu } from "@/components/ui/ContextMenu";
 import { showToast } from "@/components/ui/show-toast";
 import { Switch } from "@/components/ui/Switch";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
-import { ipcProviderModelsSavedList, ipcProvidersList } from "@/ipc/client";
+import { ipcProviderModelsGetSaved, ipcProviderModelsSavedList, ipcProvidersList } from "@/ipc/client";
 import { SettingsField, SettingsSection } from "./settings-ui";
 
 const DYNAMIC_MACROS = [
@@ -157,7 +157,7 @@ function applyDefinitionToFormState(
         maxSteps: String(def.runtime?.maxSteps ?? 20),
         modelEnabled: modelOn,
         providerId: baselineProviderId,
-        vendorModelId: baselineSavedModelId,
+        savedModelId: baselineSavedModelId,
         toolsMode: toolsWire.mode,
         toolsSelected: [...toolsWire.selected],
         ...promptForm,
@@ -207,7 +207,7 @@ export const AgentDefinitionEditorForm = forwardRef<
         maxSteps,
         modelEnabled,
         providerId,
-        vendorModelId: savedModelId,
+        savedModelId: savedModelId,
         toolsMode,
         toolsSelected,
         systemEnabled,
@@ -239,13 +239,13 @@ export const AgentDefinitionEditorForm = forwardRef<
       if (modelPin == null || modelPin === "") {
         return { modelOn: false, providerId: "", savedModelId: "" };
       }
-      const providerRes = await ipcProvidersList();
-      const rows = providerRes.ok ? providerRes.data : [];
-      for (const provider of rows) {
-        const res = await ipcProviderModelsSavedList({ providerId: provider.id });
-        if (res.ok && res.data.some((m) => m.id === modelPin)) {
-          return { modelOn: true, providerId: provider.id, savedModelId: modelPin };
-        }
+      const res = await ipcProviderModelsGetSaved({ savedModelId: modelPin });
+      if (res.ok && res.data != null) {
+        return {
+          modelOn: true,
+          providerId: res.data.providerId,
+          savedModelId: modelPin,
+        };
       }
       return { modelOn: false, providerId: "", savedModelId: "" };
     },
@@ -319,7 +319,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       maxSteps,
       modelEnabled: false,
       providerId: "",
-      vendorModelId: "",
+      savedModelId: "",
       toolsMode,
       toolsSelected,
       systemEnabled,

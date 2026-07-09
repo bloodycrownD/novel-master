@@ -40,6 +40,7 @@ import {
   ipcAgentRegistryUpsert,
   ipcAgentYamlExport,
   ipcAgentYamlImport,
+  ipcProviderModelsGetSaved,
   ipcProviderModelsSavedList,
   ipcProvidersList,
 } from "@/ipc/client";
@@ -140,7 +141,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         maxSteps,
         modelEnabled,
         providerId,
-        vendorModelId: savedModelId,
+        savedModelId: savedModelId,
         toolsMode,
         toolsSelected,
         systemEnabled,
@@ -181,15 +182,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }, []);
 
   const resolveSavedModelPin = useCallback(
-    async (modelPin: string | undefined, providerRows: Array<{ id: string }>) => {
+    async (modelPin: string | undefined) => {
       if (modelPin == null || modelPin === "") {
         return { modelOn: false, providerId: "", savedModelId: "" };
       }
-      for (const provider of providerRows) {
-        const res = await ipcProviderModelsSavedList({ providerId: provider.id });
-        if (res.ok && res.data.some((m) => m.id === modelPin)) {
-          return { modelOn: true, providerId: provider.id, savedModelId: modelPin };
-        }
+      const res = await ipcProviderModelsGetSaved({ savedModelId: modelPin });
+      if (res.ok && res.data != null) {
+        return {
+          modelOn: true,
+          providerId: res.data.providerId,
+          savedModelId: modelPin,
+        };
       }
       return { modelOn: false, providerId: "", savedModelId: "" };
     },
@@ -243,7 +246,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       let baselineProviderId = "";
       let baselineSavedModelId = "";
       let modelOn = false;
-      const resolved = await resolveSavedModelPin(def.model, providerRows);
+      const resolved = await resolveSavedModelPin(def.model);
       modelOn = resolved.modelOn;
       if (modelOn) {
         setModelEnabled(true);
@@ -266,7 +269,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           maxSteps: String(def.runtime?.maxSteps ?? 20),
           modelEnabled: modelOn,
           providerId: baselineProviderId,
-          vendorModelId: baselineSavedModelId,
+          savedModelId: baselineSavedModelId,
           toolsMode: toolsWire.mode,
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
@@ -378,7 +381,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       maxSteps,
       modelEnabled: false,
       providerId: "",
-      vendorModelId: "",
+      savedModelId: "",
       toolsMode,
       toolsSelected,
       systemEnabled,

@@ -4,7 +4,7 @@
  * @module service/events/impl/actions/run-agent.handler
  */
 
-import { resolveApplicationModelId } from "@/domain/agent/logic/resolve-application-model-id.js";
+import { resolveSavedModelId } from "@/domain/agent/logic/resolve-saved-model-id.js";
 import { resolveAgentToolRegistry } from "@/domain/agent/logic/resolve-agent-tool-registry.js";
 import { validateAgentDefinition } from "@/domain/agent/logic/validate-agent-definition.js";
 import type { RunAgentActionParams } from "@/domain/events-config/model/events-config.js";
@@ -55,7 +55,7 @@ export async function runRunAgentAction(
 
   const definition = await deps.agentRegistry.get(agentId);
   const workspaceModelId = (await deps.getWorkspaceModelId()) ?? "";
-  const savedModelId = resolveApplicationModelId({
+  const savedModelId = resolveSavedModelId({
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });

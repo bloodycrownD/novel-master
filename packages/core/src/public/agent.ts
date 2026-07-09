@@ -9,6 +9,13 @@ export {
   type ValidateAgentDefinitionOptions,
 } from "../domain/agent/logic/validate-agent-definition.js";
 export {
+  resolveSavedModelId,
+  resolveSummarySavedModelId,
+  type ResolveSavedModelIdInput,
+  type ResolveSummarySavedModelIdInput,
+} from "../domain/agent/logic/resolve-saved-model-id.js";
+/** @deprecated 请改用 {@link resolveSavedModelId}。 */
+export {
   resolveApplicationModelId,
   resolveSummaryApplicationModelId,
   type ResolveApplicationModelIdInput,

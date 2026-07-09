@@ -41,7 +41,7 @@ export type AgentEditorFormInput = {
   maxSteps: string;
   modelEnabled: boolean;
   providerId: string;
-  vendorModelId: string;
+  savedModelId: string;
   toolsMode: ToolsMode;
   toolsSelected: readonly string[];
   systemEnabled: boolean;
@@ -485,7 +485,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     ...(input.modelEnabled
       ? {
           providerId: input.providerId,
-          vendorModelId: input.vendorModelId,
+          savedModelId: input.savedModelId,
         }
       : {}),
     systemEnabled: input.systemEnabled,
@@ -519,8 +519,8 @@ export function buildAgentDefinitionFromForm(
   const steps = Number(input.maxSteps);
   const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
   let modelPin: string | undefined;
-  if (input.modelEnabled && input.vendorModelId.trim()) {
-    const trimmed = input.vendorModelId.trim();
+  if (input.modelEnabled && input.savedModelId.trim()) {
+    const trimmed = input.savedModelId.trim();
     if (!isSavedModelUuidFormat(trimmed)) {
       return { ok: false, message: "专属模型须为已保存模型的 UUID" };
     }
