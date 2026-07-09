@@ -30,10 +30,12 @@ import {
   createMessageTranscriptEffectsService,
   createProjectService,
   createSessionService,
+  createUserVfsTurnServiceBundle,
   type MessageService,
   type MessageTranscriptEffectsService,
   type ProjectService,
   type SessionService,
+  type UserVfsTurnService,
 } from "@novel-master/core/chat";
 import {
   createProviderServices,
@@ -119,6 +121,10 @@ export interface NovelMasterRuntime {
   readonly providerModels: ProviderModelService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: ProviderServiceBundle["savedModelRepo"];
+  /** {@link AgentTurnRuntimePort} 别名；与 savedModels 同源。 */
+  readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
+  /** 用户 VFS U-A-U-A 落库；runAgentTurn flush 前置。 */
+  readonly userVfsTurn: UserVfsTurnService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;
@@ -178,6 +184,7 @@ export async function createNovelMasterRuntime(
     conn,
     worktreeSnapshot,
   );
+  const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
     conditionsStore: compactionConditions,
@@ -243,6 +250,8 @@ export async function createNovelMasterRuntime(
     providerModels: providerBundle.providerModels,
     modelRequests,
     savedModels: providerBundle.savedModelRepo,
+    savedModelRepo: providerBundle.savedModelRepo,
+    userVfsTurn,
     regexConfig,
   };
 }
