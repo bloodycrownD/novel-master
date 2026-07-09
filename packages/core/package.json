@@ -58,6 +58,10 @@
       "types": "./dist/public/worktree.d.ts",
       "import": "./dist/public/worktree.js"
     },
+    "./format": {
+      "types": "./dist/public/format.d.ts",
+      "import": "./dist/public/format.js"
+    },
     "./tdbc": {
       "types": "./dist/infra/tdbc/index.d.ts",
       "import": "./dist/infra/tdbc/index.js"

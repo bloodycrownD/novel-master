@@ -25,7 +25,7 @@ import {
   isMarkdownPreviewPath,
 } from '../../components/vfs/FileMarkdownPreview';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
-import {formatCharCount} from '../../utils/format-char-count';
+import {formatCharCount} from '@novel-master/core/format';
 
 type FileEditorRoute = RouteProp<RootStackParamList, 'FileEditor'>;
 

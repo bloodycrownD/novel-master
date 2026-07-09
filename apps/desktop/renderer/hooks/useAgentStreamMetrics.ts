@@ -2,6 +2,12 @@
  * Agent 流式生成计时与正文字数统计（不含 tool 参数计数）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  buildStreamMetricsLine,
+  formatCharCount,
+} from "@novel-master/core/format";
+
+export { formatCharCount };
 
 export type AgentStreamMetricsSnapshot = {
   readonly elapsedMs: number;
@@ -54,34 +60,11 @@ export function formatStreamElapsed(seconds: number): string {
   return `${Math.round(seconds)}s`;
 }
 
-/** 紧凑 locale 整数（字数）。 */
-export function formatCharCount(n: number): string {
-  return n.toLocaleString("zh-CN");
-}
-
 /** 构建 metrics 条文案（供 AgentStreamMetricsBar 与单测共用）。 */
 export function buildAgentStreamMetricsLabel(
   metrics: AgentStreamMetricsView,
 ): string {
-  const elapsedSec = metrics.elapsedMs / 1000;
-  const elapsedLabel = formatStreamElapsed(elapsedSec);
-  const rate =
-    metrics.charsPerSecond >= 10
-      ? Math.round(metrics.charsPerSecond)
-      : Math.round(metrics.charsPerSecond * 10) / 10;
-
-  const prefix = metrics.running ? "生成中" : "上次生成";
-  const parts: string[] = [
-    `${prefix} · ${elapsedLabel}`,
-    `正文 ${formatCharCount(metrics.textChars)} 字`,
-  ];
-  if (metrics.thinkingChars > 0) {
-    parts.push(`思考 ${formatCharCount(metrics.thinkingChars)} 字`);
-  }
-  if (metrics.totalChars > 0 && elapsedSec > 0) {
-    parts.push(`${rate} 字/秒`);
-  }
-  return parts.join(" · ");
+  return buildStreamMetricsLine(metrics);
 }
 
 /** 运行中 live 统计；结束后保留「上次生成」直至下一轮。 */

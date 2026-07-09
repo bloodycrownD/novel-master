@@ -71,7 +71,7 @@ import {
   SettingsPanel,
   SettingsSection,
 } from "./settings-ui";
-import { deriveRegexGroupId } from "@/utils/regex-group-id";
+import { deriveRegexGroupId } from "@novel-master/core/format";
 import {
   parseOptionalDepthInput,
   previewRegexReplacementOnly,

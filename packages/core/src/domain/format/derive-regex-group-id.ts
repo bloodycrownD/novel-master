@@ -1,8 +1,6 @@
-/**
- * Internal regex group id from display name (users only enter the name in UI).
- */
+/** 内部 regex 分组 id：由展示名推导（UI 仅输入名称）。 */
 
-/** Stable slug; falls back to time-based id when name has no usable characters. */
+/** 稳定 slug；名称无可用字符时回退为 time-based id。 */
 export function deriveRegexGroupId(
   displayName: string,
   takenIds: ReadonlySet<string>,

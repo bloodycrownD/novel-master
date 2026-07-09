@@ -1,4 +1,4 @@
-import {deriveRegexGroupId} from '../src/utils/regex-group-id';
+import {deriveRegexGroupId} from '@novel-master/core/format';
 
 describe('deriveRegexGroupId', () => {
   it('slugifies display name', () => {

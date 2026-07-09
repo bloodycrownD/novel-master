@@ -18,6 +18,7 @@
       "@novel-master/core/message-checkpoint": ["./src/public/message-checkpoint.ts"],
       "@novel-master/core/vfs": ["./src/public/vfs.ts"],
       "@novel-master/core/worktree": ["./src/public/worktree.ts"],
+      "@novel-master/core/format": ["./src/public/format.ts"],
       "@novel-master/core/tdbc": ["./src/infra/tdbc/index.ts"],
       "@novel-master/core/sksp": ["./src/infra/sksp/index.ts"],
       "@novel-master/core/nmtp": ["./src/infra/nmtp/index.ts"],

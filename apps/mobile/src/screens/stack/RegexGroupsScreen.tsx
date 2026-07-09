@@ -26,7 +26,7 @@ import {useBatchSelection} from '../../hooks/useBatchSelection';
 import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import type {RootStackParamList} from '../../navigation/types';
-import {deriveRegexGroupId} from '../../utils/regex-group-id';
+import {deriveRegexGroupId} from '@novel-master/core/format';
 import {useTheme} from '../../theme/ThemeProvider';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useToast} from '../../components/chrome/ToastHost';
