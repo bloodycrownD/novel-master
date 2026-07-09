@@ -16,7 +16,7 @@ export interface AgentToolPolicy {
 export interface AgentDefinition {
   readonly name: string;
   readonly prompts: AgentPromptLayout;
-  /** Optional default model pin (applicationModelId); host resolves with flag/state. */
+  /** Optional default model pin (savedModelId UUID); host resolves with CLI flag/state. */
   readonly model?: string;
   readonly runtime?: {
     readonly maxSteps?: number;
