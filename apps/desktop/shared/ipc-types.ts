@@ -6,7 +6,6 @@
 export const IPC_CHANNELS = {
   BOOTSTRAP_STATUS: "nm:bootstrap/status",
   BOOTSTRAP_REBOOTSTRAP: "nm:bootstrap/rebootstrap",
-  EVENT_BUS: "nm:event-bus",
   AGENT_STREAM: "nm:agent-stream",
   /** Main → renderer：agentActive refcount 变化（工具卡「执行中」等） */
   AGENT_ACTIVITY: "nm:agent/activity",
