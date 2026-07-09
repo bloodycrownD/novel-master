@@ -23,6 +23,7 @@ import type { EventOrchestrator } from "@/service/events/event-orchestrator.port
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
+import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
@@ -85,8 +86,28 @@ export interface RunAgentTurnAfterResolveContext {
 
 export interface RunAgentTurnOptions {
   readonly stream?: boolean;
+  /**
+   * 空 content 续跑且末条为 user（含 App Composer 空发）。
+   * 跳过「content 非空」校验；不 append user。
+   */
   readonly allowResumeWithoutInput?: boolean;
+  /**
+   * CLI assistant-continue：空 content + visible 末条 assistant + maxStepsOverride: 1。
+   * 跳过「末条须 user」校验；不 append user。App 不传此字段。
+   */
+  readonly allowAssistantContinue?: boolean;
   readonly signal?: AbortSignal;
+  /** CLI `--modelId`；透传至 runner.run.cliModelId，覆盖 definition.model pin。 */
+  readonly cliModelId?: string;
+  /** 覆盖 definition.runtime.maxSteps；CLI continue → 1；`--max-steps` → 用户值。 */
+  readonly maxStepsOverride?: number;
+  /** CLI stdout 流式回调；App 经 eventBus，通常不传。 */
+  readonly onStream?: (event: LlmStreamEvent) => void;
+  /**
+   * 仅 CLI `--agent-config` / `--agent-id` / `--prompt-path` 解析成功时注入。
+   * 非空时跳过 resolveAgentForProject。
+   */
+  readonly definitionOverride?: AgentDefinition;
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
@@ -167,8 +188,23 @@ export async function runAgentTurn(
   const stream = options?.stream !== false;
   const trimmed = userContent.trim();
   const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
-  if (trimmed === "" && !allowResumeWithoutInput) {
+  const allowAssistantContinue = options?.allowAssistantContinue === true;
+
+  if (allowResumeWithoutInput && allowAssistantContinue) {
+    throw new AgentTurnError(
+      "allowResumeWithoutInput 与 allowAssistantContinue 互斥",
+    );
+  }
+
+  if (trimmed === "" && !allowResumeWithoutInput && !allowAssistantContinue) {
     throw new AgentTurnError("消息不能为空");
+  }
+  if (trimmed === "" && allowAssistantContinue) {
+    if (options?.maxStepsOverride !== 1) {
+      throw new AgentTurnError(
+        "allowAssistantContinue 须配合 maxStepsOverride: 1",
+      );
+    }
   }
   if (trimmed === "" && allowResumeWithoutInput) {
     stage = "resume-check-last-message";
@@ -180,12 +216,16 @@ export async function runAgentTurn(
     }
   }
 
-  const { definition } = await mapResolveError(() =>
-    resolveAgentForProject(runtime, scope.projectId),
-  );
+  const definition =
+    options?.definitionOverride ??
+    (
+      await mapResolveError(() =>
+        resolveAgentForProject(runtime, scope.projectId),
+      )
+    ).definition;
   stage = "resolve-model";
   const { savedModelId, workspaceModelId } = await mapResolveError(() =>
-    resolveApplicationModelIdForRun(runtime, definition),
+    resolveApplicationModelIdForRun(runtime, definition, options?.cliModelId),
   );
 
   await options?.onAfterResolveModel?.({
@@ -255,16 +295,22 @@ export async function runAgentTurn(
 
   try {
     stage = "runner.run";
+    const maxSteps =
+      options?.maxStepsOverride ??
+      definition.runtime?.maxSteps ??
+      DEFAULT_AGENT_MAX_STEPS;
     return await runner.run({
       definition,
       sessionId: scope.sessionId,
       projectId: scope.projectId,
       savedModelId,
       workspaceModelId,
-      maxSteps: definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS,
+      cliModelId: options?.cliModelId,
+      maxSteps,
       activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
       signal: options?.signal,
+      onStream: options?.onStream,
     });
   } catch (error) {
     options?.onRunFailed?.({

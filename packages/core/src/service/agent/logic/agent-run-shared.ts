@@ -60,13 +60,15 @@ export async function resolveCurrentAgentDefinition(
   }
 }
 
-/** Resolves dialogue savedModelId (agent pin → workspace current model). */
+/** Resolves dialogue savedModelId（cliModelId → agent pin → workspace current model）。 */
 export async function resolveApplicationModelIdForRun(
   runtime: AgentRunRuntimePort,
   definition: AgentDefinition,
+  cliModelId?: string,
 ): Promise<{ savedModelId: string; workspaceModelId: string }> {
   const workspaceModelId = (await runtime.state.getCurrentModelId()) ?? "";
   const resolved = resolveApplicationModelId({
+    cliModelId,
     agentModelId: definition.model,
     workspaceModelId: workspaceModelId || undefined,
   });
