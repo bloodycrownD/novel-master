@@ -3,10 +3,10 @@ import { describe, it } from "node:test";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
 import {
   AgentTurnError,
-  flushPendingUserVfsTurnsWithTrailingUserReorder,
   runAgentTurn,
   type AgentTurnRuntimePort,
 } from "@/service/agent/logic/run-agent-turn.js";
+import { prepareUserVfsTurnForAgentRun } from "@/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import {
   refreshUserVfsUnifiedToolTurnSnapshot,
@@ -267,11 +267,12 @@ describe("runAgentTurn", () => {
       },
     });
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      runtime,
-      "s",
-      "",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: runtime.messages,
+      userVfsTurn: runtime.userVfsTurn!,
+      sessionId: "s",
+      trimmedInput: "",
+    });
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
@@ -302,7 +303,12 @@ describe("runAgentTurn", () => {
       },
     });
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(runtime, "s", "");
+    await prepareUserVfsTurnForAgentRun({
+      messages: runtime.messages,
+      userVfsTurn: runtime.userVfsTurn!,
+      sessionId: "s",
+      trimmedInput: "",
+    });
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
   });
@@ -329,11 +335,12 @@ describe("runAgentTurn", () => {
       },
     });
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      runtime,
-      "s",
-      "",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: runtime.messages,
+      userVfsTurn: runtime.userVfsTurn!,
+      sessionId: "s",
+      trimmedInput: "",
+    });
 
     assert.deepEqual(order, ["flush"]);
   });
@@ -365,7 +372,13 @@ describe("runAgentTurn", () => {
     });
 
     await assert.rejects(
-      () => flushPendingUserVfsTurnsWithTrailingUserReorder(runtime, "s", ""),
+      () =>
+        prepareUserVfsTurnForAgentRun({
+          messages: runtime.messages,
+          userVfsTurn: runtime.userVfsTurn!,
+          sessionId: "s",
+          trimmedInput: "",
+        }),
       /flush failed/,
     );
 

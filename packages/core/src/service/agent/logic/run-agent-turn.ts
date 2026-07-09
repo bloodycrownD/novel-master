@@ -12,12 +12,9 @@ import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-too
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
-import type {
-  ChatMessage,
-  MessageContent,
-} from "@/domain/chat/model/message.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
+import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -41,6 +38,7 @@ import {
   resolveApplicationModelIdForRun,
   type AgentRunRuntimePort,
 } from "./agent-run-shared.js";
+import { prepareUserVfsTurnForAgentRun } from "./prepare-user-vfs-turn-for-agent-run.js";
 import { resolveAgentForProject } from "./resolve-agent-for-project.js";
 
 export interface AgentTurnScope {
@@ -132,49 +130,6 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** 空续跑时暂存的末条 user，flush 后写回以免 UUA。 */
-export interface TrailingUserSnapshot {
-  readonly content: MessageContent;
-  readonly raw: ChatMessage["raw"];
-}
-
-/**
- * flush 前若 pending 非空、空续跑且末条为 user，暂存并删除该条；flush 后再 append 写回。
- * pending 为空时 flush 为 no-op，不重排末条 user。
- */
-export async function flushPendingUserVfsTurnsWithTrailingUserReorder(
-  runtime: Pick<AgentTurnRuntimePort, "messages" | "userVfsTurn">,
-  sessionId: string,
-  trimmed: string,
-): Promise<void> {
-  const userVfsTurn = runtime.userVfsTurn;
-  if (userVfsTurn == null) {
-    return;
-  }
-
-  let trailingUser: TrailingUserSnapshot | null = null;
-
-  // 仅 pending 非空且空续跑：末条 user 须在 flush UA 之后重挂，避免 UUA。
-  if (trimmed === "" && (await userVfsTurn.hasPendingTurns(sessionId))) {
-    const list = await runtime.messages.listBySession(sessionId);
-    const last = list[list.length - 1];
-    if (last?.role === "user") {
-      trailingUser = { content: last.content, raw: last.raw };
-      await runtime.messages.delete(last.id);
-    }
-  }
-
-  try {
-    await userVfsTurn.flushPendingUserVfsTurns(sessionId);
-  } finally {
-    if (trailingUser != null) {
-      await runtime.messages.append(sessionId, "user", trailingUser.content, {
-        raw: trailingUser.raw,
-      });
-    }
-  }
-}
-
 /**
  * Appends a user message (optional) and runs the agent loop (streaming via event bus).
  */
@@ -238,11 +193,12 @@ export async function runAgentTurn(
 
   if (isUserVfsUnifiedToolTurnEnabled() && runtime.userVfsTurn != null) {
     stage = "flush-pending-user-vfs-turns";
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      runtime,
-      scope.sessionId,
-      trimmed,
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: runtime.messages,
+      userVfsTurn: runtime.userVfsTurn,
+      sessionId: scope.sessionId,
+      trimmedInput: trimmed,
+    });
   }
 
   if (trimmed !== "") {

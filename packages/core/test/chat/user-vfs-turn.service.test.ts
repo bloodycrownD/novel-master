@@ -9,7 +9,7 @@ import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core
 
 import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT, USER_VFS_TURN_ACK_TEXT } from "@novel-master/core/chat";
 
-import { flushPendingUserVfsTurnsWithTrailingUserReorder } from "../../src/service/agent/logic/run-agent-turn.js";
+import { prepareUserVfsTurnForAgentRun } from "../../src/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 
 import { type MessageCheckpointService } from "@novel-master/core/message-checkpoint";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
@@ -118,11 +118,12 @@ describe("UserVfsTurnService", () => {
 
     await userVfsTurn.executeOp(session.id, writeOp("/f1.md", "content"));
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      { messages: ctx.messages, userVfsTurn },
-      session.id,
-      "",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: ctx.messages,
+      userVfsTurn,
+      sessionId: session.id,
+      trimmedInput: "",
+    });
 
     const listed = await ctx.messages.listBySession(session.id);
     assert.equal(listed.length, 4);
@@ -143,11 +144,12 @@ describe("UserVfsTurnService", () => {
     await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
     await userVfsTurn.executeOp(session.id, writeOp("/f2.md", "content"));
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      { messages: ctx.messages, userVfsTurn },
-      session.id,
-      "hi",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: ctx.messages,
+      userVfsTurn,
+      sessionId: session.id,
+      trimmedInput: "hi",
+    });
     await ctx.messages.append(session.id, "user", textBlocks("hi"));
 
     const listed = await ctx.messages.listBySession(session.id);
@@ -169,11 +171,12 @@ describe("UserVfsTurnService", () => {
     await ctx.messages.append(session.id, "user", textBlocks("用户续跑"));
     await userVfsTurn.executeOp(session.id, writeOp("/f3.md", "content"));
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      { messages: ctx.messages, userVfsTurn },
-      session.id,
-      "",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: ctx.messages,
+      userVfsTurn,
+      sessionId: session.id,
+      trimmedInput: "",
+    });
 
     const listed = await ctx.messages.listBySession(session.id);
     assert.equal(listed.length, 3);
@@ -197,11 +200,12 @@ describe("UserVfsTurnService", () => {
       textBlocks("续跑"),
     );
 
-    await flushPendingUserVfsTurnsWithTrailingUserReorder(
-      { messages: ctx.messages, userVfsTurn },
-      session.id,
-      "",
-    );
+    await prepareUserVfsTurnForAgentRun({
+      messages: ctx.messages,
+      userVfsTurn,
+      sessionId: session.id,
+      trimmedInput: "",
+    });
 
     const listed = await ctx.messages.listBySession(session.id);
     assert.equal(listed.length, 2);
