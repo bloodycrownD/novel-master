@@ -2,6 +2,10 @@
  * Agent 回合 UI 生命周期：uiRunning + activeRunId。
  * agentActive refcount 由平台层独占；beginUiRun 递增，RUN_FINISHED/FAILED 在 stream runtime 递减。
  */
+import {
+  shouldAcceptRunEvent,
+  shouldIgnoreStaleRunStarted,
+} from '@novel-master/core/agent';
 import { useCallback, useRef, useState } from 'react';
 import type {
   AgentRunFailedPayload,
@@ -62,20 +66,18 @@ export function useAgentRunLifecycle({
   }, [setUiRunningSynced]);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
-    if (runId == null || runId.length === 0) {
-      return false;
-    }
-    const current = activeRunIdRef.current;
-    if (current == null) {
-      return false;
-    }
-    return current === runId;
+    return shouldAcceptRunEvent(activeRunIdRef.current, runId);
   }, []);
 
   const onRunStarted = useCallback(
     (payload: AgentRunStartedPayload) => {
       // abort 后 uiRunning=false 时忽略迟到 RUN_STARTED（与 Desktop 对称）
-      if (!uiRunningRef.current) {
+      if (
+        shouldIgnoreStaleRunStarted(
+          uiRunningRef.current,
+          activeRunIdRef.current,
+        )
+      ) {
         return;
       }
       syncActiveRunId(payload.runId);

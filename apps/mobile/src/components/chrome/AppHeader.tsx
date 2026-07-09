@@ -7,6 +7,7 @@ import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {BackIcon, MenuIcon, MoonIcon, SunIcon} from '../icons/TabIcons';
 import {PAGE_HEADER_CONFIG} from '../../navigation/header-config';
 import {useHeaderContext} from '../../navigation/HeaderContext';
+import {useChatTabNavigationOptional} from '../../screens/tabs/chat-tab/ChatTabNavigationProvider';
 import {useTheme} from '../../theme/ThemeProvider';
 
 /** 顶栏内容区高度：48 minHeight + 10 paddingBottom */
@@ -21,7 +22,8 @@ type Props = {
 export function AppHeader({pageKey, onBack, onMenu}: Props) {
   const insets = useSafeAreaInsets();
   const {tokens, mode, toggleMode} = useTheme();
-  const {chat, stackOverride} = useHeaderContext();
+  const {stackOverride} = useHeaderContext();
+  const chatNav = useChatTabNavigationOptional();
 
   const resolved = useMemo(() => {
     const base = PAGE_HEADER_CONFIG[pageKey];
@@ -34,26 +36,27 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
         onMenu: stackOverride.onMenu ?? onMenu,
       };
     }
-    if (pageKey === 'chat') {
+    if (pageKey === 'chat' && chatNav != null) {
+      const {state, actions} = chatNav;
       let title = base.title;
       let showBack = false;
-      if (chat.chatSubview === 'conversation') {
-        title = chat.sessionTitle ?? '会话';
+      if (state.chatSubview === 'conversation') {
+        title = state.sessionTitle ?? '会话';
         showBack = true;
-      } else if (chat.sessionListPanel === 'template') {
+      } else if (state.sessionListPanel === 'projects') {
         title = '项目工作区';
       } else if (
-        chat.chatSubview === 'sessions' &&
-        chat.sessionListPanel === 'sessions'
+        state.chatSubview === 'list' &&
+        state.sessionListPanel === 'sessions'
       ) {
-        title = chat.projectName ?? base.title;
+        title = state.projectName ?? base.title;
       }
       return {
         title,
         showBack,
         showMenu: true,
-        onBack: chat.onBackFromConversation ?? onBack,
-        onMenu: chat.onOpenDrawer ?? onMenu,
+        onBack: actions.backFromConversation ?? onBack,
+        onMenu: actions.openDrawer ?? onMenu,
       };
     }
     return {
@@ -63,10 +66,12 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
       onBack,
       onMenu,
     };
-  }, [pageKey, chat, stackOverride, onBack, onMenu]);
+  }, [pageKey, chatNav, stackOverride, onBack, onMenu]);
 
   const menuLabel =
-    pageKey === 'chat' && chat.chatSubview === 'conversation'
+    pageKey === 'chat' &&
+    chatNav != null &&
+    chatNav.state.chatSubview === 'conversation'
       ? '会话操作'
       : '项目列表';
 
