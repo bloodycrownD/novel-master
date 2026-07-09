@@ -1,12 +1,18 @@
 /**
  * Agent run UI 生命周期：仅管理 uiRunning 与 activeRunId（不触碰 agentActive refcount）。
  */
+import {
+  shouldAcceptRunEvent,
+  shouldIgnoreStaleRunStarted,
+} from "@novel-master/core/agent";
 import { useCallback, useRef, useState } from "react";
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentRunStartedPayload,
 } from "@shared/agent-event-types";
+
+export { shouldAcceptRunEvent, shouldIgnoreStaleRunStarted };
 
 export type AgentRunLifecycle = {
   readonly uiRunning: boolean;
@@ -24,28 +30,6 @@ export type AgentRunLifecycle = {
   onRunFailed(payload: AgentRunFailedPayload): boolean;
   resetUiForSessionChange(): void;
 };
-
-/** 纯函数：是否接受带 runId 的 stream/bus 事件。 */
-export function shouldAcceptRunEvent(
-  activeRunId: string | null,
-  runId: string | undefined,
-): boolean {
-  if (runId == null || runId === "") {
-    return false;
-  }
-  if (activeRunId == null) {
-    return false;
-  }
-  return activeRunId === runId;
-}
-
-/** 纯函数：abort 后迟到 RUN_STARTED 是否应被忽略。 */
-export function shouldIgnoreStaleRunStarted(
-  uiRunning: boolean,
-  _activeRunId: string | null,
-): boolean {
-  return !uiRunning;
-}
 
 export function useAgentRunLifecycle(
   onStreamReset?: () => void,

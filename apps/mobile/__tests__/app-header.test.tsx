@@ -2,11 +2,37 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import {AppHeader} from '../src/components/chrome/AppHeader';
-import type {ChatHeaderContext} from '../src/navigation/types';
+import type {ChatTabNavigationContextValue} from '../src/screens/tabs/chat-tab/ChatTabNavigationProvider';
 
-const mockChat: ChatHeaderContext = {
-  chatSubview: 'sessions',
-  sessionListPanel: 'sessions',
+const mockNavState = {
+  chatSubview: 'list' as 'list' | 'conversation',
+  sessionListPanel: 'sessions' as 'sessions' | 'projects',
+  projectName: undefined as string | undefined,
+  sessionTitle: undefined as string | undefined,
+  sessionDrawerOpen: false,
+  projectDrawerOpen: false,
+  sessionBatchActive: false,
+  workspaceCanGoUp: false,
+};
+
+const mockChatNav: ChatTabNavigationContextValue = {
+  state: mockNavState,
+  actions: {
+    backFromConversation: jest.fn(),
+    showChatPanel: jest.fn(),
+    closeSessionDrawer: jest.fn(),
+    closeProjectDrawer: jest.fn(),
+    showSessionsPanel: jest.fn(),
+    openDrawer: jest.fn(),
+    exitMessageBatch: jest.fn(),
+    closeMessageMenu: jest.fn(),
+    closeMessageEdit: jest.fn(),
+    closeModelPicker: jest.fn(),
+    closeAgentPicker: jest.fn(),
+    closeSessionRename: jest.fn(),
+    exitSessionBatch: jest.fn(),
+    workspaceGoUp: undefined,
+  },
 };
 
 jest.mock('react-native-safe-area-context', () => ({
@@ -27,7 +53,11 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 }));
 
 jest.mock('../src/navigation/HeaderContext', () => ({
-  useHeaderContext: () => ({chat: mockChat, stackOverride: undefined}),
+  useHeaderContext: () => ({chat: undefined, stackOverride: undefined}),
+}));
+
+jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
+  useChatTabNavigationOptional: () => mockChatNav,
 }));
 
 jest.mock('../src/components/icons/TabIcons', () => {
@@ -65,14 +95,14 @@ function headerTitle(root: TestRenderer.ReactTestInstance): string {
 
 describe('AppHeader', () => {
   beforeEach(() => {
-    mockChat.chatSubview = 'sessions';
-    mockChat.sessionListPanel = 'sessions';
-    mockChat.projectName = undefined;
-    mockChat.sessionTitle = undefined;
+    mockNavState.chatSubview = 'list';
+    mockNavState.sessionListPanel = 'sessions';
+    mockNavState.projectName = undefined;
+    mockNavState.sessionTitle = undefined;
   });
 
   it('会话列表态显示当前项目名称', () => {
-    mockChat.projectName = '我的小说';
+    mockNavState.projectName = '我的小说';
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(<AppHeader pageKey="chat" />);
@@ -89,7 +119,7 @@ describe('AppHeader', () => {
   });
 
   it('项目工作区分段仍显示固定标题', () => {
-    mockChat.sessionListPanel = 'template';
+    mockNavState.sessionListPanel = 'projects';
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(<AppHeader pageKey="chat" />);
@@ -98,8 +128,8 @@ describe('AppHeader', () => {
   });
 
   it('对话态仍显示会话标题', () => {
-    mockChat.chatSubview = 'conversation';
-    mockChat.sessionTitle = '第一章讨论';
+    mockNavState.chatSubview = 'conversation';
+    mockNavState.sessionTitle = '第一章讨论';
     let tree!: TestRenderer.ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(<AppHeader pageKey="chat" />);

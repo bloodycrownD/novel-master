@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import {
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
-} from "@/hooks/useAgentRunLifecycle";
+} from "@novel-master/core/agent";
 
 describe("shouldAcceptRunEvent", () => {
   it("activeRunId 为空时拒绝", () => {
