@@ -7,22 +7,23 @@
 import { readFile } from "node:fs/promises";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 
-import { ChatAgentSession, createAgentRunner, resolveAgentToolRegistry, validateAgentDefinition, type AgentDefinition } from "@novel-master/core/agent";
-
-import { textBlocks } from "@novel-master/core/chat";
+import {
+  AgentConfigError,
+  runAgentTurn,
+  validateAgentDefinition,
+  type AgentDefinition,
+} from "@novel-master/core/agent";
 
 import { assertSavedModelUuid, type LlmStreamEvent } from "@novel-master/core/provider";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { buildMinimalDefinition } from "../config/build-minimal-definition.js";
 import { loadAgentFromConfig } from "../config/load-agent-config-file.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
-import { resolveCliSavedModelId } from "./resolve-application-model-id.js";
 import {
   createRegistryValidateOptions,
   runAgentRegistryCommand,
 } from "./registry-commands.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
-import { AgentConfigError } from "@novel-master/core/agent";
 
 function flagString(
   flags: ReadonlyMap<string, string | true>,
@@ -32,13 +33,35 @@ function flagString(
   return typeof v === "string" ? v : undefined;
 }
 
-async function resolveDefinition(
+async function validateDefinitionForCli(
+  rt: NovelMasterRuntime,
+  definition: AgentDefinition,
+): Promise<void> {
+  const toolProbe = new ToolRegistry();
+  registerBuiltinTools(toolProbe);
+  await validateAgentDefinition(definition, {
+    assertSavedModel: async (savedModelId) => {
+      await assertSavedModelUuid(savedModelId, rt.savedModels);
+    },
+    registeredToolNames: toolProbe.list(),
+  });
+}
+
+/**
+ * 仅当 `--agent-config` / `--agent-id` / `--prompt-path` 之一存在时解析 definition；
+ * 无 flag 时返回 undefined，由 runAgentTurn 内 resolveAgentForProject 处理。
+ */
+async function tryResolveDefinitionFromFlags(
   rt: NovelMasterRuntime,
   flags: ReadonlyMap<string, string | true>,
-): Promise<AgentDefinition> {
+): Promise<AgentDefinition | undefined> {
   const agentConfigPath = flagString(flags, "agent-config");
   const agentId = flagString(flags, "agent-id");
   const promptPath = flagString(flags, "prompt-path");
+
+  if (agentConfigPath == null && agentId == null && promptPath == null) {
+    return undefined;
+  }
 
   let definition: AgentDefinition;
   if (agentConfigPath != null) {
@@ -59,51 +82,25 @@ async function resolveDefinition(
     const layout = loadAgentPromptLayoutFromYaml(source);
     definition = buildMinimalDefinition({ layout });
   } else {
-    const currentAgentId = await rt.state.getCurrentAgentId();
-    if (currentAgentId != null && currentAgentId !== "") {
-      try {
-        definition = await rt.agentRegistry.get(currentAgentId);
-      } catch (error) {
-        if (error instanceof AgentConfigError && error.code === "AGENT_NOT_FOUND") {
-          throw new Error(
-            `agent not found in registry: ${currentAgentId} (run nm agent import first)`,
-          );
-        }
-        throw error;
-      }
-    } else {
-      definition = buildMinimalDefinition({
-        layout: { persist: [], dynamic: [] },
-      });
-    }
+    return undefined;
   }
 
-  const toolProbe = new ToolRegistry();
-  registerBuiltinTools(toolProbe);
-  await validateAgentDefinition(definition, {
-    assertSavedModel: async (savedModelId) => {
-      await assertSavedModelUuid(savedModelId, rt.savedModels);
-    },
-    registeredToolNames: toolProbe.list(),
-  });
-
+  await validateDefinitionForCli(rt, definition);
   return definition;
 }
 
-async function resolveMaxSteps(
+function parseMaxStepsFlag(
   flags: ReadonlyMap<string, string | true>,
-  definition: AgentDefinition,
-  defaultSteps: number,
-): Promise<number> {
+): number | undefined {
   const fromFlag = flagString(flags, "max-steps");
-  if (fromFlag != null) {
-    const n = Number(fromFlag);
-    if (!Number.isFinite(n) || n < 1) {
-      throw new Error("--max-steps must be a positive integer");
-    }
-    return Math.floor(n);
+  if (fromFlag == null) {
+    return undefined;
   }
-  return definition.runtime?.maxSteps ?? defaultSteps;
+  const n = Number(fromFlag);
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error("--max-steps must be a positive integer");
+  }
+  return Math.floor(n);
 }
 
 export async function runAgent(
@@ -127,6 +124,7 @@ export async function runAgent(
       const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
       const content = flagString(flags, "content");
       const noStream = flags.get("no-stream") === true;
+      const cliModelId = flagString(flags, "modelId");
 
       const agentConfigPath = flagString(flags, "agent-config");
       const agentId = flagString(flags, "agent-id");
@@ -140,95 +138,65 @@ export async function runAgent(
         }
       }
 
-      let definition = await resolveDefinition(rt, flags);
+      const definitionFromFlags = await tryResolveDefinitionFromFlags(rt, flags);
       if (shouldSave) {
+        if (definitionFromFlags == null) {
+          throw new Error("--save requires --agent-config <path>");
+        }
         await rt.agentRegistry.upsert(
           agentId!,
-          definition,
+          definitionFromFlags,
           createRegistryValidateOptions(rt),
         );
       }
 
-      const { savedModelId, workspaceModelId, cliModelId } =
-        await resolveCliSavedModelId({
-          flags,
-          definition,
-          state: rt.state,
-        });
-      const maxSteps =
-        subcommand === "continue"
-          ? 1
-          : await resolveMaxSteps(flags, definition, 20);
+      const options: {
+        stream: boolean;
+        cliModelId?: string;
+        maxStepsOverride?: number;
+        onStream?: (ev: LlmStreamEvent) => void;
+        definitionOverride?: AgentDefinition;
+        allowResumeWithoutInput?: boolean;
+        allowAssistantContinue?: boolean;
+      } = {
+        stream: !noStream,
+        ...(cliModelId != null ? { cliModelId } : {}),
+        maxStepsOverride:
+          subcommand === "continue" ? 1 : parseMaxStepsFlag(flags),
+        onStream: noStream
+          ? undefined
+          : (ev: LlmStreamEvent) => {
+              if (ev.type === "text-delta") {
+                process.stdout.write(ev.text);
+              }
+            },
+      };
 
-      if (content != null) {
-        await rt.messages.append(sessionId, "user", textBlocks(content));
-      } else if (subcommand === "continue") {
+      if (definitionFromFlags != null) {
+        options.definitionOverride = definitionFromFlags;
+      }
+
+      if (subcommand === "continue" && (content == null || content === "")) {
         const all = await rt.messages.listBySession(sessionId);
         const visible = all.filter((m) => !m.hidden);
-        const last = visible[visible.length - 1];
-        if (last?.role === "user") {
-          // continue without --content: last message already user — do not append
-        } else if (last == null) {
+        const lastVisible = visible[visible.length - 1];
+        if (lastVisible?.role === "user") {
+          options.allowResumeWithoutInput = true;
+        } else if (lastVisible?.role === "assistant") {
+          options.allowAssistantContinue = true;
+        } else if (lastVisible == null) {
           throw new Error(
             "No messages in session; use --content <text> or append a user message first",
           );
         }
       }
 
-      const wt = rt.worktree({ kind: "session", projectId, sessionId });
-      await rt.worktreeSnapshot.getOrRefresh(projectId, sessionId, () =>
-        wt.materializePersistBlock(),
+      const result = await runAgentTurn(
+        rt,
+        { projectId, sessionId },
+        content ?? "",
+        options,
       );
-
-      const baseRegistry = new ToolRegistry();
-      const vfs = rt.sessionVfs(projectId, sessionId);
-      registerBuiltinTools(baseRegistry);
-      const registry = resolveAgentToolRegistry(baseRegistry, definition);
-
-      const session = new ChatAgentSession(rt.messages, sessionId);
-      const activeRegexGroupId = await rt.state.getCurrentRegexGroupId();
-      const runner = createAgentRunner({
-        session,
-        modelRequests: rt.modelRequests,
-        savedModels: rt.savedModels,
-        registry,
-        toolCtx: {
-          vfs,
-          projectId,
-          sessionId,
-          listSessionMessages: () => rt.messages.listBySession(sessionId),
-        },
-        messageCheckpoint: rt.messageCheckpoint,
-        regexConfig: rt.regexConfig,
-        listAllSessionMessages: () => rt.messages.listBySession(sessionId),
-        eventBus: rt.eventBus,
-        worktreeSnapshot: rt.worktreeSnapshot,
-        worktree: rt.worktree,
-        compactionConditions: rt.compactionConditionEvaluator,
-        eventOrchestrator: rt.eventOrchestrator,
-      });
-
-      const onStream =
-        noStream
-          ? undefined
-          : (ev: LlmStreamEvent) => {
-              if (ev.type === "text-delta") {
-                process.stdout.write(ev.text);
-              }
-            };
-
-      const result = await runner.run({
-        definition,
-        sessionId,
-        projectId,
-        savedModelId,
-        workspaceModelId,
-        cliModelId,
-        maxSteps,
-        activeRegexGroupId,
-        stream: !noStream,
-        onStream,
-      });
 
       if (!noStream) {
         process.stdout.write("\n");
