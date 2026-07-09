@@ -54,6 +54,7 @@ import {
 } from "@/domain/events/model/event-types.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import { generateAgentRunId } from "@/domain/agent/logic/generate-agent-run-id.js";
+import { DEFAULT_AGENT_MAX_STEPS } from "../logic/agent-run-max-steps.js";
 
 export interface DefaultAgentRunnerDeps {
   readonly session: AgentSession;
@@ -75,8 +76,6 @@ export interface DefaultAgentRunnerDeps {
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
 }
-
-const DEFAULT_MAX_STEPS = 20;
 
 /**
  * Executes agent loops: conditions �?LLM �?tools �?repeat up to maxSteps.
@@ -117,7 +116,7 @@ export class DefaultAgentRunner implements AgentRunner {
     const maxSteps =
       options.maxSteps ??
       options.definition.runtime?.maxSteps ??
-      DEFAULT_MAX_STEPS;
+      DEFAULT_AGENT_MAX_STEPS;
     const doomLoopThreshold =
       options.definition.runtime?.doomLoopThreshold ?? DOOM_LOOP_THRESHOLD;
     const doomLoopCrossRoundWindow =
