@@ -11,13 +11,7 @@ import type {
   SessionRenameRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 function toDto(session: {
   id: string;
@@ -43,7 +37,7 @@ export async function handleSessionsListByProject(
     const sessions = await rt.sessions.listByProject(req.projectId);
     return { ok: true, data: sessions.map(toDto) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -55,7 +49,7 @@ export async function handleSessionsCreate(
     const session = await rt.sessions.create(req.projectId, req.title);
     return { ok: true, data: toDto(session) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -67,7 +61,7 @@ export async function handleSessionsRename(
     const session = await rt.sessions.rename(req.id, req.title);
     return { ok: true, data: toDto(session) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -79,7 +73,7 @@ export async function handleSessionsDelete(
     await rt.sessions.delete(req.id);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -91,6 +85,6 @@ export async function handleSessionsPullTemplate(
     await rt.sessions.pullTemplate(req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

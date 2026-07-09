@@ -22,6 +22,7 @@ import {
   notifyWorkspaceMutatedToRenderer,
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
+import { formatIpcError } from "../format-ipc-error.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -37,13 +38,6 @@ function toIpcFillPolicy(
     return fillPolicy;
   }
   return undefined;
-}
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
 }
 
 async function loadWorktreeRows(
@@ -67,7 +61,7 @@ export async function handleWorktreeBuildListRows(
     const rows = await loadWorktreeRows(rt, req);
     return { ok: true, data: rows };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -91,7 +85,7 @@ export async function handleWorktreeSetDirRule(
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -110,7 +104,7 @@ export async function handleWorktreeSetFileRule(
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -127,7 +121,7 @@ export async function handleWorktreeInvalidateSessionSnapshot(
     });
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -158,6 +152,6 @@ export async function handleWorktreeGetDirRule(
       },
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

@@ -7,13 +7,7 @@ import type {
   IpcResult,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handleCompactionManual(
   req: CompactionManualRequest,
@@ -30,6 +24,6 @@ export async function handleCompactionManual(
     );
     return { ok: true, data: { ok: result.ok } };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

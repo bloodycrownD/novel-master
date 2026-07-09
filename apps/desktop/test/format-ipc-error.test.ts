@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { ToolError } from "@novel-master/core";
+import { VfsError } from "@novel-master/core/vfs";
+import { AgentTurnError } from "@novel-master/core/agent";
 import {
   sessionFsRollbackNoCheckpoint,
   sessionFsRollbackRevisionBackfillRequired,
@@ -40,5 +43,23 @@ describe("formatIpcError", () => {
       "/chapter-1.md",
       "/notes/b.md",
     ]);
+  });
+
+  it("unwraps VfsError cause from ToolError", () => {
+    const cause = new VfsError("CONFLICT", "Version conflict");
+    const err = new ToolError("FAILED", "Tool failed: write", {
+      toolName: "write",
+      cause,
+    });
+    const payload = formatIpcError(err);
+    assert.equal(payload.code, "CONFLICT");
+    assert.equal(payload.message, "Version conflict");
+  });
+
+  it("maps AgentTurnError to AGENT_RUN_ERROR", () => {
+    const err = new AgentTurnError("消息不能为空");
+    const payload = formatIpcError(err);
+    assert.equal(payload.code, "AGENT_RUN_ERROR");
+    assert.equal(payload.message, "消息不能为空");
   });
 });

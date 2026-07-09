@@ -18,13 +18,7 @@ import type {
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { loadChatPromptTokenStatsResilient } from "../../services/chat-prompt-tokens.service.js";
 import { buildRealPromptPreviewSegments } from "../../services/prompt-preview.service.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handlePromptRealPreview(
   req: PromptScopeRequest,
@@ -42,7 +36,7 @@ export async function handlePromptRealPreview(
       })),
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -54,7 +48,7 @@ export async function handlePromptChatTokenLabel(
     const stats = await loadChatPromptTokenStatsResilient(rt, req);
     return { ok: true, data: stats };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -114,6 +108,6 @@ export async function handlePromptAgentMeta(
       throw error;
     }
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

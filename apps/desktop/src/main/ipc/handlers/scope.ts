@@ -10,13 +10,7 @@ import type {
   ScopeSnapshotDto,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 /** Loads persisted pointers and reconciles against project/session lists. */
 async function loadDesktopScope(
@@ -61,7 +55,7 @@ export async function handleScopeGet(): Promise<IpcResult<ScopeSnapshotDto>> {
     const data = await loadDesktopScope(rt);
     return { ok: true, data };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -83,7 +77,7 @@ export async function handleScopeSetProject(
       data: { projectId: req.projectId, sessionId },
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -99,6 +93,6 @@ export async function handleScopeSetSession(
       data: { projectId: req.projectId, sessionId: req.sessionId },
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

@@ -5,6 +5,9 @@
  */
 import type { IpcErrorPayload } from "../../../shared/ipc-types.js";
 import { isCloudSyncError } from "@novel-master/core";
+import { AgentTurnError } from "@novel-master/core/agent";
+import { ToolError } from "@novel-master/core";
+import { VfsError, isVfsError } from "@novel-master/core/vfs";
 import { ZodError } from "zod";
 
 const FIELD_LABELS: Record<string, string> = {
@@ -63,6 +66,21 @@ export function formatIpcError(err: unknown): IpcErrorPayload {
   }
   if (err instanceof ZodError) {
     return { code: "VALIDATION", message: formatZodIssues(err) };
+  }
+  if (err instanceof VfsError) {
+    return { code: err.code, message: err.message };
+  }
+  if (err instanceof ToolError) {
+    const cause = err.cause;
+    if (cause instanceof VfsError || isVfsError(cause)) {
+      const vfsCause = cause as VfsError;
+      return { code: vfsCause.code, message: vfsCause.message };
+    }
+    const message = cause instanceof Error ? cause.message : err.message;
+    return { code: err.code, message };
+  }
+  if (err instanceof AgentTurnError) {
+    return { code: "AGENT_RUN_ERROR", message: err.message };
   }
   if (err instanceof Error) {
     const code = typedDomainCode(err);

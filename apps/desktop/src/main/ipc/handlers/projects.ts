@@ -14,13 +14,7 @@ import type {
   ProjectUpdateAgentConfigRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 function toDto(project: {
   id: string;
@@ -42,7 +36,7 @@ export async function handleProjectsList(): Promise<IpcResult<ProjectDto[]>> {
     const projects = await rt.projects.list();
     return { ok: true, data: projects.map(toDto) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -54,7 +48,7 @@ export async function handleProjectsCreate(
     const project = await rt.projects.create(req.name);
     return { ok: true, data: toDto(project) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -66,7 +60,7 @@ export async function handleProjectsRename(
     const project = await rt.projects.rename(req.id, req.name);
     return { ok: true, data: toDto(project) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -78,7 +72,7 @@ export async function handleProjectsDelete(
     await rt.projects.delete(req.id);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -90,7 +84,7 @@ export async function handleProjectsPullTemplate(
     await rt.projects.pullTemplate(req.projectId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -113,7 +107,7 @@ export async function handleProjectsGetAgentConfig(
     const config = await rt.projects.getAgentConfig(req.projectId);
     return { ok: true, data: toAgentConfigDto(config) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -132,6 +126,6 @@ export async function handleProjectsUpdateAgentConfig(
     const config = await rt.projects.updateAgentConfig(req.projectId, patch);
     return { ok: true, data: toAgentConfigDto(config) };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

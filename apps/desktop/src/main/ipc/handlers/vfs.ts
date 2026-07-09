@@ -19,7 +19,6 @@ import type {
   VfsZipRequest,
 } from "../../../../shared/ipc-types.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
-import { VfsError, isVfsError } from "@novel-master/core/vfs";
 
 import {
   buildUserVfsDeleteOp,
@@ -53,27 +52,7 @@ import {
   notifyWorkspaceMutatedToRenderer,
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof VfsError) {
-    return { code: err.code, message: err.message };
-  }
-  if (err instanceof Error && err.name === "ToolError") {
-    const toolErr = err as Error & { code?: string; cause?: unknown };
-    const cause = toolErr.cause;
-    if (cause instanceof VfsError || isVfsError(cause)) {
-      const vfsCause = cause as VfsError;
-      return { code: vfsCause.code, message: vfsCause.message };
-    }
-    const message =
-      cause instanceof Error ? cause.message : err.message;
-    return { code: toolErr.code ?? err.name, message };
-  }
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 function focusedWindow(): BrowserWindow | undefined {
   return BrowserWindow.getFocusedWindow() ?? undefined;
@@ -107,7 +86,7 @@ export async function handleVfsList(
       })),
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -128,7 +107,7 @@ export async function handleVfsRead(
       },
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -181,7 +160,7 @@ export async function handleVfsWrite(
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -207,7 +186,7 @@ export async function handleVfsMkdir(
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -237,7 +216,7 @@ export async function handleVfsDelete(
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -273,7 +252,7 @@ export async function handleVfsRename(
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -286,7 +265,7 @@ export async function handleVfsZipExport(
     const result = await exportVfsZipWithDialog(rt, scope, focusedWindow());
     return { ok: true, data: result };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -304,6 +283,6 @@ export async function handleVfsZipImport(
     );
     return { ok: true, data: result };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }

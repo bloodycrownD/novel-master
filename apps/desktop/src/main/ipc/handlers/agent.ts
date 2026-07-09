@@ -9,10 +9,14 @@ import {
   assertSavedModelUuid,
   savedModelDisplayName,
 } from "@novel-master/core/provider";
-import type {
-  AgentRunFailedPayload,
-  AgentRunFinishedPayload,
-  AgentRunStartedPayload,
+import {
+  EVENT_AGENT_RUN_FAILED,
+  EVENT_AGENT_RUN_FINISHED,
+  EVENT_AGENT_RUN_STARTED,
+  type AgentRunFailedPayload,
+  type AgentRunFinishedPayload,
+  type AgentRunStartedPayload,
+  type SimpleEventBus,
 } from "@novel-master/core/events";
 import type {
   AgentAbortRequest,
@@ -26,7 +30,6 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
-  AgentRunError,
   resolveCurrentAgentDefinition,
   resolveCurrentAgentId,
   resolveDesktopSavedModelId,
@@ -38,16 +41,7 @@ import {
   isDesktopAgentActive,
 } from "../../runtime/agent-activity.js";
 import { desktopLogError } from "../../log/desktop-log.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof AgentRunError) {
-    return { code: "AGENT_RUN_ERROR", message: err.message };
-  }
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 async function resolveModelLabel(
   rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
@@ -99,7 +93,7 @@ export async function handleAgentResolveCurrent(): Promise<
       },
     };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -123,7 +117,7 @@ export async function handleAgentListPicker(): Promise<
     }
     return { ok: true, data: { rows, currentId } };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -135,7 +129,7 @@ export async function handleAgentSetCurrent(
     await rt.state.setCurrentAgentId(req.agentId);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -163,7 +157,7 @@ export async function handleModelListPicker(): Promise<
     rows.sort((a, b) => a.label.localeCompare(b.label, "zh-CN"));
     return { ok: true, data: { rows, currentId } };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -179,7 +173,7 @@ export async function handleModelSetCurrent(
     await rt.state.setCurrentModelId(saved.id);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -189,8 +183,10 @@ const activeRuns = new Map<string, RunEntry>();
 /** abort 删除 activeRuns 后仍用于 FINISHED/FAILED 与 runId 匹配。 */
 const sessionRunIds = new Map<string, string>();
 
+let lifecycleSubscriptions: Array<{ unsubscribe: () => void }> = [];
+
 /**
- * RUN_STARTED 转发前登记 runId（由 forward-event-bus 调用，非 renderer 侧）。
+ * RUN_STARTED 时登记 runId（main 进程 eventBus 订阅，非 renderer 侧）。
  */
 export function onCoreRunStarted({
   sessionId,
@@ -214,7 +210,7 @@ function finishTrackedRun(sessionId: string, runId: string): void {
   decrementDesktopAgentActive();
 }
 
-/** RUN_FINISHED 转发前清理 run 登记（由 forward-event-bus 调用）。 */
+/** RUN_FINISHED 时清理 run 登记。 */
 export function onCoreRunFinished({
   sessionId,
   runId,
@@ -222,12 +218,39 @@ export function onCoreRunFinished({
   finishTrackedRun(sessionId, runId);
 }
 
-/** RUN_FAILED 转发前清理 run 登记（由 forward-event-bus 调用）。 */
+/** RUN_FAILED 时清理 run 登记。 */
 export function onCoreRunFailed({
   sessionId,
   runId,
 }: AgentRunFailedPayload): void {
   finishTrackedRun(sessionId, runId);
+}
+
+function detachAgentRunLifecycleListeners(): void {
+  for (const sub of lifecycleSubscriptions) {
+    sub.unsubscribe();
+  }
+  lifecycleSubscriptions = [];
+}
+
+/**
+ * 订阅 core run 生命周期事件，与 handleAgentRun 同模块维护 activeRuns / agentActive。
+ * 返回 cleanup 供 rebootstrap / quit。
+ */
+export function attachAgentRunLifecycleListeners(
+  eventBus: SimpleEventBus,
+): () => void {
+  detachAgentRunLifecycleListeners();
+
+  lifecycleSubscriptions = [
+    eventBus.subscribe(EVENT_AGENT_RUN_STARTED, onCoreRunStarted),
+    eventBus.subscribe(EVENT_AGENT_RUN_FINISHED, onCoreRunFinished),
+    eventBus.subscribe(EVENT_AGENT_RUN_FAILED, (payload: unknown) => {
+      onCoreRunFailed(payload as AgentRunFailedPayload);
+    }),
+  ];
+
+  return detachAgentRunLifecycleListeners;
 }
 
 export async function handleAgentAbort(
@@ -299,7 +322,7 @@ export async function handleAgentRun(
     activeRuns.delete(req.sessionId);
     sessionRunIds.delete(req.sessionId);
     decrementDesktopAgentActive();
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 

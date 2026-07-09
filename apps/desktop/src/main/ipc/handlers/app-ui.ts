@@ -12,13 +12,7 @@ import {
   DESKTOP_UI_KEY_THEME,
 } from "../../storage/app-ui-prefs.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-
-function formatError(err: unknown): { code: string; message: string } {
-  if (err instanceof Error) {
-    return { code: err.name || "ERROR", message: err.message };
-  }
-  return { code: "ERROR", message: String(err) };
-}
+import { formatIpcError } from "../format-ipc-error.js";
 
 export async function handleAppUiGet(
   req: AppUiGetRequest,
@@ -29,7 +23,7 @@ export async function handleAppUiGet(
     const value = await appUi.get(req.key);
     return { ok: true, data: value };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
 
@@ -48,6 +42,6 @@ export async function handleAppUiSet(
     await appUi.set(req.key, req.value);
     return { ok: true, data: undefined };
   } catch (err) {
-    return { ok: false, error: formatError(err) };
+    return { ok: false, error: formatIpcError(err) };
   }
 }
