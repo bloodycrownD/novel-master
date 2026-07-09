@@ -9,6 +9,7 @@
     "prebuild": "npm run build -w @novel-master/core && npm run build -w @novel-master/cloud-sync-driver-s3 && npm run build -w @novel-master/tdbc-driver-better-sqlite3 && npm run build -w @novel-master/tokenizer-driver-node && npm run build -w @novel-master/sksp-windows && npm run build -w @novel-master/sksp-mac",
     "build": "npm run build:icons && vite build && npm run build:main && npm run build:preload",
     "build:icons": "node scripts/generate-icons.mjs",
+    "generate:desktop-events": "node scripts/generate-desktop-events.mjs",
     "build:main": "tsc -p tsconfig.json",
     "build:preload": "esbuild src/preload/preload.ts --bundle --platform=node --format=cjs --outfile=dist/src/preload/preload.cjs --external:electron",
     "build:renderer": "vite build",
