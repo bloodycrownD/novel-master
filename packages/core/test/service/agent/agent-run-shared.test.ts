@@ -83,6 +83,17 @@ describe("agent-run-shared", () => {
     assert.equal(result.workspaceModelId, "workspace-model");
   });
 
+  it("resolveApplicationModelIdForRun 优先使用 cliModelId", async () => {
+    const runtime = makeRuntime({ currentModelId: "workspace-model" });
+    const result = await resolveApplicationModelIdForRun(
+      runtime,
+      sampleDefinition,
+      "cli-override-model",
+    );
+    assert.equal(result.savedModelId, "cli-override-model");
+    assert.equal(result.workspaceModelId, "workspace-model");
+  });
+
   it("resolveApplicationModelIdForRun throws when no model resolved", async () => {
     const runtime = makeRuntime({ currentModelId: "" });
     const definition: AgentDefinition = { ...sampleDefinition, model: undefined };
