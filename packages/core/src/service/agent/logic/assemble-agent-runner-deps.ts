@@ -7,6 +7,7 @@
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
+import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { CreateAgentRunnerDeps } from "../create-agent-runner.js";
@@ -22,11 +23,11 @@ export interface AssembleAgentRunnerDepsInput {
     | "messages"
     | "modelRequests"
     | "messageCheckpoint"
-    | "regexConfig"
     | "eventBus"
     | "worktreeSnapshot"
     | "worktree"
   > & {
+    readonly regexConfig?: RegexConfigService;
     readonly savedModelRepo?: SavedModelRepository;
     /** 事件轨 savedModels 别名。 */
     readonly savedModels?: SavedModelRepository;

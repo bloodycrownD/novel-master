@@ -63,3 +63,12 @@ export type {
   RunAgentTurnOptions,
   RunAgentTurnAfterResolveContext,
 } from "../service/agent/logic/run-agent-turn.js";
+export {
+  shouldAcceptRunEvent,
+  shouldIgnoreStaleRunStarted,
+} from "../service/agent/logic/agent-run-lifecycle-helpers.js";
+export {
+  assembleAgentRunnerDeps,
+  type AssembleAgentRunnerDepsInput,
+} from "../service/agent/logic/assemble-agent-runner-deps.js";
+export { DEFAULT_AGENT_MAX_STEPS } from "../service/agent/logic/agent-run-max-steps.js";
