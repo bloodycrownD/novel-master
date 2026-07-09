@@ -13,6 +13,8 @@ import { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import type { AgentRegistryService } from "@/service/agent/agent-registry.port.js";
 import { createAgentRunner } from "@/service/agent/create-agent-runner.js";
+import { assembleAgentRunnerDeps } from "@/service/agent/logic/assemble-agent-runner-deps.js";
+import { DEFAULT_AGENT_MAX_STEPS } from "@/service/agent/logic/agent-run-max-steps.js";
 import { ChatAgentSession } from "@/service/agent/impl/chat-agent-session.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
@@ -71,24 +73,20 @@ export async function runRunAgentAction(
   const registry = resolveAgentToolRegistry(probe, definition);
   const session = new ChatAgentSession(deps.messages, ctx.sessionId);
 
-  const runner = createAgentRunner({
-    session,
-    modelRequests: deps.modelRequests,
-    savedModels: deps.savedModels,
-    registry,
-    toolCtx: {
-      vfs,
-      projectId: ctx.projectId,
-      sessionId: ctx.sessionId,
-      listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
-    },
-    messageCheckpoint: deps.messageCheckpoint,
-    eventBus: deps.eventBus,
-    worktreeSnapshot: deps.worktreeSnapshot,
-    worktree: deps.worktree,
-    regexConfig: deps.regexConfig,
-    listAllSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
-  });
+  const runner = createAgentRunner(
+    assembleAgentRunnerDeps({
+      session,
+      runtime: deps,
+      registry,
+      toolCtx: {
+        vfs,
+        projectId: ctx.projectId,
+        sessionId: ctx.sessionId,
+        listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
+      },
+      includeCompactionOrchestrator: false,
+    }),
+  );
 
   const activeRegexGroupId = await deps.getActiveRegexGroupId?.();
 
@@ -98,7 +96,7 @@ export async function runRunAgentAction(
     projectId: ctx.projectId,
     savedModelId,
     workspaceModelId,
-    maxSteps: definition.runtime?.maxSteps ?? 20,
+    maxSteps: definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS,
     activeRegexGroupId,
     persistMessages: false,
     publishRunLifecycle: false,

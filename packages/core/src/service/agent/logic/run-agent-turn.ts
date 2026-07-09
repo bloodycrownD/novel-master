@@ -33,6 +33,8 @@ import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
+import { DEFAULT_AGENT_MAX_STEPS } from "./agent-run-max-steps.js";
+import { assembleAgentRunnerDeps } from "./assemble-agent-runner-deps.js";
 import {
   AgentRunResolveError,
   resolveApplicationModelIdForRun,
@@ -235,28 +237,21 @@ export async function runAgentTurn(
     async () => wt.materializePersistBlock(),
   );
 
-  const runner = createAgentRunner({
-    session,
-    modelRequests: runtime.modelRequests,
-    savedModels: runtime.savedModelRepo,
-    registry,
-    toolCtx: {
-      vfs,
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-      listSessionMessages: (): Promise<readonly ChatMessage[]> =>
-        runtime.messages.listBySession(scope.sessionId),
-    },
-    messageCheckpoint: runtime.messageCheckpoint,
-    regexConfig: runtime.regexConfig,
-    listAllSessionMessages: (): Promise<readonly ChatMessage[]> =>
-      runtime.messages.listBySession(scope.sessionId),
-    eventBus: runtime.eventBus,
-    worktreeSnapshot: runtime.worktreeSnapshot,
-    worktree: runtime.worktree,
-    compactionConditions: runtime.compactionConditionEvaluator,
-    eventOrchestrator: runtime.eventOrchestrator,
-  });
+  const runner = createAgentRunner(
+    assembleAgentRunnerDeps({
+      session,
+      runtime,
+      registry,
+      toolCtx: {
+        vfs,
+        projectId: scope.projectId,
+        sessionId: scope.sessionId,
+        listSessionMessages: (): Promise<readonly ChatMessage[]> =>
+          runtime.messages.listBySession(scope.sessionId),
+      },
+      includeCompactionOrchestrator: true,
+    }),
+  );
 
   try {
     stage = "runner.run";
@@ -266,7 +261,7 @@ export async function runAgentTurn(
       projectId: scope.projectId,
       savedModelId,
       workspaceModelId,
-      maxSteps: definition.runtime?.maxSteps ?? 20,
+      maxSteps: definition.runtime?.maxSteps ?? DEFAULT_AGENT_MAX_STEPS,
       activeRegexGroupId: activeRegexGroupId ?? undefined,
       stream,
       signal: options?.signal,
