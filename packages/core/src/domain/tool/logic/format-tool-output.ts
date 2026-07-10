@@ -15,47 +15,131 @@ export type FormatToolErrorForLlmOptions = {
   readonly vfsScope?: VfsScope;
 };
 
-function isTruncatedReadOutput(rec: Record<string, unknown>): boolean {
+type GrepMatchShape = {
+  readonly path: string;
+  readonly line: number;
+  readonly column: number;
+  readonly excerpt: string;
+};
+
+function formatLineNumber(lineNum: number): string {
+  return String(lineNum).padStart(6, " ");
+}
+
+/** Detects read tool output (including truncated). */
+export function isReadOutput(rec: Record<string, unknown>): boolean {
   return (
     typeof rec.path === "string" &&
     typeof rec.content === "string" &&
-    typeof rec.truncated === "boolean" &&
-    rec.truncated === true
+    typeof rec.totalLines === "number" &&
+    typeof rec.returnedLines === "number" &&
+    typeof rec.truncated === "boolean"
   );
 }
 
-function formatTruncatedReadOutput(rec: Record<string, unknown>): string {
-  const parts = [rec.content as string];
-  const hints: string[] = ["Output truncated."];
-  if (typeof rec.totalLines === "number") {
-    hints.push(`Total lines: ${rec.totalLines}.`);
+/** Formats read output with 6-digit right-aligned line numbers. */
+export function formatReadOutput(rec: Record<string, unknown>): string {
+  const content = rec.content as string;
+  const offset = typeof rec.offset === "number" ? rec.offset : 1;
+  const lines = content.split("\n");
+  const numbered = lines.map(
+    (line, index) => `${formatLineNumber(offset + index)}|${line}`,
+  );
+  const parts = [numbered.join("\n")];
+
+  if (rec.truncated === true) {
+    const hints: string[] = ["Output truncated."];
+    if (typeof rec.totalLines === "number") {
+      hints.push(`Total lines: ${rec.totalLines}.`);
+    }
+    if (typeof rec.nextOffset === "number") {
+      hints.push(`Continue with offset=${rec.nextOffset}.`);
+    }
+    parts.push(hints.join(" "));
   }
-  if (typeof rec.nextOffset === "number") {
-    hints.push(`Continue with offset=${rec.nextOffset}.`);
-  }
-  parts.push(hints.join(" "));
+
   return parts.join("\n\n");
 }
 
-function isTruncatedMatchOutput(rec: Record<string, unknown>): boolean {
+/** Detects vfs grep tool output (excludes chat_grep). */
+export function isGrepOutput(rec: Record<string, unknown>): boolean {
+  if (
+    !Array.isArray(rec.matches) ||
+    typeof rec.total !== "number" ||
+    typeof rec.truncated !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (rec.matches.length === 0) {
+    return !Array.isArray(rec.paths) && !Array.isArray(rec.entries);
+  }
+
+  const first = rec.matches[0];
+  if (first == null || typeof first !== "object") {
+    return false;
+  }
+
+  const match = first as Record<string, unknown>;
+  if ("messageId" in match || "seq" in match || "hidden" in match) {
+    return false;
+  }
+
   return (
-    typeof rec.total === "number" &&
-    typeof rec.truncated === "boolean" &&
-    rec.truncated === true
+    typeof match.path === "string" &&
+    typeof match.line === "number" &&
+    typeof match.column === "number" &&
+    typeof match.excerpt === "string"
   );
 }
 
-function formatTruncatedMatchOutput(rec: Record<string, unknown>): string {
-  const matchItems = rec.matches ?? rec.paths;
-  const itemCount = Array.isArray(matchItems) ? matchItems.length : 0;
-  const omitted =
-    typeof rec.total === "number" ? rec.total - itemCount : undefined;
-  const body = JSON.stringify(rec, null, 2);
-  const hint =
-    omitted != null && omitted > 0
-      ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).`
-      : `\n\nOutput truncated (total ${rec.total}).`;
-  return body + hint;
+/** Formats grep matches as `path:line:column: excerpt` per line. */
+export function formatGrepOutput(rec: Record<string, unknown>): string {
+  const matches = rec.matches as readonly GrepMatchShape[];
+  let out = matches
+    .map((match) => `${match.path}:${match.line}:${match.column}: ${match.excerpt}`)
+    .join("\n");
+
+  if (rec.truncated === true) {
+    const omitted =
+      typeof rec.total === "number" ? rec.total - matches.length : undefined;
+    const hint =
+      omitted != null && omitted > 0
+        ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).`
+        : `\n\nOutput truncated (total ${rec.total}).`;
+    out += hint;
+  }
+
+  return out;
+}
+
+/** Detects glob tool output. */
+export function isGlobOutput(rec: Record<string, unknown>): boolean {
+  return (
+    Array.isArray(rec.paths) &&
+    typeof rec.total === "number" &&
+    typeof rec.truncated === "boolean" &&
+    !Array.isArray(rec.entries) &&
+    !Array.isArray(rec.matches)
+  );
+}
+
+/** Formats glob paths one per line. */
+export function formatGlobOutput(rec: Record<string, unknown>): string {
+  const paths = rec.paths as readonly string[];
+  let out = paths.join("\n");
+
+  if (rec.truncated === true) {
+    const omitted =
+      typeof rec.total === "number" ? rec.total - paths.length : undefined;
+    const hint =
+      omitted != null && omitted > 0
+        ? `\n\nOutput truncated (${omitted} more omitted; total ${rec.total}).`
+        : `\n\nOutput truncated (total ${rec.total}).`;
+    out += hint;
+  }
+
+  return out;
 }
 
 function isFsLsOutput(rec: Record<string, unknown>): boolean {
@@ -87,16 +171,20 @@ export function formatToolOutputForLlm(out: unknown): string {
     const rec = out as Record<string, unknown>;
     const keys = Object.keys(rec);
 
-    if (isTruncatedReadOutput(rec)) {
-      return formatTruncatedReadOutput(rec);
+    if (isReadOutput(rec)) {
+      return formatReadOutput(rec);
     }
 
     if (isFsLsOutput(rec)) {
       return formatFsLsOutput(rec);
     }
 
-    if (isTruncatedMatchOutput(rec)) {
-      return formatTruncatedMatchOutput(rec);
+    if (isGrepOutput(rec)) {
+      return formatGrepOutput(rec);
+    }
+
+    if (isGlobOutput(rec)) {
+      return formatGlobOutput(rec);
     }
 
     if (keys.length === 1 && typeof rec.version === "number") {
