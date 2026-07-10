@@ -223,15 +223,17 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
     }
 
     const aborted = req.signal?.aborted === true;
-    const { blocks, streamRaw } = aborted
+    const finishResult = aborted
       ? {
           blocks: openAiStreamAccumulatorsToPartialBlocks(state, req.onStream),
           streamRaw:
             state.lastUsageEvent ??
             state.lastEvent ??
             ({ streamed: true, aborted: true } as Record<string, unknown>),
+          degradedToolCalls: [] as const,
         }
       : finishOpenAiSse(state, req.onStream);
+    const { blocks, streamRaw, degradedToolCalls } = finishResult;
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseOpenAiUsage(streamRaw);
     const result: LlmChatResult = {
@@ -239,6 +241,7 @@ export class OpenAiProtocolAdapter implements LlmProtocolAdapter {
       blocks,
       raw: streamRaw ?? { streamed: true },
       usage,
+      ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
     };
     req.onStream?.({ type: "done", result });
     return result;

@@ -196,9 +196,10 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
     }
 
     const aborted = req.signal?.aborted === true;
-    const { blocks, streamRaw } = aborted
+    const finishResult = aborted
       ? finishAnthropicSsePartial(state, req.onStream, toolNames)
       : finishAnthropicSse(state, req.onStream, toolNames);
+    const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseAnthropicUsage(streamRaw);
     const result: LlmChatResult = {
@@ -206,6 +207,7 @@ export class AnthropicProtocolAdapter implements LlmProtocolAdapter {
       blocks,
       raw: streamRaw ?? { streamed: true },
       usage,
+      ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
     };
     req.onStream?.({ type: "done", result });
     return result;

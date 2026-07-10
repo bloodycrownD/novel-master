@@ -7,7 +7,7 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import type { AnthropicToolNameWire } from "./anthropic-tool-names.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
@@ -16,7 +16,7 @@ import {
   recordMalformedSseLine,
   type SseParseDiagnostics,
 } from "./sse-parse-errors.js";
-import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
+import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -40,6 +40,7 @@ export type AnthropicSseParserState = SseParseDiagnostics & {
   active: ActiveBlock | null;
   toolUses: ToolUseAccumulator[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 };
 
 export function createAnthropicSseParserState(): AnthropicSseParserState {
@@ -50,6 +51,7 @@ export function createAnthropicSseParserState(): AnthropicSseParserState {
     toolUses: [],
     streamRaw: undefined,
     malformedLineCount: 0,
+    degradedToolCalls: [],
   };
 }
 
@@ -94,8 +96,20 @@ function flushActiveBlock(
     case "tool_use": {
       const tu = state.toolUses[active.index];
       if (tu != null) {
-        const input = parseToolArgumentsJson(tu.inputJson, "anthropic");
+        const parsed = tryParseToolArgumentsJson(tu.inputJson);
         const name = toolNames?.fromWire(tu.name) ?? tu.name;
+        let input: Record<string, unknown>;
+        if (parsed.ok) {
+          input = parsed.value;
+        } else {
+          input = {};
+          state.degradedToolCalls.push({
+            id: tu.id,
+            name,
+            rawArguments: parsed.raw,
+            reason: "INVALID_TOOL_ARGUMENTS",
+          });
+        }
         state.blocks.push({
           type: "tool_use",
           id: tu.id,
@@ -246,6 +260,7 @@ export function finishAnthropicSse(
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 } {
   if (state.buffer !== "") {
     feedAnthropicSseChunk(state, "\n", onStream, toolNames);
@@ -254,7 +269,11 @@ export function finishAnthropicSse(
   flushActiveBlock(state, onStream, toolNames);
 
   assertSseParseSucceededOrThrow(state, state.blocks, "anthropic");
-  return { blocks: state.blocks, streamRaw: state.streamRaw };
+  return {
+    blocks: state.blocks,
+    streamRaw: state.streamRaw,
+    degradedToolCalls: state.degradedToolCalls,
+  };
 }
 
 /** Partial snapshot when the user aborted mid-stream. */

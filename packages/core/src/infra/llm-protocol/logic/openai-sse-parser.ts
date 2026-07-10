@@ -7,7 +7,7 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import {
   openAiStreamAccumulatorsToBlocks,
   openAiStreamDeltaToEvents,
@@ -101,15 +101,17 @@ export function finishOpenAiSse(
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 } {
   if (state.buffer !== "") {
     feedOpenAiSseChunk(state, "\n", onStream);
   }
-  const blocks = openAiStreamAccumulatorsToBlocks(state, onStream);
+  const { blocks, degradedToolCalls } = openAiStreamAccumulatorsToBlocks(state, onStream);
   assertSseParseSucceededOrThrow(state, blocks, "openai");
   return {
     blocks,
     streamRaw: state.lastUsageEvent ?? state.lastEvent,
+    degradedToolCalls,
   };
 }
 

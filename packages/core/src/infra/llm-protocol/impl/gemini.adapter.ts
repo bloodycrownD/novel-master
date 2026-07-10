@@ -154,9 +154,10 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
     }
 
     const aborted = req.signal?.aborted === true;
-    const { blocks, streamRaw } = aborted
+    const finishResult = aborted
       ? finishGeminiSsePartial(state, req.onStream)
       : finishGeminiSse(state, req.onStream);
+    const { blocks, streamRaw, degradedToolCalls = [] } = finishResult;
     const assistantText = messageBodyTextFromContent({ blocks });
     const usage = parseGeminiUsage(streamRaw);
     const result: LlmChatResult = {
@@ -164,6 +165,7 @@ export class GeminiProtocolAdapter implements LlmProtocolAdapter {
       blocks,
       raw: streamRaw ?? { streamed: true },
       usage,
+      ...(degradedToolCalls.length > 0 ? { degradedToolCalls } : {}),
     };
     req.onStream?.({ type: "done", result });
     return result;

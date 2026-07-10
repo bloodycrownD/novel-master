@@ -9,7 +9,7 @@
 import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import type { LlmStreamEvent, DegradedToolCall } from "../ports/adapter.port.js";
 import { cleanseReplyTextAndThinking } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import {
@@ -18,7 +18,7 @@ import {
   finishInlineThinkingAwareText,
 } from "./inline-thinking-parser.js";
 import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
-import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
+import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
 
@@ -391,17 +391,30 @@ export function openAiStreamAccumulatorsToBlocks(
     inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
-): ContentBlock[] {
+): { blocks: ContentBlock[]; degradedToolCalls: DegradedToolCall[] } {
   finishInlineThinkingAwareText(state, onStream);
   const blocks = blocksFromReplyStrings(
     state.textParts.join(""),
     state.thinkingParts.join(""),
   );
+  const degradedToolCalls: DegradedToolCall[] = [];
 
   const indices = [...state.toolCalls.keys()].sort((a, b) => a - b);
   for (const index of indices) {
     const acc = state.toolCalls.get(index)!;
-    const input = parseToolArgumentsJson(acc.argumentsJson, "openai");
+    const parsed = tryParseToolArgumentsJson(acc.argumentsJson);
+    let input: Record<string, unknown>;
+    if (parsed.ok) {
+      input = parsed.value;
+    } else {
+      input = {};
+      degradedToolCalls.push({
+        id: acc.id,
+        name: acc.name,
+        rawArguments: parsed.raw,
+        reason: "INVALID_TOOL_ARGUMENTS",
+      });
+    }
     blocks.push({
       type: "tool_use",
       id: acc.id,
@@ -419,7 +432,7 @@ export function openAiStreamAccumulatorsToBlocks(
     }
   }
 
-  return blocks;
+  return { blocks, degradedToolCalls };
 }
 
 /** Partial stream snapshot on user cancel (see {@link buildStreamPartialBlocks}). */

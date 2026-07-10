@@ -5,7 +5,7 @@
  */
 
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
-import type { LlmStreamEvent } from "../ports/adapter.port.js";
+import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
 import {
   cleanseReplyTextAndThinking,
@@ -21,7 +21,7 @@ import {
   recordMalformedSseLine,
   type SseParseDiagnostics,
 } from "./sse-parse-errors.js";
-import { parseToolArgumentsJson } from "./tool-arguments-parse.js";
+import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -202,14 +202,37 @@ export function feedGeminiSseChunk(
 function functionCallsToToolUses(
   state: GeminiSseParserState,
   strict = false,
-): Array<{ id: string; name: string; input: Record<string, unknown> }> {
-  const out: Array<{ id: string; name: string; input: Record<string, unknown> }> =
-    [];
+): {
+  toolUses: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    thinkingSignature?: string;
+  }>;
+  degradedToolCalls: DegradedToolCall[];
+} {
+  const toolUses: Array<{
+    id: string;
+    name: string;
+    input: Record<string, unknown>;
+    thinkingSignature?: string;
+  }> = [];
+  const degradedToolCalls: DegradedToolCall[] = [];
   for (const acc of state.functionCalls.values()) {
     let input: Record<string, unknown> = {};
     if (acc.argsJson !== "") {
       if (strict) {
-        input = parseToolArgumentsJson(acc.argsJson, "gemini");
+        const parsed = tryParseToolArgumentsJson(acc.argsJson);
+        if (parsed.ok) {
+          input = parsed.value;
+        } else {
+          degradedToolCalls.push({
+            id: acc.id,
+            name: acc.name,
+            rawArguments: parsed.raw,
+            reason: "INVALID_TOOL_ARGUMENTS",
+          });
+        }
       } else {
         try {
           input = JSON.parse(acc.argsJson) as Record<string, unknown>;
@@ -218,14 +241,14 @@ function functionCallsToToolUses(
         }
       }
     }
-    out.push({
+    toolUses.push({
       id: acc.id,
       name: acc.name,
       input,
       ...(acc.thinkingSignature != null ? { thinkingSignature: acc.thinkingSignature } : {}),
     });
   }
-  return out;
+  return { toolUses, degradedToolCalls };
 }
 
 function emitToolUsesFromAccumulators(
@@ -277,6 +300,7 @@ export function finishGeminiSse(
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 } {
   if (state.buffer !== "") {
     feedGeminiSseChunk(state, "\n", onStream);
@@ -301,9 +325,10 @@ export function finishGeminiSse(
   if (cleansed.visible !== "") {
     blocks.push({ type: "text", text: cleansed.visible });
   }
+  const { toolUses, degradedToolCalls } = functionCallsToToolUses(state, true);
   blocks.push(
     ...emitToolUsesFromAccumulators(
-      functionCallsToToolUses(state, true),
+      toolUses,
       onStream,
       state.emittedFunctionCallKeys,
     ),
@@ -316,10 +341,14 @@ export function finishGeminiSse(
       candidates?: Array<{ content?: { parts?: unknown[] } }>;
     };
     const parts = raw.candidates?.[0]?.content?.parts ?? [];
-    return { blocks: geminiPartsToBlocks(parts), streamRaw: state.streamRaw };
+    return {
+      blocks: geminiPartsToBlocks(parts),
+      streamRaw: state.streamRaw,
+      degradedToolCalls,
+    };
   }
 
-  return { blocks, streamRaw: state.streamRaw };
+  return { blocks, streamRaw: state.streamRaw, degradedToolCalls };
 }
 
 /** Partial snapshot when the user aborted mid-stream. */
@@ -339,11 +368,12 @@ export function finishGeminiSsePartial(
     state.textParts.join(""),
     state.thinkingParts.join(""),
   );
+  const { toolUses } = functionCallsToToolUses(state);
   const blocks = buildStreamPartialBlocks(
     {
       text: cleansed.visible,
       thinking: cleansed.thinking,
-      toolUses: functionCallsToToolUses(state),
+      toolUses,
     },
     onStream,
   );
