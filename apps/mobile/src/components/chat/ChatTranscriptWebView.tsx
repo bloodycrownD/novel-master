@@ -228,6 +228,7 @@ export const ChatTranscriptWebView = memo(
       ref,
     ) {
       const uiRunning = uiRunningProp ?? agentRunning;
+      const streamGenerating = uiRunning || toolInvoking;
       const { tokens } = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
@@ -297,9 +298,9 @@ export const ChatTranscriptWebView = memo(
         postToWeb({
           v: 1,
           type: 'streamToolInvoking',
-          payload: { active: uiRunning },
+          payload: { active: streamGenerating },
         });
-      }, [webReady, uiRunning, postToWeb]);
+      }, [webReady, streamGenerating, postToWeb]);
 
       const flushPendingStreamDeltas = useCallback(() => {
         if (streamRafRef.current != null) {

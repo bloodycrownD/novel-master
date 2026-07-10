@@ -358,6 +358,7 @@ export function finishGeminiSsePartial(
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 } {
   if (state.buffer !== "") {
     feedGeminiSseChunk(state, "\n", onStream);
@@ -381,5 +382,6 @@ export function finishGeminiSsePartial(
   return {
     blocks,
     streamRaw: state.streamRaw ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+    degradedToolCalls: [],
   };
 }

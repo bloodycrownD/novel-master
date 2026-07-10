@@ -284,6 +284,7 @@ export function finishAnthropicSsePartial(
 ): {
   blocks: ContentBlock[];
   streamRaw: unknown;
+  degradedToolCalls: DegradedToolCall[];
 } {
   if (state.buffer !== "") {
     feedAnthropicSseChunk(state, "\n", onStream, toolNames);
@@ -315,5 +316,6 @@ export function finishAnthropicSsePartial(
   return {
     blocks,
     streamRaw: state.streamRaw ?? ({ streamed: true, aborted: true } as Record<string, unknown>),
+    degradedToolCalls: [],
   };
 }
