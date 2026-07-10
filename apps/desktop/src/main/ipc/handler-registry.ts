@@ -155,24 +155,26 @@ import {
 } from "./handlers/worktree.js";
 
 type NoArgHandler = () => unknown;
-type ReqHandler = (req: unknown) => unknown;
 type BoolHandler = (enabled: boolean) => unknown;
-type EventReqHandler = (event: IpcMainInvokeEvent, req: unknown) => unknown;
 
 function bindNoArg(channel: string, handler: NoArgHandler): void {
   ipcMain.handle(channel, () => handler());
 }
 
-function bindReq(channel: string, handler: ReqHandler): void {
-  ipcMain.handle(channel, (_event, req) => handler(req));
+/** 注册带请求体的 invoke；泛型保留各 handler 的 req 类型，避免 unknown 逆变报错。 */
+function bindReq<T>(channel: string, handler: (req: T) => unknown): void {
+  ipcMain.handle(channel, (_event, req) => handler(req as T));
 }
 
 function bindBool(channel: string, handler: BoolHandler): void {
   ipcMain.handle(channel, (_event, enabled: boolean) => handler(enabled));
 }
 
-function bindEventReq(channel: string, handler: EventReqHandler): void {
-  ipcMain.handle(channel, (event, req) => handler(event, req));
+function bindEventReq<T>(
+  channel: string,
+  handler: (event: IpcMainInvokeEvent, req: T) => unknown,
+): void {
+  ipcMain.handle(channel, (event, req) => handler(event, req as T));
 }
 
 /** 按映射表注册全部 ipcMain.handle。 */
