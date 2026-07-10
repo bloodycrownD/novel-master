@@ -17,16 +17,18 @@ import {
   addPersistWorktreeBlock,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
+  countFormPromptSources,
   createDefaultDynamicTextBlock,
   createDefaultPersistTextBlock,
   definitionToForm,
+  deletePersistTextBlock,
   formSnapshotJson,
+  hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
-  movePersistBlock,
+  movePersistTextBlock,
   removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
-  updatePersistWorktreeRole,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   type ToolsMode,
@@ -533,13 +535,22 @@ export function AgentEditorForm(props: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
-  const {blocks: persistBlocks, worktree: persistWorktree} = useMemo(
+  const {textBlocks: persistTextBlocks, worktree: persistWorktree} = useMemo(
     () => splitPersistBlocksForEditor(persist),
     [persist],
   );
 
-  const movePersist = (index: number, dir: -1 | 1) => {
-    setPersist(prev => movePersistBlock(prev, index, dir));
+  const promptRegionForm = () => ({
+    systemEnabled,
+    systemContent,
+    persistEnabled,
+    dynamicEnabled,
+    persist,
+    dynamic,
+  });
+
+  const movePersist = (textIndex: number, dir: -1 | 1) => {
+    setPersist(prev => movePersistTextBlock(prev, textIndex, dir));
   };
 
   const moveDynamic = (index: number, dir: -1 | 1) => {
@@ -556,15 +567,19 @@ export function AgentEditorForm(props: Props) {
     });
   };
 
-  const deletePersist = (index: number) => {
-    setPersist(prev => {
-      const {blocks} = splitPersistBlocksForEditor(prev);
-      return blocks.filter((_, i) => i !== index);
-    });
+  const deletePersist = (textIndex: number) => {
+    const nextPersist = deletePersistTextBlock(persist, textIndex);
+    const nextForm = {...promptRegionForm(), persist: nextPersist};
+    if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
+      setPersist(nextPersist);
+      return;
+    }
+    if (countFormPromptSources(nextForm, {excludeWorktree: true}) < 1) {
+      showToast('至少保留一个 Prompt 块');
+      return;
+    }
+    setPersist(nextPersist);
   };
-
-  const persistTextIndex = (persistIndex: number) =>
-    persistBlocks.slice(0, persistIndex).filter(b => b.type === 'text').length;
 
   const deleteDynamic = (index: number) => {
     setDynamic(prev => prev.filter((_, i) => i !== index));
@@ -572,21 +587,16 @@ export function AgentEditorForm(props: Props) {
 
   const addPersistTextBlock = () => {
     setPersist(prev => {
-      const {blocks} = splitPersistBlocksForEditor(prev);
-      const textCount = blocks.filter(block => block.type === 'text').length;
-      return [...blocks, createDefaultPersistTextBlock(textCount)];
+      const {blocks, textBlocks} = splitPersistBlocksForEditor(prev);
+      return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
     });
     setAddBlockVisible(false);
   };
 
-  const addPersistWorktree = () => {
-    setPersist(prev => addPersistWorktreeBlock(prev));
-    setAddBlockVisible(false);
-  };
-
-  const removePersistWorktree = () => {
-    setPersist(prev => removePersistWorktreeBlock(prev));
-    setAddBlockVisible(false);
+  const setPersistWorktreeEnabled = (enabled: boolean) => {
+    setPersist(prev =>
+      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev),
+    );
   };
 
   const addDynamicBlock = () => {
@@ -699,10 +709,6 @@ export function AgentEditorForm(props: Props) {
     chat: PROMPT_REGION_LABELS.chatBlocks ?? '会话区',
     dynamic: PROMPT_REGION_LABELS.dynamicBlocks,
   };
-
-  /** 工作树块菜单/徽章文案；旧 core 包可能仍为 worktree / 权威块。 */
-  const worktreeBlockLabel =
-    WORKTREE_BLOCK_LABEL === '工作树' ? WORKTREE_BLOCK_LABEL : '工作树';
 
   const renderPromptSectionHead = (
     label: string,
@@ -911,6 +917,32 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
+          {renderPromptSectionHead(WORKTREE_BLOCK_LABEL)}
+          <View
+            style={[
+              styles.blockCard,
+              {backgroundColor: tokens.surface, borderColor: tokens.border},
+            ]}>
+            <View style={styles.blockHeader}>
+              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
+                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+                  {WORKTREE_BLOCK_LABEL}
+                </Text>
+              </View>
+              <View style={styles.blockHeaderSpacer} />
+              <Switch
+                value={persistWorktree != null}
+                onValueChange={setPersistWorktreeEnabled}
+                trackColor={{false: tokens.border, true: tokens.primary}}
+              />
+            </View>
+            <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+              {persistWorktree != null
+                ? WORKTREE_BLOCK_HINT
+                : '关闭时不注入项目文件树。'}
+            </Text>
+          </View>
+
           {renderPromptSectionHead(promptSectionLabels.persist, {
             switchValue: persistEnabled,
             onSwitchChange: setPersistEnabled,
@@ -923,56 +955,12 @@ export function AgentEditorForm(props: Props) {
             ]}>
             {persistEnabled ? (
               <View style={styles.blockList}>
-            {persistBlocks.length === 0 ? (
+            {persistTextBlocks.length === 0 ? (
               <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
                 {PROMPT_REGION_LABELS.emptyPersistHint}
               </Text>
             ) : null}
-            {persistBlocks.map((block, index) => {
-              if (block.type === 'worktree') {
-                return (
-                  <View
-                    key={`persist-worktree-${index}`}
-                    style={[
-                      styles.blockCard,
-                      {backgroundColor: tokens.surface, borderColor: tokens.border},
-                    ]}>
-                    <View style={styles.blockHeader}>
-                      <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                        <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                          {worktreeBlockLabel}
-                        </Text>
-                      </View>
-                      <View style={styles.blockHeaderSpacer} />
-                      {renderBlockActions(
-                        index,
-                        persistBlocks.length,
-                        movePersist,
-                        deletePersist,
-                      )}
-                    </View>
-                    <FormField label="角色" tokens={tokens}>
-                      <FormSelectField
-                        tokens={tokens}
-                        value={block.role ?? 'user'}
-                        onChange={role =>
-                          setPersist(prev =>
-                            updatePersistWorktreeRole(prev, role as 'user' | 'assistant'),
-                          )
-                        }
-                        options={ROLE_OPTIONS}
-                        sheetTitle="选择角色"
-                      />
-                    </FormField>
-                    <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                      {WORKTREE_BLOCK_HINT}
-                    </Text>
-                  </View>
-                );
-              }
-
-              const textIndex = persistTextIndex(index);
-              return (
+            {persistTextBlocks.map((block, index) => (
                 <View
                   key={`persist-block-${index}`}
                   style={[
@@ -990,7 +978,7 @@ export function AgentEditorForm(props: Props) {
                     </Text>
                     {renderBlockActions(
                       index,
-                      persistBlocks.length,
+                      persistTextBlocks.length,
                       movePersist,
                       deletePersist,
                     )}
@@ -1002,7 +990,7 @@ export function AgentEditorForm(props: Props) {
                       onChangeText={v =>
                         setPersist(prev =>
                           mapPersistTextBlocks(prev, (b, i) =>
-                            i === textIndex ? {...b, name: v} : b,
+                            i === index ? {...b, name: v} : b,
                           ),
                         )
                       }
@@ -1015,7 +1003,7 @@ export function AgentEditorForm(props: Props) {
                       onChange={role =>
                         setPersist(prev =>
                           mapPersistTextBlocks(prev, (b, i) =>
-                            i === textIndex
+                            i === index
                               ? {...b, role: role as PersistTextPromptBlock['role']}
                               : b,
                           ),
@@ -1035,7 +1023,7 @@ export function AgentEditorForm(props: Props) {
                       onChangeText={v =>
                         setPersist(prev =>
                           mapPersistTextBlocks(prev, (b, i) =>
-                            i === textIndex ? {...b, content: v} : b,
+                            i === index ? {...b, content: v} : b,
                           ),
                         )
                       }
@@ -1043,8 +1031,7 @@ export function AgentEditorForm(props: Props) {
                     />
                   </FormField>
                 </View>
-              );
-            })}
+            ))}
               </View>
             ) : (
               <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
@@ -1199,20 +1186,11 @@ export function AgentEditorForm(props: Props) {
       </ScreenFormLayout>
       <BottomSheetMenu
         visible={addBlockVisible}
-        items={[
-          {label: '文本块', action: 'persist-text'},
-          ...(persistWorktree
-            ? [{label: `移除${worktreeBlockLabel}`, action: 'persist-worktree-remove'}]
-            : [{label: worktreeBlockLabel, action: 'persist-worktree-add'}]),
-        ]}
+        items={[{label: '文本块', action: 'persist-text'}]}
         onClose={() => setAddBlockVisible(false)}
         onSelect={action => {
           if (action === 'persist-text') {
             addPersistTextBlock();
-          } else if (action === 'persist-worktree-add') {
-            addPersistWorktree();
-          } else if (action === 'persist-worktree-remove') {
-            removePersistWorktree();
           }
         }}
       />
