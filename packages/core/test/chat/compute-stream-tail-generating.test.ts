@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import {
-  computeStreamTailGenerating,
-  DEFAULT_STREAM_TAIL_IDLE_MS,
-} from "../../src/domain/chat/logic/compute-stream-tail-generating.js";
+import { computeStreamTailGenerating } from "../../src/domain/chat/logic/compute-stream-tail-generating.js";
 
 describe("computeStreamTailGenerating", () => {
   it("uiRunning=false 时恒为 false", () => {
@@ -23,28 +20,11 @@ describe("computeStreamTailGenerating", () => {
     );
   });
 
-  it("uiRunning=true 且距上次 delta <300ms 时为 false", () => {
+  it("uiRunning=true 时恒为 true", () => {
     assert.equal(
       computeStreamTailGenerating({
         uiRunning: true,
         msSinceLastStreamDelta: 0,
-      }),
-      false,
-    );
-    assert.equal(
-      computeStreamTailGenerating({
-        uiRunning: true,
-        msSinceLastStreamDelta: DEFAULT_STREAM_TAIL_IDLE_MS - 1,
-      }),
-      false,
-    );
-  });
-
-  it("uiRunning=true 且距上次 delta ≥300ms 时为 true", () => {
-    assert.equal(
-      computeStreamTailGenerating({
-        uiRunning: true,
-        msSinceLastStreamDelta: DEFAULT_STREAM_TAIL_IDLE_MS,
       }),
       true,
     );
@@ -57,22 +37,22 @@ describe("computeStreamTailGenerating", () => {
     );
   });
 
-  it("支持自定义 idleThresholdMs", () => {
+  it("msSinceLastStreamDelta / idleThresholdMs 被忽略", () => {
     assert.equal(
       computeStreamTailGenerating({
         uiRunning: true,
-        msSinceLastStreamDelta: 499,
-        idleThresholdMs: 500,
-      }),
-      false,
-    );
-    assert.equal(
-      computeStreamTailGenerating({
-        uiRunning: true,
-        msSinceLastStreamDelta: 500,
+        msSinceLastStreamDelta: 0,
         idleThresholdMs: 500,
       }),
       true,
+    );
+    assert.equal(
+      computeStreamTailGenerating({
+        uiRunning: false,
+        msSinceLastStreamDelta: 10_000,
+        idleThresholdMs: 500,
+      }),
+      false,
     );
   });
 });
