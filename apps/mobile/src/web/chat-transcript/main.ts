@@ -981,6 +981,9 @@ export function buildTranscriptBootScript(): string {
         scroller.scrollTop = 0;
       }
       renderRows();
+      if (payload.generating) {
+        setStreamToolInvokingDom(true);
+      }
       if (intent === 'stick') {
         requestAnimationFrame(function () {
           scrollAfterRender();

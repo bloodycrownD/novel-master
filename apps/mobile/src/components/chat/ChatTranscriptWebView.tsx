@@ -290,6 +290,17 @@ export const ChatTranscriptWebView = memo(
         webRef.current?.postMessage(encodeHostToTranscript(message));
       }, []);
 
+      const syncStreamToolInvoking = useCallback(() => {
+        if (!webReady) {
+          return;
+        }
+        postToWeb({
+          v: 1,
+          type: 'streamToolInvoking',
+          payload: { active: uiRunning },
+        });
+      }, [webReady, uiRunning, postToWeb]);
+
       const flushPendingStreamDeltas = useCallback(() => {
         if (streamRafRef.current != null) {
           return;
@@ -447,11 +458,13 @@ export const ChatTranscriptWebView = memo(
               rows,
               hasMore,
               scrollIntent,
+              ...(uiRunning ? { generating: true } : {}),
               ...(scrollIntent === 'restore' && restoreScroll != null
                 ? { restoreScroll }
                 : {}),
             },
           });
+          syncStreamToolInvoking();
         },
         [
           messages,
@@ -460,6 +473,8 @@ export const ChatTranscriptWebView = memo(
           sessionKey,
           flags?.richText,
           agentRunning,
+          uiRunning,
+          syncStreamToolInvoking,
         ],
       );
 
@@ -551,8 +566,9 @@ export const ChatTranscriptWebView = memo(
             type: 'streamCommit',
             payload: { rows, scrollIntent },
           });
+          syncStreamToolInvoking();
         },
-        [webReady, postToWeb, clearLocalStreamBuffers],
+        [webReady, postToWeb, clearLocalStreamBuffers, syncStreamToolInvoking],
       );
 
       const tryCommitStreamTail = useCallback(
@@ -603,8 +619,9 @@ export const ChatTranscriptWebView = memo(
         if (webReady && wasActive) {
           postToWeb({ v: 1, type: 'streamReset', payload: {} });
           flushPendingSnapshot();
+          syncStreamToolInvoking();
         }
-      }, [webReady, postToWeb, flushPendingSnapshot, clearLocalStreamBuffers]);
+      }, [webReady, postToWeb, flushPendingSnapshot, clearLocalStreamBuffers, syncStreamToolInvoking]);
 
       useImperativeHandle(
         ref,
@@ -792,15 +809,8 @@ export const ChatTranscriptWebView = memo(
       }, [webReady, menuCloseSignal, postToWeb]);
 
       useEffect(() => {
-        if (!webReady) {
-          return;
-        }
-        postToWeb({
-          v: 1,
-          type: 'streamToolInvoking',
-          payload: { active: toolInvoking },
-        });
-      }, [webReady, toolInvoking, postToWeb]);
+        syncStreamToolInvoking();
+      }, [syncStreamToolInvoking, toolInvoking]);
 
       useEffect(() => {
         if (!webReady) {

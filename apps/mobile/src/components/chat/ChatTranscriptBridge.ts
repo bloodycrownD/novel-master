@@ -106,6 +106,8 @@ export type HostToTranscriptMessage =
         stream?: TranscriptStreamState;
         scrollIntent: TranscriptScrollIntent;
         restoreScroll?: TranscriptRestoreScroll;
+        /** RN 侧 uiRunning 时携带，applySnapshot 后重同步 generating DOM。 */
+        generating?: boolean;
       }
     >
   | BridgeEnvelope<

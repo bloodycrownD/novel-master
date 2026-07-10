@@ -52,7 +52,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
     agentMeta,
     streamMetricsAccRef,
     streamMetricsLastRun,
-    streamTailGenerating,
     uiRunning,
     agentActive,
     messageBatchActive,
@@ -250,7 +249,7 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
                 hasMore={hasMoreMessages}
                 agentRunning={agentActive}
                 uiRunning={uiRunning}
-                toolInvoking={streamTailGenerating}
+                toolInvoking={uiRunning}
                 flags={transcriptFlags}
                 selectedMessageIds={messageBatchSelectedIds}
                 affectedMessageIds={visibilityBatchPreview.affectedIds}
@@ -270,7 +269,7 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
                 messages={chatMessages}
                 streamingText={streamingText}
                 streamingThinking={streamingThinking}
-                toolInvoking={streamTailGenerating}
+                toolInvoking={uiRunning}
                 agentRunning={agentActive}
                 chatRichTextEnabled={chatRichTextEnabled}
                 richRenderEpoch={richRenderEpoch}
