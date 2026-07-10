@@ -69,11 +69,23 @@ export interface LlmTokenUsage {
   readonly totalTokens?: number;
 }
 
+/** finish 路径 arguments JSON 解析失败时收集的元数据；不进入 ToolRunner。 */
+export interface DegradedToolCall {
+  readonly id: string;
+  readonly name: string;
+  /** 原始 arguments 片段（截断），供 tool_result content / 调试。 */
+  readonly rawArguments: string;
+  /** 固定为 ProviderError code。 */
+  readonly reason: "INVALID_TOOL_ARGUMENTS";
+}
+
 export interface LlmChatResult {
   readonly assistantText: string;
   readonly blocks: readonly ContentBlock[];
   readonly raw: unknown;
   readonly usage?: LlmTokenUsage;
+  /** finish 降级项；与 blocks 中对应 tool_use（input={}）按 id 对齐。 */
+  readonly degradedToolCalls?: readonly DegradedToolCall[];
 }
 
 export interface LlmProtocolAdapter {

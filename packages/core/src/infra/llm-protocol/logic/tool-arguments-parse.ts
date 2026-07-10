@@ -14,20 +14,35 @@ function truncate(raw: string, maxLen: number): string {
   return raw.slice(0, maxLen) + "…";
 }
 
+export type TryParseToolArgumentsResult =
+  | { readonly ok: true; readonly value: Record<string, unknown> }
+  | { readonly ok: false; readonly raw: string };
+
+/** finish 路径：非法 JSON 返回 `{ ok: false, raw }`，不抛错。 */
+export function tryParseToolArgumentsJson(
+  raw: string,
+): TryParseToolArgumentsResult {
+  if (raw === "") {
+    return { ok: true, value: {} };
+  }
+  try {
+    return { ok: true, value: JSON.parse(raw) as Record<string, unknown> };
+  } catch {
+    return { ok: false, raw };
+  }
+}
+
 /** 解析 tool arguments；空串为 {}，非空非法 JSON 抛错。 */
 export function parseToolArgumentsJson(
   raw: string,
   protocol: LlmProtocolKind,
 ): Record<string, unknown> {
-  if (raw === "") {
-    return {};
+  const parsed = tryParseToolArgumentsJson(raw);
+  if (parsed.ok) {
+    return parsed.value;
   }
-  try {
-    return JSON.parse(raw) as Record<string, unknown>;
-  } catch {
-    throw new ProviderError(
-      "INVALID_TOOL_ARGUMENTS",
-      `${protocol}: invalid tool arguments JSON (${truncate(raw, 80)})`,
-    );
-  }
+  throw new ProviderError(
+    "INVALID_TOOL_ARGUMENTS",
+    `${protocol}: invalid tool arguments JSON (${truncate(parsed.raw, 80)})`,
+  );
 }
