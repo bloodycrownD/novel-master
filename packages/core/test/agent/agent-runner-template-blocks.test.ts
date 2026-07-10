@@ -7,7 +7,7 @@ import {
   type CreateAgentRunnerDeps,
   type BuiltinToolContext,
 } from "@novel-master/core/agent";
-import { textBlocks } from "@novel-master/core/chat";
+import { textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
 import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
@@ -82,7 +82,7 @@ function runnerDeps(
 }
 
 describe("AgentRunner template blocks", () => {
-  it("T5: history includes synthetic worktree message from persist block", async () => {
+  it("T-WT16: history 含 worktree 双消息 + 会话 user", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -129,13 +129,15 @@ describe("AgentRunner template blocks", () => {
     });
 
     const history = captured.options?.history ?? [];
-    assert.equal(history.length, 2);
+    assert.equal(history.length, 3);
     assert.equal(history[0]!.id, "prompt:worktree:canon");
     assert.equal(messageBodyText(history[0]!), "WORKTREE_SNAPSHOT");
-    assert.equal(history[1]!.role, "user");
+    assert.equal(history[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(messageBodyText(history[1]!), TOOL_TURN_BRIDGE_TEXT);
+    assert.equal(history[2]!.role, "user");
   });
 
-  it("R3: persist worktree block on step 0 and step 1", async () => {
+  it("T-WT16 R3: 多步 history 均含 worktree 双消息", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
@@ -200,14 +202,18 @@ describe("AgentRunner template blocks", () => {
 
     assert.equal(histories.length, 2);
     for (const opts of histories) {
-      assert.equal(
-        opts.history?.some((m) => m.id === "prompt:worktree:canon"),
-        true,
-      );
-      const ctxMsg = opts.history?.find((m) => m.id === "prompt:worktree:canon");
+      const history = opts.history ?? [];
+      assert.equal(history.some((m) => m.id === "prompt:worktree:canon"), true);
+      assert.equal(history.some((m) => m.id === "prompt:worktree:canon:done"), true);
+      const ctxMsg = history.find((m) => m.id === "prompt:worktree:canon");
+      const doneMsg = history.find((m) => m.id === "prompt:worktree:canon:done");
       assert.equal(
         ctxMsg != null ? messageBodyText(ctxMsg) : "",
         "WORKTREE_SNAPSHOT",
+      );
+      assert.equal(
+        doneMsg != null ? messageBodyText(doneMsg) : "",
+        TOOL_TURN_BRIDGE_TEXT,
       );
     }
   });

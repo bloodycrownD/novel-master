@@ -127,11 +127,14 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     );
   });
 
-  it("persist 开：末块非 assistant 失败", () => {
+  it("T-WT1: persist 开：文本末块非 assistant 失败（worktree 不参与）", () => {
     assert.throws(
       () =>
         validateAgentPromptLayoutFromMaps(
-          { tail: { type: "text", role: "user", content: "x" } },
+          {
+            tail: { type: "text", role: "user", content: "x" },
+            canon: { type: "worktree" },
+          },
           {},
           undefined,
           { persistEnabled: true },
@@ -142,25 +145,46 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     );
   });
 
-  it("persist 开：worktree assistant 可作为末块", () => {
+  it("T-WT2: persist 开：文本末块 assistant + worktree 通过", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       {
         head: { type: "text", role: "user", content: "x" },
         canon: { type: "worktree", role: "assistant" },
+        tail: { type: "text", role: "assistant", content: "ok" },
       },
       {},
       undefined,
       { persistEnabled: true },
     );
-    assert.equal(layout.persist.length, 2);
+    assert.equal(layout.persist.length, 3);
     assert.equal(layout.persist[1]?.type, "worktree");
+    assert.equal(layout.persist[2]?.type, "text");
+    assert.equal(
+      layout.persist[2]?.type === "text" ? layout.persist[2].role : undefined,
+      "assistant",
+    );
   });
 
-  it("persist 开：worktree 缺省 role 作末块失败", () => {
+  it("T-WT3: persist 开：仅 worktree、无文本失败", () => {
     assert.throws(
       () =>
         validateAgentPromptLayoutFromMaps(
           { canon: { type: "worktree" } },
+          {},
+          undefined,
+          { persistEnabled: true },
+        ),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("至少需要一个文本块"),
+    );
+  });
+
+  it("persist 开：末块非 assistant 失败", () => {
+    assert.throws(
+      () =>
+        validateAgentPromptLayoutFromMaps(
+          { tail: { type: "text", role: "user", content: "x" } },
           {},
           undefined,
           { persistEnabled: true },

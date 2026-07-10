@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  addPersistWorktreeBlock,
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
   countEffectiveFormPromptSources,
@@ -14,6 +15,7 @@ import {
   layoutFromFormInput,
   movePersistBlock,
   PROMPT_REGION_LABELS,
+  removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   updatePersistWorktreeRole,
@@ -46,7 +48,11 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
   assert.equal(
     WORKTREE_BLOCK_HINT,
-    "运行时自动注入当前会话的项目文件树，供模型了解可访问的文件。角色决定注入消息在模型侧显示为用户或助手；启用持久区时若工作树作为末块，请设为助手。",
+    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。",
+  );
+  assert.equal(
+    PROMPT_REGION_LABELS.layoutOrder,
+    "系统 → 工作树 → 持久区 → 会话历史 → 动态区",
   );
   assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止宏与生命周期。");
   assert.equal(PROMPT_REGION_LABELS.dynamicLifecycleOnceHint, "仅首轮请求带入。");
@@ -294,6 +300,33 @@ test("buildAgentDefinitionFromForm wire order matches mixed persist editor order
   }
 });
 
+test("T-WT10: createDefaultAgentEditorPrompts persist 无 worktree", () => {
+  const defaults = createDefaultAgentEditorPrompts();
+  assert.equal(defaults.persist.length, 0);
+  assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
+});
+
+test("T-WT11: addPersistWorktreeBlock / removePersistWorktreeBlock round-trip", () => {
+  const added = addPersistWorktreeBlock([]);
+  assert.equal(added.length, 1);
+  assert.equal(added[0]?.type, "worktree");
+  const removed = removePersistWorktreeBlock(added);
+  assert.equal(removed.length, 0);
+  const again = addPersistWorktreeBlock(added);
+  assert.equal(again.length, 1);
+});
+
+test("T-WT12: definitionToForm 含 canon 可 derive Switch 开", () => {
+  const form = definitionToForm({
+    name: "writer",
+    prompts: {
+      persist: [{ name: "canon", type: "worktree" }],
+      dynamic: [],
+    },
+  });
+  assert.equal(splitPersistBlocksForEditor(form.persist).worktree?.name, WORKTREE_BLOCK_WIRE_NAME);
+});
+
 test("createDefaultAgentEditorPrompts starts with empty persist", () => {
   const defaults = createDefaultAgentEditorPrompts();
   assert.equal(defaults.systemEnabled, false);
@@ -496,7 +529,7 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
   assert.equal(result.ok, true);
 });
 
-test("buildAgentDefinitionFromForm allows worktree-only persist", () => {
+test("buildAgentDefinitionFromForm allows worktree-only when persistEnabled 关", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
     maxSteps: "20",
@@ -675,7 +708,7 @@ test("buildAgentDefinitionFromForm persistEnabled 开且末块不合规时失败
   }
 });
 
-test("buildAgentDefinitionFromForm persistEnabled 开且 worktree assistant 末块可保存", () => {
+test("buildAgentDefinitionFromForm persistEnabled 开且 worktree + 文本末块 assistant 可保存", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
     maxSteps: "20",
@@ -691,6 +724,7 @@ test("buildAgentDefinitionFromForm persistEnabled 开且 worktree assistant 末�
     persist: [
       { name: "p1", type: "text", role: "user", content: "x" },
       { name: "canon", type: "worktree", role: "assistant" },
+      { name: "tail", type: "text", role: "assistant", content: "ok" },
     ],
     dynamic: [],
   });

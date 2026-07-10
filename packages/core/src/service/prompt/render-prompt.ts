@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from "../../domain/chat/model/message.js";
 import { textBlocks } from "../../domain/chat/content/text-blocks.js";
+import { TOOL_TURN_BRIDGE_TEXT } from "../chat/impl/append-tool-turn-bridge.js";
 import { formatChatMessageForCliPreview } from "../../domain/chat/content/message-body-text.js";
 import type {
   AgentPromptLayout,
@@ -54,10 +55,9 @@ export function computeLlmExportZonesFromLayout(
   options?: PromptAssemblyOptions,
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
-  let persistCount = 0;
-  if (layout.persistEnabled === true) {
-    persistCount = layout.persist.length;
-  }
+  const hasWorktree = layout.persist.some((block) => block.type === "worktree");
+  const textBlockCount = layout.persist.filter((block) => block.type === "text").length;
+  let persistCount = (hasWorktree ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
   if (layout.dynamicEnabled === true) {
     for (const block of layout.dynamic) {
@@ -103,7 +103,16 @@ function syntheticTemplateMessage(
   };
 }
 
-function syntheticWorktreeMessage(
+function findWorktreeBlock(
+  layout: AgentPromptLayout,
+): Extract<PersistPromptBlock, { type: "worktree" }> | undefined {
+  return layout.persist.find(
+    (block): block is Extract<PersistPromptBlock, { type: "worktree" }> =>
+      block.type === "worktree",
+  );
+}
+
+function syntheticWorktreeUserMessage(
   block: Extract<PersistPromptBlock, { type: "worktree" }>,
   worktreeDisplay: string,
   ctx: PromptRenderContext,
@@ -112,13 +121,69 @@ function syntheticWorktreeMessage(
     id: `prompt:worktree:${block.name}`,
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
-    role: block.role ?? "user",
+    role: "user",
     content: textBlocks(worktreeDisplay),
     provider: null,
     raw: null,
     createdAtMs: 0,
     hidden: false,
   };
+}
+
+function syntheticWorktreeDoneMessage(
+  block: Extract<PersistPromptBlock, { type: "worktree" }>,
+  ctx: PromptRenderContext,
+): ChatMessage {
+  return {
+    id: `prompt:worktree:${block.name}:done`,
+    sessionId: ctx.messages[0]?.sessionId ?? "",
+    seq: 0,
+    role: "assistant",
+    content: textBlocks(TOOL_TURN_BRIDGE_TEXT),
+    provider: null,
+    raw: null,
+    createdAtMs: 0,
+    hidden: false,
+  };
+}
+
+/** 存在 worktree 块时追加 user 文件树 + assistant done 两条合成消息。 */
+function appendWorktreePairIfPresent(
+  layout: AgentPromptLayout,
+  ctx: PromptRenderContext,
+  messages: ChatMessage[],
+): void {
+  const block = findWorktreeBlock(layout);
+  if (block == null) {
+    return;
+  }
+  messages.push(syntheticWorktreeUserMessage(block, ctx.worktreeDisplay, ctx));
+  messages.push(syntheticWorktreeDoneMessage(block, ctx));
+}
+
+function appendWorktreePairSegmentsIfPresent(
+  layout: AgentPromptLayout,
+  ctx: PromptRenderContext,
+  segments: PromptAssemblySegment[],
+): void {
+  const block = findWorktreeBlock(layout);
+  if (block == null) {
+    return;
+  }
+  segments.push({
+    id: `prompt-worktree-${block.name}`,
+    role: "user",
+    title: block.name,
+    body: ctx.worktreeDisplay,
+    source: "template",
+  });
+  segments.push({
+    id: `prompt-worktree-${block.name}-done`,
+    role: "assistant",
+    title: `${block.name} · done`,
+    body: TOOL_TURN_BRIDGE_TEXT,
+    source: "template",
+  });
 }
 
 /**
@@ -143,6 +208,8 @@ export async function buildPromptAssemblyFromLayout(
     });
   }
 
+  appendWorktreePairSegmentsIfPresent(layout, ctx, segments);
+
   if (layout.persistEnabled === true) {
     for (const block of layout.persist) {
       if (block.type === "text") {
@@ -151,14 +218,6 @@ export async function buildPromptAssemblyFromLayout(
           role: block.role,
           title: block.name,
           body: block.content,
-          source: "template",
-        });
-      } else {
-        segments.push({
-          id: `persist-worktree-${block.name}`,
-          role: block.role ?? "user",
-          title: block.name,
-          body: ctx.worktreeDisplay,
           source: "template",
         });
       }
@@ -217,14 +276,12 @@ export async function buildPromptLlmInputFromLayout(
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
 
+  appendWorktreePairIfPresent(layout, ctx, messages);
+
   if (layout.persistEnabled === true) {
     for (const block of layout.persist) {
       if (block.type === "text") {
         messages.push(syntheticTemplateMessage(block, block.content, ctx));
-      } else {
-        messages.push(
-          syntheticWorktreeMessage(block, ctx.worktreeDisplay, ctx),
-        );
       }
     }
   }

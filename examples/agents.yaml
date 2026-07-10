@@ -8,8 +8,6 @@ agents:
       system: |
         You are a helpful assistant.
       persist:
-        canon:
-          type: worktree
         persona:
           type: text
           role: user

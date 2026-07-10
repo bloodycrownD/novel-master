@@ -242,14 +242,18 @@ export function validateAgentPromptLayoutFromMaps(
   const dynamicEnabled = options?.dynamicEnabled === true;
 
   if (persistEnabled) {
-    if (persist.length < 1) {
+    const persistTextBlocks = persist.filter(
+      (block): block is Extract<PersistPromptBlock, { type: "text" }> =>
+        block.type === "text",
+    );
+    if (persistTextBlocks.length < 1) {
       throw new PromptError(
         "INVALID_YAML",
-        "启用持久区时至少需要一个块",
+        "启用持久区时至少需要一个文本块",
       );
     }
-    const last = persist[persist.length - 1]!;
-    if (persistBlockRole(last) !== "assistant") {
+    const last = persistTextBlocks[persistTextBlocks.length - 1]!;
+    if (last.role !== "assistant") {
       throw new PromptError(
         "INVALID_YAML",
         "启用持久区时最后一个块须为助手角色",
@@ -287,13 +291,6 @@ export function validateAgentPromptLayoutFromMaps(
     persist,
     dynamic,
   };
-}
-
-function persistBlockRole(block: PersistPromptBlock): "user" | "assistant" {
-  if (block.type === "worktree") {
-    return block.role ?? "user";
-  }
-  return block.role;
 }
 
 function assertUniqueBlockNames(

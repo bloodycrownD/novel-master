@@ -84,9 +84,9 @@ export const WORKTREE_BLOCK_WIRE_NAME = "canon";
 
 /** 工作树块在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKTREE_BLOCK_LABEL = "工作树";
-/** 持久区工作树块说明（用户可见，避免技术术语）。 */
+/** 工作树块说明（用户可见，避免技术术语）。 */
 export const WORKTREE_BLOCK_HINT =
-  "运行时自动注入当前会话的项目文件树，供模型了解可访问的文件。角色决定注入消息在模型侧显示为用户或助手；启用持久区时若工作树作为末块，请设为助手。";
+  "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。";
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
@@ -102,7 +102,7 @@ export const PROMPT_REGION_LABELS = {
   persistBlocks: "持久区",
   dynamicBlocks: "动态区",
   persistRegionHint: "持久区禁止宏与生命周期。",
-  layoutOrder: "系统 → 持久区 → 会话历史 → 动态区",
+  layoutOrder: "系统 → 工作树 → 持久区 → 会话历史 → 动态区",
   layoutOrderPrefix: "纵向顺序与模型组装一致：",
   layoutOrderPrefixShort: "纵向顺序：",
   systemDisabledHint: "关闭时不写入系统提示词。",
@@ -267,6 +267,7 @@ export function removePersistWorktreeBlock(
   return splitPersistBlocksForEditor(persist).blocks.filter((block) => block.type !== "worktree");
 }
 
+/** @deprecated 运行时固定 user + assistant 双消息，不再使用 worktree 块 role。 */
 export function updatePersistWorktreeRole(
   persist: readonly PersistPromptBlock[],
   role: "user" | "assistant",

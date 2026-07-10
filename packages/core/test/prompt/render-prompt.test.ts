@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
 
-import { buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, buildPromptPreviewSegmentsFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
+import { buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, buildPromptPreviewSegmentsFromLayout, computeLlmExportZonesFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
+import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
@@ -46,11 +47,12 @@ describe("buildPromptLlmInputFromLayout", () => {
     assert.equal(messageBodyText(input.messages[0]!), "ask");
   });
 
-  it("worktree persist block becomes synthetic user message", async () => {
+  it("T-WT4: worktree 块注入 user 树 + assistant done 双消息", async () => {
     const layout: AgentPromptLayout = {
       persistEnabled: true,
       persist: [
         { name: "canon", type: "worktree" },
+        { name: "tail", type: "text", role: "assistant", content: "ok" },
       ],
       dynamic: [],
     };
@@ -59,8 +61,87 @@ describe("buildPromptLlmInputFromLayout", () => {
       messages: [message("user", "hi", 1)],
       now: fixedNow,
     });
+    assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
+    assert.equal(input.messages[0]!.role, "user");
     assert.equal(messageBodyText(input.messages[0]!), "WT");
+    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[1]!.role, "assistant");
+    assert.equal(messageBodyText(input.messages[1]!), TOOL_TURN_BRIDGE_TEXT);
+  });
+
+  it("T-WT5: 无 worktree 块时不注入双消息", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: true,
+      persist: [{ name: "u", type: "text", role: "assistant", content: "ask" }],
+      dynamic: [],
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, {
+      worktreeDisplay: "WT",
+      messages: [],
+      now: fixedNow,
+    });
+    assert.equal(input.messages.length, 1);
+    assert.equal(input.messages[0]!.id, "prompt:u");
+    assert.ok(input.messages.every((m) => !m.id.includes("worktree")));
+  });
+});
+
+describe("buildPromptAssemblyFromLayout worktree", () => {
+  it("T-WT4b: 预览含 prompt-worktree 双段且 persistEnabled=false 仍注入", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [{ name: "canon", type: "worktree" }],
+      dynamic: [],
+    };
+    const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    const wt = segments.find((s) => s.id === "prompt-worktree-canon");
+    const done = segments.find((s) => s.id === "prompt-worktree-canon-done");
+    assert.equal(wt?.role, "user");
+    assert.equal(wt?.body, "WT");
+    assert.equal(done?.role, "assistant");
+    assert.equal(done?.body, TOOL_TURN_BRIDGE_TEXT);
+    assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
+  });
+
+  it("T-WT8: 全 layout 顺序 worktree 对 → persist 文本 → chat → dynamic", async () => {
+    const layout: AgentPromptLayout = {
+      system: "sys",
+      persistEnabled: true,
+      dynamicEnabled: true,
+      persist: [
+        { name: "canon", type: "worktree" },
+        { name: "persona", type: "text", role: "user", content: "人设" },
+        { name: "tail", type: "text", role: "assistant", content: "ok" },
+      ],
+      dynamic: [
+        { name: "state", type: "text", role: "user", content: "dyn", lifecycle: "once" },
+      ],
+    };
+    const messages = [message("user", "hi", 1)];
+    const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx, { agentStepIndex: 0 });
+    assert.deepEqual(
+      input.messages.map((m) => m.id),
+      [
+        "prompt:worktree:canon",
+        "prompt:worktree:canon:done",
+        "prompt:persona",
+        "prompt:tail",
+        "m1",
+        "prompt:state",
+      ],
+    );
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx, { agentStepIndex: 0 });
+    const templateIds = segments.filter((s) => s.source === "template").map((s) => s.id);
+    assert.deepEqual(templateIds, [
+      "prompt-worktree-canon",
+      "prompt-worktree-canon-done",
+      "persist-persona",
+      "persist-tail",
+      "dynamic-state",
+    ]);
   });
 });
 
@@ -198,18 +279,64 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     assert.ok(segments.every((s) => !s.id.startsWith("dynamic-")));
   });
 
-  it("worktree 块读取 block.role（缺省 user）", async () => {
+  it("T-WT6: persistEnabled=false + worktree 仅双消息无 persist 文本", async () => {
     const layout: AgentPromptLayout = {
-      persistEnabled: true,
+      persistEnabled: false,
+      persist: [
+        { name: "canon", type: "worktree" },
+        { name: "u", type: "text", role: "user", content: "ask" },
+      ],
+      dynamic: [],
+    };
+    const ctx = {
+      worktreeDisplay: "WT",
+      messages: [message("user", "hi", 1)],
+      now: fixedNow,
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages.length, 3);
+    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
+    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[2]!.id, "m1");
+    assert.ok(input.messages.every((m) => !m.id.startsWith("prompt:u")));
+
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx);
+    assert.ok(segments.some((s) => s.id === "prompt-worktree-canon"));
+    assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
+  });
+
+  it("T-WT7: wire role assistant on canon 仍注入 user+done", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
       persist: [{ name: "canon", type: "worktree", role: "assistant" }],
       dynamic: [],
     };
     const ctx = { worktreeDisplay: "WT", messages: [], now: fixedNow };
     const input = await buildPromptLlmInputFromLayout(layout, ctx);
-    assert.equal(input.messages[0]!.role, "assistant");
+    assert.equal(input.messages[0]!.role, "user");
+    assert.equal(input.messages[1]!.role, "assistant");
+    assert.equal(messageBodyText(input.messages[1]!), TOOL_TURN_BRIDGE_TEXT);
 
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
-    const wt = segments.find((s) => s.id === "persist-worktree-canon");
-    assert.equal(wt?.role, "assistant");
+    const wt = segments.find((s) => s.id === "prompt-worktree-canon");
+    const done = segments.find((s) => s.id === "prompt-worktree-canon-done");
+    assert.equal(wt?.role, "user");
+    assert.equal(done?.role, "assistant");
+  });
+});
+
+describe("computeLlmExportZonesFromLayout", () => {
+  it("T-WT9: persistCount 含 worktree 双消息", () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: true,
+      persist: [
+        { name: "canon", type: "worktree" },
+        { name: "p1", type: "text", role: "user", content: "a" },
+        { name: "p2", type: "text", role: "assistant", content: "b" },
+      ],
+      dynamic: [],
+    };
+    const zones = computeLlmExportZonesFromLayout(layout);
+    assert.equal(zones.persistCount, 4);
   });
 });

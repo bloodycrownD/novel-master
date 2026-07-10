@@ -35,6 +35,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     dynamicEnabled: true,
     persist: [
       { name: "persona", type: "text", role: "user", content: "人设" },
+      { name: "tail", type: "text", role: "assistant", content: "ok" },
       { name: "canon", type: "worktree" },
     ],
     dynamic: [
@@ -48,7 +49,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     ],
   };
 
-  it("顺序：system 字段 + persist + chat + dynamic", async () => {
+  it("顺序：system 字段 + worktree 对 + persist 文本 + chat + dynamic", async () => {
     const worktree = mockWorktree("/\n└── readme.md 全部加载");
     const input = await buildPromptLlmInputFromLayout(
       layout,
@@ -61,11 +62,13 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
       { agentStepIndex: 0 },
     );
     assert.equal(input.system, "sys");
-    assert.equal(input.messages.length, 4);
-    assert.equal(input.messages[0]!.id, "prompt:persona");
-    assert.equal(input.messages[1]!.id, "prompt:worktree:canon");
-    assert.equal(input.messages[2]!.id, "m1");
-    assert.equal(input.messages[3]!.id, "prompt:state");
+    assert.equal(input.messages.length, 6);
+    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
+    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[2]!.id, "prompt:persona");
+    assert.equal(input.messages[3]!.id, "prompt:tail");
+    assert.equal(input.messages[4]!.id, "m1");
+    assert.equal(input.messages[5]!.id, "prompt:state");
   });
 
   it("dynamic lifecycle once 在 step≥1 跳过", async () => {
@@ -74,9 +77,11 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
       { worktreeDisplay: "WT", messages: [], worktree: mockWorktree("/") },
       { agentStepIndex: 1 },
     );
-    assert.equal(input.messages.length, 2);
-    assert.equal(input.messages[0]!.id, "prompt:persona");
-    assert.equal(input.messages[1]!.id, "prompt:worktree:canon");
+    assert.equal(input.messages.length, 4);
+    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
+    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[2]!.id, "prompt:persona");
+    assert.equal(input.messages[3]!.id, "prompt:tail");
   });
 
   it("$filetree 走 WorktreeService.renderFileTree，不调用 vfs.list", async () => {
