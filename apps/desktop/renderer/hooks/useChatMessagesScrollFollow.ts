@@ -123,11 +123,12 @@ export function useChatMessagesScrollFollow(
   }, [messagesLength, followTailIfNearBottom]);
 
   useLayoutEffect(() => {
-    if (!streamingText && !streamingThinking && !streamTailGenerating) {
+    if (!running && !streamingText && !streamingThinking && !streamTailGenerating) {
       return;
     }
     followTailIfNearBottom();
   }, [
+    running,
     streamingText,
     streamingThinking,
     streamTailGenerating,

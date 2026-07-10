@@ -65,7 +65,7 @@ export function MessageList({
   uiRunning = false,
   streamingText,
   streamingThinking,
-  streamTailGenerating = false,
+  streamTailGenerating: _streamTailGenerating = false,
   agentRunning = false,
   batchMode = null,
   selectedIds,
@@ -75,9 +75,7 @@ export function MessageList({
   onOpenMessageMenu,
   onOpenToolFile,
 }: MessageListProps) {
-  const hasStreamTextOrThinking = !!streamingText || !!streamingThinking;
-  const hasStreaming =
-    uiRunning && (hasStreamTextOrThinking || streamTailGenerating);
+  const hasStreaming = uiRunning;
 
   if (messages.length === 0 && !hasStreaming) {
     return <p className="chat-messages__empty">暂无消息</p>;
@@ -268,7 +266,7 @@ export function MessageList({
                 <Markdown remarkPlugins={[remarkGfm]}>{streamingText}</Markdown>
               </div>
             ) : null}
-            {streamTailGenerating ? (
+            {uiRunning ? (
               <p className="chat-message__stream-tail">生成中</p>
             ) : null}
           </div>
