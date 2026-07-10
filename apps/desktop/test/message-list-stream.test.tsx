@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import { MessageList } from "@/features/chat/MessageList";
+
+/** T-S2：run 全程 uiRunning 时 stream tail「生成中」始终可见。 */
+test("T-S2: uiRunning 无 delta 时仍渲染 stream tail 生成中", () => {
+  const html = renderToStaticMarkup(
+    <MessageList messages={[]} uiRunning />,
+  );
+  assert.match(html, /chat-message__stream-tail/);
+  assert.match(html, /生成中/);
+});
+
+test("T-S2: uiRunning 且有 streamingText 时仍渲染生成中", () => {
+  const html = renderToStaticMarkup(
+    <MessageList
+      messages={[]}
+      uiRunning
+      streamingText="partial reply"
+    />,
+  );
+  assert.match(html, /chat-message__stream-tail/);
+  assert.match(html, /生成中/);
+  assert.match(html, /partial reply/);
+});
+
+test("T-S2: uiRunning=false 时不渲染 stream tail", () => {
+  const html = renderToStaticMarkup(
+    <MessageList messages={[]} uiRunning={false} />,
+  );
+  assert.doesNotMatch(html, /chat-message__stream-tail/);
+});
