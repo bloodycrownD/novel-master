@@ -73,4 +73,54 @@ describe("buildToolResultBlock", () => {
     assert.equal(block.summary, "30 lines");
     assert.equal(resolveToolResultOk(block), true);
   });
+
+  it("BTRB-FMT-01: read/grep/glob content uses readable formatters", () => {
+    const readBlock = buildToolResultBlock(
+      "tu-read",
+      {
+        ok: true,
+        output: {
+          path: "/a.md",
+          content: "hello",
+          offset: 1,
+          limit: 2000,
+          totalLines: 1,
+          returnedLines: 1,
+          truncated: false,
+        },
+      },
+      { toolName: "read" },
+    );
+    assert.equal(readBlock.content, "     1|hello");
+
+    const grepBlock = buildToolResultBlock(
+      "tu-grep",
+      {
+        ok: true,
+        output: {
+          matches: [
+            { path: "/x.ts", line: 2, column: 4, excerpt: "needle" },
+          ],
+          total: 1,
+          truncated: false,
+        },
+      },
+      { toolName: "grep" },
+    );
+    assert.equal(grepBlock.content, "/x.ts:2:4: needle");
+
+    const globBlock = buildToolResultBlock(
+      "tu-glob",
+      {
+        ok: true,
+        output: {
+          paths: ["/a.ts", "/b.ts"],
+          total: 2,
+          truncated: false,
+        },
+      },
+      { toolName: "glob" },
+    );
+    assert.equal(globBlock.content, "/a.ts\n/b.ts");
+  });
 });

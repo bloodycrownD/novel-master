@@ -40,7 +40,7 @@ describe("formatToolOutputForLlm", () => {
     assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
   });
 
-  it("T10: formats truncated read with nextOffset hint", () => {
+  it("FMT-READ-03: formats truncated read with line numbers and nextOffset hint", () => {
     const out = formatToolOutputForLlm({
       path: "/a.md",
       content: "line-1",
@@ -53,8 +53,131 @@ describe("formatToolOutputForLlm", () => {
       truncated: true,
       nextOffset: 2001,
     });
-    assert.ok(out.includes("line-1"));
+    assert.equal(out.startsWith("     1|line-1"), true);
+    assert.ok(!out.includes('"path"'));
     assert.ok(out.includes("Continue with offset=2001"));
+    assert.ok(out.includes("Output truncated."));
+  });
+
+  it("FMT-READ-01: non-truncated read uses line numbers, not JSON", () => {
+    const out = formatToolOutputForLlm({
+      path: "/a.md",
+      content: "alpha\nbeta",
+      version: 1,
+      mtimeMs: 0,
+      offset: 1,
+      limit: 2000,
+      totalLines: 2,
+      returnedLines: 2,
+      truncated: false,
+    });
+    assert.equal(out, "     1|alpha\n     2|beta");
+    assert.ok(!out.includes("{"));
+  });
+
+  it("FMT-READ-02: offset=10 starts line numbers at 10", () => {
+    const out = formatToolOutputForLlm({
+      path: "/a.md",
+      content: "line-ten\nline-eleven",
+      version: 1,
+      mtimeMs: 0,
+      offset: 10,
+      limit: 2000,
+      totalLines: 20,
+      returnedLines: 2,
+      truncated: false,
+    });
+    assert.equal(out, "    10|line-ten\n    11|line-eleven");
+  });
+
+  it("FMT-GREP-01: grep matches as path:line:column per line", () => {
+    const out = formatToolOutputForLlm({
+      matches: [
+        { path: "/src/a.ts", line: 3, column: 5, excerpt: "const x = 1;" },
+        { path: "/src/b.ts", line: 10, column: 1, excerpt: "export {}" },
+      ],
+      total: 2,
+      truncated: false,
+    });
+    assert.equal(
+      out,
+      "/src/a.ts:3:5: const x = 1;\n/src/b.ts:10:1: export {}",
+    );
+    assert.ok(!out.includes('"matches"'));
+  });
+
+  it("FMT-GREP-01: truncated grep uses line format plus hint", () => {
+    const out = formatToolOutputForLlm({
+      matches: [{ path: "/a.ts", line: 1, column: 1, excerpt: "foo" }],
+      total: 50,
+      truncated: true,
+    });
+    assert.equal(out.startsWith("/a.ts:1:1: foo"), true);
+    assert.ok(out.includes("Output truncated (49 more omitted; total 50)."));
+    assert.ok(!out.includes('"total"'));
+  });
+
+  it("FMT-GLOB-01: glob paths one per line", () => {
+    const out = formatToolOutputForLlm({
+      paths: ["/src/a.ts", "/src/b.ts"],
+      total: 2,
+      truncated: false,
+    });
+    assert.equal(out, "/src/a.ts\n/src/b.ts");
+    assert.ok(!out.includes('"paths"'));
+  });
+
+  it("FMT-GLOB-01: truncated glob uses line format plus hint", () => {
+    const out = formatToolOutputForLlm({
+      paths: ["/a.ts"],
+      total: 10,
+      truncated: true,
+    });
+    assert.equal(out.startsWith("/a.ts"), true);
+    assert.ok(out.includes("Output truncated (9 more omitted; total 10)."));
+    assert.ok(!out.includes('"total"'));
+  });
+
+  it("FMT-REG-01: edit/write still return ok", () => {
+    assert.equal(formatToolOutputForLlm({ version: 1 }), "ok");
+    assert.equal(
+      formatToolOutputForLlm({ version: 2, replacements: 2 }),
+      "ok",
+    );
+    assert.equal(formatToolOutputForLlm({ ok: true }), "ok");
+  });
+
+  it("FMT-REG-02: fs ls tab format unchanged", () => {
+    const out = formatToolOutputForLlm({
+      entries: [{ path: "/a", kind: "file" }],
+      total: 100,
+      truncated: true,
+      omitted: 99,
+    });
+    assert.ok(out.includes("/a\tfile"));
+    assert.ok(out.includes("truncated"));
+  });
+
+  it("FMT-REG-03: chat_grep output stays JSON, not grep formatter", () => {
+    const input = {
+      matches: [
+        {
+          messageId: "msg-1",
+          seq: 2,
+          role: "user",
+          line: 1,
+          column: 3,
+          excerpt: "hello",
+          hidden: false,
+        },
+      ],
+      total: 1,
+      truncated: false,
+    };
+    const out = formatToolOutputForLlm(input);
+    assert.ok(out.includes('"messageId"'));
+    assert.ok(out.includes('"seq"'));
+    assert.ok(!out.includes("msg-1:1:3:"));
   });
 
   it("T10: formats fs ls truncated output", () => {
