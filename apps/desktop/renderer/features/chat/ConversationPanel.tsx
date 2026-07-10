@@ -10,7 +10,6 @@ import { useAgentStream } from "@/hooks/useAgentStream";
 import { useAgentRunLifecycle } from "@/hooks/useAgentRunLifecycle";
 import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
 import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
-import { useStreamTailGenerating } from "@/hooks/useStreamTailGenerating";
 import { useDesktopAgentActive } from "@/hooks/useDesktopAgentActive";
 import {
   ipcAppUiGet,
@@ -88,19 +87,12 @@ export function ConversationPanel({
     resetUiForSessionChange,
   } = runLifecycle;
 
-  const {
-    streamTailGenerating,
-    noteStreamDelta,
-    resetStreamClock,
-  } = useStreamTailGenerating(running);
-
   const agentActive = useDesktopAgentActive();
 
   const onStreamReset = useCallback(() => {
     setStreamingText("");
     setStreamingThinking("");
-    resetStreamClock();
-  }, [resetStreamClock]);
+  }, []);
 
   useEffect(() => {
     streamResetRef.current = onStreamReset;
@@ -242,16 +234,14 @@ export function ConversationPanel({
     if (delta.length === 0) {
       return;
     }
-    noteStreamDelta();
     noteMetricsTextDelta(delta);
     setStreamingText((prev) => prev + delta);
-  }, [noteStreamDelta, noteMetricsTextDelta]);
+  }, [noteMetricsTextDelta]);
 
   const onThinkingDelta = useCallback((delta: string) => {
-    noteStreamDelta();
     noteMetricsThinkingDelta(delta);
     setStreamingThinking((prev) => prev + delta);
-  }, [noteStreamDelta, noteMetricsThinkingDelta]);
+  }, [noteMetricsThinkingDelta]);
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
@@ -314,7 +304,7 @@ export function ConversationPanel({
   useChatMessagesScrollFollow(chatMessagesRef, {
     streamingText: running ? streamingText : undefined,
     streamingThinking: running ? streamingThinking : undefined,
-    streamTailGenerating: running ? streamTailGenerating : false,
+    streamTailGenerating: running,
     messagesLength: messages.length,
     running,
     sessionId,
@@ -721,7 +711,7 @@ export function ConversationPanel({
             uiRunning={running}
             streamingText={running ? streamingText : undefined}
             streamingThinking={running ? streamingThinking : undefined}
-            streamTailGenerating={running ? streamTailGenerating : false}
+            streamTailGenerating={running}
             agentRunning={agentActive}
             batchMode={messageBatch.mode}
             selectedIds={messageBatch.selectedIds}

@@ -51,8 +51,6 @@ export type UseChatStreamRuntimeParams = {
   onRunStarted: (payload: AgentRunStartedPayload) => void;
   onRunFinished?: (payload: AgentRunFinishedPayload) => void;
   onRunFailed?: (payload: AgentRunFailedPayload) => void;
-  noteStreamDelta: () => void;
-  resetStreamClock: () => void;
 };
 
 export function useChatStreamRuntime({
@@ -68,8 +66,6 @@ export function useChatStreamRuntime({
   onRunStarted,
   onRunFinished,
   onRunFailed,
-  noteStreamDelta,
-  resetStreamClock,
 }: UseChatStreamRuntimeParams) {
   const runtime = useRuntime();
   const [streamingText, setStreamingText] = useState('');
@@ -110,9 +106,6 @@ export function useChatStreamRuntime({
     onMessagesChanged,
     onStepCommitted,
   };
-
-  const streamClockRef = useRef({ noteStreamDelta, resetStreamClock });
-  streamClockRef.current = { noteStreamDelta, resetStreamClock };
 
   const metricsRef = useRef({
     noteMetricsTextDelta,
@@ -197,7 +190,6 @@ export function useChatStreamRuntime({
       ingressTimerRef.current = null;
     }
     ingressQueueRef.current = [];
-    streamClockRef.current.resetStreamClock();
     applyBuffer.reset();
   }, [applyBuffer]);
 
@@ -262,7 +254,6 @@ export function useChatStreamRuntime({
       if (delta.length === 0) {
         return;
       }
-      streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsTextDelta(delta);
       ingestWireChunk({ kind: 'text', delta });
     },
@@ -274,7 +265,6 @@ export function useChatStreamRuntime({
       if (delta.length === 0) {
         return;
       }
-      streamClockRef.current.noteStreamDelta();
       metricsRef.current.noteMetricsThinkingDelta(delta);
       ingestWireChunk({ kind: 'thinking', delta });
     },

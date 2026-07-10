@@ -31,7 +31,6 @@ import { useToast } from '@/components/chrome/ToastHost';
 import { useRuntime } from '@/hooks/useRuntime';
 import { useMobileScope } from '@/hooks/useMobileScope';
 import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
-import { useStreamTailGenerating } from '@/hooks/useStreamTailGenerating';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useDismissOverlaysOnBlur } from '@/hooks/useDismissOverlaysOnBlur';
 import { useNovelMaster } from '@/runtime/novel-master-context';
@@ -237,7 +236,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
   const lifecycle = useAgentRunLifecycle({
     onStreamReset: () => streamResetRef.current(),
   });
-  const streamTail = useStreamTailGenerating(lifecycle.uiRunning);
 
   const [agentActive, setAgentActive] = useState(() => isMobileAgentActive());
   useEffect(() => subscribeMobileAgentActivity(setAgentActive), []);
@@ -273,8 +271,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     onRunStarted: lifecycle.onRunStarted,
     onRunFinished: lifecycle.onRunFinished,
     onRunFailed: lifecycle.onRunFailed,
-    noteStreamDelta: streamTail.noteStreamDelta,
-    resetStreamClock: streamTail.resetStreamClock,
   });
   streamResetRef.current = stream.handleStreamReset;
 
@@ -354,7 +350,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       uiRunning: lifecycle.uiRunning,
       agentActive,
       activeRunId: lifecycle.activeRunId,
-      streamTailGenerating: streamTail.streamTailGenerating,
+      streamTailGenerating: lifecycle.uiRunning,
       streamingText: stream.streamingText,
       streamingThinking: stream.streamingThinking,
       streamMetricsLastRun: stream.streamMetricsLastRun,
@@ -425,7 +421,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       scope,
       lifecycle,
       agentActive,
-      streamTail,
       stream,
       messages,
       messageBatch,
