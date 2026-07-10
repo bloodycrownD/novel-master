@@ -285,6 +285,19 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     void loadAgent();
   }, [loadAgent]);
 
+  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
+    () => splitPersistBlocksForEditor(persist),
+    [persist],
+  );
+
+  const displayName = name.trim() || "未命名 Agent";
+
+  useEffect(() => {
+    if (!agentId || invalidHealth != null || loadError != null) return;
+    nav.navState.editingAgentDisplayName = displayName;
+    nav.setAgentEditorTitle?.(displayName);
+  }, [agentId, invalidHealth, loadError, displayName, nav]);
+
   if (!agentId) {
     return <p className="settings-hint">缺少 agentId</p>;
   }
@@ -418,11 +431,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     }
   };
 
-  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
-    () => splitPersistBlocksForEditor(persist),
-    [persist],
-  );
-
   const movePersist = (textIndex: number, dir: -1 | 1) => {
     setPersist((prev) => movePersistTextBlock(prev, textIndex, dir));
   };
@@ -523,18 +531,12 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   };
 
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
-  const displayName = name.trim() || "未命名 Agent";
 
   const handlePromptTextareaKeyDown = (
     e: ReactKeyboardEvent<HTMLTextAreaElement>,
   ) => {
     handleMultilineSubmitKeyDown(e, () => void save(), { disabled: saving });
   };
-
-  useEffect(() => {
-    nav.navState.editingAgentDisplayName = displayName;
-    nav.setAgentEditorTitle?.(displayName);
-  }, [displayName, nav]);
 
   const renderBlockActions = (
     index: number,
