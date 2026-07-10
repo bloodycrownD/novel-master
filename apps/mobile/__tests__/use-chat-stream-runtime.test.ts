@@ -12,7 +12,6 @@ import {
 } from '@novel-master/core/events';
 import type {ChatTranscriptWebViewHandle} from '@/components/chat/ChatTranscriptWebView';
 import {useAgentRunLifecycle} from '@/hooks/useAgentRunLifecycle';
-import {useStreamTailGenerating} from '@/hooks/useStreamTailGenerating';
 import {useChatStreamRuntime} from '@/screens/tabs/chat-tab/useChatStreamRuntime';
 import {
   isMobileAgentActive,
@@ -68,13 +67,11 @@ describe('useChatStreamRuntime', () => {
     const api: {
       stream?: ReturnType<typeof useChatStreamRuntime>;
       lifecycle?: ReturnType<typeof useAgentRunLifecycle>;
-      streamTail?: ReturnType<typeof useStreamTailGenerating>;
     } = {};
 
     function Harness() {
       const ref = useRef<ChatTranscriptWebViewHandle>(webHandle);
       const lifecycle = useAgentRunLifecycle();
-      const streamTail = useStreamTailGenerating(lifecycle.uiRunning);
       const state = useChatStreamRuntime({
         sessionId: 's1',
         uiRunning: lifecycle.uiRunning,
@@ -87,12 +84,9 @@ describe('useChatStreamRuntime', () => {
         onRunStarted: lifecycle.onRunStarted,
         onRunFinished: lifecycle.onRunFinished,
         onRunFailed: lifecycle.onRunFailed,
-        noteStreamDelta: streamTail.noteStreamDelta,
-        resetStreamClock: streamTail.resetStreamClock,
       });
       api.stream = state;
       api.lifecycle = lifecycle;
-      api.streamTail = streamTail;
       return null;
     }
 
@@ -203,23 +197,15 @@ describe('useChatStreamRuntime', () => {
     expect(api.stream!.streamingText).toBe('');
   });
 
-  it('thinking 空闲 ≥300ms 后 streamTailGenerating 为 true', () => {
-    const {api, startRun} = mountRuntime({beginUiRun: true});
-    startRun();
+  it('beginUiRun 后 uiRunning 立即为 true', () => {
+    const {api} = mountRuntime();
     act(() => {
-      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
-        sessionId: 's1',
-        runId: RUN_ID,
-        text: 'think',
-      });
+      api.lifecycle!.beginUiRun();
     });
-    act(() => {
-      jest.advanceTimersByTime(300);
-    });
-    expect(api.streamTail!.streamTailGenerating).toBe(true);
+    expect(api.lifecycle!.uiRunning).toBe(true);
   });
 
-  it('仅 TOOL_USE、无 text/thinking delta 时空闲 ≥300ms 显示 streamTailGenerating', () => {
+  it('仅 TOOL_USE、无 text/thinking delta 时 uiRunning 仍为 true', () => {
     const {api, startRun} = mountRuntime({beginUiRun: true});
     startRun();
     act(() => {
@@ -230,9 +216,8 @@ describe('useChatStreamRuntime', () => {
         name: 'read',
         input: {},
       });
-      jest.advanceTimersByTime(500);
     });
-    expect(api.streamTail!.streamTailGenerating).toBe(true);
+    expect(api.lifecycle!.uiRunning).toBe(true);
   });
 
   it('chatStreamBatchEnabled=false 时走 pushStreamDelta 保序', () => {

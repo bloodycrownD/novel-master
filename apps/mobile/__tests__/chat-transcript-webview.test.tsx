@@ -101,6 +101,15 @@ function messageTypesSince(clearAfterIndex: number): string[] {
   });
 }
 
+function streamToolInvokingActiveSince(clearAfterIndex: number): boolean[] {
+  return mockWebViewPostMessages
+    .slice(clearAfterIndex)
+    .map(raw => decodeHostToTranscript(raw))
+    .flatMap(msg =>
+      msg.type === 'streamToolInvoking' ? [msg.payload.active] : [],
+    );
+}
+
 function snapshotScrollIntentsSince(
   clearAfterIndex: number,
 ): Array<'stick' | 'restore' | 'preserve'> {
@@ -464,6 +473,100 @@ describe('ChatTranscriptWebView', () => {
     if (invokingMsg?.type === 'streamToolInvoking') {
       expect(invokingMsg.payload.active).toBe(true);
     }
+  });
+
+  it('T-S3: uiRunning 时 sessionSnapshot preserve 后仍 post streamToolInvoking', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    const edited = {
+      ...messages[0]!,
+      content: {blocks: [{type: 'text' as const, text: 'edited'}]},
+    };
+    let tree: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={messages}
+          uiRunning
+          toolInvoking
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    const baseline = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      tree!.update(
+        <ChatTranscriptWebView
+          sessionKey="p1:s1"
+          messages={[edited]}
+          uiRunning
+          toolInvoking
+        />,
+      );
+    });
+    await flushDeferredSnapshot();
+
+    const snapshotMsg = mockWebViewPostMessages
+      .slice(baseline)
+      .map(raw => decodeHostToTranscript(raw))
+      .find(msg => msg.type === 'sessionSnapshot');
+    expect(snapshotMsg?.type).toBe('sessionSnapshot');
+    if (snapshotMsg?.type === 'sessionSnapshot') {
+      expect(snapshotMsg.payload.scrollIntent).toBe('preserve');
+      expect(snapshotMsg.payload.generating).toBe(true);
+    }
+    expect(streamToolInvokingActiveSince(baseline)).toContain(true);
+  });
+
+  it('T-S3b: uiRunning 时 streamReset / streamCommit 后仍 post streamToolInvoking', async () => {
+    const messages = [sampleMessage('m1', 1)];
+    const assistant = assistantTextMessage('a1', 2, 'done');
+    let tree: TestRenderer.ReactTestRenderer;
+    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+
+    await act(async () => {
+      tree = TestRenderer.create(
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+          uiRunning
+          toolInvoking
+        />,
+      );
+    });
+
+    simulateWebReady(tree!.root);
+    await flushDeferredSnapshot();
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'partial');
+    });
+    await flushAnimationFrame();
+
+    const baselineReset = mockWebViewPostMessages.length;
+
+    await act(async () => {
+      ref.current?.resetStream();
+    });
+
+    expect(streamToolInvokingActiveSince(baselineReset)).toContain(true);
+
+    await act(async () => {
+      ref.current?.pushStreamDelta('text', 'stream done');
+    });
+    await flushAnimationFrame();
+
+    const baselineCommit = mockWebViewPostMessages.length;
+    ref.current?.tryCommitStreamTail([...messages, assistant], messages.length);
+
+    expect(messageTypesSince(baselineCommit)).toContain('streamCommit');
+    expect(streamToolInvokingActiveSince(baselineCommit)).toContain(true);
   });
 
   it('richText flag 切换时不抛错并 post sessionSnapshot', async () => {
