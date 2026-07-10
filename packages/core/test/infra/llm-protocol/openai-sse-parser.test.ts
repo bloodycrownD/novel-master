@@ -219,7 +219,7 @@ describe("openai-sse-parser", () => {
     assert.equal(toolUses.length, 1);
   });
 
-  it("TU-04: invalid tool JSON at finish throws", () => {
+  it("T-ITA-01 / TU-04: invalid tool JSON at finish degrades, no throw", () => {
     const state = createOpenAiSseParserState();
     const bad = JSON.stringify({
       choices: [
@@ -237,14 +237,15 @@ describe("openai-sse-parser", () => {
       ],
     });
     feedOpenAiSseChunk(state, "data: " + bad + "\n\n");
-    assert.throws(
-      () => finishOpenAiSse(state),
-      (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
-        return true;
-      },
-    );
+    const { blocks, degradedToolCalls } = finishOpenAiSse(state);
+    assert.equal(degradedToolCalls.length, 1);
+    assert.equal(degradedToolCalls[0]!.id, "c1");
+    assert.equal(degradedToolCalls[0]!.name, "read");
+    assert.equal(degradedToolCalls[0]!.reason, "INVALID_TOOL_ARGUMENTS");
+    assert.equal(degradedToolCalls[0]!.rawArguments, "{bad");
+    const toolUse = blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolUse && toolUse.type === "tool_use");
+    assert.deepEqual(toolUse.input, {});
   });
 });
 

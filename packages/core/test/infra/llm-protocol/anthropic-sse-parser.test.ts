@@ -147,28 +147,26 @@ describe("anthropic-sse-parser", () => {
     assert.equal(blocks.length, 1);
   });
 
-  it("TU-04: invalid partial_json on block stop throws", () => {
+  it("T-ITA-02 / TU-04: invalid partial_json on block stop degrades, no throw", () => {
     const state = createAnthropicSseParserState();
-    assert.throws(
-      () => {
-        feedAnthropicSseChunk(
-          state,
-          [
-            "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
-            "",
-            "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{bad\"}}",
-            "",
-            "data: {\"type\":\"content_block_stop\"}",
-            "",
-          ].join("\n"),
-        );
-      },
-      (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
-        return true;
-      },
+    feedAnthropicSseChunk(
+      state,
+      [
+        "data: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"tool_use\",\"id\":\"t1\",\"name\":\"read\"}}",
+        "",
+        "data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{bad\"}}",
+        "",
+        "data: {\"type\":\"content_block_stop\"}",
+        "",
+      ].join("\n"),
     );
+    const { blocks, degradedToolCalls } = finishAnthropicSse(state);
+    assert.equal(degradedToolCalls.length, 1);
+    assert.equal(degradedToolCalls[0]!.id, "t1");
+    assert.equal(degradedToolCalls[0]!.reason, "INVALID_TOOL_ARGUMENTS");
+    const toolUse = blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolUse && toolUse.type === "tool_use");
+    assert.deepEqual(toolUse.input, {});
   });
 
 });

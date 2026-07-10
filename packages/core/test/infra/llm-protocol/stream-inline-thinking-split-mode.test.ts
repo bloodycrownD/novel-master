@@ -70,7 +70,7 @@ describe("stream-inline-thinking-split-mode", () => {
       "<thought>a</thought>b",
     );
 
-    const blocks = openAiStreamAccumulatorsToBlocks(state);
+    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]!.type, "thinking");
     assert.equal(blocks[1]!.type, "text");
@@ -98,7 +98,7 @@ describe("stream-inline-thinking-split-mode", () => {
       "&lt;thought&gt;a&lt;/thought&gt;b",
     );
 
-    const blocks = openAiStreamAccumulatorsToBlocks(state);
+    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
     assert.equal(blocks.length, 2);
     if (blocks[0]!.type === "thinking" && blocks[1]!.type === "text") {
       assert.equal(blocks[0].text, "a");

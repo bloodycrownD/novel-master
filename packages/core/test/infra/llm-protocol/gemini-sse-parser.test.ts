@@ -183,21 +183,20 @@ describe("gemini-sse-parser", () => {
     assert.equal(toolUses.length, 1);
   });
 
-  it("TU-04: invalid args JSON at finish throws", () => {
+  it("T-ITA-02 / TU-04: invalid args JSON at finish degrades, no throw", () => {
     const state = createGeminiSseParserState();
     state.functionCalls.set("c1", {
       name: "read",
       argsJson: "{bad",
       id: "c1",
     });
-    assert.throws(
-      () => finishGeminiSse(state),
-      (err: unknown) => {
-        assert.ok(err instanceof ProviderError);
-        assert.equal(err.code, "INVALID_TOOL_ARGUMENTS");
-        return true;
-      },
-    );
+    const { blocks, degradedToolCalls } = finishGeminiSse(state);
+    assert.equal(degradedToolCalls.length, 1);
+    assert.equal(degradedToolCalls[0]!.id, "c1");
+    assert.equal(degradedToolCalls[0]!.reason, "INVALID_TOOL_ARGUMENTS");
+    const toolUse = blocks.find((b) => b.type === "tool_use");
+    assert.ok(toolUse && toolUse.type === "tool_use");
+    assert.deepEqual(toolUse.input, {});
   });
 
 });

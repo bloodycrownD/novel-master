@@ -21,8 +21,9 @@ import { buildToolResultBlock } from "@/domain/tool/logic/build-tool-result-bloc
 import { anyToolUseMutatesWorkspace } from "@/domain/tool/logic/tool-use-mutates-workspace.js";
 import type { AgentRunResult, ModelRoundSummary } from "@/domain/agent/model/agent-run-result.js";
 import type { ToolRegistry } from "@/domain/tool/logic/tool-registry.js";
-import { ToolRunner } from "@/domain/tool/logic/tool-runner.js";
+import { ToolRunner, type ParallelToolOutcome, type ToolCall } from "@/domain/tool/logic/tool-runner.js";
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
+import { ProviderError } from "@/errors/provider-errors.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import { toolsFromRegistry } from "@/infra/llm-protocol/logic/tool-definitions.js";
 import type { ModelRequestService } from "../../provider/model-request.port.js";
@@ -75,6 +76,13 @@ export interface DefaultAgentRunnerDeps {
   readonly eventOrchestrator?: EventOrchestrator;
   readonly regexConfig?: RegexConfigService;
   readonly listAllSessionMessages?: () => Promise<readonly ChatMessage[]>;
+}
+
+function truncateRaw(raw: string, maxLen: number): string {
+  if (raw.length <= maxLen) {
+    return raw;
+  }
+  return raw.slice(0, maxLen) + "…";
 }
 
 /**
@@ -323,14 +331,44 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        const parallelOutcomes = await this.toolRunner.runParallel(
-          toolUses.map((tu) => ({ name: tu.name, input: tu.input })),
+        const degradedById = new Map(
+          (result.degradedToolCalls ?? []).map((d) => [d.id, d] as const),
+        );
+        const outcomes: Array<ParallelToolOutcome | null> = [];
+        const runnableCalls: ToolCall[] = [];
+
+        for (const tu of toolUses) {
+          const degraded = degradedById.get(tu.id);
+          if (degraded != null) {
+            outcomes.push({
+              ok: false,
+              error: new ProviderError(
+                "INVALID_TOOL_ARGUMENTS",
+                `${protocol}: invalid tool arguments JSON (${truncateRaw(degraded.rawArguments, 80)})`,
+              ),
+            });
+            continue;
+          }
+          runnableCalls.push({ name: tu.name, input: tu.input });
+          outcomes.push(null);
+        }
+
+        const parallelResults = await this.toolRunner.runParallel(
+          runnableCalls,
           this.deps.toolCtx,
         );
+        let parallelIdx = 0;
+        for (let i = 0; i < outcomes.length; i++) {
+          if (outcomes[i] == null) {
+            outcomes[i] = parallelResults[parallelIdx]!;
+            parallelIdx += 1;
+          }
+        }
+
         const vfsMutated = anyToolUseMutatesWorkspace(toolUses);
         vfsMutatedInRun = vfsMutatedInRun || vfsMutated;
         const toolResults: ToolResultBlock[] = toolUses.map((tu, i) =>
-          buildToolResultBlock(tu.id, parallelOutcomes[i]!, {
+          buildToolResultBlock(tu.id, outcomes[i]!, {
             toolName: tu.name,
             vfsScope: { kind: "session", projectId, sessionId },
           }),

@@ -9,7 +9,7 @@ import {
   type CreateAgentRunnerDeps,
 } from "@novel-master/core/agent";
 import { textBlocks } from "@novel-master/core/chat";
-import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
+import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
@@ -1203,6 +1203,136 @@ describe("AgentRunner", () => {
       (e: unknown) =>
         e instanceof Error && e.name === "AgentError" && (e as AgentError).code === "DOOM_LOOP",
     );
+  });
+
+  it("T-ITA-03: degraded tool args → no RUN_FAILED, tool_result ok:false, run continues", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const bus = new SimpleEventBus();
+    let runFailed = false;
+    bus.subscribe(EVENT_AGENT_RUN_FAILED, () => {
+      runFailed = true;
+    });
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          { type: "tool_use", id: "bad1", name: "read", input: {} },
+        ],
+        degradedToolCalls: [
+          {
+            id: "bad1",
+            name: "read",
+            rawArguments: "{bad",
+            reason: "INVALID_TOOL_ARGUMENTS",
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+        eventBus: bus,
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(runFailed, false);
+    assert.equal(result.stopReason, "completed");
+    assert.equal(model.callCount(), 2);
+    const toolResult = session
+      .allMessages()
+      .flatMap((m) => m.content.blocks)
+      .find((b) => b.type === "tool_result");
+    assert.ok(toolResult && toolResult.type === "tool_result");
+    assert.equal(toolResult.ok, false);
+    assert.ok(toolResult.content.trimStart().startsWith("Error:"));
+  });
+
+  it("T-ITA-04: degraded + valid tool mixed, id-aligned, only valid runs", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+    const vfs = mockVfs();
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          { type: "tool_use", id: "bad1", name: "read", input: {} },
+          {
+            type: "tool_use",
+            id: "good1",
+            name: "write",
+            input: { path: "/ok.txt", content: "hi" },
+          },
+        ],
+        degradedToolCalls: [
+          {
+            id: "bad1",
+            name: "read",
+            rawArguments: "{bad",
+            reason: "INVALID_TOOL_ARGUMENTS",
+          },
+        ],
+        raw: {},
+      },
+      {
+        assistantText: "done",
+        blocks: [{ type: "text", text: "done" }],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(vfs),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    assert.equal(model.callCount(), 2);
+    const toolResults = session
+      .allMessages()
+      .flatMap((m) => m.content.blocks)
+      .filter((b): b is Extract<(typeof b), { type: "tool_result" }> => b.type === "tool_result");
+    assert.equal(toolResults.length, 2);
+    const badResult = toolResults.find((r) => r.toolUseId === "bad1");
+    const goodResult = toolResults.find((r) => r.toolUseId === "good1");
+    assert.ok(badResult);
+    assert.ok(goodResult);
+    assert.equal(badResult.ok, false);
+    assert.equal(goodResult.ok, true);
+    const file = await vfs.read("/ok.txt");
+    assert.equal(file.content, "hi");
   });
 
 });
