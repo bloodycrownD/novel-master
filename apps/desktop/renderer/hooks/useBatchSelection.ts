@@ -3,22 +3,17 @@
  */
 import { useCallback, useMemo, useState } from "react";
 
-export type MessageBatchMode = "hide" | "restore" | "delete";
-
 export function useBatchSelection() {
-  const [mode, setMode] = useState<MessageBatchMode | null>(null);
+  const [active, setActive] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
-  const active = mode != null;
-
-  /** 通用批量入口（会话/VFS/Provider 等非消息可见性场景）。 */
   const enter = useCallback(() => {
-    setMode("hide");
+    setActive(true);
     setSelectedIds(new Set());
   }, []);
 
   const exit = useCallback(() => {
-    setMode((prev) => (prev != null ? null : prev));
+    setActive((prev) => (prev ? false : prev));
     setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
   }, []);
 
@@ -47,7 +42,6 @@ export function useBatchSelection() {
   return useMemo(
     () => ({
       active,
-      mode,
       selectedIds,
       selectedCount: selectedIds.size,
       enter,
@@ -58,7 +52,6 @@ export function useBatchSelection() {
     }),
     [
       active,
-      mode,
       selectedIds,
       enter,
       exit,
