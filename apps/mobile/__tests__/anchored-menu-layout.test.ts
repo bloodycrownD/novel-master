@@ -9,11 +9,10 @@ describe('layoutAnchoredMenu', () => {
   const anchor = {x: 40, y: 520, width: 200, height: 48};
   const items = [
     {label: '编辑'},
-    {label: '隐藏'},
     {label: '复制'},
+    {label: '置位'},
     {label: '分叉'},
     {label: '回滚'},
-    {label: '删除'},
   ];
 
   it('flips above when the bubble is near the bottom edge', () => {
@@ -37,7 +36,7 @@ describe('layoutAnchoredMenu', () => {
     );
   });
 
-  it('does not scroll for six items when viewport has room', () => {
+  it('does not scroll for five items when viewport has room', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
       {x: 40, y: 200, width: 200, height: 48},
@@ -50,7 +49,7 @@ describe('layoutAnchoredMenu', () => {
     expect(layout.maxHeight).toBe(anchoredMenuContentHeight(items.length));
   });
 
-  it('does not scroll six items in a short WebView-sized viewport when wedge fits', () => {
+  it('does not scroll five items in a short WebView-sized viewport when wedge fits', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
       {x: 200, y: 316, width: 120, height: 40},

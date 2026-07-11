@@ -666,6 +666,60 @@ export function useChatTabMessageActions({
     ],
   );
 
+  const handleSetFloorFromMessage = useCallback(
+    (messageId: string) => {
+      if (sessionId == null || projectId == null) {
+        return;
+      }
+      if (agentRunning) {
+        showToast(toastMessage('请稍候', 'Agent 运行中无法置位'));
+        return;
+      }
+
+      const runSetFloor = async () => {
+        try {
+          const result =
+            await runtime.messageTranscriptEffects.setMessageFloorAtMessage(
+              projectId,
+              sessionId,
+              messageId,
+            );
+          await reloadMessages(true);
+          bumpWorktreeUiToken();
+          void refreshChatTokenLabel();
+          const changed = result.hiddenCount + result.shownCount;
+          showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
+        } catch (error) {
+          showToast(toastMessage('置位失败', error));
+        }
+      };
+
+      Alert.alert(
+        '置位到此消息？',
+        '此消息之前将不参与提示词，此消息及之后将恢复可见。',
+        [
+          {text: '取消', style: 'cancel'},
+          {
+            text: '置位',
+            onPress: () => {
+              void runSetFloor();
+            },
+          },
+        ],
+      );
+    },
+    [
+      sessionId,
+      projectId,
+      agentRunning,
+      runtime,
+      reloadMessages,
+      bumpWorktreeUiToken,
+      refreshChatTokenLabel,
+      showToast,
+    ],
+  );
+
   const handleMessageMenuAction = useCallback(
     (target: ChatMessage, action: string) => {
       if (action === 'edit') {
@@ -688,12 +742,15 @@ export function useChatTabMessageActions({
         showToast('已复制');
       } else if (action === 'fork') {
         handleForkFromMessage(target.id).catch(() => undefined);
+      } else if (action === 'set-floor') {
+        handleSetFloorFromMessage(target.id);
       } else if (action === 'rollback') {
         handleRollbackFromMessage(target.id);
       }
     },
     [
       handleForkFromMessage,
+      handleSetFloorFromMessage,
       handleRollbackFromMessage,
       setMessageEditPrompt,
       showToast,

@@ -44,7 +44,12 @@ export function applyTextEditToMessage(
   return {blocks: result};
 }
 
-/** 长按菜单：编辑、复制、分叉、回滚（无 hide/unhide/delete）。 */
+/** user/assistant 消息行可置位（非 user_vfs_turn 等展示形态由调用方过滤）。 */
+export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
+  return message.role === 'user' || message.role === 'assistant';
+}
+
+/** 长按菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
 export function buildMessageActionItems(
   message: ChatMessage,
 ): MessageActionMenuItem[] {
@@ -53,6 +58,9 @@ export function buildMessageActionItems(
     items.push({label: '编辑', action: 'edit'});
   }
   items.push({label: '复制', action: 'copy'});
+  if (isSetFloorEligibleMessage(message)) {
+    items.push({label: '置位', action: 'set-floor'});
+  }
   items.push({label: '分叉', action: 'fork'});
   if (!message.hidden) {
     items.push({label: '回滚', action: 'rollback', danger: true});

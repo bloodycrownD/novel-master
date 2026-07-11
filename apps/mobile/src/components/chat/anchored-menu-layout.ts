@@ -14,7 +14,7 @@ export const ANCHORED_MENU_H_PADDING = 32;
 /** Rough width per glyph for CJK/Latin labels without native measure. */
 export const ANCHORED_MENU_CHAR_WIDTH_EST = 14;
 /** Standard chat message action count — never scroll inside WebView wedge. */
-export const MESSAGE_ACTION_MENU_ITEM_COUNT = 6;
+export const MESSAGE_ACTION_MENU_ITEM_COUNT = 5;
 
 export interface MenuAnchor {
   readonly x: number;
