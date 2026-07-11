@@ -52,8 +52,6 @@ import {FormTextInput} from '../form/FormTextInput';
 import {PromptMacroTextInput} from './PromptMacroTextInput';
 import {ScreenFormLayout} from '../form/ScreenFormLayout';
 import {StickyFormFooter} from '../form/StickyFormFooter';
-import {BottomSheetMenu} from '../sheet/BottomSheetMenu';
-import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
 import {useRuntime} from '../../hooks/useRuntime';
 import {useTheme} from '../../theme/ThemeProvider';
 import {useToast} from '../chrome/ToastHost';
@@ -135,7 +133,6 @@ export function AgentEditorForm(props: Props) {
     Awaited<ReturnType<typeof runtime.providerModels.savedList>>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
-  const [addBlockVisible, setAddBlockVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -145,12 +142,6 @@ export function AgentEditorForm(props: Props) {
   const [recovering, setRecovering] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
-
-  const dismissAllOverlays = useCallback(() => {
-    setAddBlockVisible(false);
-  }, []);
-
-  useDismissOverlaysOnBlur(dismissAllOverlays);
 
   const snapshot = useMemo(
     () =>
@@ -590,7 +581,6 @@ export function AgentEditorForm(props: Props) {
       const {blocks, textBlocks} = splitPersistBlocksForEditor(prev);
       return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
     });
-    setAddBlockVisible(false);
   };
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
@@ -601,7 +591,6 @@ export function AgentEditorForm(props: Props) {
 
   const addDynamicBlock = () => {
     setDynamic(prev => [...prev, createDefaultDynamicTextBlock(prev.length)]);
-    setAddBlockVisible(false);
   };
 
   const handleProviderChange = async (pid: string) => {
@@ -946,7 +935,7 @@ export function AgentEditorForm(props: Props) {
           {renderPromptSectionHead(promptSectionLabels.persist, {
             switchValue: persistEnabled,
             onSwitchChange: setPersistEnabled,
-            ...(persistEnabled ? {onAdd: () => setAddBlockVisible(true)} : {}),
+            ...(persistEnabled ? {onAdd: addPersistTextBlock} : {}),
           })}
           <View
             style={[
@@ -1184,16 +1173,6 @@ export function AgentEditorForm(props: Props) {
           </View>
         </FormSectionCard>
       </ScreenFormLayout>
-      <BottomSheetMenu
-        visible={addBlockVisible}
-        items={[{label: '文本块', action: 'persist-text'}]}
-        onClose={() => setAddBlockVisible(false)}
-        onSelect={action => {
-          if (action === 'persist-text') {
-            addPersistTextBlock();
-          }
-        }}
-      />
     </>
   );
 }
