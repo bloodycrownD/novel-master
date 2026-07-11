@@ -8,7 +8,7 @@ import { agentsBundleDocumentSchema } from "../src/agent/schemas/agents-bundle.s
 
 const examplesAgentsYaml = join(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../examples/agents.yaml",
+  "../../../examples/agents.yaml"
 );
 
 describe("agents bundle schema", () => {
@@ -36,7 +36,7 @@ describe("agents bundle schema", () => {
           },
         },
       },
-      agentsBundleDocumentSchema,
+      agentsBundleDocumentSchema
     );
     assert.equal(Object.keys(doc.agents).length, 2);
     assert.equal(doc.agents.writer!.prompts.system, "hi");

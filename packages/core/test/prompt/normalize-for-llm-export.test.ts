@@ -16,11 +16,10 @@ function msg(
     readonly id?: string;
     readonly raw?: Record<string, unknown> | null;
     readonly blocks?: ChatMessage["content"]["blocks"];
-  },
+  }
 ): ChatMessage {
   const blocks =
-    options?.blocks ??
-    (text === "" ? [] : [{ type: "text" as const, text }]);
+    options?.blocks ?? (text === "" ? [] : [{ type: "text" as const, text }]);
   return {
     id: options?.id ?? `m-${role}`,
     sessionId: "s1",
@@ -80,9 +79,7 @@ describe("normalizeForLlmExport", () => {
     const text = msg("user", "a", { id: "u1" });
     const tool = msg("user", "", {
       id: "u2",
-      blocks: [
-        { type: "tool_result", toolUseId: "tu_1", content: "ok" },
-      ],
+      blocks: [{ type: "tool_result", toolUseId: "tu_1", content: "ok" }],
     });
     const out = normalizeForLlmExport([text, tool], "anthropic", {
       persistCount: 0,
@@ -126,7 +123,9 @@ describe("normalizeForLlmExport", () => {
   it("T-WT9: worktree 双消息 persistCount=2 与 chat 跨区不 merge", () => {
     const messages = [
       msg("user", "tree", { id: "prompt:worktree:canon" }),
-      msg("assistant", TOOL_TURN_BRIDGE_TEXT, { id: "prompt:worktree:canon:done" }),
+      msg("assistant", TOOL_TURN_BRIDGE_TEXT, {
+        id: "prompt:worktree:canon:done",
+      }),
       msg("user", "chat", { id: "c1" }),
     ];
     const out = normalizeForLlmExport(messages, "anthropic", {

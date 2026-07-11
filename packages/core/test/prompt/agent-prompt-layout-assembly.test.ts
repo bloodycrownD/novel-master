@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
 
-import { buildPromptLlmInputFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
+import {
+  buildPromptLlmInputFromLayout,
+  formatPromptLlmInputForCliFromLayout,
+  messageBodyText,
+  type AgentPromptLayout,
+} from "@novel-master/core/prompt";
 
 import type { WorktreeService } from "@novel-master/core/worktree";
 
@@ -59,7 +64,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
         now: fixedNow,
         worktree,
       },
-      { agentStepIndex: 0 },
+      { agentStepIndex: 0 }
     );
     assert.equal(input.system, "sys");
     assert.equal(input.messages.length, 6);
@@ -75,7 +80,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     const input = await buildPromptLlmInputFromLayout(
       layout,
       { worktreeDisplay: "WT", messages: [], worktree: mockWorktree("/") },
-      { agentStepIndex: 1 },
+      { agentStepIndex: 1 }
     );
     assert.equal(input.messages.length, 4);
     assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
@@ -88,7 +93,9 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     const renderFileTree = mock.fn(async () => "/\n└── x.md 全部加载");
     const worktree = { renderFileTree } as unknown as WorktreeService;
     const list = mock.fn(async () => []);
-    const vfs = { list } as unknown as import("@novel-master/core/vfs").VfsService;
+    const vfs = {
+      list,
+    } as unknown as import("@novel-master/core/vfs").VfsService;
     const input = await buildPromptLlmInputFromLayout(
       {
         dynamicEnabled: true,
@@ -97,7 +104,7 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
           { name: "d", type: "text", role: "user", content: "{{$filetree}}" },
         ],
       },
-      { worktreeDisplay: "", messages: [], worktree, vfs },
+      { worktreeDisplay: "", messages: [], worktree, vfs }
     );
     assert.equal(renderFileTree.mock.callCount(), 1);
     assert.equal(list.mock.callCount(), 0);
@@ -109,7 +116,7 @@ describe("formatPromptLlmInputForCliFromLayout", () => {
   it("system 段在首行", async () => {
     const out = await formatPromptLlmInputForCliFromLayout(
       { system: "ctx", persist: [], dynamic: [] },
-      { worktreeDisplay: "", messages: [] },
+      { worktreeDisplay: "", messages: [] }
     );
     assert.equal(out, "system: ctx");
   });

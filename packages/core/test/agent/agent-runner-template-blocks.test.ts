@@ -9,7 +9,11 @@ import {
 } from "@novel-master/core/agent";
 import { textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { messageBodyText } from "@novel-master/core/prompt";
-import { type LlmChatResult, type ModelRequestOptions, type ModelRequestService } from "@novel-master/core/provider";
+import {
+  type LlmChatResult,
+  type ModelRequestOptions,
+  type ModelRequestService,
+} from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
@@ -61,9 +65,12 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+  deps: Omit<
+    CreateAgentRunnerDeps,
+    "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"
+  > &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
-  worktreeDisplay: string,
+  worktreeDisplay: string
 ): CreateAgentRunnerDeps {
   const store = createSessionWorktreeSnapshotStore();
   return {
@@ -73,11 +80,15 @@ function runnerDeps(
     worktreeSnapshot: store,
     worktree: () =>
       ({
-        scope: { kind: "session", projectId: PROJECT_ID, sessionId: SESSION_ID },
+        scope: {
+          kind: "session",
+          projectId: PROJECT_ID,
+          sessionId: SESSION_ID,
+        },
         renderDisplay: async () => worktreeDisplay,
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay }),
-      }) as never,
+      } as never),
   };
 }
 
@@ -115,8 +126,8 @@ describe("AgentRunner template blocks", () => {
           registry: new ToolRegistry(),
           toolCtx: mockToolCtx(mockVfs()),
         },
-        "WORKTREE_SNAPSHOT",
-      ),
+        "WORKTREE_SNAPSHOT"
+      )
     );
 
     await runner.run({
@@ -187,8 +198,8 @@ describe("AgentRunner template blocks", () => {
           registry,
           toolCtx: mockToolCtx(vfs),
         },
-        "WORKTREE_SNAPSHOT",
-      ),
+        "WORKTREE_SNAPSHOT"
+      )
     );
 
     await runner.run({
@@ -203,17 +214,25 @@ describe("AgentRunner template blocks", () => {
     assert.equal(histories.length, 2);
     for (const opts of histories) {
       const history = opts.history ?? [];
-      assert.equal(history.some((m) => m.id === "prompt:worktree:canon"), true);
-      assert.equal(history.some((m) => m.id === "prompt:worktree:canon:done"), true);
+      assert.equal(
+        history.some((m) => m.id === "prompt:worktree:canon"),
+        true
+      );
+      assert.equal(
+        history.some((m) => m.id === "prompt:worktree:canon:done"),
+        true
+      );
       const ctxMsg = history.find((m) => m.id === "prompt:worktree:canon");
-      const doneMsg = history.find((m) => m.id === "prompt:worktree:canon:done");
+      const doneMsg = history.find(
+        (m) => m.id === "prompt:worktree:canon:done"
+      );
       assert.equal(
         ctxMsg != null ? messageBodyText(ctxMsg) : "",
-        "WORKTREE_SNAPSHOT",
+        "WORKTREE_SNAPSHOT"
       );
       assert.equal(
         doneMsg != null ? messageBodyText(doneMsg) : "",
-        TOOL_TURN_BRIDGE_TEXT,
+        TOOL_TURN_BRIDGE_TEXT
       );
     }
   });

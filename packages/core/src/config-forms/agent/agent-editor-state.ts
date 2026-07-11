@@ -1,4 +1,7 @@
-import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
+import type {
+  AgentDefinition,
+  AgentToolPolicy,
+} from "@/domain/agent/model/agent-definition.js";
 import type {
   AgentPromptLayout,
   DynamicPromptBlock,
@@ -63,7 +66,7 @@ export function parseToolsList(text: string): string[] {
 /** @deprecated Use {@link buildToolsPolicyFromSelection}. */
 export function buildToolsPolicy(
   mode: ToolsMode,
-  listText: string,
+  listText: string
 ): AgentToolPolicy | undefined {
   return buildToolsPolicyFromSelection(mode, parseToolsList(listText));
 }
@@ -123,7 +126,7 @@ export const PROMPT_REGION_LABELS = {
 } as const;
 
 export function blockTypeLabel(
-  type: PersistPromptBlock["type"] | DynamicPromptBlock["type"],
+  type: PersistPromptBlock["type"] | DynamicPromptBlock["type"]
 ): string {
   if (type === "worktree") {
     return WORKTREE_BLOCK_LABEL;
@@ -132,7 +135,9 @@ export function blockTypeLabel(
 }
 
 /** 规范化单个 persist 块（工作树固定 name，缺省 role 为 user）。 */
-export function normalizePersistBlock(block: PersistPromptBlock): PersistPromptBlock {
+export function normalizePersistBlock(
+  block: PersistPromptBlock
+): PersistPromptBlock {
   if (block.type === "worktree") {
     return {
       name: WORKTREE_BLOCK_WIRE_NAME,
@@ -144,32 +149,43 @@ export function normalizePersistBlock(block: PersistPromptBlock): PersistPromptB
 }
 
 /** 将 persist 拆为有序块列表与编辑器辅助视图（保留混排顺序）。 */
-export function splitPersistBlocksForEditor(persist: readonly PersistPromptBlock[]): {
+export function splitPersistBlocksForEditor(
+  persist: readonly PersistPromptBlock[]
+): {
   readonly blocks: readonly PersistPromptBlock[];
   readonly textBlocks: readonly PersistTextPromptBlock[];
   readonly worktree: PersistWorktreePromptBlock | null;
 } {
   const blocks = persist.map(normalizePersistBlock);
-  const textBlocks = blocks.filter((b): b is PersistTextPromptBlock => b.type === "text");
-  const worktree = blocks.find((b): b is PersistWorktreePromptBlock => b.type === "worktree") ?? null;
+  const textBlocks = blocks.filter(
+    (b): b is PersistTextPromptBlock => b.type === "text"
+  );
+  const worktree =
+    blocks.find(
+      (b): b is PersistWorktreePromptBlock => b.type === "worktree"
+    ) ?? null;
   return { blocks, textBlocks, worktree };
 }
 
 /** 合并有序 persist 块（保留传入顺序）。 */
 export function joinPersistBlocksForLayout(
-  blocks: readonly PersistPromptBlock[],
+  blocks: readonly PersistPromptBlock[]
 ): PersistPromptBlock[];
 /** @deprecated 请直接传入完整有序 persist 数组。 */
 export function joinPersistBlocksForLayout(
   textBlocks: readonly PersistTextPromptBlock[],
-  worktree: PersistWorktreePromptBlock | null,
+  worktree: PersistWorktreePromptBlock | null
 ): PersistPromptBlock[];
 export function joinPersistBlocksForLayout(
-  blocksOrText: readonly PersistPromptBlock[] | readonly PersistTextPromptBlock[],
-  worktree?: PersistWorktreePromptBlock | null,
+  blocksOrText:
+    | readonly PersistPromptBlock[]
+    | readonly PersistTextPromptBlock[],
+  worktree?: PersistWorktreePromptBlock | null
 ): PersistPromptBlock[] {
   if (worktree === undefined) {
-    return (blocksOrText as readonly PersistPromptBlock[]).map(normalizePersistBlock);
+    return (blocksOrText as readonly PersistPromptBlock[]).map(
+      normalizePersistBlock
+    );
   }
   const textBlocks = blocksOrText as readonly PersistTextPromptBlock[];
   return worktree != null
@@ -179,7 +195,10 @@ export function joinPersistBlocksForLayout(
 
 export function mapPersistTextBlocks(
   persist: readonly PersistPromptBlock[],
-  mapper: (block: PersistTextPromptBlock, index: number) => PersistTextPromptBlock,
+  mapper: (
+    block: PersistTextPromptBlock,
+    index: number
+  ) => PersistTextPromptBlock
 ): PersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   let textIndex = 0;
@@ -196,7 +215,7 @@ export function mapPersistTextBlocks(
 export function movePersistBlock(
   persist: readonly PersistPromptBlock[],
   index: number,
-  direction: -1 | 1,
+  direction: -1 | 1
 ): PersistPromptBlock[] {
   const blocks = [...splitPersistBlocksForEditor(persist).blocks];
   const target = index + direction;
@@ -212,7 +231,7 @@ export function movePersistBlock(
 export function movePersistTextBlock(
   persist: readonly PersistPromptBlock[],
   textIndex: number,
-  direction: -1 | 1,
+  direction: -1 | 1
 ): PersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   const textIndices = blocks
@@ -237,7 +256,7 @@ export function movePersistTextBlock(
 
 export function deletePersistTextBlock(
   persist: readonly PersistPromptBlock[],
-  textIndex: number,
+  textIndex: number
 ): PersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   let currentTextIndex = 0;
@@ -252,7 +271,7 @@ export function deletePersistTextBlock(
 }
 
 export function addPersistWorktreeBlock(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly PersistPromptBlock[]
 ): PersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   if (blocks.some((block) => block.type === "worktree")) {
@@ -262,18 +281,20 @@ export function addPersistWorktreeBlock(
 }
 
 export function removePersistWorktreeBlock(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly PersistPromptBlock[]
 ): PersistPromptBlock[] {
-  return splitPersistBlocksForEditor(persist).blocks.filter((block) => block.type !== "worktree");
+  return splitPersistBlocksForEditor(persist).blocks.filter(
+    (block) => block.type !== "worktree"
+  );
 }
 
 /** @deprecated 运行时固定 user + assistant 双消息，不再使用 worktree 块 role。 */
 export function updatePersistWorktreeRole(
   persist: readonly PersistPromptBlock[],
-  role: "user" | "assistant",
+  role: "user" | "assistant"
 ): PersistPromptBlock[] {
   return splitPersistBlocksForEditor(persist).blocks.map((block) =>
-    block.type === "worktree" ? { ...block, role } : block,
+    block.type === "worktree" ? { ...block, role } : block
   );
 }
 
@@ -287,7 +308,7 @@ export function isDynamicBlockPersistent(block: DynamicTextBlock): boolean {
 /** 将 UI「常驻」开关映射为 lifecycle（常驻时省略字段）。 */
 export function withDynamicBlockPersistence(
   block: DynamicTextBlock,
-  persistent: boolean,
+  persistent: boolean
 ): DynamicTextBlock {
   if (persistent) {
     const { lifecycle: _removed, ...rest } = block;
@@ -318,7 +339,10 @@ export function createDefaultAgentEditorPrompts(): Pick<
 
 /** 是否启用了任一 Prompt 区域（system / persist / dynamic）。 */
 export function hasAnyPromptRegionEnabled(
-  input: Pick<AgentEditorFormInput, "systemEnabled" | "persistEnabled" | "dynamicEnabled">,
+  input: Pick<
+    AgentEditorFormInput,
+    "systemEnabled" | "persistEnabled" | "dynamicEnabled"
+  >
 ): boolean {
   return input.systemEnabled || input.persistEnabled || input.dynamicEnabled;
 }
@@ -333,7 +357,7 @@ export function hasEffectivePromptSource(
     | "dynamicEnabled"
     | "persist"
     | "dynamic"
-  >,
+  >
 ): boolean {
   return countEffectiveFormPromptSources(input) > 0;
 }
@@ -348,7 +372,7 @@ export function countEffectiveFormPromptSources(
     | "dynamicEnabled"
     | "persist"
     | "dynamic"
-  >,
+  >
 ): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
@@ -365,14 +389,19 @@ export function countEffectiveFormPromptSources(
 
 /** 统计 system + dynamic 有效 Prompt 来源（删除持久区块时允许 persist 全空）。 */
 export function countMinimumPromptSources(
-  input: Pick<AgentEditorFormInput, "systemEnabled" | "systemContent" | "dynamic">,
-  options?: { excludeDynamicIndex?: number },
+  input: Pick<
+    AgentEditorFormInput,
+    "systemEnabled" | "systemContent" | "dynamic"
+  >,
+  options?: { excludeDynamicIndex?: number }
 ): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
     count += 1;
   }
-  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
+  count += input.dynamic.filter(
+    (_, index) => index !== options?.excludeDynamicIndex
+  ).length;
   return count;
 }
 
@@ -386,22 +415,28 @@ export function countFormPromptSources(
     excludePersistTextIndex?: number;
     excludeDynamicIndex?: number;
     excludeWorktree?: boolean;
-  },
+  }
 ): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
     count += 1;
   }
   const { textBlocks, worktree } = splitPersistBlocksForEditor(input.persist);
-  count += textBlocks.filter((_, index) => index !== options?.excludePersistTextIndex).length;
+  count += textBlocks.filter(
+    (_, index) => index !== options?.excludePersistTextIndex
+  ).length;
   if (worktree != null && !options?.excludeWorktree) {
     count += 1;
   }
-  count += input.dynamic.filter((_, index) => index !== options?.excludeDynamicIndex).length;
+  count += input.dynamic.filter(
+    (_, index) => index !== options?.excludeDynamicIndex
+  ).length;
   return count;
 }
 
-export function createDefaultPersistTextBlock(index: number): PersistTextPromptBlock {
+export function createDefaultPersistTextBlock(
+  index: number
+): PersistTextPromptBlock {
   return {
     name: `persist-${index + 1}`,
     type: "text",
@@ -418,7 +453,9 @@ export function createDefaultWorktreeBlock(): PersistWorktreePromptBlock {
   };
 }
 
-export function createDefaultDynamicTextBlock(index: number): DynamicPromptBlock {
+export function createDefaultDynamicTextBlock(
+  index: number
+): DynamicPromptBlock {
   return {
     name: `dynamic-${index + 1}`,
     type: "text",
@@ -429,7 +466,7 @@ export function createDefaultDynamicTextBlock(index: number): DynamicPromptBlock
 
 /** AgentDefinition → 编辑器表单 Prompt 字段。 */
 export function definitionToForm(
-  def: AgentDefinition,
+  def: AgentDefinition
 ): Pick<
   AgentEditorFormInput,
   | "systemEnabled"
@@ -460,7 +497,7 @@ export function layoutFromFormInput(
     | "dynamicEnabled"
     | "persist"
     | "dynamic"
-  >,
+  >
 ): AgentPromptLayout {
   const system =
     input.systemEnabled && input.systemContent.trim() !== ""
@@ -499,7 +536,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
 }
 
 export function buildAgentDefinitionFromForm(
-  input: AgentEditorFormInput,
+  input: AgentEditorFormInput
 ): { ok: true; definition: AgentDefinition } | { ok: false; message: string } {
   if (!input.name.trim()) {
     return { ok: false, message: "请填写 Agent 名称" };
@@ -518,7 +555,10 @@ export function buildAgentDefinitionFromForm(
     throw error;
   }
   const steps = Number(input.maxSteps);
-  const tools = buildToolsPolicyFromSelection(input.toolsMode, input.toolsSelected);
+  const tools = buildToolsPolicyFromSelection(
+    input.toolsMode,
+    input.toolsSelected
+  );
   let modelPin: string | undefined;
   if (input.modelEnabled && input.savedModelId.trim()) {
     const trimmed = input.savedModelId.trim();
@@ -530,7 +570,9 @@ export function buildAgentDefinitionFromForm(
   const def: AgentDefinition = {
     name: input.name.trim(),
     prompts: validatedLayout,
-    ...(Number.isFinite(steps) && steps > 0 ? { runtime: { maxSteps: steps } } : {}),
+    ...(Number.isFinite(steps) && steps > 0
+      ? { runtime: { maxSteps: steps } }
+      : {}),
     ...(modelPin != null ? { model: modelPin } : {}),
     ...(tools != null ? { tools } : {}),
   };

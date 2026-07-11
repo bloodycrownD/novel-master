@@ -1,13 +1,17 @@
 /**
  * Agent definition editor: name, model pin, maxSteps, three-region prompt layout.
  */
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {Alert, Pressable, StyleSheet, Switch, Text, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
-import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
-import { type AgentDefinition } from "@novel-master/core/agent";
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { type AgentDefinition } from '@novel-master/core/agent';
 
-import { type DynamicPromptBlock, type PersistPromptBlock, type PersistTextPromptBlock } from "@novel-master/core/prompt";
+import {
+  type DynamicPromptBlock,
+  type PersistPromptBlock,
+  type PersistTextPromptBlock,
+} from '@novel-master/core/prompt';
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
@@ -40,24 +44,27 @@ import {
   storedConfigInvalidReason,
   type StoredConfigInvalidCode,
 } from '@novel-master/core/config-forms/stored-config-validity';
-import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry } from '@novel-master/core';
 
-import { formatSavedModelDisplayName } from "@novel-master/core/provider";
-import {ToolPolicyPicker} from './ToolPolicyPicker';
-import {FormField} from '../form/FormField';
-import {FormSwitchRow} from '../form/FormSwitchRow';
-import {FormSectionCard} from '../form/FormSectionCard';
-import {FormSelectField} from '../form/FormSelectField';
-import {FormTextInput} from '../form/FormTextInput';
-import {PromptMacroTextInput} from './PromptMacroTextInput';
-import {ScreenFormLayout} from '../form/ScreenFormLayout';
-import {StickyFormFooter} from '../form/StickyFormFooter';
-import {useRuntime} from '../../hooks/useRuntime';
-import {useTheme} from '../../theme/ThemeProvider';
-import {useToast} from '../chrome/ToastHost';
-import {toastMessage} from '../../errors/toast-message';
-import {exportAgentYaml, importAgentYaml} from '../../services/agent-yaml.service';
-import type {RootStackParamList} from '../../navigation/types';
+import { formatSavedModelDisplayName } from '@novel-master/core/provider';
+import { ToolPolicyPicker } from './ToolPolicyPicker';
+import { FormField } from '../form/FormField';
+import { FormSwitchRow } from '../form/FormSwitchRow';
+import { FormSectionCard } from '../form/FormSectionCard';
+import { FormSelectField } from '../form/FormSelectField';
+import { FormTextInput } from '../form/FormTextInput';
+import { PromptMacroTextInput } from './PromptMacroTextInput';
+import { ScreenFormLayout } from '../form/ScreenFormLayout';
+import { StickyFormFooter } from '../form/StickyFormFooter';
+import { useRuntime } from '../../hooks/useRuntime';
+import { useTheme } from '../../theme/ThemeProvider';
+import { useToast } from '../chrome/ToastHost';
+import { toastMessage } from '../../errors/toast-message';
+import {
+  exportAgentYaml,
+  importAgentYaml,
+} from '../../services/agent-yaml.service';
+import type { RootStackParamList } from '../../navigation/types';
 
 type StackNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -71,9 +78,9 @@ function agentDisplayNameFromWire(raw: unknown, agentId: string): string {
     raw != null &&
     typeof raw === 'object' &&
     'name' in raw &&
-    typeof (raw as {name: unknown}).name === 'string'
+    typeof (raw as { name: unknown }).name === 'string'
   ) {
-    const trimmed = (raw as {name: string}).name.trim();
+    const trimmed = (raw as { name: string }).name.trim();
     if (trimmed.length > 0) {
       return trimmed;
     }
@@ -102,16 +109,13 @@ type ProjectEditorProps = {
 type Props = RegistryEditorProps | ProjectEditorProps;
 
 export function AgentEditorForm(props: Props) {
-  const {
-    onDirtyChange,
-    onSaved,
-  } = props;
+  const { onDirtyChange, onSaved } = props;
   const isProjectMode = props.editorMode === 'project';
   const agentId = !isProjectMode ? props.agentId : '';
   const projectId = isProjectMode ? props.projectId : '';
   const initialDefinition = isProjectMode ? props.initialDefinition : undefined;
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
+  const { tokens } = useTheme();
+  const { showToast } = useToast();
   const navigation = useNavigation<StackNav>();
   const runtime = useRuntime();
   const [name, setName] = useState('');
@@ -127,7 +131,7 @@ export function AgentEditorForm(props: Props) {
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
-    Array<{id: string; label: string; protocol: string}>
+    Array<{ id: string; label: string; protocol: string }>
   >([]);
   const [savedModels, setSavedModels] = useState<
     Awaited<ReturnType<typeof runtime.providerModels.savedList>>
@@ -319,7 +323,7 @@ export function AgentEditorForm(props: Props) {
       }
       const health = assessAgentDefinitionWire(raw);
       if (health.status === 'invalid') {
-        setInvalidConfig({code: health.code, message: health.message});
+        setInvalidConfig({ code: health.code, message: health.message });
         return;
       }
       await populateFormFromDefinition(health.value);
@@ -343,7 +347,7 @@ export function AgentEditorForm(props: Props) {
 
   const handleDeleteBrokenAgent = useCallback(() => {
     Alert.alert('删除 Agent', `确定删除 ${agentId}？`, [
-      {text: '取消', style: 'cancel'},
+      { text: '取消', style: 'cancel' },
       {
         text: '删除',
         style: 'destructive',
@@ -376,7 +380,7 @@ export function AgentEditorForm(props: Props) {
         ? '将用默认 prompts 与运行时覆盖当前项目专属配置，并保留显示名称。是否继续？'
         : '将用默认 prompts 与运行时覆盖当前配置，并保留 Agent ID 与显示名称。是否继续？',
       [
-        {text: '取消', style: 'cancel'},
+        { text: '取消', style: 'cancel' },
         {
           text: '覆盖并保存',
           onPress: () => {
@@ -396,8 +400,8 @@ export function AgentEditorForm(props: Props) {
                 if (isProjectMode) {
                   await runtime.projects.updateAgentConfig(
                     projectId,
-                    {mode: 'custom', definition: def},
-                    {registeredToolNames: probe.list()},
+                    { mode: 'custom', definition: def },
+                    { registeredToolNames: probe.list() },
                   );
                 } else {
                   await runtime.agentRegistry.upsert(agentId, def, {
@@ -468,7 +472,7 @@ export function AgentEditorForm(props: Props) {
         showToast('请选择专属模型');
         return;
       }
-      def = {...def, model: savedModelId};
+      def = { ...def, model: savedModelId };
     }
     setSaving(true);
     try {
@@ -477,8 +481,8 @@ export function AgentEditorForm(props: Props) {
       if (isProjectMode) {
         await runtime.projects.updateAgentConfig(
           projectId,
-          {mode: 'custom', definition: def},
-          {registeredToolNames: probe.list()},
+          { mode: 'custom', definition: def },
+          { registeredToolNames: probe.list() },
         );
       } else {
         await runtime.agentRegistry.upsert(agentId, def, {
@@ -508,7 +512,7 @@ export function AgentEditorForm(props: Props) {
 
   const handleImportYaml = useCallback(() => {
     Alert.alert('导入 YAML', '将覆盖当前 Agent 配置，是否继续？', [
-      {text: '取消', style: 'cancel'},
+      { text: '取消', style: 'cancel' },
       {
         text: '导入',
         onPress: () => {
@@ -526,7 +530,7 @@ export function AgentEditorForm(props: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
-  const {textBlocks: persistTextBlocks, worktree: persistWorktree} = useMemo(
+  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
     () => splitPersistBlocksForEditor(persist),
     [persist],
   );
@@ -560,12 +564,12 @@ export function AgentEditorForm(props: Props) {
 
   const deletePersist = (textIndex: number) => {
     const nextPersist = deletePersistTextBlock(persist, textIndex);
-    const nextForm = {...promptRegionForm(), persist: nextPersist};
+    const nextForm = { ...promptRegionForm(), persist: nextPersist };
     if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
       setPersist(nextPersist);
       return;
     }
-    if (countFormPromptSources(nextForm, {excludeWorktree: true}) < 1) {
+    if (countFormPromptSources(nextForm, { excludeWorktree: true }) < 1) {
       showToast('至少保留一个 Prompt 块');
       return;
     }
@@ -578,14 +582,16 @@ export function AgentEditorForm(props: Props) {
 
   const addPersistTextBlock = () => {
     setPersist(prev => {
-      const {blocks, textBlocks} = splitPersistBlocksForEditor(prev);
+      const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
       return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
     });
   };
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
     setPersist(prev =>
-      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev),
+      enabled
+        ? addPersistWorktreeBlock(prev)
+        : removePersistWorktreeBlock(prev),
     );
   };
 
@@ -628,16 +634,14 @@ export function AgentEditorForm(props: Props) {
   if (loading) {
     return (
       <View style={styles.loadingWrap}>
-        <Text style={{color: tokens.textSecondary}}>加载中…</Text>
+        <Text style={{ color: tokens.textSecondary }}>加载中…</Text>
       </View>
     );
   }
 
   if (loadError != null || invalidConfig != null) {
     const title =
-      invalidConfig != null
-        ? STORED_CONFIG_LABELS.invalidTitle
-        : '加载失败';
+      invalidConfig != null ? STORED_CONFIG_LABELS.invalidTitle : '加载失败';
     const reason =
       invalidConfig != null
         ? storedConfigInvalidReason(invalidConfig.code)
@@ -648,30 +652,46 @@ export function AgentEditorForm(props: Props) {
         <View
           style={[
             styles.invalidCard,
-            {borderColor: tokens.border, backgroundColor: tokens.surface},
-          ]}>
-          <Text style={[styles.invalidTitle, {color: tokens.text}]}>{title}</Text>
-          <Text style={[styles.invalidReason, {color: tokens.textSecondary}]}>
+            { borderColor: tokens.border, backgroundColor: tokens.surface },
+          ]}
+        >
+          <Text style={[styles.invalidTitle, { color: tokens.text }]}>
+            {title}
+          </Text>
+          <Text style={[styles.invalidReason, { color: tokens.textSecondary }]}>
             {reason}
           </Text>
           {typeof __DEV__ !== 'undefined' && __DEV__ && detail.length > 0 ? (
-            <Text style={[styles.invalidDetail, {color: tokens.textTertiary}]}>
+            <Text
+              style={[styles.invalidDetail, { color: tokens.textTertiary }]}
+            >
               {detail}
             </Text>
           ) : null}
           <View style={styles.invalidActions}>
             <Pressable
               disabled={recovering}
-              onPress={() => navigation.goBack()}>
-              <Text style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}>
+              onPress={() => navigation.goBack()}
+            >
+              <Text
+                style={{
+                  color: tokens.primary,
+                  fontSize: 14,
+                  fontWeight: '600',
+                }}
+              >
                 {STORED_CONFIG_LABELS.agentBack}
               </Text>
             </Pressable>
             {invalidConfig != null ? (
-              <Pressable
-                disabled={recovering}
-                onPress={handleOverwriteDefault}>
-                <Text style={{color: tokens.primary, fontSize: 14, fontWeight: '600'}}>
+              <Pressable disabled={recovering} onPress={handleOverwriteDefault}>
+                <Text
+                  style={{
+                    color: tokens.primary,
+                    fontSize: 14,
+                    fontWeight: '600',
+                  }}
+                >
                   {STORED_CONFIG_LABELS.agentOverwriteDefault}
                 </Text>
               </Pressable>
@@ -679,8 +699,15 @@ export function AgentEditorForm(props: Props) {
             {!isProjectMode ? (
               <Pressable
                 disabled={recovering}
-                onPress={handleDeleteBrokenAgent}>
-                <Text style={{color: tokens.danger, fontSize: 14, fontWeight: '600'}}>
+                onPress={handleDeleteBrokenAgent}
+              >
+                <Text
+                  style={{
+                    color: tokens.danger,
+                    fontSize: 14,
+                    fontWeight: '600',
+                  }}
+                >
                   {STORED_CONFIG_LABELS.agentDelete}
                 </Text>
               </Pressable>
@@ -708,18 +735,20 @@ export function AgentEditorForm(props: Props) {
     },
   ) => (
     <View style={styles.sectionHead}>
-      <Text style={[styles.sectionLabel, {color: tokens.text}]}>{label}</Text>
+      <Text style={[styles.sectionLabel, { color: tokens.text }]}>{label}</Text>
       <View style={styles.sectionHeadActions}>
         {opts?.onAdd != null ? (
           <Pressable onPress={opts.onAdd}>
-            <Text style={{color: tokens.primary, fontWeight: '600'}}>添加</Text>
+            <Text style={{ color: tokens.primary, fontWeight: '600' }}>
+              添加
+            </Text>
           </Pressable>
         ) : null}
         {opts?.switchValue !== undefined && opts.onSwitchChange != null ? (
           <Switch
             value={opts.switchValue}
             onValueChange={opts.onSwitchChange}
-            trackColor={{false: tokens.border, true: tokens.primary}}
+            trackColor={{ false: tokens.border, true: tokens.primary }}
           />
         ) : null}
       </View>
@@ -735,22 +764,34 @@ export function AgentEditorForm(props: Props) {
     <View style={styles.blockActions}>
       {index > 0 ? (
         <Pressable
-          style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
-          onPress={() => onMove(index, -1)}>
-          <Text style={{color: tokens.textSecondary}}>↑</Text>
+          style={[
+            styles.actionBtn,
+            { borderColor: tokens.border, backgroundColor: tokens.surface },
+          ]}
+          onPress={() => onMove(index, -1)}
+        >
+          <Text style={{ color: tokens.textSecondary }}>↑</Text>
         </Pressable>
       ) : null}
       {index < total - 1 ? (
         <Pressable
-          style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
-          onPress={() => onMove(index, 1)}>
-          <Text style={{color: tokens.textSecondary}}>↓</Text>
+          style={[
+            styles.actionBtn,
+            { borderColor: tokens.border, backgroundColor: tokens.surface },
+          ]}
+          onPress={() => onMove(index, 1)}
+        >
+          <Text style={{ color: tokens.textSecondary }}>↓</Text>
         </Pressable>
       ) : null}
       <Pressable
-        style={[styles.actionBtn, {borderColor: tokens.border, backgroundColor: tokens.surface}]}
-        onPress={() => onDelete(index)}>
-        <Text style={{color: tokens.danger}}>×</Text>
+        style={[
+          styles.actionBtn,
+          { borderColor: tokens.border, backgroundColor: tokens.surface },
+        ]}
+        onPress={() => onDelete(index)}
+      >
+        <Text style={{ color: tokens.danger }}>×</Text>
       </Pressable>
     </View>
   );
@@ -766,24 +807,35 @@ export function AgentEditorForm(props: Props) {
             loading={saving}
             onPress={() => handleSave().catch(() => undefined)}
           />
-        }>
+        }
+      >
         <FormSectionCard title="基本信息" tokens={tokens}>
           {!isProjectMode ? (
             <View style={styles.yamlActions}>
               <Pressable onPress={() => handleImportYaml()}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>导入 YAML</Text>
+                <Text style={{ color: tokens.primary, fontWeight: '600' }}>
+                  导入 YAML
+                </Text>
               </Pressable>
-              <Pressable onPress={() => handleExportYaml().catch(() => undefined)}>
-                <Text style={{color: tokens.primary, fontWeight: '600'}}>导出 YAML</Text>
+              <Pressable
+                onPress={() => handleExportYaml().catch(() => undefined)}
+              >
+                <Text style={{ color: tokens.primary, fontWeight: '600' }}>
+                  导出 YAML
+                </Text>
               </Pressable>
             </View>
           ) : (
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+            <Text style={[styles.hint, { color: tokens.textSecondary }]}>
               项目专属配置，不会写入全局 Agent 列表。
             </Text>
           )}
           <FormField label="名称" tokens={tokens}>
-            <FormTextInput tokens={tokens} value={name} onChangeText={setName} />
+            <FormTextInput
+              tokens={tokens}
+              value={name}
+              onChangeText={setName}
+            />
           </FormField>
         </FormSectionCard>
 
@@ -792,16 +844,19 @@ export function AgentEditorForm(props: Props) {
           tokens={tokens}
           rightAction={
             <View style={styles.switchRow}>
-              <Text style={{color: tokens.textSecondary, fontSize: 13}}>专属模型</Text>
+              <Text style={{ color: tokens.textSecondary, fontSize: 13 }}>
+                专属模型
+              </Text>
               <Switch
                 value={modelEnabled}
                 onValueChange={setModelEnabled}
-                trackColor={{false: tokens.border, true: tokens.primary}}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
               />
             </View>
-          }>
+          }
+        >
           {!modelEnabled ? (
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+            <Text style={[styles.hint, { color: tokens.textSecondary }]}>
               未启用时跟随工作区当前模型（会话操作抽屉 / 我的）。
             </Text>
           ) : (
@@ -831,7 +886,7 @@ export function AgentEditorForm(props: Props) {
                   disabled={!providerId}
                 />
               </FormField>
-              <Text style={[styles.hint, {color: tokens.textSecondary}]}>
+              <Text style={[styles.hint, { color: tokens.textSecondary }]}>
                 model: {pinnedModelHint ?? '—'}
               </Text>
             </>
@@ -842,7 +897,8 @@ export function AgentEditorForm(props: Props) {
           <FormField
             label={PROMPT_REGION_LABELS.maxStepsLabel}
             tokens={tokens}
-            hint={PROMPT_REGION_LABELS.maxStepsHint}>
+            hint={PROMPT_REGION_LABELS.maxStepsHint}
+          >
             <FormTextInput
               tokens={tokens}
               value={maxSteps}
@@ -865,7 +921,8 @@ export function AgentEditorForm(props: Props) {
           {toolsMode !== 'default' ? (
             <FormField
               label={toolsMode === 'allow' ? '白名单工具' : '黑名单工具'}
-              tokens={tokens}>
+              tokens={tokens}
+            >
               <ToolPolicyPicker
                 tokens={tokens}
                 selected={toolsSelected}
@@ -873,13 +930,17 @@ export function AgentEditorForm(props: Props) {
               />
             </FormField>
           ) : (
-            <Text style={[styles.hint, {color: tokens.textSecondary}]}>
-              未配置时使用全部内置工具（7 个）：read、write、edit、fs、glob、grep、chat_grep。
+            <Text style={[styles.hint, { color: tokens.textSecondary }]}>
+              未配置时使用全部内置工具（7
+              个）：read、write、edit、fs、glob、grep、chat_grep。
             </Text>
           )}
         </FormSectionCard>
 
-        <FormSectionCard title={PROMPT_REGION_LABELS.layoutTitle} tokens={tokens}>
+        <FormSectionCard
+          title={PROMPT_REGION_LABELS.layoutTitle}
+          tokens={tokens}
+        >
           {renderPromptSectionHead(promptSectionLabels.system, {
             switchValue: systemEnabled,
             onSwitchChange: setSystemEnabled,
@@ -887,10 +948,14 @@ export function AgentEditorForm(props: Props) {
           <View
             style={[
               styles.blockCard,
-              {backgroundColor: tokens.surface, borderColor: tokens.border},
-            ]}>
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
+            ]}
+          >
             {systemEnabled ? (
-              <FormField label={PROMPT_REGION_LABELS.systemContent} tokens={tokens}>
+              <FormField
+                label={PROMPT_REGION_LABELS.systemContent}
+                tokens={tokens}
+              >
                 <FormTextInput
                   tokens={tokens}
                   value={systemContent}
@@ -900,7 +965,7 @@ export function AgentEditorForm(props: Props) {
                 />
               </FormField>
             ) : (
-              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
                 {PROMPT_REGION_LABELS.systemDisabledHint}
               </Text>
             )}
@@ -910,11 +975,17 @@ export function AgentEditorForm(props: Props) {
           <View
             style={[
               styles.blockCard,
-              {backgroundColor: tokens.surface, borderColor: tokens.border},
-            ]}>
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
+            ]}
+          >
             <View style={styles.blockHeader}>
-              <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
+              <View
+                style={[
+                  styles.typeBadge,
+                  { backgroundColor: `${tokens.primary}1A` },
+                ]}
+              >
+                <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
                   {WORKTREE_BLOCK_LABEL}
                 </Text>
               </View>
@@ -922,10 +993,10 @@ export function AgentEditorForm(props: Props) {
               <Switch
                 value={persistWorktree != null}
                 onValueChange={setPersistWorktreeEnabled}
-                trackColor={{false: tokens.border, true: tokens.primary}}
+                trackColor={{ false: tokens.border, true: tokens.primary }}
               />
             </View>
-            <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+            <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
               {persistWorktree != null
                 ? WORKTREE_BLOCK_HINT
                 : '关闭时不注入项目文件树。'}
@@ -935,95 +1006,129 @@ export function AgentEditorForm(props: Props) {
           {renderPromptSectionHead(promptSectionLabels.persist, {
             switchValue: persistEnabled,
             onSwitchChange: setPersistEnabled,
-            ...(persistEnabled ? {onAdd: addPersistTextBlock} : {}),
+            ...(persistEnabled ? { onAdd: addPersistTextBlock } : {}),
           })}
           <View
             style={[
               styles.blockCard,
-              {backgroundColor: tokens.surface, borderColor: tokens.border},
-            ]}>
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
+            ]}
+          >
             {persistEnabled ? (
               <View style={styles.blockList}>
-            {persistTextBlocks.length === 0 ? (
-              <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
-                {PROMPT_REGION_LABELS.emptyPersistHint}
-              </Text>
-            ) : null}
-            {persistTextBlocks.map((block, index) => (
-                <View
-                  key={`persist-block-${index}`}
-                  style={[
-                    styles.blockCard,
-                    {backgroundColor: tokens.surface, borderColor: tokens.border},
-                  ]}>
-                  <View style={styles.blockHeader}>
-                    <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                      <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                        {blockTypeLabel(block.type)}
-                      </Text>
-                    </View>
-                    <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                      {block.name}
-                    </Text>
-                    {renderBlockActions(
-                      index,
-                      persistTextBlocks.length,
-                      movePersist,
-                      deletePersist,
-                    )}
-                  </View>
-                  <FormField label="名称" tokens={tokens}>
-                    <FormTextInput
-                      tokens={tokens}
-                      value={block.name}
-                      onChangeText={v =>
-                        setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? {...b, name: v} : b,
-                          ),
-                        )
-                      }
-                    />
-                  </FormField>
-                  <FormField label="角色" tokens={tokens}>
-                    <FormSelectField
-                      tokens={tokens}
-                      value={block.role}
-                      onChange={role =>
-                        setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index
-                              ? {...b, role: role as PersistTextPromptBlock['role']}
-                              : b,
-                          ),
-                        )
-                      }
-                      options={ROLE_OPTIONS}
-                      sheetTitle="选择角色"
-                    />
-                  </FormField>
-                  <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                    {PROMPT_REGION_LABELS.persistRegionHint}
+                {persistTextBlocks.length === 0 ? (
+                  <Text
+                    style={[
+                      styles.emptyHint,
+                      {
+                        color: tokens.textSecondary,
+                        borderColor: tokens.borderLight,
+                      },
+                    ]}
+                  >
+                    {PROMPT_REGION_LABELS.emptyPersistHint}
                   </Text>
-                  <FormField label="内容" tokens={tokens}>
-                    <FormTextInput
-                      tokens={tokens}
-                      value={block.content}
-                      onChangeText={v =>
-                        setPersist(prev =>
-                          mapPersistTextBlocks(prev, (b, i) =>
-                            i === index ? {...b, content: v} : b,
-                          ),
-                        )
-                      }
-                      multiline
-                    />
-                  </FormField>
-                </View>
-            ))}
+                ) : null}
+                {persistTextBlocks.map((block, index) => (
+                  <View
+                    key={`persist-block-${index}`}
+                    style={[
+                      styles.blockCard,
+                      {
+                        backgroundColor: tokens.surface,
+                        borderColor: tokens.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.blockHeader}>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          { backgroundColor: `${tokens.primary}1A` },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            { color: tokens.primary },
+                          ]}
+                        >
+                          {blockTypeLabel(block.type)}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.blockName, { color: tokens.text }]}
+                        numberOfLines={1}
+                      >
+                        {block.name}
+                      </Text>
+                      {renderBlockActions(
+                        index,
+                        persistTextBlocks.length,
+                        movePersist,
+                        deletePersist,
+                      )}
+                    </View>
+                    <FormField label="名称" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.name}
+                        onChangeText={v =>
+                          setPersist(prev =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === index ? { ...b, name: v } : b,
+                            ),
+                          )
+                        }
+                      />
+                    </FormField>
+                    <FormField label="角色" tokens={tokens}>
+                      <FormSelectField
+                        tokens={tokens}
+                        value={block.role}
+                        onChange={role =>
+                          setPersist(prev =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === index
+                                ? {
+                                    ...b,
+                                    role: role as PersistTextPromptBlock['role'],
+                                  }
+                                : b,
+                            ),
+                          )
+                        }
+                        options={ROLE_OPTIONS}
+                        sheetTitle="选择角色"
+                      />
+                    </FormField>
+                    <Text
+                      style={[
+                        styles.fieldHint,
+                        { color: tokens.textSecondary },
+                      ]}
+                    >
+                      {PROMPT_REGION_LABELS.persistRegionHint}
+                    </Text>
+                    <FormField label="内容" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.content}
+                        onChangeText={v =>
+                          setPersist(prev =>
+                            mapPersistTextBlocks(prev, (b, i) =>
+                              i === index ? { ...b, content: v } : b,
+                            ),
+                          )
+                        }
+                        multiline
+                      />
+                    </FormField>
+                  </View>
+                ))}
               </View>
             ) : (
-              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
                 {PROMPT_REGION_LABELS.persistDisabledHint}
               </Text>
             )}
@@ -1038,14 +1143,18 @@ export function AgentEditorForm(props: Props) {
                 borderColor: tokens.borderLight,
                 borderLeftColor: tokens.primary,
               },
-            ]}>
+            ]}
+          >
             <View style={styles.chatSlotHeader}>
               <View
                 style={[
                   styles.chatSlotTag,
-                  {backgroundColor: `${tokens.primary}18`},
-                ]}>
-                <Text style={[styles.chatSlotTagText, {color: tokens.primary}]}>
+                  { backgroundColor: `${tokens.primary}18` },
+                ]}
+              >
+                <Text
+                  style={[styles.chatSlotTagText, { color: tokens.primary }]}
+                >
                   {PROMPT_REGION_LABELS.chatTag}
                 </Text>
               </View>
@@ -1056,16 +1165,24 @@ export function AgentEditorForm(props: Props) {
                     backgroundColor: tokens.surface,
                     borderColor: tokens.borderLight,
                   },
-                ]}>
-                <Text style={[styles.readonlyPillText, {color: tokens.textSecondary}]}>
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.readonlyPillText,
+                    { color: tokens.textSecondary },
+                  ]}
+                >
                   只读
                 </Text>
               </View>
             </View>
-            <Text style={[styles.chatSlotTitle, {color: tokens.text}]}>
+            <Text style={[styles.chatSlotTitle, { color: tokens.text }]}>
               {PROMPT_REGION_LABELS.chat}
             </Text>
-            <Text style={[styles.chatSlotHint, {color: tokens.textSecondary}]}>
+            <Text
+              style={[styles.chatSlotHint, { color: tokens.textSecondary }]}
+            >
               {PROMPT_REGION_LABELS.chatReadonlyHint}
             </Text>
           </View>
@@ -1073,100 +1190,145 @@ export function AgentEditorForm(props: Props) {
           {renderPromptSectionHead(promptSectionLabels.dynamic, {
             switchValue: dynamicEnabled,
             onSwitchChange: setDynamicEnabled,
-            ...(dynamicEnabled ? {onAdd: addDynamicBlock} : {}),
+            ...(dynamicEnabled ? { onAdd: addDynamicBlock } : {}),
           })}
           <View
             style={[
               styles.blockCard,
-              {backgroundColor: tokens.surface, borderColor: tokens.border},
-            ]}>
+              { backgroundColor: tokens.surface, borderColor: tokens.border },
+            ]}
+          >
             {dynamicEnabled ? (
               <View style={styles.blockList}>
-            {dynamic.length === 0 ? (
-              <Text style={[styles.emptyHint, {color: tokens.textSecondary, borderColor: tokens.borderLight}]}>
-                {PROMPT_REGION_LABELS.emptyDynamicHint}
-              </Text>
-            ) : null}
-            {dynamic.map((block, index) => (
-              <View
-                key={`dynamic-block-${index}`}
-                style={[
-                  styles.blockCard,
-                  {backgroundColor: tokens.surface, borderColor: tokens.border},
-                ]}>
-                <View style={styles.blockHeader}>
-                  <View style={[styles.typeBadge, {backgroundColor: `${tokens.primary}1A`}]}>
-                    <Text style={[styles.typeBadgeText, {color: tokens.primary}]}>
-                      {blockTypeLabel(block.type)}
-                    </Text>
-                  </View>
-                  <Text style={[styles.blockName, {color: tokens.text}]} numberOfLines={1}>
-                    {block.name}
-                  </Text>
-                  {renderBlockActions(index, dynamic.length, moveDynamic, deleteDynamic)}
-                </View>
-                <FormField label="名称" tokens={tokens}>
-                  <FormTextInput
-                    tokens={tokens}
-                    value={block.name}
-                    onChangeText={v =>
-                      setDynamic(prev =>
-                        prev.map((b, i) => (i === index ? {...b, name: v} : b)),
-                      )
-                    }
-                  />
-                </FormField>
-                <FormField label="角色" tokens={tokens}>
-                  <FormSelectField
-                    tokens={tokens}
-                    value={block.role}
-                    onChange={role =>
-                      setDynamic(prev =>
-                        prev.map((b, i) =>
-                          i === index
-                            ? {...b, role: role as DynamicPromptBlock['role']}
-                            : b,
-                        ),
-                      )
-                    }
-                    options={ROLE_OPTIONS}
-                    sheetTitle="选择角色"
-                  />
-                </FormField>
-                <FormSwitchRow
-                  label="常驻"
-                  tokens={tokens}
-                  value={isDynamicBlockPersistent(block)}
-                  onValueChange={persistent =>
-                    setDynamic(prev =>
-                      prev.map((b, i) =>
-                        i === index ? withDynamicBlockPersistence(b, persistent) : b,
-                      ),
-                    )
-                  }
-                />
-                {!isDynamicBlockPersistent(block) ? (
-                  <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
-                    {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
+                {dynamic.length === 0 ? (
+                  <Text
+                    style={[
+                      styles.emptyHint,
+                      {
+                        color: tokens.textSecondary,
+                        borderColor: tokens.borderLight,
+                      },
+                    ]}
+                  >
+                    {PROMPT_REGION_LABELS.emptyDynamicHint}
                   </Text>
                 ) : null}
-                <FormField label="内容" tokens={tokens}>
-                  <PromptMacroTextInput
-                    tokens={tokens}
-                    value={block.content}
-                    onChangeText={v =>
-                      setDynamic(prev =>
-                        prev.map((b, i) => (i === index ? {...b, content: v} : b)),
-                      )
-                    }
-                    placeholder="支持 $time、$week_cn、$filetree…"
-                  />
-                </FormField>
-              </View>
-            ))}
+                {dynamic.map((block, index) => (
+                  <View
+                    key={`dynamic-block-${index}`}
+                    style={[
+                      styles.blockCard,
+                      {
+                        backgroundColor: tokens.surface,
+                        borderColor: tokens.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.blockHeader}>
+                      <View
+                        style={[
+                          styles.typeBadge,
+                          { backgroundColor: `${tokens.primary}1A` },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.typeBadgeText,
+                            { color: tokens.primary },
+                          ]}
+                        >
+                          {blockTypeLabel(block.type)}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.blockName, { color: tokens.text }]}
+                        numberOfLines={1}
+                      >
+                        {block.name}
+                      </Text>
+                      {renderBlockActions(
+                        index,
+                        dynamic.length,
+                        moveDynamic,
+                        deleteDynamic,
+                      )}
+                    </View>
+                    <FormField label="名称" tokens={tokens}>
+                      <FormTextInput
+                        tokens={tokens}
+                        value={block.name}
+                        onChangeText={v =>
+                          setDynamic(prev =>
+                            prev.map((b, i) =>
+                              i === index ? { ...b, name: v } : b,
+                            ),
+                          )
+                        }
+                      />
+                    </FormField>
+                    <FormField label="角色" tokens={tokens}>
+                      <FormSelectField
+                        tokens={tokens}
+                        value={block.role}
+                        onChange={role =>
+                          setDynamic(prev =>
+                            prev.map((b, i) =>
+                              i === index
+                                ? {
+                                    ...b,
+                                    role: role as DynamicPromptBlock['role'],
+                                  }
+                                : b,
+                            ),
+                          )
+                        }
+                        options={ROLE_OPTIONS}
+                        sheetTitle="选择角色"
+                      />
+                    </FormField>
+                    <FormSwitchRow
+                      label="常驻"
+                      tokens={tokens}
+                      value={isDynamicBlockPersistent(block)}
+                      onValueChange={persistent =>
+                        setDynamic(prev =>
+                          prev.map((b, i) =>
+                            i === index
+                              ? withDynamicBlockPersistence(b, persistent)
+                              : b,
+                          ),
+                        )
+                      }
+                    />
+                    {!isDynamicBlockPersistent(block) ? (
+                      <Text
+                        style={[
+                          styles.fieldHint,
+                          { color: tokens.textSecondary },
+                        ]}
+                      >
+                        {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
+                      </Text>
+                    ) : null}
+                    <FormField label="内容" tokens={tokens}>
+                      <PromptMacroTextInput
+                        tokens={tokens}
+                        value={block.content}
+                        onChangeText={v =>
+                          setDynamic(prev =>
+                            prev.map((b, i) =>
+                              i === index ? { ...b, content: v } : b,
+                            ),
+                          )
+                        }
+                        placeholder="支持 $time、$week_cn、$filetree…"
+                      />
+                    </FormField>
+                  </View>
+                ))}
               </View>
             ) : (
-              <Text style={[styles.fieldHint, {color: tokens.textSecondary}]}>
+              <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
                 {PROMPT_REGION_LABELS.dynamicDisabledHint}
               </Text>
             )}
@@ -1178,22 +1340,33 @@ export function AgentEditorForm(props: Props) {
 }
 
 const styles = StyleSheet.create({
-  loadingWrap: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
-  invalidWrap: {flex: 1, padding: 16, justifyContent: 'center'},
+  loadingWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  invalidWrap: { flex: 1, padding: 16, justifyContent: 'center' },
   invalidCard: {
     borderWidth: 1,
     borderRadius: 10,
     padding: 16,
     gap: 10,
   },
-  invalidTitle: {fontSize: 15, fontWeight: '600', lineHeight: 21},
-  invalidReason: {fontSize: 13, lineHeight: 19},
-  invalidDetail: {fontSize: 11, lineHeight: 16},
-  invalidActions: {flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 16, marginTop: 4},
-  hint: {fontSize: 13, lineHeight: 18},
-  fieldHint: {fontSize: 12, lineHeight: 16, marginTop: -2},
-  switchRow: {flexDirection: 'row', alignItems: 'center', gap: 8},
-  yamlActions: {flexDirection: 'row', alignItems: 'center', gap: 16},
+  invalidTitle: { fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  invalidReason: { fontSize: 13, lineHeight: 19 },
+  invalidDetail: { fontSize: 11, lineHeight: 16 },
+  invalidActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 16,
+    marginTop: 4,
+  },
+  hint: { fontSize: 13, lineHeight: 18 },
+  fieldHint: { fontSize: 12, lineHeight: 16, marginTop: -2 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  yamlActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   sectionHead: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1212,7 +1385,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-  blockList: {gap: 12},
+  blockList: { gap: 12 },
   blockCard: {
     borderWidth: 1,
     borderRadius: 10,
@@ -1260,7 +1433,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
-  readonlyCard: {opacity: 0.85},
+  readonlyCard: { opacity: 0.85 },
   blockHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1283,8 +1456,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  blockHeaderSpacer: {flex: 1},
-  blockActions: {flexDirection: 'row', gap: 4},
+  blockHeaderSpacer: { flex: 1 },
+  blockActions: { flexDirection: 'row', gap: 4 },
   emptyHint: {
     fontSize: 12,
     lineHeight: 18,

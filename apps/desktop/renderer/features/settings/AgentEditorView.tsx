@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { type AgentDefinition } from "@novel-master/core/agent";
 
-import { type DynamicPromptBlock, type PersistPromptBlock, type PersistTextPromptBlock } from "@novel-master/core/prompt";
+import {
+  type DynamicPromptBlock,
+  type PersistPromptBlock,
+  type PersistTextPromptBlock,
+} from "@novel-master/core/prompt";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
@@ -32,7 +43,10 @@ import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { showToast } from "@/components/ui/show-toast";
-import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
+import {
+  toastSettingsError,
+  toastSettingsSuccess,
+} from "@/utils/settings-feedback";
 import {
   ipcAgentRegistryDelete,
   ipcAgentRegistryGet,
@@ -85,7 +99,7 @@ function readAgentNameFromWire(raw: unknown, fallback: string): string {
 function insertAtCursor(
   value: string,
   insert: string,
-  textarea: HTMLTextAreaElement | null,
+  textarea: HTMLTextAreaElement | null
 ): string {
   if (textarea == null) {
     return value + insert;
@@ -110,21 +124,26 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
-  const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
+  const [providers, setProviders] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
   const [savedModels, setSavedModels] = useState<
     Array<{ id: string; vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [invalidHealth, setInvalidHealth] = useState<
-    Extract<StoredConfigHealth<AgentDefinition>, { status: "invalid" }> | null
-  >(null);
+  const [invalidHealth, setInvalidHealth] = useState<Extract<
+    StoredConfigHealth<AgentDefinition>,
+    { status: "invalid" }
+  > | null>(null);
   const [storedWire, setStoredWire] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
   const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(null);
+  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(
+    null
+  );
 
   const snapshot = useMemo(
     () =>
@@ -157,7 +176,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       dynamicEnabled,
       persist,
       dynamic,
-    ],
+    ]
   );
 
   const loadSavedModels = useCallback(async (pid: string) => {
@@ -168,7 +187,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
-        })),
+        }))
       );
     }
   }, []);
@@ -188,7 +207,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       }
       return { modelOn: false, providerId: "", savedModelId: "" };
     },
-    [],
+    []
   );
 
   const loadAgent = useCallback(async () => {
@@ -266,7 +285,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           toolsSelected: [...toolsWire.selected],
           ...promptForm,
           persist: [...promptForm.persist],
-        }),
+        })
       );
     } finally {
       setLoading(false);
@@ -279,7 +298,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
     () => splitPersistBlocksForEditor(persist),
-    [persist],
+    [persist]
   );
 
   const displayName = name.trim() || "未命名 Agent";
@@ -310,10 +329,15 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       return;
     }
     const preservedName = readAgentNameFromWire(wire, agentId);
-    const def = buildDefaultAgentDefinitionPreservingName(preservedName || agentId);
+    const def = buildDefaultAgentDefinitionPreservingName(
+      preservedName || agentId
+    );
     setSaving(true);
     try {
-      const saveRes = await ipcAgentRegistryUpsert({ agentId, definition: def });
+      const saveRes = await ipcAgentRegistryUpsert({
+        agentId,
+        definition: def,
+      });
       if (saveRes.ok) {
         toastSettingsSuccess("已用默认模板覆盖并保存");
         await loadAgent();
@@ -349,7 +373,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             >
               {STORED_CONFIG_LABELS.agentOverwriteDefault}
             </Button>
-            <Button variant="danger" onClick={() => void handleDeleteBrokenAgent()}>
+            <Button
+              variant="danger"
+              onClick={() => void handleDeleteBrokenAgent()}
+            >
               {STORED_CONFIG_LABELS.agentDelete}
             </Button>
           </div>
@@ -368,7 +395,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             <Button variant="secondary" onClick={() => nav.pop()}>
               返回列表
             </Button>
-            <Button variant="danger" onClick={() => void handleDeleteBrokenAgent()}>
+            <Button
+              variant="danger"
+              onClick={() => void handleDeleteBrokenAgent()}
+            >
               删除 Agent
             </Button>
           </div>
@@ -378,7 +408,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   }
 
   const modelHint =
-    savedModels.find((m) => m.id === savedModelId)?.displayName ?? savedModelId ?? "—";
+    savedModels.find((m) => m.id === savedModelId)?.displayName ??
+    savedModelId ??
+    "—";
 
   const save = async () => {
     const built = buildAgentDefinitionFromForm({
@@ -451,7 +483,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   /** 删除 Prompt 块前校验：三区全关则放行，否则删除后须至少保留一个有效来源。 */
   const guardPromptBlockDeletion = (
     nextForm: ReturnType<typeof promptRegionForm>,
-    proceed: () => void,
+    proceed: () => void
   ) => {
     if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
       proceed();
@@ -480,8 +512,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const deleteDynamic = (index: number) => {
     const nextDynamic = dynamic.filter((_, i) => i !== index);
-    guardPromptBlockDeletion({ ...promptRegionForm(), dynamic: nextDynamic }, () =>
-      setDynamic(nextDynamic),
+    guardPromptBlockDeletion(
+      { ...promptRegionForm(), dynamic: nextDynamic },
+      () => setDynamic(nextDynamic)
     );
   };
 
@@ -494,7 +527,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
     setPersist((prev) =>
-      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev),
+      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev)
     );
   };
 
@@ -512,7 +545,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
-        })),
+        }))
       );
     } else {
       setSavedModelId("");
@@ -523,7 +556,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const dirty = savedBaseline != null && snapshot !== savedBaseline;
 
   const handlePromptTextareaKeyDown = (
-    e: ReactKeyboardEvent<HTMLTextAreaElement>,
+    e: ReactKeyboardEvent<HTMLTextAreaElement>
   ) => {
     handleMultilineSubmitKeyDown(e, () => void save(), { disabled: saving });
   };
@@ -532,20 +565,35 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     index: number,
     total: number,
     onMove: (i: number, d: -1 | 1) => void,
-    onDelete: (i: number) => void,
+    onDelete: (i: number) => void
   ) => (
     <div className="config-block-card__actions">
       {index > 0 ? (
-        <button type="button" className="icon-btn" onClick={() => onMove(index, -1)} aria-label="上移">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => onMove(index, -1)}
+          aria-label="上移"
+        >
           ↑
         </button>
       ) : null}
       {index < total - 1 ? (
-        <button type="button" className="icon-btn" onClick={() => onMove(index, 1)} aria-label="下移">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => onMove(index, 1)}
+          aria-label="下移"
+        >
           ↓
         </button>
       ) : null}
-      <button type="button" className="icon-btn" onClick={() => onDelete(index)} aria-label="删除">
+      <button
+        type="button"
+        className="icon-btn"
+        onClick={() => onDelete(index)}
+        aria-label="删除"
+      >
         ×
       </button>
     </div>
@@ -566,7 +614,8 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               variant="secondary"
               onClick={() =>
                 void ipcAgentYamlExport({ agentId }).then((r) => {
-                  if (r.ok && r.data === "saved") showToast("已导出 Agent YAML");
+                  if (r.ok && r.data === "saved")
+                    showToast("已导出 Agent YAML");
                   else if (!r.ok) showToast(r.error.message);
                 })
               }
@@ -576,20 +625,32 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
         }
         footer={
-          <Button variant="primary" disabled={saving} onClick={() => void save()}>
+          <Button
+            variant="primary"
+            disabled={saving}
+            onClick={() => void save()}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
         }
       >
         <SettingsSection title="基本信息">
           <SettingsField label="名称">
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
           </SettingsField>
         </SettingsSection>
 
         <SettingsSection title="模型">
           <SettingsField label="专属模型" row>
-            <Switch checked={modelEnabled} onChange={setModelEnabled} aria-label="专属模型" />
+            <Switch
+              checked={modelEnabled}
+              onChange={setModelEnabled}
+              aria-label="专属模型"
+            />
           </SettingsField>
           {!modelEnabled ? (
             <p className="settings-hint settings-hint--compact">
@@ -598,7 +659,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           ) : (
             <>
               <SettingsField label="服务商">
-                <select value={providerId} onChange={(e) => void handleProviderChange(e.target.value)}>
+                <select
+                  value={providerId}
+                  onChange={(e) => void handleProviderChange(e.target.value)}
+                >
                   {providers.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label}
@@ -626,14 +690,22 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
         <SettingsSection title="运行时">
           <SettingsField label={PROMPT_REGION_LABELS.maxStepsLabel}>
-            <input type="number" min={1} value={maxSteps} onChange={(e) => setMaxSteps(e.target.value)} />
+            <input
+              type="number"
+              min={1}
+              value={maxSteps}
+              onChange={(e) => setMaxSteps(e.target.value)}
+            />
           </SettingsField>
           <p className="settings-hint">{PROMPT_REGION_LABELS.maxStepsHint}</p>
         </SettingsSection>
 
         <SettingsSection title="工具策略">
           <SettingsField label="模式">
-            <select value={toolsMode} onChange={(e) => setToolsMode(e.target.value as ToolsMode)}>
+            <select
+              value={toolsMode}
+              onChange={(e) => setToolsMode(e.target.value as ToolsMode)}
+            >
               {TOOL_MODE_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
@@ -642,24 +714,36 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
             </select>
           </SettingsField>
           {toolsMode !== "default" ? (
-            <SettingsField label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}>
-              <ToolPolicyPicker selected={toolsSelected} onChange={setToolsSelected} />
+            <SettingsField
+              label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}
+            >
+              <ToolPolicyPicker
+                selected={toolsSelected}
+                onChange={setToolsSelected}
+              />
             </SettingsField>
           ) : (
             <p className="settings-hint">
-              未配置时使用全部内置工具（7 个）：read、write、edit、fs、glob、grep、chat_grep。
+              未配置时使用全部内置工具（7
+              个）：read、write、edit、fs、glob、grep、chat_grep。
             </p>
           )}
         </SettingsSection>
 
         <SettingsSection title={PROMPT_REGION_LABELS.layoutTitle}>
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.systemBlocks}</span>
+            <span className="config-block-card__section-label">
+              {PROMPT_REGION_LABELS.systemBlocks}
+            </span>
           </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.system}</span>
-              <span className="config-block-card__meta">{PROMPT_REGION_LABELS.systemPromptTitle}</span>
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.system}
+              </span>
+              <span className="config-block-card__meta">
+                {PROMPT_REGION_LABELS.systemPromptTitle}
+              </span>
               <Switch
                 checked={systemEnabled}
                 onChange={setSystemEnabled}
@@ -678,17 +762,23 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   />
                 </SettingsField>
               ) : (
-                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.systemDisabledHint}</p>
+                <p className="config-block-card__hint">
+                  {PROMPT_REGION_LABELS.systemDisabledHint}
+                </p>
               )}
             </div>
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">{WORKTREE_BLOCK_LABEL}</span>
+            <span className="config-block-card__section-label">
+              {WORKTREE_BLOCK_LABEL}
+            </span>
           </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">{WORKTREE_BLOCK_LABEL}</span>
+              <span className="config-block-card__badge">
+                {WORKTREE_BLOCK_LABEL}
+              </span>
               <Switch
                 checked={persistWorktree != null}
                 onChange={setPersistWorktreeEnabled}
@@ -699,17 +789,23 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               {persistWorktree != null ? (
                 <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
               ) : (
-                <p className="config-block-card__hint">关闭时不注入项目文件树。</p>
+                <p className="config-block-card__hint">
+                  关闭时不注入项目文件树。
+                </p>
               )}
             </div>
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.persistBlocks}</span>
+            <span className="config-block-card__section-label">
+              {PROMPT_REGION_LABELS.persistBlocks}
+            </span>
           </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.persistBlocks}</span>
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.persistBlocks}
+              </span>
               <Switch
                 checked={persistEnabled}
                 onChange={setPersistEnabled}
@@ -720,7 +816,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               {persistEnabled ? (
                 <>
                   <div className="config-block-card__section-head">
-                    <span className="config-block-card__section-label">块列表</span>
+                    <span className="config-block-card__section-label">
+                      块列表
+                    </span>
                     <button
                       type="button"
                       className="settings-link-btn"
@@ -737,18 +835,27 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     }
                   >
                     {persistTextBlocks.length === 0 ? (
-                      <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyPersistHint}</p>
+                      <p className="config-block-card__empty-hint">
+                        {PROMPT_REGION_LABELS.emptyPersistHint}
+                      </p>
                     ) : null}
                     {persistTextBlocks.map((block, index) => (
-                      <div key={`persist-${index}`} className="config-block-card config-block-card--prompt">
+                      <div
+                        key={`persist-${index}`}
+                        className="config-block-card config-block-card--prompt"
+                      >
                         <div className="config-block-card__header">
-                          <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
-                          <span className="config-block-card__meta">{block.name}</span>
+                          <span className="config-block-card__badge">
+                            {blockTypeLabel(block.type)}
+                          </span>
+                          <span className="config-block-card__meta">
+                            {block.name}
+                          </span>
                           {renderBlockActions(
                             index,
                             persistTextBlocks.length,
                             movePersist,
-                            deletePersist,
+                            deletePersist
                           )}
                         </div>
                         <div className="config-block-card__body">
@@ -758,8 +865,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               onChange={(e) =>
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index ? { ...b, name: e.target.value } : b,
-                                  ),
+                                    i === index
+                                      ? { ...b, name: e.target.value }
+                                      : b
+                                  )
                                 )
                               }
                             />
@@ -771,9 +880,13 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
                                     i === index
-                                      ? { ...b, role: e.target.value as PersistTextPromptBlock["role"] }
-                                      : b,
-                                  ),
+                                      ? {
+                                          ...b,
+                                          role: e.target
+                                            .value as PersistTextPromptBlock["role"],
+                                        }
+                                      : b
+                                  )
                                 )
                               }
                             >
@@ -784,7 +897,9 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               ))}
                             </select>
                           </SettingsField>
-                          <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistRegionHint}</p>
+                          <p className="config-block-card__hint">
+                            {PROMPT_REGION_LABELS.persistRegionHint}
+                          </p>
                           <SettingsField label="内容">
                             <textarea
                               rows={4}
@@ -792,8 +907,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                               onChange={(e) =>
                                 setPersist((prev) =>
                                   mapPersistTextBlocks(prev, (b, i) =>
-                                    i === index ? { ...b, content: e.target.value } : b,
-                                  ),
+                                    i === index
+                                      ? { ...b, content: e.target.value }
+                                      : b
+                                  )
                                 )
                               }
                             />
@@ -804,33 +921,45 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   </div>
                 </>
               ) : (
-                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistDisabledHint}</p>
+                <p className="config-block-card__hint">
+                  {PROMPT_REGION_LABELS.persistDisabledHint}
+                </p>
               )}
             </div>
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.chatBlocks}</span>
+            <span className="config-block-card__section-label">
+              {PROMPT_REGION_LABELS.chatBlocks}
+            </span>
           </div>
           <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
             <div className="config-block-card__header config-block-card__header--chat-slot">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chatTag}</span>
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.chatTag}
+              </span>
               <span className="config-block-card__readonly-pill">只读</span>
             </div>
             <div className="config-block-card__body">
               <p className="config-block-card__meta config-block-card__meta--chat-title">
                 {PROMPT_REGION_LABELS.chat}
               </p>
-              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.chatReadonlyHint}</p>
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.chatReadonlyHint}
+              </p>
             </div>
           </div>
 
           <div className="config-block-card__section-head">
-            <span className="config-block-card__section-label">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
+            <span className="config-block-card__section-label">
+              {PROMPT_REGION_LABELS.dynamicBlocks}
+            </span>
           </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
-              <span className="config-block-card__badge">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
+              <span className="config-block-card__badge">
+                {PROMPT_REGION_LABELS.dynamicBlocks}
+              </span>
               <Switch
                 checked={dynamicEnabled}
                 onChange={setDynamicEnabled}
@@ -841,130 +970,177 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
               {dynamicEnabled ? (
                 <>
                   <div className="config-block-card__section-head">
-                    <span className="config-block-card__section-label">块列表</span>
-                    <button type="button" className="settings-link-btn" onClick={() => addDynamicBlock()}>
+                    <span className="config-block-card__section-label">
+                      块列表
+                    </span>
+                    <button
+                      type="button"
+                      className="settings-link-btn"
+                      onClick={() => addDynamicBlock()}
+                    >
                       添加
                     </button>
                   </div>
                   <div
                     className={
-                      dynamic.length === 0 ? "config-block-list config-block-list--empty" : "config-block-list"
+                      dynamic.length === 0
+                        ? "config-block-list config-block-list--empty"
+                        : "config-block-list"
                     }
                   >
                     {dynamic.length === 0 ? (
-                      <p className="config-block-card__empty-hint">{PROMPT_REGION_LABELS.emptyDynamicHint}</p>
+                      <p className="config-block-card__empty-hint">
+                        {PROMPT_REGION_LABELS.emptyDynamicHint}
+                      </p>
                     ) : null}
                     {dynamic.map((block, index) => (
-              <div key={`dynamic-${index}`} className="config-block-card config-block-card--prompt">
-                <div className="config-block-card__header">
-                  <span className="config-block-card__badge">{blockTypeLabel(block.type)}</span>
-                  <span className="config-block-card__meta">{block.name}</span>
-                  {renderBlockActions(index, dynamic.length, moveDynamic, deleteDynamic)}
-                </div>
-                <div className="config-block-card__body">
-                  <SettingsField label="名称">
-                    <input
-                      value={block.name}
-                      onChange={(e) =>
-                        setDynamic((prev) =>
-                          prev.map((b, i) => (i === index ? { ...b, name: e.target.value } : b)),
-                        )
-                      }
-                    />
-                  </SettingsField>
-                  <SettingsField label="角色">
-                    <select
-                      value={block.role}
-                      onChange={(e) =>
-                        setDynamic((prev) =>
-                          prev.map((b, i) =>
-                            i === index
-                              ? { ...b, role: e.target.value as DynamicPromptBlock["role"] }
-                              : b,
-                          ),
-                        )
-                      }
-                    >
-                      {ROLE_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  </SettingsField>
-                  <div className="config-block-card__switch-row">
-                    <span className="config-block-card__switch-label">常驻</span>
-                    <Switch
-                      checked={isDynamicBlockPersistent(block)}
-                      onChange={(persistent) =>
-                        setDynamic((prev) =>
-                          prev.map((b, i) =>
-                            i === index ? withDynamicBlockPersistence(b, persistent) : b,
-                          ),
-                        )
-                      }
-                      aria-label="常驻"
-                    />
-                  </div>
-                  {!isDynamicBlockPersistent(block) ? (
-                    <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
-                      {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
-                    </p>
-                  ) : null}
-                  <SettingsField label="内容">
-                    <textarea
-                      ref={dynamicInsertIndex === index ? dynamicTextareaRef : undefined}
-                      rows={4}
-                      value={block.content}
-                      onFocus={() => setDynamicInsertIndex(index)}
-                      onKeyDown={handlePromptTextareaKeyDown}
-                      onChange={(e) =>
-                        setDynamic((prev) =>
-                          prev.map((b, i) =>
-                            i === index ? { ...b, content: e.target.value } : b,
-                          ),
-                        )
-                      }
-                    />
-                  </SettingsField>
-                  <div className="config-dep-chips">
-                    <span className="config-block-card__hint">宏：</span>
-                    {DYNAMIC_MACROS.map((macro) => (
-                      <button
-                        key={macro.token}
-                        type="button"
-                        className="config-dep-chip"
-                        onClick={() => {
-                          setDynamicInsertIndex(index);
-                          setDynamic((prev) =>
-                            prev.map((b, i) =>
-                              i === index
-                                ? {
-                                    ...b,
-                                    content: insertAtCursor(
-                                      b.content,
-                                      macro.token,
-                                      dynamicInsertIndex === index
-                                        ? dynamicTextareaRef.current
-                                        : null,
-                                    ),
-                                  }
-                                : b,
-                            ),
-                          );
-                        }}
+                      <div
+                        key={`dynamic-${index}`}
+                        className="config-block-card config-block-card--prompt"
                       >
-                        {macro.label}
-                      </button>
+                        <div className="config-block-card__header">
+                          <span className="config-block-card__badge">
+                            {blockTypeLabel(block.type)}
+                          </span>
+                          <span className="config-block-card__meta">
+                            {block.name}
+                          </span>
+                          {renderBlockActions(
+                            index,
+                            dynamic.length,
+                            moveDynamic,
+                            deleteDynamic
+                          )}
+                        </div>
+                        <div className="config-block-card__body">
+                          <SettingsField label="名称">
+                            <input
+                              value={block.name}
+                              onChange={(e) =>
+                                setDynamic((prev) =>
+                                  prev.map((b, i) =>
+                                    i === index
+                                      ? { ...b, name: e.target.value }
+                                      : b
+                                  )
+                                )
+                              }
+                            />
+                          </SettingsField>
+                          <SettingsField label="角色">
+                            <select
+                              value={block.role}
+                              onChange={(e) =>
+                                setDynamic((prev) =>
+                                  prev.map((b, i) =>
+                                    i === index
+                                      ? {
+                                          ...b,
+                                          role: e.target
+                                            .value as DynamicPromptBlock["role"],
+                                        }
+                                      : b
+                                  )
+                                )
+                              }
+                            >
+                              {ROLE_OPTIONS.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </SettingsField>
+                          <div className="config-block-card__switch-row">
+                            <span className="config-block-card__switch-label">
+                              常驻
+                            </span>
+                            <Switch
+                              checked={isDynamicBlockPersistent(block)}
+                              onChange={(persistent) =>
+                                setDynamic((prev) =>
+                                  prev.map((b, i) =>
+                                    i === index
+                                      ? withDynamicBlockPersistence(
+                                          b,
+                                          persistent
+                                        )
+                                      : b
+                                  )
+                                )
+                              }
+                              aria-label="常驻"
+                            />
+                          </div>
+                          {!isDynamicBlockPersistent(block) ? (
+                            <p className="config-block-card__hint config-block-card__hint--subtle config-block-card__switch-hint">
+                              {PROMPT_REGION_LABELS.dynamicLifecycleOnceHint}
+                            </p>
+                          ) : null}
+                          <SettingsField label="内容">
+                            <textarea
+                              ref={
+                                dynamicInsertIndex === index
+                                  ? dynamicTextareaRef
+                                  : undefined
+                              }
+                              rows={4}
+                              value={block.content}
+                              onFocus={() => setDynamicInsertIndex(index)}
+                              onKeyDown={handlePromptTextareaKeyDown}
+                              onChange={(e) =>
+                                setDynamic((prev) =>
+                                  prev.map((b, i) =>
+                                    i === index
+                                      ? { ...b, content: e.target.value }
+                                      : b
+                                  )
+                                )
+                              }
+                            />
+                          </SettingsField>
+                          <div className="config-dep-chips">
+                            <span className="config-block-card__hint">
+                              宏：
+                            </span>
+                            {DYNAMIC_MACROS.map((macro) => (
+                              <button
+                                key={macro.token}
+                                type="button"
+                                className="config-dep-chip"
+                                onClick={() => {
+                                  setDynamicInsertIndex(index);
+                                  setDynamic((prev) =>
+                                    prev.map((b, i) =>
+                                      i === index
+                                        ? {
+                                            ...b,
+                                            content: insertAtCursor(
+                                              b.content,
+                                              macro.token,
+                                              dynamicInsertIndex === index
+                                                ? dynamicTextareaRef.current
+                                                : null
+                                            ),
+                                          }
+                                        : b
+                                    )
+                                  );
+                                }}
+                              >
+                                {macro.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
                     ))}
-                  </div>
-                </div>
-              </div>
-            ))}
                   </div>
                 </>
               ) : (
-                <p className="config-block-card__hint">{PROMPT_REGION_LABELS.dynamicDisabledHint}</p>
+                <p className="config-block-card__hint">
+                  {PROMPT_REGION_LABELS.dynamicDisabledHint}
+                </p>
               )}
             </div>
           </div>

@@ -47,7 +47,11 @@ import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { showToast } from "@/components/ui/show-toast";
 import { Switch } from "@/components/ui/Switch";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
-import { ipcProviderModelsGetSaved, ipcProviderModelsSavedList, ipcProvidersList } from "@/ipc/client";
+import {
+  ipcProviderModelsGetSaved,
+  ipcProviderModelsSavedList,
+  ipcProvidersList,
+} from "@/ipc/client";
 import { SettingsField, SettingsSection } from "./settings-ui";
 
 const DYNAMIC_MACROS = [
@@ -80,7 +84,7 @@ export type AgentDefinitionEditorFormProps = {
 function insertAtCursor(
   value: string,
   insert: string,
-  textarea: HTMLTextAreaElement | null,
+  textarea: HTMLTextAreaElement | null
 ): string {
   if (textarea == null) {
     return value + insert;
@@ -111,8 +115,8 @@ function applyDefinitionToFormState(
   },
   providerRows: Array<{ id: string; label: string }>,
   resolveSavedModelPin: (
-    modelPin: string | undefined,
-  ) => Promise<{ modelOn: boolean; providerId: string; savedModelId: string }>,
+    modelPin: string | undefined
+  ) => Promise<{ modelOn: boolean; providerId: string; savedModelId: string }>
 ): void {
   const promptForm = definitionToForm(def);
   setters.setName(def.name ?? "");
@@ -159,7 +163,7 @@ function applyDefinitionToFormState(
         toolsSelected: [...toolsWire.selected],
         ...promptForm,
         persist: [...promptForm.persist],
-      }),
+      })
     );
   })();
 }
@@ -169,7 +173,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   AgentDefinitionEditorFormProps
 >(function AgentDefinitionEditorForm(
   { definition, resetKey, disabled = false, onDirtyChange, onSubmitShortcut },
-  ref,
+  ref
 ) {
   const [name, setName] = useState("");
   const [maxSteps, setMaxSteps] = useState("20");
@@ -184,13 +188,17 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
-  const [providers, setProviders] = useState<Array<{ id: string; label: string }>>([]);
+  const [providers, setProviders] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
   const [savedModels, setSavedModels] = useState<
     Array<{ id: string; vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
   const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(null);
+  const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(
+    null
+  );
 
   const snapshot = useMemo(
     () =>
@@ -223,7 +231,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       dynamicEnabled,
       persist,
       dynamic,
-    ],
+    ]
   );
 
   const resolveSavedModelPin = useCallback(
@@ -241,7 +249,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       }
       return { modelOn: false, providerId: "", savedModelId: "" };
     },
-    [],
+    []
   );
 
   const loadSavedModels = useCallback(async (pid: string) => {
@@ -252,7 +260,7 @@ export const AgentDefinitionEditorForm = forwardRef<
           id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
-        })),
+        }))
       );
     }
   }, []);
@@ -291,7 +299,7 @@ export const AgentDefinitionEditorForm = forwardRef<
           setSavedBaseline,
         },
         providerRows,
-        resolveSavedModelPin,
+        resolveSavedModelPin
       );
     })();
     return () => {
@@ -353,15 +361,17 @@ export const AgentDefinitionEditorForm = forwardRef<
       isDirty: () => dirty,
       markSaved: () => setSavedBaseline(snapshot),
     }),
-    [buildDefinition, dirty, snapshot],
+    [buildDefinition, dirty, snapshot]
   );
 
   const modelHint =
-    savedModels.find((m) => m.id === savedModelId)?.displayName ?? savedModelId ?? "—";
+    savedModels.find((m) => m.id === savedModelId)?.displayName ??
+    savedModelId ??
+    "—";
 
   const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
     () => splitPersistBlocksForEditor(persist),
-    [persist],
+    [persist]
   );
 
   const movePersist = (textIndex: number, dir: -1 | 1) => {
@@ -391,7 +401,7 @@ export const AgentDefinitionEditorForm = forwardRef<
 
   const guardPromptBlockDeletion = (
     nextForm: ReturnType<typeof promptRegionForm>,
-    proceed: () => void,
+    proceed: () => void
   ) => {
     if (!hasAnyPromptRegionEnabled(promptRegionForm())) {
       proceed();
@@ -420,8 +430,9 @@ export const AgentDefinitionEditorForm = forwardRef<
 
   const deleteDynamic = (index: number) => {
     const nextDynamic = dynamic.filter((_, i) => i !== index);
-    guardPromptBlockDeletion({ ...promptRegionForm(), dynamic: nextDynamic }, () =>
-      setDynamic(nextDynamic),
+    guardPromptBlockDeletion(
+      { ...promptRegionForm(), dynamic: nextDynamic },
+      () => setDynamic(nextDynamic)
     );
   };
 
@@ -434,7 +445,7 @@ export const AgentDefinitionEditorForm = forwardRef<
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
     setPersist((prev) =>
-      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev),
+      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev)
     );
   };
 
@@ -452,7 +463,7 @@ export const AgentDefinitionEditorForm = forwardRef<
           id: m.id,
           vendorModelId: m.vendorModelId,
           displayName: m.displayName?.trim() || m.vendorModelId,
-        })),
+        }))
       );
     } else {
       setSavedModelId("");
@@ -460,7 +471,9 @@ export const AgentDefinitionEditorForm = forwardRef<
     }
   };
 
-  const handlePromptTextareaKeyDown = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+  const handlePromptTextareaKeyDown = (
+    e: ReactKeyboardEvent<HTMLTextAreaElement>
+  ) => {
     handleMultilineSubmitKeyDown(e, () => onSubmitShortcut?.(), { disabled });
   };
 
@@ -468,7 +481,7 @@ export const AgentDefinitionEditorForm = forwardRef<
     index: number,
     total: number,
     onMove: (i: number, d: -1 | 1) => void,
-    onDelete: (i: number) => void,
+    onDelete: (i: number) => void
   ) => (
     <div className="config-block-card__actions">
       {index > 0 ? (
@@ -592,12 +605,18 @@ export const AgentDefinitionEditorForm = forwardRef<
           </select>
         </SettingsField>
         {toolsMode !== "default" ? (
-          <SettingsField label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}>
-            <ToolPolicyPicker selected={toolsSelected} onChange={setToolsSelected} />
+          <SettingsField
+            label={toolsMode === "allow" ? "白名单工具" : "黑名单工具"}
+          >
+            <ToolPolicyPicker
+              selected={toolsSelected}
+              onChange={setToolsSelected}
+            />
           </SettingsField>
         ) : (
           <p className="settings-hint">
-            未配置时使用全部内置工具（7 个）：read、write、edit、fs、glob、grep、chat_grep。
+            未配置时使用全部内置工具（7
+            个）：read、write、edit、fs、glob、grep、chat_grep。
           </p>
         )}
       </SettingsSection>
@@ -610,8 +629,12 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
         <div className="config-block-card config-block-card--prompt">
           <div className="config-block-card__header">
-            <span className="config-block-card__badge">{PROMPT_REGION_LABELS.system}</span>
-            <span className="config-block-card__meta">{PROMPT_REGION_LABELS.systemPromptTitle}</span>
+            <span className="config-block-card__badge">
+              {PROMPT_REGION_LABELS.system}
+            </span>
+            <span className="config-block-card__meta">
+              {PROMPT_REGION_LABELS.systemPromptTitle}
+            </span>
             <Switch
               checked={systemEnabled}
               disabled={disabled}
@@ -632,17 +655,23 @@ export const AgentDefinitionEditorForm = forwardRef<
                 />
               </SettingsField>
             ) : (
-              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.systemDisabledHint}</p>
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.systemDisabledHint}
+              </p>
             )}
           </div>
         </div>
 
         <div className="config-block-card__section-head">
-          <span className="config-block-card__section-label">{WORKTREE_BLOCK_LABEL}</span>
+          <span className="config-block-card__section-label">
+            {WORKTREE_BLOCK_LABEL}
+          </span>
         </div>
         <div className="config-block-card config-block-card--prompt">
           <div className="config-block-card__header">
-            <span className="config-block-card__badge">{WORKTREE_BLOCK_LABEL}</span>
+            <span className="config-block-card__badge">
+              {WORKTREE_BLOCK_LABEL}
+            </span>
             <Switch
               checked={persistWorktree != null}
               disabled={disabled}
@@ -654,7 +683,9 @@ export const AgentDefinitionEditorForm = forwardRef<
             {persistWorktree != null ? (
               <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
             ) : (
-              <p className="config-block-card__hint">关闭时不注入项目文件树。</p>
+              <p className="config-block-card__hint">
+                关闭时不注入项目文件树。
+              </p>
             )}
           </div>
         </div>
@@ -666,7 +697,9 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
         <div className="config-block-card config-block-card--prompt">
           <div className="config-block-card__header">
-            <span className="config-block-card__badge">{PROMPT_REGION_LABELS.persistBlocks}</span>
+            <span className="config-block-card__badge">
+              {PROMPT_REGION_LABELS.persistBlocks}
+            </span>
             <Switch
               checked={persistEnabled}
               disabled={disabled}
@@ -678,7 +711,9 @@ export const AgentDefinitionEditorForm = forwardRef<
             {persistEnabled ? (
               <>
                 <div className="config-block-card__section-head">
-                  <span className="config-block-card__section-label">块列表</span>
+                  <span className="config-block-card__section-label">
+                    块列表
+                  </span>
                   <button
                     type="button"
                     className="settings-link-btn"
@@ -709,12 +744,14 @@ export const AgentDefinitionEditorForm = forwardRef<
                         <span className="config-block-card__badge">
                           {blockTypeLabel(block.type)}
                         </span>
-                        <span className="config-block-card__meta">{block.name}</span>
+                        <span className="config-block-card__meta">
+                          {block.name}
+                        </span>
                         {renderBlockActions(
                           index,
                           persistTextBlocks.length,
                           movePersist,
-                          deletePersist,
+                          deletePersist
                         )}
                       </div>
                       <div className="config-block-card__body">
@@ -725,8 +762,10 @@ export const AgentDefinitionEditorForm = forwardRef<
                             onChange={(e) =>
                               setPersist((prev) =>
                                 mapPersistTextBlocks(prev, (b, i) =>
-                                  i === index ? { ...b, name: e.target.value } : b,
-                                ),
+                                  i === index
+                                    ? { ...b, name: e.target.value }
+                                    : b
+                                )
                               )
                             }
                           />
@@ -741,10 +780,11 @@ export const AgentDefinitionEditorForm = forwardRef<
                                   i === index
                                     ? {
                                         ...b,
-                                        role: e.target.value as PersistTextPromptBlock["role"],
+                                        role: e.target
+                                          .value as PersistTextPromptBlock["role"],
                                       }
-                                    : b,
-                                ),
+                                    : b
+                                )
                               )
                             }
                           >
@@ -766,8 +806,10 @@ export const AgentDefinitionEditorForm = forwardRef<
                             onChange={(e) =>
                               setPersist((prev) =>
                                 mapPersistTextBlocks(prev, (b, i) =>
-                                  i === index ? { ...b, content: e.target.value } : b,
-                                ),
+                                  i === index
+                                    ? { ...b, content: e.target.value }
+                                    : b
+                                )
                               )
                             }
                           />
@@ -778,7 +820,9 @@ export const AgentDefinitionEditorForm = forwardRef<
                 </div>
               </>
             ) : (
-              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.persistDisabledHint}</p>
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.persistDisabledHint}
+              </p>
             )}
           </div>
         </div>
@@ -790,14 +834,18 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
         <div className="config-block-card config-block-card--prompt config-block-card--chat-slot">
           <div className="config-block-card__header config-block-card__header--chat-slot">
-            <span className="config-block-card__badge">{PROMPT_REGION_LABELS.chatTag}</span>
+            <span className="config-block-card__badge">
+              {PROMPT_REGION_LABELS.chatTag}
+            </span>
             <span className="config-block-card__readonly-pill">只读</span>
           </div>
           <div className="config-block-card__body">
             <p className="config-block-card__meta config-block-card__meta--chat-title">
               {PROMPT_REGION_LABELS.chat}
             </p>
-            <p className="config-block-card__hint">{PROMPT_REGION_LABELS.chatReadonlyHint}</p>
+            <p className="config-block-card__hint">
+              {PROMPT_REGION_LABELS.chatReadonlyHint}
+            </p>
           </div>
         </div>
 
@@ -808,7 +856,9 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
         <div className="config-block-card config-block-card--prompt">
           <div className="config-block-card__header">
-            <span className="config-block-card__badge">{PROMPT_REGION_LABELS.dynamicBlocks}</span>
+            <span className="config-block-card__badge">
+              {PROMPT_REGION_LABELS.dynamicBlocks}
+            </span>
             <Switch
               checked={dynamicEnabled}
               disabled={disabled}
@@ -820,7 +870,9 @@ export const AgentDefinitionEditorForm = forwardRef<
             {dynamicEnabled ? (
               <>
                 <div className="config-block-card__section-head">
-                  <span className="config-block-card__section-label">块列表</span>
+                  <span className="config-block-card__section-label">
+                    块列表
+                  </span>
                   <button
                     type="button"
                     className="settings-link-btn"
@@ -851,8 +903,15 @@ export const AgentDefinitionEditorForm = forwardRef<
                         <span className="config-block-card__badge">
                           {blockTypeLabel(block.type)}
                         </span>
-                        <span className="config-block-card__meta">{block.name}</span>
-                        {renderBlockActions(index, dynamic.length, moveDynamic, deleteDynamic)}
+                        <span className="config-block-card__meta">
+                          {block.name}
+                        </span>
+                        {renderBlockActions(
+                          index,
+                          dynamic.length,
+                          moveDynamic,
+                          deleteDynamic
+                        )}
                       </div>
                       <div className="config-block-card__body">
                         <SettingsField label="名称">
@@ -862,8 +921,10 @@ export const AgentDefinitionEditorForm = forwardRef<
                             onChange={(e) =>
                               setDynamic((prev) =>
                                 prev.map((b, i) =>
-                                  i === index ? { ...b, name: e.target.value } : b,
-                                ),
+                                  i === index
+                                    ? { ...b, name: e.target.value }
+                                    : b
+                                )
                               )
                             }
                           />
@@ -878,10 +939,11 @@ export const AgentDefinitionEditorForm = forwardRef<
                                   i === index
                                     ? {
                                         ...b,
-                                        role: e.target.value as DynamicPromptBlock["role"],
+                                        role: e.target
+                                          .value as DynamicPromptBlock["role"],
                                       }
-                                    : b,
-                                ),
+                                    : b
+                                )
                               )
                             }
                           >
@@ -893,15 +955,19 @@ export const AgentDefinitionEditorForm = forwardRef<
                           </select>
                         </SettingsField>
                         <div className="config-block-card__switch-row">
-                          <span className="config-block-card__switch-label">常驻</span>
+                          <span className="config-block-card__switch-label">
+                            常驻
+                          </span>
                           <Switch
                             checked={isDynamicBlockPersistent(block)}
                             disabled={disabled}
                             onChange={(persistent) =>
                               setDynamic((prev) =>
                                 prev.map((b, i) =>
-                                  i === index ? withDynamicBlockPersistence(b, persistent) : b,
-                                ),
+                                  i === index
+                                    ? withDynamicBlockPersistence(b, persistent)
+                                    : b
+                                )
                               )
                             }
                             aria-label="常驻"
@@ -914,7 +980,11 @@ export const AgentDefinitionEditorForm = forwardRef<
                         ) : null}
                         <SettingsField label="内容">
                           <textarea
-                            ref={dynamicInsertIndex === index ? dynamicTextareaRef : undefined}
+                            ref={
+                              dynamicInsertIndex === index
+                                ? dynamicTextareaRef
+                                : undefined
+                            }
                             rows={4}
                             value={block.content}
                             disabled={disabled}
@@ -923,8 +993,10 @@ export const AgentDefinitionEditorForm = forwardRef<
                             onChange={(e) =>
                               setDynamic((prev) =>
                                 prev.map((b, i) =>
-                                  i === index ? { ...b, content: e.target.value } : b,
-                                ),
+                                  i === index
+                                    ? { ...b, content: e.target.value }
+                                    : b
+                                )
                               )
                             }
                           />
@@ -949,11 +1021,11 @@ export const AgentDefinitionEditorForm = forwardRef<
                                             macro.token,
                                             dynamicInsertIndex === index
                                               ? dynamicTextareaRef.current
-                                              : null,
+                                              : null
                                           ),
                                         }
-                                      : b,
-                                  ),
+                                      : b
+                                  )
                                 );
                               }}
                             >
@@ -967,12 +1039,13 @@ export const AgentDefinitionEditorForm = forwardRef<
                 </div>
               </>
             ) : (
-              <p className="config-block-card__hint">{PROMPT_REGION_LABELS.dynamicDisabledHint}</p>
+              <p className="config-block-card__hint">
+                {PROMPT_REGION_LABELS.dynamicDisabledHint}
+              </p>
             )}
           </div>
         </div>
       </SettingsSection>
-
     </>
   );
 });

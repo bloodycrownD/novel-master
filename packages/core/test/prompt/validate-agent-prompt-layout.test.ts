@@ -3,9 +3,7 @@ import { describe, it } from "node:test";
 import { AgentConfigError } from "../../src/errors/agent-config-errors.js";
 import { agentDefinitionSchema } from "../../src/domain/agent/model/agent-definition.schema.js";
 import { PromptError } from "../../src/errors/prompt-errors.js";
-import {
-  validateAgentPromptLayoutFromMaps,
-} from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { validateAgentPromptLayoutFromMaps } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
 describe("validateAgentPromptLayoutFromMaps", () => {
   it("拒绝 persist 文本含宏", () => {
@@ -13,10 +11,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           { bad: { type: "text", role: "user", content: "x {{$time}}" } },
-          {},
+          {}
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("持久区文本块不得包含宏"),
+        e instanceof PromptError && e.message.includes("持久区文本块不得包含宏")
     );
   });
 
@@ -32,9 +30,11 @@ describe("validateAgentPromptLayoutFromMaps", () => {
               lifecycle: "once",
             },
           },
-          {},
+          {}
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("持久区文本块不得包含 lifecycle"),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("持久区文本块不得包含 lifecycle")
     );
   });
 
@@ -43,9 +43,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           { bad: { type: "text", role: "system", content: "x" } },
-          {},
+          {}
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("prompts.system"),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("prompts.system")
     );
   });
 
@@ -54,16 +55,17 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           {},
-          { bad: { type: "text", role: "user", content: "{{.filetree}}" } },
+          { bad: { type: "text", role: "user", content: "{{.filetree}}" } }
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("$filetree"),
+      (e: unknown) =>
+        e instanceof PromptError && e.message.includes("$filetree")
     );
   });
 
   it("接受 dynamic {{$filetree}}", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       {},
-      { state: { type: "text", role: "user", content: "{{$filetree}}" } },
+      { state: { type: "text", role: "user", content: "{{$filetree}}" } }
     );
     assert.equal(layout.dynamic.length, 1);
   });
@@ -73,33 +75,39 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           { a: { type: "worktree" }, b: { type: "worktree" } },
-          {},
+          {}
         ),
-      (e: unknown) => e instanceof PromptError && e.message.includes("最多只能有一个 worktree"),
+      (e: unknown) =>
+        e instanceof PromptError &&
+        e.message.includes("最多只能有一个 worktree")
     );
   });
 
   it("worktree 缺省 role 时 normalize 为 user", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       { canon: { type: "worktree" } },
-      {},
+      {}
     );
     assert.equal(layout.persist.length, 1);
     assert.equal(layout.persist[0]?.type, "worktree");
     assert.equal(
-      layout.persist[0]?.type === "worktree" ? layout.persist[0].role : undefined,
-      "user",
+      layout.persist[0]?.type === "worktree"
+        ? layout.persist[0].role
+        : undefined,
+      "user"
     );
   });
 
   it("接受 worktree role assistant", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       { canon: { type: "worktree", role: "assistant" } },
-      {},
+      {}
     );
     assert.equal(
-      layout.persist[0]?.type === "worktree" ? layout.persist[0].role : undefined,
-      "assistant",
+      layout.persist[0]?.type === "worktree"
+        ? layout.persist[0].role
+        : undefined,
+      "assistant"
     );
   });
 
@@ -108,10 +116,11 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           { canon: { type: "worktree", content: "x" } },
-          {},
+          {}
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree 块不得包含 content"),
+        e instanceof PromptError &&
+        e.message.includes("worktree 块不得包含 content")
     );
   });
 
@@ -120,10 +129,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       () =>
         validateAgentPromptLayoutFromMaps(
           { canon: { type: "worktree", lifecycle: "once" } },
-          {},
+          {}
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree 块不得包含"),
+        e instanceof PromptError && e.message.includes("worktree 块不得包含")
     );
   });
 
@@ -137,11 +146,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           },
           {},
           undefined,
-          { persistEnabled: true },
+          { persistEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("最后一个块须为助手"),
+        e instanceof PromptError && e.message.includes("最后一个块须为助手")
     );
   });
 
@@ -154,14 +162,14 @@ describe("validateAgentPromptLayoutFromMaps", () => {
       },
       {},
       undefined,
-      { persistEnabled: true },
+      { persistEnabled: true }
     );
     assert.equal(layout.persist.length, 3);
     assert.equal(layout.persist[1]?.type, "worktree");
     assert.equal(layout.persist[2]?.type, "text");
     assert.equal(
       layout.persist[2]?.type === "text" ? layout.persist[2].role : undefined,
-      "assistant",
+      "assistant"
     );
   });
 
@@ -172,11 +180,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           { canon: { type: "worktree" } },
           {},
           undefined,
-          { persistEnabled: true },
+          { persistEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("至少需要一个文本块"),
+        e instanceof PromptError && e.message.includes("至少需要一个文本块")
     );
   });
 
@@ -187,11 +194,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           { tail: { type: "text", role: "user", content: "x" } },
           {},
           undefined,
-          { persistEnabled: true },
+          { persistEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("最后一个块须为助手"),
+        e instanceof PromptError && e.message.includes("最后一个块须为助手")
     );
   });
 
@@ -202,11 +208,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
           {},
           { only: { type: "text", role: "assistant", content: "x" } },
           undefined,
-          { dynamicEnabled: true },
+          { dynamicEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("至少需要两个块"),
+        e instanceof PromptError && e.message.includes("至少需要两个块")
     );
   });
 
@@ -220,11 +225,10 @@ describe("validateAgentPromptLayoutFromMaps", () => {
             b: { type: "text", role: "user", content: "y" },
           },
           undefined,
-          { dynamicEnabled: true },
+          { dynamicEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("第一个块须为助手"),
+        e instanceof PromptError && e.message.includes("第一个块须为助手")
     );
   });
 
@@ -238,17 +242,17 @@ describe("validateAgentPromptLayoutFromMaps", () => {
             b: { type: "text", role: "assistant", content: "y" },
           },
           undefined,
-          { dynamicEnabled: true },
+          { dynamicEnabled: true }
         ),
       (e: unknown) =>
-        e instanceof PromptError && e.message.includes("最后一个块须为用户"),
+        e instanceof PromptError && e.message.includes("最后一个块须为用户")
     );
   });
 
   it("开关关时不校验末块", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       { tail: { type: "text", role: "user", content: "x" } },
-      { only: { type: "text", role: "assistant", content: "y" } },
+      { only: { type: "text", role: "assistant", content: "y" } }
     );
     assert.equal(layout.persist.length, 1);
     assert.equal(layout.dynamic.length, 1);
@@ -266,7 +270,7 @@ describe("agentDefinitionSchema wire", () => {
         }),
       (e: unknown) =>
         e instanceof AgentConfigError &&
-        e.message.includes("prompts.blocks is removed"),
+        e.message.includes("prompts.blocks is removed")
     );
   });
 
@@ -279,7 +283,7 @@ describe("agentDefinitionSchema wire", () => {
           prompts: { regions: {} },
         }),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.message.includes("prompts.regions"),
+        e instanceof AgentConfigError && e.message.includes("prompts.regions")
     );
   });
 
@@ -292,7 +296,7 @@ describe("agentDefinitionSchema wire", () => {
           prompts: { persist: {}, dynamic: {}, chat: {} },
         }),
       (e: unknown) =>
-        e instanceof AgentConfigError && e.message.includes("prompts.chat"),
+        e instanceof AgentConfigError && e.message.includes("prompts.chat")
     );
   });
 });

@@ -32,29 +32,38 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.maxStepsLabel, "最大步数");
   assert.equal(
     PROMPT_REGION_LABELS.maxStepsHint,
-    "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。",
+    "限制单轮任务中模型与工具的往返次数；未填写时默认为 20。"
   );
   assert.equal(PROMPT_REGION_LABELS.emptyPersistHint, "暂无块，点击添加");
   assert.equal(PROMPT_REGION_LABELS.emptyDynamicHint, "暂无块，点击添加");
-  assert.equal(PROMPT_REGION_LABELS.systemDisabledHint, "关闭时不写入系统提示词。");
+  assert.equal(
+    PROMPT_REGION_LABELS.systemDisabledHint,
+    "关闭时不写入系统提示词。"
+  );
   assert.equal(
     PROMPT_REGION_LABELS.persistDisabledHint,
-    "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。",
+    "关闭后持久区内容不会发送给 AI，已填写的内容仍保留。"
   );
   assert.equal(
     PROMPT_REGION_LABELS.dynamicDisabledHint,
-    "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。",
+    "关闭后动态区内容不会发送给 AI，已填写的内容仍保留。"
   );
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
   assert.equal(
     PROMPT_REGION_LABELS.layoutOrder,
-    "系统 → 工作树 → 持久区 → 会话历史 → 动态区",
+    "系统 → 工作树 → 持久区 → 会话历史 → 动态区"
   );
-  assert.equal(PROMPT_REGION_LABELS.persistRegionHint, "持久区禁止宏与生命周期。");
-  assert.equal(PROMPT_REGION_LABELS.dynamicLifecycleOnceHint, "仅首轮请求带入。");
+  assert.equal(
+    PROMPT_REGION_LABELS.persistRegionHint,
+    "持久区禁止宏与生命周期。"
+  );
+  assert.equal(
+    PROMPT_REGION_LABELS.dynamicLifecycleOnceHint,
+    "仅首轮请求带入。"
+  );
 
   const values = Object.values(PROMPT_REGION_LABELS).filter(
-    (value): value is string => typeof value === "string",
+    (value): value is string => typeof value === "string"
   );
   for (const value of values) {
     assert.doesNotMatch(value, /API system/i);
@@ -73,7 +82,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
 test("T-WT13: WORKTREE_BLOCK_HINT 新文案", () => {
   assert.equal(
     WORKTREE_BLOCK_HINT,
-    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。",
+    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。"
   );
 });
 
@@ -97,14 +106,17 @@ test("T8: toolsSelectionFromDefinition round-trips policy modes", () => {
       prompts: { persist: [], dynamic: [] },
       tools: { allow: ["read"] },
     }),
-    { mode: "allow", selected: ["read"] },
+    { mode: "allow", selected: ["read"] }
   );
   assert.deepEqual(
-    toolsSelectionFromDefinition({ name: "a", prompts: { persist: [], dynamic: [] } }),
+    toolsSelectionFromDefinition({
+      name: "a",
+      prompts: { persist: [], dynamic: [] },
+    }),
     {
       mode: "default",
       selected: [],
-    },
+    }
   );
 });
 
@@ -178,7 +190,12 @@ test("layoutFromFormInput wires persistEnabled/dynamicEnabled when on", () => {
 });
 
 test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
-  const block = { name: "k", type: "text" as const, role: "user" as const, content: "go" };
+  const block = {
+    name: "k",
+    type: "text" as const,
+    role: "user" as const,
+    content: "go",
+  };
   assert.equal(isDynamicBlockPersistent(block), true);
   const once = withDynamicBlockPersistence(block, false);
   assert.equal(once.lifecycle, "once");
@@ -240,17 +257,22 @@ test("movePersistBlock swaps text and worktree in mixed persist", () => {
   const mixed = [
     { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
     createDefaultWorktreeBlock(),
-    { name: "p2", type: "text" as const, role: "assistant" as const, content: "b" },
+    {
+      name: "p2",
+      type: "text" as const,
+      role: "assistant" as const,
+      content: "b",
+    },
   ];
   const movedUp = movePersistBlock(mixed, 1, -1);
   assert.deepEqual(
     movedUp.map((block) => block.type),
-    ["worktree", "text", "text"],
+    ["worktree", "text", "text"]
   );
   const movedDown = movePersistBlock(mixed, 0, 1);
   assert.deepEqual(
     movedDown.map((block) => block.type),
-    ["worktree", "text", "text"],
+    ["worktree", "text", "text"]
   );
 });
 
@@ -261,7 +283,10 @@ test("updatePersistWorktreeRole updates worktree role only", () => {
   ];
   const updated = updatePersistWorktreeRole(persist, "assistant");
   assert.equal(updated[0]?.type, "text");
-  assert.equal(updated[0]?.type === "text" ? updated[0].role : undefined, "user");
+  assert.equal(
+    updated[0]?.type === "text" ? updated[0].role : undefined,
+    "user"
+  );
   assert.deepEqual(updated[1], {
     name: WORKTREE_BLOCK_WIRE_NAME,
     type: "worktree",
@@ -292,13 +317,15 @@ test("buildAgentDefinitionFromForm wire order matches mixed persist editor order
   if (result.ok) {
     assert.deepEqual(
       result.definition.prompts.persist.map((block) => block.type),
-      ["worktree", "text"],
+      ["worktree", "text"]
     );
     const validated = validateAgentPromptLayout(result.definition.prompts);
     assert.equal(validated.persist[0]?.type, "worktree");
     assert.equal(
-      validated.persist[0]?.type === "worktree" ? validated.persist[0].role : undefined,
-      "user",
+      validated.persist[0]?.type === "worktree"
+        ? validated.persist[0].role
+        : undefined,
+      "user"
     );
   }
 });
@@ -327,7 +354,10 @@ test("T-WT12: definitionToForm 含 canon 可 derive Switch 开", () => {
       dynamic: [],
     },
   });
-  assert.equal(splitPersistBlocksForEditor(form.persist).worktree?.name, WORKTREE_BLOCK_WIRE_NAME);
+  assert.equal(
+    splitPersistBlocksForEditor(form.persist).worktree?.name,
+    WORKTREE_BLOCK_WIRE_NAME
+  );
 });
 
 test("createDefaultAgentEditorPrompts starts with empty persist", () => {
@@ -385,7 +415,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       toolsSelected: [],
       ...createDefaultAgentEditorPrompts(),
     }).ok,
-    false,
+    false
   );
   assert.equal(
     buildAgentDefinitionFromForm({
@@ -398,7 +428,7 @@ test("buildAgentDefinitionFromForm validates required fields", () => {
       toolsSelected: [],
       ...createDefaultAgentEditorPrompts(),
     }).ok,
-    true,
+    true
   );
 });
 
@@ -453,7 +483,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       persist: [],
       dynamic: [],
     }),
-    0,
+    0
   );
   assert.equal(
     countEffectiveFormPromptSources({
@@ -464,7 +494,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
-    3,
+    3
   );
   assert.equal(
     countEffectiveFormPromptSources({
@@ -475,7 +505,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
-    0,
+    0
   );
   assert.equal(
     countEffectiveFormPromptSources({
@@ -486,7 +516,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
       dynamic: [],
     }),
-    1,
+    1
   );
 });
 
@@ -527,7 +557,9 @@ test("buildAgentDefinitionFromForm allows empty persist with dynamic block", () 
     persistEnabled: false,
     dynamicEnabled: false,
     persist: [],
-    dynamic: [{ name: "state", type: "text", role: "user", content: "{{$time}}" }],
+    dynamic: [
+      { name: "state", type: "text", role: "user", content: "{{$time}}" },
+    ],
   });
   assert.equal(result.ok, true);
 });
@@ -558,7 +590,7 @@ test("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
       systemContent: "sys",
       dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
     }),
-    2,
+    2
   );
   assert.equal(
     countMinimumPromptSources({
@@ -566,7 +598,7 @@ test("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
       systemContent: "   ",
       dynamic: [],
     }),
-    0,
+    0
   );
   assert.equal(
     countMinimumPromptSources(
@@ -578,9 +610,9 @@ test("countMinimumPromptSources 仅统计 system 与 dynamic", () => {
           { name: "d2", type: "text", role: "user", content: "b" },
         ],
       },
-      { excludeDynamicIndex: 0 },
+      { excludeDynamicIndex: 0 }
     ),
-    1,
+    1
   );
 });
 
@@ -592,7 +624,7 @@ test("countFormPromptSources ignores enabled system without content", () => {
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
     }),
-    1,
+    1
   );
   assert.equal(
     countFormPromptSources(
@@ -602,9 +634,9 @@ test("countFormPromptSources ignores enabled system without content", () => {
         persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
         dynamic: [],
       },
-      { excludePersistTextIndex: 0 },
+      { excludePersistTextIndex: 0 }
     ),
-    1,
+    1
   );
 });
 
@@ -617,8 +649,18 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
       { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" as const },
     ],
     dynamic: [
-      { name: "d1", type: "text" as const, role: "user" as const, content: "b" },
-      { name: "d2", type: "text" as const, role: "user" as const, content: "c" },
+      {
+        name: "d1",
+        type: "text" as const,
+        role: "user" as const,
+        content: "b",
+      },
+      {
+        name: "d2",
+        type: "text" as const,
+        role: "user" as const,
+        content: "c",
+      },
     ],
   };
   assert.equal(countFormPromptSources(input), 5);
@@ -630,7 +672,7 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
       excludeDynamicIndex: 0,
       excludeWorktree: true,
     }),
-    2,
+    2
   );
 });
 
@@ -648,11 +690,26 @@ test("buildAgentDefinitionFromForm round-trips persistEnabled/dynamicEnabled", (
     persistEnabled: true,
     dynamicEnabled: true,
     persist: [
-      { name: "p1", type: "text" as const, role: "assistant" as const, content: "我将遵守" },
+      {
+        name: "p1",
+        type: "text" as const,
+        role: "assistant" as const,
+        content: "我将遵守",
+      },
     ],
     dynamic: [
-      { name: "d1", type: "text" as const, role: "assistant" as const, content: "a" },
-      { name: "d2", type: "text" as const, role: "user" as const, content: "b" },
+      {
+        name: "d1",
+        type: "text" as const,
+        role: "assistant" as const,
+        content: "a",
+      },
+      {
+        name: "d2",
+        type: "text" as const,
+        role: "user" as const,
+        content: "b",
+      },
     ],
   };
   const result = buildAgentDefinitionFromForm(input);

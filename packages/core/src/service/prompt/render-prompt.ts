@@ -22,7 +22,10 @@ import type {
   PromptRenderContext,
 } from "../../domain/prompt/model/prompt-render-context.js";
 
-export type { PromptLlmInput, PromptRenderContext } from "../../domain/prompt/model/prompt-render-context.js";
+export type {
+  PromptLlmInput,
+  PromptRenderContext,
+} from "../../domain/prompt/model/prompt-render-context.js";
 
 /** One segment from the single assembly traversal (preview / serialize / LLM derive). */
 export interface PromptAssemblySegment {
@@ -52,12 +55,16 @@ export interface PromptAssemblyOptions {
  */
 export function computeLlmExportZonesFromLayout(
   layout: AgentPromptLayout,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
   const hasWorktree = layout.persist.some((block) => block.type === "worktree");
-  const textBlockCount = layout.persist.filter((block) => block.type === "text").length;
-  const persistCount = (hasWorktree ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
+  const textBlockCount = layout.persist.filter(
+    (block) => block.type === "text"
+  ).length;
+  const persistCount =
+    (hasWorktree ? 2 : 0) +
+    (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
   if (layout.dynamicEnabled === true) {
     for (const block of layout.dynamic) {
@@ -88,7 +95,7 @@ function formatSegment(role: string, body: string): string {
 function syntheticTemplateMessage(
   block: PersistTextPromptBlock | DynamicPromptBlock,
   expanded: string,
-  ctx: PromptRenderContext,
+  ctx: PromptRenderContext
 ): ChatMessage {
   return {
     id: `prompt:${block.name}`,
@@ -104,18 +111,18 @@ function syntheticTemplateMessage(
 }
 
 function findWorktreeBlock(
-  layout: AgentPromptLayout,
+  layout: AgentPromptLayout
 ): Extract<PersistPromptBlock, { type: "worktree" }> | undefined {
   return layout.persist.find(
     (block): block is Extract<PersistPromptBlock, { type: "worktree" }> =>
-      block.type === "worktree",
+      block.type === "worktree"
   );
 }
 
 function syntheticWorktreeUserMessage(
   block: Extract<PersistPromptBlock, { type: "worktree" }>,
   worktreeDisplay: string,
-  ctx: PromptRenderContext,
+  ctx: PromptRenderContext
 ): ChatMessage {
   return {
     id: `prompt:worktree:${block.name}`,
@@ -132,7 +139,7 @@ function syntheticWorktreeUserMessage(
 
 function syntheticWorktreeDoneMessage(
   block: Extract<PersistPromptBlock, { type: "worktree" }>,
-  ctx: PromptRenderContext,
+  ctx: PromptRenderContext
 ): ChatMessage {
   return {
     id: `prompt:worktree:${block.name}:done`,
@@ -151,7 +158,7 @@ function syntheticWorktreeDoneMessage(
 function appendWorktreePairIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): void {
   const block = findWorktreeBlock(layout);
   if (block == null) {
@@ -164,7 +171,7 @@ function appendWorktreePairIfPresent(
 function appendWorktreePairSegmentsIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  segments: PromptAssemblySegment[],
+  segments: PromptAssemblySegment[]
 ): void {
   const block = findWorktreeBlock(layout);
   if (block == null) {
@@ -192,7 +199,7 @@ function appendWorktreePairSegmentsIfPresent(
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): Promise<readonly PromptAssemblySegment[]> {
   const agentStepIndex = resolveAgentStepIndex(options);
   const segments: PromptAssemblySegment[] = [];
@@ -224,7 +231,11 @@ export async function buildPromptAssemblyFromLayout(
     }
   }
 
-  for (let messageIndex = 0; messageIndex < ctx.messages.length; messageIndex++) {
+  for (
+    let messageIndex = 0;
+    messageIndex < ctx.messages.length;
+    messageIndex++
+  ) {
     const message = ctx.messages[messageIndex]!;
     if (message.hidden) {
       continue;
@@ -271,7 +282,7 @@ export async function buildPromptAssemblyFromLayout(
 export async function buildPromptLlmInputFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): Promise<PromptLlmInput> {
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
@@ -313,7 +324,7 @@ export async function buildPromptLlmInputFromLayout(
 export async function buildPromptPreviewSegmentsFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): Promise<PromptPreviewSegment[]> {
   const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
   return segments.map((segment) => ({
@@ -328,7 +339,7 @@ export async function buildPromptPreviewSegmentsFromLayout(
 export async function formatPromptLlmInputForCliFromLayout(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
-  options?: PromptAssemblyOptions,
+  options?: PromptAssemblyOptions
 ): Promise<string> {
   const segments = await buildPromptAssemblyFromLayout(layout, ctx, options);
   return segments

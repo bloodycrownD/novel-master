@@ -2,16 +2,20 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks, type ChatMessage } from "@novel-master/core/chat";
 
-import { buildPromptAssemblyFromLayout, buildPromptLlmInputFromLayout, buildPromptPreviewSegmentsFromLayout, computeLlmExportZonesFromLayout, formatPromptLlmInputForCliFromLayout, messageBodyText, type AgentPromptLayout } from "@novel-master/core/prompt";
+import {
+  buildPromptAssemblyFromLayout,
+  buildPromptLlmInputFromLayout,
+  buildPromptPreviewSegmentsFromLayout,
+  computeLlmExportZonesFromLayout,
+  formatPromptLlmInputForCliFromLayout,
+  messageBodyText,
+  type AgentPromptLayout,
+} from "@novel-master/core/prompt";
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 
 const fixedNow = new Date(2026, 4, 24, 9, 0, 0);
 
-function message(
-  role: string,
-  content: string,
-  seq: number,
-): ChatMessage {
+function message(role: string, content: string, seq: number): ChatMessage {
   return {
     id: `m${seq}`,
     sessionId: "s1",
@@ -116,12 +120,20 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
         { name: "tail", type: "text", role: "assistant", content: "ok" },
       ],
       dynamic: [
-        { name: "state", type: "text", role: "user", content: "dyn", lifecycle: "once" },
+        {
+          name: "state",
+          type: "text",
+          role: "user",
+          content: "dyn",
+          lifecycle: "once",
+        },
       ],
     };
     const messages = [message("user", "hi", 1)];
     const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
-    const input = await buildPromptLlmInputFromLayout(layout, ctx, { agentStepIndex: 0 });
+    const input = await buildPromptLlmInputFromLayout(layout, ctx, {
+      agentStepIndex: 0,
+    });
     assert.deepEqual(
       input.messages.map((m) => m.id),
       [
@@ -131,10 +143,14 @@ describe("buildPromptAssemblyFromLayout worktree", () => {
         "prompt:tail",
         "m1",
         "prompt:state",
-      ],
+      ]
     );
-    const segments = await buildPromptAssemblyFromLayout(layout, ctx, { agentStepIndex: 0 });
-    const templateIds = segments.filter((s) => s.source === "template").map((s) => s.id);
+    const segments = await buildPromptAssemblyFromLayout(layout, ctx, {
+      agentStepIndex: 0,
+    });
+    const templateIds = segments
+      .filter((s) => s.source === "template")
+      .map((s) => s.id);
     assert.deepEqual(templateIds, [
       "prompt-worktree-canon",
       "prompt-worktree-canon-done",
@@ -149,7 +165,10 @@ describe("buildPromptPreviewSegmentsFromLayout", () => {
   it("segments join to the same text as formatPromptLlmInputForCliFromLayout", async () => {
     const messages = [message("user", "{{literal}}", 1)];
     const ctx = { worktreeDisplay: "WT", messages, now: fixedNow };
-    const segments = await buildPromptPreviewSegmentsFromLayout(sampleLayout, ctx);
+    const segments = await buildPromptPreviewSegmentsFromLayout(
+      sampleLayout,
+      ctx
+    );
     const joined = segments
       .map((s) => {
         const trimmed = s.body.replace(/\r\n/g, "\n");
@@ -165,7 +184,7 @@ describe("buildPromptPreviewSegmentsFromLayout", () => {
       .join("\n");
     assert.equal(
       joined,
-      await formatPromptLlmInputForCliFromLayout(sampleLayout, ctx),
+      await formatPromptLlmInputForCliFromLayout(sampleLayout, ctx)
     );
   });
 });
@@ -192,10 +211,8 @@ describe("buildPromptAssemblyFromLayout", () => {
   });
 
   it("UA 两段按两条普通 message 展示（不合并摘要）", async () => {
-    const actionXml =
-      '<user-vfs-action kind="delete" path="/test.md" />';
-    const wrapped =
-      `<system-message>\n${actionXml}\n</system-message>`;
+    const actionXml = '<user-vfs-action kind="delete" path="/test.md" />';
+    const wrapped = `<system-message>\n${actionXml}\n</system-message>`;
     const messages: ChatMessage[] = [
       {
         id: "u1",
@@ -262,20 +279,34 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
       dynamicEnabled: false,
       persist: [],
       dynamic: [
-        { name: "kick", type: "text", role: "user", content: "go", lifecycle: "once" },
+        {
+          name: "kick",
+          type: "text",
+          role: "user",
+          content: "go",
+          lifecycle: "once",
+        },
       ],
     };
-    const input = await buildPromptLlmInputFromLayout(layout, {
-      worktreeDisplay: "",
-      messages: [],
-      now: fixedNow,
-    }, { agentStepIndex: 0 });
+    const input = await buildPromptLlmInputFromLayout(
+      layout,
+      {
+        worktreeDisplay: "",
+        messages: [],
+        now: fixedNow,
+      },
+      { agentStepIndex: 0 }
+    );
     assert.equal(input.messages.length, 0);
 
-    const segments = await buildPromptAssemblyFromLayout(layout, {
-      worktreeDisplay: "",
-      messages: [],
-    }, { agentStepIndex: 0 });
+    const segments = await buildPromptAssemblyFromLayout(
+      layout,
+      {
+        worktreeDisplay: "",
+        messages: [],
+      },
+      { agentStepIndex: 0 }
+    );
     assert.ok(segments.every((s) => !s.id.startsWith("dynamic-")));
   });
 
