@@ -2,7 +2,6 @@ import React from 'react';
 import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 
-const mockGetOrRefresh = jest.fn();
 const mockShowToast = jest.fn();
 
 jest.mock('@react-navigation/native', () => ({
@@ -65,6 +64,8 @@ jest.mock('../src/services/worktree-operations.service', () => ({
 }));
 
 let capturedEntityMenuOnSelect: ((action: string) => void) | undefined;
+let capturedMoreMenuOnSelect: ((action: string) => void) | undefined;
+let capturedDirRuleOnSave: ((input: unknown) => Promise<void>) | undefined;
 
 jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   BottomSheetMenu: ({
@@ -79,12 +80,26 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
     if (visible && items?.some(item => item.action === 'toggle-include')) {
       capturedEntityMenuOnSelect = onSelect;
     }
+    if (visible && items?.some(item => item.action === 'directory-rule')) {
+      capturedMoreMenuOnSelect = onSelect;
+    }
     return null;
   },
 }));
 
 jest.mock('../src/components/sheet/DirectoryRuleSheet', () => ({
-  DirectoryRuleSheet: () => null,
+  DirectoryRuleSheet: ({
+    visible,
+    onSave,
+  }: {
+    visible: boolean;
+    onSave: (input: unknown) => Promise<void>;
+  }) => {
+    if (visible) {
+      capturedDirRuleOnSave = onSave;
+    }
+    return null;
+  },
 }));
 
 jest.mock('../src/components/template/TemplatePullButton', () => ({
@@ -131,6 +146,7 @@ const fixedListRows = [
 const buildListRows = jest.fn(async () => fixedListRows);
 const list = jest.fn(async () => []);
 const getDirRule = jest.fn(async () => null);
+const setDirRule = jest.fn(async () => undefined);
 const mockCapture = captureSessionWorktreeBlockForMobile as jest.Mock;
 
 const mockRuntime = {
@@ -158,7 +174,7 @@ function renderSessionVfm(rootPath = '/') {
         sessionId: 's1',
       }}
       vfs={{list} as any}
-      worktree={{buildListRows, getDirRule} as any}
+      worktree={{buildListRows, getDirRule, setDirRule} as any}
       onOpenFile={jest.fn()}
       rootPath={rootPath}
     />
@@ -172,10 +188,12 @@ describe('VfsFileManager session worktree snapshot', () => {
     buildListRows.mockClear();
     list.mockClear();
     getDirRule.mockClear();
+    setDirRule.mockClear();
     mockCapture.mockClear();
     mockShowToast.mockClear();
-    mockGetOrRefresh.mockReset();
     capturedEntityMenuOnSelect = undefined;
+    capturedMoreMenuOnSelect = undefined;
+    capturedDirRuleOnSave = undefined;
     (cycleFileInclusion as jest.Mock).mockReset();
     (cycleFileInclusion as jest.Mock).mockResolvedValue('show');
     buildListRows.mockResolvedValue(fixedListRows);
@@ -197,7 +215,6 @@ describe('VfsFileManager session worktree snapshot', () => {
     });
 
     expect(buildListRows).toHaveBeenCalled();
-    expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 
   it('path change triggers buildListRows reload without snapshot', async () => {
@@ -206,17 +223,15 @@ describe('VfsFileManager session worktree snapshot', () => {
       await flushPromises();
     });
     buildListRows.mockClear();
-    mockGetOrRefresh.mockClear();
 
     await act(async () => {
       tree!.update(renderSessionVfm('/subdir'));
       await flushPromises();
     });
     expect(buildListRows).toHaveBeenCalled();
-    expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 
-  it('T-WEC6: capture 写入 block store，列表不经 snapshot', async () => {
+  it('T-WEC6: setDirRule 经 VfsFileManager 触发 capture，列表不经 snapshot', async () => {
     mockCapture.mockResolvedValue({
       worktreeDisplay: 'wt',
       capturedAtMs: 1,
@@ -225,20 +240,39 @@ describe('VfsFileManager session worktree snapshot', () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
     });
-    mockGetOrRefresh.mockClear();
     mockCapture.mockClear();
+    buildListRows.mockClear();
+
+    const moreBtn = tree!.root.findByProps({testID: 'vfs-more-action'});
+    await act(async () => {
+      moreBtn.props.onPress();
+      await flushPromises();
+    });
+    expect(capturedMoreMenuOnSelect).toBeDefined();
 
     await act(async () => {
-      await mockCapture(mockRuntime, {
-        projectId: 'p1',
-        sessionId: 's1',
-      });
+      capturedMoreMenuOnSelect!('directory-rule');
+      await flushPromises();
     });
+    expect(capturedDirRuleOnSave).toBeDefined();
+
+    await act(async () => {
+      await capturedDirRuleOnSave!({
+        logicalPath: '/',
+        ruleEnabled: true,
+        sortField: 'name',
+        sortOrder: 'asc',
+        fillPolicy: 'filename',
+      });
+      await flushPromises();
+    });
+
+    expect(setDirRule).toHaveBeenCalled();
     expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
       projectId: 'p1',
       sessionId: 's1',
     });
-    expect(mockGetOrRefresh).not.toHaveBeenCalled();
+    expect(buildListRows).toHaveBeenCalled();
   });
 
   it('file toggle-include 调用 captureSessionWorktreeBlockForMobile', async () => {
@@ -251,7 +285,6 @@ describe('VfsFileManager session worktree snapshot', () => {
       await flushPromises();
     });
     mockCapture.mockClear();
-    mockGetOrRefresh.mockClear();
 
     const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
     await act(async () => {
@@ -270,6 +303,5 @@ describe('VfsFileManager session worktree snapshot', () => {
       projectId: 'p1',
       sessionId: 's1',
     });
-    expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 });

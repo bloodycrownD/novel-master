@@ -1,5 +1,5 @@
 /**
- * Session actions drawer: rename, prompt preview, compaction, worktree refresh.
+ * Session actions drawer: rename, prompt preview, compaction, prompt file block capture.
  * Agent/model selection lives under Profile → 我的.
  */
 import React from 'react';
@@ -13,7 +13,7 @@ type Props = {
   onRename?: () => void;
   onCompact?: () => void;
   onRealPrompt?: () => void;
-  onRefreshWorktree?: () => void;
+  onCapturePromptFileBlock?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -22,7 +22,7 @@ export function SessionActionsDrawer({
   onRename,
   onCompact,
   onRealPrompt,
-  onRefreshWorktree,
+  onCapturePromptFileBlock,
 }: Props) {
   const { tokens } = useTheme();
 
@@ -30,7 +30,7 @@ export function SessionActionsDrawer({
     { label: '聊天重命名', action: onRename },
     { label: '查看提示词', action: onRealPrompt },
     { label: '压缩上下文', action: onCompact },
-    { label: '刷新提示词文件块', action: onRefreshWorktree },
+    { label: '刷新提示词文件块', action: onCapturePromptFileBlock },
   ];
 
   return (

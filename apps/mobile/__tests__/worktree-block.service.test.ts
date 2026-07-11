@@ -8,7 +8,7 @@ import {
 } from '../src/services/worktree-block.service';
 
 describe('worktree-block.service', () => {
-  it('T-WEC4b: captureSessionWorktreeBlockForMobile 写入 block store', async () => {
+  it('captureSessionWorktreeBlockForMobile 写入 block store', async () => {
     const blockStore = {
       capture: jest.fn(),
       getCapturedBlock: jest.fn(() => ({

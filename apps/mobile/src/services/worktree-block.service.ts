@@ -4,7 +4,7 @@
  * @module services/worktree-block.service
  */
 import {
-  captureSessionWorktreeBlock,
+  captureSessionWorktreeBlock as coreCaptureSessionWorktreeBlock,
   getCapturedBlockOrCapture,
 } from '@novel-master/core/worktree';
 import type {MobileNovelMasterRuntime} from '../runtime/types';
@@ -42,7 +42,7 @@ export async function captureSessionWorktreeBlockForMobile(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorktreeBlockScope,
 ) {
-  return captureSessionWorktreeBlock(
+  return coreCaptureSessionWorktreeBlock(
     {
       kind: 'session',
       projectId: scope.projectId,
@@ -51,6 +51,9 @@ export async function captureSessionWorktreeBlockForMobile(
     blockRuntime(runtime),
   );
 }
+
+/** {@link captureSessionWorktreeBlockForMobile} 的 spec 对齐导出名。 */
+export {captureSessionWorktreeBlockForMobile as captureSessionWorktreeBlock};
 
 /** 手动刷新提示词文件块：委托 {@link captureSessionWorktreeBlockForMobile}。 */
 export async function captureSessionWorktreeBlockOnManualRefresh(
