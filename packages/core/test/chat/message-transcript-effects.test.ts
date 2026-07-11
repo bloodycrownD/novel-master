@@ -164,6 +164,34 @@ describe("MessageTranscriptEffectsService", () => {
     assert.equal((await svfs.read("/keep.md")).content, "stable");
   });
 
+  it("T-SF4b：末条 hidden 锚点置位后恢复可见", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const store = createSessionWorktreeSnapshotStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+
+    await ctx.messages.append(session.id, "user", textBlocks("u1"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "a1" }],
+    });
+    await ctx.messages.append(session.id, "user", textBlocks("u2"));
+    const m4 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "a2" }],
+    });
+    await ctx.messages.hideRange(session.id, 4, 4);
+
+    const result = await effects.setMessageFloorAtMessage(
+      project.id,
+      session.id,
+      m4.id,
+    );
+    assert.ok(result.shownCount >= 1);
+
+    const updated = await ctx.messages.get(m4.id);
+    assert.equal(updated.hidden, false);
+  });
+
   it("T-SF7：role=system 抛错", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
