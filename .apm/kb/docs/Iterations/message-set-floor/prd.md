@@ -10,7 +10,8 @@ dependency:
 # 消息置位 PRD
 
 > **平台**：Mobile（Android + iOS）+ Desktop（`apps/mobile`、`apps/desktop`）  
-> **性质**：会话消息可见性交互重组——以长按「置位」替代 hide/restore 批量模式；精简会话菜单；**物理删除** App 内批量多选 UI 代码；**不删除** Core 层 hide/show/truncate 能力与 CLI。
+> **性质**：会话消息可见性交互重组——以长按「置位」替代 hide/restore 批量模式；精简会话菜单；**物理删除** App 内批量多选 UI 代码；**不删除** Core 层 hide/show/truncate 能力与 CLI。  
+> **Supersede（快照 / dirty）**：[`worktree-engine-convergence`](../worktree-engine-convergence/prd.md) 已 supersede 本 PRD 中 **worktree 快照 / markDirty / isDirty** 相关验收口径（置位完成后由 **置位应用入口显式 capture**；Core hide/show 不附带快照副作用）。**本 PRD 仍管辖**：置位语义、transcript 可见性、批量 UI 删除、双端 UI 刷新触发（`bumpWorktreeUiToken` / `notifyWorkspaceMutated`）。
 
 ## 背景
 
@@ -42,7 +43,7 @@ dependency:
 | 代码精简       | hide/restore/delete **批量多选 UI 及专属测试物理删除**，仓库内无用户可达残留                                         |
 | 语义清晰       | 用户能区分：**置位**（软可见性）、**回滚**（截断 + 恢复工作区）、**分叉**（新会话）                                  |
 | 双端一致       | Mobile RN 菜单、Mobile WebView 菜单、Desktop 右键/⋯ 菜单项与确认文案一致                                             |
-| 工作树刷新继承 | 置位成功后 Core markDirty + 双端 UI 刷新行为 **与批量 hide / 批量 restore 一致**（非 delete/rollback 路径）          |
+| 工作树刷新继承 | 置位成功后 **应用层 capture** + 双端 UI 刷新行为 **与批量 hide / 批量 restore 一致**（非 delete/rollback 路径；snapshot/capture 见 WEC） |
 | 后端保留       | Core hide/show/truncate API 与 CLI `nm message hide/show` **仍可用**；仅 App UI 入口变更                             |
 
 ## 用户与场景
@@ -119,15 +120,18 @@ dependency:
 
 **F. 工作树刷新（继承 hide / unhide）**
 
+> **现行契约（WEC）**：Core 路径仅 transcript hide/show；`captureSessionWorktreeBlock` 在应用层（置位应用入口）；`bumpWorktreeUiToken` / `notifyWorkspaceMutated` 路径不变。详见 [`worktree-engine-convergence`](../worktree-engine-convergence/prd.md)。
+
 置位在副作用上 **等价于** 对同一锚点依次执行 hide 前缀 + show 后缀，因此 **完整继承** 现网消息 **隐藏（hide）** 与 **恢复显示（unhide / show）** 的工作树刷新机制，遵循 [`message-worktree-refresh-tighten`](../message-worktree-refresh-tighten/prd.md) visibility 刷新矩阵：
 
-| 层级    | 置位成功后行为（与 hide / restore 批量 **相同**）                                                               |
-| ------- | --------------------------------------------------------------------------------------------------------------- |
-| Core    | 经 `MessageTranscriptEffects`（或等价统一入口）调用 `hideRange` + `showRange` 后 **`markSessionWorktreeDirty`** |
-| Mobile  | 成功后 **`bumpWorktreeUiToken`**（或现网 hide/restore 批量所用的同等刷新触发）                                  |
-| Desktop | 成功后 **`notifyWorkspaceMutated`**（或现网 hide/restore 批量所用的同等刷新触发）                               |
+| 层级    | 置位成功后行为（与 hide / restore 批量 **相同**）                                                                                  |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Core    | 经 `MessageTranscriptEffects`（或等价统一入口）调用 `hideRange` + `showRange`（**无** Core 内 markDirty/capture；见 WEC）            |
+| 应用层  | effects 成功后 **`captureSessionWorktreeBlock`**（置位应用入口；验收见 WEC PRD §A）                                                  |
+| Mobile  | 成功后 **`bumpWorktreeUiToken`**（或现网 hide/restore 批量所用的同等刷新触发）                                                     |
+| Desktop | 成功后 **`notifyWorkspaceMutated`**（或现网 hide/restore 批量所用的同等刷新触发）                                                  |
 
-**明确不继承** delete / rollback 路径：置位 **不** 调用 `truncateMessagesAfter`；Core **不** 因置位而跳过 markDirty；双端 **不** 走 delete/rollback 的「不刷新 worktree」收窄口径。
+**明确不继承** delete / rollback 路径：置位 **不** 调用 `truncateMessagesAfter`；**不** 因置位而跳过应用层 capture 或双端 UI 刷新；双端 **不** 走 delete/rollback 的「不 capture、不 bump/notify」收窄口径。
 
 实现要求：置位 **复用** hide/show 统一副作用链路，**禁止** 新建一套独立的 worktree 刷新分支。
 
@@ -161,7 +165,7 @@ dependency:
 5. **删除能力 App 内收敛**：不再提供「仅删聊天记录」批量 UI；用户改用回滚（含「仅删除后续对话」降级）。**后端 truncate 能力不删**。
 6. **双端 parity**：Mobile WebView transcript、Mobile legacy RN、Desktop 三处长按菜单对 **合格消息行** 均含「置位」且语义一致；工具卡片三端均不支持置位。
 7. **运行中保护**：Agent 运行中不可置位，提示与分叉/回滚一致。
-8. **工作树刷新继承 hide/unhide**：置位经 hide/show 统一入口执行；Core `markDirty`、Mobile `bumpWorktreeUiToken`、Desktop `notifyWorkspaceMutated` 与现网批量 hide / 批量 restore **一致**；**不**走 delete/rollback 不刷新路径。
+8. **工作树刷新继承 hide/unhide**：置位经 hide/show 统一入口执行 transcript 变更；**应用层** `captureSessionWorktreeBlock`（见 WEC）、Mobile `bumpWorktreeUiToken`、Desktop `notifyWorkspaceMutated` 与现网批量 hide / 批量 restore **一致**；**不**走 delete/rollback 不刷新路径。
 
 ## 验收标准
 
@@ -195,10 +199,12 @@ dependency:
 
 ### 工作树刷新（继承 hide / unhide）
 
-- **Given** 会话存在已物化 worktree 快照，**When** 置位成功，**Then** Core `worktreeSnapshot.isDirty` 为 **true**（与批量 hide 或批量 restore 成功后一致）。
+> **Supersede**：快照物化 / capture / dirty 验收以 [`worktree-engine-convergence`](../worktree-engine-convergence/prd.md) 为准（置位完成后由 **置位应用入口显式 capture**；Core hide/show **不** 设 `isDirty`）。本节仅保留 **双端 UI 刷新** 与 **非 delete/rollback 路径** 验收。
+
+- **Given** 会话存在已物化 worktree 快照，**When** 置位成功，**Then** **置位应用入口** 已 capture，提示词文件块为最新快照（验收细则见 WEC PRD §A）。
 - **Given** 同上，**When** 置位成功，**Then** Mobile 工作区相关 UI 刷新触发与现网 **批量 hide / 批量 restore** 相同（如 `bumpWorktreeUiToken` 递增）。
 - **Given** 同上，**When** 置位成功，**Then** Desktop 工作区相关 UI 刷新触发与现网 **批量 hide / 批量 restore** 相同（如 `notifyWorkspaceMutated`）。
-- **Given** 置位与批量 delete 或 rollback 对比，**When** 仅执行置位，**Then** **不** 采用 delete/rollback 的「不 markDirty、不 bump/notify」收窄行为。
+- **Given** 置位与批量 delete 或 rollback 对比，**When** 仅执行置位，**Then** **不** 采用 delete/rollback 的「不 capture、不 bump/notify」收窄行为（capture 口径见 WEC；UI 刷新仍须触发）。
 
 ### 批量 UI 物理删除
 

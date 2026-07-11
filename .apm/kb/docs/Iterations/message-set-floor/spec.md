@@ -6,12 +6,13 @@ date: 2026-07-11
 
 > **PRD**：`.apm/kb/docs/Iterations/message-set-floor/prd.md`  
 > **Supersede**：`vfs-user-ops-unified-tool-turn`、`message-delete-worktree-narrow-refresh`、`message-worktree-refresh-tighten` 中 **App 消息 hide/restore/delete 批量多选** 的 UI/运行时表述（Core API 与 CLI 保留）  
+> **Supersede（snapshot/dirty）**：`worktree-engine-convergence` 落地后，**正文凡仍出现 `markDirty`/`markSessionWorktreeDirty`/`isDirty` 处均为历史表述**；现行契约以 [T-WEC3/T-WEC4](../worktree-engine-convergence/spec.md#测试策略) 为准：**Core effects 无 snapshot 副作用**，置位 snapshot 由应用层 `captureSessionWorktreeBlock` 负责。本 SPEC 的 **T-SF5**/**T-SF14** 仅保留置位/transcript 与 UI 刷新路径断言，**不再**要求 `isDirty`。  
 > **建议分支**：`feature/message-set-floor`
 
 ## 设计目标
 
 1. **长按「置位」**：以锚点 `seq=N` 一次完成 `seq<N` hide + `seq≥N` show；仅 **user/assistant 消息行**；工具卡片不支持。
-2. **工作树刷新**：置位 **完整继承** hide/unhide 路径（Core `markDirty` + Mobile `bumpWorktreeUiToken` + Desktop `notifyWorkspaceMutated`）；**不**走 delete/rollback 收窄。
+2. **工作树刷新**：置位 **完整继承** hide/unhide 的 UI 刷新路径（Mobile `bumpWorktreeUiToken` + Desktop `notifyWorkspaceMutated`）；snapshot/capture 由应用层白名单执行（WEC [T-WEC3/T-WEC4](../worktree-engine-convergence/spec.md#测试策略)）；Core effects **无** snapshot 副作用；**不**走 delete/rollback 收窄。
 3. **会话菜单精简**：移除 hide/restore/delete 三项及 **消息批量多选 UI 物理删除**。
 4. **Core 保留**：`hideRange`/`showRange`/`truncateMessagesAfter`、CLI、`visibility-batch-range`/`tail-batch-range` 不删。
 5. **双端 parity**：Mobile RN + WebView + Desktop 菜单、确认文案、执行与刷新一致。
@@ -33,29 +34,33 @@ date: 2026-07-11
 
 ### 架构分层
 
+> **现行契约（WEC）**：Core 路径仅 transcript hide/show（T-WEC3）；`captureSessionWorktreeBlock` 在应用层（Desktop main `handleMessagesSetFloor`、Mobile `runSetFloor`；T-WEC4/4b）；`notifyWorkspaceMutated` 留 Desktop renderer。
+
 ```mermaid
 flowchart TB
   subgraph UI [Mobile / Desktop]
     MENU[buildMessageActionItems / buildMenuItems]
     MENU -->|set-floor| CONFIRM[二次确认]
     CONFIRM --> FX[setMessageFloorAtMessage]
-    FX --> RELOAD[reloadMessages]
+    FX --> CAP[captureSessionWorktreeBlock]
+    CAP --> RELOAD[reloadMessages]
     RELOAD --> BUMP[bumpWorktreeUiToken / notifyWorkspaceMutated]
   end
 
-  subgraph IPC [Desktop]
+  subgraph IPC [Desktop main]
     H[handleMessagesSetFloor]
+    H --> CAP
   end
 
-  subgraph Core [packages/core]
+  subgraph Core [packages/core — 无 snapshot 副作用]
     FX --> SVC[MessageTranscriptEffectsService.setMessageFloorAtMessage]
     SVC --> RNG[computeSetFloorRanges]
     SVC --> HID[hideRange]
     SVC --> SHO[showRange]
-    SVC --> DIRTY[markSessionWorktreeDirty 一次]
   end
 
   CONFIRM -.->|Desktop| H --> SVC
+  CONFIRM -.->|Mobile hook| FX
 ```
 
 ### Core API（新增）
@@ -87,7 +92,7 @@ export interface SetMessageFloorResult {
   readonly shownCount: number;
 }
 
-/** hide 前缀 + show 后缀 + 单次 markDirty；不 truncate */
+/** hide 前缀 + show 后缀；不 truncate；snapshot/capture 见 WEC 应用层白名单（T-WEC3/T-WEC4） */
 setMessageFloorAtMessage(
   projectId: string,
   sessionId: string,
@@ -99,7 +104,7 @@ setMessageFloorAtMessage(
 
 - `listBySession` 解析 `messageId → floorSeq`；找不到抛错。
 - `isSetFloorAnchorRole(message.role)` 不满足则抛错（App 菜单已过滤，Core 防御性校验）。
-- 先 `hideRange` 再 `showRange`（Repository 幂等过滤）；**仅末尾** `markSessionWorktreeDirty` 一次（行为等价于 hide/show，避免双次 dirty 噪音）。
+- 先 `hideRange` 再 `showRange`（Repository 幂等过滤）；**不**在 Core 内 markDirty/capture（WEC 落地后由应用层 `captureSessionWorktreeBlock` 负责，见 T-WEC3/T-WEC4）。
 - **不**调用 `truncateMessagesAfter`。
 
 ### 菜单契约
@@ -133,13 +138,16 @@ export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
 
 ### 工作树刷新矩阵（置位对齐 hide/restore 批量）
 
-| 层级    | 置位成功后                                                  |
-| ------- | ----------------------------------------------------------- |
-| Core    | `markSessionWorktreeDirty`（`setMessageFloorAtMessage` 内） |
-| Mobile  | `reloadMessages(true)` + `bumpWorktreeUiToken()`            |
-| Desktop | `reloadMessages()` + `notifyWorkspaceMutated()`             |
+> **现行契约（WEC）**：Core 路径不 markDirty/capture（T-WEC3）；Desktop main / Mobile hook 在 effects 成功后 capture（T-WEC4/4b）；UI 刷新路径不变。
 
-**禁止**新建独立 worktree 刷新分支；**禁止**因置位跳过 markDirty。
+| 层级    | 置位成功后                                                                 |
+| ------- | -------------------------------------------------------------------------- |
+| Core    | 仅 transcript hide/show（**无** snapshot 副作用；T-WEC3）                    |
+| 应用层  | `captureSessionWorktreeBlock`（Desktop main / Mobile hook；T-WEC4/4b）     |
+| Mobile  | `reloadMessages(true)` + `bumpWorktreeUiToken()`                           |
+| Desktop | `reloadMessages()` + `notifyWorkspaceMutated()`（renderer）                |
+
+**禁止**新建独立 worktree 刷新分支；**禁止**因置位跳过应用层 capture 或 UI 刷新（`bump`/`notify`）。
 
 ### 批量 UI 删除范围
 
@@ -298,8 +306,8 @@ Mobile：`Alert.alert`；Desktop：`ConfirmModal`（非 destructive）。
 ### M1 — Core
 
 - Step 1 — phase-core-set-floor-range — blocking: yes — qa: auto：新增 `message-set-floor-range.ts`（`computeSetFloorRanges`、`isSetFloorAnchorRole`）及 `message-set-floor-range.test.ts`（N=1、N=M、中间锚点、空操作边界）。
-- Step 2 — phase-core-effects-api — blocking: yes — qa: auto：扩展 `MessageTranscriptEffectsService.setMessageFloorAtMessage`；实现内 `listBySession` 取 seq/maxSeq → hide/show → **单次** `markSessionWorktreeDirty`；更新 `public/chat.ts` 与 `packages/core/test/package-exports/snapshots/public-chat-allowlist.json`。
-- Step 3 — phase-core-effects-tests — blocking: yes — qa: auto：扩展 `message-transcript-effects.test.ts`（置位 prefix/suffix、markDirty=true、不 truncate、role 非法抛错）。
+- Step 2 — phase-core-effects-api — blocking: yes — qa: auto：扩展 `MessageTranscriptEffectsService.setMessageFloorAtMessage`；实现内 `listBySession` 取 seq/maxSeq → hide/show（**无** Core 内 markDirty/capture，见 WEC T-WEC3）；更新 `public/chat.ts` 与 `packages/core/test/package-exports/snapshots/public-chat-allowlist.json`。
+- Step 3 — phase-core-effects-tests — blocking: yes — qa: auto：扩展 `message-transcript-effects.test.ts`（置位 prefix/suffix、不 truncate、role 非法抛错）；`isDirty`/markDirty 断言见 WEC T-WEC3（supersede T-SF5）。
 
 ### M2 — Mobile
 
@@ -330,6 +338,11 @@ Mobile：`Alert.alert`；Desktop：`ConfirmModal`（非 destructive）。
 
 ## 测试策略
 
+### Supersede 注记（worktree-engine-convergence）
+
+- **T-SF5**：保留 Core 置位/transcript 行为断言（与 T-SF4 互补：`setMessageFloorAtMessage` 后 prefix hidden、suffix visible）；`worktreeSnapshot.isDirty` / `markSessionWorktreeDirty` 断言由 WEC **[T-WEC3](../worktree-engine-convergence/spec.md#测试策略)** supersede（Core 路径不 capture、无 dirty 语义）。
+- **T-SF14**：保留 Desktop IPC 委托 `setMessageFloorAtMessage` 与成功后 `notifyWorkspaceMutated` 路径；`captureSessionWorktreeBlock` / `getCapturedBlock` 断言由 WEC **[T-WEC4](../worktree-engine-convergence/spec.md#测试策略)** supersede。
+
 ### 验证命令
 
 ```bash
@@ -357,7 +370,7 @@ npm test -w @novel-master/desktop
 | T-SF2   | yes      | 1         | `computeSetFloorRanges(N=M)` 仅 hidePrefix                                                      |
 | T-SF3   | yes      | 1         | `computeSetFloorRanges` 中间 N 同时 hide+show                                                   |
 | T-SF4   | yes      | 3         | `setMessageFloorAtMessage` 后 prefix hidden、suffix visible                                     |
-| T-SF5   | yes      | 3         | 置位后 `worktreeSnapshot.isDirty === true`                                                      |
+| T-SF5   | yes      | 3         | Core 置位 transcript 行为（prefix hidden、suffix visible）；**不**断言 `isDirty`（snapshot 见 T-WEC3） |
 | T-SF6   | yes      | 3         | 置位 **不** 调用 truncate；消息条数不变                                                         |
 | T-SF7   | yes      | 3         | `role=system`（或非法）抛错                                                                     |
 | T-SF8   | yes      | 4         | user 消息菜单含 `set-floor`（在 copy 后、fork 前）                                              |
@@ -366,7 +379,7 @@ npm test -w @novel-master/desktop
 | T-SF11  | yes      | 5         | WebView `user_vfs_turn` 行菜单 **无** set-floor                                                 |
 | T-SF12  | yes      | 5         | WebView tool-card hit 菜单 **无** set-floor                                                     |
 | T-SF13  | yes      | 6         | 仓库无 `MessageBatchHeader`；SessionActionsDrawer 无 hide/restore/delete 文案                   |
-| T-SF14  | yes      | 7         | Desktop IPC `setFloor` 委托 effects；成功后 notify 路径                                         |
+| T-SF14  | yes      | 7         | Desktop IPC `setFloor` 委托 effects；成功后 `notifyWorkspaceMutated` 路径（capture 见 T-WEC4）   |
 | T-SF15  | yes      | 8         | Desktop 会话菜单无三项；无 `#chat-batch-bar`；无 `messageBatch` 传参链；`runSessionAction` 已删 |
 | T-SF15b | yes      | 8         | Desktop `useBatchSelection` 含 `enter()`、无 `enterHide`/`enterRestore`/`enterDelete`           |
 | T-SF16  | yes      | 9         | 集成测无 messageBatch mock；无 `.batch-check` 样式断言                                          |
@@ -381,7 +394,7 @@ npm test -w @novel-master/desktop
 | 置位行为         | T-SF4、T-SF1–3             |
 | 工具卡片不支持   | T-SF11、T-SF12             |
 | 菜单精简         | T-SF13、T-SF15             |
-| 工作树刷新继承   | T-SF5、T-SF14、T-SF17      |
+| 工作树刷新继承   | T-SF5（transcript）、T-SF14（notify）、T-WEC3/T-WEC4（snapshot/capture）、T-SF17 |
 | 批量 UI 物理删除 | T-SF13、T-SF15、T-SF16     |
 | 运行中拦截       | Step 4/7 代码审查 + manual |
 | 后端保留         | T-SF6 + CLI 现有测不动     |
@@ -425,7 +438,7 @@ impact_files:
   - apps/desktop/renderer/ipc/invoke-registry.ts
 constraints:
   - 工具卡片与 user_vfs_turn 无置位；WebView hitEl 接线必做
-  - 单次 markDirty；不 truncate；锚点用原始 seq，不 resolveRollbackAnchorMessage
+  - Core 仅 transcript（无 snapshot 副作用，WEC T-WEC3）；capture 见应用层 T-WEC4/4b；不 truncate；锚点用原始 seq，不 resolveRollbackAnchorMessage
   - 物理删除 MessageBatchHeader 与 #chat-batch-bar
   - useBatchSelection 删 enter* 后强制补 enter()；非 chat 场景保留
 blocking_steps: [1, 2, 3, 4, 5, 6, 7, 8, 9]
