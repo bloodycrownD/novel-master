@@ -1,6 +1,7 @@
 /**
  * Session 级 worktree 快照端口（仅持久 worktreeDisplay）。
  *
+ * @deprecated 使用 {@link ./session-worktree-block.port.js} 中的 `SessionWorktreeBlockStore`。
  * @module service/prompt/session-worktree-snapshot.port
  */
 

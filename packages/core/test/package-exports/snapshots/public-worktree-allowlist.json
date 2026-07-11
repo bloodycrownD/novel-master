@@ -1,6 +1,9 @@
 [
   "DEFAULT_WORKTREE_DIR_RULE",
+  "SessionWorktreeBlockScopeError",
+  "captureSessionWorktreeBlock",
   "computeHeadTailIndices",
+  "createSessionWorktreeBlockStore",
   "createSessionWorktreeSnapshotStore",
   "createTemplatePullService",
   "createWorktreeService",

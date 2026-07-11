@@ -50,3 +50,13 @@ export type {
   SessionWorktreeSnapshotStore,
 } from "../service/prompt/session-worktree-snapshot.port.js";
 export { createSessionWorktreeSnapshotStore } from "../service/prompt/create-session-worktree-snapshot-store.js";
+export type {
+  SessionWorktreeBlock,
+  SessionWorktreeBlockStore,
+} from "../service/prompt/session-worktree-block.port.js";
+export { createSessionWorktreeBlockStore } from "../service/prompt/create-session-worktree-block-store.js";
+export {
+  captureSessionWorktreeBlock,
+  SessionWorktreeBlockScopeError,
+  type CaptureSessionWorktreeBlockRuntime,
+} from "../service/prompt/capture-session-worktree-block.js";
