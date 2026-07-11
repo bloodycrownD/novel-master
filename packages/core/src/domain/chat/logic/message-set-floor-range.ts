@@ -16,7 +16,7 @@ export function computeSetFloorRanges(
   const hidePrefix =
     floorSeq > 1 ? { fromSeq: 1 as const, toSeq: floorSeq - 1 } : null;
   const showSuffix =
-    floorSeq <= sessionMaxSeq && (floorSeq < sessionMaxSeq || floorSeq === 1)
+    floorSeq <= sessionMaxSeq
       ? { fromSeq: floorSeq, toSeq: sessionMaxSeq }
       : null;
   return { hidePrefix, showSuffix };

@@ -20,10 +20,10 @@ describe("message-set-floor-range", () => {
     assert.deepEqual(ranges.showSuffix, { fromSeq: 1, toSeq: 5 });
   });
 
-  it("T-SF2：N=M 仅 hidePrefix", () => {
+  it("T-SF2：N=M hidePrefix 与锚点 showSuffix", () => {
     const ranges = computeSetFloorRanges(5, 5);
     assert.deepEqual(ranges.hidePrefix, { fromSeq: 1, toSeq: 4 });
-    assert.equal(ranges.showSuffix, null);
+    assert.deepEqual(ranges.showSuffix, { fromSeq: 5, toSeq: 5 });
   });
 
   it("T-SF3：中间 N 同时 hide+show", () => {
