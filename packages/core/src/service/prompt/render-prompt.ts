@@ -57,7 +57,7 @@ export function computeLlmExportZonesFromLayout(
   const agentStepIndex = resolveAgentStepIndex(options);
   const hasWorktree = layout.persist.some((block) => block.type === "worktree");
   const textBlockCount = layout.persist.filter((block) => block.type === "text").length;
-  let persistCount = (hasWorktree ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
+  const persistCount = (hasWorktree ? 2 : 0) + (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
   if (layout.dynamicEnabled === true) {
     for (const block of layout.dynamic) {
