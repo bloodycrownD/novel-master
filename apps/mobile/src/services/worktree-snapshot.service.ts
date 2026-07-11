@@ -31,12 +31,3 @@ export async function getOrRefreshSessionWorktreeSnapshot(
     () => wt.materializePersistBlock(),
   );
 }
-
-/** VFS 或规则变更后标记 session worktree 快照为 dirty。 */
-export function invalidateSessionWorktreeSnapshot(
-  runtime: MobileNovelMasterRuntime,
-  projectId: string,
-  sessionId: string,
-): void {
-  runtime.worktreeSnapshot.markDirty(projectId, sessionId);
-}

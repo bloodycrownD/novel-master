@@ -28,3 +28,11 @@ export async function captureSessionWorktreeBlockForMobile(
     },
   );
 }
+
+/** 手动刷新提示词文件块：委托 {@link captureSessionWorktreeBlockForMobile}。 */
+export async function captureSessionWorktreeBlockOnManualRefresh(
+  runtime: MobileNovelMasterRuntime,
+  scope: SessionWorktreeBlockScope,
+) {
+  return captureSessionWorktreeBlockForMobile(runtime, scope);
+}

@@ -149,8 +149,8 @@ import {
 } from './handlers/vfs.js';
 import {
   handleWorktreeBuildListRows,
+  handleWorktreeCaptureSessionBlock,
   handleWorktreeGetDirRule,
-  handleWorktreeInvalidateSessionSnapshot,
   handleWorktreeSetDirRule,
   handleWorktreeSetFileRule,
 } from './handlers/worktree.js';
@@ -221,8 +221,12 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.WORKTREE_SET_FILE_RULE, handleWorktreeSetFileRule);
   bindReq(IPC_CHANNELS.WORKTREE_GET_DIR_RULE, handleWorktreeGetDirRule);
   bindReq(
+    IPC_CHANNELS.WORKTREE_CAPTURE_SESSION_BLOCK,
+    handleWorktreeCaptureSessionBlock,
+  );
+  bindReq(
     IPC_CHANNELS.WORKTREE_INVALIDATE_SESSION_SNAPSHOT,
-    handleWorktreeInvalidateSessionSnapshot,
+    handleWorktreeCaptureSessionBlock,
   );
 
   bindReq(IPC_CHANNELS.MESSAGES_LIST, handleMessagesList);

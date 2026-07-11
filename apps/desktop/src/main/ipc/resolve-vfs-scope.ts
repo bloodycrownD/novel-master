@@ -73,13 +73,3 @@ export async function captureSessionWorktreeBlockForScope(
     worktreeBlockStore: rt.worktreeBlockStore,
   });
 }
-
-/** 会话 scope VFS / 规则变更后标记 worktree 快照 dirty。 */
-export function invalidateSessionWorktreeSnapshot(
-  rt: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-): void {
-  if (scope.kind === "session") {
-    rt.worktreeSnapshot.markDirty(scope.projectId, scope.sessionId);
-  }
-}

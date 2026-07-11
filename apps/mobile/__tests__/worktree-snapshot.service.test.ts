@@ -1,8 +1,5 @@
 import {describe, expect, it, jest} from '@jest/globals';
-import {
-  getOrRefreshSessionWorktreeSnapshot,
-  invalidateSessionWorktreeSnapshot,
-} from '../src/services/worktree-snapshot.service';
+import {getOrRefreshSessionWorktreeSnapshot} from '../src/services/worktree-snapshot.service';
 
 describe('worktree-snapshot.service', () => {
   it('getOrRefresh delegates to worktreeSnapshot store', async () => {
@@ -30,14 +27,5 @@ describe('worktree-snapshot.service', () => {
     expect(snap.refreshedAtMs).toBeGreaterThan(0);
     expect(getOrRefresh).toHaveBeenCalledWith('p1', 's1', expect.any(Function));
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
-  });
-
-  it('invalidate marks session dirty', () => {
-    const markDirty = jest.fn();
-    const runtime = {
-      worktreeSnapshot: {markDirty},
-    };
-    invalidateSessionWorktreeSnapshot(runtime as any, 'p1', 's1');
-    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
   });
 });

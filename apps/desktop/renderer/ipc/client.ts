@@ -55,7 +55,7 @@ export const {
   ipcWorktreeSetDirRule,
   ipcWorktreeSetFileRule,
   ipcWorktreeGetDirRule,
-  ipcWorktreeInvalidateSessionSnapshot,
+  ipcWorktreeCaptureSessionBlock,
   ipcVfsRead,
   ipcVfsWrite,
   ipcVfsMkdir,

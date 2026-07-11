@@ -45,6 +45,8 @@ export const IPC_CHANNELS = {
   WORKTREE_SET_DIR_RULE: 'nm:worktree/setDirRule',
   WORKTREE_SET_FILE_RULE: 'nm:worktree/setFileRule',
   WORKTREE_GET_DIR_RULE: 'nm:worktree/getDirRule',
+  WORKTREE_CAPTURE_SESSION_BLOCK: 'nm:worktree/captureSessionBlock',
+  /** @deprecated 使用 WORKTREE_CAPTURE_SESSION_BLOCK */
   WORKTREE_INVALIDATE_SESSION_SNAPSHOT: 'nm:worktree/invalidateSessionSnapshot',
 
   PROJECTS_PULL_TEMPLATE: 'nm:projects/pullTemplate',
@@ -391,11 +393,15 @@ export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
 };
 
-/** 手动刷新工作树：仅标记会话 worktree 快照 dirty（消费方 ②）。 */
-export type WorktreeInvalidateSessionSnapshotRequest = {
+/** 手动刷新提示词文件块：立即 capture 写入 block store（消费方 ②）。 */
+export type WorktreeCaptureSessionBlockRequest = {
   readonly projectId: string;
   readonly sessionId: string;
 };
+
+/** @deprecated 使用 WorktreeCaptureSessionBlockRequest */
+export type WorktreeInvalidateSessionSnapshotRequest =
+  WorktreeCaptureSessionBlockRequest;
 
 export type SessionFsRollbackRequest = {
   readonly projectId: string;

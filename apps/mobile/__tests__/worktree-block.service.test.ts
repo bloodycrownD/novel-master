@@ -1,6 +1,9 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
-import {captureSessionWorktreeBlockForMobile} from '../src/services/worktree-block.service';
+import {
+  captureSessionWorktreeBlockForMobile,
+  captureSessionWorktreeBlockOnManualRefresh,
+} from '../src/services/worktree-block.service';
 
 describe('worktree-block.service', () => {
   it('T-WEC4b: captureSessionWorktreeBlockForMobile 写入 block store', async () => {
@@ -28,6 +31,34 @@ describe('worktree-block.service', () => {
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
     expect(blockStore.capture).toHaveBeenCalledWith('p1', 's1', {
       worktreeDisplay: 'mock-body',
+    });
+  });
+
+  it('T-WEC8: captureSessionWorktreeBlockOnManualRefresh 委托 capture', async () => {
+    const blockStore = {
+      capture: jest.fn(),
+      getCapturedBlock: jest.fn(() => ({
+        worktreeDisplay: 'manual-body',
+        capturedAtMs: 2,
+      })),
+    };
+    const materializePersistBlock = jest.fn(async () => ({
+      worktreeDisplay: 'manual-body',
+    }));
+    const runtime = {
+      worktreeBlockStore: blockStore,
+      worktree: () => ({materializePersistBlock}),
+    };
+
+    const block = await captureSessionWorktreeBlockOnManualRefresh(runtime as any, {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
+
+    expect(block.worktreeDisplay).toBe('manual-body');
+    expect(materializePersistBlock).toHaveBeenCalledTimes(1);
+    expect(blockStore.capture).toHaveBeenCalledWith('p1', 's1', {
+      worktreeDisplay: 'manual-body',
     });
   });
 });

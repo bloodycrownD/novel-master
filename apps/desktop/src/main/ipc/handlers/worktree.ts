@@ -6,16 +6,16 @@
 import type {
   IpcResult,
   WorktreeBuildListRowsRequest,
+  WorktreeCaptureSessionBlockRequest,
   WorktreeGetDirRuleRequest,
-  WorktreeInvalidateSessionSnapshotRequest,
   WorktreeListRowDto,
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
+  captureSessionWorktreeBlockForScope,
   getWorktreeForScope,
-  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 import {
@@ -81,7 +81,9 @@ export async function handleWorktreeSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    invalidateSessionWorktreeSnapshot(rt, scope);
+    if (scope.kind === "session") {
+      await captureSessionWorktreeBlockForScope(rt, scope);
+    }
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
@@ -100,7 +102,9 @@ export async function handleWorktreeSetFileRule(
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
     });
-    invalidateSessionWorktreeSnapshot(rt, scope);
+    if (scope.kind === "session") {
+      await captureSessionWorktreeBlockForScope(rt, scope);
+    }
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
@@ -108,13 +112,13 @@ export async function handleWorktreeSetFileRule(
   }
 }
 
-/** 手动「刷新工作树」：仅 markDirty，不重载消费方 ① UI。 */
-export async function handleWorktreeInvalidateSessionSnapshot(
-  req: WorktreeInvalidateSessionSnapshotRequest,
+/** 手动刷新提示词文件块：立即 capture，不重载消费方 ① 列表。 */
+export async function handleWorktreeCaptureSessionBlock(
+  req: WorktreeCaptureSessionBlockRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    invalidateSessionWorktreeSnapshot(rt, {
+    await captureSessionWorktreeBlockForScope(rt, {
       kind: "session",
       projectId: req.projectId,
       sessionId: req.sessionId,

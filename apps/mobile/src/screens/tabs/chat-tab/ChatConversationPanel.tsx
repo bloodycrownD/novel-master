@@ -277,7 +277,7 @@ export function ChatConversationPanel({
           controller.handleCompactSession();
         }}
         onRealPrompt={controller.onNavigateRealPrompt}
-        onRefreshWorktree={controller.handleRefreshWorktree}
+        onRefreshWorktree={controller.handleCapturePromptFileBlock}
       />
       <MessageActionMenu
         visible={!useWebviewTranscript && messageMenuTarget != null}

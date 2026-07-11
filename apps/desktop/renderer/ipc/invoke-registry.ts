@@ -65,7 +65,7 @@ import {
   type VfsZipRequest,
   type WorktreeBuildListRowsRequest,
   type WorktreeGetDirRuleRequest,
-  type WorktreeInvalidateSessionSnapshotRequest,
+  type WorktreeCaptureSessionBlockRequest,
   type WorktreeListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
@@ -178,8 +178,13 @@ export function createInvokeClient(invoke: InvokeFn) {
       WorktreeGetDirRuleRequest,
       IpcResult<WorktreeSetDirRuleRequest | null>
     >(invoke, IPC_CHANNELS.WORKTREE_GET_DIR_RULE),
+    ipcWorktreeCaptureSessionBlock: withReq<
+      WorktreeCaptureSessionBlockRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.WORKTREE_CAPTURE_SESSION_BLOCK),
+    /** @deprecated 使用 ipcWorktreeCaptureSessionBlock */
     ipcWorktreeInvalidateSessionSnapshot: withReq<
-      WorktreeInvalidateSessionSnapshotRequest,
+      WorktreeCaptureSessionBlockRequest,
       IpcResult<void>
     >(invoke, IPC_CHANNELS.WORKTREE_INVALIDATE_SESSION_SNAPSHOT),
     ipcVfsRead: withReq<VfsReadRequest, IpcResult<VfsReadResultDto>>(

@@ -4,7 +4,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { buildMessageActionItems } from '@/components/chat/message-edit';
-import { invalidateSessionWorktreeSnapshot } from '@/services/worktree-snapshot.service';
+import { captureSessionWorktreeBlockOnManualRefresh } from '@/services/worktree-block.service';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabMessageActions } from './useChatTabMessages';
 
@@ -42,16 +42,21 @@ export function useChatTabController() {
     [ctx],
   );
 
-  const handleRefreshWorktree = useCallback(() => {
+  const handleCapturePromptFileBlock = useCallback(() => {
     if (ctx.projectId == null || ctx.sessionId == null) {
       return;
     }
-    invalidateSessionWorktreeSnapshot(
-      ctx.runtime,
-      ctx.projectId,
-      ctx.sessionId,
-    );
-    ctx.showToast('工作树快照已标记刷新');
+    void (async () => {
+      try {
+        await captureSessionWorktreeBlockOnManualRefresh(ctx.runtime, {
+          projectId: ctx.projectId!,
+          sessionId: ctx.sessionId!,
+        });
+        ctx.showToast('已更新提示词文件块快照');
+      } catch {
+        ctx.showToast('刷新提示词文件块失败');
+      }
+    })();
   }, [ctx]);
 
   const onNavigateRealPrompt = useCallback(() => {
@@ -113,7 +118,7 @@ export function useChatTabController() {
   return {
     ...messageActions,
     handleMessageLongPress,
-    handleRefreshWorktree,
+    handleCapturePromptFileBlock,
     onNavigateRealPrompt,
     onWebMenuOpenChange,
     onWebMessageMenuAction,

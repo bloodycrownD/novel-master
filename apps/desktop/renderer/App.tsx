@@ -22,7 +22,7 @@ import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
 import { ToastHost } from './components/ui/ToastHost';
 import { ThemeProvider } from './providers/ThemeProvider';
 import {
-  ipcWorktreeInvalidateSessionSnapshot,
+  ipcWorktreeCaptureSessionBlock,
   ipcSessionsRename,
 } from './ipc/client';
 
@@ -347,12 +347,12 @@ function DesktopOverlays() {
             closeMenus();
             if (projectId && sessionId) {
               void (async () => {
-                const result = await ipcWorktreeInvalidateSessionSnapshot({
+                const result = await ipcWorktreeCaptureSessionBlock({
                   projectId,
                   sessionId,
                 });
                 if (result.ok) {
-                  showToast('工作树已刷新');
+                  showToast('已更新提示词文件块快照');
                 } else {
                   showToast(result.error.message);
                 }
@@ -360,7 +360,7 @@ function DesktopOverlays() {
             }
           }}
         >
-          刷新工作树
+          刷新提示词文件块
         </button>
         <button
           type="button"

@@ -1,5 +1,5 @@
 /**
- * Worktree IPC 处理器测试：session 列表走实时 buildListRows；invalidate smoke。
+ * Worktree IPC 处理器测试：session 列表走实时 buildListRows；规则 / 手动 capture。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -8,7 +8,9 @@ import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import {
   handleWorktreeBuildListRows,
-  handleWorktreeInvalidateSessionSnapshot,
+  handleWorktreeCaptureSessionBlock,
+  handleWorktreeSetDirRule,
+  handleWorktreeSetFileRule,
 } from "../src/main/ipc/handlers/worktree.js";
 import {
   setupDesktopDbTestEnv,
@@ -45,14 +47,14 @@ describe("worktree ipc handlers", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("session buildListRows 不经 snapshot getOrRefresh", async () => {
+  it("session buildListRows 不经 block store capture", async () => {
     const rt = await getDesktopRuntime();
-    let getOrRefreshCalls = 0;
-    const originalGetOrRefresh =
-      rt.worktreeSnapshot.getOrRefresh.bind(rt.worktreeSnapshot);
-    rt.worktreeSnapshot.getOrRefresh = async (...args) => {
-      getOrRefreshCalls += 1;
-      return originalGetOrRefresh(...args);
+    let captureCalls = 0;
+    const originalCapture =
+      rt.worktreeBlockStore.capture.bind(rt.worktreeBlockStore);
+    rt.worktreeBlockStore.capture = (...args) => {
+      captureCalls += 1;
+      return originalCapture(...args);
     };
 
     const result = await handleWorktreeBuildListRows({
@@ -62,32 +64,68 @@ describe("worktree ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(getOrRefreshCalls, 0);
+    assert.equal(captureCalls, 0);
     if (result.ok) {
       assert.ok(Array.isArray(result.data));
     }
   });
 
-  it("invalidateSessionSnapshot 标记 dirty（smoke）", async () => {
+  it("T-WEC6: setDirRule 成功后 capture", async () => {
     const rt = await getDesktopRuntime();
-    rt.worktreeSnapshot.markDirty(projectId, sessionId);
-    assert.equal(rt.worktreeSnapshot.isDirty(projectId, sessionId), true);
+    rt.worktreeBlockStore.clear(projectId, sessionId);
+    assert.equal(
+      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
+      undefined,
+    );
 
-    let markDirtyCalls = 0;
-    const originalMarkDirty =
-      rt.worktreeSnapshot.markDirty.bind(rt.worktreeSnapshot);
-    rt.worktreeSnapshot.markDirty = (pid, sid) => {
-      markDirtyCalls += 1;
-      originalMarkDirty(pid, sid);
-    };
+    const result = await handleWorktreeSetDirRule({
+      workspaceScope: "chat",
+      projectId,
+      sessionId,
+      logicalPath: "/",
+      ruleEnabled: true,
+    });
 
-    const result = await handleWorktreeInvalidateSessionSnapshot({
+    assert.equal(result.ok, true);
+    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
+    assert.notEqual(block, undefined);
+    assert.equal(typeof block!.capturedAtMs, "number");
+  });
+
+  it("T-WEC6: setFileRule 成功后 capture", async () => {
+    const rt = await getDesktopRuntime();
+    rt.worktreeBlockStore.clear(projectId, sessionId);
+
+    const result = await handleWorktreeSetFileRule({
+      workspaceScope: "chat",
+      projectId,
+      sessionId,
+      logicalPath: "/note.md",
+      inclusionMode: "show",
+    });
+
+    assert.equal(result.ok, true);
+    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
+    assert.notEqual(block, undefined);
+    assert.equal(typeof block!.capturedAtMs, "number");
+  });
+
+  it("T-WEC8: captureSessionBlock 立即 capture，不经 buildListRows store", async () => {
+    const rt = await getDesktopRuntime();
+    rt.worktreeBlockStore.clear(projectId, sessionId);
+    assert.equal(
+      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
+      undefined,
+    );
+
+    const result = await handleWorktreeCaptureSessionBlock({
       projectId,
       sessionId,
     });
 
     assert.equal(result.ok, true);
-    assert.equal(markDirtyCalls, 1);
-    assert.equal(rt.worktreeSnapshot.isDirty(projectId, sessionId), true);
+    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
+    assert.notEqual(block, undefined);
+    assert.equal(typeof block!.capturedAtMs, "number");
   });
 });

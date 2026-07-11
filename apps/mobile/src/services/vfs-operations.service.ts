@@ -9,7 +9,7 @@ import {
 import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, readUserVfsSaveBaseline, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {executeSessionUserVfsOp} from './user-vfs-turn-execute.service';
-import {invalidateSessionWorktreeSnapshot} from './worktree-snapshot.service';
+import {captureSessionWorktreeBlockForMobile} from './worktree-block.service';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -88,7 +88,10 @@ async function cleanupWorktreeAfterVfsDelete(
   const wt = runtime.worktree(scope);
   await wt.deleteRulesUnderLogicalPrefix(path);
   if (scope.kind === 'session') {
-    invalidateSessionWorktreeSnapshot(runtime, scope.projectId, scope.sessionId);
+    await captureSessionWorktreeBlockForMobile(runtime, {
+      projectId: scope.projectId,
+      sessionId: scope.sessionId,
+    });
   }
 }
 

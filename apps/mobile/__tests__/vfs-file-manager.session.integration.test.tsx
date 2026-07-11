@@ -96,19 +96,18 @@ jest.mock('../src/services/vfs-zip.service', () => ({
   importVfsZip: jest.fn(),
 }));
 
-jest.mock('../src/services/worktree-snapshot.service', () => {
+jest.mock('../src/services/worktree-block.service', () => {
   const actual = jest.requireActual(
-    '../src/services/worktree-snapshot.service',
-  ) as typeof import('../src/services/worktree-snapshot.service');
+    '../src/services/worktree-block.service',
+  ) as typeof import('../src/services/worktree-block.service');
   return {
     ...actual,
-    getOrRefreshSessionWorktreeSnapshot: (...args: unknown[]) =>
-      mockGetOrRefresh(...args),
+    captureSessionWorktreeBlockForMobile: jest.fn(),
   };
 });
 
 import {cycleFileInclusion} from '../src/services/worktree-operations.service';
-import {invalidateSessionWorktreeSnapshot} from '../src/services/worktree-snapshot.service';
+import {captureSessionWorktreeBlockForMobile} from '../src/services/worktree-block.service';
 
 const {VfsFileManager} = require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
@@ -132,11 +131,12 @@ const fixedListRows = [
 const buildListRows = jest.fn(async () => fixedListRows);
 const list = jest.fn(async () => []);
 const getDirRule = jest.fn(async () => null);
-const markDirty = jest.fn();
+const mockCapture = captureSessionWorktreeBlockForMobile as jest.Mock;
 
 const mockRuntime = {
-  worktreeSnapshot: {
-    markDirty,
+  worktreeBlockStore: {
+    capture: jest.fn(),
+    getCapturedBlock: jest.fn(),
   },
   worktree: jest.fn(),
 };
@@ -172,7 +172,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     buildListRows.mockClear();
     list.mockClear();
     getDirRule.mockClear();
-    markDirty.mockClear();
+    mockCapture.mockClear();
     mockShowToast.mockClear();
     mockGetOrRefresh.mockReset();
     capturedEntityMenuOnSelect = undefined;
@@ -216,26 +216,41 @@ describe('VfsFileManager session worktree snapshot', () => {
     expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 
-  it('invalidate marks snapshot dirty without fetching list via snapshot', async () => {
+  it('T-WEC6: capture 写入 block store，列表不经 snapshot', async () => {
+    mockCapture.mockResolvedValue({
+      worktreeDisplay: 'wt',
+      capturedAtMs: 1,
+    });
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
     });
     mockGetOrRefresh.mockClear();
+    mockCapture.mockClear();
 
     await act(async () => {
-      invalidateSessionWorktreeSnapshot(mockRuntime as any, 'p1', 's1');
+      await mockCapture(mockRuntime, {
+        projectId: 'p1',
+        sessionId: 's1',
+      });
     });
-    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
+    expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
     expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 
-  it('file toggle-include 调用 invalidateSessionWorktreeSnapshot', async () => {
+  it('file toggle-include 调用 captureSessionWorktreeBlockForMobile', async () => {
+    mockCapture.mockResolvedValue({
+      worktreeDisplay: 'wt',
+      capturedAtMs: 1,
+    });
     await act(async () => {
       tree = TestRenderer.create(renderSessionVfm());
       await flushPromises();
     });
-    markDirty.mockClear();
+    mockCapture.mockClear();
     mockGetOrRefresh.mockClear();
 
     const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
@@ -251,7 +266,10 @@ describe('VfsFileManager session worktree snapshot', () => {
     });
 
     expect(cycleFileInclusion).toHaveBeenCalled();
-    expect(markDirty).toHaveBeenCalledWith('p1', 's1');
+    expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
+      projectId: 'p1',
+      sessionId: 's1',
+    });
     expect(mockGetOrRefresh).not.toHaveBeenCalled();
   });
 });

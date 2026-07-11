@@ -179,7 +179,7 @@ jest.mock('../src/screens/tabs/chat-tab/useChatTabController', () => ({
     confirmBatchDeleteSessions: jest.fn(),
     handleCompactSession: jest.fn(),
     onNavigateRealPrompt: jest.fn(),
-    handleRefreshWorktree: jest.fn(),
+    handleCapturePromptFileBlock: jest.fn(),
   }),
 }));
 

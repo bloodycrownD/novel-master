@@ -43,9 +43,9 @@ import {
   importVfsZipWithDialog,
 } from "../../services/vfs-zip.service.js";
 import {
+  captureSessionWorktreeBlockForScope,
   getVfsForScope,
   getWorktreeForScope,
-  invalidateSessionWorktreeSnapshot,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
 import {
@@ -211,7 +211,9 @@ export async function handleVfsDelete(
 
     const wt = getWorktreeForScope(rt, scope);
     await wt.deleteRulesUnderLogicalPrefix(req.path);
-    invalidateSessionWorktreeSnapshot(rt, scope);
+    if (scope.kind === "session") {
+      await captureSessionWorktreeBlockForScope(rt, scope);
+    }
 
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };

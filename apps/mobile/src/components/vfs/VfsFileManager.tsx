@@ -70,7 +70,7 @@ import {
 import {toastMessage} from '../../errors/toast-message';
 import {useRuntime} from '../../hooks/useRuntime';
 import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
-import {invalidateSessionWorktreeSnapshot} from '../../services/worktree-snapshot.service';
+import {captureSessionWorktreeBlockForMobile} from '../../services/worktree-block.service';
 import {useTheme} from '../../theme/ThemeProvider';
 import {TemplatePullButton} from '../template/TemplatePullButton';
 import {useToast} from '../chrome/ToastHost';
@@ -197,13 +197,12 @@ export const VfsFileManager = forwardRef<
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  const invalidateSessionSnapshot = useCallback(() => {
+  const captureSessionBlock = useCallback(async () => {
     if (scope.kind === 'session') {
-      invalidateSessionWorktreeSnapshot(
-        runtime,
-        scope.projectId,
-        scope.sessionId,
-      );
+      await captureSessionWorktreeBlockForMobile(runtime, {
+        projectId: scope.projectId,
+        sessionId: scope.sessionId,
+      });
     }
   }, [runtime, scope]);
 
@@ -321,9 +320,9 @@ export const VfsFileManager = forwardRef<
   }, [reload]);
 
   const reloadAfterRuleChange = useCallback(async () => {
-    invalidateSessionSnapshot();
+    await captureSessionBlock();
     await reload();
-  }, [invalidateSessionSnapshot, reload]);
+  }, [captureSessionBlock, reload]);
 
   useImperativeHandle(
     ref,
@@ -470,7 +469,7 @@ export const VfsFileManager = forwardRef<
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file') {
           await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
-          invalidateSessionSnapshot();
+          await captureSessionBlock();
           await refreshVisibleRowsFromWorktree();
           return;
         }
@@ -493,7 +492,7 @@ export const VfsFileManager = forwardRef<
               row.path === menuPath ? patchDirRuleRow(row, nextEnabled) : row,
             ),
           );
-          invalidateSessionSnapshot();
+          await captureSessionBlock();
           // WHY: child file inclusion/display only changes inside the toggled dir.
           if (
             currentPath === menuPath ||
