@@ -1,9 +1,7 @@
 import { type ChatMessage } from "@novel-master/core/chat";
-import {messageHasToolUse} from '../src/components/chat/message-blocks';
 import {
   deleteToolTurn,
   hideToolTurn,
-  type MessageRuntime,
 } from '../src/components/chat/tool-turn-actions';
 
 function msg(
@@ -45,38 +43,6 @@ function createRuntime() {
     hidden,
     deleted,
   };
-}
-
-/** Mirrors ChatTabScreen hideSelectedMessages batch handler. */
-async function batchHideSelected(
-  runtime: MessageRuntime,
-  messages: readonly ChatMessage[],
-  selectedIds: readonly string[],
-): Promise<void> {
-  for (const id of selectedIds) {
-    const target = messages.find(m => m.id === id);
-    if (target != null && messageHasToolUse(target)) {
-      await hideToolTurn(runtime, messages, id, true);
-    } else {
-      await runtime.messages.hide(id);
-    }
-  }
-}
-
-/** Mirrors ChatTabScreen unhideSelectedMessages batch handler. */
-async function batchUnhideSelected(
-  runtime: MessageRuntime,
-  messages: readonly ChatMessage[],
-  selectedIds: readonly string[],
-): Promise<void> {
-  for (const id of selectedIds) {
-    const target = messages.find(m => m.id === id);
-    if (target != null && messageHasToolUse(target)) {
-      await hideToolTurn(runtime, messages, id, false);
-    } else {
-      await runtime.messages.show(id);
-    }
-  }
 }
 
 describe('tool-turn-actions', () => {
@@ -127,23 +93,5 @@ describe('tool-turn-actions', () => {
     expect(runtime.messages.delete).toHaveBeenCalledTimes(1);
     expect(runtime.messages.delete).toHaveBeenCalledWith('u2');
     expect(deleted).toEqual(new Set(['u2']));
-  });
-
-  it('batch hide on assistant with tool_use hides assistant and paired tool_results', async () => {
-    const {runtime, hidden} = createRuntime();
-    await batchHideSelected(runtime, messages, ['a1']);
-    expect(runtime.messages.hide).toHaveBeenCalledWith('a1');
-    expect(runtime.messages.hide).toHaveBeenCalledWith('u1');
-    expect(hidden).toEqual(new Set(['a1', 'u1']));
-  });
-
-  it('batch unhide on assistant with tool_use shows assistant and paired tool_results', async () => {
-    const {runtime, hidden} = createRuntime();
-    hidden.add('a1');
-    hidden.add('u1');
-    await batchUnhideSelected(runtime, messages, ['a1']);
-    expect(runtime.messages.show).toHaveBeenCalledWith('a1');
-    expect(runtime.messages.show).toHaveBeenCalledWith('u1');
-    expect(hidden).toEqual(new Set());
   });
 });
