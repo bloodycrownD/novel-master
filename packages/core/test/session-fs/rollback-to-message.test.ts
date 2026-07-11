@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageRepository } from "../../src/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 import { createMessageRollbackService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
@@ -104,12 +104,12 @@ describe("rollbackToMessage", () => {
     assert.equal(left[0]!.id, m1.id);
   });
 
-  it("rollback 成功不 markDirty worktree 快照", async () => {
+  it("rollback 成功不 capture worktree 块", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const rollback = createMessageRollbackService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const rollback = createMessageRollbackService(ctx.conn);
 
     const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
     await ctx.messages.append(session.id, "assistant", {
@@ -117,15 +117,18 @@ describe("rollbackToMessage", () => {
     });
 
     await rollback.rollbackToMessage(session.id, project.id, user1.id);
-    assert.equal(store.isDirty(project.id, session.id), false);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
   });
 
-  it("skipVfsReconcile 不 markDirty", async () => {
+  it("skipVfsReconcile 不 capture worktree 块", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const rollback = createMessageRollbackService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const rollback = createMessageRollbackService(ctx.conn);
 
     const user1 = await ctx.messages.append(session.id, "user", textBlocks("hi"));
     await ctx.messages.append(session.id, "user", textBlocks("tail"));
@@ -133,12 +136,15 @@ describe("rollbackToMessage", () => {
     await rollback.rollbackToMessage(session.id, project.id, user1.id, {
       skipVfsReconcile: true,
     });
-    assert.equal(store.isDirty(project.id, session.id), false);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
     const messages = await ctx.messages.listBySession(session.id);
     assert.equal(messages.length, 1);
   });
 
-  it("sessionFs facade 经共享 store rollback 后不 markDirty", async () => {
+  it("sessionFs facade rollback 后不 capture worktree 块", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -148,8 +154,14 @@ describe("rollbackToMessage", () => {
       blocks: [{ type: "text", text: "bye" }],
     });
 
-    assert.equal(ctx.worktreeSnapshot.isDirty(project.id, session.id), false);
+    assert.equal(
+      ctx.worktreeBlockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
-    assert.equal(ctx.worktreeSnapshot.isDirty(project.id, session.id), false);
+    assert.equal(
+      ctx.worktreeBlockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
   });
 });

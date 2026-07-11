@@ -46,7 +46,6 @@ import {
 } from "@novel-master/core/vfs";
 import {
   createSessionWorktreeBlockStore,
-  createSessionWorktreeSnapshotStore,
   createWorktreeService,
 } from "@novel-master/core/worktree";
 import { createKkvService } from "@novel-master/core/kkv";
@@ -95,7 +94,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -119,7 +117,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeSnapshot,
+      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
@@ -144,7 +142,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeSnapshot,
     worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
@@ -154,7 +151,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     messages,
     messageTranscriptEffects,
     appendToolTurnBridge,
-    sessionFs: createSessionFsService(conn, worktreeSnapshot),
+    sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>

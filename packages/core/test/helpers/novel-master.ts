@@ -25,8 +25,8 @@ import {
 } from "@novel-master/core/session-fs";
 import { createScopedVfsService, type VfsService } from "@novel-master/core/vfs";
 import {
-  createSessionWorktreeSnapshotStore,
-  type SessionWorktreeSnapshotStore,
+  createSessionWorktreeBlockStore,
+  type SessionWorktreeBlockStore,
 } from "@novel-master/core/worktree";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
@@ -41,7 +41,7 @@ export interface NovelMasterTestContext {
   readonly sessions: SessionService;
   readonly messages: MessageService;
   readonly sessionFs: SessionFsService;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly messageCheckpoint: MessageCheckpointService;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -55,7 +55,7 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     filename: ":memory:",
   });
   await bootstrapNovelMaster(conn);
-  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
+  const worktreeBlockStore = createSessionWorktreeBlockStore();
   return {
     conn,
     state: createPersistentState(conn),
@@ -63,9 +63,9 @@ export async function openNovelMasterTestConnection(): Promise<NovelMasterTestCo
     projects: createProjectService(conn),
     sessions: createSessionService(conn),
     messages: createMessageService(conn),
-    sessionFs: createSessionFsService(conn, worktreeSnapshot),
+    sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
-    worktreeSnapshot,
+    worktreeBlockStore,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

@@ -16,7 +16,7 @@ import {
 } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -67,17 +67,20 @@ import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 function runnerDeps(
   deps: Omit<
     CreateAgentRunnerDeps,
-    "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"
+    "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"
   > &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
   worktreeDisplay: string
 ): CreateAgentRunnerDeps {
-  const store = createSessionWorktreeSnapshotStore();
   return {
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktreeSnapshot: store,
+    worktreeBlockStore: mockWorktreeBlockStore(
+      worktreeDisplay,
+      PROJECT_ID,
+      SESSION_ID,
+    ),
     worktree: () =>
       ({
         scope: {

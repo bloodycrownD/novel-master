@@ -28,9 +28,7 @@ function baseRuntime(overrides: Partial<any> = {}) {
     sessionFs: {},
     regexConfig: {},
     eventBus: {publish: jest.fn(), subscribe: () => ({unsubscribe: () => undefined})},
-    worktreeSnapshot: {
-      getOrRefresh: async () => ({worktreeDisplay: '', refreshedAtMs: 0}),
-    },
+    worktreeBlockStore: createSessionWorktreeBlockStore(),
     worktree: () => ({
       materializePersistBlock: async () => ({worktreeDisplay: ''}),
     }),

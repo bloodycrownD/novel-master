@@ -1,21 +1,28 @@
 /**
- * Agent runner 测试用 worktree 快照 mock。
+ * Agent runner 测试用 worktree block store mock。
  */
-import { createSessionWorktreeSnapshotStore, type SessionWorktreeSnapshotStore, type WorktreeService } from "@novel-master/core/worktree";
+import {
+  createSessionWorktreeBlockStore,
+  type SessionWorktreeBlockStore,
+  type WorktreeService,
+} from "@novel-master/core/worktree";
 
-/** 固定 display 的内存 worktree 快照存储。 */
+/** 预 capture 固定 display 的内存 block store。 */
+export function mockWorktreeBlockStore(
+  worktreeDisplay = "WT",
+  projectId = "test-project",
+  sessionId = "test-session",
+): SessionWorktreeBlockStore {
+  const store = createSessionWorktreeBlockStore();
+  store.capture(projectId, sessionId, { worktreeDisplay });
+  return store;
+}
+
+/** @deprecated 使用 {@link mockWorktreeBlockStore} */
 export function mockWorktreeSnapshot(
   worktreeDisplay = "WT",
-): SessionWorktreeSnapshotStore {
-  const store = createSessionWorktreeSnapshotStore();
-  const originalGetOrRefresh = store.getOrRefresh.bind(store);
-  store.getOrRefresh = async (_p, _s, render) => {
-    const rendered = await render();
-    return originalGetOrRefresh(_p, _s, async () => ({
-      worktreeDisplay: rendered.worktreeDisplay || worktreeDisplay,
-    }));
-  };
-  return store;
+): SessionWorktreeBlockStore {
+  return mockWorktreeBlockStore(worktreeDisplay);
 }
 
 /** 最小 WorktreeService mock（不调用 materialize）。 */

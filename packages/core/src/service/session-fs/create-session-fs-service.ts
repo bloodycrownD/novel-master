@@ -8,21 +8,12 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { SqliteMessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { createMessageRollbackService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
 import { DefaultSessionFsService } from "./impl/session-fs.service.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type { SessionFsService } from "./session-fs.port.js";
 
-/**
- * 为给定连接创建 {@link SessionFsService}。
- *
- * @param conn - {@link bootstrapNovelMaster} 之后的已打开连接
- * @param worktreeSnapshot - 与 runtime orchestrator 共用的 worktree 快照 store（生产环境必传）
- */
-export function createSessionFsService(
-  conn: TdbcConnection,
-  worktreeSnapshot?: SessionWorktreeSnapshotStore,
-): SessionFsService {
+/** 为给定连接创建 {@link SessionFsService}。 */
+export function createSessionFsService(conn: TdbcConnection): SessionFsService {
   return new DefaultSessionFsService({
-    messageRollback: createMessageRollbackService(conn, worktreeSnapshot),
+    messageRollback: createMessageRollbackService(conn),
   });
 }
 

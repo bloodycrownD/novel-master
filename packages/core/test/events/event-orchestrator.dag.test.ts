@@ -63,7 +63,7 @@ function baseOrchestrator(
           messages: {} as never,
           agentRegistry: {} as never,
           modelRequests: {} as never,
-          worktreeSnapshot: {} as never,
+          worktreeBlockStore: {} as never,
           worktree: () => ({}) as never,
           sessionVfs: () => ({}) as never,
           messageCheckpoint: {} as never,

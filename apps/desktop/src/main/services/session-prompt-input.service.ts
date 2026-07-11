@@ -4,6 +4,7 @@
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
+import { getCapturedBlockOrCapture } from "@novel-master/core/worktree";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { applyActiveRegexChannel } from "./regex-apply-channel.service.js";
 
@@ -17,22 +18,6 @@ export interface SessionPromptInputBundle {
   readonly layout: AgentPromptLayout;
   readonly ctx: PromptRenderContext;
   readonly input: PromptLlmInput;
-}
-
-async function getSessionWorktreeSnapshot(
-  runtime: DesktopNovelMasterRuntime,
-  scope: SessionPromptScope,
-) {
-  const wt = runtime.worktree({
-    kind: "session",
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-  });
-  return runtime.worktreeSnapshot.getOrRefresh(
-    scope.projectId,
-    scope.sessionId,
-    () => wt.materializePersistBlock(),
-  );
 }
 
 export async function buildSessionPromptInput(
@@ -54,7 +39,17 @@ export async function buildSessionPromptInput(
     visible,
     "llm",
   );
-  const snapshot = await getSessionWorktreeSnapshot(runtime, scope);
+  const block = await getCapturedBlockOrCapture(
+    {
+      kind: "session",
+      projectId: scope.projectId,
+      sessionId: scope.sessionId,
+    },
+    {
+      worktree: (s) => runtime.worktree(s),
+      worktreeBlockStore: runtime.worktreeBlockStore,
+    },
+  );
   const wt = runtime.worktree({
     kind: "session",
     projectId: scope.projectId,
@@ -62,7 +57,7 @@ export async function buildSessionPromptInput(
   });
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const ctx: PromptRenderContext = {
-    worktreeDisplay: snapshot.worktreeDisplay,
+    worktreeDisplay: block.worktreeDisplay,
     messages,
     worktree: wt,
     vfs,

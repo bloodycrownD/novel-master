@@ -57,6 +57,7 @@ export type {
 export { createSessionWorktreeBlockStore } from "../service/prompt/create-session-worktree-block-store.js";
 export {
   captureSessionWorktreeBlock,
+  getCapturedBlockOrCapture,
   SessionWorktreeBlockScopeError,
   type CaptureSessionWorktreeBlockRuntime,
 } from "../service/prompt/capture-session-worktree-block.js";

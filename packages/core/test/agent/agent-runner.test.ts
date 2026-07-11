@@ -13,7 +13,7 @@ import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FI
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
@@ -31,14 +31,14 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeSnapshot" | "worktree" | "savedModels"> &
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"> &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+    worktreeBlockStore: mockWorktreeBlockStore(),
     worktree: () =>
       ({
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -297,7 +297,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktreeBlockStore: mockWorktreeBlockStore(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -452,7 +452,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktreeBlockStore: mockWorktreeBlockStore(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -505,7 +505,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktreeBlockStore: mockWorktreeBlockStore(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -577,7 +577,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeSnapshot: createSessionWorktreeSnapshotStore(),
+      worktreeBlockStore: mockWorktreeBlockStore(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },

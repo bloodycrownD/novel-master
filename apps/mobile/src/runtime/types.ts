@@ -36,7 +36,6 @@ import type { SessionFsService } from '@novel-master/core/session-fs';
 import type { VfsScope, VfsService } from '@novel-master/core/vfs';
 import type {
   SessionWorktreeBlockStore,
-  SessionWorktreeSnapshotStore,
   WorktreeService,
 } from '@novel-master/core/worktree';
 import type {KkvService} from '@novel-master/core/kkv';
@@ -61,7 +60,6 @@ export interface MobileNovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;

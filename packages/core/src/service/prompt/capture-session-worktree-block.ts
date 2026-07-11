@@ -54,3 +54,27 @@ export async function captureSessionWorktreeBlock(
   }
   return block;
 }
+
+/**
+ * 只读已 capture 块；无条目时显式 capture 一次（run / 预览读路径）。
+ */
+export async function getCapturedBlockOrCapture(
+  scope: VfsScope,
+  runtime: CaptureSessionWorktreeBlockRuntime,
+): Promise<SessionWorktreeBlock> {
+  if (scope.kind !== "session") {
+    throw new SessionWorktreeBlockScopeError(
+      "仅 session scope 可读取 worktree 块",
+    );
+  }
+
+  const existing = runtime.worktreeBlockStore.getCapturedBlock(
+    scope.projectId,
+    scope.sessionId,
+  );
+  if (existing != null) {
+    return existing;
+  }
+
+  return captureSessionWorktreeBlock(scope, runtime);
+}

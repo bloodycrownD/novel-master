@@ -9,6 +9,7 @@ import {
   type AgentTurnRuntimePort,
 } from "@novel-master/core/agent";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -65,15 +66,7 @@ function makeRuntime(
       capture: async () => undefined,
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    worktreeSnapshot: {
-      getOrRefresh: async (_p, _s, render) => {
-        const data = await render();
-        return {
-          worktreeDisplay: data.worktreeDisplay,
-          refreshedAtMs: Date.now(),
-        };
-      },
-    } as AgentTurnRuntimePort["worktreeSnapshot"],
+    worktreeBlockStore: createSessionWorktreeBlockStore(),
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:

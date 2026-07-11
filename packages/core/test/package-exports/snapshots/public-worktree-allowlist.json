@@ -9,6 +9,7 @@
   "createWorktreeService",
   "evaluateFileDisplay",
   "formatLocalMtime",
+  "getCapturedBlockOrCapture",
   "joinFileBlocks",
   "mapProjectWorktreePathToSession",
   "mapSessionWorktreePathToProject",

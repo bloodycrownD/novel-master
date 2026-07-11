@@ -60,10 +60,8 @@ import {
 } from "@novel-master/core/vfs";
 import {
   createSessionWorktreeBlockStore,
-  createSessionWorktreeSnapshotStore,
   createWorktreeService,
   type SessionWorktreeBlockStore,
-  type SessionWorktreeSnapshotStore,
   type WorktreeService,
 } from "@novel-master/core/worktree";
 import type { AgentRegistryService } from "@novel-master/core/agent";
@@ -112,7 +110,6 @@ export interface NovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
   readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
@@ -181,7 +178,6 @@ export async function createNovelMasterRuntime(
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeSnapshot = createSessionWorktreeSnapshotStore();
   const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
@@ -205,7 +201,7 @@ export async function createNovelMasterRuntime(
       agentRegistry,
       modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeSnapshot,
+      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
@@ -225,7 +221,6 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeSnapshot,
     worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
@@ -234,7 +229,7 @@ export async function createNovelMasterRuntime(
     sessions: createSessionService(conn),
     messages,
     messageTranscriptEffects,
-    sessionFs: createSessionFsService(conn, worktreeSnapshot),
+    sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),

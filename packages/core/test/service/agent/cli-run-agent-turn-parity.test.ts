@@ -97,7 +97,7 @@ function makeRuntime(
     } as AgentTurnRuntimePort["savedModelRepo"],
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    worktreeSnapshot: ctx.worktreeSnapshot,
+    worktreeBlockStore: ctx.worktreeBlockStore,
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:

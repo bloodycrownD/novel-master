@@ -8,7 +8,7 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { EventsConfigStore } from "@/service/events-config/events-config-store.port.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
+import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { RunAgentHandlerDeps } from "./impl/actions/run-agent.handler.js";
@@ -40,7 +40,7 @@ export function createRunAgentHandlerDeps(input: {
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -53,7 +53,7 @@ export function createRunAgentHandlerDeps(input: {
     agentRegistry: input.agentRegistry,
     modelRequests: input.modelRequests,
     savedModels: input.savedModels,
-    worktreeSnapshot: input.worktreeSnapshot,
+    worktreeBlockStore: input.worktreeBlockStore,
     worktree: input.worktree,
     sessionVfs: input.sessionVfs,
     messageCheckpoint: input.messageCheckpoint,

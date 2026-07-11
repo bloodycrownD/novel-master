@@ -12,6 +12,7 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 
 function mockUserVfsTurn(overrides: {
   readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
@@ -66,15 +67,7 @@ function makeRuntime(overrides: {
       capture: async () => undefined,
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    worktreeSnapshot: {
-      getOrRefresh: async (_p, _s, render) => {
-        const data = await render();
-        return {
-          worktreeDisplay: data.worktreeDisplay,
-          refreshedAtMs: Date.now(),
-        };
-      },
-    } as AgentTurnRuntimePort["worktreeSnapshot"],
+    worktreeBlockStore: createSessionWorktreeBlockStore(),
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:

@@ -35,7 +35,6 @@ import { isVfsError } from "@/errors/vfs-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
 import type {
   MessageRollbackService,
   RollbackOptions,
@@ -48,7 +47,6 @@ export interface MessageRollbackServiceDeps {
   readonly entries: VfsEntryRepository;
   readonly revisions: VfsRevisionRepository;
   readonly checkpoints: MessageCheckpointRepository;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
 }
 
 /** 回滚计划：anchor、tail、待 reconcile 路径与目标树。 */

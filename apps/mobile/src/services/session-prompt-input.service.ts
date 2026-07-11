@@ -6,7 +6,7 @@ import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 import {applyActiveRegexChannel} from './regex-apply-channel';
-import {getOrRefreshSessionWorktreeSnapshot} from './worktree-snapshot.service';
+import {getCapturedBlockOrCaptureForMobile} from './worktree-block.service';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -40,7 +40,7 @@ export async function buildSessionPromptInput(
     visible,
     'llm',
   );
-  const snapshot = await getOrRefreshSessionWorktreeSnapshot(runtime, scope);
+  const block = await getCapturedBlockOrCaptureForMobile(runtime, scope);
   const wt = runtime.worktree({
     kind: 'session',
     projectId: scope.projectId,
@@ -48,7 +48,7 @@ export async function buildSessionPromptInput(
   });
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
   const ctx: PromptRenderContext = {
-    worktreeDisplay: snapshot.worktreeDisplay,
+    worktreeDisplay: block.worktreeDisplay,
     messages,
     worktree: wt,
     vfs,

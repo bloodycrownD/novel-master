@@ -13,7 +13,7 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionWorktreeSnapshotStore } from "../prompt/session-worktree-snapshot.port.js";
+import type { SessionWorktreeBlockStore } from "../prompt/session-worktree-block.port.js";
 import type { WorktreeService } from "../worktree/worktree.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "../events/event-orchestrator.port.js";
@@ -28,7 +28,7 @@ export interface CreateAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   /**
    * mutating 工具并行 settled 后同步 capture；失败会中断当前 agent run。

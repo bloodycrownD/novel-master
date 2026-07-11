@@ -37,7 +37,8 @@ import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
+import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
+import { getCapturedBlockOrCapture } from "@/service/prompt/capture-session-worktree-block.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -64,7 +65,7 @@ export interface DefaultAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   /**
    * mutating ���߲��� settled ��ͬ�� capture��ʧ�ܻ��жϵ�ǰ agent run��
@@ -138,6 +139,11 @@ export class DefaultAgentRunner implements AgentRunner {
     };
 
     try {
+      await getCapturedBlockOrCapture(wtScope, {
+        worktree: this.deps.worktree,
+        worktreeBlockStore: this.deps.worktreeBlockStore,
+      });
+
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
           stopReason = "cancelled";
@@ -145,14 +151,13 @@ export class DefaultAgentRunner implements AgentRunner {
         }
         let stepCompactionEmitted = false;
 
-        const snapshot = await this.deps.worktreeSnapshot.getOrRefresh(
+        const block = this.deps.worktreeBlockStore.getCapturedBlock(
           projectId,
           sessionId,
-          async () => {
-            const wt = this.deps.worktree(wtScope);
-            return wt.materializePersistBlock();
-          },
         );
+        if (block == null) {
+          throw new Error("worktree 块未 capture");
+        }
 
         let visible = await session.list();
         if (signal?.aborted) {
@@ -171,7 +176,7 @@ export class DefaultAgentRunner implements AgentRunner {
 
         const wt = this.deps.worktree(wtScope);
         const promptRenderCtx = {
-          worktreeDisplay: snapshot.worktreeDisplay,
+          worktreeDisplay: block.worktreeDisplay,
           messages: visible,
           vfs: this.deps.toolCtx.vfs,
           worktree: wt,
