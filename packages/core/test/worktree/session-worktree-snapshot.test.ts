@@ -1,7 +1,12 @@
+/**
+ * @deprecated M1 起提示词路径已迁移至 {@link SessionWorktreeBlockStore}（见 session-worktree-block.test.ts）。
+ * 本文件仅覆盖旧 `markDirty` / `getOrRefresh` 兼容层，避免与 capture 心智冲突。
+ */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
 
+/** @deprecated 使用 SessionWorktreeBlockStore 测例（session-worktree-block.test.ts）。 */
 describe("SessionWorktreeSnapshotStore", () => {
   it("markDirty 后 getOrRefresh 返回非空 worktreeDisplay", async () => {
     const store = createSessionWorktreeSnapshotStore();

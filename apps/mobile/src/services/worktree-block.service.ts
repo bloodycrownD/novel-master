@@ -59,3 +59,15 @@ export async function captureSessionWorktreeBlockOnManualRefresh(
 ) {
   return captureSessionWorktreeBlockForMobile(runtime, scope);
 }
+
+/** manual 压缩 emit 成功后 capture；失败时不 capture（T-WEC5）。 */
+export async function captureAfterManualCompactionEmit(
+  runtime: MobileNovelMasterRuntime,
+  scope: SessionWorktreeBlockScope,
+  emitOk: boolean,
+): Promise<void> {
+  if (!emitOk) {
+    return;
+  }
+  await captureSessionWorktreeBlockForMobile(runtime, scope);
+}

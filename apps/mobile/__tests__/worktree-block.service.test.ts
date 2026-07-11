@@ -1,6 +1,7 @@
 import {describe, expect, it, jest} from '@jest/globals';
 
 import {
+  captureAfterManualCompactionEmit,
   captureSessionWorktreeBlockForMobile,
   captureSessionWorktreeBlockOnManualRefresh,
   getCapturedBlockOrCaptureForMobile,
@@ -86,6 +87,53 @@ describe('worktree-block.service', () => {
     expect(block.worktreeDisplay).toBe('wt');
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
     expect(capture).toHaveBeenCalledWith('p1', 's1', {worktreeDisplay: 'wt'});
+  });
+
+  it('T-WEC5: manual 压缩 emit 成功后 capture', async () => {
+    const blockStore = {
+      capture: jest.fn(),
+      getCapturedBlock: jest.fn(() => ({
+        worktreeDisplay: 'compact-body',
+        capturedAtMs: 3,
+      })),
+    };
+    const materializePersistBlock = jest.fn(async () => ({
+      worktreeDisplay: 'compact-body',
+    }));
+    const runtime = {
+      worktreeBlockStore: blockStore,
+      worktree: () => ({materializePersistBlock}),
+    };
+
+    await captureAfterManualCompactionEmit(runtime as any, {
+      projectId: 'p1',
+      sessionId: 's1',
+    }, true);
+
+    expect(materializePersistBlock).toHaveBeenCalledTimes(1);
+    expect(blockStore.capture).toHaveBeenCalledWith('p1', 's1', {
+      worktreeDisplay: 'compact-body',
+    });
+  });
+
+  it('T-WEC5: manual 压缩 emit 失败时不 capture', async () => {
+    const blockStore = {
+      capture: jest.fn(),
+      getCapturedBlock: jest.fn(),
+    };
+    const materializePersistBlock = jest.fn();
+    const runtime = {
+      worktreeBlockStore: blockStore,
+      worktree: () => ({materializePersistBlock}),
+    };
+
+    await captureAfterManualCompactionEmit(runtime as any, {
+      projectId: 'p1',
+      sessionId: 's1',
+    }, false);
+
+    expect(materializePersistBlock).not.toHaveBeenCalled();
+    expect(blockStore.capture).not.toHaveBeenCalled();
   });
 
   it('getCapturedBlockOrCapture 有条目时不重复 capture', async () => {
