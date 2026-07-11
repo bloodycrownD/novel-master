@@ -31,7 +31,6 @@ import {
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { Button } from "@/components/ui/Button";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { ContextMenu } from "@/components/ui/ContextMenu";
 import { showToast } from "@/components/ui/show-toast";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";
 import {
@@ -68,8 +67,6 @@ const DYNAMIC_MACROS = [
 ] as const;
 
 type Nav = SettingsNavHandle;
-
-type AddMenuTarget = "persist" | null;
 
 /** 从 wire 尽力读取显示名称。 */
 function readAgentNameFromWire(raw: unknown, fallback: string): string {
@@ -126,11 +123,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [storedWire, setStoredWire] = useState<unknown | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirmImport, setConfirmImport] = useState(false);
-  const [addBlockMenu, setAddBlockMenu] = useState<{
-    x: number;
-    y: number;
-    target: AddMenuTarget;
-  } | null>(null);
   const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(null);
 
@@ -498,7 +490,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
       return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
     });
-    setAddBlockMenu(null);
   };
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
@@ -509,7 +500,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
   const addDynamicBlock = () => {
     setDynamic((prev) => [...prev, createDefaultDynamicTextBlock(prev.length)]);
-    setAddBlockMenu(null);
   };
 
   const handleProviderChange = async (pid: string) => {
@@ -734,15 +724,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                     <button
                       type="button"
                       className="settings-link-btn"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        setAddBlockMenu({
-                          x: Math.max(8, rect.right - 140),
-                          y: Math.max(8, rect.bottom + 4),
-                          target: "persist",
-                        });
-                      }}
+                      onClick={() => addPersistTextBlock()}
                     >
                       添加
                     </button>
@@ -988,16 +970,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
           </div>
         </SettingsSection>
       </SettingsFormSection>
-      <ContextMenu
-        open={addBlockMenu != null}
-        x={addBlockMenu?.x ?? 0}
-        y={addBlockMenu?.y ?? 0}
-        items={[{ label: "文本块", action: "persist-text" }]}
-        onSelect={(action) => {
-          if (action === "persist-text") addPersistTextBlock();
-        }}
-        onClose={() => setAddBlockMenu(null)}
-      />
       <ConfirmModal
         open={confirmImport}
         title="导入 YAML"

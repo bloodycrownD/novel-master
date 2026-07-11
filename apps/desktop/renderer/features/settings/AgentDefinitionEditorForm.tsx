@@ -44,7 +44,6 @@ import {
   type ToolsMode,
 } from "@novel-master/core/config-forms/agent";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
-import { ContextMenu } from "@/components/ui/ContextMenu";
 import { showToast } from "@/components/ui/show-toast";
 import { Switch } from "@/components/ui/Switch";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
@@ -56,8 +55,6 @@ const DYNAMIC_MACROS = [
   { label: "$week_cn", token: "{{$week_cn}}" },
   { label: "$filetree", token: "{{$filetree}}" },
 ] as const;
-
-type AddMenuTarget = "persist" | null;
 
 export type AgentDefinitionBuildResult =
   | { readonly ok: true; readonly definition: AgentDefinition }
@@ -192,11 +189,6 @@ export const AgentDefinitionEditorForm = forwardRef<
     Array<{ id: string; vendorModelId: string; displayName: string }>
   >([]);
   const [savedBaseline, setSavedBaseline] = useState<string | null>(null);
-  const [addBlockMenu, setAddBlockMenu] = useState<{
-    x: number;
-    y: number;
-    target: AddMenuTarget;
-  } | null>(null);
   const dynamicTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const [dynamicInsertIndex, setDynamicInsertIndex] = useState<number | null>(null);
 
@@ -438,7 +430,6 @@ export const AgentDefinitionEditorForm = forwardRef<
       const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
       return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
     });
-    setAddBlockMenu(null);
   };
 
   const setPersistWorktreeEnabled = (enabled: boolean) => {
@@ -449,7 +440,6 @@ export const AgentDefinitionEditorForm = forwardRef<
 
   const addDynamicBlock = () => {
     setDynamic((prev) => [...prev, createDefaultDynamicTextBlock(prev.length)]);
-    setAddBlockMenu(null);
   };
 
   const handleProviderChange = async (pid: string) => {
@@ -693,15 +683,7 @@ export const AgentDefinitionEditorForm = forwardRef<
                     type="button"
                     className="settings-link-btn"
                     disabled={disabled}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rect = e.currentTarget.getBoundingClientRect();
-                      setAddBlockMenu({
-                        x: Math.max(8, rect.right - 140),
-                        y: Math.max(8, rect.bottom + 4),
-                        target: "persist",
-                      });
-                    }}
+                    onClick={() => addPersistTextBlock()}
                   >
                     添加
                   </button>
@@ -991,16 +973,6 @@ export const AgentDefinitionEditorForm = forwardRef<
         </div>
       </SettingsSection>
 
-      <ContextMenu
-        open={addBlockMenu != null}
-        x={addBlockMenu?.x ?? 0}
-        y={addBlockMenu?.y ?? 0}
-        items={[{ label: "文本块", action: "persist-text" }]}
-        onSelect={(action) => {
-          if (action === "persist-text") addPersistTextBlock();
-        }}
-        onClose={() => setAddBlockMenu(null)}
-      />
     </>
   );
 });
