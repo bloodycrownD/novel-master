@@ -10,9 +10,7 @@ import { ChatComposer } from '@/components/chat/ChatComposer';
 import { ChatMetaBar } from '@/components/chat/ChatMetaBar';
 import { ChatStreamMetricsBarLive } from '@/components/chat/ChatStreamMetricsBarLive';
 import { ChatTranscriptWebView } from '@/components/chat/ChatTranscriptWebView';
-import {
-  MessageActionMenu,
-} from '@/components/chat/MessageActionMenu';
+import { MessageActionMenu } from '@/components/chat/MessageActionMenu';
 import { MessageEditModal } from '@/components/chat/MessageEditModal';
 import { MessageList } from '@/components/chat/MessageList';
 import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
@@ -29,7 +27,10 @@ export type ChatConversationPanelProps = {
   visible: boolean;
 };
 
-export function ChatConversationPanel({ tokens, visible }: ChatConversationPanelProps) {
+export function ChatConversationPanel({
+  tokens,
+  visible,
+}: ChatConversationPanelProps) {
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const setWorkspaceBackState = useChatTabWorkspaceBackState();

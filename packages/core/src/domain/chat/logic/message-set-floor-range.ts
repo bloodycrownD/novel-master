@@ -2,8 +2,8 @@
 
 export function isSetFloorAnchorRole(
   role: string,
-): role is "user" | "assistant" {
-  return role === "user" || role === "assistant";
+): role is 'user' | 'assistant' {
+  return role === 'user' || role === 'assistant';
 }
 
 export function computeSetFloorRanges(
@@ -11,7 +11,10 @@ export function computeSetFloorRanges(
   sessionMaxSeq: number,
 ): {
   readonly hidePrefix: { readonly fromSeq: 1; readonly toSeq: number } | null;
-  readonly showSuffix: { readonly fromSeq: number; readonly toSeq: number } | null;
+  readonly showSuffix: {
+    readonly fromSeq: number;
+    readonly toSeq: number;
+  } | null;
 } {
   const hidePrefix =
     floorSeq > 1 ? { fromSeq: 1 as const, toSeq: floorSeq - 1 } : null;

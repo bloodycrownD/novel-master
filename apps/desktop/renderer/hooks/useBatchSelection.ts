@@ -1,7 +1,7 @@
 /**
  * 通用批量多选状态（项目/会话/Provider 等）。
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from 'react';
 
 export function useBatchSelection() {
   const [active, setActive] = useState(false);
@@ -13,12 +13,12 @@ export function useBatchSelection() {
   }, []);
 
   const exit = useCallback(() => {
-    setActive((prev) => (prev ? false : prev));
-    setSelectedIds((prev) => (prev.size === 0 ? prev : new Set()));
+    setActive(prev => (prev ? false : prev));
+    setSelectedIds(prev => (prev.size === 0 ? prev : new Set()));
   }, []);
 
   const toggle = useCallback((id: string) => {
-    setSelectedIds((prev) => {
+    setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
@@ -50,14 +50,6 @@ export function useBatchSelection() {
       selectRange,
       isSelected,
     }),
-    [
-      active,
-      selectedIds,
-      enter,
-      exit,
-      toggle,
-      selectRange,
-      isSelected,
-    ],
+    [active, selectedIds, enter, exit, toggle, selectRange, isSelected],
   );
 }

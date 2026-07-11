@@ -69,7 +69,7 @@ import {
   type WorktreeListRowDto,
   type WorktreeSetDirRuleRequest,
   type WorktreeSetFileRuleRequest,
-} from "@shared/ipc-types";
+} from '@shared/ipc-types';
 
 export type InvokeFn = <T>(channel: string, arg?: unknown) => Promise<T>;
 
@@ -81,14 +81,14 @@ function withReq<TReq, TRes>(
   invoke: InvokeFn,
   channel: string,
 ): (req: TReq) => Promise<TRes> {
-  return (req) => invoke<TRes>(channel, req);
+  return req => invoke<TRes>(channel, req);
 }
 
 function withBool<TRes>(
   invoke: InvokeFn,
   channel: string,
 ): (enabled: boolean) => Promise<TRes> {
-  return (enabled) => invoke<TRes>(channel, enabled);
+  return enabled => invoke<TRes>(channel, enabled);
 }
 
 /** 由 client.ts 注入 bridge().invoke，生成全部 ipc* 封装。 */
@@ -106,16 +106,22 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.AGENT_ACTIVITY_GET,
     ),
-    ipcScopeGet: noArg<IpcResult<ScopeSnapshotDto>>(invoke, IPC_CHANNELS.SCOPE_GET),
-    ipcScopeSetProject: withReq<ScopeSetProjectRequest, IpcResult<ScopeSnapshotDto>>(
+    ipcScopeGet: noArg<IpcResult<ScopeSnapshotDto>>(
       invoke,
-      IPC_CHANNELS.SCOPE_SET_PROJECT,
+      IPC_CHANNELS.SCOPE_GET,
     ),
-    ipcScopeSetSession: withReq<ScopeSetSessionRequest, IpcResult<ScopeSnapshotDto>>(
+    ipcScopeSetProject: withReq<
+      ScopeSetProjectRequest,
+      IpcResult<ScopeSnapshotDto>
+    >(invoke, IPC_CHANNELS.SCOPE_SET_PROJECT),
+    ipcScopeSetSession: withReq<
+      ScopeSetSessionRequest,
+      IpcResult<ScopeSnapshotDto>
+    >(invoke, IPC_CHANNELS.SCOPE_SET_SESSION),
+    ipcProjectsList: noArg<IpcResult<ProjectDto[]>>(
       invoke,
-      IPC_CHANNELS.SCOPE_SET_SESSION,
+      IPC_CHANNELS.PROJECTS_LIST,
     ),
-    ipcProjectsList: noArg<IpcResult<ProjectDto[]>>(invoke, IPC_CHANNELS.PROJECTS_LIST),
     ipcProjectsCreate: withReq<ProjectCreateRequest, IpcResult<ProjectDto>>(
       invoke,
       IPC_CHANNELS.PROJECTS_CREATE,
@@ -164,10 +170,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.WORKTREE_SET_DIR_RULE,
     ),
-    ipcWorktreeSetFileRule: withReq<WorktreeSetFileRuleRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.WORKTREE_SET_FILE_RULE,
-    ),
+    ipcWorktreeSetFileRule: withReq<
+      WorktreeSetFileRuleRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.WORKTREE_SET_FILE_RULE),
     ipcWorktreeGetDirRule: withReq<
       WorktreeGetDirRuleRequest,
       IpcResult<WorktreeSetDirRuleRequest | null>
@@ -204,22 +210,22 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
-    ipcProjectsPullTemplate: withReq<ProjectPullTemplateRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.PROJECTS_PULL_TEMPLATE,
-    ),
-    ipcSessionsPullTemplate: withReq<SessionPullTemplateRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.SESSIONS_PULL_TEMPLATE,
-    ),
+    ipcProjectsPullTemplate: withReq<
+      ProjectPullTemplateRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.PROJECTS_PULL_TEMPLATE),
+    ipcSessionsPullTemplate: withReq<
+      SessionPullTemplateRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.SESSIONS_PULL_TEMPLATE),
     ipcMessagesList: withReq<MessagesListRequest, IpcResult<ChatMessageDto[]>>(
       invoke,
       IPC_CHANNELS.MESSAGES_LIST,
     ),
-    ipcMessagesAppend: withReq<MessagesAppendRequest, IpcResult<ChatMessageDto>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_APPEND,
-    ),
+    ipcMessagesAppend: withReq<
+      MessagesAppendRequest,
+      IpcResult<ChatMessageDto>
+    >(invoke, IPC_CHANNELS.MESSAGES_APPEND),
     ipcMessagesAppendToolTurnBridge: withReq<
       MessagesAppendToolTurnBridgeRequest,
       IpcResult<ChatMessageDto>
@@ -244,10 +250,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       MessagesShowRangeRequest,
       IpcResult<{ count: number }>
     >(invoke, IPC_CHANNELS.MESSAGES_SHOW_RANGE),
-    ipcMessagesTruncateAfter: withReq<MessagesTruncateAfterRequest, IpcResult<void>>(
-      invoke,
-      IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER,
-    ),
+    ipcMessagesTruncateAfter: withReq<
+      MessagesTruncateAfterRequest,
+      IpcResult<void>
+    >(invoke, IPC_CHANNELS.MESSAGES_TRUNCATE_AFTER),
     ipcMessagesDelete: withReq<MessagesDeleteRequest, IpcResult<void>>(
       invoke,
       IPC_CHANNELS.MESSAGES_DELETE,
@@ -329,8 +335,14 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.PROVIDERS_GET,
     ),
-    ipcProvidersCreate: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDERS_CREATE),
-    ipcProvidersEdit: withReq<unknown, unknown>(invoke, IPC_CHANNELS.PROVIDERS_EDIT),
+    ipcProvidersCreate: withReq<unknown, unknown>(
+      invoke,
+      IPC_CHANNELS.PROVIDERS_CREATE,
+    ),
+    ipcProvidersEdit: withReq<unknown, unknown>(
+      invoke,
+      IPC_CHANNELS.PROVIDERS_EDIT,
+    ),
     ipcProvidersDelete: withReq<{ providerId: string }, unknown>(
       invoke,
       IPC_CHANNELS.PROVIDERS_DELETE,
@@ -384,7 +396,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.AGENT_REGISTRY_DELETE,
     ),
-    ipcAgentRegistryCreateBlank: noArg(invoke, IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK),
+    ipcAgentRegistryCreateBlank: noArg(
+      invoke,
+      IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK,
+    ),
     ipcAgentYamlExport: withReq<{ agentId: string }, unknown>(
       invoke,
       IPC_CHANNELS.AGENT_YAML_EXPORT,
@@ -439,7 +454,10 @@ export function createInvokeClient(invoke: InvokeFn) {
     ipcEventsClearConfig: noArg(invoke, IPC_CHANNELS.EVENTS_CLEAR_CONFIG),
     ipcEventsExportYaml: noArg(invoke, IPC_CHANNELS.EVENTS_EXPORT_YAML),
     ipcEventsImportYaml: noArg(invoke, IPC_CHANNELS.EVENTS_IMPORT_YAML),
-    ipcCompactionConditionsGet: noArg(invoke, IPC_CHANNELS.COMPACTION_CONDITIONS_GET),
+    ipcCompactionConditionsGet: noArg(
+      invoke,
+      IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
+    ),
     ipcCompactionConditionsSet: withReq<unknown, unknown>(
       invoke,
       IPC_CHANNELS.COMPACTION_CONDITIONS_SET,
@@ -464,20 +482,26 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED,
     ),
-    ipcCloudSyncTestConnection: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION),
-    ipcCloudSyncGetLocalStatus: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS),
+    ipcCloudSyncTestConnection: noArg(
+      invoke,
+      IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION,
+    ),
+    ipcCloudSyncGetLocalStatus: noArg(
+      invoke,
+      IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS,
+    ),
     ipcCloudSyncPull: noArg(invoke, IPC_CHANNELS.CLOUD_SYNC_PULL),
     ipcCloudSyncPush: (req?: { forceOverwriteRemote?: boolean }) =>
       invoke(IPC_CHANNELS.CLOUD_SYNC_PUSH, req),
     ipcShellMenuPopup: withReq<
       {
-        menuId: "file" | "edit" | "view" | "window" | "help";
+        menuId: 'file' | 'edit' | 'view' | 'window' | 'help';
         x: number;
         y: number;
       },
       IpcResult<null>
     >(invoke, IPC_CHANNELS.SHELL_MENU_POPUP),
-    ipcShellSetTitleBarTheme: (theme: "light" | "dark") =>
+    ipcShellSetTitleBarTheme: (theme: 'light' | 'dark') =>
       invoke(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, theme),
     ipcAppOpenExternal: (url: string) => {
       const req: AppOpenExternalRequest = { url };

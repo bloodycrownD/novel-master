@@ -86,17 +86,13 @@ function layoutAnchoredMenuInternal(
   const spaceBelow = screenHeight - (anchor.y + anchor.height);
   // Prefer below unless it would clip; flip above when bottom space is tighter.
   const placeAbove =
-    spaceBelow < flipEstimate + ANCHORED_MENU_GAP &&
-    spaceAbove >= spaceBelow;
+    spaceBelow < flipEstimate + ANCHORED_MENU_GAP && spaceAbove >= spaceBelow;
 
   const availableSpace =
     (placeAbove ? spaceAbove : spaceBelow) -
     ANCHORED_MENU_GAP -
     ANCHORED_MENU_SCREEN_MARGIN;
-  const availableMax = Math.max(
-    ANCHORED_MENU_ITEM_MIN_HEIGHT,
-    availableSpace,
-  );
+  const availableMax = Math.max(ANCHORED_MENU_ITEM_MIN_HEIGHT, availableSpace);
   const scrollable = contentHeight > availableMax + 1;
   let menuHeight = scrollable
     ? Math.min(contentHeight, availableMax)
@@ -114,7 +110,7 @@ function layoutAnchoredMenuInternal(
     Math.min(top, screenHeight - menuHeight - ANCHORED_MENU_SCREEN_MARGIN),
   );
 
-  return {left, top, width: menuWidth, maxHeight: menuHeight, scrollable};
+  return { left, top, width: menuWidth, maxHeight: menuHeight, scrollable };
 }
 
 export interface AnchoredMenuLayout {
@@ -128,14 +124,15 @@ export interface AnchoredMenuLayout {
 
 /** Content-aware width so short labels do not stretch to full screen. */
 export function computeAnchoredMenuWidth(
-  items: readonly {label: string}[],
+  items: readonly { label: string }[],
   screenWidth: number,
 ): number {
   const longest = items.reduce(
     (max, item) => Math.max(max, item.label.length),
     0,
   );
-  const byLabel = longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
+  const byLabel =
+    longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
   const cap = screenWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
   return Math.min(
     cap,

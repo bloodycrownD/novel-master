@@ -58,7 +58,9 @@ describe('chat-transcript-bridge', () => {
 
   it('rejects invalid bridge version', () => {
     expect(() =>
-      decodeTranscriptToHost(JSON.stringify({v: 99, type: 'ready', payload: {}})),
+      decodeTranscriptToHost(
+        JSON.stringify({ v: 99, type: 'ready', payload: {} }),
+      ),
     ).toThrow(/version/i);
   });
 
@@ -66,9 +68,11 @@ describe('chat-transcript-bridge', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'streamDelta' as const,
-      payload: {kind: 'text' as const, delta: 'chunk', html: '<p>chunk</p>'},
+      payload: { kind: 'text' as const, delta: 'chunk', html: '<p>chunk</p>' },
     };
-    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(message);
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
   });
 
   it('round-trips RN→Web prependPage envelope', () => {
@@ -89,14 +93,16 @@ describe('chat-transcript-bridge', () => {
         prependedCount: 1,
       },
     };
-    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(message);
+    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
+      message,
+    );
   });
 
   it('round-trips Web→RN openToolFile envelope', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'openToolFile' as const,
-      payload: {path: '/续写/chapter.md'},
+      payload: { path: '/续写/chapter.md' },
     };
     const raw = encodeTranscriptToHost(message);
     const parsed = decodeTranscriptToHost(raw);
@@ -110,7 +116,7 @@ describe('chat-transcript-bridge', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'openMessageMenu' as const,
-      payload: {messageId: 'm1', pageX: 120, pageY: 340},
+      payload: { messageId: 'm1', pageX: 120, pageY: 340 },
     };
     expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
       message,
@@ -121,7 +127,7 @@ describe('chat-transcript-bridge', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'messageMenuAction' as const,
-      payload: {messageId: 'm1', action: 'copy'},
+      payload: { messageId: 'm1', action: 'copy' },
     };
     expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
       message,
@@ -186,10 +192,9 @@ describe('chat-transcript-bridge', () => {
     const menuMessage = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'openMessageMenu' as const,
-      payload: {messageId: 'm1', pageX: 10, pageY: 20},
+      payload: { messageId: 'm1', pageX: 10, pageY: 20 },
     };
     expect(menuMessage.type).toBe('openMessageMenu');
     expect(menuMessage.type).not.toBe('sessionSnapshot');
   });
 });
-

@@ -1,7 +1,7 @@
 /**
  * 通用批量多选状态（Agent/Provider/会话列表等非消息可见性场景）。
  */
-import {useCallback, useMemo, useState} from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 export function useBatchSelection() {
   const [active, setActive] = useState(false);
@@ -50,14 +50,6 @@ export function useBatchSelection() {
       selectRange,
       isSelected,
     }),
-    [
-      active,
-      selectedIds,
-      enter,
-      exit,
-      toggle,
-      selectRange,
-      isSelected,
-    ],
+    [active, selectedIds, enter, exit, toggle, selectRange, isSelected],
   );
 }

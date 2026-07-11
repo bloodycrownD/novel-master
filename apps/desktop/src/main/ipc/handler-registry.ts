@@ -1,9 +1,9 @@
 /**
  * IPC invoke 映射表（main 侧）：channel → handler 一行注册。
  */
-import { ipcMain, type IpcMainInvokeEvent } from "electron";
-import { IPC_CHANNELS } from "../../../shared/ipc-types.js";
-import { handleAppUiGet, handleAppUiSet } from "./handlers/app-ui.js";
+import { ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { IPC_CHANNELS } from '../../../shared/ipc-types.js';
+import { handleAppUiGet, handleAppUiSet } from './handlers/app-ui.js';
 import {
   handleAgentAbort,
   handleAgentListPicker,
@@ -12,17 +12,17 @@ import {
   handleAgentSetCurrent,
   handleModelListPicker,
   handleModelSetCurrent,
-} from "./handlers/agent.js";
-import { isDesktopAgentActive } from "../runtime/agent-activity.js";
+} from './handlers/agent.js';
+import { isDesktopAgentActive } from '../runtime/agent-activity.js';
 import {
   handleBootstrapRebootstrap,
   handleBootstrapStatus,
-} from "./handlers/bootstrap.js";
-import { handleCompactionManual } from "./handlers/compaction.js";
+} from './handlers/bootstrap.js';
+import { handleCompactionManual } from './handlers/compaction.js';
 import {
   handleCompactionConditionsGet,
   handleCompactionConditionsSet,
-} from "./handlers/compaction-conditions.js";
+} from './handlers/compaction-conditions.js';
 import {
   handleAgentRegistryCreateBlank,
   handleAgentRegistryDelete,
@@ -31,8 +31,8 @@ import {
   handleAgentRegistryUpsert,
   handleAgentYamlExport,
   handleAgentYamlImport,
-} from "./handlers/agent-registry.js";
-import { handleBackupExport, handleBackupImport } from "./handlers/backup.js";
+} from './handlers/agent-registry.js';
+import { handleBackupExport, handleBackupImport } from './handlers/backup.js';
 import {
   handleCloudSyncGetConfig,
   handleCloudSyncGetLocalStatus,
@@ -41,29 +41,29 @@ import {
   handleCloudSyncSetConfig,
   handleCloudSyncSetEnabled,
   handleCloudSyncTestConnection,
-} from "./handlers/cloud-sync.js";
+} from './handlers/cloud-sync.js';
 import {
   handleEventsClearConfig,
   handleEventsExportYaml,
   handleEventsGetConfig,
   handleEventsImportYaml,
   handleEventsSetConfig,
-} from "./handlers/events.js";
+} from './handlers/events.js';
 import {
   handleAppCheckForUpdates,
   handleAppGetInfo,
   handleAppOpenExternal,
-} from "./handlers/app-info.js";
+} from './handlers/app-info.js';
 import {
   handleShellMenuPopup,
   handleShellSetTitleBarTheme,
-} from "./handlers/shell.js";
+} from './handlers/shell.js';
 import {
   handlePreferencesGetLlmStream,
   handlePreferencesGetSessionFsVersionCheck,
   handlePreferencesSetLlmStream,
   handlePreferencesSetSessionFsVersionCheck,
-} from "./handlers/preferences.js";
+} from './handlers/preferences.js';
 import {
   handleProviderModelsDeleteSaved,
   handleProviderModelsEditSaved,
@@ -74,14 +74,14 @@ import {
   handleProviderModelsSavedList,
   handleProviderModelsSuggestList,
   handleProviderModelsUpdateSettings,
-} from "./handlers/provider-models.js";
+} from './handlers/provider-models.js';
 import {
   handleProvidersCreate,
   handleProvidersDelete,
   handleProvidersEdit,
   handleProvidersGet,
   handleProvidersList,
-} from "./handlers/providers.js";
+} from './handlers/providers.js';
 import {
   handleRegexCreateGroup,
   handleRegexCreateRule,
@@ -95,7 +95,7 @@ import {
   handleRegexSetCurrent,
   handleRegexUpdateGroup,
   handleRegexUpdateRule,
-} from "./handlers/regex.js";
+} from './handlers/regex.js';
 import {
   handleMessagesAppend,
   handleMessagesAppendToolTurnBridge,
@@ -110,12 +110,12 @@ import {
   handleMessagesShow,
   handleMessagesShowRange,
   handleMessagesTruncateAfter,
-} from "./handlers/messages.js";
+} from './handlers/messages.js';
 import {
   handlePromptAgentMeta,
   handlePromptChatTokenLabel,
   handlePromptRealPreview,
-} from "./handlers/prompt.js";
+} from './handlers/prompt.js';
 import {
   handleProjectsCreate,
   handleProjectsDelete,
@@ -124,19 +124,19 @@ import {
   handleProjectsPullTemplate,
   handleProjectsRename,
   handleProjectsUpdateAgentConfig,
-} from "./handlers/projects.js";
+} from './handlers/projects.js';
 import {
   handleScopeGet,
   handleScopeSetProject,
   handleScopeSetSession,
-} from "./handlers/scope.js";
+} from './handlers/scope.js';
 import {
   handleSessionsCreate,
   handleSessionsDelete,
   handleSessionsListByProject,
   handleSessionsPullTemplate,
   handleSessionsRename,
-} from "./handlers/sessions.js";
+} from './handlers/sessions.js';
 import {
   handleVfsDelete,
   handleVfsList,
@@ -146,14 +146,14 @@ import {
   handleVfsWrite,
   handleVfsZipExport,
   handleVfsZipImport,
-} from "./handlers/vfs.js";
+} from './handlers/vfs.js';
 import {
   handleWorktreeBuildListRows,
   handleWorktreeGetDirRule,
   handleWorktreeInvalidateSessionSnapshot,
   handleWorktreeSetDirRule,
   handleWorktreeSetFileRule,
-} from "./handlers/worktree.js";
+} from './handlers/worktree.js';
 
 type NoArgHandler = () => unknown;
 type BoolHandler = (enabled: boolean) => unknown;
@@ -193,7 +193,10 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.PROJECTS_DELETE, handleProjectsDelete);
   bindReq(IPC_CHANNELS.PROJECTS_PULL_TEMPLATE, handleProjectsPullTemplate);
   bindReq(IPC_CHANNELS.PROJECTS_GET_AGENT_CONFIG, handleProjectsGetAgentConfig);
-  bindReq(IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG, handleProjectsUpdateAgentConfig);
+  bindReq(
+    IPC_CHANNELS.PROJECTS_UPDATE_AGENT_CONFIG,
+    handleProjectsUpdateAgentConfig,
+  );
 
   bindReq(IPC_CHANNELS.SESSIONS_LIST_BY_PROJECT, handleSessionsListByProject);
   bindReq(IPC_CHANNELS.SESSIONS_CREATE, handleSessionsCreate);
@@ -234,7 +237,10 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.MESSAGES_FORK, handleMessagesFork);
   bindReq(IPC_CHANNELS.MESSAGES_ROLLBACK, handleMessagesRollback);
   bindReq(IPC_CHANNELS.MESSAGES_SET_FLOOR, handleMessagesSetFloor);
-  bindReq(IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE, handleMessagesAppendToolTurnBridge);
+  bindReq(
+    IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE,
+    handleMessagesAppendToolTurnBridge,
+  );
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);
   bindReq(IPC_CHANNELS.AGENT_ABORT, handleAgentAbort);
@@ -261,8 +267,14 @@ export function registerHandlersFromRegistry(): void {
     IPC_CHANNELS.PREFERENCES_SET_SESSION_FS_VERSION_CHECK,
     handlePreferencesSetSessionFsVersionCheck,
   );
-  bindNoArg(IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM, handlePreferencesGetLlmStream);
-  bindBool(IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM, handlePreferencesSetLlmStream);
+  bindNoArg(
+    IPC_CHANNELS.PREFERENCES_GET_LLM_STREAM,
+    handlePreferencesGetLlmStream,
+  );
+  bindBool(
+    IPC_CHANNELS.PREFERENCES_SET_LLM_STREAM,
+    handlePreferencesSetLlmStream,
+  );
 
   bindNoArg(IPC_CHANNELS.PROVIDERS_LIST, handleProvidersList);
   bindReq(IPC_CHANNELS.PROVIDERS_GET, handleProvidersGet);
@@ -270,21 +282,42 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.PROVIDERS_EDIT, handleProvidersEdit);
   bindReq(IPC_CHANNELS.PROVIDERS_DELETE, handleProvidersDelete);
 
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST, handleProviderModelsSavedList);
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_SAVED_LIST,
+    handleProviderModelsSavedList,
+  );
   bindReq(IPC_CHANNELS.PROVIDER_MODELS_FETCH, handleProviderModelsFetch);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST, handleProviderModelsSuggestList);
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_SUGGEST_LIST,
+    handleProviderModelsSuggestList,
+  );
   bindReq(IPC_CHANNELS.PROVIDER_MODELS_SAVE, handleProviderModelsSave);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED, handleProviderModelsDeleteSaved);
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_DELETE_SAVED,
+    handleProviderModelsDeleteSaved,
+  );
   bindReq(IPC_CHANNELS.PROVIDER_MODELS_GET_SAVED, handleProviderModelsGetSaved);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS, handleProviderModelsUpdateSettings);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW, handleProviderModelsResetContextWindow);
-  bindReq(IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED, handleProviderModelsEditSaved);
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_UPDATE_SETTINGS,
+    handleProviderModelsUpdateSettings,
+  );
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_RESET_CONTEXT_WINDOW,
+    handleProviderModelsResetContextWindow,
+  );
+  bindReq(
+    IPC_CHANNELS.PROVIDER_MODELS_EDIT_SAVED,
+    handleProviderModelsEditSaved,
+  );
 
   bindNoArg(IPC_CHANNELS.AGENT_REGISTRY_LIST, handleAgentRegistryList);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_GET, handleAgentRegistryGet);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_UPSERT, handleAgentRegistryUpsert);
   bindReq(IPC_CHANNELS.AGENT_REGISTRY_DELETE, handleAgentRegistryDelete);
-  bindNoArg(IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK, handleAgentRegistryCreateBlank);
+  bindNoArg(
+    IPC_CHANNELS.AGENT_REGISTRY_CREATE_BLANK,
+    handleAgentRegistryCreateBlank,
+  );
   bindReq(IPC_CHANNELS.AGENT_YAML_EXPORT, handleAgentYamlExport);
   bindReq(IPC_CHANNELS.AGENT_YAML_IMPORT, handleAgentYamlImport);
 
@@ -307,8 +340,14 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.EVENTS_EXPORT_YAML, handleEventsExportYaml);
   bindNoArg(IPC_CHANNELS.EVENTS_IMPORT_YAML, handleEventsImportYaml);
 
-  bindNoArg(IPC_CHANNELS.COMPACTION_CONDITIONS_GET, handleCompactionConditionsGet);
-  bindReq(IPC_CHANNELS.COMPACTION_CONDITIONS_SET, handleCompactionConditionsSet);
+  bindNoArg(
+    IPC_CHANNELS.COMPACTION_CONDITIONS_GET,
+    handleCompactionConditionsGet,
+  );
+  bindReq(
+    IPC_CHANNELS.COMPACTION_CONDITIONS_SET,
+    handleCompactionConditionsSet,
+  );
 
   bindNoArg(IPC_CHANNELS.BACKUP_EXPORT, handleBackupExport);
   bindNoArg(IPC_CHANNELS.BACKUP_IMPORT, handleBackupImport);
@@ -316,13 +355,22 @@ export function registerHandlersFromRegistry(): void {
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_CONFIG, handleCloudSyncGetConfig);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_SET_CONFIG, handleCloudSyncSetConfig);
   bindBool(IPC_CHANNELS.CLOUD_SYNC_SET_ENABLED, handleCloudSyncSetEnabled);
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION, handleCloudSyncTestConnection);
-  bindNoArg(IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS, handleCloudSyncGetLocalStatus);
+  bindNoArg(
+    IPC_CHANNELS.CLOUD_SYNC_TEST_CONNECTION,
+    handleCloudSyncTestConnection,
+  );
+  bindNoArg(
+    IPC_CHANNELS.CLOUD_SYNC_GET_LOCAL_STATUS,
+    handleCloudSyncGetLocalStatus,
+  );
   bindNoArg(IPC_CHANNELS.CLOUD_SYNC_PULL, handleCloudSyncPull);
   bindReq(IPC_CHANNELS.CLOUD_SYNC_PUSH, handleCloudSyncPush);
 
   bindEventReq(IPC_CHANNELS.SHELL_MENU_POPUP, handleShellMenuPopup);
-  bindEventReq(IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME, handleShellSetTitleBarTheme);
+  bindEventReq(
+    IPC_CHANNELS.SHELL_SET_TITLEBAR_THEME,
+    handleShellSetTitleBarTheme,
+  );
   bindReq(IPC_CHANNELS.SHELL_OPEN_EXTERNAL, handleAppOpenExternal);
 
   bindNoArg(IPC_CHANNELS.APP_GET_INFO, handleAppGetInfo);

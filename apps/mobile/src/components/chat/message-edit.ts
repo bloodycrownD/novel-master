@@ -1,7 +1,11 @@
 /**
  * Helpers for in-app message edit (text-only content) and long-press menu items.
  */
-import { type ChatMessage, type ContentBlock, type MessageContent } from "@novel-master/core/chat";
+import {
+  type ChatMessage,
+  type ContentBlock,
+  type MessageContent,
+} from '@novel-master/core/chat';
 
 export interface MessageActionMenuItem {
   readonly label: string;
@@ -13,7 +17,7 @@ export interface MessageActionMenuItem {
 export function editableTextFromMessage(message: ChatMessage): string | null {
   const blocks = message.content.blocks ?? [];
   const parts = blocks
-    .filter((b): b is Extract<typeof b, {type: 'text'}> => b.type === 'text')
+    .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
     .map(b => b.text.trim())
     .filter(Boolean);
   return parts.length > 0 ? parts.join('\n\n') : null;
@@ -33,7 +37,7 @@ export function applyTextEditToMessage(
   for (const block of blocks) {
     if (block.type === 'text') {
       if (!textReplaced) {
-        result.push({type: 'text', text: newText});
+        result.push({ type: 'text', text: newText });
         textReplaced = true;
       }
     } else {
@@ -41,7 +45,7 @@ export function applyTextEditToMessage(
     }
   }
 
-  return {blocks: result};
+  return { blocks: result };
 }
 
 /** user/assistant 消息行可置位（非 user_vfs_turn 等展示形态由调用方过滤）。 */
@@ -55,15 +59,15 @@ export function buildMessageActionItems(
 ): MessageActionMenuItem[] {
   const items: MessageActionMenuItem[] = [];
   if (editableTextFromMessage(message) != null) {
-    items.push({label: '编辑', action: 'edit'});
+    items.push({ label: '编辑', action: 'edit' });
   }
-  items.push({label: '复制', action: 'copy'});
+  items.push({ label: '复制', action: 'copy' });
   if (isSetFloorEligibleMessage(message)) {
-    items.push({label: '置位', action: 'set-floor'});
+    items.push({ label: '置位', action: 'set-floor' });
   }
-  items.push({label: '分叉', action: 'fork'});
+  items.push({ label: '分叉', action: 'fork' });
   if (!message.hidden) {
-    items.push({label: '回滚', action: 'rollback', danger: true});
+    items.push({ label: '回滚', action: 'rollback', danger: true });
   }
   return items;
 }

@@ -1,4 +1,4 @@
-import {describe, expect, it} from '@jest/globals';
+import { describe, expect, it } from '@jest/globals';
 import {
   anchoredMenuContentHeight,
   computeAnchoredMenuWidth,
@@ -6,23 +6,29 @@ import {
 } from '../src/components/chat/anchored-menu-layout';
 
 describe('layoutAnchoredMenu', () => {
-  const anchor = {x: 40, y: 520, width: 200, height: 48};
+  const anchor = { x: 40, y: 520, width: 200, height: 48 };
   const items = [
-    {label: '编辑'},
-    {label: '复制'},
-    {label: '置位'},
-    {label: '分叉'},
-    {label: '回滚'},
+    { label: '编辑' },
+    { label: '复制' },
+    { label: '置位' },
+    { label: '分叉' },
+    { label: '回滚' },
   ];
 
   it('flips above when the bubble is near the bottom edge', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
-    const layout = layoutAnchoredMenu(anchor, items.length, menuWidth, 360, 640);
+    const layout = layoutAnchoredMenu(
+      anchor,
+      items.length,
+      menuWidth,
+      360,
+      640,
+    );
     expect(layout.top).toBeLessThan(anchor.y);
   });
 
   it('opens below when there is room under the bubble', () => {
-    const topAnchor = {x: 40, y: 80, width: 200, height: 48};
+    const topAnchor = { x: 40, y: 80, width: 200, height: 48 };
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
       topAnchor,
@@ -39,7 +45,7 @@ describe('layoutAnchoredMenu', () => {
   it('does not scroll for five items when viewport has room', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
-      {x: 40, y: 200, width: 200, height: 48},
+      { x: 40, y: 200, width: 200, height: 48 },
       items.length,
       menuWidth,
       360,
@@ -52,7 +58,7 @@ describe('layoutAnchoredMenu', () => {
   it('does not scroll five items in a short WebView-sized viewport when wedge fits', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
-      {x: 200, y: 316, width: 120, height: 40},
+      { x: 200, y: 316, width: 120, height: 40 },
       items.length,
       menuWidth,
       360,
@@ -65,7 +71,7 @@ describe('layoutAnchoredMenu', () => {
   it('scrolls when content exceeds the height cap', () => {
     const menuWidth = computeAnchoredMenuWidth(items, 360);
     const layout = layoutAnchoredMenu(
-      {x: 40, y: 200, width: 200, height: 48},
+      { x: 40, y: 200, width: 200, height: 48 },
       10,
       menuWidth,
       360,

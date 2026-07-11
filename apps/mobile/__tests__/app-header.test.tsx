@@ -1,8 +1,8 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
-import {AppHeader} from '../src/components/chrome/AppHeader';
-import type {ChatTabNavigationContextValue} from '../src/screens/tabs/chat-tab/ChatTabNavigationProvider';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
+import { AppHeader } from '../src/components/chrome/AppHeader';
+import type { ChatTabNavigationContextValue } from '../src/screens/tabs/chat-tab/ChatTabNavigationProvider';
 
 const mockNavState = {
   chatSubview: 'list' as 'list' | 'conversation',
@@ -35,7 +35,7 @@ const mockChatNav: ChatTabNavigationContextValue = {
 };
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 jest.mock('../src/theme/ThemeProvider', () => ({
@@ -52,7 +52,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 }));
 
 jest.mock('../src/navigation/HeaderContext', () => ({
-  useHeaderContext: () => ({chat: undefined, stackOverride: undefined}),
+  useHeaderContext: () => ({ chat: undefined, stackOverride: undefined }),
 }));
 
 jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
@@ -73,15 +73,15 @@ jest.mock('../src/components/icons/TabIcons', () => {
 jest.mock('react-native', () => {
   const mockReact = require('react');
   return {
-    Pressable: ({children, ...props}: {children?: React.ReactNode}) =>
+    Pressable: ({ children, ...props }: { children?: React.ReactNode }) =>
       mockReact.createElement('Pressable', props, children),
     StyleSheet: {
       hairlineWidth: 1,
       create: (s: object) => s,
     },
-    Text: ({children, ...props}: {children?: React.ReactNode}) =>
+    Text: ({ children, ...props }: { children?: React.ReactNode }) =>
       mockReact.createElement('Text', props, children),
-    View: ({children, ...props}: {children?: React.ReactNode}) =>
+    View: ({ children, ...props }: { children?: React.ReactNode }) =>
       mockReact.createElement('View', props, children),
   };
 });

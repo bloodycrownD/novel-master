@@ -1,6 +1,6 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
 import {
   useAndroidChatBackHandler,
   type AndroidChatBackActions,
@@ -11,11 +11,11 @@ let capturedHandler: (() => boolean) | undefined;
 const mockRemove = jest.fn();
 
 jest.mock('react-native', () => ({
-  Platform: {OS: 'android'},
+  Platform: { OS: 'android' },
   BackHandler: {
     addEventListener: jest.fn((_event: string, handler: () => boolean) => {
       capturedHandler = handler;
-      return {remove: mockRemove};
+      return { remove: mockRemove };
     }),
   },
 }));
@@ -88,9 +88,7 @@ describe('useAndroidChatBackHandler', () => {
     actions: AndroidChatBackActions,
   ): () => boolean {
     act(() => {
-      TestRenderer.create(
-        React.createElement(TestHost, {state, actions}),
-      );
+      TestRenderer.create(React.createElement(TestHost, { state, actions }));
     });
     expect(capturedHandler).toBeDefined();
     return capturedHandler!;
@@ -100,8 +98,8 @@ describe('useAndroidChatBackHandler', () => {
     const backFromConversation = jest.fn();
     const showChatPanel = jest.fn();
     const handler = mountAndGetHandler(
-      defaultState({chatSubview: 'conversation', conversationPanel: 'chat'}),
-      defaultActions({backFromConversation, showChatPanel}),
+      defaultState({ chatSubview: 'conversation', conversationPanel: 'chat' }),
+      defaultActions({ backFromConversation, showChatPanel }),
     );
 
     expect(handler()).toBe(true);
@@ -119,7 +117,7 @@ describe('useAndroidChatBackHandler', () => {
         conversationPanel: 'workspace',
         workspaceCanGoUp: false,
       }),
-      defaultActions({backFromConversation, showChatPanel}),
+      defaultActions({ backFromConversation, showChatPanel }),
     );
 
     expect(handler()).toBe(true);
@@ -139,7 +137,7 @@ describe('useAndroidChatBackHandler', () => {
         workspaceCanGoUp: true,
         workspaceGoUp,
       }),
-      defaultActions({backFromConversation, showChatPanel}),
+      defaultActions({ backFromConversation, showChatPanel }),
     );
 
     expect(handler()).toBe(true);
@@ -151,8 +149,8 @@ describe('useAndroidChatBackHandler', () => {
   it('T-B2: session list with no overlays returns false', () => {
     const backFromConversation = jest.fn();
     const handler = mountAndGetHandler(
-      defaultState({chatSubview: 'sessions'}),
-      defaultActions({backFromConversation}),
+      defaultState({ chatSubview: 'sessions' }),
+      defaultActions({ backFromConversation }),
     );
 
     expect(handler()).toBe(false);
@@ -167,7 +165,7 @@ describe('useAndroidChatBackHandler', () => {
         chatSubview: 'conversation',
         sessionDrawerOpen: true,
       }),
-      defaultActions({backFromConversation, closeSessionDrawer}),
+      defaultActions({ backFromConversation, closeSessionDrawer }),
     );
 
     expect(handler()).toBe(true);
@@ -178,8 +176,8 @@ describe('useAndroidChatBackHandler', () => {
   it('T-B5: project template panel returns to session list before exiting app', () => {
     const showSessionsPanel = jest.fn();
     const handler = mountAndGetHandler(
-      defaultState({sessionListPanel: 'template'}),
-      defaultActions({showSessionsPanel}),
+      defaultState({ sessionListPanel: 'template' }),
+      defaultActions({ showSessionsPanel }),
     );
 
     expect(handler()).toBe(true);
@@ -194,7 +192,7 @@ describe('useAndroidChatBackHandler', () => {
         chatSubview: 'conversation',
         agentPickerOpen: true,
       }),
-      defaultActions({backFromConversation, closeAgentPicker}),
+      defaultActions({ backFromConversation, closeAgentPicker }),
     );
 
     expect(handler()).toBe(true);
@@ -210,7 +208,7 @@ describe('useAndroidChatBackHandler', () => {
         chatSubview: 'conversation',
         messageMenuOpen: true,
       }),
-      defaultActions({backFromConversation, closeMessageMenu}),
+      defaultActions({ backFromConversation, closeMessageMenu }),
     );
 
     expect(handler()).toBe(true);

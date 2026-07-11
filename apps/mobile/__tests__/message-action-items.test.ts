@@ -1,4 +1,4 @@
-import { type ChatMessage } from "@novel-master/core/chat";
+import { type ChatMessage } from '@novel-master/core/chat';
 import {
   buildMessageActionItems,
   isSetFloorEligibleMessage,
@@ -13,7 +13,7 @@ function msg(
     sessionId: 's1',
     seq: 1,
     role,
-    content: {blocks},
+    content: { blocks },
     provider: null,
     raw: null,
     createdAtMs: 1,
@@ -23,21 +23,19 @@ function msg(
 
 describe('isSetFloorEligibleMessage', () => {
   it('allows user and assistant roles', () => {
-    expect(isSetFloorEligibleMessage(msg([{type: 'text', text: 'hi'}]))).toBe(
+    expect(isSetFloorEligibleMessage(msg([{ type: 'text', text: 'hi' }]))).toBe(
       true,
     );
     expect(
       isSetFloorEligibleMessage(
-        msg([{type: 'text', text: 'reply'}], 'assistant'),
+        msg([{ type: 'text', text: 'reply' }], 'assistant'),
       ),
     ).toBe(true);
   });
 
   it('rejects system role', () => {
     expect(
-      isSetFloorEligibleMessage(
-        msg([{type: 'text', text: 'sys'}], 'system'),
-      ),
+      isSetFloorEligibleMessage(msg([{ type: 'text', text: 'sys' }], 'system')),
     ).toBe(false);
   });
 });
@@ -45,7 +43,7 @@ describe('isSetFloorEligibleMessage', () => {
 describe('buildMessageActionItems', () => {
   it('includes edit, copy, set-floor, fork, rollback for editable messages', () => {
     const actions = buildMessageActionItems(
-      msg([{type: 'text', text: 'hi'}]),
+      msg([{ type: 'text', text: 'hi' }]),
     ).map(i => i.action);
     expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
@@ -54,8 +52,8 @@ describe('buildMessageActionItems', () => {
     const actions = buildMessageActionItems(
       msg(
         [
-          {type: 'text', text: 'reply'},
-          {type: 'tool_use', id: 't1', name: 'vfs.read', input: {}},
+          { type: 'text', text: 'reply' },
+          { type: 'tool_use', id: 't1', name: 'vfs.read', input: {} },
         ],
         'assistant',
       ),
@@ -66,7 +64,7 @@ describe('buildMessageActionItems', () => {
   it('includes set-floor when message has only tool_use blocks', () => {
     const actions = buildMessageActionItems(
       msg(
-        [{type: 'tool_use', id: 't1', name: 'vfs.read', input: {}}],
+        [{ type: 'tool_use', id: 't1', name: 'vfs.read', input: {} }],
         'assistant',
       ),
     ).map(i => i.action);
@@ -75,14 +73,14 @@ describe('buildMessageActionItems', () => {
 
   it('hidden 消息含置位、无 rollback', () => {
     const actions = buildMessageActionItems({
-      ...msg([{type: 'text', text: 'hi'}]),
+      ...msg([{ type: 'text', text: 'hi' }]),
       hidden: true,
     }).map(i => i.action);
     expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork']);
   });
 
   it('set-floor 在 copy 之后、fork 之前', () => {
-    const items = buildMessageActionItems(msg([{type: 'text', text: 'hi'}]));
+    const items = buildMessageActionItems(msg([{ type: 'text', text: 'hi' }]));
     const copyIdx = items.findIndex(i => i.action === 'copy');
     const setFloorIdx = items.findIndex(i => i.action === 'set-floor');
     const forkIdx = items.findIndex(i => i.action === 'fork');
@@ -103,16 +101,16 @@ function resolveSetFloorToastMessage(result: {
 
 describe('set-floor toast (T-SF18 mobile)', () => {
   it('有变更时 Toast「已置位」', () => {
-    expect(resolveSetFloorToastMessage({hiddenCount: 1, shownCount: 0})).toBe(
+    expect(resolveSetFloorToastMessage({ hiddenCount: 1, shownCount: 0 })).toBe(
       '已置位',
     );
-    expect(resolveSetFloorToastMessage({hiddenCount: 0, shownCount: 2})).toBe(
+    expect(resolveSetFloorToastMessage({ hiddenCount: 0, shownCount: 2 })).toBe(
       '已置位',
     );
   });
 
   it('幂等无变更时 Toast「上下文已是最新状态」', () => {
-    expect(resolveSetFloorToastMessage({hiddenCount: 0, shownCount: 0})).toBe(
+    expect(resolveSetFloorToastMessage({ hiddenCount: 0, shownCount: 0 })).toBe(
       '上下文已是最新状态',
     );
   });

@@ -89,10 +89,7 @@ export type TranscriptRestoreScroll = {
 
 /** Host → transcript */
 export type HostToTranscriptMessage =
-  | BridgeEnvelope<
-      'init',
-      {theme: TranscriptTheme; flags: TranscriptFlags}
-    >
+  | BridgeEnvelope<'init', { theme: TranscriptTheme; flags: TranscriptFlags }>
   | BridgeEnvelope<
       'sessionSnapshot',
       {
@@ -109,9 +106,9 @@ export type HostToTranscriptMessage =
     >
   | BridgeEnvelope<
       'prependPage',
-      {rows: readonly TranscriptRow[]; prependedCount: number}
+      { rows: readonly TranscriptRow[]; prependedCount: number }
     >
-  | BridgeEnvelope<'appendTailRows', {rows: readonly TranscriptRow[]}>
+  | BridgeEnvelope<'appendTailRows', { rows: readonly TranscriptRow[] }>
   | BridgeEnvelope<
       'streamCommit',
       {
@@ -140,10 +137,10 @@ export type HostToTranscriptMessage =
       }
     >
   | BridgeEnvelope<'streamReset', Record<string, never>>
-  | BridgeEnvelope<'streamToolInvoking', {active: boolean}>
-  | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
-  | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
-  | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
+  | BridgeEnvelope<'streamToolInvoking', { active: boolean }>
+  | BridgeEnvelope<'messagePatch', { messageId: string; patch: unknown }>
+  | BridgeEnvelope<'themeUpdate', { theme: TranscriptTheme }>
+  | BridgeEnvelope<'flagsUpdate', { flags: TranscriptFlags }>
   | BridgeEnvelope<'closeMenu', Record<string, never>>;
 
 /** Transcript → host */
@@ -157,7 +154,7 @@ export type ChatTranscriptScrollSnapshot = {
 };
 
 export type TranscriptToHostMessage =
-  | BridgeEnvelope<'ready', {version: string}>
+  | BridgeEnvelope<'ready', { version: string }>
   | BridgeEnvelope<
       'scrollSnapshot',
       ChatTranscriptScrollSnapshot & {
@@ -168,18 +165,15 @@ export type TranscriptToHostMessage =
   | BridgeEnvelope<'loadOlder', Record<string, never>>
   | BridgeEnvelope<
       'openMessageMenu',
-      {messageId: string; pageX: number; pageY: number}
+      { messageId: string; pageX: number; pageY: number }
     >
-  | BridgeEnvelope<'openToolFile', {path: string}>
-  | BridgeEnvelope<
-      'messageMenuAction',
-      {messageId: string; action: string}
-    >
+  | BridgeEnvelope<'openToolFile', { path: string }>
+  | BridgeEnvelope<'messageMenuAction', { messageId: string; action: string }>
   | BridgeEnvelope<'menuOpened', Record<string, never>>
   | BridgeEnvelope<'menuClosed', Record<string, never>>
   | BridgeEnvelope<
       'log',
-      {level: string; message: string; fields?: Record<string, unknown>}
+      { level: string; message: string; fields?: Record<string, unknown> }
     >;
 
 export type HostToTranscriptType = HostToTranscriptMessage['type'];
@@ -225,11 +219,11 @@ export function parseScrollSnapshotFromHost(
   if (message.type !== 'scrollSnapshot') {
     return null;
   }
-  const {schemaVersion, offsetY, nearBottom} = message.payload;
+  const { schemaVersion, offsetY, nearBottom } = message.payload;
   if (schemaVersion !== CHAT_TRANSCRIPT_SCROLL_SCHEMA_VERSION) {
     return null;
   }
-  return {schemaVersion, offsetY, nearBottom};
+  return { schemaVersion, offsetY, nearBottom };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

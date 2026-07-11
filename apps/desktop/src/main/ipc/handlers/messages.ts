@@ -6,10 +6,10 @@ import {
   textBlocks,
   type ChatMessage,
   type MessageContent,
-} from "@novel-master/core/chat";
+} from '@novel-master/core/chat';
 
-import { messageBodyText } from "@novel-master/core/prompt";
-import { type ContentBlock } from "@novel-master/core/chat";
+import { messageBodyText } from '@novel-master/core/prompt';
+import { type ContentBlock } from '@novel-master/core/chat';
 import type {
   ChatMessageDto,
   ContentBlockDto,
@@ -29,27 +29,27 @@ import type {
   MessagesTruncateAfterRequest,
   SessionDto,
   SessionFsRollbackRequest,
-} from "../../../../shared/ipc-types.js";
-import { formatIpcError } from "../format-ipc-error.js";
-import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
-import { loadSessionMessagesForDisplay } from "../../services/regex-apply-channel.service.js";
+} from '../../../../shared/ipc-types.js';
+import { formatIpcError } from '../format-ipc-error.js';
+import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
+import { loadSessionMessagesForDisplay } from '../../services/regex-apply-channel.service.js';
 
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
   switch (block.type) {
-    case "text":
-      return { type: "text", text: block.text };
-    case "thinking":
-      return { type: "thinking", text: block.text };
-    case "tool_use":
+    case 'text':
+      return { type: 'text', text: block.text };
+    case 'thinking':
+      return { type: 'thinking', text: block.text };
+    case 'tool_use':
       return {
-        type: "tool_use",
+        type: 'tool_use',
         id: block.id,
         name: block.name,
         input: block.input,
       };
-    case "tool_result":
+    case 'tool_result':
       return {
-        type: "tool_result",
+        type: 'tool_result',
         toolUseId: block.toolUseId,
         content: block.content,
         ...(block.ok !== undefined ? { ok: block.ok } : {}),
@@ -128,9 +128,9 @@ function applyTextEditToMessageContent(
   let textReplaced = false;
 
   for (const block of blocks) {
-    if (block.type === "text") {
+    if (block.type === 'text') {
       if (!textReplaced) {
-        result.push({ type: "text", text: newText });
+        result.push({ type: 'text', text: newText });
         textReplaced = true;
       }
     } else {
@@ -309,7 +309,9 @@ export async function handleMessagesRollback(
     const rollbackOptions =
       req.skipVfsReconcile || req.revisionHeadBackfill
         ? {
-            ...(req.skipVfsReconcile ? { skipVfsReconcile: true as const } : {}),
+            ...(req.skipVfsReconcile
+              ? { skipVfsReconcile: true as const }
+              : {}),
             ...(req.revisionHeadBackfill
               ? { revisionHeadBackfill: true as const }
               : {}),

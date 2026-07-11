@@ -185,10 +185,7 @@ function shouldSkipSnapshotAfterStreamCommit(
     return false;
   }
   const addedIds = messages.slice(prevCount).map(message => message.id);
-  return (
-    addedIds.length > 0 &&
-    addedIds.every(id => committedIds.includes(id))
-  );
+  return addedIds.length > 0 && addedIds.every(id => committedIds.includes(id));
 }
 
 export const ChatTranscriptWebView = memo(
@@ -419,12 +416,7 @@ export const ChatTranscriptWebView = memo(
           type: 'init',
           payload: { theme: themeFromTokens(tokens), flags: resolvedFlags },
         });
-      }, [
-        flags?.richText,
-        postToWeb,
-        tokens,
-        uiRunning,
-      ]);
+      }, [flags?.richText, postToWeb, tokens, uiRunning]);
 
       // C1: sessionSnapshot must not depend on streamingText/streamingThinking — stream tail only via streamDelta.
       const sendSessionSnapshotNow = useCallback(
@@ -608,7 +600,13 @@ export const ChatTranscriptWebView = memo(
           flushPendingSnapshot();
           syncStreamToolInvoking();
         }
-      }, [webReady, postToWeb, flushPendingSnapshot, clearLocalStreamBuffers, syncStreamToolInvoking]);
+      }, [
+        webReady,
+        postToWeb,
+        flushPendingSnapshot,
+        clearLocalStreamBuffers,
+        syncStreamToolInvoking,
+      ]);
 
       useImperativeHandle(
         ref,
@@ -618,7 +616,12 @@ export const ChatTranscriptWebView = memo(
           resetStream: resetStreamTail,
           tryCommitStreamTail,
         }),
-        [queueStreamDelta, queueStreamBatch, resetStreamTail, tryCommitStreamTail],
+        [
+          queueStreamDelta,
+          queueStreamBatch,
+          resetStreamTail,
+          tryCommitStreamTail,
+        ],
       );
 
       const sendPrependPage = useCallback(
@@ -741,12 +744,7 @@ export const ChatTranscriptWebView = memo(
           type: 'flagsUpdate',
           payload: { flags: resolvedFlags },
         });
-      }, [
-        webReady,
-        flags?.richText,
-        uiRunning,
-        postToWeb,
-      ]);
+      }, [webReady, flags?.richText, uiRunning, postToWeb]);
 
       useEffect(() => {
         if (!webReady) {
@@ -840,11 +838,14 @@ export const ChatTranscriptWebView = memo(
             offsetYBefore: lastScrollRef.current.offsetY,
           });
           sendPrependPage(prependedCount);
-        } else if (grew && shouldSkipSnapshotAfterStreamCommit(
-          messages,
-          prevCount,
-          lastStreamCommitIdsRef.current,
-        )) {
+        } else if (
+          grew &&
+          shouldSkipSnapshotAfterStreamCommit(
+            messages,
+            prevCount,
+            lastStreamCommitIdsRef.current,
+          )
+        ) {
           lastStreamCommitIdsRef.current = [];
           prevFirstMessageIdRef.current = firstId;
           prevMessageCountRef.current = messages.length;
@@ -877,7 +878,9 @@ export const ChatTranscriptWebView = memo(
             prevFirstId != null &&
             firstId != null &&
             firstId !== prevFirstId;
-          sendSessionSnapshot(shrink || tailWindowReplaced ? 'stick' : 'preserve');
+          sendSessionSnapshot(
+            shrink || tailWindowReplaced ? 'stick' : 'preserve',
+          );
         }
 
         prevFirstMessageIdRef.current = firstId;

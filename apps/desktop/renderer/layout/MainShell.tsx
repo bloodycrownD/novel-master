@@ -1,14 +1,14 @@
-import type { RefObject } from "react";
-import type { WorkspaceContextTarget } from "../features/workspace/WorkspaceTree";
-import { ChatRail } from "./ChatRail";
-import { ExplorerPane } from "./ExplorerPane";
-import { PreviewPane } from "./PreviewPane";
+import type { RefObject } from 'react';
+import type { WorkspaceContextTarget } from '../features/workspace/WorkspaceTree';
+import { ChatRail } from './ChatRail';
+import { ExplorerPane } from './ExplorerPane';
+import { PreviewPane } from './PreviewPane';
 
 interface MainShellProps {
   workspaceRef: RefObject<HTMLDivElement | null>;
   onOpenWorkspaceContextMenu: (target: WorkspaceContextTarget) => void;
   onBlankWorkspaceContextMenu: (
-    target: Extract<WorkspaceContextTarget, { kind: "blank" }>,
+    target: Extract<WorkspaceContextTarget, { kind: 'blank' }>,
   ) => void;
   onOpenSessionActions: (anchor: HTMLElement) => void;
   settingsOpen: boolean;

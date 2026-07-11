@@ -29,7 +29,10 @@ export function useChatTabController() {
   });
 
   const handleMessageLongPress = useCallback(
-    (msg: import('@novel-master/core/chat').ChatMessage, anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor) => {
+    (
+      msg: import('@novel-master/core/chat').ChatMessage,
+      anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor,
+    ) => {
       if (ctx.uiRunning) {
         return;
       }
@@ -43,7 +46,11 @@ export function useChatTabController() {
     if (ctx.projectId == null || ctx.sessionId == null) {
       return;
     }
-    invalidateSessionWorktreeSnapshot(ctx.runtime, ctx.projectId, ctx.sessionId);
+    invalidateSessionWorktreeSnapshot(
+      ctx.runtime,
+      ctx.projectId,
+      ctx.sessionId,
+    );
     ctx.showToast('工作树快照已标记刷新');
   }, [ctx]);
 

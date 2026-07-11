@@ -7,17 +7,18 @@ import {
   type AgentActivityPayload,
   type VfsScopeRequest,
   type WorkspaceMutatedPayload,
-} from "@shared/ipc-types";
-import { createInvokeClient } from "./invoke-registry";
+} from '@shared/ipc-types';
+import { createInvokeClient } from './invoke-registry';
 
 function bridge() {
   if (!window.novelMasterDesktop) {
     const inBrowser =
-      typeof navigator !== "undefined" && !/Electron/i.test(navigator.userAgent);
+      typeof navigator !== 'undefined' &&
+      !/Electron/i.test(navigator.userAgent);
     throw new Error(
       inBrowser
-        ? "novelMasterDesktop 仅在 Electron 中可用。请运行 npm run desktop:dev，不要直接在浏览器打开 localhost:5173。"
-        : "novelMasterDesktop preload bridge is unavailable（preload 未加载，请重新 build 后启动 Electron）",
+        ? 'novelMasterDesktop 仅在 Electron 中可用。请运行 npm run desktop:dev，不要直接在浏览器打开 localhost:5173。'
+        : 'novelMasterDesktop preload bridge is unavailable（preload 未加载，请重新 build 后启动 Electron）',
     );
   }
   return window.novelMasterDesktop;
@@ -150,14 +151,20 @@ export const {
 export function onAgentStream(
   callback: (payload: AgentStreamEventPayload) => void,
 ): () => void {
-  return bridge().on(IPC_CHANNELS.AGENT_STREAM, callback as (p: unknown) => void);
+  return bridge().on(
+    IPC_CHANNELS.AGENT_STREAM,
+    callback as (p: unknown) => void,
+  );
 }
 
 /** 订阅 main 进程 agentActive refcount 变化。 */
 export function onAgentActivity(
   callback: (payload: AgentActivityPayload) => void,
 ): () => void {
-  return bridge().on(IPC_CHANNELS.AGENT_ACTIVITY, callback as (p: unknown) => void);
+  return bridge().on(
+    IPC_CHANNELS.AGENT_ACTIVITY,
+    callback as (p: unknown) => void,
+  );
 }
 
 /** 订阅 main 进程推送的工作区变更通知（VFS / 规则变更后 Explorer 刷新）。 */
@@ -171,7 +178,7 @@ export function onWorkspaceMutated(
 }
 
 function vfsScope(
-  workspaceScope: VfsScopeRequest["workspaceScope"],
+  workspaceScope: VfsScopeRequest['workspaceScope'],
   projectId?: string,
   sessionId?: string,
 ): VfsScopeRequest {

@@ -1,17 +1,24 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
-import { type ChatMessage } from "@novel-master/core/chat";
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
+import { type ChatMessage } from '@novel-master/core/chat';
 import {
   CHAT_TRANSCRIPT_BRIDGE_VERSION,
   decodeHostToTranscript,
 } from '../src/components/chat/ChatTranscriptBridge';
-import {ChatTranscriptWebView} from '../src/components/chat/ChatTranscriptWebView';
+import { ChatTranscriptWebView } from '../src/components/chat/ChatTranscriptWebView';
 import {
   clearMockWebViewPostMessages,
   mockWebViewPostMessages,
 } from '../test-utils/react-native-webview-mock';
-import {emitChatTranscriptTelemetry} from '../src/services/chat-transcript-telemetry';
+import { emitChatTranscriptTelemetry } from '../src/services/chat-transcript-telemetry';
 
 const mockEmitTelemetry = emitChatTranscriptTelemetry as jest.MockedFunction<
   typeof emitChatTranscriptTelemetry
@@ -40,7 +47,7 @@ function sampleMessage(id: string, seq: number): ChatMessage {
     sessionId: 's1',
     seq,
     role: 'user',
-    content: {blocks: [{type: 'text', text: `msg-${id}`}]},
+    content: { blocks: [{ type: 'text', text: `msg-${id}` }] },
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -55,7 +62,7 @@ function assistantWithToolUse(id: string, seq: number): ChatMessage {
     seq,
     role: 'assistant',
     content: {
-      blocks: [{type: 'tool_use', id: `tu-${id}`, name: 'read', input: {}}],
+      blocks: [{ type: 'tool_use', id: `tu-${id}`, name: 'read', input: {} }],
     },
     provider: null,
     raw: null,
@@ -64,13 +71,17 @@ function assistantWithToolUse(id: string, seq: number): ChatMessage {
   };
 }
 
-function assistantTextMessage(id: string, seq: number, text: string): ChatMessage {
+function assistantTextMessage(
+  id: string,
+  seq: number,
+  text: string,
+): ChatMessage {
   return {
     id,
     sessionId: 's1',
     seq,
     role: 'assistant',
-    content: {blocks: [{type: 'text', text}]},
+    content: { blocks: [{ type: 'text', text }] },
     provider: null,
     raw: null,
     createdAtMs: seq,
@@ -78,14 +89,18 @@ function assistantTextMessage(id: string, seq: number, text: string): ChatMessag
   };
 }
 
-function toolResultsUserMessage(id: string, seq: number, toolUseId: string): ChatMessage {
+function toolResultsUserMessage(
+  id: string,
+  seq: number,
+  toolUseId: string,
+): ChatMessage {
   return {
     id,
     sessionId: 's1',
     seq,
     role: 'user',
     content: {
-      blocks: [{type: 'tool_result', tool_use_id: toolUseId, content: 'ok'}],
+      blocks: [{ type: 'tool_result', tool_use_id: toolUseId, content: 'ok' }],
     },
     provider: null,
     raw: null,
@@ -135,7 +150,7 @@ function simulateWebMessage(
 ): void {
   const webView = root.findByType(
     require('react-native-webview').default as React.ComponentType<{
-      onMessage?: (event: {nativeEvent: {data: string}}) => void;
+      onMessage?: (event: { nativeEvent: { data: string } }) => void;
     }>,
   );
   act(() => {
@@ -151,10 +166,8 @@ function simulateWebMessage(
   });
 }
 
-function simulateWebReady(
-  root: TestRenderer.ReactTestInstance,
-): void {
-  simulateWebMessage(root, 'ready', {version: 'test'});
+function simulateWebReady(root: TestRenderer.ReactTestInstance): void {
+  simulateWebMessage(root, 'ready', { version: 'test' });
 }
 
 async function flushAnimationFrame(): Promise<void> {
@@ -239,7 +252,9 @@ describe('ChatTranscriptWebView', () => {
 
     const typesAfterMoreStream = messageTypesSince(baseline2);
     expect(typesAfterMoreStream).not.toContain('sessionSnapshot');
-    expect(typesAfterMoreStream.filter(t => t === 'streamDelta').length).toBeGreaterThanOrEqual(1);
+    expect(
+      typesAfterMoreStream.filter(t => t === 'streamDelta').length,
+    ).toBeGreaterThanOrEqual(1);
   });
 
   it('richText 开启时 text streamDelta 应包含 RN html（与 spec 契约一致）', async () => {
@@ -253,7 +268,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -272,7 +287,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText="**bold**"
           streamingThinking=""
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -306,7 +321,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -325,7 +340,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking="*reason*"
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -390,7 +405,7 @@ describe('ChatTranscriptWebView', () => {
     const typesAfterMenu = messageTypesSince(baseline);
     expect(typesAfterMenu).not.toContain('sessionSnapshot');
     expect(typesAfterMenu).not.toContain('flagsUpdate');
-    expect(mockEmitTelemetry).toHaveBeenCalledWith({name: 'menu_open'});
+    expect(mockEmitTelemetry).toHaveBeenCalledWith({ name: 'menu_open' });
   });
 
   it('T7: new flags object ref with same values does not post flagsUpdate', async () => {
@@ -422,7 +437,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{...baseFlags}}
+          flags={{ ...baseFlags }}
         />,
       );
     });
@@ -477,7 +492,7 @@ describe('ChatTranscriptWebView', () => {
     const messages = [sampleMessage('m1', 1)];
     const edited = {
       ...messages[0]!,
-      content: {blocks: [{type: 'text' as const, text: 'edited'}]},
+      content: { blocks: [{ type: 'text' as const, text: 'edited' }] },
     };
     let tree: TestRenderer.ReactTestRenderer;
 
@@ -525,7 +540,10 @@ describe('ChatTranscriptWebView', () => {
     const messages = [sampleMessage('m1', 1)];
     const assistant = assistantTextMessage('a1', 2, 'done');
     let tree: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
 
     await act(async () => {
       tree = TestRenderer.create(
@@ -576,7 +594,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: false}}
+          flags={{ richText: false }}
         />,
       );
     });
@@ -591,7 +609,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -604,7 +622,10 @@ describe('ChatTranscriptWebView', () => {
   it('T-kkv-batch-off: pushStreamDelta 同一 RAF 内按到达序 post streamDelta', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
 
     await act(async () => {
       tree = TestRenderer.create(
@@ -642,19 +663,22 @@ describe('ChatTranscriptWebView', () => {
         if (msg.type !== 'streamDelta') {
           return null;
         }
-        return {kind: msg.payload.kind, delta: msg.payload.delta};
+        return { kind: msg.payload.kind, delta: msg.payload.delta };
       }),
     ).toEqual([
-      {kind: 'thinking', delta: 'A'},
-      {kind: 'text', delta: 'B'},
-      {kind: 'thinking', delta: 'C'},
+      { kind: 'thinking', delta: 'A' },
+      { kind: 'text', delta: 'B' },
+      { kind: 'thinking', delta: 'C' },
     ]);
   });
 
   it('imperative pushStreamBatch 发送 streamBatch 且 rich 含 html', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
 
     await act(async () => {
       tree = TestRenderer.create(
@@ -662,7 +686,7 @@ describe('ChatTranscriptWebView', () => {
           ref={ref}
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: true}}
+          flags={{ richText: true }}
         />,
       );
     });
@@ -677,8 +701,8 @@ describe('ChatTranscriptWebView', () => {
     await act(async () => {
       ref.current?.pushStreamBatch({
         segments: [
-          {kind: 'thinking', delta: '*r*'},
-          {kind: 'text', delta: '**b**'},
+          { kind: 'thinking', delta: '*r*' },
+          { kind: 'text', delta: '**b**' },
         ],
       });
     });
@@ -691,8 +715,8 @@ describe('ChatTranscriptWebView', () => {
     expect(batchMsg?.type).toBe('streamBatch');
     if (batchMsg?.type === 'streamBatch') {
       expect(batchMsg.payload.segments).toEqual([
-        {kind: 'thinking', delta: '*r*'},
-        {kind: 'text', delta: '**b**'},
+        { kind: 'thinking', delta: '*r*' },
+        { kind: 'text', delta: '**b**' },
       ]);
       expect(typeof batchMsg.payload.textHtml).toBe('string');
       expect(batchMsg.payload.textHtml!.length).toBeGreaterThan(0);
@@ -803,7 +827,10 @@ describe('ChatTranscriptWebView', () => {
       tree!.update(
         <ChatTranscriptWebView
           sessionKey="p1:s1"
-          messages={[...initialMessages, assistantTextMessage('a1', 2, 'hello')]}
+          messages={[
+            ...initialMessages,
+            assistantTextMessage('a1', 2, 'hello'),
+          ]}
           agentRunning
           uiRunning
         />,
@@ -820,7 +847,10 @@ describe('ChatTranscriptWebView', () => {
     const initialMessages = [sampleMessage('u1', 1)];
     const assistant = assistantTextMessage('a1', 2, 'stream done');
     let tree: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
 
     await act(async () => {
       tree = TestRenderer.create(
@@ -876,11 +906,18 @@ describe('ChatTranscriptWebView', () => {
   it('T-W4: abort resetStream 仍清 stream tail', async () => {
     const messages = [sampleMessage('m1', 1)];
     let tree: TestRenderer.ReactTestRenderer;
-    const ref = React.createRef<import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle>();
+    const ref =
+      React.createRef<
+        import('../src/components/chat/ChatTranscriptWebView').ChatTranscriptWebViewHandle
+      >();
 
     await act(async () => {
       tree = TestRenderer.create(
-        <ChatTranscriptWebView ref={ref} sessionKey="p1:s1" messages={messages} />,
+        <ChatTranscriptWebView
+          ref={ref}
+          sessionKey="p1:s1"
+          messages={messages}
+        />,
       );
     });
 
@@ -938,10 +975,10 @@ describe('ChatTranscriptWebView', () => {
   });
 
   it('同长度但 firstId 变化（满页回滚）时 sessionSnapshot 使用 stick', async () => {
-    const initialMessages = Array.from({length: 40}, (_, i) =>
+    const initialMessages = Array.from({ length: 40 }, (_, i) =>
       sampleMessage(`old-${i + 1}`, i + 1),
     );
-    const afterRollback = Array.from({length: 40}, (_, i) =>
+    const afterRollback = Array.from({ length: 40 }, (_, i) =>
       sampleMessage(`new-${i + 1}`, i + 1),
     );
     let tree: TestRenderer.ReactTestRenderer;
@@ -970,10 +1007,7 @@ describe('ChatTranscriptWebView', () => {
   });
 
   it('同长度消息变更时 sessionSnapshot 仍使用 preserve', async () => {
-    const initialMessages = [
-      sampleMessage('m1', 1),
-      sampleMessage('m2', 2),
-    ];
+    const initialMessages = [sampleMessage('m1', 1), sampleMessage('m2', 2)];
     let tree: TestRenderer.ReactTestRenderer;
 
     await act(async () => {
@@ -988,7 +1022,7 @@ describe('ChatTranscriptWebView', () => {
     const baseline = mockWebViewPostMessages.length;
 
     const updatedSameLength = [
-      {...initialMessages[0]!, hidden: true},
+      { ...initialMessages[0]!, hidden: true },
       initialMessages[1]!,
     ];
 

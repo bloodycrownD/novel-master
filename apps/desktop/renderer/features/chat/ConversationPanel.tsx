@@ -1,16 +1,16 @@
-import { formatRollbackRevisionBackfillAlertMessage } from "@novel-master/core/session-fs";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChatMessageDto } from "@shared/ipc-types";
+import { formatRollbackRevisionBackfillAlertMessage } from '@novel-master/core/session-fs';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ChatMessageDto } from '@shared/ipc-types';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
-} from "@shared/agent-event-types";
-import { useAgentStream } from "@/hooks/useAgentStream";
-import { useAgentRunLifecycle } from "@/hooks/useAgentRunLifecycle";
-import { useChatMessagesScrollFollow } from "@/hooks/useChatMessagesScrollFollow";
-import { useAgentStreamMetrics } from "@/hooks/useAgentStreamMetrics";
-import { useDesktopAgentActive } from "@/hooks/useDesktopAgentActive";
+} from '@shared/agent-event-types';
+import { useAgentStream } from '@/hooks/useAgentStream';
+import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
+import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
+import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
+import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
 import {
   ipcAppUiGet,
   ipcCompactionManual,
@@ -19,25 +19,25 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesSetFloor,
-} from "@/ipc/client";
-import { useShellNav } from "@/providers/ShellNavProvider";
-import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { showToast } from "@/components/ui/show-toast";
-import { formatUserError } from "@/utils/format-user-error";
-import { ChatComposer } from "./ChatComposer";
+} from '@/ipc/client';
+import { useShellNav } from '@/providers/ShellNavProvider';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { showToast } from '@/components/ui/show-toast';
+import { formatUserError } from '@/utils/format-user-error';
+import { ChatComposer } from './ChatComposer';
 import {
   deriveComposerSendState,
   findLastVisibleMessageDto,
-} from "./composer-send-state";
+} from './composer-send-state';
 import {
   buildMessageActionItems,
   editableTextFromMessage,
-} from "./message-edit";
-import { MessageEditModal } from "./MessageEditModal";
-import { flushAgentStepUi } from "./flush-run-ui";
-import { MessageList } from "./MessageList";
-import { RealPromptPanel } from "./RealPromptPanel";
-import { AgentStreamMetricsBar } from "./AgentStreamMetricsBar";
+} from './message-edit';
+import { MessageEditModal } from './MessageEditModal';
+import { flushAgentStepUi } from './flush-run-ui';
+import { MessageList } from './MessageList';
+import { RealPromptPanel } from './RealPromptPanel';
+import { AgentStreamMetricsBar } from './AgentStreamMetricsBar';
 
 interface ConversationPanelProps {
   projectId: string;
@@ -50,13 +50,18 @@ export function ConversationPanel({
   sessionId,
   onOpenSessionActions,
 }: ConversationPanelProps) {
-  const { notifyWorkspaceMutated, openSession, projectName, openChatWorkspacePreview } = useShellNav();
+  const {
+    notifyWorkspaceMutated,
+    openSession,
+    projectName,
+    openChatWorkspacePreview,
+  } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
   const streamResetRef = useRef<() => void>(() => {});
-  const [tab, setTab] = useState<"chat" | "realPrompt">("chat");
+  const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingThinking, setStreamingThinking] = useState("");
+  const [streamingText, setStreamingText] = useState('');
+  const [streamingThinking, setStreamingThinking] = useState('');
 
   const runLifecycle = useAgentRunLifecycle(() => streamResetRef.current());
   const {
@@ -73,8 +78,8 @@ export function ConversationPanel({
   const agentActive = useDesktopAgentActive();
 
   const onStreamReset = useCallback(() => {
-    setStreamingText("");
-    setStreamingThinking("");
+    setStreamingText('');
+    setStreamingThinking('');
   }, []);
 
   useEffect(() => {
@@ -103,10 +108,14 @@ export function ConversationPanel({
     initialText: string;
   } | null>(null);
   const [confirmState, setConfirmState] = useState<
-    | { kind: "set-floor"; messageId: string }
-    | { kind: "rollback"; messageId: string }
-    | { kind: "rollback-backfill"; messageId: string; missingLogicalPaths: readonly string[] }
-    | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
+    | { kind: 'set-floor'; messageId: string }
+    | { kind: 'rollback'; messageId: string }
+    | {
+        kind: 'rollback-backfill';
+        messageId: string;
+        missingLogicalPaths: readonly string[];
+      }
+    | { kind: 'rollback-degraded'; messageId: string; errorMessage: string }
     | null
   >(null);
 
@@ -134,27 +143,33 @@ export function ConversationPanel({
   }, [sessionId, resetUiForSessionChange, onStreamReset]);
 
   useEffect(() => {
-    ipcAppUiGet("chatRichText")
-      .then((res) =>
+    ipcAppUiGet('chatRichText')
+      .then(res =>
         setChatRichText(
-          res.ok && res.data != null ? res.data !== "false" : true,
+          res.ok && res.data != null ? res.data !== 'false' : true,
         ),
       )
       .catch(() => undefined);
   }, []);
 
-  const onTextDelta = useCallback((delta: string) => {
-    if (delta.length === 0) {
-      return;
-    }
-    noteMetricsTextDelta(delta);
-    setStreamingText((prev) => prev + delta);
-  }, [noteMetricsTextDelta]);
+  const onTextDelta = useCallback(
+    (delta: string) => {
+      if (delta.length === 0) {
+        return;
+      }
+      noteMetricsTextDelta(delta);
+      setStreamingText(prev => prev + delta);
+    },
+    [noteMetricsTextDelta],
+  );
 
-  const onThinkingDelta = useCallback((delta: string) => {
-    noteMetricsThinkingDelta(delta);
-    setStreamingThinking((prev) => prev + delta);
-  }, [noteMetricsThinkingDelta]);
+  const onThinkingDelta = useCallback(
+    (delta: string) => {
+      noteMetricsThinkingDelta(delta);
+      setStreamingThinking(prev => prev + delta);
+    },
+    [noteMetricsThinkingDelta],
+  );
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
@@ -173,8 +188,8 @@ export function ConversationPanel({
       if (!finishUiRun(payload)) {
         return;
       }
-      setStreamingText("");
-      setStreamingThinking("");
+      setStreamingText('');
+      setStreamingThinking('');
       if (payload.vfsMutated) {
         notifyWorkspaceMutated();
       }
@@ -189,8 +204,8 @@ export function ConversationPanel({
       if (!failUiRun(payload)) {
         return;
       }
-      setStreamingText("");
-      setStreamingThinking("");
+      setStreamingText('');
+      setStreamingThinking('');
       if (vfsMutatedInRunRef.current) {
         notifyWorkspaceMutated();
       }
@@ -229,8 +244,8 @@ export function ConversationPanel({
 
   useEffect(() => {
     const onDocClick = () => closeMessageMenu();
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
   }, [closeMessageMenu]);
 
   const openMessageMenu = useCallback(
@@ -252,24 +267,24 @@ export function ConversationPanel({
   const copyMessage = useCallback(async (message: ChatMessageDto) => {
     const text = editableTextFromMessage(message) ?? message.bodyText?.trim();
     if (!text) {
-      showToast("该消息没有可复制的文本");
+      showToast('该消息没有可复制的文本');
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
-      showToast("已复制");
+      showToast('已复制');
     } catch {
-      showToast("复制失败");
+      showToast('复制失败');
     }
   }, []);
 
   const rollbackToMessage = useCallback(
     async (messageId: string) => {
       if (running) {
-        showToast("Agent 运行中无法回滚");
+        showToast('Agent 运行中无法回滚');
         return;
       }
-      setConfirmState({ kind: "rollback", messageId });
+      setConfirmState({ kind: 'rollback', messageId });
     },
     [running],
   );
@@ -292,17 +307,17 @@ export function ConversationPanel({
           : {}),
       });
       if (!result.ok) {
-        if (result.error.code === "ROLLBACK_REVISION_BACKFILL_REQUIRED") {
+        if (result.error.code === 'ROLLBACK_REVISION_BACKFILL_REQUIRED') {
           setConfirmState({
-            kind: "rollback-backfill",
+            kind: 'rollback-backfill',
             messageId,
             missingLogicalPaths: result.error.missingLogicalPaths ?? [],
           });
           return;
         }
-        if (result.error.code === "ROLLBACK_VFS_RESTORE_FAILED") {
+        if (result.error.code === 'ROLLBACK_VFS_RESTORE_FAILED') {
           setConfirmState({
-            kind: "rollback-degraded",
+            kind: 'rollback-degraded',
             messageId,
             errorMessage: result.error.message,
           });
@@ -311,13 +326,13 @@ export function ConversationPanel({
         showToast(result.error.message);
         return;
       }
-      setStreamingText("");
+      setStreamingText('');
       await reloadMessages();
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
       showToast(
-        options?.skipVfsReconcile ? "对话已截断，工作区未恢复" : "回滚成功",
+        options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
     },
     [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
@@ -325,30 +340,30 @@ export function ConversationPanel({
 
   const handleMessageAction = useCallback(
     async (message: ChatMessageDto, action: string) => {
-      if (action === "edit") {
+      if (action === 'edit') {
         const initial = editableTextFromMessage(message);
         if (initial == null) {
-          showToast("该消息没有可编辑的文本");
+          showToast('该消息没有可编辑的文本');
           return;
         }
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }
-      if (action === "copy") {
+      if (action === 'copy') {
         await copyMessage(message);
         return;
       }
-      if (action === "set-floor") {
+      if (action === 'set-floor') {
         if (running) {
-          showToast("Agent 运行中无法置位");
+          showToast('Agent 运行中无法置位');
           return;
         }
-        setConfirmState({ kind: "set-floor", messageId: message.id });
+        setConfirmState({ kind: 'set-floor', messageId: message.id });
         return;
       }
-      if (action === "fork") {
+      if (action === 'fork') {
         if (running) {
-          showToast("Agent 运行中无法分叉");
+          showToast('Agent 运行中无法分叉');
           return;
         }
         const result = await ipcMessagesFork({
@@ -359,11 +374,11 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
-        setStreamingText("");
-        await openSession(result.data, projectName ?? "—");
+        setStreamingText('');
+        await openSession(result.data, projectName ?? '—');
         return;
       }
-      if (action === "rollback") {
+      if (action === 'rollback') {
         await rollbackToMessage(message.id);
       }
     },
@@ -393,13 +408,13 @@ export function ConversationPanel({
     const state = confirmState;
     setConfirmState(null);
     if (!state) return;
-    if (state.kind === "rollback") {
+    if (state.kind === 'rollback') {
       await executeRollback(state.messageId);
-    } else if (state.kind === "rollback-backfill") {
+    } else if (state.kind === 'rollback-backfill') {
       await executeRollback(state.messageId, { revisionHeadBackfill: true });
-    } else if (state.kind === "rollback-degraded") {
+    } else if (state.kind === 'rollback-degraded') {
       await executeRollback(state.messageId, { skipVfsReconcile: true });
-    } else if (state.kind === "set-floor") {
+    } else if (state.kind === 'set-floor') {
       const result = await ipcMessagesSetFloor({
         projectId,
         sessionId,
@@ -409,11 +424,10 @@ export function ConversationPanel({
         showToast(result.error.message);
         return;
       }
-      const changed =
-        result.data.hiddenCount + result.data.shownCount > 0;
+      const changed = result.data.hiddenCount + result.data.shownCount > 0;
       await reloadMessages();
       notifyWorkspaceMutated();
-      showToast(changed ? "已置位" : "上下文已是最新状态");
+      showToast(changed ? '已置位' : '上下文已是最新状态');
     }
   }, [
     confirmState,
@@ -425,76 +439,74 @@ export function ConversationPanel({
   ]);
 
   const confirmMessage = (() => {
-    if (!confirmState) return "";
-    if (confirmState.kind === "set-floor") {
-      return "此消息之前将不参与提示词，此消息及之后将恢复可见。";
+    if (!confirmState) return '';
+    if (confirmState.kind === 'set-floor') {
+      return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
     }
-    if (confirmState.kind === "rollback-degraded") {
+    if (confirmState.kind === 'rollback-degraded') {
       return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
     }
-    if (confirmState.kind === "rollback-backfill") {
+    if (confirmState.kind === 'rollback-backfill') {
       return formatRollbackRevisionBackfillAlertMessage(
         confirmState.missingLogicalPaths,
       );
     }
-    return "将删除此消息之后的对话，并撤销相关文件修改。是否继续？";
+    return '将删除此消息之后的对话，并撤销相关文件修改。是否继续？';
   })();
 
   const confirmTitle =
-    confirmState?.kind === "set-floor"
-      ? "置位到此消息？"
-      : confirmState?.kind === "rollback-degraded"
-        ? "无法恢复工作区"
-        : confirmState?.kind === "rollback-backfill"
-          ? "快照丢失"
-          : "确认操作";
+    confirmState?.kind === 'set-floor'
+      ? '置位到此消息？'
+      : confirmState?.kind === 'rollback-degraded'
+      ? '无法恢复工作区'
+      : confirmState?.kind === 'rollback-backfill'
+      ? '快照丢失'
+      : '确认操作';
 
   const confirmLabel =
-    confirmState?.kind === "set-floor"
-      ? "置位"
-      : confirmState?.kind === "rollback-degraded"
-        ? "仅删除后续对话"
-        : confirmState?.kind === "rollback-backfill"
-          ? "继续回滚"
-          : "确定";
+    confirmState?.kind === 'set-floor'
+      ? '置位'
+      : confirmState?.kind === 'rollback-degraded'
+      ? '仅删除后续对话'
+      : confirmState?.kind === 'rollback-backfill'
+      ? '继续回滚'
+      : '确定';
 
   return (
     <>
       <div className="conversation-tabs" role="tablist" aria-label="会话内容">
         <button
           type="button"
-          className={`conversation-tab${tab === "chat" ? " is-active" : ""}`}
+          className={`conversation-tab${tab === 'chat' ? ' is-active' : ''}`}
           data-conversation-tab="chat"
           role="tab"
-          aria-selected={tab === "chat"}
-          onClick={() => setTab("chat")}
+          aria-selected={tab === 'chat'}
+          onClick={() => setTab('chat')}
         >
           聊天
         </button>
         <button
           type="button"
-          className={`conversation-tab${tab === "realPrompt" ? " is-active" : ""}`}
+          className={`conversation-tab${
+            tab === 'realPrompt' ? ' is-active' : ''
+          }`}
           data-conversation-tab="realPrompt"
           role="tab"
-          aria-selected={tab === "realPrompt"}
-          onClick={() => setTab("realPrompt")}
+          aria-selected={tab === 'realPrompt'}
+          onClick={() => setTab('realPrompt')}
         >
           提示词
         </button>
       </div>
       <div
-        className={`conversation-panel${tab === "chat" ? " is-visible" : ""}`}
+        className={`conversation-panel${tab === 'chat' ? ' is-visible' : ''}`}
         data-conversation-panel="chat"
-        hidden={tab !== "chat"}
+        hidden={tab !== 'chat'}
       >
         {streamMetrics != null ? (
           <AgentStreamMetricsBar metrics={streamMetrics} />
         ) : null}
-        <div
-          ref={chatMessagesRef}
-          className="chat-messages"
-          id="chat-messages"
-        >
+        <div ref={chatMessagesRef} className="chat-messages" id="chat-messages">
           <MessageList
             messages={messages}
             uiRunning={running}
@@ -509,7 +521,7 @@ export function ConversationPanel({
         </div>
         <div
           id="message-actions-menu"
-          className={`message-actions-menu${messageMenu ? "" : " hidden"}`}
+          className={`message-actions-menu${messageMenu ? '' : ' hidden'}`}
           role="menu"
           aria-label="消息操作"
           hidden={!messageMenu}
@@ -518,14 +530,14 @@ export function ConversationPanel({
               ? { left: messageMenu.x, top: messageMenu.y }
               : undefined
           }
-          onClick={(e) => e.stopPropagation()}
+          onClick={e => e.stopPropagation()}
         >
-          {menuItems.map((item) => (
+          {menuItems.map(item => (
             <button
               key={item.action}
               type="button"
               data-message-action={item.action}
-              className={item.danger ? "is-danger" : undefined}
+              className={item.danger ? 'is-danger' : undefined}
               onClick={() => {
                 const target = messageMenu?.message;
                 closeMessageMenu();
@@ -541,9 +553,9 @@ export function ConversationPanel({
         <MessageEditModal
           open={messageEdit != null}
           title="编辑消息"
-          initialValue={messageEdit?.initialText ?? ""}
+          initialValue={messageEdit?.initialText ?? ''}
           onClose={() => setMessageEdit(null)}
-          onConfirm={async (value) => {
+          onConfirm={async value => {
             const edit = messageEdit;
             setMessageEdit(null);
             if (edit) {
@@ -570,14 +582,16 @@ export function ConversationPanel({
         />
       </div>
       <div
-        className={`conversation-panel${tab === "realPrompt" ? " is-visible" : ""}`}
+        className={`conversation-panel${
+          tab === 'realPrompt' ? ' is-visible' : ''
+        }`}
         data-conversation-panel="realPrompt"
-        hidden={tab !== "realPrompt"}
+        hidden={tab !== 'realPrompt'}
       >
         <RealPromptPanel
           projectId={projectId}
           sessionId={sessionId}
-          visible={tab === "realPrompt"}
+          visible={tab === 'realPrompt'}
         />
       </div>
       <ConfirmModal
@@ -586,9 +600,9 @@ export function ConversationPanel({
         message={confirmMessage}
         confirmLabel={confirmLabel}
         danger={
-          confirmState?.kind === "rollback" ||
-          confirmState?.kind === "rollback-backfill" ||
-          confirmState?.kind === "rollback-degraded"
+          confirmState?.kind === 'rollback' ||
+          confirmState?.kind === 'rollback-backfill' ||
+          confirmState?.kind === 'rollback-degraded'
         }
         onConfirm={() => void handleConfirm()}
         onCancel={() => setConfirmState(null)}

@@ -1,14 +1,14 @@
 /**
  * Chat tab message list state: tail load, cache, and older-message paging.
  */
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {Alert} from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { type ChatMessage } from "@novel-master/core/chat";
+import { type ChatMessage } from '@novel-master/core/chat';
 
-import { EVENT_SESSION_COMPACTION_REQUESTED } from "@novel-master/core/events";
-import {formatError} from '@/errors/format-error';
-import {toastMessage} from '@/errors/toast-message';
+import { EVENT_SESSION_COMPACTION_REQUESTED } from '@novel-master/core/events';
+import { formatError } from '@/errors/format-error';
+import { toastMessage } from '@/errors/toast-message';
 import {
   applyTextEditToMessage,
   editableTextFromMessage,
@@ -23,8 +23,8 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import type {RollbackOptions} from '@novel-master/core/message-checkpoint';
-import {rollbackToMessage} from '@/services/message-rollback.service';
+import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
+import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
   getSessionViewCache,
   sessionViewCacheKey,
@@ -34,9 +34,9 @@ import {
   loadSessionMessagesPageForDisplay,
   loadSessionMessagesTailForDisplay,
 } from '@/services/regex-apply-channel';
-import {prependOlderMessages} from '@/services/message-paging';
-import type {MobileNovelMasterRuntime} from '@/runtime/types';
-import type {ChatSubview} from './useChatTabScope';
+import { prependOlderMessages } from '@/services/message-paging';
+import type { MobileNovelMasterRuntime } from '@/runtime/types';
+import type { ChatSubview } from './useChatTabScope';
 
 const CHAT_PAGE_SIZE = 40;
 
@@ -140,19 +140,16 @@ export function useChatTabMessages({
     [runtime, sessionId, projectId],
   );
 
-  const hydrateFromSessionCache = useCallback(
-    (pid: string, sid: string) => {
-      const cached = getSessionViewCache(sessionViewCacheKey(pid, sid));
-      if (cached != null) {
-        setChatMessages([...cached.messages]);
-        setHasMoreMessages(cached.hasMoreMessages);
-      } else {
-        setChatMessages([]);
-        setHasMoreMessages(false);
-      }
-    },
-    [],
-  );
+  const hydrateFromSessionCache = useCallback((pid: string, sid: string) => {
+    const cached = getSessionViewCache(sessionViewCacheKey(pid, sid));
+    if (cached != null) {
+      setChatMessages([...cached.messages]);
+      setHasMoreMessages(cached.hasMoreMessages);
+    } else {
+      setChatMessages([]);
+      setHasMoreMessages(false);
+    }
+  }, []);
 
   const loadOlderMessages = useCallback(async () => {
     if (sessionId == null || loadingMoreMessages || chatMessages.length === 0) {
@@ -164,10 +161,14 @@ export function useChatTabMessages({
       if (beforeSeq == null) {
         return;
       }
-      const older = await loadSessionMessagesPageForDisplay(runtime, sessionId, {
-        limit: CHAT_PAGE_SIZE,
-        beforeSeq,
-      });
+      const older = await loadSessionMessagesPageForDisplay(
+        runtime,
+        sessionId,
+        {
+          limit: CHAT_PAGE_SIZE,
+          beforeSeq,
+        },
+      );
       if (older.length === 0) {
         setHasMoreMessages(false);
         return;
@@ -264,9 +265,11 @@ export type UseChatTabMessageActionsParams = {
   reloadLists: () => Promise<void>;
   setCurrentSession: (sessionId: string) => Promise<void>;
   setChatSubview: (subview: ChatSubview) => void;
-  setConversationPanel: (panel: import('./useChatTabScope').ConversationPanel) => void;
+  setConversationPanel: (
+    panel: import('./useChatTabScope').ConversationPanel,
+  ) => void;
   setMessageEditPrompt: (
-    prompt: {messageId: string; initialText: string} | undefined,
+    prompt: { messageId: string; initialText: string } | undefined,
   ) => void;
 };
 
@@ -286,7 +289,7 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
-  const {chatMessages, reloadMessages} = messages;
+  const { chatMessages, reloadMessages } = messages;
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
@@ -296,35 +299,33 @@ export function useChatTabMessageActions({
     if (projectId == null || sessionId == null) {
       return;
     }
-    Alert.alert(
-      '压缩上下文',
-      '将按照事件配置压缩上下文。是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '压缩',
-          onPress: () => {
-            void (async () => {
-              try {
-                const result = await runtime.eventOrchestrator.emit(
-                  EVENT_SESSION_COMPACTION_REQUESTED,
-                  {sessionId, projectId, trigger: 'manual'},
+    Alert.alert('压缩上下文', '将按照事件配置压缩上下文。是否继续？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '压缩',
+        onPress: () => {
+          void (async () => {
+            try {
+              const result = await runtime.eventOrchestrator.emit(
+                EVENT_SESSION_COMPACTION_REQUESTED,
+                { sessionId, projectId, trigger: 'manual' },
+              );
+              await reloadMessages(true);
+              void refreshChatTokenLabel();
+              if (!result.ok) {
+                showToast(
+                  toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
-                await reloadMessages(true);
-                void refreshChatTokenLabel();
-                if (!result.ok) {
-                  showToast(toastMessage('压缩部分失败', result.failures[0]?.error));
-                } else {
-                  showToast('已压缩');
-                }
-              } catch (error) {
-                showToast(toastMessage('压缩失败', error));
+              } else {
+                showToast('已压缩');
               }
-            })();
-          },
+            } catch (error) {
+              showToast(toastMessage('压缩失败', error));
+            }
+          })();
         },
-      ],
-    );
+      },
+    ]);
   }, [
     agentRunning,
     projectId,
@@ -386,7 +387,7 @@ export function useChatTabMessageActions({
         try {
           await rollbackToMessage(
             runtime,
-            {projectId, sessionId},
+            { projectId, sessionId },
             targetMessageId,
             options,
           );
@@ -407,7 +408,7 @@ export function useChatTabMessageActions({
               '快照丢失',
               formatRollbackRevisionBackfillAlertMessage(missingPaths),
               [
-                {text: '取消', style: 'cancel'},
+                { text: '取消', style: 'cancel' },
                 {
                   text: '继续回滚',
                   style: 'destructive',
@@ -423,13 +424,16 @@ export function useChatTabMessageActions({
             );
             return;
           }
-          if (!options?.skipVfsReconcile && isRollbackVfsDegradableError(error)) {
+          if (
+            !options?.skipVfsReconcile &&
+            isRollbackVfsDegradableError(error)
+          ) {
             const errorMessage = formatError(error);
             Alert.alert(
               '无法恢复工作区',
               `${errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`,
               [
-                {text: '取消', style: 'cancel'},
+                { text: '取消', style: 'cancel' },
                 {
                   text: '仅删除后续对话',
                   style: 'destructive',
@@ -453,7 +457,7 @@ export function useChatTabMessageActions({
         '回滚到此消息',
         '将删除此消息之后的对话，并撤销相关文件修改。是否继续？',
         [
-          {text: '取消', style: 'cancel'},
+          { text: '取消', style: 'cancel' },
           {
             text: '回滚',
             style: 'destructive',
@@ -509,7 +513,7 @@ export function useChatTabMessageActions({
         '置位到此消息？',
         '此消息之前将不参与提示词，此消息及之后将恢复可见。',
         [
-          {text: '取消', style: 'cancel'},
+          { text: '取消', style: 'cancel' },
           {
             text: '置位',
             onPress: () => {

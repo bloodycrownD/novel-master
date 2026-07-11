@@ -1,6 +1,13 @@
-import React, {useRef} from 'react';
-import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
+import React, { useRef } from 'react';
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
 
 const mockReload = jest.fn(async () => undefined);
 
@@ -8,7 +15,7 @@ jest.mock('../src/components/vfs/VfsFileManager', () => {
   const React = require('react');
   return {
     VfsFileManager: React.forwardRef(
-      (_props: unknown, ref: React.Ref<{reload: () => Promise<void>}>) => {
+      (_props: unknown, ref: React.Ref<{ reload: () => Promise<void> }>) => {
         React.useImperativeHandle(ref, () => ({
           canGoUp: () => false,
           goUp: () => undefined,
@@ -51,8 +58,8 @@ jest.mock('../src/components/agent/AgentPickerModal', () => ({
   AgentPickerModal: () => null,
 }));
 
-import {ChatConversationPanel} from '../src/screens/tabs/chat-tab/ChatConversationPanel';
-import type {VfsFileManagerHandle} from '../src/components/vfs/VfsFileManager';
+import { ChatConversationPanel } from '../src/screens/tabs/chat-tab/ChatConversationPanel';
+import type { VfsFileManagerHandle } from '../src/components/vfs/VfsFileManager';
 
 const tokens = {
   background: '#000',
@@ -80,7 +87,9 @@ const mockSetConversationPanel = jest.fn((panel: 'chat' | 'workspace') => {
   mockConversationPanel = panel;
 });
 
-function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>) {
+function makeMockContext(
+  workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>,
+) {
   return {
     projectId: 'p1',
     sessionId: 's1',
@@ -88,7 +97,7 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
     setConversationPanel: mockSetConversationPanel,
     chatSubview: 'conversation' as const,
     setChatSubview: jest.fn(),
-    agentMeta: {agentId: 'a1', agentName: 'A', hasDedicatedModel: false},
+    agentMeta: { agentId: 'a1', agentName: 'A', hasDedicatedModel: false },
     uiRunning: false,
     agentActive: false,
     activeRunId: null,
@@ -96,7 +105,7 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
     streamingText: '',
     streamingThinking: '',
     streamMetricsLastRun: null,
-    streamMetricsAccRef: {current: null},
+    streamMetricsAccRef: { current: null },
     onStreamReset: jest.fn(),
     chatMessages: [],
     hasMoreMessages: false,
@@ -139,7 +148,7 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
     onOpenFileEditor: jest.fn(),
     onNeedModel: jest.fn(),
     onRefreshChatMeta: jest.fn(),
-    transcriptWebRef: {current: null},
+    transcriptWebRef: { current: null },
     workspaceVfsRef,
     scope: {
       sessionRenamePrompt: undefined,
@@ -147,7 +156,7 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
       refreshChatTokenLabel: jest.fn(),
       reloadLists: jest.fn(async () => undefined),
     },
-    messages: {hydrateFromSessionCache: jest.fn()},
+    messages: { hydrateFromSessionCache: jest.fn() },
     resetStreamingDisplay: jest.fn(),
     navigation: {} as any,
     showToast: jest.fn(),
@@ -178,7 +187,7 @@ jest.mock('../src/screens/tabs/chat-tab/ChatTabNavigationProvider', () => ({
   useChatTabWorkspaceBackState: () => jest.fn(),
 }));
 
-import {useChatTabContext} from '../src/screens/tabs/chat-tab/ChatTabProvider';
+import { useChatTabContext } from '../src/screens/tabs/chat-tab/ChatTabProvider';
 
 const mockUseChatTabContext = useChatTabContext as jest.MockedFunction<
   typeof useChatTabContext

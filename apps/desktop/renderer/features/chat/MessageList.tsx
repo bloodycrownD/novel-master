@@ -1,17 +1,17 @@
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import type { ChatMessageDto } from "@shared/ipc-types";
-import { buildChatListItems } from "./message-blocks";
-import { ToolCallGroupCard } from "./ToolCallGroupCard";
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { ChatMessageDto } from '@shared/ipc-types';
+import { buildChatListItems } from './message-blocks';
+import { ToolCallGroupCard } from './ToolCallGroupCard';
 import {
   parseUserVfsActionFromText,
   UserVfsActionBody,
-} from "./user-vfs-action-transcript";
+} from './user-vfs-action-transcript';
 
 const ROLE_LABELS: Record<string, string> = {
-  user: "用户",
-  assistant: "助手",
-  system: "系统",
+  user: '用户',
+  assistant: '助手',
+  system: '系统',
 };
 
 interface MessageListProps {
@@ -79,8 +79,8 @@ export function MessageList({
 
   return (
     <>
-      {listItems.map((item) => {
-        if (item.kind === "user_vfs_turn") {
+      {listItems.map(item => {
+        if (item.kind === 'user_vfs_turn') {
           if (item.tools.length === 0) {
             return null;
           }
@@ -88,7 +88,9 @@ export function MessageList({
           return (
             <div
               key={item.id}
-              className={`chat-message chat-message--user${item.hidden ? " chat-message--hidden" : ""}`}
+              className={`chat-message chat-message--user${
+                item.hidden ? ' chat-message--hidden' : ''
+              }`}
               data-message-id={item.id}
             >
               <div className="chat-message__body">
@@ -109,16 +111,18 @@ export function MessageList({
         }
 
         const msg = item.message;
-        const text = item.textParts.join("\n");
+        const text = item.textParts.join('\n');
         const userVfsAction =
-          msg.role === "user" ? parseUserVfsActionFromText(text) : null;
+          msg.role === 'user' ? parseUserVfsActionFromText(text) : null;
 
         return (
           <div
             key={msg.id}
-            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}`}
+            className={`chat-message chat-message--${msg.role}${
+              msg.hidden ? ' chat-message--hidden' : ''
+            }`}
             data-message-id={msg.id}
-            onContextMenu={(e) => {
+            onContextMenu={e => {
               if (!onOpenMessageMenu) {
                 return;
               }
@@ -137,7 +141,7 @@ export function MessageList({
                     className="chat-message__menu-btn"
                     aria-label="消息操作"
                     aria-haspopup="menu"
-                    onClick={(e) => openMenu(msg, e)}
+                    onClick={e => openMenu(msg, e)}
                   >
                     ⋯
                   </button>
@@ -146,7 +150,7 @@ export function MessageList({
               {item.thinkingParts.length > 0 ? (
                 <details className="chat-message__thinking">
                   <summary>思考过程</summary>
-                  <p>{item.thinkingParts.join("\n")}</p>
+                  <p>{item.thinkingParts.join('\n')}</p>
                 </details>
               ) : null}
               {text ? (
@@ -156,7 +160,7 @@ export function MessageList({
                   <MessageBody
                     text={text}
                     richText={chatRichText}
-                    alwaysRichText={msg.role === "assistant"}
+                    alwaysRichText={msg.role === 'assistant'}
                   />
                 )
               ) : null}

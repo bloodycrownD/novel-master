@@ -43,23 +43,22 @@ export type ChatTabNavigationContextValue = {
   readonly actions: ChatTabNavigationActions;
 };
 
-const ChatTabNavigationCtx = createContext<ChatTabNavigationContextValue | null>(
-  null,
-);
+const ChatTabNavigationCtx =
+  createContext<ChatTabNavigationContextValue | null>(null);
 
-const WorkspaceBackCtx = createContext<
-  React.Dispatch<
-    React.SetStateAction<{
-      canGoUp: boolean;
-      goUp: () => void;
-    } | null>
-  > | null
->(null);
+const WorkspaceBackCtx = createContext<React.Dispatch<
+  React.SetStateAction<{
+    canGoUp: boolean;
+    goUp: () => void;
+  } | null>
+> | null>(null);
 
 export function useChatTabNavigation(): ChatTabNavigationContextValue {
   const ctx = useContext(ChatTabNavigationCtx);
   if (ctx == null) {
-    throw new Error('useChatTabNavigation 须在 ChatTabNavigationProvider 内使用');
+    throw new Error(
+      'useChatTabNavigation 须在 ChatTabNavigationProvider 内使用',
+    );
   }
   return ctx;
 }
@@ -87,12 +86,9 @@ export function ChatTabNavigationProvider({
 
   const state = useMemo(
     (): ChatTabNavigationState => ({
-      chatSubview:
-        ctx.chatSubview === 'conversation' ? 'conversation' : 'list',
+      chatSubview: ctx.chatSubview === 'conversation' ? 'conversation' : 'list',
       sessionListPanel:
-        ctx.scope.sessionListPanel === 'template'
-          ? 'projects'
-          : 'sessions',
+        ctx.scope.sessionListPanel === 'template' ? 'projects' : 'sessions',
       projectName: ctx.scope.currentProject?.name,
       sessionTitle:
         ctx.scope.currentSession?.title ?? ctx.scope.currentSession?.id,
@@ -138,10 +134,7 @@ export function ChatTabNavigationProvider({
     [ctx, onExitSessionBatch, workspaceBackState],
   );
 
-  const value = useMemo(
-    () => ({ state, actions }),
-    [state, actions],
-  );
+  const value = useMemo(() => ({ state, actions }), [state, actions]);
 
   return (
     <WorkspaceBackCtx.Provider value={setWorkspaceBackState}>

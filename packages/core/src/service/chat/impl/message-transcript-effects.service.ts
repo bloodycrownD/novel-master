@@ -7,20 +7,20 @@
 import {
   computeSetFloorRanges,
   isSetFloorAnchorRole,
-} from "@/domain/chat/logic/message-set-floor-range.js";
-import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
-import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
-import { markSessionWorktreeDirty } from "@/service/prompt/logic/mark-session-worktree-dirty.js";
+} from '@/domain/chat/logic/message-set-floor-range.js';
+import { chatInvalidArgument, chatNotFound } from '@/errors/chat-errors.js';
+import type { TdbcConnection } from '@/infra/tdbc/ports/connection.port.js';
+import { markSessionWorktreeDirty } from '@/service/prompt/logic/mark-session-worktree-dirty.js';
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
-} from "@/service/message-checkpoint/truncate-tail-wiring.js";
-import type { SessionWorktreeSnapshotStore } from "@/service/prompt/session-worktree-snapshot.port.js";
-import type { MessageService } from "../message.port.js";
+} from '@/service/message-checkpoint/truncate-tail-wiring.js';
+import type { SessionWorktreeSnapshotStore } from '@/service/prompt/session-worktree-snapshot.port.js';
+import type { MessageService } from '../message.port.js';
 import type {
   MessageTranscriptEffectsService,
   SetMessageFloorResult,
-} from "../message-transcript-effects.port.js";
+} from '../message-transcript-effects.port.js';
 
 /** {@link DefaultMessageTranscriptEffectsService} 依赖。 */
 export interface MessageTranscriptEffectsServiceDeps {
@@ -44,11 +44,7 @@ export class DefaultMessageTranscriptEffectsService
     toSeq: number,
   ): Promise<number> {
     const count = await this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
-    markSessionWorktreeDirty(
-      this.deps.worktreeSnapshot,
-      projectId,
-      sessionId,
-    );
+    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
     return count;
   }
 
@@ -59,11 +55,7 @@ export class DefaultMessageTranscriptEffectsService
     toSeq: number,
   ): Promise<number> {
     const count = await this.deps.messages.showRange(sessionId, fromSeq, toSeq);
-    markSessionWorktreeDirty(
-      this.deps.worktreeSnapshot,
-      projectId,
-      sessionId,
-    );
+    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
     return count;
   }
 
@@ -73,15 +65,13 @@ export class DefaultMessageTranscriptEffectsService
     afterSeq: number,
     options?: { sweepRevisions?: boolean },
   ): Promise<void> {
-    await this.deps.conn.transaction(async (tx) => {
-      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx),
-        {
-          projectId,
-          sessionId,
-          afterSeq,
-          sweepRevisions: options?.sweepRevisions ?? false,
-        },
-      );
+    await this.deps.conn.transaction(async tx => {
+      await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
+        projectId,
+        sessionId,
+        afterSeq,
+        sweepRevisions: options?.sweepRevisions ?? false,
+      });
     });
   }
 
@@ -91,9 +81,9 @@ export class DefaultMessageTranscriptEffectsService
     messageId: string,
   ): Promise<SetMessageFloorResult> {
     const messages = await this.deps.messages.listBySession(sessionId);
-    const anchor = messages.find((m) => m.id === messageId);
+    const anchor = messages.find(m => m.id === messageId);
     if (anchor == null) {
-      throw chatNotFound("message", messageId, { sessionId });
+      throw chatNotFound('message', messageId, { sessionId });
     }
     if (!isSetFloorAnchorRole(anchor.role)) {
       throw chatInvalidArgument(
@@ -102,7 +92,7 @@ export class DefaultMessageTranscriptEffectsService
     }
 
     const sessionMaxSeq =
-      messages.length > 0 ? Math.max(...messages.map((m) => m.seq)) : 0;
+      messages.length > 0 ? Math.max(...messages.map(m => m.seq)) : 0;
     const { hidePrefix, showSuffix } = computeSetFloorRanges(
       anchor.seq,
       sessionMaxSeq,
@@ -125,11 +115,7 @@ export class DefaultMessageTranscriptEffectsService
       );
     }
 
-    markSessionWorktreeDirty(
-      this.deps.worktreeSnapshot,
-      projectId,
-      sessionId,
-    );
+    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
 
     return { hiddenCount, shownCount };
   }

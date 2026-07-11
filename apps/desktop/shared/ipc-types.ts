@@ -4,154 +4,152 @@
  */
 
 export const IPC_CHANNELS = {
-  BOOTSTRAP_STATUS: "nm:bootstrap/status",
-  BOOTSTRAP_REBOOTSTRAP: "nm:bootstrap/rebootstrap",
-  AGENT_STREAM: "nm:agent-stream",
+  BOOTSTRAP_STATUS: 'nm:bootstrap/status',
+  BOOTSTRAP_REBOOTSTRAP: 'nm:bootstrap/rebootstrap',
+  AGENT_STREAM: 'nm:agent-stream',
   /** Main → renderer：agentActive refcount 变化（工具卡「执行中」等） */
-  AGENT_ACTIVITY: "nm:agent/activity",
-  AGENT_ACTIVITY_GET: "nm:agent/activity/get",
+  AGENT_ACTIVITY: 'nm:agent/activity',
+  AGENT_ACTIVITY_GET: 'nm:agent/activity/get',
   /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
-  WORKSPACE_MUTATED: "nm:workspace/mutated",
+  WORKSPACE_MUTATED: 'nm:workspace/mutated',
 
-  SCOPE_GET: "nm:scope/get",
-  SCOPE_SET_PROJECT: "nm:scope/setProject",
-  SCOPE_SET_SESSION: "nm:scope/setSession",
+  SCOPE_GET: 'nm:scope/get',
+  SCOPE_SET_PROJECT: 'nm:scope/setProject',
+  SCOPE_SET_SESSION: 'nm:scope/setSession',
 
-  PROJECTS_LIST: "nm:projects/list",
-  PROJECTS_CREATE: "nm:projects/create",
-  PROJECTS_RENAME: "nm:projects/rename",
-  PROJECTS_DELETE: "nm:projects/delete",
-  PROJECTS_GET_AGENT_CONFIG: "nm:projects/getAgentConfig",
-  PROJECTS_UPDATE_AGENT_CONFIG: "nm:projects/updateAgentConfig",
+  PROJECTS_LIST: 'nm:projects/list',
+  PROJECTS_CREATE: 'nm:projects/create',
+  PROJECTS_RENAME: 'nm:projects/rename',
+  PROJECTS_DELETE: 'nm:projects/delete',
+  PROJECTS_GET_AGENT_CONFIG: 'nm:projects/getAgentConfig',
+  PROJECTS_UPDATE_AGENT_CONFIG: 'nm:projects/updateAgentConfig',
 
-  SESSIONS_LIST_BY_PROJECT: "nm:sessions/listByProject",
-  SESSIONS_CREATE: "nm:sessions/create",
-  SESSIONS_RENAME: "nm:sessions/rename",
-  SESSIONS_DELETE: "nm:sessions/delete",
+  SESSIONS_LIST_BY_PROJECT: 'nm:sessions/listByProject',
+  SESSIONS_CREATE: 'nm:sessions/create',
+  SESSIONS_RENAME: 'nm:sessions/rename',
+  SESSIONS_DELETE: 'nm:sessions/delete',
 
-  APP_UI_GET: "nm:app-ui/get",
-  APP_UI_SET: "nm:app-ui/set",
+  APP_UI_GET: 'nm:app-ui/get',
+  APP_UI_SET: 'nm:app-ui/set',
 
-  VFS_LIST: "nm:vfs/list",
-  VFS_READ: "nm:vfs/read",
-  VFS_WRITE: "nm:vfs/write",
-  VFS_MKDIR: "nm:vfs/mkdir",
-  VFS_DELETE: "nm:vfs/delete",
-  VFS_RENAME: "nm:vfs/rename",
-  VFS_ZIP_EXPORT: "nm:vfs/zipExport",
-  VFS_ZIP_IMPORT: "nm:vfs/zipImport",
+  VFS_LIST: 'nm:vfs/list',
+  VFS_READ: 'nm:vfs/read',
+  VFS_WRITE: 'nm:vfs/write',
+  VFS_MKDIR: 'nm:vfs/mkdir',
+  VFS_DELETE: 'nm:vfs/delete',
+  VFS_RENAME: 'nm:vfs/rename',
+  VFS_ZIP_EXPORT: 'nm:vfs/zipExport',
+  VFS_ZIP_IMPORT: 'nm:vfs/zipImport',
 
-  WORKTREE_BUILD_LIST_ROWS: "nm:worktree/buildListRows",
-  WORKTREE_SET_DIR_RULE: "nm:worktree/setDirRule",
-  WORKTREE_SET_FILE_RULE: "nm:worktree/setFileRule",
-  WORKTREE_GET_DIR_RULE: "nm:worktree/getDirRule",
-  WORKTREE_INVALIDATE_SESSION_SNAPSHOT:
-    "nm:worktree/invalidateSessionSnapshot",
+  WORKTREE_BUILD_LIST_ROWS: 'nm:worktree/buildListRows',
+  WORKTREE_SET_DIR_RULE: 'nm:worktree/setDirRule',
+  WORKTREE_SET_FILE_RULE: 'nm:worktree/setFileRule',
+  WORKTREE_GET_DIR_RULE: 'nm:worktree/getDirRule',
+  WORKTREE_INVALIDATE_SESSION_SNAPSHOT: 'nm:worktree/invalidateSessionSnapshot',
 
-  PROJECTS_PULL_TEMPLATE: "nm:projects/pullTemplate",
-  SESSIONS_PULL_TEMPLATE: "nm:sessions/pullTemplate",
+  PROJECTS_PULL_TEMPLATE: 'nm:projects/pullTemplate',
+  SESSIONS_PULL_TEMPLATE: 'nm:sessions/pullTemplate',
 
-  MESSAGES_LIST: "nm:messages/list",
-  MESSAGES_APPEND: "nm:messages/append",
-  MESSAGES_EDIT: "nm:messages/edit",
-  MESSAGES_HIDE: "nm:messages/hide",
-  MESSAGES_SHOW: "nm:messages/show",
-  MESSAGES_HIDE_RANGE: "nm:messages/hideRange",
-  MESSAGES_SHOW_RANGE: "nm:messages/showRange",
-  MESSAGES_TRUNCATE_AFTER: "nm:messages/truncateAfter",
-  MESSAGES_DELETE: "nm:messages/delete",
-  MESSAGES_FORK: "nm:messages/fork",
-  MESSAGES_ROLLBACK: "nm:messages/rollback",
-  MESSAGES_SET_FLOOR: "nm:messages/setFloor",
-  MESSAGES_APPEND_TOOL_TURN_BRIDGE: "nm:messages/appendToolTurnBridge",
+  MESSAGES_LIST: 'nm:messages/list',
+  MESSAGES_APPEND: 'nm:messages/append',
+  MESSAGES_EDIT: 'nm:messages/edit',
+  MESSAGES_HIDE: 'nm:messages/hide',
+  MESSAGES_SHOW: 'nm:messages/show',
+  MESSAGES_HIDE_RANGE: 'nm:messages/hideRange',
+  MESSAGES_SHOW_RANGE: 'nm:messages/showRange',
+  MESSAGES_TRUNCATE_AFTER: 'nm:messages/truncateAfter',
+  MESSAGES_DELETE: 'nm:messages/delete',
+  MESSAGES_FORK: 'nm:messages/fork',
+  MESSAGES_ROLLBACK: 'nm:messages/rollback',
+  MESSAGES_SET_FLOOR: 'nm:messages/setFloor',
+  MESSAGES_APPEND_TOOL_TURN_BRIDGE: 'nm:messages/appendToolTurnBridge',
 
-  AGENT_RUN: "nm:agent/run",
-  AGENT_ABORT: "nm:agent/abort",
-  AGENT_RESOLVE_CURRENT: "nm:agent/resolveCurrent",
-  AGENT_LIST_PICKER: "nm:agent/listPicker",
-  AGENT_SET_CURRENT: "nm:agent/setCurrent",
+  AGENT_RUN: 'nm:agent/run',
+  AGENT_ABORT: 'nm:agent/abort',
+  AGENT_RESOLVE_CURRENT: 'nm:agent/resolveCurrent',
+  AGENT_LIST_PICKER: 'nm:agent/listPicker',
+  AGENT_SET_CURRENT: 'nm:agent/setCurrent',
 
-  MODEL_LIST_PICKER: "nm:model/listPicker",
-  MODEL_SET_CURRENT: "nm:model/setCurrent",
+  MODEL_LIST_PICKER: 'nm:model/listPicker',
+  MODEL_SET_CURRENT: 'nm:model/setCurrent',
 
-  PROMPT_REAL_PREVIEW: "nm:prompt/realPreview",
-  PROMPT_CHAT_TOKEN_LABEL: "nm:prompt/chatTokenLabel",
-  PROMPT_AGENT_META: "nm:prompt/agentMeta",
+  PROMPT_REAL_PREVIEW: 'nm:prompt/realPreview',
+  PROMPT_CHAT_TOKEN_LABEL: 'nm:prompt/chatTokenLabel',
+  PROMPT_AGENT_META: 'nm:prompt/agentMeta',
 
-  COMPACTION_MANUAL: "nm:compaction/manual",
+  COMPACTION_MANUAL: 'nm:compaction/manual',
 
   PREFERENCES_GET_SESSION_FS_VERSION_CHECK:
-    "nm:preferences/getSessionFsVersionCheck",
+    'nm:preferences/getSessionFsVersionCheck',
   PREFERENCES_SET_SESSION_FS_VERSION_CHECK:
-    "nm:preferences/setSessionFsVersionCheck",
-  PREFERENCES_GET_LLM_STREAM: "nm:preferences/getLlmStream",
-  PREFERENCES_SET_LLM_STREAM: "nm:preferences/setLlmStream",
+    'nm:preferences/setSessionFsVersionCheck',
+  PREFERENCES_GET_LLM_STREAM: 'nm:preferences/getLlmStream',
+  PREFERENCES_SET_LLM_STREAM: 'nm:preferences/setLlmStream',
 
-  PROVIDERS_LIST: "nm:providers/list",
-  PROVIDERS_GET: "nm:providers/get",
-  PROVIDERS_CREATE: "nm:providers/create",
-  PROVIDERS_EDIT: "nm:providers/edit",
-  PROVIDERS_DELETE: "nm:providers/delete",
+  PROVIDERS_LIST: 'nm:providers/list',
+  PROVIDERS_GET: 'nm:providers/get',
+  PROVIDERS_CREATE: 'nm:providers/create',
+  PROVIDERS_EDIT: 'nm:providers/edit',
+  PROVIDERS_DELETE: 'nm:providers/delete',
 
-  PROVIDER_MODELS_SAVED_LIST: "nm:providerModels/savedList",
-  PROVIDER_MODELS_FETCH: "nm:providerModels/fetch",
-  PROVIDER_MODELS_SUGGEST_LIST: "nm:providerModels/suggestList",
-  PROVIDER_MODELS_SAVE: "nm:providerModels/save",
-  PROVIDER_MODELS_DELETE_SAVED: "nm:providerModels/deleteSaved",
-  PROVIDER_MODELS_GET_SAVED: "nm:providerModels/getSaved",
-  PROVIDER_MODELS_UPDATE_SETTINGS: "nm:providerModels/updateSettings",
-  PROVIDER_MODELS_RESET_CONTEXT_WINDOW:
-    "nm:providerModels/resetContextWindow",
-  PROVIDER_MODELS_EDIT_SAVED: "nm:providerModels/editSaved",
+  PROVIDER_MODELS_SAVED_LIST: 'nm:providerModels/savedList',
+  PROVIDER_MODELS_FETCH: 'nm:providerModels/fetch',
+  PROVIDER_MODELS_SUGGEST_LIST: 'nm:providerModels/suggestList',
+  PROVIDER_MODELS_SAVE: 'nm:providerModels/save',
+  PROVIDER_MODELS_DELETE_SAVED: 'nm:providerModels/deleteSaved',
+  PROVIDER_MODELS_GET_SAVED: 'nm:providerModels/getSaved',
+  PROVIDER_MODELS_UPDATE_SETTINGS: 'nm:providerModels/updateSettings',
+  PROVIDER_MODELS_RESET_CONTEXT_WINDOW: 'nm:providerModels/resetContextWindow',
+  PROVIDER_MODELS_EDIT_SAVED: 'nm:providerModels/editSaved',
 
-  AGENT_REGISTRY_LIST: "nm:agentRegistry/list",
-  AGENT_REGISTRY_GET: "nm:agentRegistry/get",
-  AGENT_REGISTRY_UPSERT: "nm:agentRegistry/upsert",
-  AGENT_REGISTRY_DELETE: "nm:agentRegistry/delete",
-  AGENT_REGISTRY_CREATE_BLANK: "nm:agentRegistry/createBlank",
+  AGENT_REGISTRY_LIST: 'nm:agentRegistry/list',
+  AGENT_REGISTRY_GET: 'nm:agentRegistry/get',
+  AGENT_REGISTRY_UPSERT: 'nm:agentRegistry/upsert',
+  AGENT_REGISTRY_DELETE: 'nm:agentRegistry/delete',
+  AGENT_REGISTRY_CREATE_BLANK: 'nm:agentRegistry/createBlank',
 
-  AGENT_YAML_EXPORT: "nm:agentYaml/export",
-  AGENT_YAML_IMPORT: "nm:agentYaml/import",
+  AGENT_YAML_EXPORT: 'nm:agentYaml/export',
+  AGENT_YAML_IMPORT: 'nm:agentYaml/import',
 
-  REGEX_LIST_GROUPS: "nm:regex/listGroups",
-  REGEX_GET_GROUP: "nm:regex/getGroup",
-  REGEX_CREATE_GROUP: "nm:regex/createGroup",
-  REGEX_UPDATE_GROUP: "nm:regex/updateGroup",
-  REGEX_DELETE_GROUP: "nm:regex/deleteGroup",
-  REGEX_LIST_RULES: "nm:regex/listRules",
-  REGEX_GET_RULE: "nm:regex/getRule",
-  REGEX_CREATE_RULE: "nm:regex/createRule",
-  REGEX_UPDATE_RULE: "nm:regex/updateRule",
-  REGEX_DELETE_RULE: "nm:regex/deleteRule",
-  REGEX_LIST_PICKER: "nm:regex/listPicker",
-  REGEX_SET_CURRENT: "nm:regex/setCurrent",
+  REGEX_LIST_GROUPS: 'nm:regex/listGroups',
+  REGEX_GET_GROUP: 'nm:regex/getGroup',
+  REGEX_CREATE_GROUP: 'nm:regex/createGroup',
+  REGEX_UPDATE_GROUP: 'nm:regex/updateGroup',
+  REGEX_DELETE_GROUP: 'nm:regex/deleteGroup',
+  REGEX_LIST_RULES: 'nm:regex/listRules',
+  REGEX_GET_RULE: 'nm:regex/getRule',
+  REGEX_CREATE_RULE: 'nm:regex/createRule',
+  REGEX_UPDATE_RULE: 'nm:regex/updateRule',
+  REGEX_DELETE_RULE: 'nm:regex/deleteRule',
+  REGEX_LIST_PICKER: 'nm:regex/listPicker',
+  REGEX_SET_CURRENT: 'nm:regex/setCurrent',
 
-  EVENTS_GET_CONFIG: "nm:events/getConfig",
-  EVENTS_SET_CONFIG: "nm:events/setConfig",
-  EVENTS_CLEAR_CONFIG: "nm:events/clearConfig",
-  EVENTS_EXPORT_YAML: "nm:events/exportYaml",
-  EVENTS_IMPORT_YAML: "nm:events/importYaml",
+  EVENTS_GET_CONFIG: 'nm:events/getConfig',
+  EVENTS_SET_CONFIG: 'nm:events/setConfig',
+  EVENTS_CLEAR_CONFIG: 'nm:events/clearConfig',
+  EVENTS_EXPORT_YAML: 'nm:events/exportYaml',
+  EVENTS_IMPORT_YAML: 'nm:events/importYaml',
 
-  COMPACTION_CONDITIONS_GET: "nm:compactionConditions/get",
-  COMPACTION_CONDITIONS_SET: "nm:compactionConditions/set",
+  COMPACTION_CONDITIONS_GET: 'nm:compactionConditions/get',
+  COMPACTION_CONDITIONS_SET: 'nm:compactionConditions/set',
 
-  BACKUP_EXPORT: "nm:backup/export",
-  BACKUP_IMPORT: "nm:backup/import",
+  BACKUP_EXPORT: 'nm:backup/export',
+  BACKUP_IMPORT: 'nm:backup/import',
 
-  CLOUD_SYNC_GET_CONFIG: "nm:cloud-sync/getConfig",
-  CLOUD_SYNC_SET_CONFIG: "nm:cloud-sync/setConfig",
-  CLOUD_SYNC_SET_ENABLED: "nm:cloud-sync/setEnabled",
-  CLOUD_SYNC_TEST_CONNECTION: "nm:cloud-sync/testConnection",
-  CLOUD_SYNC_GET_LOCAL_STATUS: "nm:cloud-sync/getLocalStatus",
-  CLOUD_SYNC_PULL: "nm:cloud-sync/pull",
-  CLOUD_SYNC_PUSH: "nm:cloud-sync/push",
+  CLOUD_SYNC_GET_CONFIG: 'nm:cloud-sync/getConfig',
+  CLOUD_SYNC_SET_CONFIG: 'nm:cloud-sync/setConfig',
+  CLOUD_SYNC_SET_ENABLED: 'nm:cloud-sync/setEnabled',
+  CLOUD_SYNC_TEST_CONNECTION: 'nm:cloud-sync/testConnection',
+  CLOUD_SYNC_GET_LOCAL_STATUS: 'nm:cloud-sync/getLocalStatus',
+  CLOUD_SYNC_PULL: 'nm:cloud-sync/pull',
+  CLOUD_SYNC_PUSH: 'nm:cloud-sync/push',
 
-  SHELL_MENU_POPUP: "nm:shell/menuPopup",
-  SHELL_SET_TITLEBAR_THEME: "nm:shell/setTitleBarTheme",
-  SHELL_OPEN_EXTERNAL: "nm:shell/openExternal",
+  SHELL_MENU_POPUP: 'nm:shell/menuPopup',
+  SHELL_SET_TITLEBAR_THEME: 'nm:shell/setTitleBarTheme',
+  SHELL_OPEN_EXTERNAL: 'nm:shell/openExternal',
 
-  APP_GET_INFO: "nm:app/getInfo",
-  APP_CHECK_FOR_UPDATES: "nm:app/checkForUpdates",
+  APP_GET_INFO: 'nm:app/getInfo',
+  APP_CHECK_FOR_UPDATES: 'nm:app/checkForUpdates',
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
@@ -169,7 +167,7 @@ export type IpcResult<T> =
 
 export type BootstrapStatusReady = {
   readonly ok: true;
-  readonly status: "ready";
+  readonly status: 'ready';
   readonly dbPath: string;
 };
 
@@ -229,7 +227,7 @@ export type ProjectDeleteRequest = {
 };
 
 /** 项目智能体策略模式。 */
-export type ProjectAgentModeDto = "follow" | "custom";
+export type ProjectAgentModeDto = 'follow' | 'custom';
 
 /** 项目智能体配置（IPC 传输）。 */
 export type ProjectAgentConfigDto = {
@@ -286,7 +284,7 @@ export type AppGetInfoData = {
 
 export type AppGetInfoResponse = IpcResult<AppGetInfoData>;
 
-export type UpdateCheckStatus = "up-to-date" | "update-available";
+export type UpdateCheckStatus = 'up-to-date' | 'update-available';
 
 export type UpdateCheckData = {
   readonly localVersion: string;
@@ -304,7 +302,7 @@ export type AppOpenExternalRequest = {
 };
 
 /** Workspace panel scope for VFS IPC (maps chat nav → VFS domain). */
-export type WorkspacePanelScope = "global" | "session" | "chat";
+export type WorkspacePanelScope = 'global' | 'session' | 'chat';
 
 export type VfsScopeRequest = {
   readonly workspaceScope: WorkspacePanelScope;
@@ -348,12 +346,12 @@ export type VfsZipRequest = VfsScopeRequest & {
   readonly confirmed?: boolean;
 };
 
-export type VfsZipExportResult = "saved" | "cancelled";
-export type VfsZipImportResult = "imported" | "cancelled";
+export type VfsZipExportResult = 'saved' | 'cancelled';
+export type VfsZipImportResult = 'imported' | 'cancelled';
 
 export type VfsListEntryDto = {
   readonly path: string;
-  readonly kind: "file" | "directory";
+  readonly kind: 'file' | 'directory';
   readonly version?: number;
   readonly mtimeMs?: number;
 };
@@ -365,7 +363,7 @@ export type VfsReadResultDto = {
 };
 
 export type WorktreeListRowDto = {
-  readonly kind: "dir" | "file";
+  readonly kind: 'dir' | 'file';
   readonly path: string;
   readonly ruleState: string;
   readonly inclusionMode: string;
@@ -377,16 +375,16 @@ export type WorktreeBuildListRowsRequest = VfsScopeRequest;
 export type WorktreeSetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
   readonly ruleEnabled?: boolean;
-  readonly sortField?: "name" | "created" | "updated";
-  readonly sortOrder?: "asc" | "desc";
+  readonly sortField?: 'name' | 'created' | 'updated';
+  readonly sortOrder?: 'asc' | 'desc';
   readonly headCount?: number;
   readonly tailCount?: number;
-  readonly fillPolicy?: "hidden" | "filename" | "header";
+  readonly fillPolicy?: 'hidden' | 'filename' | 'header';
 };
 
 export type WorktreeSetFileRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
-  readonly inclusionMode: "auto" | "show" | "hide";
+  readonly inclusionMode: 'auto' | 'show' | 'hide';
 };
 
 export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
@@ -422,16 +420,16 @@ export type MessagesListRequest = {
 };
 
 export type ContentBlockDto =
-  | { readonly type: "text"; readonly text: string }
-  | { readonly type: "thinking"; readonly text: string }
+  | { readonly type: 'text'; readonly text: string }
+  | { readonly type: 'thinking'; readonly text: string }
   | {
-      readonly type: "tool_use";
+      readonly type: 'tool_use';
       readonly id: string;
       readonly name: string;
       readonly input: Record<string, unknown>;
     }
   | {
-      readonly type: "tool_result";
+      readonly type: 'tool_result';
       readonly toolUseId: string;
       readonly content: string;
       readonly ok?: boolean;
@@ -440,8 +438,8 @@ export type ContentBlockDto =
 
 /** 会话消息 synthetic 元数据（对应 core `MessageMetadata`）。 */
 export type MessageMetadataDto = {
-  readonly source?: "user";
-  readonly actor?: "user";
+  readonly source?: 'user';
+  readonly actor?: 'user';
   readonly synthetic?: boolean;
   readonly kind?: string;
   readonly toolInputCompressed?: boolean;
@@ -462,7 +460,7 @@ export type ChatMessageDto = {
 
 export type MessagesAppendRequest = {
   readonly sessionId: string;
-  readonly role: "user" | "assistant" | "system";
+  readonly role: 'user' | 'assistant' | 'system';
   readonly text: string;
 };
 
@@ -582,7 +580,7 @@ export type PromptPreviewSegmentDto = {
 };
 
 export type PromptAgentMetaResponse = {
-  readonly source: "global" | "project-custom" | "none";
+  readonly source: 'global' | 'project-custom' | 'none';
   readonly agentId?: string;
   readonly agentName: string;
   readonly modelLabel: string;
@@ -631,7 +629,7 @@ export type ProviderListItemDto = {
   readonly protocol: string;
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
-  readonly apiKeyStatus: "set" | "not set";
+  readonly apiKeyStatus: 'set' | 'not set';
   readonly savedCount: number;
 };
 
@@ -642,12 +640,12 @@ export type ProviderDetailDto = {
   readonly baseUrl: string;
   readonly isBuiltin: boolean;
   readonly headers: Record<string, string>;
-  readonly apiKeyStatus: "set" | "not set";
+  readonly apiKeyStatus: 'set' | 'not set';
 };
 
 export type ProviderCreateRequest = {
   readonly id: string;
-  readonly protocol: "openai" | "anthropic" | "gemini";
+  readonly protocol: 'openai' | 'anthropic' | 'gemini';
   readonly baseUrl: string;
   readonly displayName?: string;
   readonly apiKey: string;
@@ -656,7 +654,7 @@ export type ProviderCreateRequest = {
 
 export type ProviderEditRequest = {
   readonly providerId: string;
-  readonly protocol?: "openai" | "anthropic" | "gemini";
+  readonly protocol?: 'openai' | 'anthropic' | 'gemini';
   readonly baseUrl?: string;
   readonly displayName?: string | null;
   readonly apiKey?: string;
@@ -720,7 +718,7 @@ export type ProviderModelsUpdateSettingsRequest = {
   readonly contextWindowTokens?: number;
   readonly tokenCounterMode?: string;
   readonly sampling?: unknown;
-  readonly thinkingLevel?: "off" | "low" | "medium" | "high";
+  readonly thinkingLevel?: 'off' | 'low' | 'medium' | 'high';
 };
 
 export type ProviderModelsResetContextWindowRequest = {
@@ -729,7 +727,7 @@ export type ProviderModelsResetContextWindowRequest = {
 
 /** 存储配置失效摘要（列表/编辑 assess 结果）。 */
 export type StoredConfigInvalidDto = {
-  readonly code: "outdated_version" | "broken_wire" | "removed_feature";
+  readonly code: 'outdated_version' | 'broken_wire' | 'removed_feature';
   readonly message: string;
   readonly storedSchemaVersion?: number;
 };
@@ -810,11 +808,11 @@ export type RegexRuleIdRequest = RegexGroupIdRequest & {
 };
 
 export type RegexCreateRuleRequest = RegexGroupIdRequest & {
-  readonly rule: Omit<RegexRuleDto, "ruleId"> & { readonly ruleId?: string };
+  readonly rule: Omit<RegexRuleDto, 'ruleId'> & { readonly ruleId?: string };
 };
 
 export type RegexUpdateRuleRequest = RegexRuleIdRequest & {
-  readonly patch: Partial<Omit<RegexRuleDto, "ruleId">>;
+  readonly patch: Partial<Omit<RegexRuleDto, 'ruleId'>>;
 };
 
 export type RegexPickerRowDto = {
@@ -853,8 +851,8 @@ export type CompactionConditionsSetRequest = {
   readonly conditions: CompactionConditionsDto;
 };
 
-export type BackupExportResult = "saved" | "cancelled";
-export type BackupImportResult = "imported" | "cancelled";
+export type BackupExportResult = 'saved' | 'cancelled';
+export type BackupImportResult = 'imported' | 'cancelled';
 
 export type CloudSyncConfigDto = {
   readonly endpoint: string;
@@ -911,7 +909,7 @@ export type CloudSyncPushResult = {
   readonly rev: number;
 };
 
-export type ShellMenuId = "file" | "edit" | "view" | "window" | "help";
+export type ShellMenuId = 'file' | 'edit' | 'view' | 'window' | 'help';
 
 export type ShellMenuPopupRequest = {
   readonly menuId: ShellMenuId;

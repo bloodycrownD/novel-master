@@ -55,8 +55,7 @@ function ChatTabScreenContent({
       conversationPanel: ctx.conversationPanel,
       sessionListPanel: ctx.scope.sessionListPanel,
       sessionDrawerOpen: ctx.sessionDrawerOpen,
-      messageMenuOpen:
-        ctx.messageMenuTarget != null || ctx.webMenuOpen,
+      messageMenuOpen: ctx.messageMenuTarget != null || ctx.webMenuOpen,
       messageEditOpen: ctx.messageEditPrompt != null,
       modelPickerOpen: ctx.modelPickerOpen,
       agentPickerOpen: ctx.agentPickerOpen,
@@ -95,12 +94,10 @@ function ChatTabScreenContent({
   );
 
   const confirmBatchDelete = useCallback(() => {
-    controller.confirmBatchDeleteSessions(
-      sessionBatch.selectedCount,
-      () =>
-        ctx.scope
-          .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
-          .catch(() => undefined),
+    controller.confirmBatchDeleteSessions(sessionBatch.selectedCount, () =>
+      ctx.scope
+        .deleteSelectedSessions(sessionBatch.selectedIds, sessionBatch.exit)
+        .catch(() => undefined),
     );
   }, [controller, sessionBatch, ctx.scope]);
 

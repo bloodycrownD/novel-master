@@ -1,38 +1,41 @@
-import { useCallback, useEffect, useState } from "react";
-import { useColumnSplitters } from "./hooks/useColumnSplitters";
-import { runCompaction } from "./features/chat/ConversationPanel";
-import { ConfirmModal } from "./components/ui/ConfirmModal";
-import { TextPromptModal } from "./components/ui/TextPromptModal";
-import { showToast } from "./components/ui/show-toast";
-import { DirectoryRuleModal } from "./features/workspace/DirectoryRuleModal";
-import { FileInclusionModal } from "./features/workspace/FileInclusionModal";
+import { useCallback, useEffect, useState } from 'react';
+import { useColumnSplitters } from './hooks/useColumnSplitters';
+import { runCompaction } from './features/chat/ConversationPanel';
+import { ConfirmModal } from './components/ui/ConfirmModal';
+import { TextPromptModal } from './components/ui/TextPromptModal';
+import { showToast } from './components/ui/show-toast';
+import { DirectoryRuleModal } from './features/workspace/DirectoryRuleModal';
+import { FileInclusionModal } from './features/workspace/FileInclusionModal';
 import {
   createWorkspaceEntry,
   deleteWorkspaceEntry,
   entryLabelForTarget,
   renameWorkspaceEntry,
-} from "./features/workspace/workspace-actions";
-import { workspaceMenuItems } from "./features/workspace/workspace-context";
-import type { WorkspaceContextTarget } from "./features/workspace/WorkspaceTree";
-import { AppChrome } from "./layout/AppChrome";
-import { MainShell } from "./layout/MainShell";
-import { SettingsOverlay } from "./layout/SettingsOverlay";
-import { NovelMasterProvider } from "./providers/NovelMasterProvider";
-import { ShellNavProvider, useShellNav } from "./providers/ShellNavProvider";
-import { ToastHost } from "./components/ui/ToastHost";
-import { ThemeProvider } from "./providers/ThemeProvider";
-import { ipcWorktreeInvalidateSessionSnapshot, ipcSessionsRename } from "./ipc/client";
+} from './features/workspace/workspace-actions';
+import { workspaceMenuItems } from './features/workspace/workspace-context';
+import type { WorkspaceContextTarget } from './features/workspace/WorkspaceTree';
+import { AppChrome } from './layout/AppChrome';
+import { MainShell } from './layout/MainShell';
+import { SettingsOverlay } from './layout/SettingsOverlay';
+import { NovelMasterProvider } from './providers/NovelMasterProvider';
+import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
+import { ToastHost } from './components/ui/ToastHost';
+import { ThemeProvider } from './providers/ThemeProvider';
+import {
+  ipcWorktreeInvalidateSessionSnapshot,
+  ipcSessionsRename,
+} from './ipc/client';
 
 type WorkspaceMenuState = WorkspaceContextTarget & {
   items: ReturnType<typeof workspaceMenuItems>;
 };
 
 type WorkspacePromptState =
-  | { kind: "create-file"; target: WorkspaceContextTarget }
-  | { kind: "create-folder"; target: WorkspaceContextTarget }
-  | { kind: "rename"; target: WorkspaceContextTarget; initialName: string };
+  | { kind: 'create-file'; target: WorkspaceContextTarget }
+  | { kind: 'create-folder'; target: WorkspaceContextTarget }
+  | { kind: 'rename'; target: WorkspaceContextTarget; initialName: string };
 
-type WorkspaceConfirmState = { kind: "delete"; target: WorkspaceContextTarget };
+type WorkspaceConfirmState = { kind: 'delete'; target: WorkspaceContextTarget };
 
 type SessionRenamePromptState = {
   sessionId: string;
@@ -42,13 +45,27 @@ type SessionRenamePromptState = {
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
-  const { projectId, sessionId, sessionName, updateSessionName, notifyWorkspaceMutated, notifyAgentConfigChanged, markPreviewTabsDeletedUnderPath, renamePreviewTab, registerEnsurePreviewVisible } =
-    useShellNav();
+  const {
+    projectId,
+    sessionId,
+    sessionName,
+    updateSessionName,
+    notifyWorkspaceMutated,
+    notifyAgentConfigChanged,
+    markPreviewTabsDeletedUnderPath,
+    renamePreviewTab,
+    registerEnsurePreviewVisible,
+  } = useShellNav();
 
-  const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(null);
-  const [workspacePrompt, setWorkspacePrompt] = useState<WorkspacePromptState | null>(null);
-  const [workspaceConfirm, setWorkspaceConfirm] = useState<WorkspaceConfirmState | null>(null);
-  const [dirRuleTarget, setDirRuleTarget] = useState<WorkspaceContextTarget | null>(null);
+  const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(
+    null,
+  );
+  const [workspacePrompt, setWorkspacePrompt] =
+    useState<WorkspacePromptState | null>(null);
+  const [workspaceConfirm, setWorkspaceConfirm] =
+    useState<WorkspaceConfirmState | null>(null);
+  const [dirRuleTarget, setDirRuleTarget] =
+    useState<WorkspaceContextTarget | null>(null);
   const [fileInclusionTarget, setFileInclusionTarget] =
     useState<WorkspaceContextTarget | null>(null);
   const [sessionMenu, setSessionMenu] = useState<{
@@ -67,7 +84,7 @@ function DesktopOverlays() {
   useEffect(() => {
     registerEnsurePreviewVisible(() => {
       if (!columnLayout.columnVisibility.preview) {
-        columnLayout.toggleColumn("preview");
+        columnLayout.toggleColumn('preview');
       }
     });
   }, [
@@ -81,23 +98,26 @@ function DesktopOverlays() {
       const target = e.target as HTMLElement | null;
       if (
         target?.closest("[data-action='open-session-actions']") ||
-        target?.closest("#session-actions-menu")
+        target?.closest('#session-actions-menu')
       ) {
         return;
       }
       closeMenus();
     };
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
+    document.addEventListener('click', onDocClick);
+    return () => document.removeEventListener('click', onDocClick);
   }, [closeMenus]);
 
-  const openWorkspaceContextMenu = useCallback((target: WorkspaceContextTarget) => {
-    setWorkspaceMenu({ ...target, items: workspaceMenuItems(target) });
-    setSessionMenu(null);
-  }, []);
+  const openWorkspaceContextMenu = useCallback(
+    (target: WorkspaceContextTarget) => {
+      setWorkspaceMenu({ ...target, items: workspaceMenuItems(target) });
+      setSessionMenu(null);
+    },
+    [],
+  );
 
   const openBlankWorkspaceContextMenu = useCallback(
-    (target: Extract<WorkspaceContextTarget, { kind: "blank" }>) => {
+    (target: Extract<WorkspaceContextTarget, { kind: 'blank' }>) => {
       openWorkspaceContextMenu(target);
     },
     [openWorkspaceContextMenu],
@@ -114,31 +134,31 @@ function DesktopOverlays() {
 
   const handleWorkspaceAction = useCallback(
     async (target: WorkspaceContextTarget, action: string) => {
-      if (action === "create-file") {
-        setWorkspacePrompt({ kind: "create-file", target });
+      if (action === 'create-file') {
+        setWorkspacePrompt({ kind: 'create-file', target });
         return;
       }
-      if (action === "create-folder") {
-        setWorkspacePrompt({ kind: "create-folder", target });
+      if (action === 'create-folder') {
+        setWorkspacePrompt({ kind: 'create-folder', target });
         return;
       }
-      if (action === "rename" && target.kind === "row") {
+      if (action === 'rename' && target.kind === 'row') {
         setWorkspacePrompt({
-          kind: "rename",
+          kind: 'rename',
           target,
           initialName: entryLabelForTarget(target),
         });
         return;
       }
-      if (action === "delete") {
-        setWorkspaceConfirm({ kind: "delete", target });
+      if (action === 'delete') {
+        setWorkspaceConfirm({ kind: 'delete', target });
         return;
       }
-      if (action === "rule-config") {
+      if (action === 'rule-config') {
         setDirRuleTarget(target);
         return;
       }
-      if (action === "file-inclusion") {
+      if (action === 'file-inclusion') {
         setFileInclusionTarget(target);
         return;
       }
@@ -154,18 +174,18 @@ function DesktopOverlays() {
         return;
       }
       let result: { ok: true } | { ok: false; message: string };
-      if (prompt.kind === "create-file") {
+      if (prompt.kind === 'create-file') {
         result = await createWorkspaceEntry(
           prompt.target,
-          "file",
+          'file',
           value,
           projectId,
           sessionId,
         );
-      } else if (prompt.kind === "create-folder") {
+      } else if (prompt.kind === 'create-folder') {
         result = await createWorkspaceEntry(
           prompt.target,
-          "folder",
+          'folder',
           value,
           projectId,
           sessionId,
@@ -177,13 +197,13 @@ function DesktopOverlays() {
           projectId,
           sessionId,
         );
-        if (result.ok && prompt.target.kind === "row") {
+        if (result.ok && prompt.target.kind === 'row') {
           const row = prompt.target.row;
           const parent =
-            row.path === "/"
-              ? ""
-              : row.path.slice(0, row.path.lastIndexOf("/")) || "";
-          const newPath = `${parent}/${value.trim()}`.replace(/\/+/g, "/");
+            row.path === '/'
+              ? ''
+              : row.path.slice(0, row.path.lastIndexOf('/')) || '';
+          const newPath = `${parent}/${value.trim()}`.replace(/\/+/g, '/');
           renamePreviewTab(prompt.target.panelScope, row.path, newPath);
         }
       }
@@ -193,7 +213,13 @@ function DesktopOverlays() {
         showToast(result.message);
       }
     },
-    [workspacePrompt, projectId, sessionId, notifyWorkspaceMutated, renamePreviewTab],
+    [
+      workspacePrompt,
+      projectId,
+      sessionId,
+      notifyWorkspaceMutated,
+      renamePreviewTab,
+    ],
   );
 
   const handleSessionRenameConfirm = useCallback(
@@ -215,7 +241,7 @@ function DesktopOverlays() {
         if (prompt.sessionId === sessionId) {
           updateSessionName(trimmed);
         }
-        showToast("已重命名会话");
+        showToast('已重命名会话');
       } else {
         showToast(result.error.message);
       }
@@ -229,14 +255,14 @@ function DesktopOverlays() {
     if (!confirm) {
       return;
     }
-    if (confirm.kind === "delete") {
+    if (confirm.kind === 'delete') {
       const result = await deleteWorkspaceEntry(
         confirm.target,
         projectId,
         sessionId,
       );
       if (result.ok) {
-        if (confirm.target.kind === "row") {
+        if (confirm.target.kind === 'row') {
           markPreviewTabsDeletedUnderPath(
             confirm.target.panelScope,
             confirm.target.row.path,
@@ -248,7 +274,13 @@ function DesktopOverlays() {
       }
       return;
     }
-  }, [workspaceConfirm, projectId, sessionId, notifyWorkspaceMutated, markPreviewTabsDeletedUnderPath]);
+  }, [
+    workspaceConfirm,
+    projectId,
+    sessionId,
+    notifyWorkspaceMutated,
+    markPreviewTabsDeletedUnderPath,
+  ]);
 
   return (
     <>
@@ -256,12 +288,12 @@ function DesktopOverlays() {
         <AppChrome
           columnLayout={columnLayout}
           settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen((open) => !open)}
+          onToggleSettings={() => setSettingsOpen(open => !open)}
         />
         <div
           id="main-shell"
           hidden={settingsOpen}
-          className={settingsOpen ? "hidden" : undefined}
+          className={settingsOpen ? 'hidden' : undefined}
         >
           <MainShell
             workspaceRef={columnLayout.workspaceRef}
@@ -282,7 +314,7 @@ function DesktopOverlays() {
 
       <div
         id="session-actions-menu"
-        className={`session-actions-menu${sessionMenu ? "" : " hidden"}`}
+        className={`session-actions-menu${sessionMenu ? '' : ' hidden'}`}
         role="menu"
         aria-label="会话操作"
         hidden={!sessionMenu}
@@ -291,7 +323,7 @@ function DesktopOverlays() {
             ? { left: sessionMenu.left, bottom: sessionMenu.bottom }
             : undefined
         }
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
         <button
           type="button"
@@ -320,7 +352,7 @@ function DesktopOverlays() {
                   sessionId,
                 });
                 if (result.ok) {
-                  showToast("工作树已刷新");
+                  showToast('工作树已刷新');
                 } else {
                   showToast(result.error.message);
                 }
@@ -359,7 +391,7 @@ function DesktopOverlays() {
 
       <div
         id="workspace-context-menu"
-        className={`workspace-context-menu${workspaceMenu ? "" : " hidden"}`}
+        className={`workspace-context-menu${workspaceMenu ? '' : ' hidden'}`}
         role="menu"
         aria-label="工作区操作"
         hidden={!workspaceMenu}
@@ -371,14 +403,14 @@ function DesktopOverlays() {
               }
             : undefined
         }
-        onClick={(e) => e.stopPropagation()}
+        onClick={e => e.stopPropagation()}
       >
-        {workspaceMenu?.items.map((item) => (
+        {workspaceMenu?.items.map(item => (
           <button
             key={item.action}
             type="button"
             data-workspace-action={item.action}
-            className={item.danger ? "is-danger" : undefined}
+            className={item.danger ? 'is-danger' : undefined}
             onClick={() => {
               const menu = workspaceMenu;
               closeMenus();
@@ -396,17 +428,17 @@ function DesktopOverlays() {
       <TextPromptModal
         open={workspacePrompt != null}
         title={
-          workspacePrompt?.kind === "create-file"
-            ? "新建文件"
-            : workspacePrompt?.kind === "create-folder"
-              ? "新建文件夹"
-              : "重命名"
+          workspacePrompt?.kind === 'create-file'
+            ? '新建文件'
+            : workspacePrompt?.kind === 'create-folder'
+            ? '新建文件夹'
+            : '重命名'
         }
         placeholder={
-          workspacePrompt?.kind === "create-folder" ? "文件夹名称" : "名称"
+          workspacePrompt?.kind === 'create-folder' ? '文件夹名称' : '名称'
         }
         initialValue={
-          workspacePrompt?.kind === "rename" ? workspacePrompt.initialName : ""
+          workspacePrompt?.kind === 'rename' ? workspacePrompt.initialName : ''
         }
         onClose={() => setWorkspacePrompt(null)}
         onConfirm={handleWorkspacePromptConfirm}
@@ -416,15 +448,17 @@ function DesktopOverlays() {
         open={sessionRenamePrompt != null}
         title="重命名会话"
         placeholder="会话名称"
-        initialValue={sessionRenamePrompt?.initialTitle ?? ""}
+        initialValue={sessionRenamePrompt?.initialTitle ?? ''}
         onClose={() => setSessionRenamePrompt(null)}
         onConfirm={handleSessionRenameConfirm}
       />
 
       <ConfirmModal
-        open={workspaceConfirm?.kind === "delete"}
+        open={workspaceConfirm?.kind === 'delete'}
         title="确认删除"
-        message={`确定删除「${workspaceConfirm ? entryLabelForTarget(workspaceConfirm.target) : ""}」？`}
+        message={`确定删除「${
+          workspaceConfirm ? entryLabelForTarget(workspaceConfirm.target) : ''
+        }」？`}
         danger
         onConfirm={handleWorkspaceConfirm}
         onCancel={() => setWorkspaceConfirm(null)}
@@ -438,7 +472,7 @@ function DesktopOverlays() {
         onClose={() => setDirRuleTarget(null)}
         onSaved={() => {
           notifyWorkspaceMutated();
-          showToast("目录规则已保存");
+          showToast('目录规则已保存');
         }}
       />
 

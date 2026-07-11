@@ -44,9 +44,7 @@ import {
 } from '@/storage/chat-transcript-engine';
 import { readChatRichTextEnabled } from '@/storage/chat-rich-text-pref';
 import { readChatStreamBatchEnabled } from '@/storage/chat-stream-batch-pref';
-import {
-  useChatTabMessages,
-} from './useChatTabMessages';
+import { useChatTabMessages } from './useChatTabMessages';
 import {
   useChatTabScope,
   type ChatSubview,
@@ -106,7 +104,9 @@ export type ChatTabContextValue = {
   readonly messageMenuTarget: ChatMessage | undefined;
   readonly messageMenuAnchor: MessageMenuAnchor | undefined;
   readonly setMessageMenuTarget: (msg: ChatMessage | undefined) => void;
-  readonly setMessageMenuAnchor: (anchor: MessageMenuAnchor | undefined) => void;
+  readonly setMessageMenuAnchor: (
+    anchor: MessageMenuAnchor | undefined,
+  ) => void;
   readonly messageEditPrompt:
     | { messageId: string; initialText: string }
     | undefined;

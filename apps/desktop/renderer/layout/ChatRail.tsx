@@ -1,14 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
-import type { ProjectDto, SessionDto } from "@shared/ipc-types";
-import { BatchCheckbox } from "../components/batch/BatchCheckbox";
-import { ManageHeader } from "../components/batch/ManageHeader";
-import { ConfirmModal } from "../components/ui/ConfirmModal";
-import { ContextMenu } from "../components/ui/ContextMenu";
-import { TextPromptModal } from "../components/ui/TextPromptModal";
-import { showToast } from "../components/ui/show-toast";
-import { ConversationPanel } from "../features/chat/ConversationPanel";
-import { ProjectAgentConfigView } from "../features/settings/ProjectAgentConfigView";
-import { useBatchSelection } from "../hooks/useBatchSelection";
+import { useCallback, useEffect, useState } from 'react';
+import type { ProjectDto, SessionDto } from '@shared/ipc-types';
+import { BatchCheckbox } from '../components/batch/BatchCheckbox';
+import { ManageHeader } from '../components/batch/ManageHeader';
+import { ConfirmModal } from '../components/ui/ConfirmModal';
+import { ContextMenu } from '../components/ui/ContextMenu';
+import { TextPromptModal } from '../components/ui/TextPromptModal';
+import { showToast } from '../components/ui/show-toast';
+import { ConversationPanel } from '../features/chat/ConversationPanel';
+import { ProjectAgentConfigView } from '../features/settings/ProjectAgentConfigView';
+import { useBatchSelection } from '../hooks/useBatchSelection';
 import {
   ipcProjectsCreate,
   ipcProjectsDelete,
@@ -18,11 +18,11 @@ import {
   ipcSessionsDelete,
   ipcSessionsListByProject,
   ipcSessionsRename,
-} from "../ipc/client";
-import { useShellNav } from "../providers/ShellNavProvider";
-import { loadDesktopScope } from "../state/desktop-scope";
-import { railPaneNavTitle } from "../state/nav-workspace";
-import { nextDefaultSessionTitle } from "../utils/session-default-title";
+} from '../ipc/client';
+import { useShellNav } from '../providers/ShellNavProvider';
+import { loadDesktopScope } from '../state/desktop-scope';
+import { railPaneNavTitle } from '../state/nav-workspace';
+import { nextDefaultSessionTitle } from '../utils/session-default-title';
 
 interface ChatRailProps {
   onOpenSessionActions: (anchor: HTMLElement) => void;
@@ -30,19 +30,19 @@ interface ChatRailProps {
 }
 
 type NamePromptState =
-  | { mode: "create-project" }
-  | { mode: "rename-project"; projectId: string; initialName: string }
-  | { mode: "rename-session"; sessionId: string; initialName: string };
+  | { mode: 'create-project' }
+  | { mode: 'rename-project'; projectId: string; initialName: string }
+  | { mode: 'rename-session'; sessionId: string; initialName: string };
 
 type ConfirmState =
-  | { kind: "delete-projects-batch"; count: number }
-  | { kind: "delete-sessions-batch"; count: number }
-  | { kind: "delete-project"; projectId: string; name: string }
-  | { kind: "delete-session"; sessionId: string; label: string };
+  | { kind: 'delete-projects-batch'; count: number }
+  | { kind: 'delete-sessions-batch'; count: number }
+  | { kind: 'delete-project'; projectId: string; name: string }
+  | { kind: 'delete-session'; sessionId: string; label: string };
 
 type ListMenuState =
-  | { kind: "project"; projectId: string; x: number; y: number }
-  | { kind: "session"; sessionId: string; x: number; y: number };
+  | { kind: 'project'; projectId: string; x: number; y: number }
+  | { kind: 'session'; sessionId: string; x: number; y: number };
 
 export function ChatRail({
   onOpenSessionActions,
@@ -122,19 +122,19 @@ export function ChatRail({
   }, [loadProjects]);
 
   useEffect(() => {
-    if (viewId === "sessions" && projectId) {
+    if (viewId === 'sessions' && projectId) {
       void loadSessions(projectId);
     }
   }, [viewId, projectId, loadSessions]);
 
   useEffect(() => {
-    if (viewId !== "projects") {
+    if (viewId !== 'projects') {
       exitProjectBatch();
     }
   }, [viewId, exitProjectBatch]);
 
   useEffect(() => {
-    if (viewId !== "sessions") {
+    if (viewId !== 'sessions') {
       exitSessionBatch();
     }
   }, [viewId, exitSessionBatch]);
@@ -169,7 +169,7 @@ export function ChatRail({
       await loadSessions(projectId);
     }
     if (sessionId != null && ids.includes(sessionId)) {
-      showNavView("sessions");
+      showNavView('sessions');
     }
   }, [
     sessionSelectedIds,
@@ -185,7 +185,7 @@ export function ChatRail({
       return;
     }
     setConfirmState({
-      kind: "delete-projects-batch",
+      kind: 'delete-projects-batch',
       count: projectSelectedCount,
     });
   }, [projectSelectedCount]);
@@ -195,7 +195,7 @@ export function ChatRail({
       return;
     }
     setConfirmState({
-      kind: "delete-sessions-batch",
+      kind: 'delete-sessions-batch',
       count: sessionSelectedCount,
     });
   }, [sessionSelectedCount]);
@@ -204,11 +204,11 @@ export function ChatRail({
     if (!projectId) {
       return;
     }
-    const title = nextDefaultSessionTitle(sessions.map((s) => s.title));
+    const title = nextDefaultSessionTitle(sessions.map(s => s.title));
     const result = await ipcSessionsCreate({ projectId, title });
     if (result.ok) {
       await loadSessions(projectId);
-      await openSession(result.data, projectName ?? "—");
+      await openSession(result.data, projectName ?? '—');
     } else {
       showToast(result.error.message);
     }
@@ -220,15 +220,15 @@ export function ChatRail({
     if (!state) {
       return;
     }
-    if (state.kind === "delete-projects-batch") {
+    if (state.kind === 'delete-projects-batch') {
       await deleteSelectedProjects();
       return;
     }
-    if (state.kind === "delete-sessions-batch") {
+    if (state.kind === 'delete-sessions-batch') {
       await deleteSelectedSessions();
       return;
     }
-    if (state.kind === "delete-project") {
+    if (state.kind === 'delete-project') {
       await ipcProjectsDelete({ id: state.projectId });
       await loadDesktopScope();
       await loadProjects();
@@ -237,14 +237,14 @@ export function ChatRail({
       }
       return;
     }
-    if (state.kind === "delete-session") {
+    if (state.kind === 'delete-session') {
       await ipcSessionsDelete({ id: state.sessionId });
       await loadDesktopScope();
       if (projectId) {
         await loadSessions(projectId);
       }
       if (sessionId === state.sessionId) {
-        showNavView("sessions");
+        showNavView('sessions');
       }
     }
   }, [
@@ -264,7 +264,7 @@ export function ChatRail({
       if (!namePrompt) {
         return;
       }
-      if (namePrompt.mode === "create-project") {
+      if (namePrompt.mode === 'create-project') {
         const result = await ipcProjectsCreate({ name });
         if (result.ok) {
           await loadProjects();
@@ -272,7 +272,7 @@ export function ChatRail({
         }
         return;
       }
-      if (namePrompt.mode === "rename-project") {
+      if (namePrompt.mode === 'rename-project') {
         const result = await ipcProjectsRename({
           id: namePrompt.projectId,
           name,
@@ -282,7 +282,7 @@ export function ChatRail({
         }
         return;
       }
-      if (namePrompt.mode === "rename-session") {
+      if (namePrompt.mode === 'rename-session') {
         const result = await ipcSessionsRename({
           id: namePrompt.sessionId,
           title: name,
@@ -292,31 +292,33 @@ export function ChatRail({
         }
       }
     },
-    [namePrompt, loadProjects, openProject, projectId, projectName, loadSessions, openSession],
+    [
+      namePrompt,
+      loadProjects,
+      openProject,
+      projectId,
+      projectName,
+      loadSessions,
+      openSession,
+    ],
   );
 
-  const openProjectMenu = (
-    project: ProjectDto,
-    event: React.MouseEvent,
-  ) => {
+  const openProjectMenu = (project: ProjectDto, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     setListMenu({
-      kind: "project",
+      kind: 'project',
       projectId: project.id,
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 140)),
       y: Math.max(8, Math.min(event.clientY, window.innerHeight - 100)),
     });
   };
 
-  const openSessionMenu = (
-    session: SessionDto,
-    event: React.MouseEvent,
-  ) => {
+  const openSessionMenu = (session: SessionDto, event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     setListMenu({
-      kind: "session",
+      kind: 'session',
       sessionId: session.id,
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 140)),
       y: Math.max(8, Math.min(event.clientY, window.innerHeight - 100)),
@@ -328,43 +330,46 @@ export function ChatRail({
       if (!listMenu) {
         return;
       }
-      if (listMenu.kind === "project") {
-        const project = projects.find((p) => p.id === listMenu.projectId);
+      if (listMenu.kind === 'project') {
+        const project = projects.find(p => p.id === listMenu.projectId);
         if (!project) {
           return;
         }
-        if (action === "rename") {
+        if (action === 'rename') {
           setNamePrompt({
-            mode: "rename-project",
+            mode: 'rename-project',
             projectId: project.id,
             initialName: project.name,
           });
-        } else if (action === "agent-config") {
-          setAgentConfigProject({ projectId: project.id, projectName: project.name });
-        } else if (action === "delete") {
+        } else if (action === 'agent-config') {
+          setAgentConfigProject({
+            projectId: project.id,
+            projectName: project.name,
+          });
+        } else if (action === 'delete') {
           setConfirmState({
-            kind: "delete-project",
+            kind: 'delete-project',
             projectId: project.id,
             name: project.name,
           });
         }
         return;
       }
-      const session = sessions.find((s) => s.id === listMenu.sessionId);
+      const session = sessions.find(s => s.id === listMenu.sessionId);
       if (!session) {
         return;
       }
-      if (action === "rename") {
+      if (action === 'rename') {
         setNamePrompt({
-          mode: "rename-session",
+          mode: 'rename-session',
           sessionId: session.id,
-          initialName: session.title ?? "",
+          initialName: session.title ?? '',
         });
-      } else if (action === "delete") {
+      } else if (action === 'delete') {
         setConfirmState({
-          kind: "delete-session",
+          kind: 'delete-session',
           sessionId: session.id,
-          label: session.title?.trim() || "该会话",
+          label: session.title?.trim() || '该会话',
         });
       }
     },
@@ -383,21 +388,21 @@ export function ChatRail({
 
   const namePromptTitle = (() => {
     if (!namePrompt) {
-      return "";
+      return '';
     }
     switch (namePrompt.mode) {
-      case "create-project":
-        return "新建项目";
-      case "rename-project":
-        return "重命名项目";
-      case "rename-session":
-        return "重命名会话";
+      case 'create-project':
+        return '新建项目';
+      case 'rename-project':
+        return '重命名项目';
+      case 'rename-session':
+        return '重命名会话';
       default:
-        return "";
+        return '';
     }
   })();
 
-  const showBack = viewId === "sessions" || viewId === "conversation";
+  const showBack = viewId === 'sessions' || viewId === 'conversation';
 
   return (
     <>
@@ -408,23 +413,23 @@ export function ChatRail({
               type="button"
               className="chat-nav-back"
               data-action={
-                viewId === "sessions" ? "back-to-projects" : "back-to-sessions"
+                viewId === 'sessions' ? 'back-to-projects' : 'back-to-sessions'
               }
               aria-label="返回"
               onClick={
-                viewId === "sessions" ? goBackToProjects : goBackToSessions
+                viewId === 'sessions' ? goBackToProjects : goBackToSessions
               }
             >
               ‹
             </button>
           ) : null}
-          {viewId === "sessions" ? (
+          {viewId === 'sessions' ? (
             <span className="column-header__title column-header__title--truncate">
-              {projectName ?? "—"}
+              {projectName ?? '—'}
             </span>
-          ) : viewId === "conversation" ? (
+          ) : viewId === 'conversation' ? (
             <span className="column-header__title column-header__title--truncate">
-              {sessionName ?? "—"}
+              {sessionName ?? '—'}
             </span>
           ) : (
             <span className="column-header__title">
@@ -435,9 +440,11 @@ export function ChatRail({
       </header>
       <section id="chat-rail" aria-label="Chat 内容">
         <div
-          className={`chat-nav-view${viewId === "projects" ? " is-visible" : ""}`}
+          className={`chat-nav-view${
+            viewId === 'projects' ? ' is-visible' : ''
+          }`}
           data-nav-view="projects"
-          hidden={viewId !== "projects"}
+          hidden={viewId !== 'projects'}
         >
           <ManageHeader
             title="项目"
@@ -451,7 +458,7 @@ export function ChatRail({
               <button
                 type="button"
                 className="list-manage-header__btn list-manage-header__btn--primary"
-                onClick={() => setNamePrompt({ mode: "create-project" })}
+                onClick={() => setNamePrompt({ mode: 'create-project' })}
               >
                 新建
               </button>
@@ -468,16 +475,18 @@ export function ChatRail({
                 <button
                   type="button"
                   className="chat-list__create-btn"
-                  onClick={() => setNamePrompt({ mode: "create-project" })}
+                  onClick={() => setNamePrompt({ mode: 'create-project' })}
                 >
                   新建项目
                 </button>
               </li>
             ) : (
-              projects.map((project) => (
+              projects.map(project => (
                 <li
                   key={project.id}
-                  className={`chat-list__item${isProjectSelected(project.id) ? " is-selected" : ""}`}
+                  className={`chat-list__item${
+                    isProjectSelected(project.id) ? ' is-selected' : ''
+                  }`}
                   data-project-id={project.id}
                   data-project-name={project.name}
                   role="button"
@@ -489,8 +498,8 @@ export function ChatRail({
                       void openProject(project);
                     }
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       if (projectBatchActive) {
                         toggleProjectBatch(project.id);
@@ -515,7 +524,7 @@ export function ChatRail({
                         type="button"
                         className="chat-list__menu-btn"
                         aria-label="项目操作"
-                        onClick={(e) => openProjectMenu(project, e)}
+                        onClick={e => openProjectMenu(project, e)}
                       >
                         ⋮
                       </button>
@@ -529,9 +538,11 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view${viewId === "sessions" ? " is-visible" : ""}`}
+          className={`chat-nav-view${
+            viewId === 'sessions' ? ' is-visible' : ''
+          }`}
           data-nav-view="sessions"
-          hidden={viewId !== "sessions"}
+          hidden={viewId !== 'sessions'}
         >
           <ManageHeader
             title="会话"
@@ -568,28 +579,30 @@ export function ChatRail({
                 </button>
               </li>
             ) : (
-              sessions.map((session) => (
+              sessions.map(session => (
                 <li
                   key={session.id}
-                  className={`chat-list__item${isSessionSelected(session.id) ? " is-selected" : ""}`}
+                  className={`chat-list__item${
+                    isSessionSelected(session.id) ? ' is-selected' : ''
+                  }`}
                   data-session-id={session.id}
-                  data-session-name={session.title ?? ""}
+                  data-session-name={session.title ?? ''}
                   role="button"
                   tabIndex={0}
                   onClick={() => {
                     if (sessionBatchActive) {
                       toggleSessionBatch(session.id);
                     } else {
-                      void openSession(session, projectName ?? "—");
+                      void openSession(session, projectName ?? '—');
                     }
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       if (sessionBatchActive) {
                         toggleSessionBatch(session.id);
                       } else {
-                        void openSession(session, projectName ?? "—");
+                        void openSession(session, projectName ?? '—');
                       }
                     }
                   }}
@@ -601,7 +614,7 @@ export function ChatRail({
                     />
                   ) : null}
                   <span className="chat-list__label">
-                    {session.title ?? "未命名会话"}
+                    {session.title ?? '未命名会话'}
                   </span>
                   {!sessionBatchActive ? (
                     <>
@@ -609,7 +622,7 @@ export function ChatRail({
                         type="button"
                         className="chat-list__menu-btn"
                         aria-label="会话操作"
-                        onClick={(e) => openSessionMenu(session, e)}
+                        onClick={e => openSessionMenu(session, e)}
                       >
                         ⋮
                       </button>
@@ -623,9 +636,11 @@ export function ChatRail({
         </div>
 
         <div
-          className={`chat-nav-view${viewId === "conversation" ? " is-visible" : ""}`}
+          className={`chat-nav-view${
+            viewId === 'conversation' ? ' is-visible' : ''
+          }`}
           data-nav-view="conversation"
-          hidden={viewId !== "conversation"}
+          hidden={viewId !== 'conversation'}
         >
           {projectId && sessionId ? (
             <ConversationPanel
@@ -643,11 +658,11 @@ export function ChatRail({
         open={namePrompt != null}
         title={namePromptTitle}
         initialValue={
-          namePrompt?.mode === "rename-project"
+          namePrompt?.mode === 'rename-project'
             ? namePrompt.initialName
-            : namePrompt?.mode === "rename-session"
-              ? namePrompt.initialName
-              : ""
+            : namePrompt?.mode === 'rename-session'
+            ? namePrompt.initialName
+            : ''
         }
         placeholder="请输入名称"
         onClose={() => setNamePrompt(null)}
@@ -659,11 +674,11 @@ export function ChatRail({
         x={listMenu?.x ?? 0}
         y={listMenu?.y ?? 0}
         items={[
-          { label: "重命名", action: "rename" },
-          ...(listMenu?.kind === "project"
-            ? [{ label: "智能体配置", action: "agent-config" }]
+          { label: '重命名', action: 'rename' },
+          ...(listMenu?.kind === 'project'
+            ? [{ label: '智能体配置', action: 'agent-config' }]
             : []),
-          { label: "删除", action: "delete", danger: true },
+          { label: '删除', action: 'delete', danger: true },
         ]}
         onSelect={handleListMenuSelect}
         onClose={() => setListMenu(null)}
@@ -673,18 +688,18 @@ export function ChatRail({
         open={confirmState != null}
         title="确认删除"
         message={(() => {
-          if (!confirmState) return "";
+          if (!confirmState) return '';
           switch (confirmState.kind) {
-            case "delete-projects-batch":
+            case 'delete-projects-batch':
               return `确定删除选中的 ${confirmState.count} 个项目？将同时移除其下所有会话。`;
-            case "delete-sessions-batch":
+            case 'delete-sessions-batch':
               return `确定删除选中的 ${confirmState.count} 个会话？`;
-            case "delete-project":
+            case 'delete-project':
               return `确定删除项目「${confirmState.name}」？将同时移除其下所有会话。`;
-            case "delete-session":
+            case 'delete-session':
               return `确定删除会话「${confirmState.label}」？`;
             default:
-              return "";
+              return '';
           }
         })()}
         danger

@@ -4,7 +4,7 @@
  * @deprecated Transcript path uses {@link ChatTranscriptWebView}; retained only when
  * Rollback path when `chatTranscriptEngine` KKV is set to `legacy-rn`.
  */
-import React, {useCallback, useEffect, useMemo, useRef} from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   FlatList,
   Pressable,
@@ -14,17 +14,17 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import type {MessageMenuAnchor} from './MessageActionMenu';
-import { type ChatMessage } from "@novel-master/core/chat";
-import {RichContentBody} from '@/components/rich-content/RichContentBody';
-import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
-import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
-import {useTheme} from '@/theme/ThemeProvider';
-import type {ThemeTokens} from '@/theme/tokens';
-import {buildChatListItems, type ChatListItem} from './message-blocks';
-import {ThinkingBlockCard} from './ThinkingBlockCard';
-import {ToolCallGroupCard} from './ToolCallGroupCard';
-import {ToolTurnPhaseBar} from './ToolTurnPhaseBar';
+import type { MessageMenuAnchor } from './MessageActionMenu';
+import { type ChatMessage } from '@novel-master/core/chat';
+import { RichContentBody } from '@/components/rich-content/RichContentBody';
+import { isRichContentOverLimit } from '@/components/rich-content/rich-content-limits';
+import type { ChatListScrollSnapshot } from '@/services/chat-list-scroll-cache';
+import { useTheme } from '@/theme/ThemeProvider';
+import type { ThemeTokens } from '@/theme/tokens';
+import { buildChatListItems, type ChatListItem } from './message-blocks';
+import { ThinkingBlockCard } from './ThinkingBlockCard';
+import { ToolCallGroupCard } from './ToolCallGroupCard';
+import { ToolTurnPhaseBar } from './ToolTurnPhaseBar';
 
 type Props = {
   messages: readonly ChatMessage[];
@@ -72,7 +72,7 @@ interface ChatMessageBodyProps {
 function chatBubbleColors(
   tokens: ThemeTokens,
   isUser: boolean,
-): {backgroundColor: string; bodyColor: string} {
+): { backgroundColor: string; bodyColor: string } {
   return {
     backgroundColor: isUser ? tokens.primary : tokens.surface,
     bodyColor: isUser ? '#fff' : tokens.text,
@@ -91,7 +91,7 @@ const ChatMessageBody = React.memo(function ChatMessageBody({
 }: ChatMessageBodyProps) {
   const plainColor = bodyColor;
   if (!richTextEnabled || isRichContentOverLimit(body)) {
-    return <Text style={{color: plainColor}}>{body}</Text>;
+    return <Text style={{ color: plainColor }}>{body}</Text>;
   }
   return (
     <RichContentBody
@@ -119,15 +119,13 @@ export function MessageList({
   onScrollSnapshot,
   defaultScrollToBottom = false,
 }: Props) {
-  const {tokens} = useTheme();
-  const listRef = useRef<FlatList<ChatListItem | {kind: 'stream'}>>(null);
+  const { tokens } = useTheme();
+  const listRef = useRef<FlatList<ChatListItem | { kind: 'stream' }>>(null);
   const prevFirstMessageIdRef = useRef<string | undefined>(undefined);
   const prevMessageCountRef = useRef(0);
   // WHY: default true breaks restore — onContentSizeChange runs before useEffect and scrolls to end.
   const nearBottomRef = useRef(
-    initialScroll != null
-      ? initialScroll.nearBottom
-      : defaultScrollToBottom,
+    initialScroll != null ? initialScroll.nearBottom : defaultScrollToBottom,
   );
   const scrollOffsetRef = useRef(initialScroll?.offsetY ?? 0);
   const viewportHeightRef = useRef(0);
@@ -135,17 +133,21 @@ export function MessageList({
   const hasAppliedInitialScrollRef = useRef(false);
   const pendingScrollRestoreRef = useRef(initialScroll != null);
   const lastScrollToEndMsRef = useRef(0);
-  const scrollToEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountContentOffsetRef = useRef<{x: number; y: number} | undefined>(
+  const scrollToEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const snapshotThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const mountContentOffsetRef = useRef<{ x: number; y: number } | undefined>(
     initialScroll != null &&
       !initialScroll.nearBottom &&
       initialScroll.offsetY > 0
-      ? {x: 0, y: initialScroll.offsetY}
+      ? { x: 0, y: initialScroll.offsetY }
       : undefined,
   );
   const items = useMemo(
-    () => buildChatListItems(messages, {agentRunning}),
+    () => buildChatListItems(messages, { agentRunning }),
     [messages, agentRunning],
   );
 
@@ -187,7 +189,7 @@ export function MessageList({
         return;
       }
       if (initialScroll?.nearBottom) {
-        listRef.current?.scrollToEnd({animated: false});
+        listRef.current?.scrollToEnd({ animated: false });
         pendingScrollRestoreRef.current = false;
         return;
       }
@@ -222,7 +224,7 @@ export function MessageList({
       lastScrollToEndMsRef.current = Date.now();
       requestAnimationFrame(() => {
         if (nearBottomRef.current) {
-          listRef.current?.scrollToEnd({animated: false});
+          listRef.current?.scrollToEnd({ animated: false });
         }
       });
     }, delay);
@@ -230,7 +232,8 @@ export function MessageList({
 
   const syncNearBottomFromScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
       scrollOffsetRef.current = contentOffset.y;
       contentHeightRef.current = contentSize.height;
       viewportHeightRef.current = layoutMeasurement.height;
@@ -266,10 +269,7 @@ export function MessageList({
     const prevCount = prevMessageCountRef.current;
     const grew = messages.length > prevCount;
     const prependedOlder =
-      grew &&
-      prevFirstId != null &&
-      firstId != null &&
-      firstId !== prevFirstId;
+      grew && prevFirstId != null && firstId != null && firstId !== prevFirstId;
 
     if (prependedOlder) {
       nearBottomRef.current = false;
@@ -285,12 +285,7 @@ export function MessageList({
 
     prevFirstMessageIdRef.current = firstId;
     prevMessageCountRef.current = messages.length;
-  }, [
-    messages,
-    initialScroll,
-    defaultScrollToBottom,
-    scheduleScrollToEnd,
-  ]);
+  }, [messages, initialScroll, defaultScrollToBottom, scheduleScrollToEnd]);
 
   useEffect(() => {
     if (!streamingText && !streamingThinking && !toolInvoking) {
@@ -318,14 +313,14 @@ export function MessageList({
     [streamingText, streamingThinking],
   );
 
-  const data: (ChatListItem | {kind: 'stream'})[] = useMemo(() => {
-    const list: (ChatListItem | {kind: 'stream'})[] = [...items];
+  const data: (ChatListItem | { kind: 'stream' })[] = useMemo(() => {
+    const list: (ChatListItem | { kind: 'stream' })[] = [...items];
     if (
       (streamingText && streamingText.length > 0) ||
       (streamingThinking && streamingThinking.length > 0) ||
       toolInvoking
     ) {
-      list.push({kind: 'stream'});
+      list.push({ kind: 'stream' });
     }
     return list;
   }, [items, streamingText, streamingThinking, toolInvoking]);
@@ -345,7 +340,12 @@ export function MessageList({
     const trimmedThinking = thinking.trim();
     const trimmedBody = body.trim();
     const showToolInvoking = options?.showToolInvoking ?? false;
-    if (!trimmedThinking && !trimmedBody && tools.length === 0 && !showToolInvoking) {
+    if (
+      !trimmedThinking &&
+      !trimmedBody &&
+      tools.length === 0 &&
+      !showToolInvoking
+    ) {
       return null;
     }
     const colors = chatBubbleColors(tokens, false);
@@ -361,7 +361,8 @@ export function MessageList({
             backgroundColor: colors.backgroundColor,
             opacity: hidden ? 0.55 : 1,
           },
-        ]}>
+        ]}
+      >
         {trimmedThinking ? (
           <ThinkingBlockCard
             text={trimmedThinking}
@@ -371,27 +372,27 @@ export function MessageList({
             richRenderEpoch={richRenderEpoch}
             contentId={`thinking-${messageId}`}
             embedded
-            showDividerBelow={!!trimmedBody || tools.length > 0 || showToolInvoking}
+            showDividerBelow={
+              !!trimmedBody || tools.length > 0 || showToolInvoking
+            }
           />
         ) : null}
-        {trimmedBody
-          ? options?.forcePlainText ? (
-              <Text style={{color: colors.bodyColor}}>{trimmedBody}</Text>
-            ) : (
-              <ChatMessageBody
-                body={trimmedBody}
-                tokens={tokens}
-                isUser={false}
-                richTextEnabled={chatRichTextEnabled}
-                richRenderEpoch={richRenderEpoch}
-                messageId={messageId}
-                bodyColor={colors.bodyColor}
-              />
-            )
-          : null}
-        {showToolInvoking ? (
-          <ToolTurnPhaseBar embedded label="生成中" />
+        {trimmedBody ? (
+          options?.forcePlainText ? (
+            <Text style={{ color: colors.bodyColor }}>{trimmedBody}</Text>
+          ) : (
+            <ChatMessageBody
+              body={trimmedBody}
+              tokens={tokens}
+              isUser={false}
+              richTextEnabled={chatRichTextEnabled}
+              richRenderEpoch={richRenderEpoch}
+              messageId={messageId}
+              bodyColor={colors.bodyColor}
+            />
+          )
         ) : null}
+        {showToolInvoking ? <ToolTurnPhaseBar embedded label="生成中" /> : null}
         {tools.length > 0 ? (
           <ToolCallGroupCard
             tools={tools}
@@ -418,7 +419,8 @@ export function MessageList({
             backgroundColor: colors.backgroundColor,
             opacity: hidden ? 0.55 : 1,
           },
-        ]}>
+        ]}
+      >
         <ChatMessageBody
           body={body}
           tokens={tokens}
@@ -438,7 +440,7 @@ export function MessageList({
       style={styles.list}
       data={data}
       contentOffset={mountContentOffsetRef.current}
-      extraData={{chatRichTextEnabled, richRenderEpoch}}
+      extraData={{ chatRichTextEnabled, richRenderEpoch }}
       ListHeaderComponent={listHeaderComponent ?? undefined}
       maintainVisibleContentPosition={{
         minIndexForVisible: 0,
@@ -458,7 +460,7 @@ export function MessageList({
           const maxOffset = Math.max(0, height - viewportHeightRef.current);
           const clamped = Math.min(scrollOffsetRef.current, maxOffset);
           scrollOffsetRef.current = clamped;
-          listRef.current?.scrollToOffset({offset: clamped, animated: false});
+          listRef.current?.scrollToOffset({ offset: clamped, animated: false });
           return;
         }
         scheduleScrollToEnd();
@@ -479,12 +481,12 @@ export function MessageList({
       }}
       ListEmptyComponent={
         !streamingText && !streamingThinking && !toolInvoking ? (
-          <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+          <Text style={[styles.empty, { color: tokens.textSecondary }]}>
             暂无消息，发送一条开始对话
           </Text>
         ) : null
       }
-      renderItem={({item}) => {
+      renderItem={({ item }) => {
         if ('kind' in item && item.kind === 'stream') {
           if (toolInvoking && !hasStreamContent) {
             return (
@@ -525,7 +527,8 @@ export function MessageList({
                   backgroundColor: colors.backgroundColor,
                   opacity: hidden ? 0.55 : 1,
                 },
-              ]}>
+              ]}
+            >
               <ToolCallGroupCard
                 tools={item.tools}
                 dimmed={hidden}
@@ -535,7 +538,9 @@ export function MessageList({
             </View>
           );
           return (
-            <View style={[styles.rowAlign, styles.rowAlignUser]}>{content}</View>
+            <View style={[styles.rowAlign, styles.rowAlignUser]}>
+              {content}
+            </View>
           );
         }
 
@@ -547,22 +552,21 @@ export function MessageList({
         if (!body && !thinking && row.tools.length === 0) {
           return null;
         }
-        const content = isUser ? (
-          renderUserBubble(body, hidden, row.message.id)
-        ) : (
-          renderAssistantBubble(
-            body,
-            thinking,
-            row.tools,
-            hidden,
-            row.message.id,
-          )
-        );
+        const content = isUser
+          ? renderUserBubble(body, hidden, row.message.id)
+          : renderAssistantBubble(
+              body,
+              thinking,
+              row.tools,
+              hidden,
+              row.message.id,
+            );
 
         return (
           <MessageLongPressRow
             isUser={isUser}
-            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}>
+            onLongPress={anchor => onMessageLongPress?.(row.message, anchor)}
+          >
             {content}
           </MessageLongPressRow>
         );
@@ -593,17 +597,18 @@ function MessageLongPressRow({
       ]}
       onLongPress={() => {
         rowRef.current?.measureInWindow((x, y, width, height) => {
-          onLongPress({x, y, width, height});
+          onLongPress({ x, y, width, height });
         });
-      }}>
+      }}
+    >
       {children}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  list: {flex: 1},
-  empty: {textAlign: 'center', marginTop: 32, paddingHorizontal: 24},
+  list: { flex: 1 },
+  empty: { textAlign: 'center', marginTop: 32, paddingHorizontal: 24 },
   rowAlign: {
     width: '100%',
     paddingHorizontal: 12,
@@ -626,4 +631,3 @@ const styles = StyleSheet.create({
     width: '85%',
   },
 });
-

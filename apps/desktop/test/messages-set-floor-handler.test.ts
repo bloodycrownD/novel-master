@@ -2,19 +2,19 @@
  * T-SF14：Desktop IPC handleMessagesSetFloor 委托 effects；markDirty 路径。
  * T-SF18：幂等置位返回零变更 counts，驱动 Toast「上下文已是最新状态」。
  */
-import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
-import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton.js";
+import assert from 'node:assert/strict';
+import { after, before, describe, it } from 'node:test';
+import { getDesktopRuntime } from '../src/main/runtime/desktop-runtime-singleton.js';
 import {
   handleMessagesAppend,
   handleMessagesSetFloor,
-} from "../src/main/ipc/handlers/messages.js";
-import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
-import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
+} from '../src/main/ipc/handlers/messages.js';
+import { handleProjectsCreate } from '../src/main/ipc/handlers/projects.js';
+import { handleSessionsCreate } from '../src/main/ipc/handlers/sessions.js';
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
-} from "./desktop-db-test-env.js";
+} from './desktop-db-test-env.js';
 
 /** Mirrors ConversationPanel handleConfirm set-floor toast selection. */
 function resolveSetFloorToastMessage(result: {
@@ -22,17 +22,17 @@ function resolveSetFloorToastMessage(result: {
   shownCount: number;
 }): string {
   const changed = result.hiddenCount + result.shownCount;
-  return changed > 0 ? "已置位" : "上下文已是最新状态";
+  return changed > 0 ? '已置位' : '上下文已是最新状态';
 }
 
-describe("handleMessagesSetFloor", () => {
+describe('handleMessagesSetFloor', () => {
   let tempDir: string;
   let projectId: string;
 
   before(async () => {
-    ({ tempDir } = await setupDesktopDbTestEnv("nm-desktop-set-floor-"));
+    ({ tempDir } = await setupDesktopDbTestEnv('nm-desktop-set-floor-'));
 
-    const project = await handleProjectsCreate({ name: "set-floor-ipc" });
+    const project = await handleProjectsCreate({ name: 'set-floor-ipc' });
     assert.equal(project.ok, true);
     if (!project.ok) {
       return;
@@ -48,31 +48,31 @@ describe("handleMessagesSetFloor", () => {
     const session = await handleSessionsCreate({ projectId, title });
     assert.equal(session.ok, true);
     if (!session.ok) {
-      throw new Error("failed to create session");
+      throw new Error('failed to create session');
     }
     return session.data.id;
   }
 
   async function appendMessage(
     sessionId: string,
-    role: "user" | "assistant",
+    role: 'user' | 'assistant',
     text: string,
   ): Promise<string> {
     const result = await handleMessagesAppend({ sessionId, role, text });
     assert.equal(result.ok, true);
     if (!result.ok) {
-      throw new Error("failed to append message");
+      throw new Error('failed to append message');
     }
     return result.data.id;
   }
 
-  it("T-SF14: 委托 messageTranscriptEffects 并 markDirty", async () => {
-    const sessionId = await createSession("sf14");
+  it('T-SF14: 委托 messageTranscriptEffects 并 markDirty', async () => {
+    const sessionId = await createSession('sf14');
     const rt = await getDesktopRuntime();
-    await appendMessage(sessionId, "user", "u1");
-    await appendMessage(sessionId, "assistant", "a1");
-    const anchorId = await appendMessage(sessionId, "user", "u2");
-    await appendMessage(sessionId, "assistant", "a2");
+    await appendMessage(sessionId, 'user', 'u1');
+    await appendMessage(sessionId, 'assistant', 'a1');
+    const anchorId = await appendMessage(sessionId, 'user', 'u2');
+    await appendMessage(sessionId, 'assistant', 'a2');
     await rt.messages.hideRange(sessionId, 3, 4);
 
     const result = await handleMessagesSetFloor({
@@ -99,12 +99,12 @@ describe("handleMessagesSetFloor", () => {
     }
   });
 
-  it("T-SF18: 幂等置位返回零变更 counts，Toast「上下文已是最新状态」", async () => {
-    const sessionId = await createSession("sf18");
+  it('T-SF18: 幂等置位返回零变更 counts，Toast「上下文已是最新状态」', async () => {
+    const sessionId = await createSession('sf18');
     const rt = await getDesktopRuntime();
-    await appendMessage(sessionId, "user", "u1");
-    const anchorId = await appendMessage(sessionId, "assistant", "a1");
-    await appendMessage(sessionId, "user", "u2");
+    await appendMessage(sessionId, 'user', 'u1');
+    const anchorId = await appendMessage(sessionId, 'assistant', 'a1');
+    await appendMessage(sessionId, 'user', 'u2');
 
     const first = await handleMessagesSetFloor({
       projectId,
@@ -127,7 +127,7 @@ describe("handleMessagesSetFloor", () => {
       assert.equal(second.data.shownCount, 0);
       assert.equal(
         resolveSetFloorToastMessage(second.data),
-        "上下文已是最新状态",
+        '上下文已是最新状态',
       );
     }
   });

@@ -14,14 +14,17 @@ type HitEl = {
 };
 
 /** Mirrors apps/mobile/src/web/chat-transcript/main.ts buildMenuItems set-floor rules. */
-function buildWebViewMenuActions(row: WebViewMenuRow, hitEl?: HitEl | null): string[] {
+function buildWebViewMenuActions(
+  row: WebViewMenuRow,
+  hitEl?: HitEl | null,
+): string[] {
   const items: string[] = [];
   if (row.text) items.push('edit');
   items.push('copy');
   const showSetFloor =
     row.kind === 'message' &&
     (row.role === 'user' || row.role === 'assistant') &&
-    !(hitEl?.closest?.('.tool-card, .tool-group-item'));
+    !hitEl?.closest?.('.tool-card, .tool-group-item');
   if (showSetFloor) items.push('set-floor');
   items.push('fork');
   if (!row.hidden) items.push('rollback');
