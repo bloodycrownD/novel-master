@@ -26,7 +26,6 @@ import { nextDefaultSessionTitle } from "../utils/session-default-title";
 
 interface ChatRailProps {
   onOpenSessionActions: (anchor: HTMLElement) => void;
-  messageBatch: ReturnType<typeof useBatchSelection>;
   settingsOpen: boolean;
 }
 
@@ -47,7 +46,6 @@ type ListMenuState =
 
 export function ChatRail({
   onOpenSessionActions,
-  messageBatch,
   settingsOpen,
 }: ChatRailProps) {
   const {
@@ -634,7 +632,6 @@ export function ChatRail({
               projectId={projectId}
               sessionId={sessionId}
               onOpenSessionActions={onOpenSessionActions}
-              messageBatch={messageBatch}
             />
           ) : (
             <p className="preview-empty">请选择会话</p>

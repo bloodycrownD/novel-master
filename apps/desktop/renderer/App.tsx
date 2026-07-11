@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useColumnSplitters } from "./hooks/useColumnSplitters";
-import { useBatchSelection } from "./hooks/useBatchSelection";
-import { runCompaction, runSessionAction } from "./features/chat/ConversationPanel";
+import { runCompaction } from "./features/chat/ConversationPanel";
 import { ConfirmModal } from "./components/ui/ConfirmModal";
 import { TextPromptModal } from "./components/ui/TextPromptModal";
 import { showToast } from "./components/ui/show-toast";
@@ -43,7 +42,6 @@ type SessionRenamePromptState = {
 function DesktopOverlays() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const columnLayout = useColumnSplitters();
-  const messageBatch = useBatchSelection();
   const { projectId, sessionId, sessionName, updateSessionName, notifyWorkspaceMutated, notifyAgentConfigChanged, markPreviewTabsDeletedUnderPath, renamePreviewTab, registerEnsurePreviewVisible } =
     useShellNav();
 
@@ -270,7 +268,6 @@ function DesktopOverlays() {
             onOpenWorkspaceContextMenu={openWorkspaceContextMenu}
             onBlankWorkspaceContextMenu={openBlankWorkspaceContextMenu}
             onOpenSessionActions={openSessionActions}
-            messageBatch={messageBatch}
             settingsOpen={settingsOpen}
           />
         </div>
@@ -296,57 +293,6 @@ function DesktopOverlays() {
         }
         onClick={(e) => e.stopPropagation()}
       >
-        <button
-          type="button"
-          data-session-action="hide-messages"
-          onClick={() => {
-            closeMenus();
-            if (projectId && sessionId) {
-              void runSessionAction(
-                "hide-messages",
-                projectId,
-                sessionId,
-                messageBatch,
-              );
-            }
-          }}
-        >
-          隐藏消息
-        </button>
-        <button
-          type="button"
-          data-session-action="restore-messages"
-          onClick={() => {
-            closeMenus();
-            if (projectId && sessionId) {
-              void runSessionAction(
-                "restore-messages",
-                projectId,
-                sessionId,
-                messageBatch,
-              );
-            }
-          }}
-        >
-          恢复消息
-        </button>
-        <button
-          type="button"
-          data-session-action="delete-messages"
-          onClick={() => {
-            closeMenus();
-            if (projectId && sessionId) {
-              void runSessionAction(
-                "delete-messages",
-                projectId,
-                sessionId,
-                messageBatch,
-              );
-            }
-          }}
-        >
-          删除消息
-        </button>
         <button
           type="button"
           data-session-action="rename"

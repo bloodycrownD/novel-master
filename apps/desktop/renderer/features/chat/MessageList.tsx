@@ -7,12 +7,6 @@ import {
   parseUserVfsActionFromText,
   UserVfsActionBody,
 } from "./user-vfs-action-transcript";
-import type { MessageBatchMode } from "./transcript-selectable-role";
-import {
-  isTailBatchRowSelectable,
-  isTranscriptRowSelectable,
-  transcriptSelectableRole,
-} from "./transcript-selectable-role";
 
 const ROLE_LABELS: Record<string, string> = {
   user: "用户",
@@ -27,12 +21,7 @@ interface MessageListProps {
   streamingThinking?: string;
   streamTailGenerating?: boolean;
   agentRunning?: boolean;
-  batchMode?: MessageBatchMode | null;
-  selectedIds?: ReadonlySet<string>;
-  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
-  affectedIds?: ReadonlySet<string>;
   chatRichText?: boolean;
-  onToggleSelect?: (messageId: string) => void;
   onOpenMessageMenu?: (
     message: ChatMessageDto,
     position: { x: number; y: number },
@@ -67,11 +56,7 @@ export function MessageList({
   streamingThinking,
   streamTailGenerating: _streamTailGenerating = false,
   agentRunning = false,
-  batchMode = null,
-  selectedIds,
-  affectedIds,
   chatRichText = false,
-  onToggleSelect,
   onOpenMessageMenu,
   onOpenToolFile,
 }: MessageListProps) {
@@ -99,45 +84,13 @@ export function MessageList({
           if (item.tools.length === 0) {
             return null;
           }
-          const selected = selectedIds?.has(item.id) ?? false;
-          const inRange = affectedIds?.has(item.id) ?? false;
-          const tailBatchRow = {
-            id: item.id,
-            role: "user",
-            seq: messages.find((m) => m.id === item.id)?.seq ?? 0,
-            hidden: item.hidden,
-            selectable: true,
-          };
-          const rowSelectable =
-            batchMode === "restore" || batchMode === "delete"
-              ? isTailBatchRowSelectable(tailBatchRow, batchMode)
-              : isTranscriptRowSelectable(
-                  transcriptSelectableRole("user", batchMode),
-                );
-          const selectableRole =
-            batchMode === "restore" || batchMode === "delete"
-              ? (rowSelectable ? "user" : "none")
-              : transcriptSelectableRole("user", batchMode);
 
           return (
             <div
               key={item.id}
-              className={`chat-message chat-message--user${item.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}${inRange ? " is-in-range" : ""}`}
+              className={`chat-message chat-message--user${item.hidden ? " chat-message--hidden" : ""}`}
               data-message-id={item.id}
-              data-selectable-role={selectableRole}
-              onClick={() => {
-                if (batchMode && rowSelectable) {
-                  onToggleSelect?.(item.id);
-                }
-              }}
             >
-              {batchMode && rowSelectable ? (
-                <label className="chat-message__check" aria-label="选择消息">
-                  <input type="checkbox" checked={selected} readOnly />
-                </label>
-              ) : batchMode ? (
-                <span className="chat-message__check-spacer" aria-hidden="true" />
-              ) : null}
               <div className="chat-message__body">
                 <span className="chat-message__role">
                   用户
@@ -156,62 +109,29 @@ export function MessageList({
         }
 
         const msg = item.message;
-        const selected = selectedIds?.has(msg.id) ?? false;
-        const inRange = affectedIds?.has(msg.id) ?? false;
         const text = item.textParts.join("\n");
-
-        const tailBatchRow = {
-          id: msg.id,
-          role: msg.role,
-          seq: msg.seq,
-          hidden: msg.hidden,
-          selectable: true,
-        };
-        const rowSelectable =
-          batchMode === "restore" || batchMode === "delete"
-            ? isTailBatchRowSelectable(tailBatchRow, batchMode)
-            : isTranscriptRowSelectable(
-                transcriptSelectableRole(msg.role, batchMode),
-              );
-        const selectableRole =
-          batchMode === "restore" || batchMode === "delete"
-            ? (rowSelectable ? (msg.role as "user" | "assistant") : "none")
-            : transcriptSelectableRole(msg.role, batchMode);
         const userVfsAction =
           msg.role === "user" ? parseUserVfsActionFromText(text) : null;
 
         return (
           <div
             key={msg.id}
-            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}${batchMode ? " chat-message--batch" : ""}${selected ? " is-selected" : ""}${inRange ? " is-in-range" : ""}`}
+            className={`chat-message chat-message--${msg.role}${msg.hidden ? " chat-message--hidden" : ""}`}
             data-message-id={msg.id}
-            data-selectable-role={selectableRole}
-            onClick={() => {
-              if (batchMode && rowSelectable) {
-                onToggleSelect?.(msg.id);
-              }
-            }}
             onContextMenu={(e) => {
-              if (batchMode || !onOpenMessageMenu) {
+              if (!onOpenMessageMenu) {
                 return;
               }
               openMenu(msg, e);
             }}
           >
-            {batchMode && rowSelectable ? (
-              <label className="chat-message__check" aria-label="选择消息">
-                <input type="checkbox" checked={selected} readOnly />
-              </label>
-            ) : batchMode ? (
-              <span className="chat-message__check-spacer" aria-hidden="true" />
-            ) : null}
             <div className="chat-message__body">
               <span className="chat-message__role">
                 {ROLE_LABELS[msg.role] ?? msg.role}
                 {msg.hidden ? (
                   <span className="chat-message__hidden-tag">已隐藏</span>
                 ) : null}
-                {!batchMode && onOpenMessageMenu ? (
+                {onOpenMessageMenu ? (
                   <button
                     type="button"
                     className="chat-message__menu-btn"

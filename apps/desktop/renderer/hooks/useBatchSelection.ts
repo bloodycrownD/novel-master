@@ -1,5 +1,5 @@
 /**
- * 消息批量模式状态（隐藏 / 恢复 / 删除）。
+ * 通用批量多选状态（项目/会话/Provider 等）。
  */
 import { useCallback, useMemo, useState } from "react";
 
@@ -11,18 +11,9 @@ export function useBatchSelection() {
 
   const active = mode != null;
 
-  const enterHide = useCallback(() => {
+  /** 通用批量入口（会话/VFS/Provider 等非消息可见性场景）。 */
+  const enter = useCallback(() => {
     setMode("hide");
-    setSelectedIds(new Set());
-  }, []);
-
-  const enterRestore = useCallback(() => {
-    setMode("restore");
-    setSelectedIds(new Set());
-  }, []);
-
-  const enterDelete = useCallback(() => {
-    setMode("delete");
     setSelectedIds(new Set());
   }, []);
 
@@ -59,9 +50,7 @@ export function useBatchSelection() {
       mode,
       selectedIds,
       selectedCount: selectedIds.size,
-      enterHide,
-      enterRestore,
-      enterDelete,
+      enter,
       exit,
       toggle,
       selectRange,
@@ -71,9 +60,7 @@ export function useBatchSelection() {
       active,
       mode,
       selectedIds,
-      enterHide,
-      enterRestore,
-      enterDelete,
+      enter,
       exit,
       toggle,
       selectRange,

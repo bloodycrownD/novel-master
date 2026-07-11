@@ -1,5 +1,4 @@
 import type { RefObject } from "react";
-import type { useBatchSelection } from "../hooks/useBatchSelection";
 import type { WorkspaceContextTarget } from "../features/workspace/WorkspaceTree";
 import { ChatRail } from "./ChatRail";
 import { ExplorerPane } from "./ExplorerPane";
@@ -12,7 +11,6 @@ interface MainShellProps {
     target: Extract<WorkspaceContextTarget, { kind: "blank" }>,
   ) => void;
   onOpenSessionActions: (anchor: HTMLElement) => void;
-  messageBatch: ReturnType<typeof useBatchSelection>;
   settingsOpen: boolean;
 }
 
@@ -21,7 +19,6 @@ export function MainShell({
   onOpenWorkspaceContextMenu,
   onBlankWorkspaceContextMenu,
   onOpenSessionActions,
-  messageBatch,
   settingsOpen,
 }: MainShellProps) {
   return (
@@ -55,7 +52,6 @@ export function MainShell({
 
       <ChatRail
         onOpenSessionActions={onOpenSessionActions}
-        messageBatch={messageBatch}
         settingsOpen={settingsOpen}
       />
     </div>
