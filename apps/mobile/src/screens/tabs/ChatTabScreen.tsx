@@ -57,7 +57,6 @@ function ChatTabScreenContent({
       sessionDrawerOpen: ctx.sessionDrawerOpen,
       messageMenuOpen:
         ctx.messageMenuTarget != null || ctx.webMenuOpen,
-      messageBatchActive: ctx.messageBatchActive,
       messageEditOpen: ctx.messageEditPrompt != null,
       modelPickerOpen: ctx.modelPickerOpen,
       agentPickerOpen: ctx.agentPickerOpen,
@@ -72,7 +71,6 @@ function ChatTabScreenContent({
       showChatPanel: nav.actions.showChatPanel,
       closeSessionDrawer: nav.actions.closeSessionDrawer,
       closeMessageMenu: nav.actions.closeMessageMenu,
-      exitMessageBatch: nav.actions.exitMessageBatch,
       closeMessageEdit: nav.actions.closeMessageEdit,
       closeModelPicker: nav.actions.closeModelPicker,
       closeAgentPicker: nav.actions.closeAgentPicker,

@@ -24,7 +24,6 @@ const mockChatNav: ChatTabNavigationContextValue = {
     closeProjectDrawer: jest.fn(),
     showSessionsPanel: jest.fn(),
     openDrawer: jest.fn(),
-    exitMessageBatch: jest.fn(),
     closeMessageMenu: jest.fn(),
     closeMessageEdit: jest.fn(),
     closeModelPicker: jest.fn(),

@@ -18,16 +18,6 @@ import {
   findLastVisibleMessage,
 } from '@/components/chat/composer-send-state';
 import {
-  computeHideRangeFromSelection,
-} from '@/components/chat/transcript-selectable-role';
-import {
-  chatMessagesToTailBatchRows,
-  computeTailBatchRangeFromSelection,
-  tailBatchDeleteAfterSeq,
-} from '@/components/chat/transcript-selectable-role';
-import type {MessageBatchMode} from '@/components/chat/transcript-selectable-role';
-import type {useBatchSelection} from '@/hooks/useBatchSelection';
-import {
   formatRollbackRevisionBackfillAlertMessage,
   isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
@@ -261,19 +251,11 @@ export function useChatTabMessages({
 
 export type UseChatTabMessagesResult = ReturnType<typeof useChatTabMessages>;
 
-type BatchSelection = ReturnType<typeof useBatchSelection> & {
-  mode: MessageBatchMode | null;
-  enterHide: () => void;
-  enterRestore: () => void;
-  enterDelete: () => void;
-};
-
 export type UseChatTabMessageActionsParams = {
   runtime: MobileNovelMasterRuntime;
   projectId: string | undefined;
   sessionId: string | undefined;
   messages: UseChatTabMessagesResult;
-  messageBatch: BatchSelection;
   agentRunning: boolean;
   resetStreamingDisplay: () => void;
   showToast: (message: string) => void;
@@ -293,7 +275,6 @@ export function useChatTabMessageActions({
   projectId,
   sessionId,
   messages,
-  messageBatch,
   agentRunning,
   resetStreamingDisplay,
   showToast,
@@ -306,176 +287,6 @@ export function useChatTabMessageActions({
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
   const {chatMessages, reloadMessages} = messages;
-
-  const exitMessageBatch = useCallback(() => {
-    messageBatch.exit();
-  }, [messageBatch]);
-
-  const enterHideMessageBatch = useCallback(() => {
-    if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法操作消息可见性'));
-      return;
-    }
-    messageBatch.exit();
-    messageBatch.enterHide();
-  }, [agentRunning, messageBatch, showToast]);
-
-  const enterRestoreMessageBatch = useCallback(() => {
-    if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法操作消息可见性'));
-      return;
-    }
-    messageBatch.exit();
-    messageBatch.enterRestore();
-  }, [agentRunning, messageBatch, showToast]);
-
-  const enterDeleteMessageBatch = useCallback(() => {
-    if (agentRunning) {
-      showToast(toastMessage('请稍候', 'Agent 运行中无法删除消息'));
-      return;
-    }
-    messageBatch.exit();
-    messageBatch.enterDelete();
-  }, [agentRunning, messageBatch, showToast]);
-
-  const finishMessageBatchMutation = useCallback(
-    async (mode: MessageBatchMode) => {
-      exitMessageBatch();
-      await reloadMessages(true);
-      if (mode === 'hide' || mode === 'restore') {
-        bumpWorktreeUiToken();
-      }
-      void refreshChatTokenLabel();
-    },
-    [
-      exitMessageBatch,
-      reloadMessages,
-      bumpWorktreeUiToken,
-      refreshChatTokenLabel,
-    ],
-  );
-
-  const confirmVisibilityBatch = useCallback(async () => {
-    if (projectId == null || sessionId == null || messageBatch.mode == null) {
-      return;
-    }
-    if (messageBatch.selectedCount === 0) {
-      return;
-    }
-
-    const runHide = async (toSeq: number) => {
-      await runtime.messageTranscriptEffects.hideMessagesInRange(
-        projectId,
-        sessionId,
-        1,
-        toSeq,
-      );
-      await finishMessageBatchMutation('hide');
-      showToast('已隐藏');
-    };
-
-    const runRestore = async (fromSeq: number, toSeq: number) => {
-      await runtime.messageTranscriptEffects.showMessagesInRange(
-        projectId,
-        sessionId,
-        fromSeq,
-        toSeq,
-      );
-      await finishMessageBatchMutation('restore');
-      showToast('已恢复');
-    };
-
-    const runDelete = async (afterSeq: number) => {
-      await runtime.messageTranscriptEffects.truncateMessagesAfter(
-        projectId,
-        sessionId,
-        afterSeq,
-      );
-      await finishMessageBatchMutation('delete');
-      showToast('已删除');
-    };
-
-    if (messageBatch.mode === 'hide') {
-      const range = computeHideRangeFromSelection(
-        chatMessages,
-        messageBatch.selectedIds,
-      );
-      if (range == null) {
-        return;
-      }
-      Alert.alert(
-        '确认隐藏',
-        `将隐藏所选 assistant 消息（seq ≤ ${range.toSeq}）及其之前的所有消息。是否继续？`,
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '隐藏',
-            onPress: () => runHide(range.toSeq).catch(err => {
-              showToast(toastMessage('隐藏失败', err));
-            }),
-          },
-        ],
-      );
-      return;
-    }
-
-    const all = await runtime.messages.listBySession(sessionId);
-    const sessionMaxSeq =
-      all.length > 0 ? Math.max(...all.map(m => m.seq)) : 0;
-    const tailRows = chatMessagesToTailBatchRows(all);
-    const range = computeTailBatchRangeFromSelection(
-      tailRows,
-      messageBatch.selectedIds,
-      sessionMaxSeq,
-      messageBatch.mode,
-    );
-    if (range == null) {
-      return;
-    }
-
-    if (messageBatch.mode === 'delete') {
-      const afterSeq = tailBatchDeleteAfterSeq(range.fromSeq);
-      Alert.alert(
-        '确认删除',
-        `将永久删除所选消息（seq ≥ ${range.fromSeq}）及其之后的所有消息。仅删除聊天记录，工作区文件不变。是否继续？`,
-        [
-          {text: '取消', style: 'cancel'},
-          {
-            text: '删除',
-            style: 'destructive',
-            onPress: () =>
-              runDelete(afterSeq).catch(err => {
-                showToast(toastMessage('删除失败', err));
-              }),
-          },
-        ],
-      );
-      return;
-    }
-
-    Alert.alert(
-      '确认恢复',
-      `将恢复所选消息（seq ≥ ${range.fromSeq}）及其之后的所有消息。是否继续？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '恢复',
-          onPress: () =>
-            runRestore(range.fromSeq, range.toSeq).catch(err => {
-              showToast(toastMessage('恢复失败', err));
-            }),
-        },
-      ],
-    );
-  }, [
-    projectId,
-    sessionId,
-    messageBatch,
-    chatMessages,
-    runtime,
-    finishMessageBatchMutation,
-    showToast,
-  ]);
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
@@ -783,11 +594,6 @@ export function useChatTabMessageActions({
   );
 
   return {
-    exitMessageBatch,
-    enterHideMessageBatch,
-    enterRestoreMessageBatch,
-    enterDeleteMessageBatch,
-    confirmVisibilityBatch,
     handleCompactSession,
     handleMessageMenuAction,
     handleSaveMessageEdit,

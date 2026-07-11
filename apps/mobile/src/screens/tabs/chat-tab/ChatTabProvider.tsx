@@ -26,12 +26,10 @@ import type {
   AgentStreamMetricsSnapshot,
   StreamMetricsAccRef,
 } from '@/hooks/useAgentStreamMetrics';
-import type { MessageBatchMode } from '@/components/chat/transcript-selectable-role';
 import { useToast } from '@/components/chrome/ToastHost';
 import { useRuntime } from '@/hooks/useRuntime';
 import { useMobileScope } from '@/hooks/useMobileScope';
 import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
-import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useDismissOverlaysOnBlur } from '@/hooks/useDismissOverlaysOnBlur';
 import { useNovelMaster } from '@/runtime/novel-master-context';
 import {
@@ -80,10 +78,6 @@ export type ChatTabContextValue = {
   readonly chatMessages: ChatMessage[];
   readonly hasMoreMessages: boolean;
   readonly loadingMoreMessages: boolean;
-  readonly messageBatchActive: boolean;
-  readonly messageBatchMode: MessageBatchMode | null;
-  readonly messageBatchSelectedIds: ReadonlySet<string>;
-  readonly messageBatchSelectedCount: number;
   readonly onMessagesChanged: () => void;
   readonly canResumeWithoutInput: boolean;
   readonly lastMessageHasToolResult: boolean;
@@ -134,11 +128,9 @@ export type ChatTabContextValue = {
   ) => void;
   readonly onNeedModel: () => void;
   readonly onRefreshChatMeta: () => void;
-  readonly exitMessageBatch: () => void;
   readonly transcriptWebRef: React.RefObject<ChatTranscriptWebViewHandle | null>;
   readonly workspaceVfsRef: React.RefObject<VfsFileManagerHandle | null>;
   readonly scope: ReturnType<typeof useChatTabScope>;
-  readonly messageBatch: ReturnType<typeof useBatchSelection>;
   readonly messages: ReturnType<typeof useChatTabMessages>;
   readonly resetStreamingDisplay: () => void;
   readonly navigation: Nav;
@@ -169,7 +161,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     refreshScope,
   } = useMobileScope();
   const navigation = useNavigation<Nav>();
-  const messageBatch = useBatchSelection();
   const { appUi, richRenderEpoch } = useNovelMaster();
 
   const scope = useChatTabScope({
@@ -359,10 +350,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       chatMessages: messages.chatMessages,
       hasMoreMessages: messages.hasMoreMessages,
       loadingMoreMessages: messages.loadingMoreMessages,
-      messageBatchActive: messageBatch.active,
-      messageBatchMode: messageBatch.mode,
-      messageBatchSelectedIds: messageBatch.selectedIds,
-      messageBatchSelectedCount: messageBatch.selectedCount,
       onMessagesChanged: () => handleMessagesChanged().catch(() => undefined),
       canResumeWithoutInput: messages.canResumeWithoutInput,
       lastMessageHasToolResult: messages.lastMessageHasToolResult,
@@ -402,11 +389,9 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       onOpenFileEditor: scope.openFileEditor,
       onNeedModel: () => setModelPickerOpen(true),
       onRefreshChatMeta: () => scope.refreshChatMeta().catch(() => undefined),
-      exitMessageBatch: () => messageBatch.exit(),
       transcriptWebRef,
       workspaceVfsRef,
       scope,
-      messageBatch,
       messages,
       resetStreamingDisplay: stream.resetStreamingDisplay,
       navigation,
@@ -423,7 +408,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       agentActive,
       stream,
       messages,
-      messageBatch,
       handleMessagesChanged,
       scroll,
       modelPickerOpen,
@@ -437,8 +421,6 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       webMenuCloseSignal,
       webMenuOpen,
       navigation,
-      messages,
-      messageBatch,
       showToast,
       runtime,
       setCurrentSession,

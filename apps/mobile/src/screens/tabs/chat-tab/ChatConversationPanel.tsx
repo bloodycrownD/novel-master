@@ -15,16 +15,6 @@ import {
 } from '@/components/chat/MessageActionMenu';
 import { MessageEditModal } from '@/components/chat/MessageEditModal';
 import { MessageList } from '@/components/chat/MessageList';
-import { MessageBatchHeader } from '@/components/batch/MessageBatchHeader';
-import {
-  computeHideRangeFromSelection,
-  computeVisibilityBatchAffectedIds,
-} from '@/components/chat/transcript-selectable-role';
-import {
-  chatMessagesToTailBatchRows,
-  computeTailBatchAffectedIds,
-  computeTailBatchRangeFromSelection,
-} from '@/components/chat/transcript-selectable-role';
 import { ModelPickerModal } from '@/components/provider/ModelPickerModal';
 import { SessionActionsDrawer } from '@/components/chrome/SessionActionsDrawer';
 import { VfsFileManager } from '@/components/vfs/VfsFileManager';
@@ -54,10 +44,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
     streamMetricsLastRun,
     uiRunning,
     agentActive,
-    messageBatchActive,
-    messageBatchMode,
-    messageBatchSelectedCount,
-    messageBatchSelectedIds,
     useWebviewTranscript,
     transcriptWebRef,
     chatScrollKey,
@@ -117,58 +103,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
     return { kind: 'session', projectId, sessionId };
   }, [projectId, sessionId]);
 
-  const visibilityBatchPreview = useMemo(() => {
-    if (messageBatchMode == null) {
-      return {
-        affectedIds: new Set<string>() as ReadonlySet<string>,
-        affectedCount: 0,
-        rangeLabel: null as string | null,
-      };
-    }
-    const sessionMaxSeq =
-      chatMessages.length > 0 ? Math.max(...chatMessages.map(m => m.seq)) : 0;
-    if (messageBatchMode === 'hide') {
-      const affectedIds = computeVisibilityBatchAffectedIds(
-        chatMessages,
-        messageBatchMode,
-        messageBatchSelectedIds,
-        sessionMaxSeq,
-      );
-      if (affectedIds.size === 0) {
-        return { affectedIds, affectedCount: 0, rangeLabel: null };
-      }
-      const range = computeHideRangeFromSelection(
-        chatMessages,
-        messageBatchSelectedIds,
-      );
-      return {
-        affectedIds,
-        affectedCount: affectedIds.size,
-        rangeLabel: range != null ? `seq 1–${range.toSeq}` : null,
-      };
-    }
-    const tailRows = chatMessagesToTailBatchRows(chatMessages);
-    const affectedIds = computeTailBatchAffectedIds(
-      tailRows,
-      messageBatchSelectedIds,
-      sessionMaxSeq,
-    );
-    if (affectedIds.size === 0) {
-      return { affectedIds, affectedCount: 0, rangeLabel: null };
-    }
-    const range = computeTailBatchRangeFromSelection(
-      tailRows,
-      messageBatchSelectedIds,
-      sessionMaxSeq,
-      messageBatchMode,
-    );
-    return {
-      affectedIds,
-      affectedCount: affectedIds.size,
-      rangeLabel: range != null ? `seq ${range.fromSeq}–末` : null,
-    };
-  }, [chatMessages, messageBatchMode, messageBatchSelectedIds]);
-
   const emitWorkspaceBackState = useCallback(() => {
     if (setWorkspaceBackState == null) {
       return;
@@ -227,17 +161,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
               accRef={streamMetricsAccRef}
               lastRun={streamMetricsLastRun}
             />
-            {messageBatchActive && messageBatchMode != null ? (
-              <MessageBatchHeader
-                tokens={tokens}
-                mode={messageBatchMode}
-                selectedCount={messageBatchSelectedCount}
-                affectedCount={visibilityBatchPreview.affectedCount}
-                rangeLabel={visibilityBatchPreview.rangeLabel}
-                onCancel={controller.exitMessageBatch}
-                onConfirm={controller.confirmVisibilityBatch}
-              />
-            ) : null}
             {useWebviewTranscript ? (
               <ChatTranscriptWebView
                 ref={transcriptWebRef}
@@ -271,10 +194,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
                 initialScroll={cachedChatScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
                 onScrollSnapshot={onChatScrollSnapshot}
-                batchMode={messageBatchActive ? messageBatchMode : null}
-                selectedMessageIds={messageBatchSelectedIds}
-                affectedMessageIds={visibilityBatchPreview.affectedIds}
-                onToggleMessageSelect={controller.handleToggleMessageSelect}
                 onMessageLongPress={controller.handleMessageLongPress}
                 onOpenToolFile={scope.openSessionFilePreview}
                 listHeaderComponent={
@@ -357,18 +276,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
           controller.handleCompactSession();
         }}
         onRealPrompt={controller.onNavigateRealPrompt}
-        onHideMessages={() => {
-          setSessionDrawerOpen(false);
-          controller.enterHideMessageBatch();
-        }}
-        onRestoreMessages={() => {
-          setSessionDrawerOpen(false);
-          controller.enterRestoreMessageBatch();
-        }}
-        onDeleteMessages={() => {
-          setSessionDrawerOpen(false);
-          controller.enterDeleteMessageBatch();
-        }}
         onRefreshWorktree={controller.handleRefreshWorktree}
       />
       <MessageActionMenu

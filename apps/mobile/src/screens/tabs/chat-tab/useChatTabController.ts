@@ -1,20 +1,9 @@
 /**
- * Chat tab 低频回调：消息菜单、批量、工作区导航等。
+ * Chat tab 低频回调：消息菜单、工作区导航等。
  */
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
-import { type ChatMessage } from '@novel-master/core/chat';
 import { buildMessageActionItems } from '@/components/chat/message-edit';
-import {
-  isTranscriptRowSelectable,
-  selectVisibilityBatchEligibleIdsFromAnchor,
-  transcriptSelectableRole,
-} from '@/components/chat/transcript-selectable-role';
-import {
-  chatMessagesToTailBatchRows,
-  isTailBatchMode,
-  selectTailBatchEligibleIdsFromAnchor,
-} from '@/components/chat/transcript-selectable-role';
 import { invalidateSessionWorktreeSnapshot } from '@/services/worktree-snapshot.service';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabMessageActions } from './useChatTabMessages';
@@ -27,7 +16,6 @@ export function useChatTabController() {
     projectId: ctx.projectId,
     sessionId: ctx.sessionId,
     messages: ctx.messages,
-    messageBatch: ctx.messageBatch,
     agentRunning: ctx.uiRunning,
     resetStreamingDisplay: ctx.resetStreamingDisplay,
     showToast: ctx.showToast,
@@ -40,46 +28,8 @@ export function useChatTabController() {
     setMessageEditPrompt: ctx.setMessageEditPrompt,
   });
 
-  const handleToggleMessageSelect = useCallback(
-    (messageId: string) => {
-      if (ctx.messageBatch.mode == null) {
-        return;
-      }
-      if (ctx.messageBatch.mode === 'hide') {
-        const target = ctx.chatMessages.find(m => m.id === messageId);
-        if (target == null) {
-          return;
-        }
-        const role = transcriptSelectableRole(
-          target.role,
-          ctx.messageBatch.mode,
-        );
-        if (!isTranscriptRowSelectable(role)) {
-          return;
-        }
-        const nextIds = selectVisibilityBatchEligibleIdsFromAnchor(
-          ctx.chatMessages,
-          ctx.messageBatch.mode,
-          messageId,
-        );
-        ctx.messageBatch.selectRange(nextIds);
-        return;
-      }
-      if (isTailBatchMode(ctx.messageBatch.mode)) {
-        const tailRows = chatMessagesToTailBatchRows(ctx.chatMessages);
-        const nextIds = selectTailBatchEligibleIdsFromAnchor(
-          tailRows,
-          messageId,
-          ctx.messageBatch.mode,
-        );
-        ctx.messageBatch.selectRange(nextIds);
-      }
-    },
-    [ctx],
-  );
-
   const handleMessageLongPress = useCallback(
-    (msg: ChatMessage, anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor) => {
+    (msg: import('@novel-master/core/chat').ChatMessage, anchor: import('@/components/chat/MessageActionMenu').MessageMenuAnchor) => {
       if (ctx.uiRunning) {
         return;
       }
@@ -155,7 +105,6 @@ export function useChatTabController() {
 
   return {
     ...messageActions,
-    handleToggleMessageSelect,
     handleMessageLongPress,
     handleRefreshWorktree,
     onNavigateRealPrompt,

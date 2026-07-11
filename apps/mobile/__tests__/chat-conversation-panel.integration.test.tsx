@@ -35,9 +35,6 @@ jest.mock('../src/components/chat/ChatTranscriptWebView', () => ({
 jest.mock('../src/components/chat/MessageList', () => ({
   MessageList: () => null,
 }));
-jest.mock('../src/components/batch/MessageBatchHeader', () => ({
-  MessageBatchHeader: () => null,
-}));
 jest.mock('../src/components/chrome/SessionActionsDrawer', () => ({
   SessionActionsDrawer: () => null,
 }));
@@ -104,10 +101,6 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
     chatMessages: [],
     hasMoreMessages: false,
     loadingMoreMessages: false,
-    messageBatchActive: false,
-    messageBatchMode: null,
-    messageBatchSelectedIds: new Set<string>(),
-    messageBatchSelectedCount: 0,
     onMessagesChanged: jest.fn(),
     canResumeWithoutInput: false,
     lastMessageHasToolResult: false,
@@ -146,7 +139,6 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
     onOpenFileEditor: jest.fn(),
     onNeedModel: jest.fn(),
     onRefreshChatMeta: jest.fn(),
-    exitMessageBatch: jest.fn(),
     transcriptWebRef: {current: null},
     workspaceVfsRef,
     scope: {
@@ -154,17 +146,6 @@ function makeMockContext(workspaceVfsRef: React.RefObject<VfsFileManagerHandle |
       setSessionRenamePrompt: jest.fn(),
       refreshChatTokenLabel: jest.fn(),
       reloadLists: jest.fn(async () => undefined),
-    },
-    messageBatch: {
-      active: false,
-      mode: null,
-      selectedIds: new Set<string>(),
-      selectedCount: 0,
-      enter: jest.fn(),
-      exit: jest.fn(),
-      toggle: jest.fn(),
-      selectRange: jest.fn(),
-      isSelected: jest.fn(() => false),
     },
     messages: {hydrateFromSessionCache: jest.fn()},
     resetStreamingDisplay: jest.fn(),
@@ -182,21 +163,14 @@ jest.mock('../src/screens/tabs/chat-tab/ChatTabProvider', () => ({
 
 jest.mock('../src/screens/tabs/chat-tab/useChatTabController', () => ({
   useChatTabController: () => ({
-    handleToggleMessageSelect: jest.fn(),
     handleMessageLongPress: jest.fn(),
     handleMessageMenuSelect: jest.fn(),
     handleWebMessageMenuAction: jest.fn(),
     handleSaveMessageEdit: jest.fn(async () => undefined),
-    confirmVisibilityBatch: jest.fn(),
-    confirmTailBatch: jest.fn(),
     confirmBatchDeleteSessions: jest.fn(),
-    handleOpenSessionRename: jest.fn(),
     handleCompactSession: jest.fn(),
-    handleNavigateRealPrompt: jest.fn(),
-    enterHideMessageBatch: jest.fn(),
-    enterRestoreMessageBatch: jest.fn(),
-    enterDeleteMessageBatch: jest.fn(),
-    handleOpenSessionFilePreview: jest.fn(),
+    onNavigateRealPrompt: jest.fn(),
+    handleRefreshWorktree: jest.fn(),
   }),
 }));
 

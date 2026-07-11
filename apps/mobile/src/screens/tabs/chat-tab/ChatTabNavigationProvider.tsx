@@ -29,7 +29,6 @@ export type ChatTabNavigationActions = {
   readonly closeProjectDrawer: () => void;
   readonly showSessionsPanel: () => void;
   readonly openDrawer: () => void;
-  readonly exitMessageBatch: () => void;
   readonly closeMessageMenu: () => void;
   readonly closeMessageEdit: () => void;
   readonly closeModelPicker: () => void;
@@ -128,7 +127,6 @@ export function ChatTabNavigationProvider({
           ctx.scope.setProjectDrawerOpen(true);
         }
       },
-      exitMessageBatch: ctx.exitMessageBatch,
       closeMessageMenu: ctx.closeMessageMenu,
       closeMessageEdit: () => ctx.setMessageEditPrompt(undefined),
       closeModelPicker: () => ctx.setModelPickerOpen(false),

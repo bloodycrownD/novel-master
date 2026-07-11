@@ -1,5 +1,5 @@
 /**
- * Session message list with tool cards, streaming tail, and optional batch select.
+ * Session message list with tool cards and streaming tail.
  *
  * @deprecated Transcript path uses {@link ChatTranscriptWebView}; retained only when
  * Rollback path when `chatTranscriptEngine` KKV is set to `legacy-rn`.
@@ -16,14 +16,6 @@ import {
 } from 'react-native';
 import type {MessageMenuAnchor} from './MessageActionMenu';
 import { type ChatMessage } from "@novel-master/core/chat";
-import type {MessageBatchMode} from './transcript-selectable-role';
-import {isTailBatchMode} from './transcript-selectable-role';
-import {
-  isTailBatchRowSelectable,
-  isTranscriptRowSelectable,
-  transcriptSelectableRole,
-} from './transcript-selectable-role';
-import {BatchCheckbox} from '@/components/batch/BatchCheckbox';
 import {RichContentBody} from '@/components/rich-content/RichContentBody';
 import {isRichContentOverLimit} from '@/components/rich-content/rich-content-limits';
 import type {ChatListScrollSnapshot} from '@/services/chat-list-scroll-cache';
@@ -44,11 +36,6 @@ type Props = {
   chatRichTextEnabled?: boolean;
   /** Bumped on app upgrade to remount rich renderers (see app-version-guard). */
   richRenderEpoch?: number;
-  batchMode?: MessageBatchMode | null;
-  selectedMessageIds?: ReadonlySet<string>;
-  /** 范围预览：hide/restore 将影响的消息 id（含不可勾选行）。 */
-  affectedMessageIds?: ReadonlySet<string>;
-  onToggleMessageSelect?: (messageId: string) => void;
   onMessageLongPress?: (
     message: ChatMessage,
     anchor: MessageMenuAnchor,
@@ -125,10 +112,6 @@ export function MessageList({
   agentRunning = false,
   chatRichTextEnabled = false,
   richRenderEpoch = 0,
-  batchMode = null,
-  selectedMessageIds,
-  affectedMessageIds,
-  onToggleMessageSelect,
   onMessageLongPress,
   listHeaderComponent,
   onOpenToolFile,
@@ -351,8 +334,6 @@ export function MessageList({
     body: string,
     thinking: string,
     tools: readonly import('./message-blocks').ToolCallView[],
-    selected: boolean,
-    inRange: boolean,
     hidden: boolean,
     messageId: string,
     options?: {
@@ -379,15 +360,6 @@ export function MessageList({
           {
             backgroundColor: colors.backgroundColor,
             opacity: hidden ? 0.55 : 1,
-          },
-          batchMode && selected && {
-            borderColor: tokens.danger,
-            borderWidth: 2,
-          },
-          batchMode && inRange && !selected && {
-            borderColor: tokens.danger,
-            borderWidth: 1,
-            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         {trimmedThinking ? (
@@ -434,8 +406,6 @@ export function MessageList({
 
   const renderUserBubble = (
     body: string,
-    selected: boolean,
-    inRange: boolean,
     hidden: boolean,
     messageId: string,
   ) => {
@@ -447,15 +417,6 @@ export function MessageList({
           {
             backgroundColor: colors.backgroundColor,
             opacity: hidden ? 0.55 : 1,
-          },
-          batchMode && selected && {
-            borderColor: tokens.danger,
-            borderWidth: 2,
-          },
-          batchMode && inRange && !selected && {
-            borderColor: tokens.danger,
-            borderWidth: 1,
-            opacity: hidden ? 0.55 : 0.95,
           },
         ]}>
         <ChatMessageBody
@@ -469,23 +430,6 @@ export function MessageList({
         />
       </View>
     );
-  };
-
-  const isBatchRowSelectable = (
-    role: string,
-    hidden: boolean,
-    mode: MessageBatchMode | null | undefined,
-  ): boolean => {
-    if (mode == null) {
-      return false;
-    }
-    if (isTailBatchMode(mode)) {
-      return isTailBatchRowSelectable(
-        {id: '', role, seq: 0, hidden, selectable: true},
-        mode,
-      );
-    }
-    return isTranscriptRowSelectable(transcriptSelectableRole(role, mode));
   };
 
   return (
@@ -556,8 +500,6 @@ export function MessageList({
                 streamingThinking ?? '',
                 [],
                 false,
-                false,
-                false,
                 'stream',
                 {
                   defaultExpandedThinking: true,
@@ -573,8 +515,6 @@ export function MessageList({
             return null;
           }
           const hidden = item.hidden;
-          const selected = selectedMessageIds?.has(item.id) ?? false;
-          const inRange = affectedMessageIds?.has(item.id) ?? false;
           const colors = chatBubbleColors(tokens, true);
           const content = (
             <View
@@ -585,15 +525,6 @@ export function MessageList({
                   backgroundColor: colors.backgroundColor,
                   opacity: hidden ? 0.55 : 1,
                 },
-                batchMode && selected && {
-                  borderColor: tokens.danger,
-                  borderWidth: 2,
-                },
-                batchMode && inRange && !selected && {
-                  borderColor: tokens.danger,
-                  borderWidth: 1,
-                  opacity: hidden ? 0.55 : 0.95,
-                },
               ]}>
               <ToolCallGroupCard
                 tools={item.tools}
@@ -603,29 +534,6 @@ export function MessageList({
               />
             </View>
           );
-          const rowSelectable = isBatchRowSelectable('user', hidden, batchMode);
-          if (batchMode) {
-            return (
-              <View style={styles.batchRow} accessibilityState={{selected}}>
-                {rowSelectable ? (
-                  <Pressable
-                    style={styles.batchCheckboxCol}
-                    onPress={() => onToggleMessageSelect?.(item.id)}>
-                    <BatchCheckbox
-                      checked={selected}
-                      accentColor={tokens.danger}
-                      onToggle={() => onToggleMessageSelect?.(item.id)}
-                    />
-                  </Pressable>
-                ) : (
-                  <View style={styles.batchCheckboxCol} />
-                )}
-                <View style={[styles.batchBubbleCol, styles.batchBubbleColUser]}>
-                  {content}
-                </View>
-              </View>
-            );
-          }
           return (
             <View style={[styles.rowAlign, styles.rowAlignUser]}>{content}</View>
           );
@@ -639,56 +547,17 @@ export function MessageList({
         if (!body && !thinking && row.tools.length === 0) {
           return null;
         }
-        const selected = selectedMessageIds?.has(row.message.id) ?? false;
-        const inRange = affectedMessageIds?.has(row.message.id) ?? false;
         const content = isUser ? (
-          renderUserBubble(body, selected, inRange, hidden, row.message.id)
+          renderUserBubble(body, hidden, row.message.id)
         ) : (
           renderAssistantBubble(
             body,
             thinking,
             row.tools,
-            selected,
-            inRange,
             hidden,
             row.message.id,
           )
         );
-
-        const rowSelectable = isBatchRowSelectable(
-          row.message.role,
-          hidden,
-          batchMode,
-        );
-
-        if (batchMode) {
-          return (
-            <View style={styles.batchRow} accessibilityState={{selected}}>
-              {rowSelectable ? (
-                <Pressable
-                  style={styles.batchCheckboxCol}
-                  onPress={() => onToggleMessageSelect?.(row.message.id)}>
-                  <BatchCheckbox
-                    checked={selected}
-                    accentColor={tokens.danger}
-                    onToggle={() => onToggleMessageSelect?.(row.message.id)}
-                  />
-                </Pressable>
-              ) : (
-                <View style={styles.batchCheckboxCol} />
-              )}
-              <View
-                style={[
-                  styles.batchBubbleCol,
-                  isUser
-                    ? styles.batchBubbleColUser
-                    : styles.batchBubbleColAssistant,
-                ]}>
-                {content}
-              </View>
-            </View>
-          );
-        }
 
         return (
           <MessageLongPressRow
@@ -743,29 +612,6 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   rowAlignAssistant: {
-    alignItems: 'flex-start',
-  },
-  /** Checkbox column fixed at screen left; bubble aligns in the remaining width. */
-  batchRow: {
-    width: '100%',
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingLeft: 4,
-    paddingRight: 12,
-  },
-  batchCheckboxCol: {
-    width: 28,
-    paddingTop: 8,
-    alignItems: 'center',
-  },
-  batchBubbleCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  batchBubbleColUser: {
-    alignItems: 'flex-end',
-  },
-  batchBubbleColAssistant: {
     alignItems: 'flex-start',
   },
   bubble: {

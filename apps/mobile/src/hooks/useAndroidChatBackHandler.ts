@@ -13,7 +13,6 @@ export type AndroidChatBackState = {
   sessionListPanel: 'sessions' | 'template';
   sessionDrawerOpen: boolean;
   messageMenuOpen: boolean;
-  messageBatchActive: boolean;
   messageEditOpen: boolean;
   modelPickerOpen: boolean;
   agentPickerOpen: boolean;
@@ -31,7 +30,6 @@ export type AndroidChatBackActions = {
   showChatPanel: () => void;
   closeSessionDrawer: () => void;
   closeMessageMenu: () => void;
-  exitMessageBatch: () => void;
   closeMessageEdit: () => void;
   closeModelPicker: () => void;
   closeAgentPicker: () => void;
@@ -52,7 +50,6 @@ export function useAndroidChatBackHandler(
     sessionListPanel,
     sessionDrawerOpen,
     messageMenuOpen,
-    messageBatchActive,
     messageEditOpen,
     modelPickerOpen,
     agentPickerOpen,
@@ -68,7 +65,6 @@ export function useAndroidChatBackHandler(
     showChatPanel,
     closeSessionDrawer,
     closeMessageMenu,
-    exitMessageBatch,
     closeMessageEdit,
     closeModelPicker,
     closeAgentPicker,
@@ -86,10 +82,6 @@ export function useAndroidChatBackHandler(
     }
     if (messageMenuOpen) {
       closeMessageMenu();
-      return true;
-    }
-    if (messageBatchActive) {
-      exitMessageBatch();
       return true;
     }
     if (messageEditOpen) {
@@ -140,7 +132,6 @@ export function useAndroidChatBackHandler(
   }, [
     sessionDrawerOpen,
     messageMenuOpen,
-    messageBatchActive,
     messageEditOpen,
     modelPickerOpen,
     agentPickerOpen,
@@ -156,7 +147,6 @@ export function useAndroidChatBackHandler(
     showChatPanel,
     closeSessionDrawer,
     closeMessageMenu,
-    exitMessageBatch,
     closeMessageEdit,
     closeModelPicker,
     closeAgentPicker,
