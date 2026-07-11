@@ -67,8 +67,6 @@ export type ChatTranscriptWebViewProps = {
   /** 菜单禁用与流式快照推迟；未传时回退 agentRunning。 */
   readonly uiRunning?: boolean;
   readonly toolInvoking?: boolean;
-  readonly selectedMessageIds?: ReadonlySet<string>;
-  readonly affectedMessageIds?: ReadonlySet<string>;
   readonly menuCloseSignal?: number;
   readonly onScrollSnapshot?: (snap: ChatTranscriptScrollSnapshot) => void;
   readonly onReady?: () => void;
@@ -81,7 +79,6 @@ export type ChatTranscriptWebViewProps = {
   ) => void;
   readonly onMessageMenuAction?: (messageId: string, action: string) => void;
   readonly onWebMenuOpenChange?: (open: boolean) => void;
-  readonly onToggleMessageSelect?: (messageId: string) => void;
 };
 
 function transcriptFlagsEqual(
@@ -90,8 +87,6 @@ function transcriptFlagsEqual(
 ): boolean {
   return (
     (a?.richText ?? false) === (b?.richText ?? false) &&
-    (a?.batchMode ?? false) === (b?.batchMode ?? false) &&
-    (a?.batchModeKind ?? null) === (b?.batchModeKind ?? null) &&
     (a?.menuDisabled ?? false) === (b?.menuDisabled ?? false)
   );
 }
@@ -113,8 +108,6 @@ function chatTranscriptWebViewPropsEqual(
     prev.defaultScrollToBottom === next.defaultScrollToBottom &&
     prev.menuCloseSignal === next.menuCloseSignal &&
     prev.initialScroll === next.initialScroll &&
-    prev.selectedMessageIds === next.selectedMessageIds &&
-    prev.affectedMessageIds === next.affectedMessageIds &&
     transcriptFlagsEqual(prev.flags, next.flags)
   );
 }
@@ -213,8 +206,6 @@ export const ChatTranscriptWebView = memo(
         agentRunning = false,
         uiRunning: uiRunningProp,
         toolInvoking = false,
-        selectedMessageIds,
-        affectedMessageIds,
         menuCloseSignal = 0,
         onScrollSnapshot,
         onReady,
@@ -223,7 +214,6 @@ export const ChatTranscriptWebView = memo(
         onOpenMessageMenu,
         onMessageMenuAction,
         onWebMenuOpenChange,
-        onToggleMessageSelect,
       },
       ref,
     ) {
@@ -422,8 +412,6 @@ export const ChatTranscriptWebView = memo(
       const sendInit = useCallback(() => {
         const resolvedFlags: TranscriptFlags = {
           richText: flags?.richText ?? false,
-          batchMode: flags?.batchMode ?? false,
-          batchModeKind: flags?.batchModeKind ?? null,
           menuDisabled: uiRunning,
         };
         postToWeb({
@@ -433,8 +421,6 @@ export const ChatTranscriptWebView = memo(
         });
       }, [
         flags?.richText,
-        flags?.batchMode,
-        flags?.batchModeKind,
         postToWeb,
         tokens,
         uiRunning,
@@ -713,10 +699,6 @@ export const ChatTranscriptWebView = memo(
             onWebMenuOpenChange?.(false);
             return;
           }
-          if (message.type === 'toggleMessageSelect') {
-            onToggleMessageSelect?.(message.payload.messageId);
-            return;
-          }
         },
         [
           onReady,
@@ -726,7 +708,6 @@ export const ChatTranscriptWebView = memo(
           onOpenMessageMenu,
           onMessageMenuAction,
           onWebMenuOpenChange,
-          onToggleMessageSelect,
           uiRunning,
         ],
       );
@@ -744,16 +725,12 @@ export const ChatTranscriptWebView = memo(
         }
         const resolvedFlags: TranscriptFlags = {
           richText: flags?.richText ?? false,
-          batchMode: flags?.batchMode ?? false,
-          batchModeKind: flags?.batchModeKind ?? null,
           menuDisabled: uiRunning,
         };
         const prev = prevSentFlagsRef.current;
         if (
           prev != null &&
           prev.richText === resolvedFlags.richText &&
-          prev.batchMode === resolvedFlags.batchMode &&
-          prev.batchModeKind === resolvedFlags.batchModeKind &&
           prev.menuDisabled === resolvedFlags.menuDisabled
         ) {
           return;
@@ -767,8 +744,6 @@ export const ChatTranscriptWebView = memo(
       }, [
         webReady,
         flags?.richText,
-        flags?.batchMode,
-        flags?.batchModeKind,
         uiRunning,
         postToWeb,
       ]);
@@ -783,24 +758,6 @@ export const ChatTranscriptWebView = memo(
           payload: { theme: themeFromTokens(tokens) },
         });
       }, [webReady, tokens, postToWeb]);
-
-      useEffect(() => {
-        if (!webReady) {
-          return;
-        }
-        postToWeb({
-          v: 1,
-          type: 'selectionUpdate',
-          payload: {
-            selectedMessageIds: selectedMessageIds
-              ? [...selectedMessageIds]
-              : [],
-            affectedMessageIds: affectedMessageIds
-              ? [...affectedMessageIds]
-              : [],
-          },
-        });
-      }, [webReady, selectedMessageIds, affectedMessageIds, postToWeb]);
 
       useEffect(() => {
         if (!webReady || menuCloseSignal === 0) {

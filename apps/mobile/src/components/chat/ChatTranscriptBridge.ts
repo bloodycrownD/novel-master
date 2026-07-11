@@ -71,9 +71,6 @@ export type TranscriptTheme = {
 
 export type TranscriptFlags = {
   readonly richText: boolean;
-  readonly batchMode: boolean;
-  /** 隐藏 / 恢复 / 删除批量多选；与 batchMode 同时为 true 时生效。 */
-  readonly batchModeKind?: 'hide' | 'restore' | 'delete' | null;
   /** When true, long-press menu is suppressed (e.g. agent running). */
   readonly menuDisabled?: boolean;
 };
@@ -147,10 +144,6 @@ export type HostToTranscriptMessage =
   | BridgeEnvelope<'messagePatch', {messageId: string; patch: unknown}>
   | BridgeEnvelope<'themeUpdate', {theme: TranscriptTheme}>
   | BridgeEnvelope<'flagsUpdate', {flags: TranscriptFlags}>
-  | BridgeEnvelope<'selectionUpdate', {
-      selectedMessageIds: readonly string[];
-      affectedMessageIds?: readonly string[];
-    }>
   | BridgeEnvelope<'closeMenu', Record<string, never>>;
 
 /** Transcript → host */
@@ -178,7 +171,6 @@ export type TranscriptToHostMessage =
       {messageId: string; pageX: number; pageY: number}
     >
   | BridgeEnvelope<'openToolFile', {path: string}>
-  | BridgeEnvelope<'toggleMessageSelect', {messageId: string}>
   | BridgeEnvelope<
       'messageMenuAction',
       {messageId: string; action: string}

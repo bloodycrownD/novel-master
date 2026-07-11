@@ -106,10 +106,8 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
   const transcriptFlags = useMemo(
     () => ({
       richText: chatRichTextEnabled,
-      batchMode: messageBatchActive,
-      batchModeKind: messageBatchMode,
     }),
-    [chatRichTextEnabled, messageBatchActive, messageBatchMode],
+    [chatRichTextEnabled],
   );
 
   const sessionVfsScope = useMemo((): VfsScope | null => {
@@ -251,8 +249,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
                 uiRunning={uiRunning}
                 toolInvoking={uiRunning}
                 flags={transcriptFlags}
-                selectedMessageIds={messageBatchSelectedIds}
-                affectedMessageIds={visibilityBatchPreview.affectedIds}
                 menuCloseSignal={webMenuCloseSignal}
                 initialScroll={restoredTranscriptScroll ?? null}
                 defaultScrollToBottom={defaultChatScrollToBottom}
@@ -261,7 +257,6 @@ export function ChatConversationPanel({ tokens, visible }: ChatConversationPanel
                 onOpenToolFile={scope.openSessionFilePreview}
                 onWebMenuOpenChange={controller.onWebMenuOpenChange}
                 onMessageMenuAction={controller.onWebMessageMenuAction}
-                onToggleMessageSelect={controller.handleToggleMessageSelect}
               />
             ) : (
               <MessageList

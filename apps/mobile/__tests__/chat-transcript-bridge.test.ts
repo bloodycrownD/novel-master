@@ -117,17 +117,6 @@ describe('chat-transcript-bridge', () => {
     );
   });
 
-  it('round-trips Web→RN toggleMessageSelect envelope', () => {
-    const message = {
-      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
-      type: 'toggleMessageSelect' as const,
-      payload: {messageId: 'm2'},
-    };
-    expect(decodeTranscriptToHost(encodeTranscriptToHost(message))).toEqual(
-      message,
-    );
-  });
-
   it('round-trips Web→RN messageMenuAction envelope', () => {
     const message = {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
@@ -166,17 +155,6 @@ describe('chat-transcript-bridge', () => {
       v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
       type: 'closeMenu' as const,
       payload: {},
-    };
-    expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
-      message,
-    );
-  });
-
-  it('round-trips RN→Web selectionUpdate envelope', () => {
-    const message = {
-      v: CHAT_TRANSCRIPT_BRIDGE_VERSION,
-      type: 'selectionUpdate' as const,
-      payload: {selectedMessageIds: ['m1', 'm3']},
     };
     expect(decodeHostToTranscript(encodeHostToTranscript(message))).toEqual(
       message,

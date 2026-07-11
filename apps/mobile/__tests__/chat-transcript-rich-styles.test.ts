@@ -8,9 +8,4 @@ describe('chat transcript rich styles', () => {
     expect(CHAT_TRANSCRIPT_HTML).toContain('outside markers stay inside the content area');
   });
 
-  it('uses compact 20px batch-check in batch mode', () => {
-    expect(CHAT_TRANSCRIPT_HTML).toContain('.batch-check');
-    expect(CHAT_TRANSCRIPT_HTML).toContain('width: 20px');
-    expect(CHAT_TRANSCRIPT_HTML).toContain('height: 20px');
-  });
 });

@@ -41,9 +41,7 @@ export function buildTranscriptBootScript(): string {
     rows: [],
     hasMore: false,
     stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
-    flags: { richText: false, batchMode: false, batchModeKind: null, menuDisabled: false },
-    selectedIds: [],
-    affectedIds: [],
+    flags: { richText: false, menuDisabled: false },
     menu: null,
     menuOverlayHandler: null,
     menuNativeTextBlockHandler: null,
@@ -431,28 +429,6 @@ export function buildTranscriptBootScript(): string {
     return null;
   }
 
-  function isSelected(messageId) {
-    return state.selectedIds.indexOf(messageId) >= 0;
-  }
-
-  function isInRange(messageId) {
-    return state.affectedIds.indexOf(messageId) >= 0;
-  }
-
-  function isBatchRowSelectable(messageRole, batchModeKind, rowHidden) {
-    if (!batchModeKind) return false;
-    if (batchModeKind === 'hide') return messageRole === 'assistant';
-    if (batchModeKind === 'delete') return !rowHidden;
-    if (batchModeKind === 'restore') return !!rowHidden;
-    return false;
-  }
-
-  function transcriptSelectableRole(messageRole, batchModeKind) {
-    if (!batchModeKind) return 'none';
-    if (batchModeKind === 'hide') return messageRole === 'assistant' ? 'assistant' : 'none';
-    return 'tail';
-  }
-
   function parseUserVfsAction(text) {
     if (!text || text.indexOf('<user-vfs-action') < 0) return null;
     var match = text.match(/<user-vfs-action\\s+([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/user-vfs-action>)/);
@@ -511,21 +487,7 @@ export function buildTranscriptBootScript(): string {
       return '';
     }
     var hidden = row.hidden ? ' hidden' : '';
-    var selected = isSelected(row.id);
-    var inRange = isInRange(row.id);
-    var selectedClass = selected ? ' selected' : '';
-    var inRangeClass = inRange ? ' in-range' : '';
-    var selectableRole = transcriptSelectableRole('user', state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = isBatchRowSelectable('user', state.flags.batchMode ? state.flags.batchModeKind : null, !!row.hidden);
-    var html = '';
-    if (state.flags.batchMode && rowSelectable) {
-      html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
-        '" aria-hidden="true">' +
-        (selected ? '✓' : '') + '</div><div class="batch-content">';
-    } else if (state.flags.batchMode) {
-      html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
-    }
-    html += '<div class="row message user vfs-turn-row' + hidden + selectedClass + inRangeClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
+    var html = '<div class="row message user vfs-turn-row' + hidden + '" data-id="' + escapeHtml(row.id) + '">';
     var toolGroupKey = 'vfs-turn:' + row.id;
     var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
     html += renderToolOnlyBubble(
@@ -538,9 +500,6 @@ export function buildTranscriptBootScript(): string {
       },
     );
     html += '</div>';
-    if (state.flags.batchMode) {
-      html += '</div></div>';
-    }
     return html;
   }
 
@@ -566,10 +525,14 @@ export function buildTranscriptBootScript(): string {
     return escapeHtml(text);
   }
 
-  function buildMenuItems(row) {
+  function buildMenuItems(row, hitEl) {
     var items = [];
     if (row.text) items.push({ label: '编辑', action: 'edit' });
     items.push({ label: '复制', action: 'copy' });
+    var showSetFloor = row.kind === 'message' &&
+      (row.role === 'user' || row.role === 'assistant') &&
+      !(hitEl && hitEl.closest && hitEl.closest('.tool-card, .tool-group-item'));
+    if (showSetFloor) items.push({ label: '置位', action: 'set-floor' });
     items.push({ label: '分叉', action: 'fork' });
     if (!row.hidden) {
       items.push({ label: '回滚', action: 'rollback', danger: true });
@@ -714,8 +677,8 @@ export function buildTranscriptBootScript(): string {
     document.addEventListener('touchend', state.menuOverlayHandler, true);
   }
 
-  function openContextMenu(messageId, pageX, pageY) {
-    if (state.flags.menuDisabled || state.flags.batchMode) return;
+  function openContextMenu(messageId, pageX, pageY, hitEl) {
+    if (state.flags.menuDisabled) return;
     var row = findMessageRow(messageId);
     if (!row) return;
     post('openMessageMenu', { messageId: messageId, pageX: pageX, pageY: pageY });
@@ -725,7 +688,7 @@ export function buildTranscriptBootScript(): string {
       pageX: pageX,
       pageY: pageY,
       anchor: resolveMenuAnchor(messageId, pageX, pageY),
-      items: buildMenuItems(row),
+      items: buildMenuItems(row, hitEl),
     };
     state.menuOpenedAt = Date.now();
     renderContextMenu();
@@ -740,7 +703,7 @@ export function buildTranscriptBootScript(): string {
   }
 
   function onMessagePointerDown(event) {
-    if (state.flags.batchMode || state.flags.menuDisabled) return;
+    if (state.flags.menuDisabled) return;
     var rowEl = event.target && event.target.closest ? event.target.closest('.row.message') : null;
     if (!rowEl) return;
     var messageId = rowEl.getAttribute('data-id');
@@ -752,12 +715,13 @@ export function buildTranscriptBootScript(): string {
       messageId: messageId,
       pageX: touch.clientX,
       pageY: touch.clientY,
+      hitEl: event.target,
     };
     state.longPressTimer = setTimeout(function () {
       state.longPressTimer = null;
       var target = state.longPressTarget;
       state.longPressTarget = null;
-      if (target) openContextMenu(target.messageId, target.pageX, target.pageY);
+      if (target) openContextMenu(target.messageId, target.pageX, target.pageY, target.hitEl);
     }, 450);
   }
 
@@ -793,21 +757,7 @@ export function buildTranscriptBootScript(): string {
     var hidden = row.hidden ? ' hidden' : '';
     var thinkingKey = 'msg:' + row.id;
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
-    var selected = isSelected(row.id);
-    var inRange = isInRange(row.id);
-    var selectedClass = selected ? ' selected' : '';
-    var inRangeClass = inRange ? ' in-range' : '';
-    var selectableRole = transcriptSelectableRole(role, state.flags.batchMode ? state.flags.batchModeKind : null);
-    var rowSelectable = isBatchRowSelectable(role, state.flags.batchMode ? state.flags.batchModeKind : null, !!row.hidden);
-    var html = '';
-    if (state.flags.batchMode && rowSelectable) {
-      html += '<div class="batch-row" data-action="toggle-select" data-id="' + escapeHtml(row.id) + '"><div class="batch-check' + (selected ? ' checked' : '') +
-        '" aria-hidden="true">' +
-        (selected ? '✓' : '') + '</div><div class="batch-content">';
-    } else if (state.flags.batchMode) {
-      html += '<div class="batch-row batch-row--ineligible"><div class="batch-content">';
-    }
-    html += '<div class="row message ' + role + hidden + selectedClass + inRangeClass + '" data-id="' + escapeHtml(row.id) + '" data-selectable-role="' + escapeHtml(selectableRole) + '">';
+    var html = '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
     if (role === 'user') {
       if (row.text) {
         html += '<div class="bubble">' + renderUserBubbleContent(row.text) + '</div>';
@@ -831,9 +781,6 @@ export function buildTranscriptBootScript(): string {
         '</div>';
     }
     html += '</div>';
-    if (state.flags.batchMode) {
-      html += '</div></div>';
-    }
     return html;
   }
 
@@ -906,8 +853,6 @@ export function buildTranscriptBootScript(): string {
   function flagsEqual(a, b) {
     return (
       a.richText === b.richText &&
-      a.batchMode === b.batchMode &&
-      a.batchModeKind === b.batchModeKind &&
       a.menuDisabled === b.menuDisabled
     );
   }
@@ -1398,11 +1343,6 @@ export function buildTranscriptBootScript(): string {
     var actionEl = target.closest('[data-action]');
     if (!actionEl) return;
     var action = actionEl.getAttribute('data-action');
-    if (action === 'toggle-select') {
-      var selectId = actionEl.getAttribute('data-id');
-      if (selectId) post('toggleMessageSelect', { messageId: selectId });
-      return;
-    }
     if (action === 'close-menu') {
       closeContextMenu(true);
       return;
@@ -1457,8 +1397,6 @@ export function buildTranscriptBootScript(): string {
         if (p.flags) {
           state.flags = {
             richText: !!p.flags.richText,
-            batchMode: !!p.flags.batchMode,
-            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
         }
@@ -1497,8 +1435,6 @@ export function buildTranscriptBootScript(): string {
         if (p.flags) {
           var nextFlags = {
             richText: !!p.flags.richText,
-            batchMode: !!p.flags.batchMode,
-            batchModeKind: p.flags.batchModeKind || null,
             menuDisabled: !!p.flags.menuDisabled,
           };
           if (flagsEqual(state.flags, nextFlags)) {
@@ -1506,7 +1442,7 @@ export function buildTranscriptBootScript(): string {
           }
           var richToggledOn = !state.flags.richText && nextFlags.richText;
           state.flags = nextFlags;
-          if (state.flags.batchMode || state.flags.menuDisabled) {
+          if (state.flags.menuDisabled) {
             closeContextMenu(true);
           }
           // Rich on: wait for sessionSnapshot rows with textHtml (avoid escapeHtml fallback).
@@ -1517,11 +1453,6 @@ export function buildTranscriptBootScript(): string {
         break;
       case 'themeUpdate':
         applyTheme(p.theme);
-        break;
-      case 'selectionUpdate':
-        state.selectedIds = (p.selectedMessageIds || []).slice();
-        state.affectedIds = (p.affectedMessageIds || []).slice();
-        renderRows();
         break;
       case 'closeMenu':
         closeContextMenu(true);

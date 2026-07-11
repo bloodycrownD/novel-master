@@ -253,7 +253,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true,  batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });
@@ -272,7 +272,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText="**bold**"
           streamingThinking=""
-          flags={{richText: true,  batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });
@@ -306,7 +306,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking=""
-          flags={{richText: true,  batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });
@@ -325,7 +325,7 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           streamingText=""
           streamingThinking="*reason*"
-          flags={{richText: true,  batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });
@@ -356,7 +356,6 @@ describe('ChatTranscriptWebView', () => {
           messages={messages}
           flags={{
             richText: false,
-            batchMode: false,
           }}
           onOpenMessageMenu={() => {
             setMenuTick(tick => tick + 1);
@@ -398,7 +397,6 @@ describe('ChatTranscriptWebView', () => {
     const messages = [sampleMessage('m1', 1)];
     const baseFlags = {
       richText: false,
-      batchMode: false,
     };
     let tree: TestRenderer.ReactTestRenderer;
 
@@ -578,7 +576,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: false, batchMode: false}}
+          flags={{richText: false}}
         />,
       );
     });
@@ -593,7 +591,7 @@ describe('ChatTranscriptWebView', () => {
         <ChatTranscriptWebView
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: true, batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });
@@ -664,7 +662,7 @@ describe('ChatTranscriptWebView', () => {
           ref={ref}
           sessionKey="p1:s1"
           messages={messages}
-          flags={{richText: true, batchMode: false}}
+          flags={{richText: true}}
         />,
       );
     });

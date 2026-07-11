@@ -60,21 +60,12 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .row.assistant .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
     .row.user.vfs-turn-row .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
     .empty-state { align-self: center; margin-top: 32px; padding: 0 24px; text-align: center; color: var(--text-secondary, #666); font-size: 14px; }
-    /* Visual size reduced; row tap target via .batch-row toggle-select */
-    .batch-row { display: flex; flex-direction: row; align-items: flex-start; width: 100%; gap: 6px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-    .batch-check { flex-shrink: 0; width: 20px; height: 20px; margin-top: 6px; border-radius: 10px; border: 1.5px solid var(--border, #c7c7cc); background: var(--bg, #fff); color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-    .batch-check.checked { border-color: var(--danger, #d92d20); background: var(--danger, #d92d20); color: #fff; }
-    .batch-content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-    .row.message.selected .bubble { box-shadow: 0 0 0 2px var(--danger, #d92d20); }
-    .row.message.in-range:not(.selected) .bubble { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger, #d92d20) 45%, transparent), 0 0 0 1px color-mix(in srgb, var(--danger, #d92d20) 28%, transparent); opacity: 0.95; }
     .menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.35); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .context-menu { position: fixed; z-index: 9999; display: flex; flex-direction: column; flex-shrink: 0; height: fit-content; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow-x: hidden; overflow-y: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
     .context-menu.scrollable { overflow-y: auto; -webkit-overflow-scrolling: touch; }
     .menu-item { flex: 0 0 auto; display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
     body.menu-open { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
     .menu-item:last-child { border-bottom: none; }
-    .batch-row.batch-row--ineligible { cursor: default; }
-    .batch-row.batch-row--ineligible .batch-content { opacity: 0.85; }
     .vfs-action-card { display: flex; flex-direction: column; gap: 6px; text-align: left; }
     .vfs-action-title { font-weight: 600; font-size: 14px; }
     .row.user.vfs-turn-row .vfs-turn-bubble {
