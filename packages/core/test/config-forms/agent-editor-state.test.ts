@@ -47,10 +47,6 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   );
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
   assert.equal(
-    WORKTREE_BLOCK_HINT,
-    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。",
-  );
-  assert.equal(
     PROMPT_REGION_LABELS.layoutOrder,
     "系统 → 工作树 → 持久区 → 会话历史 → 动态区",
   );
@@ -72,6 +68,13 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
     assert.doesNotMatch(value, /\bCore\b/);
     assert.doesNotMatch(value, /\brun\b/i);
   }
+});
+
+test("T-WT13: WORKTREE_BLOCK_HINT 新文案", () => {
+  assert.equal(
+    WORKTREE_BLOCK_HINT,
+    "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。",
+  );
 });
 
 test("buildToolsPolicyFromSelection returns undefined for default mode", () => {

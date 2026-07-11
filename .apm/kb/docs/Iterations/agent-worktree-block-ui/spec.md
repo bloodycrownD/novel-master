@@ -187,7 +187,7 @@ prompts:
 | 旧 DB/YAML 含 `persist.canon` | 直接加载；Switch 开；双消息注入；**无**迁移脚本 |
 | 内置 `examples/agents.yaml` | **删除** canon；新装环境默认关 |
 | wire `role: assistant` on canon | 加载保留；运行时仍 user+done |
-| `persistEnabled=true` 仅 worktree、无文本 | **校验失败**（至少一块 persist **文本**）；**UX 指引**：打开编辑器后持久区 Switch 旁或保存 toast 提示「持久区开启时须至少保留一块文本块」；用户可（a）添加文本块，或（b）关闭持久区 Switch，或（c）关闭工作树顶卡后保存（移除 canon）——**无需** wire 迁移，再保存即通过校验 |
+| `persistEnabled=true` 仅 worktree、无文本 | **校验失败**（至少一块 persist **文本**）；保存时校验错误信息已足够指引用户；专用 toast **不在本迭代**（非 blocking，留后续）；用户可（a）添加文本块，或（b）关闭持久区 Switch，或（c）关闭工作树顶卡后保存（移除 canon）——**无需** wire 迁移，再保存即通过校验 |
 | 关 worktree Switch | 从 `persist[]` **移除** worktree 块（非仅 UI 关断） |
 
 ## 详细实现步骤
@@ -289,6 +289,8 @@ npm test -w @novel-master/mobile
 | Desktop 双表单漏改 | Step 7 明确两文件；同 diff checklist | — |
 | `persistEnabled=true` 仅 worktree 历史数据 | T-WT3 拒绝保存；编辑器提示用户加文本块、关 persist 或关工作树后重存（SPEC 兼容性表） | — |
 | 删除 guard 误拦工作树关断 | 顶卡 Switch off **禁止** `guardPromptBlockDeletion`；`excludeWorktree` 仅 persist 文本删除 | — |
+
+> **实现注（persist-only-worktree 保存 UX）**：本迭代不实现专用保存 toast；`buildAgentDefinitionFromForm` / `validateAgentPromptLayout` 返回的校验错误信息已足够，专用 toast 留后续迭代（非 blocking）。
 
 **回滚**：按 M3→M2→M1 revert PR；wire 未变，旧客户端读新数据仍合法（仅多/少双消息行为差异）。
 

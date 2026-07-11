@@ -1,5 +1,5 @@
 /**
- * Prompt → LLM input and CLI formatting（三区 layout）。
+ * Prompt → LLM input and CLI formatting（三区 layout；worktree 双段在 persist 文本与 chat 之前注入）。
  *
  * @module service/prompt/render-prompt
  */
@@ -187,7 +187,7 @@ function appendWorktreePairSegmentsIfPresent(
 }
 
 /**
- * 三区 layout 单次遍历：system → persist → chat → dynamic。
+ * 三区 layout 单次遍历：system → worktree 双段（若存在）→ persist 文本 → chat → dynamic。
  */
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
