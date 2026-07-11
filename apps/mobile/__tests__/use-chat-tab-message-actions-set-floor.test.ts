@@ -1,12 +1,12 @@
 /**
  * T-WEC4b：Mobile runSetFloor 编排链（setMessageFloorAtMessage → capture → reload → bump）。
  */
-import {describe, expect, it, jest, beforeEach} from '@jest/globals';
+import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import React from 'react';
-import TestRenderer, {act} from 'react-test-renderer';
-import {type ChatMessage} from '@novel-master/core/chat';
+import TestRenderer, { act } from 'react-test-renderer';
+import { type ChatMessage } from '@novel-master/core/chat';
 
-import {useChatTabMessageActions} from '../src/screens/tabs/chat-tab/useChatTabMessages';
+import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessages';
 
 const mockSetMessageFloorAtMessage = jest.fn();
 const mockCapture = jest.fn();
@@ -17,7 +17,7 @@ const mockShowToast = jest.fn();
 
 jest.mock('@react-native-clipboard/clipboard', () => ({
   __esModule: true,
-  default: {setString: jest.fn()},
+  default: { setString: jest.fn() },
 }));
 
 jest.mock('../src/services/regex-apply-channel', () => ({
@@ -41,7 +41,7 @@ jest.mock('react-native', () => ({
       (
         _title: string,
         _message: string,
-        buttons: {text: string; onPress?: () => void}[],
+        buttons: { text: string; onPress?: () => void }[],
       ) => {
         buttons.find(b => b.text === '置位')?.onPress?.();
       },
@@ -90,7 +90,7 @@ const sampleMessage = (): ChatMessage => ({
   sessionId: 's1',
   seq: 2,
   role: 'user',
-  content: {blocks: [{type: 'text', text: 'hi'}]},
+  content: { blocks: [{ type: 'text', text: 'hi' }] },
   provider: null,
   raw: null,
   createdAtMs: 1,
@@ -104,7 +104,7 @@ describe('useChatTabMessageActions set-floor', () => {
       hiddenCount: 1,
       shownCount: 1,
     });
-    mockCapture.mockResolvedValue({worktreeDisplay: 'wt', capturedAtMs: 1});
+    mockCapture.mockResolvedValue({ worktreeDisplay: 'wt', capturedAtMs: 1 });
     mockReloadMessages.mockResolvedValue(undefined);
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);
   });
@@ -118,11 +118,7 @@ describe('useChatTabMessageActions set-floor', () => {
       await Promise.resolve();
     });
 
-    expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith(
-      'p1',
-      's1',
-      'm1',
-    );
+    expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith('p1', 's1', 'm1');
     expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
       projectId: 'p1',
       sessionId: 's1',

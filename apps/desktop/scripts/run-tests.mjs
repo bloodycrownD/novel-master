@@ -19,8 +19,14 @@ const env = {
   ),
 };
 
+const extraArgs = process.argv.slice(2).filter((arg) => arg.length > 0);
+const testTargets =
+  extraArgs.length > 0
+    ? extraArgs.join(" ")
+    : "test/**/*.test.ts test/**/*.test.js";
+
 execSync(
-  "npx tsx --tsconfig tsconfig.renderer.json --test test/**/*.test.ts test/**/*.test.js",
+  `npx tsx --tsconfig tsconfig.renderer.json --test ${testTargets}`,
   { cwd: desktopRoot, stdio: "inherit", env, shell: true },
 );
 

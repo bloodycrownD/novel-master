@@ -1,6 +1,13 @@
 import React from 'react';
-import {describe, expect, it, jest, beforeEach, afterEach} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
+import {
+  describe,
+  expect,
+  it,
+  jest,
+  beforeEach,
+  afterEach,
+} from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
 
 const mockShowToast = jest.fn();
 
@@ -31,7 +38,7 @@ jest.mock('../src/hooks/useDismissOverlaysOnBlur', () => ({
 }));
 
 jest.mock('../src/components/chrome/ToastHost', () => ({
-  useToast: () => ({showToast: mockShowToast}),
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock('../src/errors/toast-message', () => ({
@@ -75,7 +82,7 @@ jest.mock('../src/components/sheet/BottomSheetMenu', () => ({
   }: {
     visible: boolean;
     onSelect: (action: string) => void;
-    items: {action: string}[];
+    items: { action: string }[];
   }) => {
     if (visible && items?.some(item => item.action === 'toggle-include')) {
       capturedEntityMenuOnSelect = onSelect;
@@ -121,10 +128,11 @@ jest.mock('../src/services/worktree-block.service', () => {
   };
 });
 
-import {cycleFileInclusion} from '../src/services/worktree-operations.service';
-import {captureSessionWorktreeBlockForMobile} from '../src/services/worktree-block.service';
+import { cycleFileInclusion } from '../src/services/worktree-operations.service';
+import { captureSessionWorktreeBlockForMobile } from '../src/services/worktree-block.service';
 
-const {VfsFileManager} = require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
+const { VfsFileManager } =
+  require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');
 
 const fixedListRows = [
   {
@@ -173,8 +181,8 @@ function renderSessionVfm(rootPath = '/') {
         projectId: 'p1',
         sessionId: 's1',
       }}
-      vfs={{list} as any}
-      worktree={{buildListRows, getDirRule, setDirRule} as any}
+      vfs={{ list } as any}
+      worktree={{ buildListRows, getDirRule, setDirRule } as any}
       onOpenFile={jest.fn()}
       rootPath={rootPath}
     />
@@ -243,7 +251,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     mockCapture.mockClear();
     buildListRows.mockClear();
 
-    const moreBtn = tree!.root.findByProps({testID: 'vfs-more-action'});
+    const moreBtn = tree!.root.findByProps({ testID: 'vfs-more-action' });
     await act(async () => {
       moreBtn.props.onPress();
       await flushPromises();
@@ -286,7 +294,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     });
     mockCapture.mockClear();
 
-    const menuBtn = tree!.root.findByProps({testID: 'vfs-row-menu-note.md'});
+    const menuBtn = tree!.root.findByProps({ testID: 'vfs-row-menu-note.md' });
     await act(async () => {
       menuBtn.props.onPress();
       await flushPromises();

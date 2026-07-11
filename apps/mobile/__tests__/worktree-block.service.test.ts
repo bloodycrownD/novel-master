@@ -1,4 +1,4 @@
-import {describe, expect, it, jest} from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 
 import {
   captureAfterManualCompactionEmit,
@@ -21,7 +21,7 @@ describe('worktree-block.service', () => {
     }));
     const runtime = {
       worktreeBlockStore: blockStore,
-      worktree: () => ({materializePersistBlock}),
+      worktree: () => ({ materializePersistBlock }),
     };
 
     const block = await captureSessionWorktreeBlockForMobile(runtime as any, {
@@ -49,13 +49,16 @@ describe('worktree-block.service', () => {
     }));
     const runtime = {
       worktreeBlockStore: blockStore,
-      worktree: () => ({materializePersistBlock}),
+      worktree: () => ({ materializePersistBlock }),
     };
 
-    const block = await captureSessionWorktreeBlockOnManualRefresh(runtime as any, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
+    const block = await captureSessionWorktreeBlockOnManualRefresh(
+      runtime as any,
+      {
+        projectId: 'p1',
+        sessionId: 's1',
+      },
+    );
 
     expect(block.worktreeDisplay).toBe('manual-body');
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
@@ -70,13 +73,15 @@ describe('worktree-block.service', () => {
     }));
     const capture = jest.fn();
     const getCapturedBlock = jest.fn(() => undefined);
-    getCapturedBlock.mockImplementationOnce(() => undefined).mockImplementation(() => ({
-      worktreeDisplay: 'wt',
-      capturedAtMs: 1,
-    }));
+    getCapturedBlock
+      .mockImplementationOnce(() => undefined)
+      .mockImplementation(() => ({
+        worktreeDisplay: 'wt',
+        capturedAtMs: 1,
+      }));
     const runtime = {
-      worktreeBlockStore: {capture, getCapturedBlock},
-      worktree: () => ({materializePersistBlock}),
+      worktreeBlockStore: { capture, getCapturedBlock },
+      worktree: () => ({ materializePersistBlock }),
     };
 
     const block = await getCapturedBlockOrCaptureForMobile(runtime as any, {
@@ -86,7 +91,7 @@ describe('worktree-block.service', () => {
 
     expect(block.worktreeDisplay).toBe('wt');
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
-    expect(capture).toHaveBeenCalledWith('p1', 's1', {worktreeDisplay: 'wt'});
+    expect(capture).toHaveBeenCalledWith('p1', 's1', { worktreeDisplay: 'wt' });
   });
 
   it('T-WEC5: manual 压缩 emit 成功后 capture', async () => {
@@ -102,13 +107,17 @@ describe('worktree-block.service', () => {
     }));
     const runtime = {
       worktreeBlockStore: blockStore,
-      worktree: () => ({materializePersistBlock}),
+      worktree: () => ({ materializePersistBlock }),
     };
 
-    await captureAfterManualCompactionEmit(runtime as any, {
-      projectId: 'p1',
-      sessionId: 's1',
-    }, true);
+    await captureAfterManualCompactionEmit(
+      runtime as any,
+      {
+        projectId: 'p1',
+        sessionId: 's1',
+      },
+      true,
+    );
 
     expect(materializePersistBlock).toHaveBeenCalledTimes(1);
     expect(blockStore.capture).toHaveBeenCalledWith('p1', 's1', {
@@ -124,13 +133,17 @@ describe('worktree-block.service', () => {
     const materializePersistBlock = jest.fn();
     const runtime = {
       worktreeBlockStore: blockStore,
-      worktree: () => ({materializePersistBlock}),
+      worktree: () => ({ materializePersistBlock }),
     };
 
-    await captureAfterManualCompactionEmit(runtime as any, {
-      projectId: 'p1',
-      sessionId: 's1',
-    }, false);
+    await captureAfterManualCompactionEmit(
+      runtime as any,
+      {
+        projectId: 'p1',
+        sessionId: 's1',
+      },
+      false,
+    );
 
     expect(materializePersistBlock).not.toHaveBeenCalled();
     expect(blockStore.capture).not.toHaveBeenCalled();
@@ -146,8 +159,8 @@ describe('worktree-block.service', () => {
       capturedAtMs: 1,
     }));
     const runtime = {
-      worktreeBlockStore: {capture, getCapturedBlock},
-      worktree: () => ({materializePersistBlock}),
+      worktreeBlockStore: { capture, getCapturedBlock },
+      worktree: () => ({ materializePersistBlock }),
     };
 
     const block = await getCapturedBlockOrCaptureForMobile(runtime as any, {
