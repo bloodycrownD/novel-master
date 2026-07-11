@@ -1,5 +1,5 @@
 /**
- * T-SF14：Desktop IPC handleMessagesSetFloor 委托 effects；markDirty 路径。
+ * T-WEC4：Desktop IPC handleMessagesSetFloor effects 成功后 capture。
  * T-SF18：幂等置位返回零变更 counts，驱动 Toast「上下文已是最新状态」。
  */
 import assert from 'node:assert/strict';
@@ -66,14 +66,19 @@ describe('handleMessagesSetFloor', () => {
     return result.data.id;
   }
 
-  it('T-SF14: 委托 messageTranscriptEffects 并 markDirty', async () => {
-    const sessionId = await createSession('sf14');
+  it('T-WEC4: 委托 messageTranscriptEffects 并 capture block', async () => {
+    const sessionId = await createSession('wec4');
     const rt = await getDesktopRuntime();
     await appendMessage(sessionId, 'user', 'u1');
     await appendMessage(sessionId, 'assistant', 'a1');
     const anchorId = await appendMessage(sessionId, 'user', 'u2');
     await appendMessage(sessionId, 'assistant', 'a2');
     await rt.messages.hideRange(sessionId, 3, 4);
+
+    assert.equal(
+      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
+      undefined,
+    );
 
     const result = await handleMessagesSetFloor({
       projectId,
@@ -86,7 +91,10 @@ describe('handleMessagesSetFloor', () => {
       assert.equal(result.data.hiddenCount, 2);
       assert.equal(result.data.shownCount, 2);
     }
-    assert.equal(rt.worktreeSnapshot.isDirty(projectId, sessionId), true);
+
+    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
+    assert.notEqual(block, undefined);
+    assert.equal(typeof block!.capturedAtMs, 'number');
 
     const anchor = await rt.messages.get(anchorId);
     const messages = await rt.messages.listBySession(sessionId);

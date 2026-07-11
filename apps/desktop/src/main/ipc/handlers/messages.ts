@@ -32,6 +32,7 @@ import type {
 } from '../../../../shared/ipc-types.js';
 import { formatIpcError } from '../format-ipc-error.js';
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
+import { captureSessionWorktreeBlockForScope } from '../resolve-vfs-scope.js';
 import { loadSessionMessagesForDisplay } from '../../services/regex-apply-channel.service.js';
 
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
@@ -283,6 +284,11 @@ export async function handleMessagesSetFloor(
       req.sessionId,
       req.messageId,
     );
+    await captureSessionWorktreeBlockForScope(rt, {
+      kind: "session",
+      projectId: req.projectId,
+      sessionId: req.sessionId,
+    });
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

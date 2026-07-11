@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
-import { createSessionWorktreeSnapshotStore } from '@novel-master/core/worktree';
+import { createSessionWorktreeBlockStore } from '@novel-master/core/worktree';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
 import {
   getNovelMasterTestContext,
@@ -16,12 +16,12 @@ import {
 novelMasterTestFixture();
 
 describe('MessageTranscriptEffectsService', () => {
-  it('hideMessagesInRange 更新 hidden 并 markDirty', async () => {
+  it('T-WEC1：hideMessagesInRange 更新 hidden 且不 capture', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u'));
     const assistant = await ctx.messages.append(session.id, 'assistant', {
@@ -35,18 +35,21 @@ describe('MessageTranscriptEffectsService', () => {
       2,
     );
     assert.equal(count, 2);
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
 
     const updated = await ctx.messages.get(assistant.id);
     assert.equal(updated.hidden, true);
   });
 
-  it('showMessagesInRange 更新 hidden 并 markDirty', async () => {
+  it('T-WEC2：showMessagesInRange 更新 hidden 且不 capture', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u'));
     await ctx.messages.append(session.id, 'assistant', {
@@ -55,19 +58,22 @@ describe('MessageTranscriptEffectsService', () => {
     await ctx.messages.hideRange(session.id, 1, 2);
 
     await effects.showMessagesInRange(project.id, session.id, 1, 2);
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
 
     const messages = await ctx.messages.listBySession(session.id);
     assert.ok(messages.every(m => !m.hidden));
   });
 
-  it('truncateMessagesAfter 删除 tail 且不 markDirty，VFS 不变', async () => {
+  it('truncateMessagesAfter 删除 tail 且不 capture，VFS 不变', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
     const m1 = await ctx.messages.append(session.id, 'user', textBlocks('1'));
@@ -80,7 +86,10 @@ describe('MessageTranscriptEffectsService', () => {
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
-    assert.equal(store.isDirty(project.id, session.id), false);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
@@ -92,8 +101,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     const m1 = await ctx.messages.append(session.id, 'user', textBlocks('u1'));
     await ctx.messages.append(session.id, 'assistant', {
@@ -124,12 +132,12 @@ describe('MessageTranscriptEffectsService', () => {
     }
   });
 
-  it('T-SF5：置位后 worktreeSnapshot.isDirty === true', async () => {
+  it('T-WEC3：setMessageFloorAtMessage Core 路径不 capture', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u'));
     const anchor = await ctx.messages.append(session.id, 'assistant', {
@@ -137,7 +145,10 @@ describe('MessageTranscriptEffectsService', () => {
     });
 
     await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
-    assert.equal(store.isDirty(project.id, session.id), true);
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, session.id),
+      undefined,
+    );
   });
 
   it('T-SF6：置位不 truncate，消息条数不变', async () => {
@@ -145,8 +156,7 @@ describe('MessageTranscriptEffectsService', () => {
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
     await ctx.messages.append(session.id, 'user', textBlocks('1'));
@@ -168,8 +178,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u1'));
     await ctx.messages.append(session.id, 'assistant', {
@@ -196,8 +205,7 @@ describe('MessageTranscriptEffectsService', () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     const system = await ctx.messages.append(
       session.id,

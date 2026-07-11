@@ -59,8 +59,10 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import {
+  createSessionWorktreeBlockStore,
   createSessionWorktreeSnapshotStore,
   createWorktreeService,
+  type SessionWorktreeBlockStore,
   type SessionWorktreeSnapshotStore,
   type WorktreeService,
 } from "@novel-master/core/worktree";
@@ -101,7 +103,7 @@ export interface NovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
-  /** hide/show/truncate 消息 transcript 并 markDirty session worktree。 */
+  /** hide/show/truncate 消息 transcript（不 capture worktree 块）。 */
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   readonly sessionFs: SessionFsService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -111,6 +113,7 @@ export interface NovelMasterRuntime {
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -179,11 +182,9 @@ export async function createNovelMasterRuntime(
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const worktreeSnapshot = createSessionWorktreeSnapshotStore();
+  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
-  const messageTranscriptEffects = createMessageTranscriptEffectsService(
-    conn,
-    worktreeSnapshot,
-  );
+  const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -225,6 +226,7 @@ export async function createNovelMasterRuntime(
     compactionConditions,
     compactionConditionEvaluator,
     worktreeSnapshot,
+    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

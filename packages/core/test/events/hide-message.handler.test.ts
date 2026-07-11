@@ -16,7 +16,7 @@ import {
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 
-import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
 
 novelMasterTestFixture();
@@ -54,8 +54,8 @@ describe("runHideMessageAction", () => {
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
 
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await runHideMessageAction(
       project.id,
@@ -70,6 +70,10 @@ describe("runHideMessageAction", () => {
         message.seq >= range.fromSeq && message.seq <= range.toSeq;
       assert.equal(message.hidden, hidden, `seq ${message.seq}`);
     }
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, sessionRow.id),
+      undefined,
+    );
   });
 
   it("有 endDepth 时仍 hide slice 内 min~max seq", async () => {
@@ -91,8 +95,7 @@ describe("runHideMessageAction", () => {
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
 
-    const store = createSessionWorktreeSnapshotStore();
-    const effects = createMessageTranscriptEffectsService(ctx.conn, store);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await runHideMessageAction(
       project.id,
@@ -107,5 +110,31 @@ describe("runHideMessageAction", () => {
         message.seq >= range.fromSeq && message.seq <= range.toSeq;
       assert.equal(message.hidden, hidden, `seq ${message.seq}`);
     }
+  });
+
+  it("T-WEC12：runHideMessageAction 单独执行不 capture", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const sessionRow = await ctx.sessions.create(project.id);
+    const chatSession = new ChatAgentSession(ctx.messages, sessionRow.id);
+
+    await appendText(chatSession, "user", "u1");
+    await appendText(chatSession, "assistant", "a1");
+
+    const slice = { startDepth: 1 };
+    const blockStore = createSessionWorktreeBlockStore();
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
+
+    await runHideMessageAction(
+      project.id,
+      sessionRow.id,
+      slice,
+      { messages: ctx.messages, messageTranscriptEffects: effects },
+    );
+
+    assert.equal(
+      blockStore.getCapturedBlock(project.id, sessionRow.id),
+      undefined,
+    );
   });
 });

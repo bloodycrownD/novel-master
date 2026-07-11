@@ -10,12 +10,10 @@ import {
 } from '@/domain/chat/logic/message-set-floor-range.js';
 import { chatInvalidArgument, chatNotFound } from '@/errors/chat-errors.js';
 import type { TdbcConnection } from '@/infra/tdbc/ports/connection.port.js';
-import { markSessionWorktreeDirty } from '@/service/prompt/logic/mark-session-worktree-dirty.js';
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
 } from '@/service/message-checkpoint/truncate-tail-wiring.js';
-import type { SessionWorktreeSnapshotStore } from '@/service/prompt/session-worktree-snapshot.port.js';
 import type { MessageService } from '../message.port.js';
 import type {
   MessageTranscriptEffectsService,
@@ -26,7 +24,6 @@ import type {
 export interface MessageTranscriptEffectsServiceDeps {
   readonly conn: TdbcConnection;
   readonly messages: MessageService;
-  readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
 }
 
 /**
@@ -38,25 +35,21 @@ export class DefaultMessageTranscriptEffectsService
   constructor(private readonly deps: MessageTranscriptEffectsServiceDeps) {}
 
   async hideMessagesInRange(
-    projectId: string,
+    _projectId: string,
     sessionId: string,
     fromSeq: number,
     toSeq: number,
   ): Promise<number> {
-    const count = await this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
-    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
-    return count;
+    return this.deps.messages.hideRange(sessionId, fromSeq, toSeq);
   }
 
   async showMessagesInRange(
-    projectId: string,
+    _projectId: string,
     sessionId: string,
     fromSeq: number,
     toSeq: number,
   ): Promise<number> {
-    const count = await this.deps.messages.showRange(sessionId, fromSeq, toSeq);
-    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
-    return count;
+    return this.deps.messages.showRange(sessionId, fromSeq, toSeq);
   }
 
   async truncateMessagesAfter(
@@ -76,7 +69,7 @@ export class DefaultMessageTranscriptEffectsService
   }
 
   async setMessageFloorAtMessage(
-    projectId: string,
+    _projectId: string,
     sessionId: string,
     messageId: string,
   ): Promise<SetMessageFloorResult> {
@@ -114,8 +107,6 @@ export class DefaultMessageTranscriptEffectsService
         showSuffix.toSeq,
       );
     }
-
-    markSessionWorktreeDirty(this.deps.worktreeSnapshot, projectId, sessionId);
 
     return { hiddenCount, shownCount };
   }

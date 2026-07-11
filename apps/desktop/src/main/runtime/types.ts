@@ -38,7 +38,11 @@ import type { MessageCheckpointService } from "@novel-master/core/message-checkp
 import type { SessionFsService } from "@novel-master/core/session-fs";
 import type { RegexConfigService } from "@novel-master/core/regex";
 import type { VfsScope, VfsService } from "@novel-master/core/vfs";
-import type { SessionWorktreeSnapshotStore, WorktreeService } from "@novel-master/core/worktree";
+import type {
+  SessionWorktreeBlockStore,
+  SessionWorktreeSnapshotStore,
+  WorktreeService,
+} from "@novel-master/core/worktree";
 import type { KkvService } from "@novel-master/core/kkv";
 
 /** Open connection with domain services (main-process singleton host). */
@@ -52,7 +56,7 @@ export interface DesktopNovelMasterRuntime {
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
-  /** hide/show/truncate 消息 transcript 并 markDirty session worktree。 */
+  /** hide/show/truncate 消息 transcript（不 capture worktree 块）。 */
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
   /** maxSteps 截断后用户确认的 tool turn 桥接 assistant 追加。 */
   readonly appendToolTurnBridge: AppendToolTurnBridgeFn;
@@ -63,6 +67,7 @@ export interface DesktopNovelMasterRuntime {
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
   readonly worktreeSnapshot: SessionWorktreeSnapshotStore;
+  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;

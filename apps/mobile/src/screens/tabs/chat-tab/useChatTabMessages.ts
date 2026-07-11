@@ -25,6 +25,7 @@ import {
 } from '@novel-master/core/session-fs';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
+import { captureSessionWorktreeBlockForMobile } from '@/services/worktree-block.service';
 import {
   getSessionViewCache,
   sessionViewCacheKey,
@@ -317,6 +318,10 @@ export function useChatTabMessageActions({
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
+                await captureSessionWorktreeBlockForMobile(runtime, {
+                  projectId,
+                  sessionId,
+                });
                 showToast('已压缩');
               }
             } catch (error) {
@@ -499,6 +504,10 @@ export function useChatTabMessageActions({
               sessionId,
               messageId,
             );
+          await captureSessionWorktreeBlockForMobile(runtime, {
+            projectId,
+            sessionId,
+          });
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();

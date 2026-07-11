@@ -8,6 +8,7 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { captureSessionWorktreeBlockForScope } from "../resolve-vfs-scope.js";
 
 export async function handleCompactionManual(
   req: CompactionManualRequest,
@@ -22,6 +23,13 @@ export async function handleCompactionManual(
         trigger: "manual",
       },
     );
+    if (result.ok) {
+      await captureSessionWorktreeBlockForScope(rt, {
+        kind: "session",
+        projectId: req.projectId,
+        sessionId: req.sessionId,
+      });
+    }
     return { ok: true, data: { ok: result.ok } };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

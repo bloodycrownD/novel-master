@@ -45,6 +45,7 @@ import {
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
+  createSessionWorktreeBlockStore,
   createSessionWorktreeSnapshotStore,
   createWorktreeService,
 } from "@novel-master/core/worktree";
@@ -95,11 +96,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
   const worktreeSnapshot = createSessionWorktreeSnapshotStore();
+  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
-  const messageTranscriptEffects = createMessageTranscriptEffectsService(
-    conn,
-    worktreeSnapshot,
-  );
+  const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const { userVfsTurn, appendToolTurnBridge } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -146,6 +145,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     compactionConditions,
     compactionConditionEvaluator,
     worktreeSnapshot,
+    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

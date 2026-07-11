@@ -1,5 +1,5 @@
 /**
- * 消息 transcript 副作用统一入口（hide / show / tail 截断 + markDirty）。
+ * 消息 transcript 副作用统一入口（hide / show / tail 截断）。
  *
  * @module service/chat/message-transcript-effects.port
  */
@@ -12,7 +12,7 @@ export interface SetMessageFloorResult {
 
 /** 消息 hide / show / tail 截断的统一副作用服务。 */
 export interface MessageTranscriptEffectsService {
-  /** hideRange + markDirty(projectId, sessionId) */
+  /** hideRange（不 capture worktree 块）。 */
   hideMessagesInRange(
     projectId: string,
     sessionId: string,
@@ -20,7 +20,7 @@ export interface MessageTranscriptEffectsService {
     toSeq: number,
   ): Promise<number>;
 
-  /** showRange + markDirty */
+  /** showRange（不 capture worktree 块）。 */
   showMessagesInRange(
     projectId: string,
     sessionId: string,
@@ -29,8 +29,8 @@ export interface MessageTranscriptEffectsService {
   ): Promise<number>;
 
   /**
-   * 截断 tail：deleteAfterSeq + tail checkpoint 清理 + markDirty。
-   * 不做 VFS reconcile；默认不 sweepSessionRevisions（批量删）。
+   * 截断 tail：deleteAfterSeq + tail checkpoint 清理。
+   * 不做 VFS reconcile；默认不 sweepSessionRevisions（批量删）；不 capture worktree 块。
    */
   truncateMessagesAfter(
     projectId: string,
@@ -39,7 +39,7 @@ export interface MessageTranscriptEffectsService {
     options?: { sweepRevisions?: boolean },
   ): Promise<void>;
 
-  /** hide 前缀 + show 后缀 + 单次 markDirty；不 truncate。 */
+  /** hide 前缀 + show 后缀；不 truncate；不 capture worktree 块。 */
   setMessageFloorAtMessage(
     projectId: string,
     sessionId: string,
