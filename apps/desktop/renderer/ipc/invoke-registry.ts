@@ -25,6 +25,8 @@ import {
   type MessagesHideRequest,
   type MessagesHideRangeRequest,
   type MessagesListRequest,
+  type MessagesSetFloorPayload,
+  type MessagesSetFloorResult,
   type MessagesShowRequest,
   type MessagesShowRangeRequest,
   type MessagesTruncateAfterRequest,
@@ -258,6 +260,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.MESSAGES_ROLLBACK,
     ),
+    ipcMessagesSetFloor: withReq<
+      MessagesSetFloorPayload,
+      IpcResult<MessagesSetFloorResult>
+    >(invoke, IPC_CHANNELS.MESSAGES_SET_FLOOR),
     ipcAgentRun: withReq<AgentRunRequest, IpcResult<{ started: boolean }>>(
       invoke,
       IPC_CHANNELS.AGENT_RUN,

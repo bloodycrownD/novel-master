@@ -23,6 +23,8 @@ import type {
   MessagesHideRangeRequest,
   MessagesListRequest,
   MessagesShowRequest,
+  MessagesSetFloorPayload,
+  MessagesSetFloorResult,
   MessagesShowRangeRequest,
   MessagesTruncateAfterRequest,
   SessionDto,
@@ -269,6 +271,22 @@ function toSessionDto(session: {
     createdAtMs: session.createdAtMs,
     updatedAtMs: session.updatedAtMs,
   };
+}
+
+export async function handleMessagesSetFloor(
+  req: MessagesSetFloorPayload,
+): Promise<IpcResult<MessagesSetFloorResult>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const result = await rt.messageTranscriptEffects.setMessageFloorAtMessage(
+      req.projectId,
+      req.sessionId,
+      req.messageId,
+    );
+    return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
 }
 
 export async function handleMessagesFork(

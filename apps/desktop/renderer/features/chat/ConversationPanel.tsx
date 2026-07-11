@@ -19,6 +19,7 @@ import {
   ipcMessagesHideRange,
   ipcMessagesList,
   ipcMessagesRollback,
+  ipcMessagesSetFloor,
   ipcMessagesShowRange,
   ipcMessagesTruncateAfter,
 } from "@/ipc/client";
@@ -123,6 +124,7 @@ export function ConversationPanel({
     | { kind: "hide-messages"; toSeq: number }
     | { kind: "restore-messages"; fromSeq: number; toSeq: number }
     | { kind: "delete-messages"; afterSeq: number; fromSeq: number }
+    | { kind: "set-floor"; messageId: string }
     | { kind: "rollback"; messageId: string }
     | { kind: "rollback-backfill"; messageId: string; missingLogicalPaths: readonly string[] }
     | { kind: "rollback-degraded"; messageId: string; errorMessage: string }
@@ -464,6 +466,14 @@ export function ConversationPanel({
         await copyMessage(message);
         return;
       }
+      if (action === "set-floor") {
+        if (running) {
+          showToast("Agent 运行中无法置位");
+          return;
+        }
+        setConfirmState({ kind: "set-floor", messageId: message.id });
+        return;
+      }
       if (action === "fork") {
         if (running) {
           showToast("Agent 运行中无法分叉");
@@ -518,6 +528,21 @@ export function ConversationPanel({
       await executeRollback(state.messageId, { revisionHeadBackfill: true });
     } else if (state.kind === "rollback-degraded") {
       await executeRollback(state.messageId, { skipVfsReconcile: true });
+    } else if (state.kind === "set-floor") {
+      const result = await ipcMessagesSetFloor({
+        projectId,
+        sessionId,
+        messageId: state.messageId,
+      });
+      if (!result.ok) {
+        showToast(result.error.message);
+        return;
+      }
+      const changed =
+        result.data.hiddenCount + result.data.shownCount > 0;
+      await reloadMessages();
+      notifyWorkspaceMutated();
+      showToast(changed ? "已置位" : "上下文已是最新状态");
     } else {
       let shouldNotifyWorkspace = false;
       if (state.kind === "hide-messages") {
@@ -571,6 +596,9 @@ export function ConversationPanel({
 
   const confirmMessage = (() => {
     if (!confirmState) return "";
+    if (confirmState.kind === "set-floor") {
+      return "此消息之前将不参与提示词，此消息及之后将恢复可见。";
+    }
     if (confirmState.kind === "hide-messages") {
       return `将隐藏所选 assistant 消息（seq ≤ ${confirmState.toSeq}）及其之前的所有消息。是否继续？`;
     }
@@ -592,22 +620,26 @@ export function ConversationPanel({
   })();
 
   const confirmTitle =
-    confirmState?.kind === "rollback-degraded"
-      ? "无法恢复工作区"
-      : confirmState?.kind === "rollback-backfill"
-        ? "快照丢失"
-        : confirmState?.kind === "delete-messages"
-          ? "确认删除消息"
-          : "确认操作";
+    confirmState?.kind === "set-floor"
+      ? "置位到此消息？"
+      : confirmState?.kind === "rollback-degraded"
+        ? "无法恢复工作区"
+        : confirmState?.kind === "rollback-backfill"
+          ? "快照丢失"
+          : confirmState?.kind === "delete-messages"
+            ? "确认删除消息"
+            : "确认操作";
 
   const confirmLabel =
-    confirmState?.kind === "rollback-degraded"
-      ? "仅删除后续对话"
-      : confirmState?.kind === "rollback-backfill"
-        ? "继续回滚"
-        : confirmState?.kind === "delete-messages"
-          ? "删除"
-          : "确定";
+    confirmState?.kind === "set-floor"
+      ? "置位"
+      : confirmState?.kind === "rollback-degraded"
+        ? "仅删除后续对话"
+        : confirmState?.kind === "rollback-backfill"
+          ? "继续回滚"
+          : confirmState?.kind === "delete-messages"
+            ? "删除"
+            : "确定";
 
   const batchBarTitle =
     messageBatch.mode === "hide"

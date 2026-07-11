@@ -76,6 +76,7 @@ export const {
   ipcMessagesDelete,
   ipcMessagesFork,
   ipcMessagesRollback,
+  ipcMessagesSetFloor,
   ipcAgentRun,
   ipcAgentAbort,
   ipcAgentResolveCurrent,

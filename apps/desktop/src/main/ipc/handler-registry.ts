@@ -106,6 +106,7 @@ import {
   handleMessagesHideRange,
   handleMessagesList,
   handleMessagesRollback,
+  handleMessagesSetFloor,
   handleMessagesShow,
   handleMessagesShowRange,
   handleMessagesTruncateAfter,
@@ -232,6 +233,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.MESSAGES_DELETE, handleMessagesDelete);
   bindReq(IPC_CHANNELS.MESSAGES_FORK, handleMessagesFork);
   bindReq(IPC_CHANNELS.MESSAGES_ROLLBACK, handleMessagesRollback);
+  bindReq(IPC_CHANNELS.MESSAGES_SET_FLOOR, handleMessagesSetFloor);
   bindReq(IPC_CHANNELS.MESSAGES_APPEND_TOOL_TURN_BRIDGE, handleMessagesAppendToolTurnBridge);
 
   bindReq(IPC_CHANNELS.AGENT_RUN, handleAgentRun);

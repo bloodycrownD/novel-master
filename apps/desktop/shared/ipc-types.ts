@@ -62,6 +62,7 @@ export const IPC_CHANNELS = {
   MESSAGES_DELETE: "nm:messages/delete",
   MESSAGES_FORK: "nm:messages/fork",
   MESSAGES_ROLLBACK: "nm:messages/rollback",
+  MESSAGES_SET_FLOOR: "nm:messages/setFloor",
   MESSAGES_APPEND_TOOL_TURN_BRIDGE: "nm:messages/appendToolTurnBridge",
 
   AGENT_RUN: "nm:agent/run",
@@ -504,6 +505,17 @@ export type MessagesDeleteRequest = {
 export type MessagesForkRequest = {
   readonly sessionId: string;
   readonly messageId: string;
+};
+
+export type MessagesSetFloorPayload = {
+  readonly projectId: string;
+  readonly sessionId: string;
+  readonly messageId: string;
+};
+
+export type MessagesSetFloorResult = {
+  readonly hiddenCount: number;
+  readonly shownCount: number;
 };
 
 export type MessagesAppendToolTurnBridgeRequest = {
