@@ -106,6 +106,10 @@ export {
   computeVisibilityBatchAffectedIds,
   selectVisibilityBatchEligibleIdsFromAnchor,
 } from "../domain/chat/logic/visibility-batch-range.js";
+export {
+  computeSetFloorRanges,
+  isSetFloorAnchorRole,
+} from "../domain/chat/logic/message-set-floor-range.js";
 export type {
   TailBatchMode,
   TailBatchRow,
@@ -144,5 +148,5 @@ export type {
 export type { ProjectService } from "../service/chat/project.port.js";
 export type { SessionService } from "../service/chat/session.port.js";
 export type { MessageService } from "../service/chat/message.port.js";
-export type { MessageTranscriptEffectsService } from "../service/chat/message-transcript-effects.port.js";
+export type { MessageTranscriptEffectsService, SetMessageFloorResult } from "../service/chat/message-transcript-effects.port.js";
 export { createMessageTranscriptEffectsService } from "../service/chat/create-message-transcript-effects.js";

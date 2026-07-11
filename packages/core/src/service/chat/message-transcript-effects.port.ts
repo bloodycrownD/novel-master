@@ -4,6 +4,12 @@
  * @module service/chat/message-transcript-effects.port
  */
 
+/** 消息置位操作结果。 */
+export interface SetMessageFloorResult {
+  readonly hiddenCount: number;
+  readonly shownCount: number;
+}
+
 /** 消息 hide / show / tail 截断的统一副作用服务。 */
 export interface MessageTranscriptEffectsService {
   /** hideRange + markDirty(projectId, sessionId) */
@@ -32,4 +38,11 @@ export interface MessageTranscriptEffectsService {
     afterSeq: number,
     options?: { sweepRevisions?: boolean },
   ): Promise<void>;
+
+  /** hide 前缀 + show 后缀 + 单次 markDirty；不 truncate。 */
+  setMessageFloorAtMessage(
+    projectId: string,
+    sessionId: string,
+    messageId: string,
+  ): Promise<SetMessageFloorResult>;
 }
