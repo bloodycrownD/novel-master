@@ -51,7 +51,7 @@ function createSpyingWorktreeService(
 novelMasterTestFixture();
 
 describe("worktree materializeLiveView", () => {
-  it("materializeLiveView 仅加载一次 metadata", async () => {
+  it("T-WEC13：materializeLiveView 仅加载一次 metadata", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
@@ -67,7 +67,7 @@ describe("worktree materializeLiveView", () => {
     assert.equal(calls.listFileMetaUnderPrefix, 1);
   });
 
-  it("并发 buildListRows + renderFileTree 合并为单次 metadata", async () => {
+  it("T-WEC13：并发 buildListRows + renderFileTree 合并为单次 metadata", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
@@ -89,7 +89,7 @@ describe("worktree materializeLiveView", () => {
     );
   });
 
-  it("委托方法与 materializeLiveView 字段一致", async () => {
+  it("T-WEC13：委托方法与 materializeLiveView 字段一致", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const pvfs = ctx.projectVfs(project.id);
@@ -111,6 +111,13 @@ describe("worktree materializeLiveView", () => {
       live.listRows.map((r) => r.path),
     );
     assert.equal(fileTree, live.filetreeDisplay);
+
+    const fileRow = live.listRows.find(
+      (r) => r.kind === "file" && r.path === "/parity/a.md",
+    );
+    assert.ok(fileRow);
+    assert.equal(fileRow.inclusionMode, "show");
+    assert.equal(fileRow.displayState, "full");
   });
 
   it("deleteRulesUnderLogicalPrefix 移除幽灵目录行", async () => {

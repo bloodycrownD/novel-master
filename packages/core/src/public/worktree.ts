@@ -6,11 +6,19 @@ export type {
   SortField,
   SortOrder,
   FillPolicy,
+  WorktreeRuleRow,
+  WorktreeDirRuleRow,
+  WorktreeFileRuleRow,
   WorktreeListRow,
   WorktreeDirRule,
   SetDirRuleInput,
   SetFileRuleInput,
 } from "../domain/worktree/model/worktree-types.js";
+export type {
+  WorktreeRuleContext,
+  WorktreeRuleView,
+} from "../domain/worktree/model/worktree-rule-view.js";
+export { evaluateWorktreeRuleView } from "../domain/worktree/logic/worktree-rule-engine.js";
 export {
   mapProjectWorktreePathToSession,
   mapSessionWorktreePathToProject,

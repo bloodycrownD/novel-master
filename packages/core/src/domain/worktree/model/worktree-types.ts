@@ -46,14 +46,26 @@ export interface WorktreeFileRule {
   readonly inclusionMode: InclusionMode;
 }
 
-/** One row in worktree list TSV output. */
-export interface WorktreeListRow {
-  readonly kind: "dir" | "file";
+/** RuleEngine DFS 单行：目录行。 */
+export type WorktreeDirRuleRow = {
+  readonly kind: "dir";
   readonly path: string;
-  readonly ruleState: string;
-  readonly inclusionMode: string;
-  readonly displayState: string;
-}
+  readonly ruleState: RuleState;
+};
+
+/** RuleEngine DFS 单行：文件行。 */
+export type WorktreeFileRuleRow = {
+  readonly kind: "file";
+  readonly path: string;
+  readonly inclusionMode: InclusionMode;
+  readonly displayState: DisplayState;
+};
+
+/** RuleEngine DFS 单行；dir / file 分支字段互斥。 */
+export type WorktreeRuleRow = WorktreeDirRuleRow | WorktreeFileRuleRow;
+
+/** 消费方 ① 列表行；与 {@link WorktreeRuleRow} 结构一致。 */
+export type WorktreeListRow = WorktreeRuleRow;
 
 /** Input for setting a directory rule via CLI/service. */
 export interface SetDirRuleInput {

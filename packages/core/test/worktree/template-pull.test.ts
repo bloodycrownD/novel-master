@@ -36,10 +36,10 @@ describe("template pull", () => {
     const rows = await swt.buildListRows();
     const fileRow = rows.find((r) => r.kind === "file" && r.path === "/a.md");
     assert.ok(fileRow);
-    assert.equal(fileRow.inclusionMode, "展示");
+    assert.equal(fileRow.inclusionMode, "show");
     const dirRoot = rows.find((r) => r.kind === "dir" && r.path === "/");
     assert.ok(dirRoot);
-    assert.equal(dirRoot.ruleState, "规则·开");
+    assert.equal(dirRoot.ruleState, "rule_on");
   });
 
   it("project pull does not change existing session vfs or messages", async () => {
@@ -92,7 +92,7 @@ describe("template pull", () => {
     });
     const rule = await pwt.buildListRows();
     const gRow = rule.find((r) => r.path === globalFile);
-    assert.equal(gRow?.inclusionMode, "隐藏");
+    assert.equal(gRow?.inclusionMode, "hide");
   });
 
   it("session pull clears message checkpoints but keeps messages", async () => {

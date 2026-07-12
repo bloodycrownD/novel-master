@@ -13,41 +13,26 @@ import {
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 import type { WorktreeRepository } from "@/domain/worktree/repositories/worktree.port.js";
-import {
-  displayStateLabel,
-  inclusionModeLabel,
-  ruleStateLabel,
-} from "@/domain/worktree/logic/worktree-labels.js";
 import { DEFAULT_WORKTREE_DIR_RULE } from "@/domain/worktree/logic/default-dir-rule.js";
 import {
   buildWorktreeDirSet,
-  directChildDirs,
-  directChildFiles,
-  parentDirOf,
 } from "@/domain/worktree/logic/worktree-tree.js";
-import {
-  evaluateFileDisplay,
-  sortDirPaths,
-  sortFilesForDir,
-  type WorktreeFileSortMeta,
-} from "@/domain/worktree/logic/worktree-eval.js";
 import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
 import { renderWorktreeFileTreeForMacro } from "@/domain/worktree/logic/worktree-file-tree.js";
+import { evaluateWorktreeRuleView } from "@/domain/worktree/logic/worktree-rule-engine.js";
 import {
   isWorktreeRootPath,
-  worktreeRootLogicalPath,
   worktreeScopeKey,
 } from "@/domain/worktree/logic/worktree-scope.js";
 import type {
   DisplayState,
-  InclusionMode,
-  RuleState,
   SetDirRuleInput,
   SetFileRuleInput,
   WorktreeDirRule,
   WorktreeListRow,
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
+import type { WorktreeRuleContext } from "@/domain/worktree/model/worktree-rule-view.js";
 import type {
   WorktreeLiveView,
   WorktreeMaterialized,
@@ -138,25 +123,18 @@ export class DefaultWorktreeService implements WorktreeService {
 
   async materialize(): Promise<WorktreeMaterialized> {
     const ctx = await this.loadContextMetadata();
-    const displayByPath = this.buildDisplayByPath(ctx);
-    const listRows: WorktreeListRow[] = [];
-    const blocks: string[] = [];
-    await this.walkDir(
-      ctx,
-      worktreeRootLogicalPath(this.scope),
-      listRows,
-      blocks,
-    );
+    const view = evaluateWorktreeRuleView(this.scope, ctx);
+    const blocks = await this.collectDisplayBlocks(ctx, view);
     const filetreeDisplay = renderWorktreeFileTreeForMacro({
       scope: this.scope,
       allDirs: ctx.allDirs,
       fileSet: ctx.fileSet,
       dirRuleMap: ctx.dirRuleMap,
       mtimeByPath: ctx.mtimeByPath,
-      displayByPath,
+      displayByPath: view.displayByPath,
     });
     return {
-      listRows,
+      listRows: view.rows,
       worktreeDisplay: joinFileBlocks(blocks),
       filetreeDisplay,
     };
@@ -179,13 +157,8 @@ export class DefaultWorktreeService implements WorktreeService {
 
   async materializePersistBlock(): Promise<WorktreePersistBlock> {
     const ctx = await this.loadContextMetadata();
-    const blocks: string[] = [];
-    await this.walkDir(
-      ctx,
-      worktreeRootLogicalPath(this.scope),
-      [],
-      blocks,
-    );
+    const view = evaluateWorktreeRuleView(this.scope, ctx);
+    const blocks = await this.collectDisplayBlocks(ctx, view);
     return { worktreeDisplay: joinFileBlocks(blocks) };
   }
 
@@ -202,45 +175,54 @@ export class DefaultWorktreeService implements WorktreeService {
     return (await this.materializeLiveView()).filetreeDisplay;
   }
 
-  /** 按文件路径预计算展示档位（宏树后缀用）。 */
-  private buildDisplayByPath(ctx: TreeContextMetadata): Map<string, DisplayState> {
-    const displayByPath = new Map<string, DisplayState>();
-    for (const filePath of ctx.fileSet) {
-      const parent = parentDirOf(filePath);
-      if (parent == null) {
-        continue;
-      }
-      displayByPath.set(
-        filePath,
-        this.computeDisplay(filePath, parent, ctx),
-      );
-    }
-    return displayByPath;
-  }
-
   private async doMaterializeLiveView(): Promise<WorktreeLiveView> {
     const ctx = await this.loadContextMetadata();
-    const displayByPath = this.buildDisplayByPath(ctx);
-    const listRows: WorktreeListRow[] = [];
-    await this.walkDir(
-      ctx,
-      worktreeRootLogicalPath(this.scope),
-      listRows,
-      null,
-    );
+    const view = evaluateWorktreeRuleView(this.scope, ctx);
     const filetreeDisplay = renderWorktreeFileTreeForMacro({
       scope: this.scope,
       allDirs: ctx.allDirs,
       fileSet: ctx.fileSet,
       dirRuleMap: ctx.dirRuleMap,
       mtimeByPath: ctx.mtimeByPath,
-      displayByPath,
+      displayByPath: view.displayByPath,
     });
-    return { listRows, filetreeDisplay };
+    return { listRows: view.rows, filetreeDisplay };
+  }
+
+  /** 按 DFS 文件行顺序收集持久块（仅非 hidden 且 full/header 读正文）。 */
+  private async collectDisplayBlocks(
+    ctx: WorktreeRuleContext,
+    view: { readonly rows: readonly WorktreeListRow[]; readonly displayByPath: ReadonlyMap<string, DisplayState> },
+  ): Promise<string[]> {
+    const blocks: string[] = [];
+    for (const row of view.rows) {
+      if (row.kind !== "file") {
+        continue;
+      }
+      const display = view.displayByPath.get(row.path) ?? row.displayState;
+      if (display === "hidden") {
+        continue;
+      }
+      let content = "";
+      if (display === "full" || display === "header") {
+        const physical = toPhysicalPath(this.scope, row.path);
+        const entry = await this.deps.vfs.findByPath(physical);
+        content = entry?.content ?? "";
+      }
+      blocks.push(
+        renderFileBlock({
+          logicalPath: row.path,
+          mtimeMs: ctx.mtimeByPath.get(row.path) ?? 0,
+          display,
+          content,
+        }),
+      );
+    }
+    return blocks;
   }
 
   /** Loads path/mtime/rules context without scanning file content. */
-  private async loadContextMetadata(): Promise<TreeContextMetadata> {
+  private async loadContextMetadata(): Promise<WorktreeRuleContext> {
     const scopeKey = worktreeScopeKey(this.scope);
     const physicalPrefix = scopePhysicalPrefix(this.scope);
     const fileMeta = await this.deps.vfs.listFileMetaUnderPrefix(physicalPrefix);
@@ -282,127 +264,6 @@ export class DefaultWorktreeService implements WorktreeService {
       allDirs,
     };
   }
-
-  private resolveRuleState(
-    dirPath: string,
-    ctx: TreeContextMetadata,
-  ): RuleState {
-    if (isWorktreeRootPath(this.scope, dirPath)) {
-      return "rule_on";
-    }
-    const rule = ctx.dirRuleMap.get(dirPath);
-    if (rule == null || !rule.ruleEnabled) {
-      return "rule_off";
-    }
-    return "rule_on";
-  }
-
-  private resolveInclusion(
-    filePath: string,
-    ctx: TreeContextMetadata,
-  ): InclusionMode {
-    return ctx.fileRuleMap.get(filePath)?.inclusionMode ?? "auto";
-  }
-
-  private computeDisplay(
-    filePath: string,
-    parentDir: string,
-    ctx: TreeContextMetadata,
-  ): DisplayState {
-    const inclusion = this.resolveInclusion(filePath, ctx);
-    const parentRuleOn = this.resolveRuleState(parentDir, ctx) === "rule_on";
-    const dirRule = ctx.dirRuleMap.get(parentDir) ?? null;
-    const siblings = directChildFiles(parentDir, ctx.fileSet);
-    const autoSiblings: WorktreeFileSortMeta[] = siblings
-      .filter((p) => this.resolveInclusion(p, ctx) === "auto")
-      .map((p) => ({
-        logicalPath: p,
-        mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
-      }));
-    const sortedAuto = sortFilesForDir(autoSiblings, dirRule);
-    const index = sortedAuto.findIndex((f) => f.logicalPath === filePath);
-    return evaluateFileDisplay({
-      inclusion,
-      parentRuleOn,
-      dirRule,
-      indexInSortedAutoFiles: index < 0 ? 0 : index,
-      autoFileCount: sortedAuto.length,
-      logicalPath: filePath,
-    });
-  }
-
-  private async walkDir(
-    ctx: TreeContextMetadata,
-    dirPath: string,
-    listRows: WorktreeListRow[],
-    displayBlocks: string[] | null,
-  ): Promise<void> {
-    const ruleState = this.resolveRuleState(dirPath, ctx);
-    listRows.push({
-      kind: "dir",
-      path: dirPath,
-      ruleState: ruleStateLabel(ruleState),
-      inclusionMode: "",
-      displayState: "",
-    });
-
-    const dirRule = ctx.dirRuleMap.get(dirPath) ?? null;
-
-    // DFS: child directories before sibling files (parent dir rule sorts both).
-    const subdirs = sortDirPaths(directChildDirs(dirPath, ctx.allDirs), dirRule);
-    for (const sub of subdirs) {
-      await this.walkDir(ctx, sub, listRows, displayBlocks);
-    }
-
-    const files = directChildFiles(dirPath, ctx.fileSet);
-    const sortedFiles = sortFilesForDir(
-      files.map((p) => ({
-        logicalPath: p,
-        mtimeMs: ctx.mtimeByPath.get(p) ?? 0,
-      })),
-      dirRule,
-    ).map((f) => f.logicalPath);
-
-    for (const filePath of sortedFiles) {
-      const inclusion = this.resolveInclusion(filePath, ctx);
-      const display = this.computeDisplay(filePath, dirPath, ctx);
-      listRows.push({
-        kind: "file",
-        path: filePath,
-        ruleState: "",
-        inclusionMode: inclusionModeLabel(inclusion),
-        displayState: displayStateLabel(display),
-      });
-      if (displayBlocks != null && display !== "hidden") {
-        let content = "";
-        // Lazy content read: only full/header display modes need file body.
-        if (display === "full" || display === "header") {
-          const physical = toPhysicalPath(this.scope, filePath);
-          const entry = await this.deps.vfs.findByPath(physical);
-          content = entry?.content ?? "";
-        }
-        displayBlocks.push(
-          renderFileBlock({
-            logicalPath: filePath,
-            mtimeMs: ctx.mtimeByPath.get(filePath) ?? 0,
-            display,
-            content,
-          }),
-        );
-      }
-    }
-  }
-}
-
-interface TreeContextMetadata {
-  readonly dirRuleMap: Map<string, WorktreeDirRule>;
-  readonly fileRuleMap: Map<
-    string,
-    import("@/domain/worktree/model/worktree-types.js").WorktreeFileRule
-  >;
-  readonly fileSet: Set<string>;
-  readonly mtimeByPath: Map<string, number>;
-  readonly allDirs: Set<string>;
 }
 
 function toLogicalPathFromPhysical(
