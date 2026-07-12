@@ -214,7 +214,7 @@ describe("worktree materialize", () => {
     });
 
     const { worktreeDisplay } = await wt.materializePersistBlock();
-    store.capture(project.id, session.id, worktreeDisplay);
+    store.capture(project.id, session.id, { worktreeDisplay });
     const block = store.getCapturedBlock(project.id, session.id);
     assert.ok(block != null && block.worktreeDisplay.length > 0);
     const display = await wt.renderDisplay();
