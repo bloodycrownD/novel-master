@@ -390,6 +390,7 @@ export const VfsFileManager = forwardRef<
     reloadVfsListOnly,
     showToast,
     runtime,
+    scope,
     useUserVfsTurn,
     sessionId,
   ]);
