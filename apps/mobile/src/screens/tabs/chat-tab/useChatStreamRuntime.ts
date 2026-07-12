@@ -19,6 +19,7 @@ import {
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
+import { shouldReloadTranscriptOnRunEvent } from '@novel-master/core/agent';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
 import {
   flushAgentStepUi,
@@ -38,6 +39,19 @@ import {
 
 const INGRESS_COALESCE_MS = 32;
 
+function shouldApplyTranscriptReload(
+  uiRunning: boolean,
+  freezeCount: number | null,
+): boolean {
+  if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {
+    return false;
+  }
+  if (freezeCount != null) {
+    return false;
+  }
+  return true;
+}
+
 export type UseChatStreamRuntimeParams = {
   sessionId: string | undefined;
   uiRunning: boolean;
@@ -46,6 +60,8 @@ export type UseChatStreamRuntimeParams = {
   transcriptWebRef: RefObject<ChatTranscriptWebViewHandle | null>;
   onMessagesChanged: FlushMessagesChanged;
   getMessageCount: () => number;
+  getUiRunning: () => boolean;
+  getTranscriptFreezeCount: () => number | null;
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   acceptRunEvent: (runId: string | undefined) => boolean;
   onRunStarted: (payload: AgentRunStartedPayload) => void;
@@ -61,6 +77,8 @@ export function useChatStreamRuntime({
   transcriptWebRef,
   onMessagesChanged,
   getMessageCount,
+  getUiRunning,
+  getTranscriptFreezeCount,
   onStepCommitted,
   acceptRunEvent,
   onRunStarted,
@@ -181,6 +199,10 @@ export function useChatStreamRuntime({
 
   const getMessageCountRef = useRef(getMessageCount);
   getMessageCountRef.current = getMessageCount;
+  const getUiRunningRef = useRef(getUiRunning);
+  getUiRunningRef.current = getUiRunning;
+  const getTranscriptFreezeCountRef = useRef(getTranscriptFreezeCount);
+  getTranscriptFreezeCountRef.current = getTranscriptFreezeCount;
   /** 本 run 内已成功 streamCommit 的消息 id，防止 step + RUN_FINISHED 双次提交。 */
   const committedTailIdsRef = useRef<Set<string>>(new Set());
 
@@ -297,6 +319,9 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        if (!getUiRunningRef.current()) {
+          return;
+        }
         handleIngressText(payload.text);
       },
     );
@@ -307,6 +332,9 @@ export function useChatStreamRuntime({
           return;
         }
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
+          return;
+        }
+        if (!getUiRunningRef.current()) {
           return;
         }
         handleIngressThinking(payload.text);
@@ -330,11 +358,19 @@ export function useChatStreamRuntime({
         if (!lifecycleRef.current.acceptRunEvent(payload.runId)) {
           return;
         }
+        const uiRunning = getUiRunningRef.current();
+        const freezeCount = getTranscriptFreezeCountRef.current();
         const cb = callbacksRef.current;
         if (payload.phase === 'tool_results') {
+          if (!shouldApplyTranscriptReload(uiRunning, freezeCount)) {
+            return;
+          }
           void Promise.resolve(
             cb.onMessagesChanged({ immediate: true }),
           ).catch(() => undefined);
+          return;
+        }
+        if (!shouldApplyTranscriptReload(uiRunning, freezeCount)) {
           return;
         }
         flushAgentStepUi(
@@ -357,14 +393,23 @@ export function useChatStreamRuntime({
           return;
         }
         decrementAgentActive();
+        const uiRunning = getUiRunningRef.current();
+        const freezeCount = getTranscriptFreezeCountRef.current();
         const cb = callbacksRef.current;
-        flushRunUi(
-          cb.onMessagesChanged,
-          handleStreamEndAfterReload,
-          getMessageCountRef.current(),
-        )
-          .then(() => lifecycleRef.current.onRunFinished?.(payload))
-          .catch(() => undefined);
+        const finishRun = () =>
+          lifecycleRef.current.onRunFinished?.(payload);
+        if (shouldApplyTranscriptReload(uiRunning, freezeCount)) {
+          flushRunUi(
+            cb.onMessagesChanged,
+            handleStreamEndAfterReload,
+            getMessageCountRef.current(),
+          )
+            .then(finishRun)
+            .catch(() => undefined);
+          return;
+        }
+        handleStreamReset();
+        finishRun();
       },
     );
     const subFailed = bus.subscribe(
@@ -377,14 +422,22 @@ export function useChatStreamRuntime({
           return;
         }
         decrementAgentActive();
+        const uiRunning = getUiRunningRef.current();
+        const freezeCount = getTranscriptFreezeCountRef.current();
         const cb = callbacksRef.current;
-        flushRunUi(
-          cb.onMessagesChanged,
-          handleStreamEndAfterReload,
-          getMessageCountRef.current(),
-        )
-          .then(() => lifecycleRef.current.onRunFailed?.(payload))
-          .catch(() => undefined);
+        const failRun = () => lifecycleRef.current.onRunFailed?.(payload);
+        if (shouldApplyTranscriptReload(uiRunning, freezeCount)) {
+          flushRunUi(
+            cb.onMessagesChanged,
+            handleStreamEndAfterReload,
+            getMessageCountRef.current(),
+          )
+            .then(failRun)
+            .catch(() => undefined);
+          return;
+        }
+        handleStreamReset();
+        failRun();
       },
     );
 
@@ -403,6 +456,7 @@ export function useChatStreamRuntime({
     handleIngressText,
     handleIngressThinking,
     handleStreamEndAfterReload,
+    handleStreamReset,
   ]);
 
   useEffect(() => {

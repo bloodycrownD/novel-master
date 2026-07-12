@@ -250,6 +250,10 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     [messages, scope.refreshChatTokenLabel],
   );
 
+  const abortUiRunWithFreeze = useCallback(() => {
+    lifecycle.abortUiRun(chatMessageCountRef.current);
+  }, [lifecycle]);
+
   const stream = useChatStreamRuntime({
     sessionId,
     uiRunning: lifecycle.uiRunning,
@@ -258,6 +262,8 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     transcriptWebRef,
     onMessagesChanged: handleMessagesChanged,
     getMessageCount: () => chatMessageCountRef.current,
+    getUiRunning: lifecycle.getUiRunning,
+    getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
     acceptRunEvent: lifecycle.acceptRunEvent,
     onRunStarted: lifecycle.onRunStarted,
     onRunFinished: lifecycle.onRunFinished,
@@ -383,7 +389,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       webMenuOpen,
       setWebMenuOpen,
       beginUiRun: lifecycle.beginUiRun,
-      abortUiRun: lifecycle.abortUiRun,
+      abortUiRun: abortUiRunWithFreeze,
       onLoadOlderMessages: () =>
         messages.loadOlderMessages().catch(() => undefined),
       onOpenFileEditor: scope.openFileEditor,
@@ -425,6 +431,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       runtime,
       setCurrentSession,
       closeMessageMenu,
+      abortUiRunWithFreeze,
     ],
   );
 

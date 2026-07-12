@@ -80,6 +80,8 @@ describe('useChatStreamRuntime', () => {
         transcriptWebRef: ref,
         onMessagesChanged,
         getMessageCount: () => messageCount,
+        getUiRunning: lifecycle.getUiRunning,
+        getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
         acceptRunEvent: lifecycle.acceptRunEvent,
         onRunStarted: lifecycle.onRunStarted,
         onRunFinished: lifecycle.onRunFinished,
