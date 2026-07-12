@@ -23,7 +23,7 @@ describe('E3 chat rollback restores VFS', () => {
     await chatTranscriptPage.sendComposerMessage('after-vfs-edit');
   });
 
-  it('restores workspace files to anchor snapshot', async () => {
+  it('plain user undo_send 回滚至发送前 prior（首条锚点清空工作区）', async () => {
     await chatTranscriptPage.longPressMessage(anchorMessageId);
     await chatTranscriptPage.tapMenuAction('rollback');
     await alertPage.acceptRollback();
@@ -31,8 +31,11 @@ describe('E3 chat rollback restores VFS', () => {
     const toast = await vfsPage.readToastMessage();
     expect(toast).toContain('回滚成功');
 
+    const idsAfter = await chatTranscriptPage.getMessageIds();
+    expect(idsAfter.length).toBe(0);
+
     await appPage.switchToWorkspacePanel();
-    await vfsPage.expectRowVisible('file-a.md');
+    await vfsPage.expectRowMissing('file-a.md');
     await vfsPage.expectRowMissing('file-b.md');
   });
 });

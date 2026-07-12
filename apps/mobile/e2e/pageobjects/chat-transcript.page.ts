@@ -87,6 +87,26 @@ export class ChatTranscriptPage {
     await browser.pause(1200);
   }
 
+  async setComposerText(text: string): Promise<void> {
+    await switchToNative();
+    const input = await $('~chat-composer-input');
+    await input.waitForDisplayed({timeout: 10000});
+    await input.setValue(text);
+    await browser.pause(300);
+  }
+
+  async getComposerText(): Promise<string> {
+    await switchToNative();
+    const input = await $('~chat-composer-input');
+    await input.waitForDisplayed({timeout: 10000});
+    return input.getText();
+  }
+
+  async expectComposerText(expected: string): Promise<void> {
+    const text = await this.getComposerText();
+    expect(text).toBe(expected);
+  }
+
   /** DOM sibling order inside one assistant bubble: thinking → body → tools. */
   async assertAssistantBlockOrder(messageId: string): Promise<void> {
     await this.openWebView();
