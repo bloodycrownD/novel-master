@@ -178,7 +178,8 @@ export function AgentList({onCreate}: Props) {
   };
 
   const handleDelete = async (agentId: string) => {
-    Alert.alert('删除 Agent', `确定删除 ${agentId}？`, [
+    const displayName = rows.find(r => r.id === agentId)?.name ?? agentId;
+    Alert.alert('删除 Agent', `删除 Agent「${displayName}」？`, [
       {text: '取消', style: 'cancel'},
       {
         text: '删除',

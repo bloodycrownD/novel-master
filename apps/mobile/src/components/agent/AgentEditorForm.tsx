@@ -143,6 +143,7 @@ export function AgentEditorForm(props: Props) {
   const [invalidConfig, setInvalidConfig] = useState<InvalidAgentConfig | null>(
     null,
   );
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [recovering, setRecovering] = useState(false);
   const [toolsMode, setToolsMode] = useState<ToolsMode>('default');
   const [toolsSelected, setToolsSelected] = useState<string[]>([]);
@@ -315,6 +316,7 @@ export function AgentEditorForm(props: Props) {
     setLoading(true);
     setLoadError(null);
     setInvalidConfig(null);
+    setDisplayName(null);
     try {
       const raw = await runtime.agentRegistry.getRawWire(agentId);
       if (raw === null) {
@@ -323,6 +325,7 @@ export function AgentEditorForm(props: Props) {
       }
       const health = assessAgentDefinitionWire(raw);
       if (health.status === 'invalid') {
+        setDisplayName(agentDisplayNameFromWire(raw, agentId));
         setInvalidConfig({ code: health.code, message: health.message });
         return;
       }
@@ -346,7 +349,7 @@ export function AgentEditorForm(props: Props) {
   }, [loadAgent, showToast]);
 
   const handleDeleteBrokenAgent = useCallback(() => {
-    Alert.alert('删除 Agent', `确定删除 ${agentId}？`, [
+    Alert.alert('删除 Agent', `删除 Agent「${displayName ?? agentId}」？`, [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
@@ -368,7 +371,7 @@ export function AgentEditorForm(props: Props) {
         },
       },
     ]);
-  }, [agentId, navigation, runtime, showToast]);
+  }, [agentId, displayName, navigation, runtime, showToast]);
 
   const handleOverwriteDefault = useCallback(() => {
     const preservedName = isProjectMode
