@@ -103,8 +103,13 @@ export class ChatTranscriptPage {
   }
 
   async expectComposerText(expected: string): Promise<void> {
-    const text = await this.getComposerText();
-    expect(text).toBe(expected);
+    await withRetry(
+      async () => {
+        const text = await this.getComposerText();
+        expect(text).toBe(expected);
+      },
+      {attempts: 3, delayMs: 700, label: `expectComposerText(${expected})`},
+    );
   }
 
   /** DOM sibling order inside one assistant bubble: thinking → body → tools. */
