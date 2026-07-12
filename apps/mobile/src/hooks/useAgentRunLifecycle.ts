@@ -19,8 +19,12 @@ export type AgentRunLifecycle = {
   readonly activeRunId: string | null;
   /** 发 run 前：uiRunning=true 并 incrementAgentActive。 */
   beginUiRun(): void;
-  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除。 */
-  abortUiRun(): void;
+  /** 终止：uiRunning=false + onStreamReset + 可选 freeze 快照；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除。 */
+  abortUiRun(freezeAt?: number): void;
+  /** 同步读 uiRunning（bus 回调须用此，禁止读 React state）。 */
+  getUiRunning(): boolean;
+  /** 同步读 abort 时快照的消息条数；非 null 时禁止增列表 reload。 */
+  getTranscriptFreezeCount(): number | null;
   /** runId 不匹配则丢弃。 */
   acceptRunEvent(runId: string | undefined): boolean;
   /** 设 activeRunId=runId、uiRunning=true（幂等）；不 increment agentActive。 */
@@ -42,6 +46,7 @@ export function useAgentRunLifecycle({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const uiRunningRef = useRef(false);
+  const transcriptFreezeCountRef = useRef<number | null>(null);
   const onStreamResetRef = useRef(onStreamReset);
   onStreamResetRef.current = onStreamReset;
 
@@ -60,10 +65,23 @@ export function useAgentRunLifecycle({
     incrementAgentActive();
   }, [setUiRunningSynced]);
 
-  const abortUiRun = useCallback(() => {
-    setUiRunningSynced(false);
-    onStreamResetRef.current?.();
-  }, [setUiRunningSynced]);
+  const getUiRunning = useCallback((): boolean => uiRunningRef.current, []);
+
+  const getTranscriptFreezeCount = useCallback(
+    (): number | null => transcriptFreezeCountRef.current,
+    [],
+  );
+
+  const abortUiRun = useCallback(
+    (freezeAt?: number) => {
+      if (freezeAt != null) {
+        transcriptFreezeCountRef.current = freezeAt;
+      }
+      setUiRunningSynced(false);
+      onStreamResetRef.current?.();
+    },
+    [setUiRunningSynced],
+  );
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
     return shouldAcceptRunEvent(activeRunIdRef.current, runId);
@@ -88,6 +106,7 @@ export function useAgentRunLifecycle({
 
   const onRunFinished = useCallback(
     (_payload: AgentRunFinishedPayload) => {
+      transcriptFreezeCountRef.current = null;
       syncActiveRunId(null);
       setUiRunningSynced(false);
     },
@@ -96,6 +115,7 @@ export function useAgentRunLifecycle({
 
   const onRunFailed = useCallback(
     (_payload: AgentRunFailedPayload) => {
+      transcriptFreezeCountRef.current = null;
       syncActiveRunId(null);
       setUiRunningSynced(false);
     },
@@ -103,6 +123,7 @@ export function useAgentRunLifecycle({
   );
 
   const resetUiForSessionChange = useCallback(() => {
+    transcriptFreezeCountRef.current = null;
     setUiRunningSynced(false);
     syncActiveRunId(null);
     onStreamResetRef.current?.();
@@ -113,6 +134,8 @@ export function useAgentRunLifecycle({
     activeRunId,
     beginUiRun,
     abortUiRun,
+    getUiRunning,
+    getTranscriptFreezeCount,
     acceptRunEvent,
     onRunStarted,
     onRunFinished,
