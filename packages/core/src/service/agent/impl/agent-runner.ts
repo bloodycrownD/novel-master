@@ -274,6 +274,11 @@ export class DefaultAgentRunner implements AgentRunner {
           throw e;
         }
 
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
         stepsExecuted += 1;
 
         let assistantMessage: ChatMessage | undefined;
@@ -290,11 +295,6 @@ export class DefaultAgentRunner implements AgentRunner {
               phase: "assistant",
             });
           }
-        }
-
-        if (signal?.aborted) {
-          stopReason = "cancelled";
-          break;
         }
 
         const toolUses = result.blocks.filter(
