@@ -73,6 +73,7 @@ export type {
 export {
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
+  shouldReloadTranscriptOnRunEvent,
 } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export {
   assembleAgentRunnerDeps,

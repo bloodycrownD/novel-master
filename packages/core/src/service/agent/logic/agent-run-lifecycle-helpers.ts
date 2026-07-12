@@ -23,3 +23,8 @@ export function shouldIgnoreStaleRunStarted(
 ): boolean {
   return !uiRunning;
 }
+
+/** STEP/FINISHED 是否允许触发增列表的 transcript reload。 */
+export function shouldReloadTranscriptOnRunEvent(uiRunning: boolean): boolean {
+  return uiRunning;
+}
