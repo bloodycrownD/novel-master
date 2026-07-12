@@ -4,6 +4,7 @@
 import {
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
+  shouldReloadTranscriptOnRunEvent,
 } from "@novel-master/core/agent";
 import { useCallback, useRef, useState } from "react";
 import type {
@@ -14,13 +15,31 @@ import type {
 
 export { shouldAcceptRunEvent, shouldIgnoreStaleRunStarted };
 
+/** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险）。 */
+export function shouldApplyTranscriptReload(
+  uiRunning: boolean,
+  freezeCount: number | null,
+): boolean {
+  if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {
+    return false;
+  }
+  if (freezeCount != null) {
+    return false;
+  }
+  return true;
+}
+
 export type AgentRunLifecycle = {
   readonly uiRunning: boolean;
   readonly activeRunId: string | null;
   /** 发 run 前：uiRunning=true；Desktop 不 increment agentActive */
   beginUiRun(): void;
-  /** 终止：uiRunning=false + onStreamReset；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除 */
-  abortUiRun(): void;
+  /** 终止：uiRunning=false + onStreamReset；可选 freezeAt 快照消息数；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除 */
+  abortUiRun(freezeAt?: number): void;
+  /** 同步读 uiRunningRef（bus 回调守卫用，禁止读 React state）。 */
+  getUiRunning(): boolean;
+  /** 同步读 abort 快照；非 null 时禁止一切增列表 reload。 */
+  getTranscriptFreezeCount(): number | null;
   /** runId 不匹配则丢弃；匹配则通过 */
   acceptRunEvent(runId: string | undefined): boolean;
   /** 仅设 activeRunId=runId、uiRunning=true（幂等）；不 increment agentActive */
@@ -38,6 +57,7 @@ export function useAgentRunLifecycle(
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
   const uiRunningRef = useRef(false);
+  const transcriptFreezeCountRef = useRef<number | null>(null);
 
   const syncActiveRunId = useCallback((runId: string | null) => {
     activeRunIdRef.current = runId;
@@ -51,13 +71,28 @@ export function useAgentRunLifecycle(
 
   const beginUiRun = useCallback(() => {
     syncActiveRunId(null);
+    transcriptFreezeCountRef.current = null;
     setUiRunningSynced(true);
   }, [syncActiveRunId, setUiRunningSynced]);
 
-  const abortUiRun = useCallback(() => {
-    setUiRunningSynced(false);
-    onStreamReset?.();
-  }, [onStreamReset, setUiRunningSynced]);
+  const abortUiRun = useCallback(
+    (freezeAt?: number) => {
+      setUiRunningSynced(false);
+      if (freezeAt != null) {
+        transcriptFreezeCountRef.current = freezeAt;
+      }
+      onStreamReset?.();
+    },
+    [onStreamReset, setUiRunningSynced],
+  );
+
+  const getUiRunning = useCallback((): boolean => {
+    return uiRunningRef.current;
+  }, []);
+
+  const getTranscriptFreezeCount = useCallback((): number | null => {
+    return transcriptFreezeCountRef.current;
+  }, []);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
     return shouldAcceptRunEvent(activeRunIdRef.current, runId);
@@ -82,6 +117,7 @@ export function useAgentRunLifecycle(
       }
       syncActiveRunId(null);
       setUiRunningSynced(false);
+      transcriptFreezeCountRef.current = null;
       return true;
     },
     [syncActiveRunId, setUiRunningSynced],
@@ -94,6 +130,7 @@ export function useAgentRunLifecycle(
       }
       syncActiveRunId(null);
       setUiRunningSynced(false);
+      transcriptFreezeCountRef.current = null;
       return true;
     },
     [syncActiveRunId, setUiRunningSynced],
@@ -102,6 +139,7 @@ export function useAgentRunLifecycle(
   const resetUiForSessionChange = useCallback(() => {
     setUiRunningSynced(false);
     syncActiveRunId(null);
+    transcriptFreezeCountRef.current = null;
   }, [syncActiveRunId, setUiRunningSynced]);
 
   return {
@@ -109,6 +147,8 @@ export function useAgentRunLifecycle(
     activeRunId,
     beginUiRun,
     abortUiRun,
+    getUiRunning,
+    getTranscriptFreezeCount,
     acceptRunEvent,
     onRunStarted,
     onRunFinished,
