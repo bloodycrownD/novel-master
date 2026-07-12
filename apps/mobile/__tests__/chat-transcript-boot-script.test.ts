@@ -16,7 +16,7 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('touch.clientX');
     expect(script).toContain('querySelector(\'.bubble\')');
     expect(script).toContain('Long-press finger point');
-    expect(script).toContain('menu.items.length <= 6');
+    expect(script).toContain('menu.items.length <= 5');
     expect(script).toContain('measuredHeight');
     expect(script).toContain('onMessagePointerMove');
     expect(script).toContain('shouldCancelLongPressForMove');
