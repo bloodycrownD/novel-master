@@ -267,13 +267,15 @@ describe('useChatStreamRuntime', () => {
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
   });
 
-  it('abort 后保留 activeRunId，cancelled RUN_FINISHED 仍 flushRunUi', async () => {
-    const {api, startRun} = mountRuntime({beginUiRun: true});
+  it('T-AC2-4：abort 后 cancelled RUN_FINISHED 清 lifecycle 但不 flushRunUi', async () => {
+    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
     startRun();
+    setMessageCount(2);
     act(() => {
-      api.lifecycle!.abortUiRun();
+      api.lifecycle!.abortUiRun(2);
     });
     expect(api.lifecycle!.uiRunning).toBe(false);
+    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(2);
     expect(api.lifecycle!.activeRunId).toBe(RUN_ID);
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
@@ -286,7 +288,121 @@ describe('useChatStreamRuntime', () => {
     });
     expect(api.lifecycle!.activeRunId).toBe(null);
     expect(api.lifecycle!.uiRunning).toBe(false);
-    expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
+    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(null);
+    expect(mockFlushRunUi).not.toHaveBeenCalled();
+  });
+
+  it('T-AC2-3：abort 后迟到 STEP_COMMITTED(assistant) 不触发 flushAgentStepUi', async () => {
+    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
+    startRun();
+    setMessageCount(1);
+    act(() => {
+      api.lifecycle!.abortUiRun(1);
+    });
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    expect(mockFlushAgentStepUi).not.toHaveBeenCalled();
+  });
+
+  it('T-AC2-9：abort 后迟到 STEP_COMMITTED(tool_results) 不触发 immediate reload', async () => {
+    const {api, startRun, onMessagesChanged, setMessageCount} = mountRuntime({
+      beginUiRun: true,
+    });
+    startRun();
+    setMessageCount(1);
+    act(() => {
+      api.lifecycle!.abortUiRun(1);
+    });
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'tool_results',
+      });
+      await Promise.resolve();
+    });
+    expect(onMessagesChanged).not.toHaveBeenCalled();
+  });
+
+  it('T-AC2-8：abort 后迟到 text/thinking delta 不增长 overlay', () => {
+    const {api, startRun, setMessageCount} = mountRuntime({
+      useWebview: false,
+      beginUiRun: true,
+    });
+    startRun();
+    setMessageCount(0);
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'before',
+      });
+      jest.advanceTimersByTime(96);
+    });
+    expect(api.stream!.streamingText).toBe('before');
+
+    act(() => {
+      api.lifecycle!.abortUiRun(1);
+    });
+
+    act(() => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_TEXT_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: '-late',
+      });
+      mockRuntime.eventBus.publish(EVENT_AGENT_STREAM_THINKING_DELTA, {
+        sessionId: 's1',
+        runId: RUN_ID,
+        text: 'think-late',
+      });
+      jest.advanceTimersByTime(96);
+    });
+    expect(api.stream!.streamingText).toBe('before');
+    expect(api.stream!.streamingThinking).toBe('');
+  });
+
+  it('T-AC2-10：resetUiForSessionChange 解除 freeze 后 STEP 可正常 reload', async () => {
+    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
+    startRun();
+    setMessageCount(2);
+    act(() => {
+      api.lifecycle!.abortUiRun(2);
+    });
+    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(2);
+
+    act(() => {
+      api.lifecycle!.resetUiForSessionChange();
+    });
+    expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(null);
+
+    act(() => {
+      api.lifecycle!.beginUiRun();
+      mockRuntime.eventBus.publish(EVENT_AGENT_RUN_STARTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+      });
+    });
+    setMessageCount(3);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    expect(mockFlushAgentStepUi).toHaveBeenCalledTimes(1);
   });
 
   it('STEP_COMMITTED(assistant) 触发 flushAgentStepUi 并尝试 commit', async () => {
