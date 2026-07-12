@@ -5,10 +5,15 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import { isPlainUserUndoSendEligible } from "@/domain/chat/logic/editable-text-from-message.js";
+import type { RollbackMode } from "@/domain/chat/logic/rollback-confirm-copy.js";
 import { listSessionFileHeads } from "@/domain/message-checkpoint/logic/list-session-files.js";
 import { findMissingRevisionPointers } from "@/domain/message-checkpoint/logic/detect-missing-revisions.js";
 import { resolveRollbackAnchorMessage } from "@/domain/message-checkpoint/logic/resolve-rollback-anchor.js";
-import { resolveRollbackTargetTree } from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
+import {
+  resolvePriorRollbackTargetTree,
+  resolveRollbackTargetTree,
+} from "@/domain/message-checkpoint/logic/resolve-target-tree.js";
 import {
   restorePathToRevision,
   restorePathToRevisionWithBackfill,
@@ -49,9 +54,11 @@ export interface MessageRollbackServiceDeps {
   readonly checkpoints: MessageCheckpointRepository;
 }
 
-/** 回滚计划：anchor、tail、待 reconcile 路径与目标树。 */
+/** 回滚计划：模式、anchor、tail、待 reconcile 路径与目标树。 */
 type RollbackPlan = {
+  mode: RollbackMode;
   anchor: ChatMessage;
+  truncateAfterSeq: number;
   tailMessageIds: string[];
   pathsToReconcile: Set<string>;
   targetTree: Map<string, number>;
@@ -133,7 +140,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       await truncateTailInTransaction(createTruncateTailDepsFromTx(tx), {
         projectId: plan.projectId,
         sessionId: plan.sessionId,
-        afterSeq: plan.anchor.seq,
+        afterSeq: plan.truncateAfterSeq,
         sweepRevisions: true,
       });
     });
@@ -155,19 +162,43 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     const allMessages = await this.deps.messages.listBySession(sessionId);
     const anchor =
       resolveRollbackAnchorMessage(allMessages, anchorMessageId) ?? clicked;
-    const tail = allMessages.filter((m) => m.seq > anchor.seq);
+
+    const mode: RollbackMode = isPlainUserUndoSendEligible(anchor)
+      ? "undo_send"
+      : "rewind";
+    const truncateAfterSeq =
+      mode === "undo_send" ? anchor.seq - 1 : anchor.seq;
+
+    const tail =
+      mode === "undo_send"
+        ? allMessages.filter((m) => m.seq >= anchor.seq)
+        : allMessages.filter((m) => m.seq > anchor.seq);
     const tailMessageIds = tail.map((m) => m.id);
 
-    const directTargetTree = await this.deps.checkpoints.loadFileTree(
-      sessionId,
-      anchor.id,
-    );
-    const targetTree = await resolveRollbackTargetTree(
-      this.deps.checkpoints,
-      sessionId,
-      anchor.id,
-      anchor.seq,
-    );
+    let targetTree: Map<string, number>;
+    let hasDirectTargetTree: boolean;
+
+    if (mode === "undo_send") {
+      targetTree = await resolvePriorRollbackTargetTree(
+        this.deps.checkpoints,
+        sessionId,
+        anchor.seq - 1,
+      );
+      // undo_send 始终按 prior 基线 diff 当前工作区（空树 = 删光会话文件）
+      hasDirectTargetTree = true;
+    } else {
+      const directTargetTree = await this.deps.checkpoints.loadFileTree(
+        sessionId,
+        anchor.id,
+      );
+      targetTree = await resolveRollbackTargetTree(
+        this.deps.checkpoints,
+        sessionId,
+        anchor.id,
+        anchor.seq,
+      );
+      hasDirectTargetTree = directTargetTree != null;
+    }
 
     const scope: VfsScope = { kind: "session", projectId, sessionId };
     const tailPointers = await this.deps.checkpoints.listFilePointersForMessages(
@@ -180,7 +211,7 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
       ...tailLogicalPaths,
       ...targetTree.keys(),
     ]);
-    if (directTargetTree != null) {
+    if (hasDirectTargetTree) {
       const currentFiles = await listSessionFileHeads(
         this.deps.entries,
         projectId,
@@ -194,6 +225,8 @@ export class DefaultMessageRollbackService implements MessageRollbackService {
     }
 
     return {
+      mode,
+      truncateAfterSeq,
       anchor,
       tailMessageIds,
       pathsToReconcile,

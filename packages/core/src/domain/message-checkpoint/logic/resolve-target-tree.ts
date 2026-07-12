@@ -34,3 +34,25 @@ export async function resolveRollbackTargetTree(
   const prior = await checkpoints.loadFileTree(sessionId, priorMessageId);
   return prior ?? new Map();
 }
+
+/**
+ * 加载 `maxSeq` 及之前最近 checkpoint 的文件树（Undo Send prior-only 路径）。
+ *
+ * @remarks 不读取 anchor 自身 checkpoint；无 prior 时返回空树（会话基线）。
+ */
+export async function resolvePriorRollbackTargetTree(
+  checkpoints: MessageCheckpointRepository,
+  sessionId: string,
+  maxSeq: number,
+): Promise<Map<string, number>> {
+  const priorMessageId = await checkpoints.findCheckpointMessageIdAtOrBefore(
+    sessionId,
+    maxSeq,
+  );
+  if (priorMessageId == null) {
+    return new Map();
+  }
+
+  const prior = await checkpoints.loadFileTree(sessionId, priorMessageId);
+  return prior ?? new Map();
+}

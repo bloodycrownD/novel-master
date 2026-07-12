@@ -174,6 +174,7 @@ export function readRollbackRevisionBackfillMissingPaths(
  */
 export function formatRollbackRevisionBackfillAlertMessage(
   missingLogicalPaths: readonly string[],
+  mode?: import("@/domain/chat/logic/rollback-confirm-copy.js").RollbackMode,
 ): string {
   const displayNames = missingLogicalPaths.map((logicalPath) =>
     logicalPath.startsWith("/") ? logicalPath.slice(1) : logicalPath,
@@ -182,7 +183,11 @@ export function formatRollbackRevisionBackfillAlertMessage(
     displayNames.length > 0
       ? displayNames.map((name) => `· ${name}`).join("\n")
       : "· （未知文件）";
-  return `快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n${fileLines}\n\n其余文件将正常回滚至锚点。`;
+  const tailLine =
+    mode === "undo_send"
+      ? "其余文件将正常回滚至发送前状态。"
+      : "其余文件将正常回滚至锚点。";
+  return `快照丢失，将使用最新内容修复。\n\n丢失快照的文件：\n${fileLines}\n\n${tailLine}`;
 }
 
 /**

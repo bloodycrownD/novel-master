@@ -96,6 +96,17 @@ export {
   hasToolResult,
   isPlainUserText,
 } from '../domain/chat/logic/message-content-helpers.js';
+export {
+  extractEditableTextFromMessage,
+  isPlainUserUndoSendEligible,
+} from '../domain/chat/logic/editable-text-from-message.js';
+export {
+  resolveRollbackConfirmMessage,
+} from '../domain/chat/logic/rollback-confirm-copy.js';
+export type {
+  RollbackConfirmKind,
+  RollbackMode,
+} from '../domain/chat/logic/rollback-confirm-copy.js';
 export type {
   MessageVisibilityBatchMode,
   TranscriptSelectableRole,
