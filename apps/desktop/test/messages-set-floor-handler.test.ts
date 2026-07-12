@@ -111,8 +111,8 @@ describe('handleMessagesSetFloor', () => {
     const sessionId = await createSession('sf18');
     const rt = await getDesktopRuntime();
     await appendMessage(sessionId, 'user', 'u1');
-    const anchorId = await appendMessage(sessionId, 'assistant', 'a1');
-    await appendMessage(sessionId, 'user', 'u2');
+    await appendMessage(sessionId, 'assistant', 'a1');
+    const anchorId = await appendMessage(sessionId, 'user', 'u2');
 
     const first = await handleMessagesSetFloor({
       projectId,

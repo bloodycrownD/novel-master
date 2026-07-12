@@ -22,7 +22,7 @@ function msg(
 }
 
 describe('isSetFloorEligibleMessage', () => {
-  it('allows user and assistant roles', () => {
+  it('allows user role only', () => {
     expect(isSetFloorEligibleMessage(msg([{ type: 'text', text: 'hi' }]))).toBe(
       true,
     );
@@ -30,7 +30,7 @@ describe('isSetFloorEligibleMessage', () => {
       isSetFloorEligibleMessage(
         msg([{ type: 'text', text: 'reply' }], 'assistant'),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it('rejects system role', () => {
@@ -48,7 +48,7 @@ describe('buildMessageActionItems', () => {
     expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
   });
 
-  it('includes set-floor for assistant messages with text and tool_use', () => {
+  it('excludes set-floor for assistant messages with text and tool_use', () => {
     const actions = buildMessageActionItems(
       msg(
         [
@@ -58,17 +58,17 @@ describe('buildMessageActionItems', () => {
         'assistant',
       ),
     ).map(i => i.action);
-    expect(actions).toEqual(['edit', 'copy', 'set-floor', 'fork', 'rollback']);
+    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
   });
 
-  it('includes set-floor when message has only tool_use blocks', () => {
+  it('excludes set-floor when assistant has only tool_use blocks', () => {
     const actions = buildMessageActionItems(
       msg(
         [{ type: 'tool_use', id: 't1', name: 'vfs.read', input: {} }],
         'assistant',
       ),
     ).map(i => i.action);
-    expect(actions).toEqual(['copy', 'set-floor', 'fork', 'rollback']);
+    expect(actions).toEqual(['copy', 'fork', 'rollback']);
   });
 
   it('hidden 消息含置位、无 rollback', () => {

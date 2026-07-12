@@ -23,7 +23,7 @@ function buildWebViewMenuActions(
   items.push('copy');
   const showSetFloor =
     row.kind === 'message' &&
-    (row.role === 'user' || row.role === 'assistant') &&
+    row.role === 'user' &&
     !hitEl?.closest?.('.tool-card, .tool-group-item');
   if (showSetFloor) items.push('set-floor');
   items.push('fork');
@@ -68,5 +68,15 @@ describe('WebView buildMenuItems set-floor eligibility', () => {
       text: 'hello',
     });
     expect(actions).toContain('set-floor');
+  });
+
+  it('assistant message 行不含 set-floor', () => {
+    const actions = buildWebViewMenuActions({
+      kind: 'message',
+      role: 'assistant',
+      text: 'reply',
+    });
+    expect(actions).not.toContain('set-floor');
+    expect(actions).toEqual(['edit', 'copy', 'fork', 'rollback']);
   });
 });
