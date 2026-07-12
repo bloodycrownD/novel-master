@@ -38,6 +38,7 @@ import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from './message-edit';
+import { resolveComposerTextAfterRollbackSuccess } from './rollback-composer';
 import { MessageEditModal } from './MessageEditModal';
 import { flushAgentStepUi } from './flush-run-ui';
 import { MessageList } from './MessageList';
@@ -425,9 +426,13 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
-      if (rollbackMode === 'undo_send' && restoreText) {
-        setComposerText(restoreText);
-      }
+      setComposerText(prev =>
+        resolveComposerTextAfterRollbackSuccess(
+          prev,
+          rollbackMode,
+          restoreText,
+        ),
+      );
       showToast(
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
