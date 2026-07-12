@@ -5,22 +5,15 @@ import {
   type ChatMessage,
   type ContentBlock,
   type MessageContent,
+  extractEditableTextFromMessage,
 } from '@novel-master/core/chat';
+
+export { extractEditableTextFromMessage as editableTextFromMessage };
 
 export interface MessageActionMenuItem {
   readonly label: string;
   readonly action: string;
   readonly danger?: boolean;
-}
-
-/** Extracts editable body text (text blocks only; thinking / tool_use excluded). */
-export function editableTextFromMessage(message: ChatMessage): string | null {
-  const blocks = message.content.blocks ?? [];
-  const parts = blocks
-    .filter((b): b is Extract<typeof b, { type: 'text' }> => b.type === 'text')
-    .map(b => b.text.trim())
-    .filter(Boolean);
-  return parts.length > 0 ? parts.join('\n\n') : null;
 }
 
 /**

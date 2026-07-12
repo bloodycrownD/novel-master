@@ -65,6 +65,10 @@ type Props = {
   /** 末条为 plain user 文本时禁用输入。 */
 
   lastMessageIsPlainUserText: boolean;
+
+  /** undo_send 回滚成功后递增，触发从 draft 刷新输入框。 */
+
+  draftRestoreToken?: number;
 };
 
 export function ChatComposer({
@@ -89,6 +93,8 @@ export function ChatComposer({
   lastMessageHasToolResult,
 
   lastMessageIsPlainUserText,
+
+  draftRestoreToken,
 }: Props) {
   const { tokens } = useTheme();
 
@@ -117,7 +123,7 @@ export function ChatComposer({
 
   useEffect(() => {
     setText(readChatComposerDraft(sessionId));
-  }, [sessionId]);
+  }, [sessionId, draftRestoreToken]);
 
   const executeRun = useCallback(
     async (content: string, allowResumeWithoutInput: boolean) => {

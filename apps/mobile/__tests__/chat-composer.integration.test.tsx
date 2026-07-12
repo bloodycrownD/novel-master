@@ -65,11 +65,16 @@ import {
   setMobileAgentActive,
 } from '../src/runtime/agent-activity';
 import {ThemeProvider} from '../src/theme/ThemeProvider';
+import {
+  readChatComposerDraft,
+  writeChatComposerDraft,
+} from '../src/storage/chat-composer-draft';
 
 function Harness(props: {
   canResumeWithoutInput: boolean;
   lastMessageHasToolResult?: boolean;
   lastMessageIsPlainUserText?: boolean;
+  draftRestoreToken?: number;
 }) {
   const lifecycle = useAgentRunLifecycle();
   return (
@@ -86,6 +91,7 @@ function Harness(props: {
         canResumeWithoutInput={props.canResumeWithoutInput}
         lastMessageHasToolResult={props.lastMessageHasToolResult ?? false}
         lastMessageIsPlainUserText={props.lastMessageIsPlainUserText ?? false}
+        draftRestoreToken={props.draftRestoreToken}
       />
     </ThemeProvider>
   );
@@ -184,6 +190,31 @@ describe('ChatComposer integration', () => {
       sendBtn.props.onPress();
     });
     expect(isMobileAgentActive()).toBe(false);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('draftRestoreToken 变更时从 draft 刷新输入', async () => {
+    writeChatComposerDraft('s', 'restored text');
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <Harness canResumeWithoutInput={false} draftRestoreToken={0} />,
+      );
+    });
+    const input = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.testID === 'chat-composer-input',
+    );
+    expect(input.props.value).toBe('restored text');
+
+    writeChatComposerDraft('s', 'after rollback');
+    await act(async () => {
+      tree!.update(
+        <Harness canResumeWithoutInput={false} draftRestoreToken={1} />,
+      );
+    });
+    expect(input.props.value).toBe('after rollback');
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

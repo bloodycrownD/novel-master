@@ -4,7 +4,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
-import { type ChatMessage } from '@novel-master/core/chat';
+import {
+  type ChatMessage,
+  isPlainUserUndoSendEligible,
+  resolveRollbackConfirmMessage,
+} from '@novel-master/core/chat';
 
 import { EVENT_SESSION_COMPACTION_REQUESTED } from '@novel-master/core/events';
 import { formatError } from '@/errors/format-error';
@@ -18,11 +22,11 @@ import {
   findLastVisibleMessage,
 } from '@/components/chat/composer-send-state';
 import {
-  formatRollbackRevisionBackfillAlertMessage,
   isRollbackRevisionBackfillRequiredError,
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
+import { writeChatComposerDraft } from '@/storage/chat-composer-draft';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
@@ -60,6 +64,7 @@ export function useChatTabMessages({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingMoreMessages, setLoadingMoreMessages] = useState(false);
+  const [draftRestoreToken, setDraftRestoreToken] = useState(0);
 
   const composerSendState = deriveComposerSendState(
     findLastVisibleMessage(chatMessages),
@@ -251,6 +256,8 @@ export function useChatTabMessages({
     persistSessionViewCache,
     handleMessagesChanged,
     hydrateFromSessionCache,
+    draftRestoreToken,
+    setDraftRestoreToken,
   };
 }
 
@@ -293,7 +300,7 @@ export function useChatTabMessageActions({
   setConversationPanel,
   setMessageEditPrompt,
 }: UseChatTabMessageActionsParams) {
-  const { chatMessages, reloadMessages } = messages;
+  const { chatMessages, reloadMessages, setDraftRestoreToken } = messages;
 
   const handleCompactSession = useCallback(() => {
     if (agentRunning) {
@@ -389,6 +396,22 @@ export function useChatTabMessageActions({
         return;
       }
 
+      const target = chatMessages.find(m => m.id === messageId);
+      if (target == null) {
+        showToast(toastMessage('回滚失败', '消息不存在'));
+        return;
+      }
+
+      const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
+      const restoreText = editableTextFromMessage(target);
+
+      const applyComposerRestore = () => {
+        if (mode === 'undo_send' && restoreText != null) {
+          writeChatComposerDraft(sessionId, restoreText);
+          setDraftRestoreToken(t => t + 1);
+        }
+      };
+
       const runRollback = async (
         targetMessageId: string,
         options?: RollbackOptions,
@@ -402,6 +425,7 @@ export function useChatTabMessageActions({
           );
           resetStreamingDisplay();
           await reloadMessages(true);
+          applyComposerRestore();
           showToast(
             options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
           );
@@ -415,7 +439,9 @@ export function useChatTabMessageActions({
               readRollbackRevisionBackfillMissingPaths(error);
             Alert.alert(
               '快照丢失',
-              formatRollbackRevisionBackfillAlertMessage(missingPaths),
+              resolveRollbackConfirmMessage(mode, 'backfill', {
+                missingPaths,
+              }),
               [
                 { text: '取消', style: 'cancel' },
                 {
@@ -440,7 +466,7 @@ export function useChatTabMessageActions({
             const errorMessage = formatError(error);
             Alert.alert(
               '无法恢复工作区',
-              `${errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`,
+              `${errorMessage}\n\n${resolveRollbackConfirmMessage(mode, 'degraded')}`,
               [
                 { text: '取消', style: 'cancel' },
                 {
@@ -464,7 +490,7 @@ export function useChatTabMessageActions({
 
       Alert.alert(
         '回滚到此消息',
-        '将删除此消息之后的对话，并撤销相关文件修改。是否继续？',
+        resolveRollbackConfirmMessage(mode, 'primary'),
         [
           { text: '取消', style: 'cancel' },
           {
@@ -483,10 +509,12 @@ export function useChatTabMessageActions({
       sessionId,
       projectId,
       agentRunning,
+      chatMessages,
       runtime,
       reloadMessages,
       resetStreamingDisplay,
       showToast,
+      setDraftRestoreToken,
     ],
   );
 

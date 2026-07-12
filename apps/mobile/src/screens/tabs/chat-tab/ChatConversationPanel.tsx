@@ -62,6 +62,7 @@ export function ChatConversationPanel({
     canResumeWithoutInput,
     lastMessageHasToolResult,
     lastMessageIsPlainUserText,
+    draftRestoreToken,
     vfsRefreshKey,
     sessionVfs,
     sessionWorktree,
@@ -222,6 +223,7 @@ export function ChatConversationPanel({
               canResumeWithoutInput={canResumeWithoutInput}
               lastMessageHasToolResult={lastMessageHasToolResult}
               lastMessageIsPlainUserText={lastMessageIsPlainUserText}
+              draftRestoreToken={draftRestoreToken}
             />
           </View>
           {sessionVfs && sessionWorktree ? (

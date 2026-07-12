@@ -80,6 +80,7 @@ export type ChatTabContextValue = {
   readonly canResumeWithoutInput: boolean;
   readonly lastMessageHasToolResult: boolean;
   readonly lastMessageIsPlainUserText: boolean;
+  readonly draftRestoreToken: number;
   readonly sessionVfs: VfsService | null;
   readonly sessionWorktree: WorktreeService | null;
   readonly vfsRefreshKey: number;
@@ -360,6 +361,7 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       canResumeWithoutInput: messages.canResumeWithoutInput,
       lastMessageHasToolResult: messages.lastMessageHasToolResult,
       lastMessageIsPlainUserText: messages.lastMessageIsPlainUserText,
+      draftRestoreToken: messages.draftRestoreToken,
       sessionVfs: scope.sessionVfs,
       sessionWorktree: scope.sessionWorktree,
       vfsRefreshKey: scope.vfsRefreshKey,
