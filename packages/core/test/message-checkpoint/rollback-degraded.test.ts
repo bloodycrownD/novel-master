@@ -227,4 +227,91 @@ describe("MessageRollbackService (degraded fallback)", () => {
     assert.equal(isRollbackVfsDegradableError(null), false);
     assert.equal(isRollbackVfsDegradableError(undefined), false);
   });
+
+  it("DF-U1: undo_send + skipVfsReconcile 删除锚点且 VFS 不变", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await svfs.write("/keep.md", "stable", { versionCheck: false });
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("anchor"));
+    await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "reply" }],
+    });
+    await svfs.write("/keep.md", "mutated", { versionCheck: false });
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+      skipVfsReconcile: true,
+    });
+
+    assert.equal((await svfs.read("/keep.md")).content, "mutated");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 0);
+  });
+
+  it("DF-U2: undo_send + revisionHeadBackfill 成功含锚点删除并对齐 prior VFS", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const svfs = ctx.sessionVfs(project.id, session.id);
+
+    await svfs.write("/state.md", "baseline", { versionCheck: false });
+    const priorAsst = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "setup" }],
+    });
+    await ctx.messageCheckpoint.capture(session.id, project.id, priorAsst.id);
+
+    const user1 = await ctx.messages.append(session.id, "user", textBlocks("prompt"));
+    const asst1 = await ctx.messages.append(session.id, "assistant", {
+      blocks: [{ type: "text", text: "reply" }],
+    });
+    await svfs.write("/state.md", "after-user1", { versionCheck: false });
+    await ctx.messageCheckpoint.capture(session.id, project.id, asst1.id);
+    await ctx.messages.append(session.id, "user", textBlocks("tail"));
+
+    await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id, {
+      revisionHeadBackfill: true,
+    });
+
+    assert.equal((await svfs.read("/state.md")).content, "baseline");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0]!.id, priorAsst.id);
+  });
+
+  it("DF-U3: rewind + skipVfsReconcile 保留 assistant 锚点（非回归）", async () => {
+    const { ctx, project, session, svfs, user1, assistant1 } =
+      await setupR1Scenario();
+
+    const physicalPath = toPhysicalPath(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      "/poem.md",
+    );
+    const revisions = await ctx.conn.query<{ version: number }>(
+      "SELECT version FROM vfs_revision WHERE path = ? ORDER BY version ASC",
+      [physicalPath],
+    );
+    await ctx.conn.execute(
+      "DELETE FROM vfs_revision WHERE path = ? AND version = ?",
+      [physicalPath, revisions[0]!.version],
+    );
+
+    await assert.rejects(() =>
+      ctx.sessionFs.rollbackToMessage(session.id, project.id, assistant1.id),
+    );
+
+    await ctx.sessionFs.rollbackToMessage(
+      session.id,
+      project.id,
+      assistant1.id,
+      { skipVfsReconcile: true },
+    );
+
+    assert.equal((await svfs.read("/poem.md")).content, "violets");
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 2);
+    assert.equal(messages[0]!.id, user1.id);
+    assert.equal(messages[1]!.id, assistant1.id);
+  });
 });

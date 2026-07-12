@@ -90,6 +90,12 @@ async function setupMultiFilePartialScenario() {
 }
 
 describe("MessageRollbackService (revision head backfill)", () => {
+  it("formatRollbackRevisionBackfillAlertMessage undo_send 末句为发送前状态", () => {
+    const message = formatRollbackRevisionBackfillAlertMessage(["/a.md"], "undo_send");
+    assert.match(message, /回滚至发送前状态/);
+    assert.doesNotMatch(message, /回滚至锚点/);
+  });
+
   it("formatRollbackRevisionBackfillAlertMessage 列出丢失快照的文件名", () => {
     const message = formatRollbackRevisionBackfillAlertMessage([
       "/a.md",

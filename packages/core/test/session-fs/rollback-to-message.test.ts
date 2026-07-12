@@ -43,7 +43,7 @@ describe("rollbackToMessage", () => {
     assert.equal(messages[1]!.id, assistant1.id);
   });
 
-  it("user anchor removes later assistant write and truncates messages", async () => {
+  it("plain user undo_send 删除锚点并移除后续 assistant 写入", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -64,11 +64,10 @@ describe("rollbackToMessage", () => {
 
     await assert.rejects(() => svfs.read("/poem.md"));
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0]!.id, user1.id);
+    assert.equal(messages.length, 0);
   });
 
-  it("text-only tail truncates messages without vfs changes", async () => {
+  it("plain user undo_send 无 prior 时纯文本 tail 删锚点并清空工作区", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -83,9 +82,9 @@ describe("rollbackToMessage", () => {
 
     await ctx.sessionFs.rollbackToMessage(session.id, project.id, user1.id);
 
-    assert.equal((await svfs.read("/keep.md")).content, "stable");
+    await assert.rejects(() => svfs.read("/keep.md"));
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 1);
+    assert.equal(messages.length, 0);
   });
 
   it("deleteAfterSeq removes only higher seq", async () => {
@@ -141,7 +140,7 @@ describe("rollbackToMessage", () => {
       undefined,
     );
     const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 1);
+    assert.equal(messages.length, 0);
   });
 
   it("sessionFs facade rollback 后不 capture worktree 块", async () => {
