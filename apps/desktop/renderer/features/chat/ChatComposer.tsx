@@ -16,6 +16,8 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 interface ChatComposerProps {
   projectId: string;
   sessionId: string;
+  value: string;
+  onChange: (text: string) => void;
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
@@ -38,6 +40,8 @@ interface ChatComposerProps {
 export function ChatComposer({
   projectId,
   sessionId,
+  value,
+  onChange,
   running,
   canResumeWithoutInput,
   lastMessageHasToolResult,
@@ -52,7 +56,6 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const { agentConfigRevision } = useShellNav();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState("");
   const [localError, setLocalError] = useState<string | undefined>();
   const [hasModel, setHasModel] = useState(false);
   const [bridgePendingText, setBridgePendingText] = useState<string | null>(
@@ -73,7 +76,7 @@ export function ChatComposer({
     void checkModel();
   }, [checkModel, sessionId, agentConfigRevision]);
 
-  useAutoResizeTextarea(textareaRef, text, 200);
+  useAutoResizeTextarea(textareaRef, value, 200);
 
   const isControlled = onErrorChange != null;
   const displayError = isControlled ? controlledError : localError;
@@ -105,7 +108,7 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
       if (content) {
-        setText("");
+        onChange("");
       }
 
       const streamResult = await ipcPreferencesGetLlmStream();
@@ -135,6 +138,7 @@ export function ChatComposer({
       projectId,
       reportError,
       sessionId,
+      onChange,
     ],
   );
 
@@ -145,7 +149,7 @@ export function ChatComposer({
       return;
     }
 
-    const content = text.trim();
+    const content = value.trim();
     const allowResumeWithoutInput = !content && canResumeWithoutInput;
     if (!content && !allowResumeWithoutInput) {
       return;
@@ -187,7 +191,7 @@ export function ChatComposer({
   const inputDisabled =
     (!hasModel && !running) || lastMessageIsPlainUserText;
   const sendDisabled =
-    !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
+    !hasModel || (!running && !value.trim() && !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel
     ? "输入消息…（Ctrl+Enter 发送）"
@@ -203,8 +207,8 @@ export function ChatComposer({
           <textarea
             ref={textareaRef}
             className="chat-composer__input"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
             disabled={inputDisabled}
             placeholder={inputPlaceholder}
             aria-label="消息输入"

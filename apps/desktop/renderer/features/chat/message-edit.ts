@@ -1,7 +1,11 @@
 /**
  * Helpers for message edit and action menu items.
  */
+import {
+  extractEditableTextFromMessage,
+} from '@novel-master/core/chat';
 import type { ChatMessageDto, ContentBlockDto } from '@shared/ipc-types';
+import { chatMessageFromDto } from './composer-send-state';
 
 export interface MessageActionMenuItem {
   readonly label: string;
@@ -9,17 +13,11 @@ export interface MessageActionMenuItem {
   readonly danger?: boolean;
 }
 
+/** Re-export Core 规则；DTO 经 {@link chatMessageFromDto} 适配。 */
 export function editableTextFromMessage(
   message: ChatMessageDto,
 ): string | null {
-  const blocks = message.contentBlocks ?? [];
-  const parts = blocks
-    .filter(
-      (b): b is Extract<ContentBlockDto, { type: 'text' }> => b.type === 'text',
-    )
-    .map(b => b.text.trim())
-    .filter(Boolean);
-  return parts.length > 0 ? parts.join('\n\n') : null;
+  return extractEditableTextFromMessage(chatMessageFromDto(message));
 }
 
 /** Merges edited text at first text-block position; preserves thinking / tool_use order. */

@@ -1,4 +1,8 @@
-import { formatRollbackRevisionBackfillAlertMessage } from '@novel-master/core/session-fs';
+import {
+  isPlainUserUndoSendEligible,
+  resolveRollbackConfirmMessage,
+  type RollbackMode,
+} from '@novel-master/core/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import type {
@@ -28,6 +32,7 @@ import { ChatComposer } from './ChatComposer';
 import {
   deriveComposerSendState,
   findLastVisibleMessageDto,
+  chatMessageFromDto,
 } from './composer-send-state';
 import {
   buildMessageActionItems,
@@ -44,6 +49,26 @@ interface ConversationPanelProps {
   sessionId: string;
   onOpenSessionActions: (anchor: HTMLElement) => void;
 }
+
+type RollbackConfirmContext = {
+  rollbackMode: RollbackMode;
+  restoreText: string | null;
+};
+
+type ConfirmState =
+  | { kind: 'set-floor'; messageId: string }
+  | ({ kind: 'rollback'; messageId: string } & RollbackConfirmContext)
+  | ({
+      kind: 'rollback-backfill';
+      messageId: string;
+      missingLogicalPaths: readonly string[];
+    } & RollbackConfirmContext)
+  | ({
+      kind: 'rollback-degraded';
+      messageId: string;
+      errorMessage: string;
+    } & RollbackConfirmContext)
+  | null;
 
 export function ConversationPanel({
   projectId,
@@ -103,6 +128,7 @@ export function ConversationPanel({
     noteThinkingDelta: noteMetricsThinkingDelta,
   } = useAgentStreamMetrics(running);
   const [composerError, setComposerError] = useState<string | undefined>();
+  const [composerText, setComposerText] = useState('');
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -113,17 +139,7 @@ export function ConversationPanel({
     messageId: string;
     initialText: string;
   } | null>(null);
-  const [confirmState, setConfirmState] = useState<
-    | { kind: 'set-floor'; messageId: string }
-    | { kind: 'rollback'; messageId: string }
-    | {
-        kind: 'rollback-backfill';
-        messageId: string;
-        missingLogicalPaths: readonly string[];
-      }
-    | { kind: 'rollback-degraded'; messageId: string; errorMessage: string }
-    | null
-  >(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
@@ -141,11 +157,12 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
-  // 切换会话时重置 UI 运行态
+  // 切换会话时重置 UI 运行态与输入框（对齐 Mobile draft 切换语义）
   useEffect(() => {
     resetUiForSessionChange();
     onStreamReset();
     setComposerError(undefined);
+    setComposerText('');
   }, [sessionId, resetUiForSessionChange, onStreamReset]);
 
   useEffect(() => {
@@ -326,15 +343,36 @@ export function ConversationPanel({
     }
   }, []);
 
+  const resolveRollbackContext = useCallback(
+    (messageId: string): RollbackConfirmContext => {
+      const target = messages.find(m => m.id === messageId);
+      if (target == null) {
+        return { rollbackMode: 'rewind', restoreText: null };
+      }
+      const chatMsg = chatMessageFromDto(target);
+      return {
+        rollbackMode: isPlainUserUndoSendEligible(chatMsg)
+          ? 'undo_send'
+          : 'rewind',
+        restoreText: editableTextFromMessage(target),
+      };
+    },
+    [messages],
+  );
+
   const rollbackToMessage = useCallback(
     async (messageId: string) => {
       if (running) {
         showToast('Agent 运行中无法回滚');
         return;
       }
-      setConfirmState({ kind: 'rollback', messageId });
+      setConfirmState({
+        kind: 'rollback',
+        messageId,
+        ...resolveRollbackContext(messageId),
+      });
     },
-    [running],
+    [running, resolveRollbackContext],
   );
 
   const executeRollback = useCallback(
@@ -343,8 +381,12 @@ export function ConversationPanel({
       options?: {
         skipVfsReconcile?: boolean;
         revisionHeadBackfill?: boolean;
+        rollbackMode?: RollbackMode;
+        restoreText?: string | null;
       },
     ) => {
+      const rollbackMode = options?.rollbackMode ?? 'rewind';
+      const restoreText = options?.restoreText ?? null;
       const result = await ipcMessagesRollback({
         projectId,
         sessionId,
@@ -360,6 +402,8 @@ export function ConversationPanel({
             kind: 'rollback-backfill',
             messageId,
             missingLogicalPaths: result.error.missingLogicalPaths ?? [],
+            rollbackMode,
+            restoreText,
           });
           return;
         }
@@ -368,6 +412,8 @@ export function ConversationPanel({
             kind: 'rollback-degraded',
             messageId,
             errorMessage: result.error.message,
+            rollbackMode,
+            restoreText,
           });
           return;
         }
@@ -378,6 +424,9 @@ export function ConversationPanel({
       await reloadMessages();
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
+      }
+      if (rollbackMode === 'undo_send' && restoreText) {
+        setComposerText(restoreText);
       }
       showToast(
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
@@ -457,11 +506,22 @@ export function ConversationPanel({
     setConfirmState(null);
     if (!state) return;
     if (state.kind === 'rollback') {
-      await executeRollback(state.messageId);
+      await executeRollback(state.messageId, {
+        rollbackMode: state.rollbackMode,
+        restoreText: state.restoreText,
+      });
     } else if (state.kind === 'rollback-backfill') {
-      await executeRollback(state.messageId, { revisionHeadBackfill: true });
+      await executeRollback(state.messageId, {
+        revisionHeadBackfill: true,
+        rollbackMode: state.rollbackMode,
+        restoreText: state.restoreText,
+      });
     } else if (state.kind === 'rollback-degraded') {
-      await executeRollback(state.messageId, { skipVfsReconcile: true });
+      await executeRollback(state.messageId, {
+        skipVfsReconcile: true,
+        rollbackMode: state.rollbackMode,
+        restoreText: state.restoreText,
+      });
     } else if (state.kind === 'set-floor') {
       const result = await ipcMessagesSetFloor({
         projectId,
@@ -492,14 +552,25 @@ export function ConversationPanel({
       return '此消息之前将不参与提示词，此消息及之后将恢复可见。';
     }
     if (confirmState.kind === 'rollback-degraded') {
-      return `${confirmState.errorMessage}\n\n可仅删除此消息之后的对话，工作区文件将保持现状。`;
+      return `${confirmState.errorMessage}\n\n${resolveRollbackConfirmMessage(
+        confirmState.rollbackMode,
+        'degraded',
+      )}`;
     }
     if (confirmState.kind === 'rollback-backfill') {
-      return formatRollbackRevisionBackfillAlertMessage(
-        confirmState.missingLogicalPaths,
+      return resolveRollbackConfirmMessage(
+        confirmState.rollbackMode,
+        'backfill',
+        { missingPaths: confirmState.missingLogicalPaths },
       );
     }
-    return '将删除此消息之后的对话，并撤销相关文件修改。是否继续？';
+    if (confirmState.kind === 'rollback') {
+      return resolveRollbackConfirmMessage(
+        confirmState.rollbackMode,
+        'primary',
+      );
+    }
+    return '';
   })();
 
   const confirmTitle =
@@ -614,6 +685,8 @@ export function ConversationPanel({
         <ChatComposer
           projectId={projectId}
           sessionId={sessionId}
+          value={composerText}
+          onChange={setComposerText}
           running={running}
           canResumeWithoutInput={composerSendState.canResumeWithoutInput}
           lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
