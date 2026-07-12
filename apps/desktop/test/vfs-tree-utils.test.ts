@@ -4,7 +4,9 @@ import {
   ancestorDirPaths,
   logicalPathForSegmentIndex,
   logicalPathSegments,
+  vfsEntryStatusText,
 } from "@/features/workspace/vfs-tree-utils";
+import type { WorktreeListRowDto } from "@shared/ipc-types";
 
 test("logicalPathSegments 拆分逻辑路径段", () => {
   const cases: Array<{ path: string; expected: string[] }> = [
@@ -38,4 +40,27 @@ test("ancestorDirPaths 返回根到目标目录链", () => {
     "/notes",
     "/notes/ch1.md",
   ]);
+});
+
+test("T-WEC15：vfsEntryStatusText 正向映射 enum 为中文标签", () => {
+  const dirOn: WorktreeListRowDto = {
+    kind: "dir",
+    path: "/notes",
+    ruleState: "rule_on",
+  };
+  const dirOff: WorktreeListRowDto = {
+    kind: "dir",
+    path: "/drafts",
+    ruleState: "rule_off",
+  };
+  const fileRow: WorktreeListRowDto = {
+    kind: "file",
+    path: "/a.md",
+    inclusionMode: "show",
+    displayState: "full",
+  };
+
+  assert.equal(vfsEntryStatusText(dirOn), "规则·开");
+  assert.equal(vfsEntryStatusText(dirOff), "规则·关");
+  assert.equal(vfsEntryStatusText(fileRow), "展示 · 全内容");
 });

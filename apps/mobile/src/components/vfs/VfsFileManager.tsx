@@ -33,7 +33,7 @@ import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
-  dirRuleStateLabel,
+  dirRuleStateFromEnabled,
   mapVfsListEntry,
   mapWorktreeRow,
   parentLogicalPath,
@@ -63,6 +63,7 @@ import {
   cycleFileInclusion,
   defaultDirRuleForm,
   dirRuleToForm,
+  emptyDirRuleForm,
   migrateWorktreeDirRename,
   toggleDirRuleEnabled,
   vfsScopeRootPath,
@@ -467,7 +468,7 @@ export const VfsFileManager = forwardRef<
         return;
       }
       if (action === 'toggle-include' && meta) {
-        if (menuRow.kind === 'file') {
+        if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
           await captureSessionBlock();
           await refreshVisibleRowsFromWorktree();
@@ -483,7 +484,7 @@ export const VfsFileManager = forwardRef<
           setWorktreeRows(prev =>
             prev.map(row =>
               row.path === menuPath && row.kind === 'dir'
-                ? {...row, ruleState: dirRuleStateLabel(nextEnabled)}
+                ? {...row, ruleState: dirRuleStateFromEnabled(nextEnabled)}
                 : row,
             ),
           );
@@ -679,10 +680,19 @@ export const VfsFileManager = forwardRef<
       void (async () => {
         try {
           const existing = await worktree.getDirRule(currentPath);
+          const listRow = worktreeRows.find(
+            r => r.path === currentPath && r.kind === 'dir',
+          );
           setDirRuleInitial(
             existing != null
               ? dirRuleToForm(existing)
-              : defaultDirRuleForm(currentPath),
+              : {
+                  ...emptyDirRuleForm(currentPath),
+                  ruleEnabled:
+                    listRow?.kind === 'dir'
+                      ? listRow.ruleState === 'rule_on'
+                      : currentPath === root,
+                },
           );
           setDirRuleOpen(true);
         } catch (error) {

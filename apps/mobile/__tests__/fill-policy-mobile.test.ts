@@ -2,6 +2,7 @@ import {normalizeFillPolicyForMobile} from '../src/storage/fill-policy-mobile';
 import {
   defaultDirRuleForm,
   dirRuleToForm,
+  emptyDirRuleForm,
 } from '../src/services/worktree-operations.service';
 
 describe('normalizeFillPolicyForMobile', () => {
@@ -35,5 +36,11 @@ describe('defaultDirRuleForm', () => {
   it('uses Core default header fill', () => {
     expect(defaultDirRuleForm('/docs').fillPolicy).toBe('header');
     expect(defaultDirRuleForm('/docs').ruleEnabled).toBe(true);
+  });
+});
+
+describe('emptyDirRuleForm', () => {
+  it('无持久化规则时 ruleEnabled 为 false', () => {
+    expect(emptyDirRuleForm('/docs').ruleEnabled).toBe(false);
   });
 });

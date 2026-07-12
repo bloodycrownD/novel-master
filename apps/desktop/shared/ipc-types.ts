@@ -364,13 +364,24 @@ export type VfsReadResultDto = {
   readonly mtimeMs: number;
 };
 
-export type WorktreeListRowDto = {
-  readonly kind: 'dir' | 'file';
-  readonly path: string;
-  readonly ruleState: string;
-  readonly inclusionMode: string;
-  readonly displayState: string;
-};
+export type WorktreeRuleState = 'rule_on' | 'rule_off';
+
+export type WorktreeInclusionMode = 'auto' | 'show' | 'hide';
+
+export type WorktreeDisplayState = 'hidden' | 'full' | 'header' | 'filename';
+
+export type WorktreeListRowDto =
+  | {
+      readonly kind: 'dir';
+      readonly path: string;
+      readonly ruleState: WorktreeRuleState;
+    }
+  | {
+      readonly kind: 'file';
+      readonly path: string;
+      readonly inclusionMode: WorktreeInclusionMode;
+      readonly displayState: WorktreeDisplayState;
+    };
 
 export type WorktreeBuildListRowsRequest = VfsScopeRequest;
 

@@ -9,9 +9,8 @@ import type { WorktreeListRowDto } from "@shared/ipc-types";
 const fileRow = (path: string): WorktreeListRowDto => ({
   path,
   kind: "file",
-  inclusionMode: "自动",
-  displayState: "全内容",
-  ruleState: "",
+  inclusionMode: "auto",
+  displayState: "full",
 });
 
 test("syncPreviewTabsWithFileRows 将不在列表中的 tab 标为已删除", () => {

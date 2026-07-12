@@ -138,16 +138,13 @@ const fixedListRows = [
   {
     kind: 'dir' as const,
     path: '/',
-    ruleState: '',
-    inclusionMode: '',
-    displayState: '',
+    ruleState: 'rule_on' as const,
   },
   {
     kind: 'file' as const,
     path: '/note.md',
-    ruleState: '',
-    inclusionMode: '',
-    displayState: '',
+    inclusionMode: 'auto' as const,
+    displayState: 'full' as const,
   },
 ];
 

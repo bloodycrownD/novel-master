@@ -2,8 +2,13 @@
  * Maps {@link WorktreeListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
 import { type VfsListEntry } from "@novel-master/core/vfs";
-
-import { type WorktreeListRow } from "@novel-master/core/worktree";
+import {
+  displayStateLabel,
+  inclusionModeLabel,
+  type InclusionMode,
+  type RuleState,
+  type WorktreeListRow,
+} from "@novel-master/core/worktree";
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
@@ -76,9 +81,20 @@ export function patchDirRuleRow(
   return {...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled)};
 }
 
-/** Worktree list row label after directory rule enabled toggles. */
-export function dirRuleStateLabel(ruleEnabled: boolean): string {
-  return ruleEnabled ? '规则·开' : '规则·关';
+/** Worktree list row enum after directory rule enabled toggles. */
+export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
+  return ruleEnabled ? 'rule_on' : 'rule_off';
+}
+
+function fileBadge(mode: InclusionMode): VfsRowBadge {
+  switch (mode) {
+    case 'hide':
+      return {label: '隐藏', tone: 'muted'};
+    case 'show':
+      return {label: '展示', tone: 'in'};
+    default:
+      return {label: '跟随', tone: 'follow'};
+  }
 }
 
 /** Map a worktree row to vfs-fm subtitle + badge. */
@@ -88,7 +104,7 @@ export function mapWorktreeRow(
 ): MappedVfsRow {
   const name = entryName(row.path);
   if (row.kind === 'dir') {
-    const ruleEnabled = row.ruleState === '规则·开';
+    const ruleEnabled = row.ruleState === 'rule_on';
     const subtitle =
       childFileCount != null && childFileCount > 0
         ? `${childFileCount}个文件`
@@ -103,22 +119,14 @@ export function mapWorktreeRow(
     };
   }
 
-  const subtitle = `${row.inclusionMode}·${row.displayState}`;
-  let badge: VfsRowBadge | null;
-  if (row.inclusionMode === '隐藏') {
-    badge = {label: '隐藏', tone: 'muted'};
-  } else if (row.inclusionMode === '展示') {
-    badge = {label: '展示', tone: 'in'};
-  } else {
-    badge = {label: '跟随', tone: 'follow'};
-  }
+  const subtitle = `${inclusionModeLabel(row.inclusionMode)}·${displayStateLabel(row.displayState)}`;
 
   return {
     path: row.path,
     name,
     kind: 'file',
     subtitle,
-    badge,
+    badge: fileBadge(row.inclusionMode),
     ruleEnabled: false,
   };
 }

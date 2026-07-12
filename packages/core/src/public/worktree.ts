@@ -31,6 +31,12 @@ export {
 } from "../domain/worktree/logic/worktree-eval.js";
 export { DEFAULT_WORKTREE_DIR_RULE } from "../domain/worktree/logic/default-dir-rule.js";
 export {
+  ruleStateLabel,
+  inclusionModeLabel,
+  displayStateLabel,
+  filetreeMacroLoadStateLabel,
+} from "../domain/worktree/logic/worktree-labels.js";
+export {
   renderFileBlock,
   joinFileBlocks,
   formatLocalMtime,

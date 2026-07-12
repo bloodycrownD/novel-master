@@ -8,30 +8,24 @@ describe('orderedDirectChildPaths', () => {
     {
       kind: 'dir',
       path: '/p',
-      ruleState: '规则·开',
-      inclusionMode: '',
-      displayState: '',
+      ruleState: 'rule_on',
     },
     {
       kind: 'dir',
       path: '/p/a',
-      ruleState: '规则·关',
-      inclusionMode: '',
-      displayState: '',
+      ruleState: 'rule_off',
     },
     {
       kind: 'file',
       path: '/p/a/f',
-      ruleState: '',
-      inclusionMode: '跟随',
-      displayState: '全内容',
+      inclusionMode: 'auto',
+      displayState: 'full',
     },
     {
       kind: 'file',
       path: '/p/b.md',
-      ruleState: '',
-      inclusionMode: '跟随',
-      displayState: '全内容',
+      inclusionMode: 'auto',
+      displayState: 'full',
     },
   ];
 

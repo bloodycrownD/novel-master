@@ -1,4 +1,9 @@
 /** VFS tree row display helpers (aligned with mobile vfs-row-mapper). */
+import {
+  displayStateLabel,
+  inclusionModeLabel,
+  ruleStateLabel,
+} from "@novel-master/core/worktree";
 import type { WorktreeListRowDto } from "@shared/ipc-types";
 
 /** `/notes/ch1.md` → [`notes`, `ch1.md`]（跳过空段） */
@@ -91,19 +96,7 @@ export function pathDepth(path: string): number {
 
 export function vfsEntryStatusText(row: WorktreeListRowDto): string {
   if (row.kind === "dir") {
-    const rule = row.ruleState.includes("开") ? "规则·开" : "规则·关";
-    return rule;
+    return ruleStateLabel(row.ruleState);
   }
-  return `${row.inclusionMode} · ${row.displayState}`;
-}
-
-export function inclusionModeFromLabel(label: string): "auto" | "show" | "hide" {
-  switch (label) {
-    case "展示":
-      return "show";
-    case "隐藏":
-      return "hide";
-    default:
-      return "auto";
-  }
+  return `${inclusionModeLabel(row.inclusionMode)} · ${displayStateLabel(row.displayState)}`;
 }

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import { DEFAULT_WORKTREE_DIR_RULE, type FillPolicy, type SetDirRuleInput, type SortField, type SortOrder } from "@novel-master/core/worktree";
+import {FormSwitchRow} from '../form/FormSwitchRow';
 import {AppModal} from '../ui/AppModal';
 import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
 import {useTheme} from '../../theme/ThemeProvider';
@@ -68,6 +69,7 @@ export function DirectoryRuleSheet({
   const [fillPolicy, setFillPolicy] = useState<FillPolicy>(
     DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
   );
+  const [ruleEnabled, setRuleEnabled] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -87,7 +89,10 @@ export function DirectoryRuleSheet({
         initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
       ),
     );
-  }, [visible, initial, logicalPath]);
+    setRuleEnabled(
+      rootRuleLocked ? true : (initial?.ruleEnabled ?? false),
+    );
+  }, [visible, initial, logicalPath, rootRuleLocked]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -99,9 +104,7 @@ export function DirectoryRuleSheet({
         headCount: clampCount(headCount),
         tailCount: clampCount(tailCount),
         fillPolicy: normalizeFillPolicyForMobile(fillPolicy),
-        ruleEnabled: rootRuleLocked
-          ? true
-          : (initial?.ruleEnabled ?? true),
+        ruleEnabled: rootRuleLocked ? true : ruleEnabled,
       });
       onClose();
     } finally {
@@ -131,6 +134,17 @@ export function DirectoryRuleSheet({
             style={styles.form}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}>
+            <FormSwitchRow
+              label="规则启用"
+              tokens={tokens}
+              value={ruleEnabled}
+              onValueChange={setRuleEnabled}
+              disabled={rootRuleLocked}
+              description={
+                rootRuleLocked ? '根目录规则不可关闭' : undefined
+              }
+              testID="dir-rule-enabled-switch"
+            />
             <FieldLabel tokens={tokens} text="排序字段" />
             <OptionRow
               options={SORT_FIELDS}

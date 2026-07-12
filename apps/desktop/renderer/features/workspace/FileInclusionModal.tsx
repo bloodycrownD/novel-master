@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { showToast } from "@/components/ui/show-toast";
-import { inclusionModeFromLabel } from "./vfs-tree-utils";
 import {
   entryLabelForTarget,
   saveFileInclusion,
@@ -61,7 +60,7 @@ export function FileInclusionModal({
     if (!open || !target || target.kind !== "row" || target.row.kind !== "file") {
       return;
     }
-    setInclusionMode(inclusionModeFromLabel(target.row.inclusionMode));
+    setInclusionMode(target.row.inclusionMode);
   }, [open, target]);
 
   if (!open || !target || !logicalPath) {

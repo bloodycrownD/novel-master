@@ -17,29 +17,14 @@ function isWorktreeRootPath(scope: VfsScope, logicalPath: string): boolean {
 
 const INCLUSION_CYCLE: InclusionMode[] = ['auto', 'show', 'hide'];
 
-/** Parse Chinese inclusion label from {@link WorktreeListRow}. */
-export function inclusionLabelToMode(label: string): InclusionMode {
-  switch (label) {
-    case '展示':
-      return 'show';
-    case '隐藏':
-      return 'hide';
-    case '跟随':
-      return 'auto';
-    default:
-      return 'auto';
-  }
-}
-
 /** Cycle file inclusion auto → show → hide. */
 export async function cycleFileInclusion(
   worktree: WorktreeService,
   logicalPath: string,
-  currentLabel: string,
+  currentMode: InclusionMode,
 ): Promise<InclusionMode> {
-  const current = inclusionLabelToMode(currentLabel);
   const next =
-    INCLUSION_CYCLE[(INCLUSION_CYCLE.indexOf(current) + 1) % INCLUSION_CYCLE.length];
+    INCLUSION_CYCLE[(INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length];
   await worktree.setFileRule({logicalPath, inclusionMode: next});
   return next;
 }
@@ -130,7 +115,7 @@ export function dirRuleToForm(rule: WorktreeDirRule): SetDirRuleInput {
   };
 }
 
-/** Default form values for directory rule sheet (Core merge semantics). */
+/** Default form values for new directory creation (Core merge semantics). */
 export function defaultDirRuleForm(logicalPath: string) {
   return {
     logicalPath,
@@ -140,6 +125,19 @@ export function defaultDirRuleForm(logicalPath: string) {
     tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
     fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
     ruleEnabled: true,
+  };
+}
+
+/** 无持久化规则记录时弹窗展示的表单初值（规则关闭，其余字段同 Core 默认）。 */
+export function emptyDirRuleForm(logicalPath: string) {
+  return {
+    logicalPath,
+    sortField: DEFAULT_WORKTREE_DIR_RULE.sortField,
+    sortOrder: DEFAULT_WORKTREE_DIR_RULE.sortOrder,
+    headCount: DEFAULT_WORKTREE_DIR_RULE.headCount,
+    tailCount: DEFAULT_WORKTREE_DIR_RULE.tailCount,
+    fillPolicy: DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
+    ruleEnabled: false,
   };
 }
 
@@ -180,7 +178,7 @@ export async function migrateWorktreeDirRename(
     } else {
       await worktree.setFileRule({
         logicalPath: targetPath,
-        inclusionMode: inclusionLabelToMode(row.inclusionMode),
+        inclusionMode: row.inclusionMode,
       });
     }
   }

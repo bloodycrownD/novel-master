@@ -14,33 +14,28 @@ describe('vfs-row-mapper', () => {
   const dirRow: WorktreeListRow = {
     kind: 'dir',
     path: '/shared',
-    ruleState: '规则·开',
-    inclusionMode: '',
-    displayState: '',
+    ruleState: 'rule_on',
   };
 
   const fileRowAuto: WorktreeListRow = {
     kind: 'file',
     path: '/readme.md',
-    ruleState: '',
-    inclusionMode: '跟随',
-    displayState: '全内容',
+    inclusionMode: 'auto',
+    displayState: 'full',
   };
 
   const fileRowShow: WorktreeListRow = {
     kind: 'file',
     path: '/visible.md',
-    ruleState: '',
-    inclusionMode: '展示',
-    displayState: '全内容',
+    inclusionMode: 'show',
+    displayState: 'full',
   };
 
   const fileRowHide: WorktreeListRow = {
     kind: 'file',
     path: '/hidden.md',
-    ruleState: '',
-    inclusionMode: '隐藏',
-    displayState: '不展示',
+    inclusionMode: 'hide',
+    displayState: 'hidden',
   };
 
   it('maps directory badge and file count subtitle', () => {
@@ -54,16 +49,14 @@ describe('vfs-row-mapper', () => {
     const fileInShared: WorktreeListRow = {
       kind: 'file',
       path: '/shared/readme.md',
-      ruleState: '',
-      inclusionMode: '跟随',
-      displayState: '全内容',
+      inclusionMode: 'auto',
+      displayState: 'full',
     };
     const siblingAuto: WorktreeListRow = {
       kind: 'file',
       path: '/shared/other.md',
-      ruleState: '',
-      inclusionMode: '跟随',
-      displayState: '文件名',
+      inclusionMode: 'auto',
+      displayState: 'filename',
     };
     const visible: MappedVfsRow[] = [
       mapWorktreeRow(fileInShared),
@@ -71,8 +64,8 @@ describe('vfs-row-mapper', () => {
       mapWorktreeRow(fileRowAuto),
     ];
     const updatedMeta: WorktreeListRow[] = [
-      {...fileInShared, inclusionMode: '展示', displayState: '全内容'},
-      {...siblingAuto, displayState: '全内容'},
+      {...fileInShared, inclusionMode: 'show', displayState: 'full'},
+      {...siblingAuto, displayState: 'full'},
     ];
     const remapped = remapDirectChildRows(visible, '/shared', updatedMeta);
     expect(remapped[0].badge).toEqual({label: '展示', tone: 'in'});
@@ -90,7 +83,7 @@ describe('vfs-row-mapper', () => {
   });
 
   it('maps directory rule off badge without count subtitle when zero files', () => {
-    const off: WorktreeListRow = {...dirRow, ruleState: '规则·关'};
+    const off: WorktreeListRow = {...dirRow, ruleState: 'rule_off'};
     const mapped = mapWorktreeRow(off, 0);
     expect(mapped.subtitle).toBe('');
     expect(mapped.badge).toEqual({label: '关闭', tone: 'muted'});
@@ -120,9 +113,8 @@ describe('vfs-row-mapper', () => {
       {
         kind: 'file',
         path: '/shared/nested.md',
-        ruleState: '',
-        inclusionMode: '跟随',
-        displayState: '文件名',
+        inclusionMode: 'auto',
+        displayState: 'filename',
       },
     ];
     expect(countFilesInDir(rows, '/')).toBe(1);
