@@ -8,7 +8,6 @@ import {
   assertLogicalPathAllowed,
   scopePhysicalPrefix,
   toLogicalPath,
-  toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
@@ -17,7 +16,7 @@ import { DEFAULT_WORKTREE_DIR_RULE } from "@/domain/worktree/logic/default-dir-r
 import {
   buildWorktreeDirSet,
 } from "@/domain/worktree/logic/worktree-tree.js";
-import { joinFileBlocks, renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
+import { materializeBlockFromView } from "@/domain/worktree/logic/worktree-materialize-engine.js";
 import { renderWorktreeFileTreeForMacro } from "@/domain/worktree/logic/worktree-file-tree.js";
 import { evaluateWorktreeRuleView } from "@/domain/worktree/logic/worktree-rule-engine.js";
 import {
@@ -25,7 +24,6 @@ import {
   worktreeScopeKey,
 } from "@/domain/worktree/logic/worktree-scope.js";
 import type {
-  DisplayState,
   SetDirRuleInput,
   SetFileRuleInput,
   WorktreeDirRule,
@@ -152,8 +150,13 @@ export class DefaultWorktreeService implements WorktreeService {
   async materializePersistBlock(): Promise<WorktreePersistBlock> {
     const ctx = await this.loadContextMetadata();
     const view = evaluateWorktreeRuleView(this.scope, ctx);
-    const blocks = await this.collectDisplayBlocks(ctx, view);
-    return { worktreeDisplay: joinFileBlocks(blocks) };
+    const worktreeDisplay = await materializeBlockFromView(
+      view,
+      this.deps.vfs,
+      this.scope,
+      ctx.mtimeByPath,
+    );
+    return { worktreeDisplay };
   }
 
   async buildListRows(): Promise<WorktreeListRow[]> {
@@ -181,38 +184,6 @@ export class DefaultWorktreeService implements WorktreeService {
       displayByPath: view.displayByPath,
     });
     return { listRows: view.rows, filetreeDisplay };
-  }
-
-  /** 按 DFS 文件行顺序收集持久块（仅非 hidden 且 full/header 读正文）。 */
-  private async collectDisplayBlocks(
-    ctx: WorktreeRuleContext,
-    view: { readonly rows: readonly WorktreeListRow[]; readonly displayByPath: ReadonlyMap<string, DisplayState> },
-  ): Promise<string[]> {
-    const blocks: string[] = [];
-    for (const row of view.rows) {
-      if (row.kind !== "file") {
-        continue;
-      }
-      const display = view.displayByPath.get(row.path) ?? row.displayState;
-      if (display === "hidden") {
-        continue;
-      }
-      let content = "";
-      if (display === "full" || display === "header") {
-        const physical = toPhysicalPath(this.scope, row.path);
-        const entry = await this.deps.vfs.findByPath(physical);
-        content = entry?.content ?? "";
-      }
-      blocks.push(
-        renderFileBlock({
-          logicalPath: row.path,
-          mtimeMs: ctx.mtimeByPath.get(row.path) ?? 0,
-          display,
-          content,
-        }),
-      );
-    }
-    return blocks;
   }
 
   /** Loads path/mtime/rules context without scanning file content. */

@@ -1,5 +1,10 @@
 /**
- * 共享 capture helper：session scope 物化并写入 block store。
+ * Session worktree 块门面：唯一生产写入路径。
+ *
+ * `SessionWorktreeBlockStore.capture` 仅允许在本模块与 store 实现内调用
+ *（见 T-WEC17 `worktree-block-capture-allowlist.test.ts`）。
+ * 应用层白名单入口均经 {@link captureSessionWorktreeBlock} /
+ * {@link getCapturedBlockOrCapture}。
  *
  * @module service/prompt/capture-session-worktree-block
  */
