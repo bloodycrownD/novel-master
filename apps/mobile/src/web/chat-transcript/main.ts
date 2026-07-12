@@ -530,7 +530,7 @@ export function buildTranscriptBootScript(): string {
     if (row.text) items.push({ label: '编辑', action: 'edit' });
     items.push({ label: '复制', action: 'copy' });
     var showSetFloor = row.kind === 'message' &&
-      (row.role === 'user' || row.role === 'assistant') &&
+      row.role === 'user' &&
       !(hitEl && hitEl.closest && hitEl.closest('.tool-card, .tool-group-item'));
     if (showSetFloor) items.push({ label: '置位', action: 'set-floor' });
     items.push({ label: '分叉', action: 'fork' });

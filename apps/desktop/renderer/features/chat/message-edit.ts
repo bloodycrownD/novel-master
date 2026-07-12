@@ -45,7 +45,7 @@ export function applyTextEditToContentBlocks(
 }
 
 export function isSetFloorEligibleMessage(message: ChatMessageDto): boolean {
-  return message.role === 'user' || message.role === 'assistant';
+  return message.role === 'user';
 }
 
 /** 长按菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */

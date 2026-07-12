@@ -48,9 +48,9 @@ export function applyTextEditToMessage(
   return { blocks: result };
 }
 
-/** user/assistant 消息行可置位（非 user_vfs_turn 等展示形态由调用方过滤）。 */
+/** 仅 user 消息行可置位（非 user_vfs_turn 等展示形态由调用方过滤）。 */
 export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
-  return message.role === 'user' || message.role === 'assistant';
+  return message.role === 'user';
 }
 
 /** 长按菜单：编辑、复制、置位、分叉、回滚（无 hide/unhide/delete）。 */
