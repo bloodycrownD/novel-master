@@ -80,7 +80,7 @@ export class DefaultMessageTranscriptEffectsService
     }
     if (!isSetFloorAnchorRole(anchor.role)) {
       throw chatInvalidArgument(
-        `set-floor anchor role must be user or assistant, got: ${anchor.role}`,
+        `set-floor anchor role must be user, got: ${anchor.role}`,
       );
     }
 

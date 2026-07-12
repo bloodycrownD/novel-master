@@ -1,9 +1,7 @@
 /** 消息置位：按锚点 seq 计算 hide/show 区间。 */
 
-export function isSetFloorAnchorRole(
-  role: string,
-): role is 'user' | 'assistant' {
-  return role === 'user' || role === 'assistant';
+export function isSetFloorAnchorRole(role: string): role is 'user' {
+  return role === 'user';
 }
 
 export function computeSetFloorRanges(
