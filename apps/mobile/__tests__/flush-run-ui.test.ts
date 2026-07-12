@@ -1,6 +1,8 @@
 import {flushAgentStepUi, flushRunUi} from '../src/components/chat/flush-run-ui';
 
 describe('flush-run-ui', () => {
+  // abort 后增列表 reload 守卫在 useChatStreamRuntime / ConversationPanel 层；
+  // 本模块在被调用时仍执行 immediate reload（见 T-AC2-3/4/9 集成测）。
   it('flushAgentStepUi reloads then clears stream only after assistant phase', async () => {
     const order: string[] = [];
     const onAssistantStreamEnd = () => order.push('reset');

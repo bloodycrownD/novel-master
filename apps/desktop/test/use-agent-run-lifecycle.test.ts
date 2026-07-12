@@ -68,7 +68,7 @@ describe("shouldApplyTranscriptReload", () => {
   });
 });
 
-describe("useAgentRunLifecycle transcriptFreezeCount", () => {
+describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
   function mountLifecycle(): AgentRunLifecycle {
     const api: { current?: AgentRunLifecycle } = {};
 
