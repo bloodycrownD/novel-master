@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
+  shouldReloadTranscriptOnRunEvent,
 } from '../../../src/service/agent/logic/agent-run-lifecycle-helpers.js';
 
 describe('shouldAcceptRunEvent', () => {
@@ -38,5 +39,12 @@ describe('shouldIgnoreStaleRunStarted', () => {
   it('beginUiRun 窗口内 uiRunning=true 时接受 RUN_STARTED', () => {
     assert.equal(shouldIgnoreStaleRunStarted(true, null), false);
     assert.equal(shouldIgnoreStaleRunStarted(true, 'run-1'), false);
+  });
+});
+
+describe('shouldReloadTranscriptOnRunEvent', () => {
+  it('T-AC2-1: uiRunning=false 时禁止 reload；true 时允许', () => {
+    assert.equal(shouldReloadTranscriptOnRunEvent(false), false);
+    assert.equal(shouldReloadTranscriptOnRunEvent(true), true);
   });
 });
