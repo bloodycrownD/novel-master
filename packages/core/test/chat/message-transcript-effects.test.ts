@@ -139,8 +139,8 @@ describe('MessageTranscriptEffectsService', () => {
     const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
-    await ctx.messages.append(session.id, 'user', textBlocks('u'));
-    const anchor = await ctx.messages.append(session.id, 'assistant', {
+    const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
+    await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a' }],
     });
 
@@ -164,17 +164,17 @@ describe('MessageTranscriptEffectsService', () => {
       blocks: [{ type: 'text', text: '2' }],
     });
     await ctx.messageCheckpoint.capture(session.id, project.id, m2.id);
-    await ctx.messages.append(session.id, 'user', textBlocks('3'));
+    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('3'));
 
     const before = await ctx.messages.listBySession(session.id);
-    await effects.setMessageFloorAtMessage(project.id, session.id, m2.id);
+    await effects.setMessageFloorAtMessage(project.id, session.id, m3.id);
     const after = await ctx.messages.listBySession(session.id);
 
     assert.equal(after.length, before.length);
     assert.equal((await svfs.read('/keep.md')).content, 'stable');
   });
 
-  it('T-SF4b：末条 hidden 锚点置位后恢复可见', async () => {
+  it('T-SF4b：末条 hidden user 锚点置位后恢复可见', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -184,20 +184,20 @@ describe('MessageTranscriptEffectsService', () => {
     await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a1' }],
     });
-    await ctx.messages.append(session.id, 'user', textBlocks('u2'));
-    const m4 = await ctx.messages.append(session.id, 'assistant', {
+    const m3 = await ctx.messages.append(session.id, 'user', textBlocks('u2'));
+    await ctx.messages.append(session.id, 'assistant', {
       blocks: [{ type: 'text', text: 'a2' }],
     });
-    await ctx.messages.hideRange(session.id, 4, 4);
+    await ctx.messages.hideRange(session.id, 3, 3);
 
     const result = await effects.setMessageFloorAtMessage(
       project.id,
       session.id,
-      m4.id,
+      m3.id,
     );
     assert.ok(result.shownCount >= 1);
 
-    const updated = await ctx.messages.get(m4.id);
+    const updated = await ctx.messages.get(m3.id);
     assert.equal(updated.hidden, false);
   });
 
@@ -217,9 +217,43 @@ describe('MessageTranscriptEffectsService', () => {
       () => effects.setMessageFloorAtMessage(project.id, session.id, system.id),
       (err: unknown) => {
         assert.ok(err instanceof Error);
-        assert.match(err.message, /user or assistant/);
+        assert.match(err.message, /set-floor anchor role must be user/);
         return true;
       },
+    );
+  });
+
+  it('T-AC1-2：role=assistant 锚点抛错且 transcript 不变', async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
+
+    await ctx.messages.append(session.id, 'user', textBlocks('u'));
+    const assistant = await ctx.messages.append(session.id, 'assistant', {
+      blocks: [{ type: 'text', text: 'a' }],
+    });
+
+    const before = await ctx.messages.listBySession(session.id);
+
+    await assert.rejects(
+      () =>
+        effects.setMessageFloorAtMessage(
+          project.id,
+          session.id,
+          assistant.id,
+        ),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /set-floor anchor role must be user/);
+        return true;
+      },
+    );
+
+    const after = await ctx.messages.listBySession(session.id);
+    assert.deepEqual(
+      after.map(m => ({ id: m.id, hidden: m.hidden })),
+      before.map(m => ({ id: m.id, hidden: m.hidden })),
     );
   });
 });

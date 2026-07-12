@@ -12,7 +12,7 @@ import {
 describe('message-set-floor-range', () => {
   it('T-SF1：N=1 仅 showSuffix', () => {
     assert.equal(isSetFloorAnchorRole('user'), true);
-    assert.equal(isSetFloorAnchorRole('assistant'), true);
+    assert.equal(isSetFloorAnchorRole('assistant'), false);
     assert.equal(isSetFloorAnchorRole('system'), false);
 
     const ranges = computeSetFloorRanges(1, 5);
