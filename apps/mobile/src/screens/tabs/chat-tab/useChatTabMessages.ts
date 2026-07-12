@@ -339,7 +339,7 @@ export function useChatTabMessageActions({
     agentRunning,
     projectId,
     sessionId,
-    runtime.eventOrchestrator,
+    runtime,
     reloadMessages,
     refreshChatTokenLabel,
     showToast,
