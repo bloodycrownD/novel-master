@@ -59,16 +59,19 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   sessionRenameVfsFile: jest.fn(),
 }));
 
-jest.mock('../src/services/worktree-operations.service', () => ({
-  batchSetDirRulesDisabled: jest.fn(),
-  batchSetDirRulesEnabled: jest.fn(),
-  cycleFileInclusion: jest.fn(),
-  defaultDirRuleForm: jest.fn(),
-  dirRuleToForm: jest.fn(),
-  migrateWorktreeDirRename: jest.fn(),
-  toggleDirRuleEnabled: jest.fn(),
-  vfsScopeRootPath: () => '/',
-}));
+jest.mock('../src/services/worktree-operations.service', () => {
+  const actual = jest.requireActual(
+    '../src/services/worktree-operations.service',
+  ) as typeof import('../src/services/worktree-operations.service');
+  return {
+    ...actual,
+    batchSetDirRulesDisabled: jest.fn(),
+    batchSetDirRulesEnabled: jest.fn(),
+    cycleFileInclusion: jest.fn(),
+    migrateWorktreeDirRename: jest.fn(),
+    toggleDirRuleEnabled: jest.fn(),
+  };
+});
 
 let capturedEntityMenuOnSelect: ((action: string) => void) | undefined;
 let capturedMoreMenuOnSelect: ((action: string) => void) | undefined;
@@ -170,6 +173,22 @@ function flushPromises(): Promise<void> {
   return new Promise(resolve => setImmediate(resolve));
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  options?: {maxAttempts?: number},
+): Promise<void> {
+  const maxAttempts = options?.maxAttempts ?? 50;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    if (predicate()) {
+      return;
+    }
+    await act(async () => {
+      await flushPromises();
+    });
+  }
+  throw new Error('waitFor: condition not met');
+}
+
 function renderSessionVfm(rootPath = '/') {
   return (
     <VfsFileManager
@@ -259,7 +278,9 @@ describe('VfsFileManager session worktree snapshot', () => {
       capturedMoreMenuOnSelect!('directory-rule');
       await flushPromises();
     });
-    expect(capturedDirRuleOnSave).toBeDefined();
+
+    await waitFor(() => capturedDirRuleOnSave != null);
+    expect(getDirRule).toHaveBeenCalled();
 
     await act(async () => {
       await capturedDirRuleOnSave!({
@@ -271,6 +292,8 @@ describe('VfsFileManager session worktree snapshot', () => {
       });
       await flushPromises();
     });
+
+    await waitFor(() => mockCapture.mock.calls.length > 0);
 
     expect(setDirRule).toHaveBeenCalled();
     expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
