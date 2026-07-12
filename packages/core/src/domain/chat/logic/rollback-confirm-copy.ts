@@ -33,8 +33,8 @@ export function resolveRollbackConfirmMessage(
 
   const scope =
     mode === "undo_send"
-      ? "将删除此消息**及之后**的对话"
-      : "将删除此消息**之后**的对话";
+      ? "将删除此消息及之后的对话"
+      : "将删除此消息之后的对话";
 
   if (kind === "primary") {
     return `${scope}，并撤销相关文件修改。是否继续？`;
@@ -42,7 +42,7 @@ export function resolveRollbackConfirmMessage(
 
   const degradedScope =
     mode === "undo_send"
-      ? "可仅删除此消息**及之后**的对话"
-      : "可仅删除此消息**之后**的对话";
+      ? "可仅删除此消息及之后的对话"
+      : "可仅删除此消息之后的对话";
   return `${degradedScope}，工作区文件将保持现状。`;
 }

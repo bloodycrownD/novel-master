@@ -7,6 +7,7 @@ describe("resolveRollbackConfirmMessage", () => {
     const message = resolveRollbackConfirmMessage("undo_send", "primary");
     assert.match(message, /及之后/);
     assert.match(message, /撤销相关文件修改/);
+    assert.doesNotMatch(message, /\*\*/);
   });
 
   it("rewind primary 含「之后」但不含「及之后」", () => {
