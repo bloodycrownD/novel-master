@@ -4,7 +4,6 @@
   "captureSessionWorktreeBlock",
   "computeHeadTailIndices",
   "createSessionWorktreeBlockStore",
-  "createSessionWorktreeSnapshotStore",
   "createTemplatePullService",
   "createWorktreeService",
   "displayStateLabel",

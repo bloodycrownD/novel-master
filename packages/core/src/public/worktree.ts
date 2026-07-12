@@ -60,11 +60,6 @@ export type {
 export { createTemplatePullService } from "../service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
 export type {
-  SessionWorktreeSnapshot,
-  SessionWorktreeSnapshotStore,
-} from "../service/prompt/session-worktree-snapshot.port.js";
-export { createSessionWorktreeSnapshotStore } from "../service/prompt/create-session-worktree-snapshot-store.js";
-export type {
   SessionWorktreeBlock,
   SessionWorktreeBlockStore,
 } from "../service/prompt/session-worktree-block.port.js";

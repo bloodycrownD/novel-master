@@ -30,4 +30,28 @@ describe("public 子入口 export allowlist 快照", () => {
       assert.deepEqual(actual, [...snapshot].sort());
     });
   }
+
+  it("T-WEC18: worktree allowlist 无 markDirty 遗留 API", async () => {
+    const snapshot = (
+      await import("./snapshots/public-worktree-allowlist.json", {
+        with: { type: "json" },
+      })
+    ).default as string[];
+    const forbidden = [
+      "createSessionWorktreeSnapshotStore",
+      "markDirty",
+      "getOrRefresh",
+      "invalidateSessionWorktreeSnapshot",
+    ];
+    for (const name of forbidden) {
+      assert.equal(
+        snapshot.includes(name),
+        false,
+        `public/worktree 不应导出 ${name}`,
+      );
+    }
+    assert.ok(snapshot.includes("createSessionWorktreeBlockStore"));
+    assert.ok(snapshot.includes("captureSessionWorktreeBlock"));
+    assert.ok(snapshot.includes("getCapturedBlockOrCapture"));
+  });
 });

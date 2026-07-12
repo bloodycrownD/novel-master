@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createSessionWorktreeSnapshotStore } from "@novel-master/core/worktree";
+import { createSessionWorktreeSnapshotStore } from "../../src/service/prompt/create-session-worktree-snapshot-store.js";
 
 /** @deprecated 使用 SessionWorktreeBlockStore 测例（session-worktree-block.test.ts）。 */
 describe("SessionWorktreeSnapshotStore", () => {

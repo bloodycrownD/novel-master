@@ -422,7 +422,7 @@ type WorktreeListRowDto =
 ### Milestone M4 — 清债与文档
 
 - Step 21 — phase-cleanup — blocking: no — qa: auto：deprecated `materialize()` / `WorktreeMaterialized`；合并双 DFS 剩余重复（若 M2 未完全消除）。
-- Step 22 — phase-cleanup — blocking: no — qa: manual_user：双端置位/改规则/手动 capture 后打开「查看提示词」与 Explorer 对照（合并后用户验收）。
+- Step 22 — phase-cleanup — blocking: no — qa: manual_user：**合并后用户验收** — 双端置位/改规则/手动 capture 后打开「查看提示词」与 Explorer 对照。
 
 ---
 

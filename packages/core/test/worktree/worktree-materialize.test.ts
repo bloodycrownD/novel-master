@@ -83,7 +83,11 @@ describe("worktree materialize", () => {
     const materialized = await wt.materialize();
     assert.equal(calls.scanContents, 0);
     assert.ok(materialized.listRows.length >= 4);
-    assert.equal(calls.listFileMetaUnderPrefix, 1, "materialize 应仅加载一次 metadata");
+    assert.equal(
+      calls.listFileMetaUnderPrefix,
+      2,
+      "deprecated materialize 组合 live + persist 各一次 metadata",
+    );
   });
 
   it("filename fill display never calls findByPath", async () => {
@@ -193,30 +197,27 @@ describe("worktree materialize", () => {
     assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
 
-  it("session worktree snapshot getOrRefresh 仅存 worktreeDisplay", async () => {
+  it("T-WEC11: capture 后 renderDisplay 与快照一致", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
 
-    const { createSessionWorktreeSnapshotStore, createWorktreeService } = await import(
-      "@novel-master/core/worktree"
-    );
-    const store = createSessionWorktreeSnapshotStore();
+    const { createSessionWorktreeBlockStore, createWorktreeService } =
+      await import("@novel-master/core/worktree");
+    const store = createSessionWorktreeBlockStore();
     const wt = createWorktreeService(ctx.conn, {
       kind: "session",
       projectId: project.id,
       sessionId: session.id,
     });
 
-    const snapshot = await store.getOrRefresh(
-      project.id,
-      session.id,
-      async () => wt.materializePersistBlock(),
-    );
-    assert.ok(snapshot.worktreeDisplay.length > 0);
+    const { worktreeDisplay } = await wt.materializePersistBlock();
+    store.capture(project.id, session.id, worktreeDisplay);
+    const block = store.getCapturedBlock(project.id, session.id);
+    assert.ok(block != null && block.worktreeDisplay.length > 0);
     const display = await wt.renderDisplay();
-    assert.equal(snapshot.worktreeDisplay, display);
+    assert.equal(block!.worktreeDisplay, display);
   });
 });

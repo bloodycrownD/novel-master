@@ -121,22 +121,16 @@ export class DefaultWorktreeService implements WorktreeService {
     );
   }
 
+  /** @deprecated 使用 {@link materializeLiveView} / {@link materializePersistBlock}。 */
   async materialize(): Promise<WorktreeMaterialized> {
-    const ctx = await this.loadContextMetadata();
-    const view = evaluateWorktreeRuleView(this.scope, ctx);
-    const blocks = await this.collectDisplayBlocks(ctx, view);
-    const filetreeDisplay = renderWorktreeFileTreeForMacro({
-      scope: this.scope,
-      allDirs: ctx.allDirs,
-      fileSet: ctx.fileSet,
-      dirRuleMap: ctx.dirRuleMap,
-      mtimeByPath: ctx.mtimeByPath,
-      displayByPath: view.displayByPath,
-    });
+    const [live, persist] = await Promise.all([
+      this.materializeLiveView(),
+      this.materializePersistBlock(),
+    ]);
     return {
-      listRows: view.rows,
-      worktreeDisplay: joinFileBlocks(blocks),
-      filetreeDisplay,
+      listRows: live.listRows,
+      worktreeDisplay: persist.worktreeDisplay,
+      filetreeDisplay: live.filetreeDisplay,
     };
   }
 

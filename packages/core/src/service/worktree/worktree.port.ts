@@ -23,7 +23,11 @@ export interface WorktreePersistBlock {
   readonly worktreeDisplay: string;
 }
 
-/** 向后兼容：列表 + 持久块 + 宏树（单次 metadata 分叉）。 */
+/**
+ * 向后兼容：列表 + 持久块 + 宏树。
+ *
+ * @deprecated 使用 {@link WorktreeLiveView} / {@link WorktreePersistBlock}。
+ */
 export interface WorktreeMaterialized {
   readonly listRows: readonly WorktreeListRow[];
   readonly worktreeDisplay: string;
@@ -44,8 +48,9 @@ export interface WorktreeService {
   deleteRulesUnderLogicalPrefix(logicalPrefix: string): Promise<void>;
 
   /**
-   * 向后兼容：单次 metadata 后分叉产出列表、持久块与宏树。
-   * 新代码请优先使用 {@link materializeLiveView} / {@link materializePersistBlock}。
+   * 向后兼容：组合 {@link materializeLiveView} 与 {@link materializePersistBlock}。
+   *
+   * @deprecated 新代码请使用 {@link materializeLiveView} / {@link materializePersistBlock}。
    */
   materialize(): Promise<WorktreeMaterialized>;
 
