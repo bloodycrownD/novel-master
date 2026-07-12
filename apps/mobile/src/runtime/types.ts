@@ -9,9 +9,7 @@ import type {
   PersistentState,
   TdbcConnection,
 } from '@novel-master/core';
-import type {
-  AgentRegistryService,
-} from '@novel-master/core/agent';
+import type { AgentRegistryService } from '@novel-master/core/agent';
 import type {
   MessageService,
   MessageTranscriptEffectsService,
@@ -29,7 +27,14 @@ import type {
   EventsConfigStore,
   SimpleEventBus,
 } from '@novel-master/core/events';
-import type { SecretStore, ModelRequestService, ProviderModelService, ProviderService, ProviderServiceBundle, TokenCounterRegistry } from '@novel-master/core/provider';
+import type {
+  SecretStore,
+  ModelRequestService,
+  ProviderModelService,
+  ProviderService,
+  ProviderServiceBundle,
+  TokenCounterRegistry,
+} from '@novel-master/core/provider';
 import type { RegexConfigService } from '@novel-master/core/regex';
 import type { MessageCheckpointService } from '@novel-master/core/message-checkpoint';
 import type { SessionFsService } from '@novel-master/core/session-fs';
@@ -38,7 +43,7 @@ import type {
   SessionWorktreeBlockStore,
   WorktreeService,
 } from '@novel-master/core/worktree';
-import type {KkvService} from '@novel-master/core/kkv';
+import type { KkvService } from '@novel-master/core/kkv';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {

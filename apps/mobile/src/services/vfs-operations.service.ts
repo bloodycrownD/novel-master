@@ -5,11 +5,21 @@ import {
   type VfsListEntry,
   type VfsScope,
   type VfsService,
-} from "@novel-master/core/vfs";
-import { buildUserVfsCreateFileOp, buildUserVfsDeleteOp, buildUserVfsMkdirOp, buildUserVfsRenameOp, buildUserVfsSaveOp, moveVfsPath, readUserVfsSaveBaseline, remapPathUnderDir, type UserVfsSaveVersionOptions } from "@novel-master/core/vfs";
-import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {executeSessionUserVfsOp} from './user-vfs-turn-execute.service';
-import {captureSessionWorktreeBlockForMobile} from './worktree-block.service';
+} from '@novel-master/core/vfs';
+import {
+  buildUserVfsCreateFileOp,
+  buildUserVfsDeleteOp,
+  buildUserVfsMkdirOp,
+  buildUserVfsRenameOp,
+  buildUserVfsSaveOp,
+  moveVfsPath,
+  readUserVfsSaveBaseline,
+  remapPathUnderDir,
+  type UserVfsSaveVersionOptions,
+} from '@novel-master/core/vfs';
+import type { MobileNovelMasterRuntime } from '../runtime/types';
+import { executeSessionUserVfsOp } from './user-vfs-turn-execute.service';
+import { captureSessionWorktreeBlockForMobile } from './worktree-block.service';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -17,7 +27,7 @@ export async function createVfsFile(
   path: string,
   content = '',
 ): Promise<void> {
-  await vfs.write(path, content, {versionCheck: false});
+  await vfs.write(path, content, { versionCheck: false });
 }
 
 /** 会话 scope：新建文件经 userVfsTurn。 */
@@ -61,9 +71,9 @@ export async function sessionCreateVfsDirectory(
 export async function deleteVfsEntry(
   vfs: VfsService,
   path: string,
-  options?: {recursive?: boolean},
+  options?: { recursive?: boolean },
 ): Promise<void> {
-  await vfs.delete(path, {recursive: options?.recursive ?? true});
+  await vfs.delete(path, { recursive: options?.recursive ?? true });
 }
 
 /** 会话 scope：删除经 userVfsTurn。 */
@@ -71,7 +81,7 @@ export async function sessionDeleteVfsEntry(
   runtime: MobileNovelMasterRuntime,
   sessionId: string,
   path: string,
-  options?: {recursive?: boolean},
+  options?: { recursive?: boolean },
 ): Promise<void> {
   await executeSessionUserVfsOp(
     runtime,
@@ -109,9 +119,11 @@ export async function deleteScopedVfsEntry(
 ): Promise<void> {
   const recursive = options.recursive ?? true;
   if (options.useUserVfsTurn && options.sessionId != null) {
-    await sessionDeleteVfsEntry(runtime, options.sessionId, path, {recursive});
+    await sessionDeleteVfsEntry(runtime, options.sessionId, path, {
+      recursive,
+    });
   } else {
-    await deleteVfsEntry(vfs, path, {recursive});
+    await deleteVfsEntry(vfs, path, { recursive });
   }
   await cleanupWorktreeAfterVfsDelete(runtime, scope, path);
 }
@@ -178,7 +190,7 @@ export async function sessionSaveVfsFile(
     baseline != null &&
     lastKnownContent !== baseline
   ) {
-    console.info("[user-vfs-turn] external_drift_detected", { path });
+    console.info('[user-vfs-turn] external_drift_detected', { path });
   }
   const op = buildUserVfsSaveOp(
     baseline,
@@ -193,5 +205,5 @@ export async function sessionSaveVfsFile(
   await executeSessionUserVfsOp(runtime, sessionId, op);
 }
 
-export {remapPathUnderDir};
-export type {VfsListEntry};
+export { remapPathUnderDir };
+export type { VfsListEntry };

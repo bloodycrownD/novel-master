@@ -1,4 +1,4 @@
-import {normalizeFillPolicyForMobile} from '../src/storage/fill-policy-mobile';
+import { normalizeFillPolicyForMobile } from '../src/storage/fill-policy-mobile';
 import {
   defaultDirRuleForm,
   dirRuleToForm,

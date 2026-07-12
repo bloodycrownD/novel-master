@@ -1,10 +1,15 @@
 /**
  * Worktree rule toggles for VFS file manager row actions.
  */
-import { type VfsScope } from "@novel-master/core/vfs";
+import { type VfsScope } from '@novel-master/core/vfs';
 
-import { type InclusionMode, type SetDirRuleInput, type WorktreeDirRule, type WorktreeService } from "@novel-master/core/worktree";
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
+import {
+  type InclusionMode,
+  type SetDirRuleInput,
+  type WorktreeDirRule,
+  type WorktreeService,
+} from '@novel-master/core/worktree';
+import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core/worktree';
 import { normalizeFillPolicyForMobile } from '../storage/fill-policy-mobile';
 
 function worktreeRootLogicalPath(_scope: VfsScope): string {
@@ -24,8 +29,10 @@ export async function cycleFileInclusion(
   currentMode: InclusionMode,
 ): Promise<InclusionMode> {
   const next =
-    INCLUSION_CYCLE[(INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length];
-  await worktree.setFileRule({logicalPath, inclusionMode: next});
+    INCLUSION_CYCLE[
+      (INCLUSION_CYCLE.indexOf(currentMode) + 1) % INCLUSION_CYCLE.length
+    ];
+  await worktree.setFileRule({ logicalPath, inclusionMode: next });
   return next;
 }
 
@@ -62,7 +69,7 @@ export async function batchSetDirRulesEnabled(
   worktree: WorktreeService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
-): Promise<{applied: number; skipped: number}> {
+): Promise<{ applied: number; skipped: number }> {
   let applied = 0;
   let skipped = 0;
   for (const path of paths) {
@@ -77,14 +84,14 @@ export async function batchSetDirRulesEnabled(
       skipped += 1;
     }
   }
-  return {applied, skipped};
+  return { applied, skipped };
 }
 
 export async function batchSetDirRulesDisabled(
   worktree: WorktreeService,
   paths: readonly string[],
   dirPaths: ReadonlySet<string>,
-): Promise<{applied: number; skipped: number}> {
+): Promise<{ applied: number; skipped: number }> {
   let applied = 0;
   let skipped = 0;
   for (const path of paths) {
@@ -99,7 +106,7 @@ export async function batchSetDirRulesDisabled(
       skipped += 1;
     }
   }
-  return {applied, skipped};
+  return { applied, skipped };
 }
 
 /** Map persisted directory rule to sheet form input. */
@@ -142,9 +149,7 @@ export function emptyDirRuleForm(logicalPath: string) {
 }
 
 /** Scope root path for navigation (unified logical `/` for all domains). */
-export function vfsScopeRootPath(
-  scope: WorktreeService['scope'],
-): string {
+export function vfsScopeRootPath(scope: WorktreeService['scope']): string {
   return worktreeRootLogicalPath(scope);
 }
 
@@ -173,7 +178,10 @@ export async function migrateWorktreeDirRename(
     if (row.kind === 'dir') {
       const rule = await worktree.getDirRule(row.path);
       if (rule != null) {
-        await worktree.setDirRule({...dirRuleToForm(rule), logicalPath: targetPath});
+        await worktree.setDirRule({
+          ...dirRuleToForm(rule),
+          logicalPath: targetPath,
+        });
       }
     } else {
       await worktree.setFileRule({

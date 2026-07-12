@@ -1,12 +1,20 @@
 /**
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
-import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
+import {
+  type AgentDefinition,
+  resolveAgentForProject,
+} from '@novel-master/core/agent';
 
-import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import type {MobileNovelMasterRuntime} from '../runtime/types';
-import {applyActiveRegexChannel} from './regex-apply-channel';
-import {getCapturedBlockOrCaptureForMobile} from './worktree-block.service';
+import {
+  buildPromptLlmInputFromLayout,
+  type AgentPromptLayout,
+  type PromptLlmInput,
+  type PromptRenderContext,
+} from '@novel-master/core/prompt';
+import type { MobileNovelMasterRuntime } from '../runtime/types';
+import { applyActiveRegexChannel } from './regex-apply-channel';
+import { getCapturedBlockOrCaptureForMobile } from './worktree-block.service';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -54,5 +62,5 @@ export async function buildSessionPromptInput(
     vfs,
   };
   const input = await buildPromptLlmInputFromLayout(resolved.prompts, ctx);
-  return {definition: resolved, layout: resolved.prompts, ctx, input};
+  return { definition: resolved, layout: resolved.prompts, ctx, input };
 }

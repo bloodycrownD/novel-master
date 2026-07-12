@@ -20,16 +20,24 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {AppModal} from '../ui/AppModal';
-import {useDismissOverlaysOnBlur} from '../../hooks/useDismissOverlaysOnBlur';
-import { type VfsListEntry, type VfsScope, type VfsService } from "@novel-master/core/vfs";
+import { AppModal } from '../ui/AppModal';
+import { useDismissOverlaysOnBlur } from '../../hooks/useDismissOverlaysOnBlur';
+import {
+  type VfsListEntry,
+  type VfsScope,
+  type VfsService,
+} from '@novel-master/core/vfs';
 
-import { type SetDirRuleInput, type WorktreeListRow, type WorktreeService } from "@novel-master/core/worktree";
-import {ParentDirIcon, ZipExportIcon, ZipImportIcon} from '../icons/TabIcons';
-import {BatchCheckbox} from '../batch/BatchCheckbox';
-import {VfsBatchHeader} from '../batch/VfsBatchHeader';
-import {BottomSheetMenu, type SheetMenuItem} from '../sheet/BottomSheetMenu';
-import {DirectoryRuleSheet} from '../sheet/DirectoryRuleSheet';
+import {
+  type SetDirRuleInput,
+  type WorktreeListRow,
+  type WorktreeService,
+} from '@novel-master/core/worktree';
+import { ParentDirIcon, ZipExportIcon, ZipImportIcon } from '../icons/TabIcons';
+import { BatchCheckbox } from '../batch/BatchCheckbox';
+import { VfsBatchHeader } from '../batch/VfsBatchHeader';
+import { BottomSheetMenu, type SheetMenuItem } from '../sheet/BottomSheetMenu';
+import { DirectoryRuleSheet } from '../sheet/DirectoryRuleSheet';
 import {
   countFilesInDir,
   isDirectChild,
@@ -41,10 +49,10 @@ import {
   remapDirectChildRows,
   type MappedVfsRow,
 } from './vfs-row-mapper';
-import {orderedDirectChildPaths} from './vfs-direct-children-order';
-import { isUserVfsUnifiedToolTurnEnabled } from "@novel-master/core/feature-flags";
+import { orderedDirectChildPaths } from './vfs-direct-children-order';
+import { isUserVfsUnifiedToolTurnEnabled } from '@novel-master/core/feature-flags';
 
-import { isVfsError } from "@novel-master/core/vfs";
+import { isVfsError } from '@novel-master/core/vfs';
 import {
   createVfsDirectory,
   createVfsFile,
@@ -68,17 +76,17 @@ import {
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
-import {toastMessage} from '../../errors/toast-message';
-import {useRuntime} from '../../hooks/useRuntime';
-import {exportVfsZip, importVfsZip} from '../../services/vfs-zip.service';
-import {captureSessionWorktreeBlockForMobile} from '../../services/worktree-block.service';
-import {useTheme} from '../../theme/ThemeProvider';
-import {TemplatePullButton} from '../template/TemplatePullButton';
-import {useToast} from '../chrome/ToastHost';
+import { toastMessage } from '../../errors/toast-message';
+import { useRuntime } from '../../hooks/useRuntime';
+import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
+import { captureSessionWorktreeBlockForMobile } from '../../services/worktree-block.service';
+import { useTheme } from '../../theme/ThemeProvider';
+import { TemplatePullButton } from '../template/TemplatePullButton';
+import { useToast } from '../chrome/ToastHost';
 
 export type VfsFileManagerPullScope =
-  | {kind: 'project'; projectId: string}
-  | {kind: 'session'; sessionId: string};
+  | { kind: 'project'; projectId: string }
+  | { kind: 'session'; sessionId: string };
 
 /** 供父组件控制系统返回时逐级退出目录，并在切入工作区时刷新列表。 */
 export type VfsFileManagerHandle = {
@@ -123,13 +131,12 @@ export const VfsFileManager = forwardRef<
   },
   ref,
 ) {
-  const {tokens} = useTheme();
-  const {showToast} = useToast();
+  const { tokens } = useTheme();
+  const { showToast } = useToast();
   const runtime = useRuntime();
   const root = rootPath ?? vfsScopeRootPath(scope);
   const sessionId = scope.kind === 'session' ? scope.sessionId : undefined;
-  const useUserVfsTurn =
-    sessionId != null && isUserVfsUnifiedToolTurnEnabled();
+  const useUserVfsTurn = sessionId != null && isUserVfsUnifiedToolTurnEnabled();
   const [currentPath, setCurrentPath] = useState(root);
   const [rows, setRows] = useState<MappedVfsRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -231,7 +238,9 @@ export const VfsFileManager = forwardRef<
   worktreeRef.current = worktree;
   scopeRef.current = scope;
 
-  const fetchWorktreeRows = useCallback(async (): Promise<WorktreeListRow[]> => {
+  const fetchWorktreeRows = useCallback(async (): Promise<
+    WorktreeListRow[]
+  > => {
     const worktreeSvc = worktreeRef.current;
     return worktreeSvc.buildListRows();
   }, []);
@@ -293,20 +302,18 @@ export const VfsFileManager = forwardRef<
       });
 
       const mapped = orderedPaths.map(path => {
-          const meta = metaByPath.get(path);
-          if (meta) {
-            const count =
-              meta.kind === 'dir'
-                ? countFilesInDir(allRows, path)
-                : undefined;
-            return mapWorktreeRow(meta, count);
-          }
-          const vfsEntry = listEntries.find((e: VfsListEntry) => e.path === path);
-          if (vfsEntry) {
-            return mapVfsListEntry(vfsEntry);
-          }
-          return mapVfsListEntry({path, kind: 'file'});
-        });
+        const meta = metaByPath.get(path);
+        if (meta) {
+          const count =
+            meta.kind === 'dir' ? countFilesInDir(allRows, path) : undefined;
+          return mapWorktreeRow(meta, count);
+        }
+        const vfsEntry = listEntries.find((e: VfsListEntry) => e.path === path);
+        if (vfsEntry) {
+          return mapVfsListEntry(vfsEntry);
+        }
+        return mapVfsListEntry({ path, kind: 'file' });
+      });
       setRows(mapped);
     } catch (error) {
       showToast(toastMessage('加载失败', error));
@@ -353,35 +360,39 @@ export const VfsFileManager = forwardRef<
     if (paths.length === 0) {
       return;
     }
-    Alert.alert(
-      '确认删除',
-      `确定删除选中的 ${paths.length} 项？`,
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              try {
-                for (const path of paths) {
-                  await deleteScopedVfsEntry(runtime, scope, vfs, path, {
-                    recursive: true,
-                    useUserVfsTurn,
-                    sessionId,
-                  });
-                }
-                vfsBatch.exit();
-                await reloadVfsListOnly();
-              } catch (err) {
-                showToast(toastMessage('删除失败', err));
+    Alert.alert('确认删除', `确定删除选中的 ${paths.length} 项？`, [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              for (const path of paths) {
+                await deleteScopedVfsEntry(runtime, scope, vfs, path, {
+                  recursive: true,
+                  useUserVfsTurn,
+                  sessionId,
+                });
               }
-            })();
-          },
+              vfsBatch.exit();
+              await reloadVfsListOnly();
+            } catch (err) {
+              showToast(toastMessage('删除失败', err));
+            }
+          })();
         },
-      ],
-    );
-  }, [vfsBatch, vfs, reloadVfsListOnly, showToast, runtime, useUserVfsTurn, sessionId]);
+      },
+    ]);
+  }, [
+    vfsBatch,
+    vfs,
+    reloadVfsListOnly,
+    showToast,
+    runtime,
+    useUserVfsTurn,
+    sessionId,
+  ]);
 
   const runBatchSetRules = useCallback(
     async (enabled: boolean) => {
@@ -419,33 +430,30 @@ export const VfsFileManager = forwardRef<
   const menuRow = menuPath
     ? rows.find(r => r.path === menuPath) ??
       (metaForMenu
-        ? mapWorktreeRow(
-            metaForMenu,
-            countFilesInDir(worktreeRows, menuPath),
-          )
+        ? mapWorktreeRow(metaForMenu, countFilesInDir(worktreeRows, menuPath))
         : undefined)
     : undefined;
 
   const entityMenuItems: SheetMenuItem[] = menuRow
     ? menuRow.kind === 'dir'
       ? [
-          {label: '状态变更', action: 'toggle-include'},
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
+          { label: '状态变更', action: 'toggle-include' },
+          { label: '重命名', action: 'rename' },
+          { label: '删除', action: 'delete', danger: true },
         ]
       : [
-          {label: '打开', action: 'open'},
-          {label: '状态变更', action: 'toggle-include'},
-          {label: '重命名', action: 'rename'},
-          {label: '删除', action: 'delete', danger: true},
+          { label: '打开', action: 'open' },
+          { label: '状态变更', action: 'toggle-include' },
+          { label: '重命名', action: 'rename' },
+          { label: '删除', action: 'delete', danger: true },
         ]
     : [];
 
   const moreMenuItems: SheetMenuItem[] = [
-    {label: '新建目录', action: 'create-directory'},
-    {label: '新建文件', action: 'create-file'},
-    {label: '目录规则', action: 'directory-rule'},
-    {label: '批量操作', action: 'batch'},
+    { label: '新建目录', action: 'create-directory' },
+    { label: '新建文件', action: 'create-file' },
+    { label: '目录规则', action: 'directory-rule' },
+    { label: '批量操作', action: 'batch' },
   ];
 
   const openPrompt = (state: PromptState) => {
@@ -484,7 +492,7 @@ export const VfsFileManager = forwardRef<
           setWorktreeRows(prev =>
             prev.map(row =>
               row.path === menuPath && row.kind === 'dir'
-                ? {...row, ruleState: dirRuleStateFromEnabled(nextEnabled)}
+                ? { ...row, ruleState: dirRuleStateFromEnabled(nextEnabled) }
                 : row,
             ),
           );
@@ -564,30 +572,26 @@ export const VfsFileManager = forwardRef<
         return;
       }
       if (action === 'delete') {
-        Alert.alert(
-          '确认删除',
-          `确定删除 ${menuRow.name}？`,
-          [
-            {text: '取消', style: 'cancel'},
-            {
-              text: '删除',
-              style: 'destructive',
-              onPress: () => {
-                const runDelete = async () => {
-                  await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
-                    recursive: true,
-                    useUserVfsTurn,
-                    sessionId,
-                  });
-                  await reloadVfsListOnly();
-                };
-                runDelete().catch(err =>
-                  showToast(toastMessage('删除失败', err)),
-                );
-              },
+        Alert.alert('确认删除', `确定删除 ${menuRow.name}？`, [
+          { text: '取消', style: 'cancel' },
+          {
+            text: '删除',
+            style: 'destructive',
+            onPress: () => {
+              const runDelete = async () => {
+                await deleteScopedVfsEntry(runtime, scope, vfs, menuPath, {
+                  recursive: true,
+                  useUserVfsTurn,
+                  sessionId,
+                });
+                await reloadVfsListOnly();
+              };
+              runDelete().catch(err =>
+                showToast(toastMessage('删除失败', err)),
+              );
             },
-          ],
-        );
+          },
+        ]);
       }
     } catch (error) {
       showToast(toastMessage('操作失败', error));
@@ -607,23 +611,19 @@ export const VfsFileManager = forwardRef<
   }, [runtime, scope, showToast]);
 
   const handleImportZip = useCallback(() => {
-    Alert.alert(
-      '导入 ZIP',
-      '将完全替换当前工作区文件，是否继续？',
-      [
-        {text: '取消', style: 'cancel'},
-        {
-          text: '导入',
-          style: 'destructive',
-          onPress: () => {
-            importVfsZip(runtime, scope, {confirmed: true})
-              .then(() => reloadVfsListOnly())
-              .then(() => showToast('ZIP 导入完成'))
-              .catch(err => showToast(toastMessage('导入失败', err)));
-          },
+    Alert.alert('导入 ZIP', '将完全替换当前工作区文件，是否继续？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '导入',
+        style: 'destructive',
+        onPress: () => {
+          importVfsZip(runtime, scope, { confirmed: true })
+            .then(() => reloadVfsListOnly())
+            .then(() => showToast('ZIP 导入完成'))
+            .catch(err => showToast(toastMessage('导入失败', err)));
         },
-      ],
-    );
+      },
+    ]);
   }, [runtime, scope, reloadVfsListOnly, showToast]);
 
   const handleMoreAction = (action: string) => {
@@ -638,9 +638,7 @@ export const VfsFileManager = forwardRef<
             return;
           }
           const path =
-            currentPath === '/'
-              ? `/${trimmed}`
-              : `${currentPath}/${trimmed}`;
+            currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
             await sessionCreateVfsFile(runtime, sessionId!, path);
           } else {
@@ -662,9 +660,7 @@ export const VfsFileManager = forwardRef<
             return;
           }
           const path =
-            currentPath === '/'
-              ? `/${trimmed}`
-              : `${currentPath}/${trimmed}`;
+            currentPath === '/' ? `/${trimmed}` : `${currentPath}/${trimmed}`;
           if (useUserVfsTurn) {
             await sessionCreateVfsDirectory(runtime, sessionId!, path);
           } else {
@@ -710,31 +706,33 @@ export const VfsFileManager = forwardRef<
   const badgeColors = (tone: 'in' | 'follow' | 'muted') => {
     switch (tone) {
       case 'in':
-        return {backgroundColor: '#dbeafe', color: tokens.primary};
+        return { backgroundColor: '#dbeafe', color: tokens.primary };
       case 'muted':
-        return {backgroundColor: tokens.border, color: tokens.textSecondary};
+        return { backgroundColor: tokens.border, color: tokens.textSecondary };
       default:
-        return {backgroundColor: '#fef3c7', color: '#92400e'};
+        return { backgroundColor: '#fef3c7', color: '#92400e' };
     }
   };
 
   return (
-    <View style={[styles.root, {backgroundColor: tokens.background}]}>
-      <View style={[styles.header, {borderBottomColor: tokens.border}]}>
+    <View style={[styles.root, { backgroundColor: tokens.background }]}>
+      <View style={[styles.header, { borderBottomColor: tokens.border }]}>
         <View style={styles.navGroup}>
           <Pressable
             disabled={!canGoUp}
             accessibilityLabel="上级目录"
             onPress={handleGoUp}
-            style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}>
+            style={[styles.iconBtn, !canGoUp && styles.iconBtnDisabled]}
+          >
             <ParentDirIcon
               color={canGoUp ? tokens.primary : tokens.textSecondary}
             />
           </Pressable>
           <Text
-            style={[styles.path, {color: tokens.text}]}
+            style={[styles.path, { color: tokens.text }]}
             numberOfLines={1}
-            ellipsizeMode="middle">
+            ellipsizeMode="middle"
+          >
             {currentPath}
           </Text>
         </View>
@@ -750,7 +748,8 @@ export const VfsFileManager = forwardRef<
             accessibilityLabel="导出 ZIP"
             disabled={exportingZip}
             onPress={handleExportZip}
-            style={[styles.iconBtn, exportingZip && styles.iconBtnDisabled]}>
+            style={[styles.iconBtn, exportingZip && styles.iconBtnDisabled]}
+          >
             {exportingZip ? (
               <ActivityIndicator size="small" color={tokens.primary} />
             ) : (
@@ -760,15 +759,17 @@ export const VfsFileManager = forwardRef<
           <Pressable
             accessibilityLabel="导入 ZIP"
             onPress={handleImportZip}
-            style={styles.iconBtn}>
+            style={styles.iconBtn}
+          >
             <ZipImportIcon color={tokens.primary} />
           </Pressable>
           <Pressable
             testID="vfs-more-action"
             accessibilityLabel="更多操作"
             onPress={() => setMoreOpen(true)}
-            style={styles.iconBtn}>
-            <Text style={{color: tokens.text, fontSize: 20, lineHeight: 22}}>
+            style={styles.iconBtn}
+          >
+            <Text style={{ color: tokens.text, fontSize: 20, lineHeight: 22 }}>
               ⋯
             </Text>
           </Pressable>
@@ -786,7 +787,7 @@ export const VfsFileManager = forwardRef<
       ) : null}
 
       {loading ? (
-        <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+        <Text style={[styles.empty, { color: tokens.textSecondary }]}>
           加载中…
         </Text>
       ) : (
@@ -794,79 +795,87 @@ export const VfsFileManager = forwardRef<
           data={rows}
           keyExtractor={item => item.path}
           ListEmptyComponent={
-            <Text style={[styles.empty, {color: tokens.textSecondary}]}>
+            <Text style={[styles.empty, { color: tokens.textSecondary }]}>
               空目录
             </Text>
           }
-          renderItem={({item}) => {
+          renderItem={({ item }) => {
             const selected = vfsBatch.isSelected(item.path);
             return (
-            <View
-              testID={`vfs-row-${item.name}`}
-              style={[styles.row, {borderBottomColor: tokens.border}]}>
-              {vfsBatch.active ? (
-                <View style={styles.batchCheckCol}>
-                  <BatchCheckbox
-                    checked={selected}
-                    onToggle={() => vfsBatch.toggle(item.path)}
-                  />
-                </View>
-              ) : null}
-              <Pressable
-                style={styles.item}
-                onPress={() => {
-                  if (vfsBatch.active) {
-                    vfsBatch.toggle(item.path);
-                    return;
-                  }
-                  if (item.kind === 'dir') {
-                    setCurrentPath(item.path);
-                  } else {
-                    onOpenFile(item.path);
-                  }
-                }}>
-                <Text style={styles.kind}>{item.kind === 'dir' ? '📁' : '📄'}</Text>
-                <View style={styles.textBlock}>
-                  <Text style={{color: tokens.text}} numberOfLines={1}>
-                    {item.name}
-                  </Text>
-                  <Text
-                    style={{color: tokens.textSecondary, fontSize: 12}}
-                    numberOfLines={1}>
-                    {item.subtitle}
-                  </Text>
-                </View>
-                {item.badge ? (
-                  <View
-                    style={[
-                      styles.badge,
-                      {
-                        backgroundColor: badgeColors(item.badge.tone)
-                          .backgroundColor,
-                      },
-                    ]}>
-                    <Text
-                      style={{
-                        fontSize: 11,
-                        color: badgeColors(item.badge.tone).color,
-                      }}>
-                      {item.badge.label}
-                    </Text>
+              <View
+                testID={`vfs-row-${item.name}`}
+                style={[styles.row, { borderBottomColor: tokens.border }]}
+              >
+                {vfsBatch.active ? (
+                  <View style={styles.batchCheckCol}>
+                    <BatchCheckbox
+                      checked={selected}
+                      onToggle={() => vfsBatch.toggle(item.path)}
+                    />
                   </View>
                 ) : null}
-              </Pressable>
-              {vfsBatch.active ? null : (
-              <Pressable
-                testID={`vfs-row-menu-${item.name}`}
-                onPress={() => setMenuPath(item.path)}
-                style={styles.menuBtn}
-                hitSlop={8}>
-                <Text style={{color: tokens.textSecondary, fontSize: 18}}>
-                  ⋮
-                </Text>
-              </Pressable>
-              )}
-            </View>
+                <Pressable
+                  style={styles.item}
+                  onPress={() => {
+                    if (vfsBatch.active) {
+                      vfsBatch.toggle(item.path);
+                      return;
+                    }
+                    if (item.kind === 'dir') {
+                      setCurrentPath(item.path);
+                    } else {
+                      onOpenFile(item.path);
+                    }
+                  }}
+                >
+                  <Text style={styles.kind}>
+                    {item.kind === 'dir' ? '📁' : '📄'}
+                  </Text>
+                  <View style={styles.textBlock}>
+                    <Text style={{ color: tokens.text }} numberOfLines={1}>
+                      {item.name}
+                    </Text>
+                    <Text
+                      style={{ color: tokens.textSecondary, fontSize: 12 }}
+                      numberOfLines={1}
+                    >
+                      {item.subtitle}
+                    </Text>
+                  </View>
+                  {item.badge ? (
+                    <View
+                      style={[
+                        styles.badge,
+                        {
+                          backgroundColor: badgeColors(item.badge.tone)
+                            .backgroundColor,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          color: badgeColors(item.badge.tone).color,
+                        }}
+                      >
+                        {item.badge.label}
+                      </Text>
+                    </View>
+                  ) : null}
+                </Pressable>
+                {vfsBatch.active ? null : (
+                  <Pressable
+                    testID={`vfs-row-menu-${item.name}`}
+                    onPress={() => setMenuPath(item.path)}
+                    style={styles.menuBtn}
+                    hitSlop={8}
+                  >
+                    <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>
+                      ⋮
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             );
           }}
         />
@@ -901,17 +910,18 @@ export const VfsFileManager = forwardRef<
         visible={prompt != null}
         transparent
         animationType="fade"
-        onRequestClose={() => setPrompt(null)}>
+        onRequestClose={() => setPrompt(null)}
+      >
         <View style={styles.promptBackdrop}>
-          <View style={[styles.promptBox, {backgroundColor: tokens.surface}]}>
-            <Text style={[styles.promptTitle, {color: tokens.text}]}>
+          <View style={[styles.promptBox, { backgroundColor: tokens.surface }]}>
+            <Text style={[styles.promptTitle, { color: tokens.text }]}>
               {prompt?.title}
             </Text>
             <TextInput
               testID="vfs-prompt-input"
               style={[
                 styles.promptInput,
-                {borderColor: tokens.border, color: tokens.text},
+                { borderColor: tokens.border, color: tokens.text },
               ]}
               placeholder={prompt?.placeholder}
               placeholderTextColor={tokens.textSecondary}
@@ -921,7 +931,7 @@ export const VfsFileManager = forwardRef<
             />
             <View style={styles.promptActions}>
               <Pressable onPress={() => setPrompt(null)}>
-                <Text style={{color: tokens.textSecondary}}>取消</Text>
+                <Text style={{ color: tokens.textSecondary }}>取消</Text>
               </Pressable>
               <Pressable
                 testID="vfs-prompt-submit"
@@ -934,11 +944,10 @@ export const VfsFileManager = forwardRef<
                   current
                     .onSubmit(promptValue)
                     .then(() => reloadVfsListOnly())
-                    .catch(err =>
-                      showToast(toastMessage('失败', err)),
-                    );
-                }}>
-                <Text style={{color: tokens.primary}}>确定</Text>
+                    .catch(err => showToast(toastMessage('失败', err)));
+                }}
+              >
+                <Text style={{ color: tokens.primary }}>确定</Text>
               </Pressable>
             </View>
           </View>
@@ -949,7 +958,7 @@ export const VfsFileManager = forwardRef<
 });
 
 const styles = StyleSheet.create({
-  root: {flex: 1},
+  root: { flex: 1 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -957,7 +966,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  navGroup: {flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8},
+  navGroup: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   iconBtn: {
     width: 40,
     height: 40,
@@ -965,8 +974,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 10,
   },
-  iconBtnDisabled: {opacity: 0.4},
-  path: {flex: 1, fontFamily: 'monospace', fontSize: 13},
+  iconBtnDisabled: { opacity: 0.4 },
+  path: { flex: 1, fontFamily: 'monospace', fontSize: 13 },
   toolbarActions: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -983,20 +992,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  item: {flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12},
-  kind: {fontSize: 18, marginRight: 8},
-  textBlock: {flex: 1, minWidth: 0},
-  badge: {borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2},
-  menuBtn: {paddingHorizontal: 12, paddingVertical: 8},
-  empty: {textAlign: 'center', marginTop: 32},
+  item: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: 12 },
+  kind: { fontSize: 18, marginRight: 8 },
+  textBlock: { flex: 1, minWidth: 0 },
+  badge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  menuBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+  empty: { textAlign: 'center', marginTop: 32 },
   promptBackdrop: {
     flex: 1,
     justifyContent: 'center',
     padding: 24,
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  promptBox: {borderRadius: 12, padding: 16},
-  promptTitle: {fontSize: 16, fontWeight: '600', marginBottom: 12},
+  promptBox: { borderRadius: 12, padding: 16 },
+  promptTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
   promptInput: {
     borderWidth: 1,
     borderRadius: 8,

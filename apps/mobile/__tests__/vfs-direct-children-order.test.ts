@@ -1,6 +1,9 @@
-import {orderedDirectChildPaths} from '../src/components/vfs/vfs-direct-children-order';
-import { type WorktreeDirRule, type WorktreeListRow } from "@novel-master/core/worktree";
-import { DEFAULT_WORKTREE_DIR_RULE } from "@novel-master/core/worktree";
+import { orderedDirectChildPaths } from '../src/components/vfs/vfs-direct-children-order';
+import {
+  type WorktreeDirRule,
+  type WorktreeListRow,
+} from '@novel-master/core/worktree';
+import { DEFAULT_WORKTREE_DIR_RULE } from '@novel-master/core/worktree';
 
 describe('orderedDirectChildPaths', () => {
   const parent = '/p';

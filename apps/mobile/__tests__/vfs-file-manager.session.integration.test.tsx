@@ -175,7 +175,7 @@ function flushPromises(): Promise<void> {
 
 async function waitFor(
   predicate: () => boolean,
-  options?: {maxAttempts?: number},
+  options?: { maxAttempts?: number },
 ): Promise<void> {
   const maxAttempts = options?.maxAttempts ?? 50;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {

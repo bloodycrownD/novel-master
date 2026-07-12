@@ -1,7 +1,7 @@
 /**
  * Directory inclusion rule form → {@link WorktreeService.setDirRule}.
  */
-import React, {useEffect, useState} from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -10,12 +10,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import { DEFAULT_WORKTREE_DIR_RULE, type FillPolicy, type SetDirRuleInput, type SortField, type SortOrder } from "@novel-master/core/worktree";
-import {FormSwitchRow} from '../form/FormSwitchRow';
-import {AppModal} from '../ui/AppModal';
-import {normalizeFillPolicyForMobile} from '../../storage/fill-policy-mobile';
-import {useTheme} from '../../theme/ThemeProvider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  DEFAULT_WORKTREE_DIR_RULE,
+  type FillPolicy,
+  type SetDirRuleInput,
+  type SortField,
+  type SortOrder,
+} from '@novel-master/core/worktree';
+import { FormSwitchRow } from '../form/FormSwitchRow';
+import { AppModal } from '../ui/AppModal';
+import { normalizeFillPolicyForMobile } from '../../storage/fill-policy-mobile';
+import { useTheme } from '../../theme/ThemeProvider';
 
 type Props = {
   visible: boolean;
@@ -27,21 +33,21 @@ type Props = {
   onSave: (input: SetDirRuleInput) => Promise<void>;
 };
 
-const SORT_FIELDS: {value: SortField; label: string}[] = [
-  {value: 'name', label: '文件名称'},
-  {value: 'created', label: '创建时间'},
-  {value: 'updated', label: '更新时间'},
+const SORT_FIELDS: { value: SortField; label: string }[] = [
+  { value: 'name', label: '文件名称' },
+  { value: 'created', label: '创建时间' },
+  { value: 'updated', label: '更新时间' },
 ];
 
-const SORT_ORDERS: {value: SortOrder; label: string}[] = [
-  {value: 'asc', label: '升序'},
-  {value: 'desc', label: '降序'},
+const SORT_ORDERS: { value: SortOrder; label: string }[] = [
+  { value: 'asc', label: '升序' },
+  { value: 'desc', label: '降序' },
 ];
 
-const FILL_POLICIES: {value: FillPolicy; label: string}[] = [
-  {value: 'filename', label: '文件名'},
-  {value: 'header', label: '头信息'},
-  {value: 'hidden', label: '不展示'},
+const FILL_POLICIES: { value: FillPolicy; label: string }[] = [
+  { value: 'filename', label: '文件名' },
+  { value: 'header', label: '头信息' },
+  { value: 'hidden', label: '不展示' },
 ];
 
 export function DirectoryRuleSheet({
@@ -52,7 +58,7 @@ export function DirectoryRuleSheet({
   onClose,
   onSave,
 }: Props) {
-  const {tokens} = useTheme();
+  const { tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const [sortField, setSortField] = useState<SortField>(
     DEFAULT_WORKTREE_DIR_RULE.sortField,
@@ -89,9 +95,7 @@ export function DirectoryRuleSheet({
         initial?.fillPolicy ?? DEFAULT_WORKTREE_DIR_RULE.fillPolicy,
       ),
     );
-    setRuleEnabled(
-      rootRuleLocked ? true : (initial?.ruleEnabled ?? false),
-    );
+    setRuleEnabled(rootRuleLocked ? true : initial?.ruleEnabled ?? false);
   }, [visible, initial, logicalPath, rootRuleLocked]);
 
   const handleSave = async () => {
@@ -117,7 +121,8 @@ export function DirectoryRuleSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}>
+      onRequestClose={onClose}
+    >
       <View style={styles.backdrop}>
         <View
           style={[
@@ -126,23 +131,21 @@ export function DirectoryRuleSheet({
               backgroundColor: tokens.surface,
               paddingBottom: Math.max(insets.bottom, 16),
             },
-          ]}>
-          <Text style={[styles.heading, {color: tokens.text}]}>
-            目录规则
-          </Text>
+          ]}
+        >
+          <Text style={[styles.heading, { color: tokens.text }]}>目录规则</Text>
           <ScrollView
             style={styles.form}
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}>
+            showsVerticalScrollIndicator={false}
+          >
             <FormSwitchRow
               label="规则启用"
               tokens={tokens}
               value={ruleEnabled}
               onValueChange={setRuleEnabled}
               disabled={rootRuleLocked}
-              description={
-                rootRuleLocked ? '根目录规则不可关闭' : undefined
-              }
+              description={rootRuleLocked ? '根目录规则不可关闭' : undefined}
               testID="dir-rule-enabled-switch"
             />
             <FieldLabel tokens={tokens} text="排序字段" />
@@ -163,7 +166,7 @@ export function DirectoryRuleSheet({
             <TextInput
               style={[
                 styles.input,
-                {borderColor: tokens.border, color: tokens.text},
+                { borderColor: tokens.border, color: tokens.text },
               ]}
               keyboardType="number-pad"
               value={headCount}
@@ -174,7 +177,7 @@ export function DirectoryRuleSheet({
             <TextInput
               style={[
                 styles.input,
-                {borderColor: tokens.border, color: tokens.text},
+                { borderColor: tokens.border, color: tokens.text },
               ]}
               keyboardType="number-pad"
               value={tailCount}
@@ -189,15 +192,16 @@ export function DirectoryRuleSheet({
               tokens={tokens}
             />
           </ScrollView>
-          <View style={[styles.actions, {borderTopColor: tokens.border}]}>
+          <View style={[styles.actions, { borderTopColor: tokens.border }]}>
             <Pressable onPress={onClose} style={styles.actionBtn}>
-              <Text style={{color: tokens.textSecondary}}>取消</Text>
+              <Text style={{ color: tokens.textSecondary }}>取消</Text>
             </Pressable>
             <Pressable
               onPress={() => handleSave().catch(() => undefined)}
               disabled={saving}
-              style={styles.actionBtn}>
-              <Text style={{color: tokens.primary}}>
+              style={styles.actionBtn}
+            >
+              <Text style={{ color: tokens.primary }}>
                 {saving ? '保存中…' : '保存'}
               </Text>
             </Pressable>
@@ -221,10 +225,10 @@ function FieldLabel({
   tokens,
 }: {
   text: string;
-  tokens: {textSecondary: string};
+  tokens: { textSecondary: string };
 }) {
   return (
-    <Text style={[styles.label, {color: tokens.textSecondary}]}>{text}</Text>
+    <Text style={[styles.label, { color: tokens.textSecondary }]}>{text}</Text>
   );
 }
 
@@ -234,10 +238,10 @@ function OptionRow<T extends string>({
   onChange,
   tokens,
 }: {
-  options: {value: T; label: string}[];
+  options: { value: T; label: string }[];
   value: T;
   onChange: (v: T) => void;
-  tokens: {border: string; primary: string; text: string};
+  tokens: { border: string; primary: string; text: string };
 }) {
   return (
     <View style={styles.optionRow}>
@@ -253,8 +257,9 @@ function OptionRow<T extends string>({
                 borderColor: active ? tokens.primary : tokens.border,
                 backgroundColor: active ? `${tokens.primary}22` : 'transparent',
               },
-            ]}>
-            <Text style={{color: active ? tokens.primary : tokens.text}}>
+            ]}
+          >
+            <Text style={{ color: active ? tokens.primary : tokens.text }}>
               {opt.label}
             </Text>
           </Pressable>
@@ -278,16 +283,16 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     overflow: 'hidden',
   },
-  heading: {fontSize: 18, fontWeight: '600', marginBottom: 12},
-  form: {maxHeight: 360},
-  label: {fontSize: 12, marginTop: 12, marginBottom: 6},
+  heading: { fontSize: 18, fontWeight: '600', marginBottom: 12 },
+  form: { maxHeight: 360 },
+  label: { fontSize: 12, marginTop: 12, marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  optionRow: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  optionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
     borderWidth: 1,
     borderRadius: 16,
@@ -301,5 +306,5 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  actionBtn: {padding: 8},
+  actionBtn: { padding: 8 },
 });

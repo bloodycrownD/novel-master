@@ -1,14 +1,14 @@
 /**
  * Maps {@link WorktreeListRow} + VFS entry metadata to list UI strings (prototype vfs-fm).
  */
-import { type VfsListEntry } from "@novel-master/core/vfs";
+import { type VfsListEntry } from '@novel-master/core/vfs';
 import {
   displayStateLabel,
   inclusionModeLabel,
   type InclusionMode,
   type RuleState,
   type WorktreeListRow,
-} from "@novel-master/core/worktree";
+} from '@novel-master/core/worktree';
 
 export type VfsBadgeTone = 'in' | 'follow' | 'muted';
 
@@ -58,16 +58,15 @@ export function countFilesInDir(
   rows: readonly WorktreeListRow[],
   dirPath: string,
 ): number {
-  return rows.filter(
-    r => r.kind === 'file' && isDirectChild(dirPath, r.path),
-  ).length;
+  return rows.filter(r => r.kind === 'file' && isDirectChild(dirPath, r.path))
+    .length;
 }
 
 /** Directory rule on/off badge for list rows. */
 export function dirRuleBadge(ruleEnabled: boolean): VfsRowBadge {
   return ruleEnabled
-    ? {label: '开启', tone: 'in'}
-    : {label: '关闭', tone: 'muted'};
+    ? { label: '开启', tone: 'in' }
+    : { label: '关闭', tone: 'muted' };
 }
 
 /** Patch one directory row after rule enabled toggles (no list reload). */
@@ -78,7 +77,7 @@ export function patchDirRuleRow(
   if (row.kind !== 'dir') {
     return row;
   }
-  return {...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled)};
+  return { ...row, ruleEnabled, badge: dirRuleBadge(ruleEnabled) };
 }
 
 /** Worktree list row enum after directory rule enabled toggles. */
@@ -89,11 +88,11 @@ export function dirRuleStateFromEnabled(ruleEnabled: boolean): RuleState {
 function fileBadge(mode: InclusionMode): VfsRowBadge {
   switch (mode) {
     case 'hide':
-      return {label: '隐藏', tone: 'muted'};
+      return { label: '隐藏', tone: 'muted' };
     case 'show':
-      return {label: '展示', tone: 'in'};
+      return { label: '展示', tone: 'in' };
     default:
-      return {label: '跟随', tone: 'follow'};
+      return { label: '跟随', tone: 'follow' };
   }
 }
 
@@ -119,7 +118,9 @@ export function mapWorktreeRow(
     };
   }
 
-  const subtitle = `${inclusionModeLabel(row.inclusionMode)}·${displayStateLabel(row.displayState)}`;
+  const subtitle = `${inclusionModeLabel(
+    row.inclusionMode,
+  )}·${displayStateLabel(row.displayState)}`;
 
   return {
     path: row.path,
@@ -148,7 +149,7 @@ export function mapVfsListEntry(entry: VfsListEntry): MappedVfsRow {
     name: entryName(entry.path),
     kind: 'file',
     subtitle: '跟随·全内容',
-    badge: {label: '跟随', tone: 'follow'},
+    badge: { label: '跟随', tone: 'follow' },
     ruleEnabled: false,
   };
 }
@@ -180,5 +181,5 @@ export function remapDirectChildRows(
 
 /** @deprecated Use {@link mapVfsListEntry}. */
 export function mapVfsFilePath(path: string): MappedVfsRow {
-  return mapVfsListEntry({path, kind: 'file'});
+  return mapVfsListEntry({ path, kind: 'file' });
 }
