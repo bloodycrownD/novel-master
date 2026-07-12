@@ -239,7 +239,7 @@ describe("MessageRollbackService (revision model)", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    await ctx.messages.append(session.id, "user", textBlocks("go"));
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "nested" }],
     });
@@ -260,7 +260,7 @@ describe("MessageRollbackService (revision model)", () => {
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
-    const user1 = await ctx.messages.append(session.id, "user", textBlocks("go"));
+    await ctx.messages.append(session.id, "user", textBlocks("go"));
     const assistant1 = await ctx.messages.append(session.id, "assistant", {
       blocks: [{ type: "text", text: "nested" }],
     });

@@ -8,7 +8,12 @@ import {
   extractEditableTextFromMessage,
 } from '@novel-master/core/chat';
 
-export { extractEditableTextFromMessage as editableTextFromMessage };
+/** Re-export Core 规则。 */
+export function editableTextFromMessage(
+  message: ChatMessage,
+): string | null {
+  return extractEditableTextFromMessage(message);
+}
 
 export interface MessageActionMenuItem {
   readonly label: string;
