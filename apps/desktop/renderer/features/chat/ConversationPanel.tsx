@@ -7,7 +7,7 @@ import type {
   AgentStepCommittedPayload,
 } from '@shared/agent-event-types';
 import { useAgentStream } from '@/hooks/useAgentStream';
-import { useAgentRunLifecycle } from '@/hooks/useAgentRunLifecycle';
+import { useAgentRunLifecycle, shouldApplyTranscriptReload } from '@/hooks/useAgentRunLifecycle';
 import { useChatMessagesScrollFollow } from '@/hooks/useChatMessagesScrollFollow';
 import { useAgentStreamMetrics } from '@/hooks/useAgentStreamMetrics';
 import { useDesktopAgentActive } from '@/hooks/useDesktopAgentActive';
@@ -68,12 +68,18 @@ export function ConversationPanel({
     uiRunning: running,
     acceptRunEvent,
     beginUiRun,
-    abortUiRun,
+    abortUiRun: abortUiRunBase,
+    getUiRunning,
+    getTranscriptFreezeCount,
     onRunStarted,
     onRunFinished: finishUiRun,
     onRunFailed: failUiRun,
     resetUiForSessionChange,
   } = runLifecycle;
+
+  const abortUiRun = useCallback(() => {
+    abortUiRunBase(messages.length);
+  }, [abortUiRunBase, messages.length]);
 
   const agentActive = useDesktopAgentActive();
 
@@ -154,37 +160,59 @@ export function ConversationPanel({
 
   const onTextDelta = useCallback(
     (delta: string) => {
+      if (!getUiRunning()) {
+        return;
+      }
       if (delta.length === 0) {
         return;
       }
       noteMetricsTextDelta(delta);
       setStreamingText(prev => prev + delta);
     },
-    [noteMetricsTextDelta],
+    [getUiRunning, noteMetricsTextDelta],
   );
 
   const onThinkingDelta = useCallback(
     (delta: string) => {
+      if (!getUiRunning()) {
+        return;
+      }
       noteMetricsThinkingDelta(delta);
       setStreamingThinking(prev => prev + delta);
     },
-    [noteMetricsThinkingDelta],
+    [getUiRunning, noteMetricsThinkingDelta],
   );
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
+      const shouldReload = shouldApplyTranscriptReload(
+        getUiRunning(),
+        getTranscriptFreezeCount(),
+      );
+      if (shouldReload) {
+        void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
+      }
       // Desktop-only 实时消费方 ①：Agent 工具突变后立即刷新 Explorer
       if (payload.vfsMutated) {
         vfsMutatedInRunRef.current = true;
         notifyWorkspaceMutated();
       }
     },
-    [reloadMessages, onStreamReset, notifyWorkspaceMutated],
+    [
+      reloadMessages,
+      onStreamReset,
+      notifyWorkspaceMutated,
+      getUiRunning,
+      getTranscriptFreezeCount,
+    ],
   );
 
   const onRunFinished = useCallback(
     (payload: AgentRunFinishedPayload) => {
+      const shouldReload = shouldApplyTranscriptReload(
+        getUiRunning(),
+        getTranscriptFreezeCount(),
+      );
       if (!finishUiRun(payload)) {
         return;
       }
@@ -194,13 +222,25 @@ export function ConversationPanel({
         notifyWorkspaceMutated();
       }
       vfsMutatedInRunRef.current = false;
-      void reloadMessages();
+      if (shouldReload) {
+        void reloadMessages();
+      }
     },
-    [finishUiRun, reloadMessages, notifyWorkspaceMutated],
+    [
+      finishUiRun,
+      reloadMessages,
+      notifyWorkspaceMutated,
+      getUiRunning,
+      getTranscriptFreezeCount,
+    ],
   );
 
   const onRunFailed = useCallback(
     (payload: AgentRunFailedPayload) => {
+      const shouldReload = shouldApplyTranscriptReload(
+        getUiRunning(),
+        getTranscriptFreezeCount(),
+      );
       if (!failUiRun(payload)) {
         return;
       }
@@ -212,9 +252,17 @@ export function ConversationPanel({
       vfsMutatedInRunRef.current = false;
       setComposerError(formatUserError(payload.error));
       showToast(payload.error);
-      void reloadMessages();
+      if (shouldReload) {
+        void reloadMessages();
+      }
     },
-    [failUiRun, reloadMessages, notifyWorkspaceMutated],
+    [
+      failUiRun,
+      reloadMessages,
+      notifyWorkspaceMutated,
+      getUiRunning,
+      getTranscriptFreezeCount,
+    ],
   );
 
   useAgentStream({
