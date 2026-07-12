@@ -30,7 +30,7 @@ export function SessionActionsDrawer({
     { label: '聊天重命名', action: onRename },
     { label: '查看提示词', action: onRealPrompt },
     { label: '压缩上下文', action: onCompact },
-    { label: '刷新提示词文件块', action: onCapturePromptFileBlock },
+    { label: '工作树快照', action: onCapturePromptFileBlock },
   ];
 
   return (

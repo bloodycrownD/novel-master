@@ -55,7 +55,7 @@ export async function captureSessionWorktreeBlockForMobile(
 /** {@link captureSessionWorktreeBlockForMobile} 的 spec 对齐导出名。 */
 export { captureSessionWorktreeBlockForMobile as captureSessionWorktreeBlock };
 
-/** 手动刷新提示词文件块：委托 {@link captureSessionWorktreeBlockForMobile}。 */
+/** 手动工作树快照：委托 {@link captureSessionWorktreeBlockForMobile}。 */
 export async function captureSessionWorktreeBlockOnManualRefresh(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorktreeBlockScope,

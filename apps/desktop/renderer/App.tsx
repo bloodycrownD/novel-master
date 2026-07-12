@@ -352,7 +352,7 @@ function DesktopOverlays() {
                   sessionId,
                 });
                 if (result.ok) {
-                  showToast('已更新提示词文件块快照');
+                  showToast('已更新工作树快照');
                 } else {
                   showToast(result.error.message);
                 }
@@ -360,7 +360,7 @@ function DesktopOverlays() {
             }
           }}
         >
-          刷新提示词文件块
+          工作树快照
         </button>
         <button
           type="button"

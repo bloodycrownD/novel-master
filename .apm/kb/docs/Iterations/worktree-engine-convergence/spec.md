@@ -125,6 +125,14 @@ flowchart TB
 | VFS 删 | 同上（规则清理后内联调用） | `handleVfsDelete` | `cleanupWorktreeAfterVfsDelete` | `invalidate*` |
 | 手动 | `captureSessionWorktreeBlockOnManualRefresh` → 委托 `captureSessionWorktreeBlock` | main `handleWorktreeCaptureSessionBlock`（IPC）；renderer 调 `ipcWorktreeCaptureSessionBlock` | `useChatTabController.handleCapturePromptFileBlock` | `invalidate*`、`handleRefreshWorktree`、`handleWorktreeInvalidateSessionSnapshot` |
 
+**用户可见文案（双端对齐，PRD 验收 D）**
+
+| 场景 | 文案 |
+|------|------|
+| 会话「更多」/ 抽屉菜单 | **工作树快照**（5 字；替代旧「刷新工作树」） |
+| 成功 Toast | **已更新工作树快照** |
+| Mobile 失败 Toast | **更新工作树快照失败** |
+
 **消费方 ① UI 刷新 — 对照（不统一函数名）**
 
 | 语义 | Desktop | Mobile | 何时调用 |
@@ -213,8 +221,8 @@ apps/mobile/src/
 | `VfsFileManager.tsx` | 规则 → capture |
 | `vfs-operations.service.ts` | 删除 → capture |
 | `useChatTabController.ts` | `handleRefreshWorktree` → `handleCapturePromptFileBlock`；内调 `captureSessionWorktreeBlockOnManualRefresh` |
-| `apps/desktop/renderer/App.tsx` | 手动刷新按钮文案 + Toast（PRD 验收 D：「刷新提示词文件块」/「已更新提示词文件块快照」，非「刷新工作树」/「工作树已刷新」） |
-| `apps/mobile/src/components/chrome/SessionActionsDrawer.tsx` | 抽屉入口文案「刷新工作树」→「刷新提示词文件块」（与 PRD 验收 D 双端对齐） |
+| `apps/desktop/renderer/App.tsx` | 手动刷新按钮文案 + Toast（PRD 验收 D：「工作树快照」/「已更新工作树快照」，非旧「刷新工作树」/「工作树已刷新」） |
+| `apps/mobile/src/components/chrome/SessionActionsDrawer.tsx` | 抽屉入口文案「刷新工作树」→「工作树快照」（5 字；与 PRD 验收 D 双端对齐） |
 | `ipc-types.ts` | 新增 `WORKTREE_CAPTURE_SESSION_BLOCK` + `handleWorktreeCaptureSessionBlock`；`WORKTREE_INVALIDATE_SESSION_SNAPSHOT` deprecated alias 一版 |
 | `worktree-block.service.ts` | 导出 `captureSessionWorktreeBlock`、`captureSessionWorktreeBlockOnManualRefresh` |
 | `message-rollback.service.ts` | 移除未用 snapshot 依赖 |
@@ -262,7 +270,7 @@ apps/mobile/src/
 - Step 6 — phase-app-capture-compaction — blocking: yes — qa: auto：Desktop `handleCompactionManual`、Mobile `handleCompactSession`（`trigger: "manual"`）在 `eventOrchestrator.emit` 成功后 capture；**不** `notifyWorkspaceMutated` / `bumpWorktreeUiToken`（与现网一致）；`hide-message.handler` / condition 压缩路径测 T-WEC12 无 capture、无 UI token bump。**须与 Step 3 同批交付**。
 - Step 7 — phase-app-capture-rules — blocking: yes — qa: auto：Desktop worktree IPC setDirRule/setFileRule、Mobile `VfsFileManager` 规则路径：`invalidate` → capture（T-WEC6）。
 - Step 8 — phase-app-capture-vfs-delete — blocking: yes — qa: auto：Desktop `handleVfsDelete`、Mobile `cleanupWorktreeAfterVfsDelete` capture（T-WEC7）。
-- Step 9 — phase-app-capture-manual — blocking: yes — qa: auto：手动刷新改为立即 capture（Desktop main `handleWorktreeCaptureSessionBlock` / Mobile `handleCapturePromptFileBlock`，均经 `captureSessionWorktreeBlockOnManualRefresh`）；IPC channel `WORKTREE_CAPTURE_SESSION_BLOCK`（旧 `WORKTREE_INVALIDATE_SESSION_SNAPSHOT` deprecated alias 一版）；renderer 改调 `ipcWorktreeCaptureSessionBlock`；**Desktop UI 改 renderer** `App.tsx` 按钮「刷新提示词文件块」+ Toast「已更新提示词文件块快照」；**Mobile UI 改** `SessionActionsDrawer.tsx` 抽屉入口「刷新工作树」→「刷新提示词文件块」+ 成功 Toast 与 Desktop 对齐；capture **不在 renderer**；双端仍不 bump 消费方 ① 列表（T-WEC8；PRD 验收 D）。
+- Step 9 — phase-app-capture-manual — blocking: yes — qa: auto：手动刷新改为立即 capture（Desktop main `handleWorktreeCaptureSessionBlock` / Mobile `handleCapturePromptFileBlock`，均经 `captureSessionWorktreeBlockOnManualRefresh`）；IPC channel `WORKTREE_CAPTURE_SESSION_BLOCK`（旧 `WORKTREE_INVALIDATE_SESSION_SNAPSHOT` deprecated alias 一版）；renderer 改调 `ipcWorktreeCaptureSessionBlock`；**Desktop UI 改 renderer** `App.tsx` 按钮「工作树快照」+ Toast「已更新工作树快照」；**Mobile UI 改** `SessionActionsDrawer.tsx` 抽屉入口「刷新工作树」→「工作树快照」+ 成功 Toast 与 Desktop 对齐；capture **不在 renderer**；双端仍不 bump 消费方 ① 列表（T-WEC8；PRD 验收 D）。
 - Step 10 — phase-read-path — blocking: yes — qa: auto：`agent-runner`、`run-agent-turn`、双端 `session-prompt-input`、CLI prompt：`getCapturedBlock`；run / 预览开始前无条目则显式 capture 一次；物化空串写入空块（T-WEC11 扩展断言）。
 - Step 11 — phase-read-path — blocking: yes — qa: auto：删除 `mark-session-worktree-dirty.ts`；runtime 字段 `worktreeSnapshot` → `worktreeBlockStore`（三端）；更新 rollback 工厂去掉死依赖。
 - Step 12 — phase-m1-cleanup — blocking: yes — qa: auto：grep 门禁：提示词路径无 `markDirty|getOrRefresh|invalidateSessionWorktreeSnapshot|handleRefreshWorktree|handleWorktreeInvalidateSessionSnapshot`（deprecated IPC alias 除外）；更新 `public-worktree-allowlist.json`。
@@ -520,7 +528,7 @@ npm run test:fast -w @novel-master/core -- \
 | `WorktreeListRow` 中文字段 | M1 保持 `string`；M2 按 **§ M2 DTO 契约** 切 enum discriminated union；IPC `WorktreeListRowDto` 与 Core 同构；双端同发 |
 | Desktop IPC 手动 capture | 新 channel `WORKTREE_CAPTURE_SESSION_BLOCK` + handler `handleWorktreeCaptureSessionBlock`；旧 `WORKTREE_INVALIDATE_SESSION_SNAPSHOT` deprecated alias 一版；renderer 改调 `ipcWorktreeCaptureSessionBlock` 并同步 `App.tsx` 文案（PRD 验收 D） |
 | Mobile 手动 capture 命名 | `handleRefreshWorktree` → `handleCapturePromptFileBlock`；经 `captureSessionWorktreeBlockOnManualRefresh` |
-| Mobile 手动刷新入口 | `SessionActionsDrawer.tsx` 文案「刷新工作树」→「刷新提示词文件块」；成功 Toast 与 Desktop 对齐（PRD 验收 D） |
+| Mobile 手动刷新入口 | `SessionActionsDrawer.tsx` 文案「刷新工作树」→「工作树快照」（5 字）；成功 Toast 与 Desktop 对齐（PRD 验收 D） |
 | 进程内 store | 无 DB 迁移；重启后快照空，run 前 capture 重建 |
 | CLI hide/show | 本迭代不 capture；文档化；可选 follow-up |
 | VFS rename | 本迭代不纳入白名单；后续迭代跟进 |

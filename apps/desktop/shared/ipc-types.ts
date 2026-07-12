@@ -404,7 +404,7 @@ export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
 };
 
-/** 手动刷新提示词文件块：立即 capture 写入 block store（消费方 ②）。 */
+/** 手动工作树快照：立即 capture 写入 block store（消费方 ②）。 */
 export type WorktreeCaptureSessionBlockRequest = {
   readonly projectId: string;
   readonly sessionId: string;

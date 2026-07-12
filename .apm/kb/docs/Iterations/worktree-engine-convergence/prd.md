@@ -79,12 +79,12 @@ Worktree（工作区规则与文件纳入）在现网已承担两类用户可见
   | **压缩上下文** | compaction 编排完成后 capture（内部 hide 不自带 capture） |
   | **worktree 规则变更** | 目录/文件 inclusion 等保存成功后 capture |
   | **VFS 删除** | 含规则清理后 capture |
-  | **手动刷新提示词文件块** | Desktop main `handleWorktreeCaptureSessionBlock`（IPC `WORKTREE_CAPTURE_SESSION_BLOCK`，旧 channel deprecated alias 一版）；Mobile `handleCapturePromptFileBlock`；均经共享 `captureSessionWorktreeBlock` / `captureSessionWorktreeBlockOnManualRefresh` |
+  | **手动工作树快照** | Desktop main `handleWorktreeCaptureSessionBlock`（IPC `WORKTREE_CAPTURE_SESSION_BLOCK`，旧 channel deprecated alias 一版）；Mobile `handleCapturePromptFileBlock`；均经共享 `captureSessionWorktreeBlock` / `captureSessionWorktreeBlockOnManualRefresh` |
 
 - **双端命名**（详见 SPEC §双端命名对照）：领域层与共享 helper **同名**（`capture` / `getCapturedBlock` / `captureSessionWorktreeBlock`）；五类白名单 **统一 capture 动词**；平台壳（IPC handler / hook）与 UI 刷新原语（`notifyWorkspaceMutated` ↔ `bumpWorktreeUiToken`）**允许不同**，以 SPEC 对照表为准
 - **不 capture**：truncate / rollback / Agent·用户 VFS 写盘（write/mkdir/rename）/ pullTemplate / **裸 hide 或 show**（无对应业务入口时）；**condition 压缩**（agent-runner）不 capture
-- **Desktop renderer**（`apps/desktop/renderer/App.tsx`）：会话「更多」按钮「刷新工作树」→「**刷新提示词文件块**」；成功 Toast 为「**已更新提示词文件块快照**」（替换现「工作树已刷新」）
-- **Mobile**：会话抽屉入口文案同步为「刷新提示词文件块」；成功 Toast 与 Desktop 对齐为「已更新提示词文件块快照」
+- **Desktop renderer**（`apps/desktop/renderer/App.tsx`）：会话「更多」按钮「刷新工作树」→「**工作树快照**」（5 字，与旧入口等长）；成功 Toast 为「**已更新工作树快照**」（替换现「工作树已刷新」）
+- **Mobile**：会话抽屉入口文案同步为「工作树快照」；成功 Toast 与 Desktop 对齐为「已更新工作树快照」
 - 清理 markDirty / invalidate / getOrRefresh 等历史命名；对外禁止 `handleRefreshWorktree`、`handleWorktreeInvalidateSessionSnapshot`、`invalidateSessionWorktreeSnapshot`
 
 **迭代 B — 规则引擎与物化引擎 + Worktree 门面**
@@ -138,7 +138,7 @@ Worktree（工作区规则与文件纳入）在现网已承担两类用户可见
 - **Given** 用户 **压缩上下文**，**When** 完成，**Then** **压缩应用入口** 已 capture（**非** hide 原语附带）。
 - **Given** 用户 **改规则** 并保存，**When** 成功，**Then** 规则变更入口已 capture。
 - **Given** 用户 **删除** VFS 文件/目录，**When** 完成，**Then** 删除入口已 capture；快照不含已删路径。
-- **Given** 用户 **手动刷新提示词文件块**，**When** 完成，**Then** Desktop main `handleWorktreeCaptureSessionBlock` 或 Mobile `handleCapturePromptFileBlock` 已立即 capture；**And** 工作区列表 **不** 因此被误刷新。
+- **Given** 用户 **手动更新工作树快照**（菜单「工作树快照」），**When** 完成，**Then** Desktop main `handleWorktreeCaptureSessionBlock` 或 Mobile `handleCapturePromptFileBlock` 已立即 capture；**And** 工作区列表 **不** 因此被误刷新。
 - **Given** Agent 同 run 内 **写 VFS**，**When** 未发生上述 capture，**Then** 文件块保持 run 开始时的快照。
 - **Given** **回滚** 或 **truncate**，**When** 完成，**Then** **不** 仅因该操作 capture。
 - **Given** 代码直接调用 Core **hide/show**（无业务入口），**When** 完成，**Then** **不** capture。
@@ -155,8 +155,8 @@ Worktree（工作区规则与文件纳入）在现网已承担两类用户可见
 
 ### D. 文案与残余
 
-- **Given** Desktop 会话「更多」手动刷新，**Then** renderer `App.tsx` 按钮为「刷新提示词文件块」（非「刷新工作树」）；成功 Toast 为「已更新提示词文件块快照」。
-- **Given** Mobile 手动刷新，**Then** 入口文案与 Toast 与 Desktop 对齐（「刷新提示词文件块」/「已更新提示词文件块快照」）。
+- **Given** Desktop 会话「更多」手动刷新，**Then** renderer `App.tsx` 按钮为「工作树快照」（5 字；非旧「刷新工作树」）；成功 Toast 为「已更新工作树快照」。
+- **Given** Mobile 手动刷新，**Then** 入口文案与 Toast 与 Desktop 对齐（「工作树快照」/「已更新工作树快照」）。
 - **Given** 手动刷新，**Then** capture 在 Desktop main `handleWorktreeCaptureSessionBlock`（`handlers/worktree.ts`，IPC `WORKTREE_CAPTURE_SESSION_BLOCK`）或 Mobile `handleCapturePromptFileBlock` 完成；renderer 仅调 IPC / 展示 Toast，**不** 在 renderer capture；**不** 触发消费方 ① 列表刷新。
 - **Given** 检索 `markDirty` / `invalidateSessionWorktreeSnapshot` / `getOrRefresh` / `handleRefreshWorktree` / `handleWorktreeInvalidateSessionSnapshot`，**Then** 提示词路径已迁移为 `capture` / `getCapturedBlock` / `captureSessionWorktreeBlock`；Core effects **无** worktree 快照依赖。
 

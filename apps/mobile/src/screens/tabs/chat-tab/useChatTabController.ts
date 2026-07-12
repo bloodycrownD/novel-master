@@ -52,9 +52,9 @@ export function useChatTabController() {
           projectId: ctx.projectId!,
           sessionId: ctx.sessionId!,
         });
-        ctx.showToast('已更新提示词文件块快照');
+        ctx.showToast('已更新工作树快照');
       } catch {
-        ctx.showToast('刷新提示词文件块失败');
+        ctx.showToast('更新工作树快照失败');
       }
     })();
   }, [ctx]);

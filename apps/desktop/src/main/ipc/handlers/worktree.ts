@@ -112,7 +112,7 @@ export async function handleWorktreeSetFileRule(
   }
 }
 
-/** 手动刷新提示词文件块：立即 capture，不重载消费方 ① 列表。 */
+/** 手动工作树快照：立即 capture，不重载消费方 ① 列表。 */
 export async function handleWorktreeCaptureSessionBlock(
   req: WorktreeCaptureSessionBlockRequest,
 ): Promise<IpcResult<void>> {
