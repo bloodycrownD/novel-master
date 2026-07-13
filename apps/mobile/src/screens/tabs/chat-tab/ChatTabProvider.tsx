@@ -265,6 +265,8 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
     getMessageCount: () => chatMessageCountRef.current,
     getUiRunning: lifecycle.getUiRunning,
     getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
+    getAbortRetainPending: lifecycle.getAbortRetainPending,
+    clearAbortRetainPending: lifecycle.clearAbortRetainPending,
     acceptRunEvent: lifecycle.acceptRunEvent,
     onRunStarted: lifecycle.onRunStarted,
     onRunFinished: lifecycle.onRunFinished,

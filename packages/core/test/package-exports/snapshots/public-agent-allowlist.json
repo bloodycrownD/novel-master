@@ -27,7 +27,9 @@
   "resolveSummarySavedModelId",
   "runAgentTurn",
   "shouldAcceptRunEvent",
+  "shouldApplyTranscriptReload",
   "shouldIgnoreStaleRunStarted",
+  "shouldReloadTranscriptOnRunEvent",
   "validateAgentDefinition",
   "validateAgentToolPolicy"
 ]

@@ -41,6 +41,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { prepareStreamTailHtml } from './prepare-stream-tail-html';
 import type { StreamWireChunk } from '@/services/stream-wire-queue';
 import { appendWireChunk } from '@/services/stream-wire-queue';
+import { decodeLiteralHtmlEntities } from '@/components/rich-content/decode-literal-html-entities';
 
 export type ChatTranscriptWebViewHandle = {
   pushStreamDelta: (kind: 'text' | 'thinking', delta: string) => void;
@@ -51,6 +52,8 @@ export type ChatTranscriptWebViewHandle = {
     allMessages: readonly ChatMessage[],
     prevCount: number,
   ) => boolean;
+  /** abort 极早 stop：将 overlay stream tail 固化为 assistant 行（不含 tools）。无 tail 则 skip。 */
+  commitAbortOverlaySnapshot: () => boolean;
 };
 
 export type ChatTranscriptWebViewProps = {
@@ -216,6 +219,10 @@ export const ChatTranscriptWebView = memo(
     ) {
       const uiRunning = uiRunningProp ?? agentRunning;
       const streamGenerating = uiRunning || toolInvoking;
+      const transcriptListOptions = {
+        agentRunning,
+        runUiStopped: !uiRunning,
+      };
       const { tokens } = useTheme();
       const webRef = useRef<WebView>(null);
       const [webReady, setWebReady] = useState(false);
@@ -426,7 +433,7 @@ export const ChatTranscriptWebView = memo(
         ) => {
           const richText = flags?.richText ?? false;
           const rows = enrichTranscriptRows(
-            buildTranscriptRows(messages, undefined, { agentRunning }),
+            buildTranscriptRows(messages, undefined, transcriptListOptions),
             richText,
           );
           postToWeb({
@@ -454,6 +461,7 @@ export const ChatTranscriptWebView = memo(
           agentRunning,
           uiRunning,
           syncStreamToolInvoking,
+          transcriptListOptions,
         ],
       );
 
@@ -507,7 +515,11 @@ export const ChatTranscriptWebView = memo(
           }
           const richText = flags?.richText ?? false;
           const rows = enrichTranscriptRows(
-            selectTailTranscriptRows(messages, tailMessages, { agentRunning }),
+            selectTailTranscriptRows(
+              messages,
+              tailMessages,
+              transcriptListOptions,
+            ),
             richText,
           );
           if (rows.length === 0) {
@@ -519,7 +531,7 @@ export const ChatTranscriptWebView = memo(
             payload: { rows },
           });
         },
-        [postToWeb, flags?.richText, agentRunning, messages],
+        [postToWeb, flags?.richText, agentRunning, messages, transcriptListOptions],
       );
 
       const commitStreamTail = useCallback(
@@ -576,7 +588,7 @@ export const ChatTranscriptWebView = memo(
           }
           const richText = flags?.richText ?? false;
           const rows = enrichTranscriptRows(
-            selectTailTranscriptRows(allMessages, added, { agentRunning }),
+            selectTailTranscriptRows(allMessages, added, transcriptListOptions),
             richText,
           );
           if (rows.length === 0) {
@@ -588,8 +600,38 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = allMessages[0]?.id;
           return true;
         },
-        [webReady, flags?.richText, agentRunning, commitStreamTail],
+        [webReady, flags?.richText, agentRunning, commitStreamTail, transcriptListOptions],
       );
+
+      const commitAbortOverlaySnapshot = useCallback((): boolean => {
+        if (!webReady) {
+          return false;
+        }
+        const text = streamTextAccumRef.current;
+        const thinking = streamThinkingAccumRef.current;
+        if (text.length === 0 && thinking.length === 0) {
+          return false;
+        }
+        if (!streamActiveRef.current) {
+          return false;
+        }
+        const richText = flags?.richText ?? false;
+        const rows = enrichTranscriptRows(
+          [
+            {
+              kind: 'message',
+              id: `abort-overlay-${Date.now()}`,
+              role: 'assistant',
+              hidden: false,
+              text: decodeLiteralHtmlEntities(text),
+              thinking: decodeLiteralHtmlEntities(thinking),
+            },
+          ],
+          richText,
+        );
+        commitStreamTail(rows, 'preserve');
+        return true;
+      }, [webReady, flags?.richText, commitStreamTail]);
 
       const resetStreamTail = useCallback(() => {
         clearLocalStreamBuffers();
@@ -615,12 +657,14 @@ export const ChatTranscriptWebView = memo(
           pushStreamBatch: queueStreamBatch,
           resetStream: resetStreamTail,
           tryCommitStreamTail,
+          commitAbortOverlaySnapshot,
         }),
         [
           queueStreamDelta,
           queueStreamBatch,
           resetStreamTail,
           tryCommitStreamTail,
+          commitAbortOverlaySnapshot,
         ],
       );
 
@@ -633,14 +677,18 @@ export const ChatTranscriptWebView = memo(
             type: 'prependPage',
             payload: {
               rows: enrichTranscriptRows(
-                buildTranscriptRows(olderMessages, undefined, { agentRunning }),
+                buildTranscriptRows(
+                  olderMessages,
+                  undefined,
+                  transcriptListOptions,
+                ),
                 richText,
               ),
               prependedCount,
             },
           });
         },
-        [messages, postToWeb, flags?.richText, agentRunning],
+        [messages, postToWeb, flags?.richText, agentRunning, transcriptListOptions],
       );
 
       const handleMessage = useCallback(

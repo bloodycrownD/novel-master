@@ -19,7 +19,7 @@ import {
   type AgentStreamThinkingDeltaPayload,
   type AgentStreamToolUsePayload,
 } from '@novel-master/core/events';
-import { shouldReloadTranscriptOnRunEvent } from '@novel-master/core/agent';
+import { shouldApplyTranscriptReload } from '@novel-master/core/agent';
 import type { ChatTranscriptWebViewHandle } from '@/components/chat/ChatTranscriptWebView';
 import {
   flushAgentStepUi,
@@ -39,19 +39,6 @@ import {
 
 const INGRESS_COALESCE_MS = 32;
 
-function shouldApplyTranscriptReload(
-  uiRunning: boolean,
-  freezeCount: number | null,
-): boolean {
-  if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {
-    return false;
-  }
-  if (freezeCount != null) {
-    return false;
-  }
-  return true;
-}
-
 export type UseChatStreamRuntimeParams = {
   sessionId: string | undefined;
   uiRunning: boolean;
@@ -62,6 +49,8 @@ export type UseChatStreamRuntimeParams = {
   getMessageCount: () => number;
   getUiRunning: () => boolean;
   getTranscriptFreezeCount: () => number | null;
+  getAbortRetainPending: () => boolean;
+  clearAbortRetainPending: () => void;
   onStepCommitted?: (payload: AgentStepCommittedPayload) => void;
   acceptRunEvent: (runId: string | undefined) => boolean;
   onRunStarted: (payload: AgentRunStartedPayload) => void;
@@ -79,6 +68,8 @@ export function useChatStreamRuntime({
   getMessageCount,
   getUiRunning,
   getTranscriptFreezeCount,
+  getAbortRetainPending,
+  clearAbortRetainPending,
   onStepCommitted,
   acceptRunEvent,
   onRunStarted,
@@ -203,6 +194,10 @@ export function useChatStreamRuntime({
   getUiRunningRef.current = getUiRunning;
   const getTranscriptFreezeCountRef = useRef(getTranscriptFreezeCount);
   getTranscriptFreezeCountRef.current = getTranscriptFreezeCount;
+  const getAbortRetainPendingRef = useRef(getAbortRetainPending);
+  getAbortRetainPendingRef.current = getAbortRetainPending;
+  const clearAbortRetainPendingRef = useRef(clearAbortRetainPending);
+  clearAbortRetainPendingRef.current = clearAbortRetainPending;
   /** 本 run 内已成功 streamCommit 的消息 id，防止 step + RUN_FINISHED 双次提交。 */
   const committedTailIdsRef = useRef<Set<string>>(new Set());
 
@@ -270,6 +265,16 @@ export function useChatStreamRuntime({
     setStreamingText('');
     setStreamingThinking('');
   }, []);
+
+  const commitAbortOverlayFallback = useCallback(async (): Promise<void> => {
+    if (useWebviewRef.current) {
+      transcriptWebRefRef.current.current?.commitAbortOverlaySnapshot();
+      return;
+    }
+    if (streamingText.length === 0 && streamingThinking.length === 0) {
+      return;
+    }
+  }, [streamingText, streamingThinking]);
 
   const handleIngressText = useCallback(
     (delta: string) => {
@@ -370,16 +375,31 @@ export function useChatStreamRuntime({
           ).catch(() => undefined);
           return;
         }
-        if (!shouldApplyTranscriptReload(uiRunning, freezeCount)) {
+        const allowAssistantReload = shouldApplyTranscriptReload(
+          uiRunning,
+          freezeCount,
+          {
+            abortRetainPending: getAbortRetainPendingRef.current(),
+            phase: 'assistant',
+          },
+        );
+        if (!allowAssistantReload) {
           return;
         }
+        const abortRetainReload = getAbortRetainPendingRef.current();
         flushAgentStepUi(
           payload.phase,
           cb.onMessagesChanged,
           handleStreamEndAfterReload,
           getMessageCountRef.current(),
         )
-          .then(() => cb.onStepCommitted?.(payload))
+          .then(() => {
+            if (abortRetainReload) {
+              clearAbortRetainPendingRef.current();
+              handleStreamReset();
+            }
+            cb.onStepCommitted?.(payload);
+          })
           .catch(() => undefined);
       },
     );
@@ -398,6 +418,16 @@ export function useChatStreamRuntime({
         const cb = callbacksRef.current;
         const finishRun = () =>
           lifecycleRef.current.onRunFinished?.(payload);
+        if (getAbortRetainPendingRef.current()) {
+          void commitAbortOverlayFallback()
+            .then(() => {
+              clearAbortRetainPendingRef.current();
+              handleStreamReset();
+              finishRun();
+            })
+            .catch(() => undefined);
+          return;
+        }
         if (shouldApplyTranscriptReload(uiRunning, freezeCount)) {
           flushRunUi(
             cb.onMessagesChanged,
@@ -457,6 +487,7 @@ export function useChatStreamRuntime({
     handleIngressThinking,
     handleStreamEndAfterReload,
     handleStreamReset,
+    commitAbortOverlayFallback,
   ]);
 
   useEffect(() => {

@@ -236,7 +236,7 @@ describe('message-blocks', () => {
     expect(view.resultContent).toBe('ok');
   });
 
-  it('orphan tool_use without result → interrupted when agent inactive', () => {
+  it('orphan tool_use without result → error when agent inactive', () => {
     const messages = [
       msg(
         'a1',
@@ -249,7 +249,25 @@ describe('message-blocks', () => {
     expect(items).toHaveLength(1);
     if (items[0]?.kind === 'message') {
       expect(items[0].tools).toHaveLength(1);
-      expect(items[0].tools[0]?.status).toBe('interrupted');
+      expect(items[0].tools[0]?.status).toBe('error');
+    }
+  });
+
+  it('T-ARP-U2: runUiStopped 时 unpaired 工具标 error（即使 agentRunning）', () => {
+    const messages = [
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'tool_use', id: 'tu1', name: 'list', input: {} }],
+        1,
+      ),
+    ];
+    const items = buildChatListItems(messages, {
+      agentRunning: true,
+      runUiStopped: true,
+    });
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools[0]?.status).toBe('error');
     }
   });
 
@@ -310,7 +328,7 @@ describe('message-blocks', () => {
     const byId = new Map(
       items.filter(i => i.kind === 'message').map(i => [i.message.id, i]),
     );
-    expect(byId.get('a1')?.tools[0]?.status).toBe('interrupted');
+    expect(byId.get('a1')?.tools[0]?.status).toBe('error');
     expect(byId.get('a2')?.tools[0]?.status).toBe('pending');
   });
 
@@ -325,7 +343,7 @@ describe('message-blocks', () => {
     ];
     const items = buildChatListItems(messages, { agentRunning: false });
     if (items[0]?.kind === 'message') {
-      expect(items[0].tools[0]?.status).toBe('interrupted');
+      expect(items[0].tools[0]?.status).toBe('error');
       expect(items[0].tools[0]?.status).not.toBe('pending');
     }
   });
@@ -465,7 +483,7 @@ describe('message-blocks', () => {
     }
   });
 
-  it('hidden assistant with incomplete tools shows interrupted when agent inactive', () => {
+  it('hidden assistant with incomplete tools shows error when agent inactive', () => {
     const messages = [
       msg(
         'a1',
@@ -480,7 +498,7 @@ describe('message-blocks', () => {
     if (items[0]?.kind === 'message') {
       expect(items[0].message.hidden).toBe(true);
       expect(items[0].tools).toHaveLength(1);
-      expect(items[0].tools[0]?.status).toBe('interrupted');
+      expect(items[0].tools[0]?.status).toBe('error');
     }
   });
 

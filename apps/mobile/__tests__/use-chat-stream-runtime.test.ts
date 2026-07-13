@@ -35,6 +35,8 @@ jest.mock('@/hooks/useRuntime', () => ({
 const RUN_ID = 'run-test-1';
 
 describe('useChatStreamRuntime', () => {
+  let renderer: TestRenderer.ReactTestRenderer | null = null;
+
   beforeEach(() => {
     jest.useFakeTimers();
     mockFlushRunUi.mockClear();
@@ -44,6 +46,12 @@ describe('useChatStreamRuntime', () => {
   });
 
   afterEach(() => {
+    if (renderer != null) {
+      act(() => {
+        renderer!.unmount();
+      });
+      renderer = null;
+    }
     jest.useRealTimers();
     setMobileAgentActive(false);
   });
@@ -59,6 +67,7 @@ describe('useChatStreamRuntime', () => {
       pushStreamBatch: jest.fn(),
       resetStream: jest.fn(),
       tryCommitStreamTail: jest.fn(() => false),
+      commitAbortOverlaySnapshot: jest.fn(() => false),
       ...options?.web,
     };
     const onMessagesChanged = jest.fn(async () => []);
@@ -82,6 +91,8 @@ describe('useChatStreamRuntime', () => {
         getMessageCount: () => messageCount,
         getUiRunning: lifecycle.getUiRunning,
         getTranscriptFreezeCount: lifecycle.getTranscriptFreezeCount,
+        getAbortRetainPending: lifecycle.getAbortRetainPending,
+        clearAbortRetainPending: lifecycle.clearAbortRetainPending,
         acceptRunEvent: lifecycle.acceptRunEvent,
         onRunStarted: lifecycle.onRunStarted,
         onRunFinished: lifecycle.onRunFinished,
@@ -93,7 +104,7 @@ describe('useChatStreamRuntime', () => {
     }
 
     act(() => {
-      TestRenderer.create(React.createElement(Harness));
+      renderer = TestRenderer.create(React.createElement(Harness));
     });
 
     if (options?.beginUiRun) {
@@ -267,8 +278,8 @@ describe('useChatStreamRuntime', () => {
     expect(mockFlushRunUi).toHaveBeenCalledTimes(1);
   });
 
-  it('T-AC2-4：abort 后 cancelled RUN_FINISHED 清 lifecycle 但不 flushRunUi', async () => {
-    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
+  it('T-ARP-M4 / T-AC2-4：abort 后 cancelled RUN_FINISHED 清 lifecycle 但不 flushRunUi', async () => {
+    const {api, startRun, setMessageCount, webHandle} = mountRuntime({beginUiRun: true});
     startRun();
     setMessageCount(2);
     act(() => {
@@ -276,6 +287,7 @@ describe('useChatStreamRuntime', () => {
     });
     expect(api.lifecycle!.uiRunning).toBe(false);
     expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(2);
+    expect(api.lifecycle!.getAbortRetainPending()).toBe(true);
     expect(api.lifecycle!.activeRunId).toBe(RUN_ID);
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_RUN_FINISHED, {
@@ -289,16 +301,49 @@ describe('useChatStreamRuntime', () => {
     expect(api.lifecycle!.activeRunId).toBe(null);
     expect(api.lifecycle!.uiRunning).toBe(false);
     expect(api.lifecycle!.getTranscriptFreezeCount()).toBe(null);
+    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
     expect(mockFlushRunUi).not.toHaveBeenCalled();
+    expect(webHandle.commitAbortOverlaySnapshot).toHaveBeenCalled();
   });
 
-  it('T-AC2-3：abort 后迟到 STEP_COMMITTED(assistant) 不触发 flushAgentStepUi', async () => {
+  it('T-ARP-M1 / T-AC2-3：abort 后 STEP_COMMITTED(assistant) 允许一次 flushAgentStepUi', async () => {
     const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
     startRun();
     setMessageCount(1);
     act(() => {
       api.lifecycle!.abortUiRun(1);
     });
+    expect(api.lifecycle!.getAbortRetainPending()).toBe(true);
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    expect(mockFlushAgentStepUi).toHaveBeenCalledTimes(1);
+    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+  });
+
+  it('T-AC2-R2：retain 完成后迟到 STEP_COMMITTED(assistant) 不二次 flush', async () => {
+    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
+    startRun();
+    setMessageCount(1);
+    act(() => {
+      api.lifecycle!.abortUiRun(1);
+    });
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    mockFlushAgentStepUi.mockClear();
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
         sessionId: 's1',
