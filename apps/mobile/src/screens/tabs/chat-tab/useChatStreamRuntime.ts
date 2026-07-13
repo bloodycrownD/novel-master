@@ -387,20 +387,22 @@ export function useChatStreamRuntime({
           return;
         }
         const abortRetainReload = getAbortRetainPendingRef.current();
-        flushAgentStepUi(
+        void flushAgentStepUi(
           payload.phase,
           cb.onMessagesChanged,
           handleStreamEndAfterReload,
           getMessageCountRef.current(),
         )
           .then(() => {
+            cb.onStepCommitted?.(payload);
+          })
+          .catch(() => undefined)
+          .finally(() => {
             if (abortRetainReload) {
               clearAbortRetainPendingRef.current();
               handleStreamReset();
             }
-            cb.onStepCommitted?.(payload);
-          })
-          .catch(() => undefined);
+          });
       },
     );
     const subFinished = bus.subscribe(
@@ -420,22 +422,22 @@ export function useChatStreamRuntime({
           lifecycleRef.current.onRunFinished?.(payload);
         if (getAbortRetainPendingRef.current()) {
           void commitAbortOverlayFallback()
-            .then(() => {
+            .catch(() => undefined)
+            .finally(() => {
               clearAbortRetainPendingRef.current();
               handleStreamReset();
               finishRun();
-            })
-            .catch(() => undefined);
+            });
           return;
         }
         if (shouldApplyTranscriptReload(uiRunning, freezeCount)) {
-          flushRunUi(
+          void flushRunUi(
             cb.onMessagesChanged,
             handleStreamEndAfterReload,
             getMessageCountRef.current(),
           )
-            .then(finishRun)
-            .catch(() => undefined);
+            .catch(() => undefined)
+            .finally(finishRun);
           return;
         }
         handleStreamReset();

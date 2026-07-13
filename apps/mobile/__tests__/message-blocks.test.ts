@@ -253,6 +253,37 @@ describe('message-blocks', () => {
     }
   });
 
+  it('T-ARP-U1: 两工具 tu1 有 result、tu2 无 result + runUiStopped → tu1 success tu2 error', () => {
+    const messages = [
+      msg(
+        'a1',
+        'assistant',
+        [
+          {
+            type: 'tool_use',
+            id: 'tu1',
+            name: 'read',
+            input: { path: '/a' },
+          },
+          { type: 'tool_use', id: 'tu2', name: 'list', input: {} },
+        ],
+        1,
+      ),
+      msg(
+        'u1',
+        'user',
+        [{ type: 'tool_result', toolUseId: 'tu1', content: 'ok' }],
+        2,
+      ),
+    ];
+    const items = buildChatListItems(messages, { runUiStopped: true });
+    if (items[0]?.kind === 'message') {
+      expect(items[0].tools).toHaveLength(2);
+      expect(items[0].tools[0]?.status).toBe('success');
+      expect(items[0].tools[1]?.status).toBe('error');
+    }
+  });
+
   it('T-ARP-U2: runUiStopped 时 unpaired 工具标 error（即使 agentRunning）', () => {
     const messages = [
       msg(

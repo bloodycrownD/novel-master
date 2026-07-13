@@ -306,8 +306,8 @@ describe('useChatStreamRuntime', () => {
     expect(webHandle.commitAbortOverlaySnapshot).toHaveBeenCalled();
   });
 
-  it('T-ARP-M1 / T-AC2-3：abort 后 STEP_COMMITTED(assistant) 允许一次 flushAgentStepUi', async () => {
-    const {api, startRun, setMessageCount} = mountRuntime({beginUiRun: true});
+  it('T-ARP-M1 / T-AC2-3：abort 后 STEP_COMMITTED(assistant) 允许一次 flushAgentStepUi + resetStream', async () => {
+    const {api, startRun, setMessageCount, webHandle} = mountRuntime({beginUiRun: true});
     startRun();
     setMessageCount(1);
     act(() => {
@@ -325,6 +325,7 @@ describe('useChatStreamRuntime', () => {
     });
     expect(mockFlushAgentStepUi).toHaveBeenCalledTimes(1);
     expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+    expect(webHandle.resetStream).toHaveBeenCalledTimes(1);
   });
 
   it('T-AC2-R2：retain 完成后迟到 STEP_COMMITTED(assistant) 不二次 flush', async () => {
@@ -365,6 +366,38 @@ describe('useChatStreamRuntime', () => {
     act(() => {
       api.lifecycle!.abortUiRun(1);
     });
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'tool_results',
+      });
+      await Promise.resolve();
+    });
+    expect(onMessagesChanged).not.toHaveBeenCalled();
+  });
+
+  it('T-ARP-M2：retain 完成后 late STEP_COMMITTED(tool_results) 不 reload', async () => {
+    const {api, startRun, onMessagesChanged, setMessageCount} = mountRuntime({
+      beginUiRun: true,
+    });
+    startRun();
+    setMessageCount(1);
+    act(() => {
+      api.lifecycle!.abortUiRun(1);
+    });
+    await act(async () => {
+      mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
+        sessionId: 's1',
+        projectId: 'p1',
+        runId: RUN_ID,
+        phase: 'assistant',
+      });
+      await Promise.resolve();
+    });
+    expect(api.lifecycle!.getAbortRetainPending()).toBe(false);
+    onMessagesChanged.mockClear();
     await act(async () => {
       mockRuntime.eventBus.publish(EVENT_AGENT_STEP_COMMITTED, {
         sessionId: 's1',

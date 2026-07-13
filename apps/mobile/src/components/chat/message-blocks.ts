@@ -37,7 +37,7 @@ export interface MessageListItem {
   readonly textParts: readonly string[];
   /** Model reasoning (`thinking` blocks); shown separately from reply text. */
   readonly thinkingParts: readonly string[];
-  /** 有 tool_use 即渲染（无 result 时由 agentRunning + isTurnToolExecuting 决定 pending / interrupted）。 */
+  /** 有 tool_use 即渲染（无 result 时 runUiStopped 优先 error，否则 agentRunning + isTurnToolExecuting 决定 pending / error）。 */
   readonly tools: readonly ToolCallView[];
 }
 
