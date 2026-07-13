@@ -11,7 +11,7 @@ import {
 import { textBlocks } from "@novel-master/core/chat";
 import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FINISHED, EVENT_AGENT_RUN_FAILED, EVENT_AGENT_STREAM_TEXT_DELTA, EVENT_SESSION_MESSAGE_RECEIVED, SimpleEventBus, type AgentStepCommittedPayload, type AgentRunFinishedPayload, type AgentRunStartedPayload, type AgentStreamTextDeltaPayload } from "@novel-master/core/events";
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
-import { registerBuiltinTools, ToolRegistry, type BuiltinToolContext } from "@novel-master/core";
+import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
 import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
@@ -154,16 +154,73 @@ describe("AgentRunner", () => {
     assert.equal(result.stepsExecuted, 0);
   });
 
-  it("aborting prevents further modelRequests.request calls (no subsequent rounds)", async () => {
+  it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
     const controller = new AbortController();
-    let calls = 0;
     const model: ModelRequestService & { callCount: () => number } = {
-      callCount: () => calls,
-      request: mock.fn(async () => {
-        calls += 1;
+      callCount: () => 1,
+      request: async () => {
+        controller.abort();
+        return {
+          assistantText: "partial",
+          blocks: [
+            { type: "thinking", text: "hmm" },
+            { type: "text", text: "partial" },
+          ],
+          raw: { partial: true },
+        };
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const bus = new SimpleEventBus();
+    const phases: AgentStepCommittedPayload["phase"][] = [];
+    bus.subscribe(EVENT_AGENT_STEP_COMMITTED, (p: AgentStepCommittedPayload) => {
+      phases.push(p.phase);
+    });
+    const runner = createAgentRunner({
+      ...runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+      eventBus: bus,
+    });
+
+    const result = await runner.run({
+      maxSteps: 3,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      signal: controller.signal,
+    });
+
+    assert.equal(result.stopReason, "cancelled");
+    assert.equal(model.callCount(), 1);
+    assert.equal(result.stepsExecuted, 0);
+    const msgs = await session.list();
+    assert.equal(msgs.length, 2);
+    assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs[1]!.role, "assistant");
+    const blocks = msgs[1]!.content.blocks;
+    assert.ok(blocks.some((b) => b.type === "thinking"));
+    assert.ok(blocks.some((b) => b.type === "text" && b.text === "partial"));
+    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
+    assert.deepEqual(phases, ["assistant"]);
+  });
+
+  it("T-ARP-C2: abort + tool_use blocks 落库 assistant，不跑 runParallel，无 tool_results", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const controller = new AbortController();
+    let runParallelInvoked = false;
+    const model: ModelRequestService & { callCount: () => number } = {
+      callCount: () => 1,
+      request: async () => {
         controller.abort();
         return {
           assistantText: "",
@@ -175,6 +232,63 @@ describe("AgentRunner", () => {
               input: { command: "ls /" },
             },
           ],
+          raw: {},
+        };
+      },
+    };
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const innerRunner = new ToolRunner(registry);
+    const trackingRunner = {
+      runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
+        runParallelInvoked = true;
+        return innerRunner.runParallel(...args);
+      },
+      call: innerRunner.call.bind(innerRunner),
+    } as ToolRunner<BuiltinToolContext>;
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+    (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = trackingRunner;
+
+    const result = await runner.run({
+      maxSteps: 6,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+      signal: controller.signal,
+    });
+
+    assert.equal(result.stopReason, "cancelled");
+    assert.equal(model.callCount(), 1);
+    assert.equal(result.stepsExecuted, 0);
+    assert.equal(runParallelInvoked, false);
+    const msgs = await session.list();
+    assert.equal(msgs.length, 2);
+    assert.equal(msgs[1]!.role, "assistant");
+    assert.ok(msgs[1]!.content.blocks.some((b) => b.type === "tool_use"));
+    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
+  });
+
+  it("T-ARP-C3: abort 后无第二次 model request，stepsExecuted===0", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const controller = new AbortController();
+    let calls = 0;
+    const model: ModelRequestService & { callCount: () => number } = {
+      callCount: () => calls,
+      request: mock.fn(async () => {
+        calls += 1;
+        controller.abort();
+        return {
+          assistantText: "once",
+          blocks: [{ type: "text", text: "once" }],
           raw: {},
         };
       }),
@@ -201,30 +315,39 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 1);
     assert.equal(result.stepsExecuted, 0);
-    const msgs = await session.list();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
   });
 
-  it("abort �?request 返回文本块仍落库 assistant partial", async () => {
+  it("T-ARP-C4: abort 在 tool 执行完成后 append 前仍无 tool_results", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("go"));
 
     const controller = new AbortController();
-    const model: ModelRequestService & { callCount: () => number } = {
-      callCount: () => 1,
-      request: async () => {
-        controller.abort();
-        return {
-          assistantText: "late",
-          blocks: [{ type: "text", text: "late" }],
-          raw: {},
-        };
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          {
+            type: "tool_use",
+            id: "tu1",
+            name: "write",
+            input: { path: "/out.txt", content: "done" },
+          },
+        ],
+        raw: {},
       },
-    };
+    ]);
 
     const registry = new ToolRegistry();
     registerBuiltinTools(registry);
+    const innerRunner = new ToolRunner(registry);
+    const abortAfterToolsRunner = {
+      runParallel: async (...args: Parameters<ToolRunner<BuiltinToolContext>["runParallel"]>) => {
+        const results = await innerRunner.runParallel(...args);
+        controller.abort();
+        return results;
+      },
+      call: innerRunner.call.bind(innerRunner),
+    } as ToolRunner<BuiltinToolContext>;
     const runner = createAgentRunner(
       runnerDeps({
         session,
@@ -233,6 +356,7 @@ describe("AgentRunner", () => {
         toolCtx: mockToolCtx(mockVfs()),
       }),
     );
+    (runner as { toolRunner: ToolRunner<BuiltinToolContext> }).toolRunner = abortAfterToolsRunner;
 
     const result = await runner.run({
       maxSteps: 3,
@@ -242,9 +366,12 @@ describe("AgentRunner", () => {
     });
 
     assert.equal(result.stopReason, "cancelled");
+    assert.equal(model.callCount(), 1);
     const msgs = await session.list();
-    assert.equal(msgs.length, 1);
-    assert.equal(msgs[0]!.role, "user");
+    assert.equal(msgs.length, 2);
+    assert.equal(msgs[1]!.role, "assistant");
+    assert.ok(msgs[1]!.content.blocks.some((b) => b.type === "tool_use"));
+    assert.ok(!msgs.some((m) => m.content.blocks.some((b) => b.type === "tool_result")));
   });
 
   it("生命周期�?stream 事件携带一�?runId", async () => {
