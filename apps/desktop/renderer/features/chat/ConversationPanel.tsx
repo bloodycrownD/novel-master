@@ -43,6 +43,7 @@ import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
   handleStepCommittedAbortRetain,
+  shouldAcceptStreamIngress,
 } from './conversation-abort-retain';
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
@@ -185,7 +186,7 @@ export function ConversationPanel({
 
   const onTextDelta = useCallback(
     (delta: string) => {
-      if (!getUiRunning()) {
+      if (!shouldAcceptStreamIngress(getUiRunning())) {
         return;
       }
       if (delta.length === 0) {
@@ -203,7 +204,7 @@ export function ConversationPanel({
 
   const onThinkingDelta = useCallback(
     (delta: string) => {
-      if (!getUiRunning()) {
+      if (!shouldAcceptStreamIngress(getUiRunning())) {
         return;
       }
       noteMetricsThinkingDelta(delta);
@@ -212,11 +213,26 @@ export function ConversationPanel({
     [getUiRunning, noteMetricsThinkingDelta],
   );
 
+  const abortRetainLifecycle = useMemo(
+    () => ({
+      getUiRunning,
+      getTranscriptFreezeCount,
+      getAbortRetainPending,
+      clearAbortRetainPending,
+    }),
+    [
+      getUiRunning,
+      getTranscriptFreezeCount,
+      getAbortRetainPending,
+      clearAbortRetainPending,
+    ],
+  );
+
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
       handleStepCommittedAbortRetain(
         payload,
-        runLifecycle,
+        abortRetainLifecycle,
         reloadMessages,
         onStreamReset,
       );
@@ -227,7 +243,7 @@ export function ConversationPanel({
       }
     },
     [
-      runLifecycle,
+      abortRetainLifecycle,
       reloadMessages,
       onStreamReset,
       notifyWorkspaceMutated,
@@ -240,7 +256,7 @@ export function ConversationPanel({
         getUiRunning(),
         getTranscriptFreezeCount(),
       );
-      const accepted = handleRunFinishedAbortRetain(payload, runLifecycle, {
+      const accepted = handleRunFinishedAbortRetain(payload, abortRetainLifecycle, {
         finishUiRun,
         shouldReloadAfterFinish: shouldReload,
         streamingText: streamingTextRef.current,
@@ -257,7 +273,7 @@ export function ConversationPanel({
       vfsMutatedInRunRef.current = false;
     },
     [
-      runLifecycle,
+      abortRetainLifecycle,
       finishUiRun,
       getUiRunning,
       getTranscriptFreezeCount,

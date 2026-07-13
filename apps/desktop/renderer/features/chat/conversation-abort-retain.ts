@@ -2,7 +2,7 @@ import type {
   AgentRunFinishedPayload,
   AgentStepCommittedPayload,
 } from "@shared/agent-event-types";
-import { shouldApplyTranscriptReload } from "@/hooks/useAgentRunLifecycle";
+import { shouldApplyTranscriptReload } from "@novel-master/core/agent";
 import { ipcMessagesAppend } from "@/ipc/client";
 import { flushAgentStepUi } from "./flush-run-ui";
 
@@ -12,6 +12,11 @@ export type AbortRetainLifecycle = {
   getAbortRetainPending(): boolean;
   clearAbortRetainPending(): void;
 };
+
+/** Stream delta ingress：Composer 停态后丢弃迟到 delta。 */
+export function shouldAcceptStreamIngress(uiRunning: boolean): boolean {
+  return uiRunning;
+}
 
 export function stepCommittedShouldReload(
   lifecycle: AbortRetainLifecycle,
@@ -83,10 +88,15 @@ export function handleRunFinishedAbortRetain(
       sessionId: options.sessionId,
       streamingText: options.streamingText,
       reloadMessages: options.reloadMessages,
-    }).then(() => {
-      lifecycle.clearAbortRetainPending();
-      options.onStreamReset();
-    });
+    })
+      .then(() => {
+        lifecycle.clearAbortRetainPending();
+        options.onStreamReset();
+      })
+      .catch(() => {
+        lifecycle.clearAbortRetainPending();
+        options.onStreamReset();
+      });
   } else {
     options.onStreamReset();
   }

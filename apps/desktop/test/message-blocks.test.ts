@@ -28,6 +28,45 @@ test("T13: 工具卡执行中仅绑 agentRunning（agentActive），与 uiRunnin
   assert.equal(isTurnToolExecuting(assistant, [assistant], false), false);
 });
 
+test("T-ARP-U1：tu1 success + tu2 unpaired + runUiStopped → tu1 success、tu2 error", () => {
+  const assistant: ChatMessageDto = {
+    id: "a1",
+    sessionId: "s1",
+    seq: 1,
+    role: "assistant",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [
+      { type: "tool_use", id: "tu1", name: "read", input: { path: "/a.md" } },
+      { type: "tool_use", id: "tu2", name: "list", input: {} },
+    ],
+  };
+  const userResult: ChatMessageDto = {
+    id: "u1",
+    sessionId: "s1",
+    seq: 2,
+    role: "user",
+    hidden: false,
+    createdAtMs: 2,
+    bodyText: "",
+    contentBlocks: [
+      { type: "tool_result", toolUseId: "tu1", content: "ok", ok: true },
+    ],
+  };
+  const items = buildChatListItems([assistant, userResult], {
+    agentRunning: true,
+    runUiStopped: true,
+  });
+  assert.equal(items.length, 1);
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].tools.length, 2);
+    const byId = new Map(items[0].tools.map((tool) => [tool.toolUseId, tool]));
+    assert.equal(byId.get("tu1")?.status, "success");
+    assert.equal(byId.get("tu2")?.status, "error");
+  }
+});
+
 test("T-ARP-U2：无 result 且 agent 未跑时工具卡标失败", () => {
   const assistant = assistantWithTool("a1", 1);
   const items = buildChatListItems([assistant], { agentRunning: false });
