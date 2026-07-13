@@ -21,6 +21,7 @@ import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { TdbcError } from "@/infra/tdbc/index.js";
 import type {
   VfsGrepMatch,
+  VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
   VfsService,
@@ -113,7 +114,7 @@ export class RevisionAwareVfsService implements VfsService {
 
   grep(
     pattern: string,
-    options?: { pathPrefix?: string },
+    options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]> {
     return this.inner.grep(pattern, options);
   }

@@ -10,6 +10,7 @@
 
 import type { VfsEntryKind } from "../model/vfs-entry.js";
 import type { VfsListEntry } from "../model/vfs-list-entry.js";
+import type { VfsGrepOptions } from "../logic/vfs-grep.js";
 
 export type { VfsEntryKind, VfsListEntry };
 
@@ -34,6 +35,11 @@ export interface VfsGrepMatch {
   readonly column: number;
   readonly excerpt: string;
 }
+
+export type {
+  VfsGrepMatchMode,
+  VfsGrepOptions,
+} from "../logic/vfs-grep.js";
 
 /**
  * Virtual file system capability (read/write/list/glob/grep/delete/mkdir).
@@ -69,7 +75,7 @@ export interface VfsService {
 
   grep(
     pattern: string,
-    options?: { pathPrefix?: string },
+    options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]>;
 
   delete(path: string, options?: { recursive?: boolean }): Promise<void>;

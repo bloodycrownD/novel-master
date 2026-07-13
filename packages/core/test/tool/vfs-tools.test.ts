@@ -37,10 +37,10 @@ describe("Builtin file tools V2 (unit)", () => {
     );
   });
 
-  it("registers exactly 7 builtin tools via registerBuiltinTools", () => {
+  it("registers exactly 6 builtin tools via registerBuiltinTools", () => {
     const registry = new ToolRegistry<BuiltinToolContext>();
     registerBuiltinTools(registry);
-    assert.equal(registry.list().length, 7);
+    assert.equal(registry.list().length, 6);
   });
 
   it("mutating tool names include write/edit/fs only", () => {

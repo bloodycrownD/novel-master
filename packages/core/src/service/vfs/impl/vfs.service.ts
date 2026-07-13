@@ -24,11 +24,13 @@ import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js"
 import { matchGlob } from "../glob-match.js";
 import type {
   VfsGrepMatch,
+  VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
   VfsService,
   WriteOptions,
 } from "../vfs.port.js";
+import { grepContents } from "@/domain/vfs/logic/vfs-grep.js";
 
 /**
  * VFS service delegating persistence to {@link VfsEntryRepository}.
@@ -178,33 +180,14 @@ export class DefaultVfsService implements VfsService {
 
   async grep(
     pattern: string,
-    options?: { pathPrefix?: string },
+    options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]> {
     const rows = await this.repo.scanContents(options?.pathPrefix);
-    const matches: VfsGrepMatch[] = [];
-
-    for (const row of rows) {
-      const lines = row.content.split("\n");
-      for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-        const line = lines[lineIndex]!;
-        let searchFrom = 0;
-        while (searchFrom < line.length) {
-          const columnIndex = line.indexOf(pattern, searchFrom);
-          if (columnIndex === -1) {
-            break;
-          }
-          matches.push({
-            path: row.path,
-            line: lineIndex + 1,
-            column: columnIndex + 1,
-            excerpt: line,
-          });
-          searchFrom = columnIndex + Math.max(pattern.length, 1);
-        }
-      }
-    }
-
-    return matches;
+    const filtered =
+      options?.pathGlob != null
+        ? rows.filter((row) => matchGlob(options.pathGlob!, row.path))
+        : rows;
+    return grepContents(filtered, pattern, options);
   }
 
   delete(path: string, options?: { recursive?: boolean }): Promise<void> {

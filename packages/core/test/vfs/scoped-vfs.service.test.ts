@@ -56,4 +56,16 @@ describe("ScopedVfsService", () => {
     await ctx.sessionVfs(project.id, session.id).write("/note.md", "n");
     await assert.rejects(() => ctx.projectVfs(project.id).read("/note.md"));
   });
+
+  it("grep with pathGlob filters logical paths", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const pvfs = ctx.projectVfs(project.id);
+    await pvfs.write("/grep-glob/a.md", "# A");
+    await pvfs.write("/grep-glob/b.txt", "# B");
+    const hits = await pvfs.grep("#", { pathGlob: "/grep-glob/**/*.md" });
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0]!.path, "/grep-glob/a.md");
+    assert.equal(hits[0]!.line, 1);
+  });
 });

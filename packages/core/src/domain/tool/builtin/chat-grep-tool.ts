@@ -1,4 +1,7 @@
 /**
+ * @deprecated 废弃。chat_grep 已从 {@link registerBuiltinTools} 移除，不再暴露给 Agent。
+ * 本文件保留供单元测试与历史参考。
+ *
  * Searches the current session message history (including hidden messages).
  *
  * @module domain/tool/builtin/chat-grep-tool
@@ -82,7 +85,7 @@ function collectMatches(
   return results;
 }
 
-/** Creates the chat_grep builtin tool definition. */
+/** Creates the chat_grep tool definition（废弃，未注册）。 */
 export function createChatGrepTool(): Tool<
   { pattern: string; options?: { role?: string } },
   ChatGrepOutput,

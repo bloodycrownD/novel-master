@@ -299,6 +299,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
@@ -312,10 +315,32 @@ jobs:
           VERSION="${{ needs.resolve-version.outputs.name }}"
           OUT="release-assets/RELEASE_NOTES.md"
 
+          extract_changelog_section() {
+            local ver="$1"
+            awk -v version="$ver" '
+              /^## \[/ {
+                if (found) { exit }
+                if ($0 ~ "^## \\[" version "\\]") { found = 1 }
+                next
+              }
+              found { print }
+            ' CHANGELOG.md
+          }
+
+          CHANGELOG_BODY="$(extract_changelog_section "${VERSION}" | sed '/^[[:space:]]*$/d')"
+
           {
             echo "# Novel Master ${TAG}"
             echo ""
-            echo "## Android"
+            echo "## 更新说明"
+            echo ""
+            if [ -n "${CHANGELOG_BODY}" ]; then
+              echo "${CHANGELOG_BODY}"
+            else
+              echo "> 本版本未在 \`CHANGELOG.md\` 中找到 \`## [${VERSION}]\` 条目，请在发版前补充。"
+            fi
+            echo ""
+            echo "## 下载 · Android"
             echo ""
             echo "| APK | ABI |"
             echo "| --- | --- |"
@@ -323,7 +348,7 @@ jobs:
             for f in release-assets/NovelMaster-"${VERSION}"-*.apk; do
               name="$(basename "$f")"
               if [[ "$name" == *-universal.apk ]]; then
-                echo "| ${name} | all (fat) |"
+                echo "| ${name} | 通用 (fat) |"
               else
                 abi="${name#NovelMaster-${VERSION}-}"
                 abi="${abi%.apk}"
@@ -331,11 +356,11 @@ jobs:
               fi
             done
             echo ""
-            echo "**Install tip:** use \`universal\` on most phones; use per-ABI builds for smaller downloads."
+            echo "**安装提示：** 多数手机请下载 \`universal\`；按 ABI 分包体积更小。"
             echo ""
-            echo "## Desktop"
+            echo "## 下载 · Desktop"
             echo ""
-            echo "| Platform | File |"
+            echo "| 平台 | 文件 |"
             echo "| --- | --- |"
             if [ -f "release-assets/NovelMaster-${VERSION}-windows-setup.exe" ]; then
               echo "| Windows (NSIS) | NovelMaster-${VERSION}-windows-setup.exe |"
@@ -344,7 +369,7 @@ jobs:
               echo "| macOS (DMG, Apple Silicon) | NovelMaster-${VERSION}-macos.dmg |"
             fi
             echo ""
-            echo "**Desktop note:** installers are **unsigned**. On macOS, use right-click → Open for first launch."
+            echo "**安装提示：** 安装包**未签名**。macOS 首次启动请右键 → 打开。"
           } > "$OUT"
 
       - name: Create GitHub Release
@@ -356,4 +381,3 @@ jobs:
           files: |
             release-assets/NovelMaster-*
           fail_on_unmatched_files: true
-          generate_release_notes: true

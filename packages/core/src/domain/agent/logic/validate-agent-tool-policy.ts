@@ -31,7 +31,7 @@ function assertKnownNames(
     const name = normalizeAgentToolPolicyName(raw);
     if (!registryNames.has(name)) {
       const hint = migrationHint(raw);
-      const v2List = FILE_TOOL_NAMES.join(", ") + ", chat_grep";
+      const v2List = FILE_TOOL_NAMES.join(", ");
       const suffix =
         hint != null
           ? ` Legacy tool "${raw}" was removed; use ${hint} instead. V2 tools: ${v2List}.`

@@ -12,8 +12,10 @@ import {
   toPhysicalPath,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "../vfs.port.js";
+import { matchGlob } from "../glob-match.js";
 import type {
   VfsGrepMatch,
+  VfsGrepOptions,
   VfsListEntry,
   VfsReadResult,
   WriteOptions,
@@ -107,7 +109,7 @@ export class ScopedVfsService implements VfsService {
 
   async grep(
     pattern: string,
-    options?: { pathPrefix?: string },
+    options?: VfsGrepOptions,
   ): Promise<VfsGrepMatch[]> {
     const prefix = options?.pathPrefix;
     let physicalPrefix: string | undefined;
@@ -116,7 +118,9 @@ export class ScopedVfsService implements VfsService {
       assertLogicalPathAllowed(this.scope, logicalPrefix);
       physicalPrefix = toPhysicalPath(this.scope, logicalPrefix);
     }
+    const { pathGlob, ...innerOptions } = options ?? {};
     const matches = await this.inner.grep(pattern, {
+      ...innerOptions,
       pathPrefix: physicalPrefix,
     });
     return matches
@@ -127,7 +131,10 @@ export class ScopedVfsService implements VfsService {
           return null;
         }
       })
-      .filter((m): m is VfsGrepMatch => m != null);
+      .filter((m): m is VfsGrepMatch => m != null)
+      .filter((m) =>
+        pathGlob != null ? matchGlob(pathGlob, m.path) : true,
+      );
   }
 
   async delete(

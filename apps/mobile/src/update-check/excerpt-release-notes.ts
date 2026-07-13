@@ -7,6 +7,9 @@ export type ReleaseNotesFocus = 'desktop' | 'mobile';
 
 const NOTES_EXCERPT_MAX = 280;
 
+/** CI 从 CHANGELOG.md 注入的 Release 区块标题 */
+const CHANGELOG_HEADING = '## 更新说明';
+
 const FALLBACK: Record<ReleaseNotesFocus, string> = {
   desktop:
     '新版本安装包已在 GitHub Releases 发布（Windows / macOS）。',
@@ -16,11 +19,25 @@ const FALLBACK: Record<ReleaseNotesFocus, string> = {
 function extractSection(body: string, heading: string): string {
   const idx = body.indexOf(heading);
   if (idx < 0) {
-    return body;
+    return '';
   }
   const after = body.slice(idx + heading.length);
   const nextSection = after.search(/\n## /);
   return nextSection >= 0 ? after.slice(0, nextSection) : after;
+}
+
+function pickPlatformSection(body: string, focus: ReleaseNotesFocus): string {
+  const headings =
+    focus === 'desktop'
+      ? ['## 下载 · Desktop', '## Desktop']
+      : ['## 下载 · Android', '## Android'];
+  for (const heading of headings) {
+    const section = extractSection(body, heading);
+    if (section.trim()) {
+      return section;
+    }
+  }
+  return '';
 }
 
 function stripMarkdownTables(text: string): string {
@@ -55,21 +72,33 @@ function toPlainText(markdown: string): string {
     .trim();
 }
 
+function excerptPlainSection(markdown: string): string {
+  const withoutTables = stripMarkdownTables(markdown);
+  return toPlainText(withoutTables);
+}
+
+function truncateExcerpt(text: string): string {
+  if (text.length <= NOTES_EXCERPT_MAX) {
+    return text;
+  }
+  return `${text.slice(0, NOTES_EXCERPT_MAX)}…`;
+}
+
+/** 优先读取 CI 从 CHANGELOG.md 注入的「更新说明」；否则回退到平台下载段落。 */
 export function excerptReleaseNotes(
   body: string,
   focus: ReleaseNotesFocus = 'mobile',
 ): string {
-  const sectionHeading = focus === 'desktop' ? '## Desktop' : '## Android';
-  const scoped = extractSection(body, sectionHeading);
-  const withoutTables = stripMarkdownTables(scoped);
-  const plain = toPlainText(withoutTables);
+  const changelog = excerptPlainSection(extractSection(body, CHANGELOG_HEADING));
+  if (changelog) {
+    return truncateExcerpt(changelog);
+  }
+
+  const plain = excerptPlainSection(pickPlatformSection(body, focus));
 
   if (!plain) {
     return FALLBACK[focus];
   }
 
-  if (plain.length <= NOTES_EXCERPT_MAX) {
-    return plain;
-  }
-  return `${plain.slice(0, NOTES_EXCERPT_MAX)}…`;
+  return truncateExcerpt(plain);
 }

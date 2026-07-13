@@ -615,8 +615,8 @@ export const AgentDefinitionEditorForm = forwardRef<
           </SettingsField>
         ) : (
           <p className="settings-hint">
-            未配置时使用全部内置工具（7
-            个）：read、write、edit、fs、glob、grep、chat_grep。
+            未配置时使用全部内置工具（6
+            个）：read、write、edit、fs、glob、grep。
           </p>
         )}
       </SettingsSection>

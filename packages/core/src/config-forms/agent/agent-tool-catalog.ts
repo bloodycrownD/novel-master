@@ -1,19 +1,18 @@
 import type { AgentDefinition, AgentToolPolicy } from "@/domain/agent/model/agent-definition.js";
 import type { ToolsMode } from "./agent-editor-state.js";
 
-/** Catalog of V2 builtin tools for Agent policy UI (names sync with FILE_TOOL_NAMES + chat_grep). */
+/** Catalog of V2 builtin tools for Agent policy UI（与 FILE_TOOL_NAMES 同步）。 */
 export const BUILTIN_TOOL_CATALOG: ReadonlyArray<{
   readonly name: string;
   readonly label: string;
   readonly description: string;
 }> = [
   { name: "read", label: "read", description: "读取工作区文件（支持分页）" },
-  { name: "write", label: "write", description: "写入或覆盖文件" },
-  { name: "edit", label: "edit", description: "查找并替换文件内容" },
+  { name: "write", label: "write", description: "写入或整文件覆盖" },
+  { name: "edit", label: "edit", description: "精确查找替换（含尾追）" },
   { name: "fs", label: "fs", description: "文件系统命令（ls/rm/mv/cp/mkdir/rmdir）" },
   { name: "glob", label: "glob", description: "按 glob 模式查找路径" },
-  { name: "grep", label: "grep", description: "在工作区文件中搜索" },
-  { name: "chat_grep", label: "chat_grep", description: "搜索当前会话消息历史" },
+  { name: "grep", label: "grep", description: "在工作区文件内容中搜索（支持正则/反选/上下文）" },
 ] as const;
 
 export function buildToolsPolicyFromSelection(
