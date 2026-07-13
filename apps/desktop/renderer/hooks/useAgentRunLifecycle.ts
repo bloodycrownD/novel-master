@@ -46,9 +46,7 @@ export type AgentRunLifecycle = {
   resetUiForSessionChange(): void;
 };
 
-export function useAgentRunLifecycle(
-  onStreamReset?: () => void,
-): AgentRunLifecycle {
+export function useAgentRunLifecycle(): AgentRunLifecycle {
   const [uiRunning, setUiRunning] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);

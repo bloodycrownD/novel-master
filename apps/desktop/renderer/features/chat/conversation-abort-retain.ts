@@ -60,12 +60,20 @@ export function handleStepCommittedAbortRetain(
   if (!stepCommittedShouldReload(lifecycle, payload.phase)) {
     return;
   }
-  void flushAgentStepUi(payload.phase, reloadMessages, () => {
-    if (payload.phase === "assistant") {
-      lifecycle.clearAbortRetainPending();
-    }
-    onStreamReset();
-  });
+  const abortRetainReload =
+    payload.phase === "assistant" && lifecycle.getAbortRetainPending();
+  void flushAgentStepUi(
+    payload.phase,
+    reloadMessages,
+    abortRetainReload ? () => undefined : onStreamReset,
+  )
+    .catch(() => undefined)
+    .finally(() => {
+      if (abortRetainReload) {
+        lifecycle.clearAbortRetainPending();
+        onStreamReset();
+      }
+    });
 }
 
 export function handleRunFinishedAbortRetain(

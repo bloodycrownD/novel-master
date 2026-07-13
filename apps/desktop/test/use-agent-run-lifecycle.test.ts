@@ -69,11 +69,11 @@ describe("shouldApplyTranscriptReload", () => {
 });
 
 describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
-  function mountLifecycle(onStreamReset?: () => void): AgentRunLifecycle {
+  function mountLifecycle(): AgentRunLifecycle {
     const api: { current?: AgentRunLifecycle } = {};
 
     function Harness() {
-      api.current = useAgentRunLifecycle(onStreamReset);
+      api.current = useAgentRunLifecycle();
       return null;
     }
 
@@ -82,11 +82,8 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
     return api.current;
   }
 
-  it("T-ARP-L1: abortUiRun 设 abortRetainPending 且不同步调 onStreamReset", () => {
-    let resetCalls = 0;
-    const lifecycle = mountLifecycle(() => {
-      resetCalls += 1;
-    });
+  it("T-ARP-L1: abortUiRun 设 abortRetainPending 且 defer overlay clear", () => {
+    const lifecycle = mountLifecycle();
     lifecycle.beginUiRun();
     lifecycle.onRunStarted({
       sessionId: "s1",
@@ -98,7 +95,6 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
 
     assert.equal(lifecycle.getUiRunning(), false);
     assert.equal(lifecycle.getAbortRetainPending(), true);
-    assert.equal(resetCalls, 0);
   });
 
   it("T-ARP-L4: getAbortRetainPending / clearAbortRetainPending；FINISHED 清 freeze", () => {

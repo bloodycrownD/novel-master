@@ -50,6 +50,31 @@ test("T-ARP-D1：abort retain + STEP assistant → reload 后 overlay clear", as
   assert.equal(lifecycle.getAbortRetainPending(), false);
 });
 
+test("T-ARP-D1：reload reject 仍 clearAbortRetainPending + onStreamReset", async () => {
+  let resetCount = 0;
+  const lifecycle = mockLifecycle();
+  handleStepCommittedAbortRetain(
+    {
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "r1",
+      phase: "assistant",
+    },
+    lifecycle,
+    async () => {
+      throw new Error("reload fail");
+    },
+    () => {
+      resetCount += 1;
+    },
+  );
+  await new Promise<void>((resolve) => {
+    setImmediate(resolve);
+  });
+  assert.equal(resetCount, 1);
+  assert.equal(lifecycle.getAbortRetainPending(), false);
+});
+
 test("T-ARP-D2：retain 完成后迟到 STEP tool_results 不 reload", async () => {
   let reloadCount = 0;
   handleStepCommittedAbortRetain(

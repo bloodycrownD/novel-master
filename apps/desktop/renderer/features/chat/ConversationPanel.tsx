@@ -87,14 +87,13 @@ export function ConversationPanel({
     openChatWorkspacePreview,
   } = useShellNav();
   const vfsMutatedInRunRef = useRef(false);
-  const streamResetRef = useRef<() => void>(() => {});
   const [tab, setTab] = useState<'chat' | 'realPrompt'>('chat');
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
   const streamingTextRef = useRef('');
 
-  const runLifecycle = useAgentRunLifecycle(() => streamResetRef.current());
+  const runLifecycle = useAgentRunLifecycle();
   const {
     uiRunning: running,
     acceptRunEvent,
@@ -121,10 +120,6 @@ export function ConversationPanel({
     setStreamingText('');
     setStreamingThinking('');
   }, []);
-
-  useEffect(() => {
-    streamResetRef.current = onStreamReset;
-  }, [onStreamReset]);
 
   useEffect(() => {
     if (running) {
