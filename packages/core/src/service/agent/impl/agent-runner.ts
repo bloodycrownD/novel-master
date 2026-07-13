@@ -276,6 +276,20 @@ export class DefaultAgentRunner implements AgentRunner {
 
         if (signal?.aborted) {
           stopReason = "cancelled";
+          if (result.blocks.length > 0) {
+            await session.append("assistant", { blocks: result.blocks }, {
+              raw: result.raw as Record<string, unknown>,
+            });
+            assistantAppendCount += 1;
+            if (publishRunLifecycle) {
+              bus.publish(EVENT_AGENT_STEP_COMMITTED, {
+                sessionId,
+                projectId,
+                runId,
+                phase: "assistant",
+              });
+            }
+          }
           break;
         }
 
