@@ -72,9 +72,11 @@ export type {
 } from "../service/agent/logic/run-agent-turn.js";
 export {
   shouldAcceptRunEvent,
+  shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
 } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
+export type { ShouldApplyTranscriptReloadOptions } from "../service/agent/logic/agent-run-lifecycle-helpers.js";
 export {
   assembleAgentRunnerDeps,
   type AssembleAgentRunnerDepsInput,

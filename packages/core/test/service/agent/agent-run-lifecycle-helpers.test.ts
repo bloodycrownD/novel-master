@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   shouldAcceptRunEvent,
+  shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
 } from '../../../src/service/agent/logic/agent-run-lifecycle-helpers.js';
@@ -46,5 +47,40 @@ describe('shouldReloadTranscriptOnRunEvent', () => {
   it('T-AC2-1: uiRunning=false 时禁止 reload；true 时允许', () => {
     assert.equal(shouldReloadTranscriptOnRunEvent(false), false);
     assert.equal(shouldReloadTranscriptOnRunEvent(true), true);
+  });
+});
+
+describe('shouldApplyTranscriptReload', () => {
+  it('uiRunning=false 且无 retain 例外时禁止 reload', () => {
+    assert.equal(shouldApplyTranscriptReload(false, null), false);
+  });
+
+  it('uiRunning=true 且无 freeze 时允许 reload', () => {
+    assert.equal(shouldApplyTranscriptReload(true, null), true);
+  });
+
+  it('freezeCount 非 null 时禁止一切增列表 reload', () => {
+    assert.equal(shouldApplyTranscriptReload(true, 3), false);
+    assert.equal(shouldApplyTranscriptReload(false, 3), false);
+  });
+
+  it('T-ARP-L2: abort retain + assistant phase 允许一次 reload（不受 freeze 约束）', () => {
+    assert.equal(
+      shouldApplyTranscriptReload(false, 2, {
+        abortRetainPending: true,
+        phase: 'assistant',
+      }),
+      true,
+    );
+  });
+
+  it('T-ARP-L3: abort retain + tool_results phase 仍禁止 reload', () => {
+    assert.equal(
+      shouldApplyTranscriptReload(false, 2, {
+        abortRetainPending: true,
+        phase: 'tool_results',
+      }),
+      false,
+    );
   });
 });

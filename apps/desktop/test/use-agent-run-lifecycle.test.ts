@@ -69,11 +69,11 @@ describe("shouldApplyTranscriptReload", () => {
 });
 
 describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
-  function mountLifecycle(): AgentRunLifecycle {
+  function mountLifecycle(onStreamReset?: () => void): AgentRunLifecycle {
     const api: { current?: AgentRunLifecycle } = {};
 
     function Harness() {
-      api.current = useAgentRunLifecycle();
+      api.current = useAgentRunLifecycle(onStreamReset);
       return null;
     }
 
@@ -81,6 +81,78 @@ describe("useAgentRunLifecycle transcriptFreezeCount (T-AC2-5)", () => {
     assert.ok(api.current);
     return api.current;
   }
+
+  it("T-ARP-L1: abortUiRun 设 abortRetainPending 且不同步调 onStreamReset", () => {
+    let resetCalls = 0;
+    const lifecycle = mountLifecycle(() => {
+      resetCalls += 1;
+    });
+    lifecycle.beginUiRun();
+    lifecycle.onRunStarted({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-1",
+    });
+
+    lifecycle.abortUiRun(5);
+
+    assert.equal(lifecycle.getUiRunning(), false);
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+    assert.equal(resetCalls, 0);
+  });
+
+  it("T-ARP-L4: getAbortRetainPending / clearAbortRetainPending；FINISHED 清 freeze", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    lifecycle.onRunStarted({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-1",
+    });
+    lifecycle.abortUiRun(4);
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+
+    lifecycle.clearAbortRetainPending();
+    assert.equal(lifecycle.getAbortRetainPending(), false);
+
+    lifecycle.abortUiRun(3);
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+    assert.equal(lifecycle.getTranscriptFreezeCount(), 3);
+
+    lifecycle.onRunFinished({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-1",
+      stopReason: "cancelled",
+    });
+    assert.equal(lifecycle.getTranscriptFreezeCount(), null);
+    // FINISHED 不自动清 abortRetainPending（由 retain reload 或 fallback 负责）
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+  });
+
+  it("T-ARP-L4: beginUiRun / resetUiForSessionChange 清 abortRetainPending", () => {
+    const lifecycle = mountLifecycle();
+    lifecycle.beginUiRun();
+    lifecycle.onRunStarted({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-1",
+    });
+    lifecycle.abortUiRun(6);
+    assert.equal(lifecycle.getAbortRetainPending(), true);
+
+    lifecycle.beginUiRun();
+    assert.equal(lifecycle.getAbortRetainPending(), false);
+
+    lifecycle.onRunStarted({
+      sessionId: "s1",
+      projectId: "p1",
+      runId: "run-2",
+    });
+    lifecycle.abortUiRun(1);
+    lifecycle.resetUiForSessionChange();
+    assert.equal(lifecycle.getAbortRetainPending(), false);
+  });
 
   it("abortUiRun(freezeAt) 设置 freezeCount 且 getUiRunning 同步为 false", () => {
     const lifecycle = mountLifecycle();

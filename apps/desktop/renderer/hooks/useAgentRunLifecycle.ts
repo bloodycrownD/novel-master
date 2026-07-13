@@ -3,6 +3,7 @@
  */
 import {
   shouldAcceptRunEvent,
+  shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
 } from "@novel-master/core/agent";
@@ -13,33 +14,28 @@ import type {
   AgentRunStartedPayload,
 } from "@shared/agent-event-types";
 
-export { shouldAcceptRunEvent, shouldIgnoreStaleRunStarted };
-
-/** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险）。 */
-export function shouldApplyTranscriptReload(
-  uiRunning: boolean,
-  freezeCount: number | null,
-): boolean {
-  if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {
-    return false;
-  }
-  if (freezeCount != null) {
-    return false;
-  }
-  return true;
-}
+export {
+  shouldAcceptRunEvent,
+  shouldApplyTranscriptReload,
+  shouldIgnoreStaleRunStarted,
+  shouldReloadTranscriptOnRunEvent,
+};
 
 export type AgentRunLifecycle = {
   readonly uiRunning: boolean;
   readonly activeRunId: string | null;
   /** 发 run 前：uiRunning=true；Desktop 不 increment agentActive */
   beginUiRun(): void;
-  /** 终止：uiRunning=false + onStreamReset；可选 freezeAt 快照消息数；不碰 agentActive；不清 activeRunId，由 FINISHED/FAILED 清除 */
+  /** 终止：uiRunning=false + abortRetainPending；可选 freezeAt 快照消息数；defer onStreamReset 至 retain 完成 */
   abortUiRun(freezeAt?: number): void;
   /** 同步读 uiRunningRef（bus 回调守卫用，禁止读 React state）。 */
   getUiRunning(): boolean;
-  /** 同步读 abort 快照；非 null 时禁止一切增列表 reload。 */
+  /** 同步读 abort 快照；非 null 时禁止一切增列表 reload（abort retain 例外除外）。 */
   getTranscriptFreezeCount(): number | null;
+  /** abort 后等待一次 assistant STEP reload。 */
+  getAbortRetainPending(): boolean;
+  /** retain reload 或 FINISHED fallback 完成后清除。 */
+  clearAbortRetainPending(): void;
   /** runId 不匹配则丢弃；匹配则通过 */
   acceptRunEvent(runId: string | undefined): boolean;
   /** 仅设 activeRunId=runId、uiRunning=true（幂等）；不 increment agentActive */
@@ -58,6 +54,7 @@ export function useAgentRunLifecycle(
   const activeRunIdRef = useRef<string | null>(null);
   const uiRunningRef = useRef(false);
   const transcriptFreezeCountRef = useRef<number | null>(null);
+  const abortRetainPendingRef = useRef(false);
 
   const syncActiveRunId = useCallback((runId: string | null) => {
     activeRunIdRef.current = runId;
@@ -72,18 +69,18 @@ export function useAgentRunLifecycle(
   const beginUiRun = useCallback(() => {
     syncActiveRunId(null);
     transcriptFreezeCountRef.current = null;
+    abortRetainPendingRef.current = false;
     setUiRunningSynced(true);
   }, [syncActiveRunId, setUiRunningSynced]);
 
   const abortUiRun = useCallback(
     (freezeAt?: number) => {
       setUiRunningSynced(false);
-      if (freezeAt != null) {
-        transcriptFreezeCountRef.current = freezeAt;
-      }
-      onStreamReset?.();
+      abortRetainPendingRef.current = true;
+      transcriptFreezeCountRef.current = freezeAt ?? null;
+      // defer onStreamReset 至 retain reload 或 FINISHED fallback
     },
-    [onStreamReset, setUiRunningSynced],
+    [setUiRunningSynced],
   );
 
   const getUiRunning = useCallback((): boolean => {
@@ -92,6 +89,14 @@ export function useAgentRunLifecycle(
 
   const getTranscriptFreezeCount = useCallback((): number | null => {
     return transcriptFreezeCountRef.current;
+  }, []);
+
+  const getAbortRetainPending = useCallback((): boolean => {
+    return abortRetainPendingRef.current;
+  }, []);
+
+  const clearAbortRetainPending = useCallback((): void => {
+    abortRetainPendingRef.current = false;
   }, []);
 
   const acceptRunEvent = useCallback((runId: string | undefined): boolean => {
@@ -140,6 +145,7 @@ export function useAgentRunLifecycle(
     setUiRunningSynced(false);
     syncActiveRunId(null);
     transcriptFreezeCountRef.current = null;
+    abortRetainPendingRef.current = false;
   }, [syncActiveRunId, setUiRunningSynced]);
 
   return {
@@ -149,6 +155,8 @@ export function useAgentRunLifecycle(
     abortUiRun,
     getUiRunning,
     getTranscriptFreezeCount,
+    getAbortRetainPending,
+    clearAbortRetainPending,
     acceptRunEvent,
     onRunStarted,
     onRunFinished,

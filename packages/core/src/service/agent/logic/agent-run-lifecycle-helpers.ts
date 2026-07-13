@@ -28,3 +28,29 @@ export function shouldIgnoreStaleRunStarted(
 export function shouldReloadTranscriptOnRunEvent(uiRunning: boolean): boolean {
   return uiRunning;
 }
+
+export type ShouldApplyTranscriptReloadOptions = {
+  readonly abortRetainPending?: boolean;
+  readonly phase?: "assistant" | "tool_results";
+};
+
+/** STEP/FINISHED/FAILED 是否允许增列表 reload（uiRunning + freeze 双保险；abort retain 一次例外）。 */
+export function shouldApplyTranscriptReload(
+  uiRunning: boolean,
+  freezeCount: number | null,
+  opts?: ShouldApplyTranscriptReloadOptions,
+): boolean {
+  if (
+    opts?.abortRetainPending === true &&
+    opts.phase === "assistant"
+  ) {
+    return true;
+  }
+  if (!shouldReloadTranscriptOnRunEvent(uiRunning)) {
+    return false;
+  }
+  if (freezeCount != null) {
+    return false;
+  }
+  return true;
+}
