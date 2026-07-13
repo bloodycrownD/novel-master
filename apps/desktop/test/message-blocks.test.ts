@@ -28,13 +28,24 @@ test("T13: 工具卡执行中仅绑 agentRunning（agentActive），与 uiRunnin
   assert.equal(isTurnToolExecuting(assistant, [assistant], false), false);
 });
 
-test("abort 后无 result 的工具卡显示已中断而非执行中", () => {
+test("T-ARP-U2：无 result 且 agent 未跑时工具卡标失败", () => {
   const assistant = assistantWithTool("a1", 1);
   const items = buildChatListItems([assistant], { agentRunning: false });
   assert.equal(items.length, 1);
   if (items[0]?.kind === "message") {
     assert.equal(items[0].tools.length, 1);
-    assert.equal(items[0].tools[0]?.status, "interrupted");
+    assert.equal(items[0].tools[0]?.status, "error");
+  }
+});
+
+test("T-ARP-U2：runUiStopped 时 unpaired 工具标失败（即使 agentRunning）", () => {
+  const assistant = assistantWithTool("a1", 1);
+  const items = buildChatListItems([assistant], {
+    agentRunning: true,
+    runUiStopped: true,
+  });
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].tools[0]?.status, "error");
   }
 });
 

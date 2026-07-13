@@ -45,6 +45,8 @@ export type ChatListItem = MessageListItem | UserVfsTurnListItem;
 
 export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
+  /** true 当 uiRunning=false（Composer 已停）；与 agentRunning 正交 */
+  readonly runUiStopped?: boolean;
 }
 
 function blocksForMessage(message: ChatMessageDto): readonly ContentBlockDto[] {
@@ -219,10 +221,14 @@ function resolveUnpairedToolStatus(
   assistant: ChatMessageDto,
   messages: readonly ChatMessageDto[],
   agentRunning: boolean,
+  runUiStopped: boolean,
 ): ToolCallStatus {
+  if (runUiStopped) {
+    return "error";
+  }
   return isTurnToolExecuting(assistant, messages, agentRunning)
     ? "pending"
-    : "interrupted";
+    : "error";
 }
 
 export function buildChatListItems(
@@ -230,6 +236,7 @@ export function buildChatListItems(
   options: BuildChatListItemsOptions = {},
 ): ChatListItem[] {
   const agentRunning = options.agentRunning ?? false;
+  const runUiStopped = options.runUiStopped ?? false;
   const results = buildToolResultByUseId(messages);
   const coreMessages = messages.map(chatMessageFromDto);
   const items: ChatListItem[] = [];
@@ -291,7 +298,7 @@ export function buildChatListItems(
 
     const hasToolUse = toolUses.length > 0;
     const unpairedStatus = hasToolUse
-      ? resolveUnpairedToolStatus(message, messages, agentRunning)
+      ? resolveUnpairedToolStatus(message, messages, agentRunning, runUiStopped)
       : undefined;
     const tools = toolUses.map((use) => {
       const view = toolCallViewFromUse(use, results);

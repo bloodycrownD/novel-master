@@ -75,7 +75,10 @@ export function MessageList({
     onOpenMessageMenu?.(message, { x: event.clientX, y: event.clientY });
   };
 
-  const listItems = buildChatListItems(messages, { agentRunning });
+  const listItems = buildChatListItems(messages, {
+    agentRunning,
+    runUiStopped: !uiRunning,
+  });
 
   return (
     <>

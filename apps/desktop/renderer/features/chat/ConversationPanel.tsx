@@ -40,7 +40,10 @@ import {
 } from './message-edit';
 import { resolveComposerTextAfterRollbackSuccess } from './rollback-composer';
 import { MessageEditModal } from './MessageEditModal';
-import { flushAgentStepUi } from './flush-run-ui';
+import {
+  handleRunFinishedAbortRetain,
+  handleStepCommittedAbortRetain,
+} from './conversation-abort-retain';
 import { MessageList } from './MessageList';
 import { RealPromptPanel } from './RealPromptPanel';
 import { AgentStreamMetricsBar } from './AgentStreamMetricsBar';
@@ -88,6 +91,7 @@ export function ConversationPanel({
   const [messages, setMessages] = useState<ChatMessageDto[]>([]);
   const [streamingText, setStreamingText] = useState('');
   const [streamingThinking, setStreamingThinking] = useState('');
+  const streamingTextRef = useRef('');
 
   const runLifecycle = useAgentRunLifecycle(() => streamResetRef.current());
   const {
@@ -97,6 +101,8 @@ export function ConversationPanel({
     abortUiRun: abortUiRunBase,
     getUiRunning,
     getTranscriptFreezeCount,
+    getAbortRetainPending,
+    clearAbortRetainPending,
     onRunStarted,
     onRunFinished: finishUiRun,
     onRunFailed: failUiRun,
@@ -110,6 +116,7 @@ export function ConversationPanel({
   const agentActive = useDesktopAgentActive();
 
   const onStreamReset = useCallback(() => {
+    streamingTextRef.current = '';
     setStreamingText('');
     setStreamingThinking('');
   }, []);
@@ -185,7 +192,11 @@ export function ConversationPanel({
         return;
       }
       noteMetricsTextDelta(delta);
-      setStreamingText(prev => prev + delta);
+      setStreamingText(prev => {
+        const next = prev + delta;
+        streamingTextRef.current = next;
+        return next;
+      });
     },
     [getUiRunning, noteMetricsTextDelta],
   );
@@ -203,13 +214,12 @@ export function ConversationPanel({
 
   const onStepCommitted = useCallback(
     (payload: AgentStepCommittedPayload) => {
-      const shouldReload = shouldApplyTranscriptReload(
-        getUiRunning(),
-        getTranscriptFreezeCount(),
+      handleStepCommittedAbortRetain(
+        payload,
+        runLifecycle,
+        reloadMessages,
+        onStreamReset,
       );
-      if (shouldReload) {
-        void flushAgentStepUi(payload.phase, reloadMessages, onStreamReset);
-      }
       // Desktop-only 实时消费方 ①：Agent 工具突变后立即刷新 Explorer
       if (payload.vfsMutated) {
         vfsMutatedInRunRef.current = true;
@@ -217,11 +227,10 @@ export function ConversationPanel({
       }
     },
     [
+      runLifecycle,
       reloadMessages,
       onStreamReset,
       notifyWorkspaceMutated,
-      getUiRunning,
-      getTranscriptFreezeCount,
     ],
   );
 
@@ -231,25 +240,31 @@ export function ConversationPanel({
         getUiRunning(),
         getTranscriptFreezeCount(),
       );
-      if (!finishUiRun(payload)) {
+      const accepted = handleRunFinishedAbortRetain(payload, runLifecycle, {
+        finishUiRun,
+        shouldReloadAfterFinish: shouldReload,
+        streamingText: streamingTextRef.current,
+        sessionId,
+        reloadMessages,
+        onStreamReset,
+      });
+      if (!accepted) {
         return;
       }
-      setStreamingText('');
-      setStreamingThinking('');
       if (payload.vfsMutated) {
         notifyWorkspaceMutated();
       }
       vfsMutatedInRunRef.current = false;
-      if (shouldReload) {
-        void reloadMessages();
-      }
     },
     [
+      runLifecycle,
       finishUiRun,
-      reloadMessages,
-      notifyWorkspaceMutated,
       getUiRunning,
       getTranscriptFreezeCount,
+      sessionId,
+      reloadMessages,
+      onStreamReset,
+      notifyWorkspaceMutated,
     ],
   );
 
@@ -262,6 +277,7 @@ export function ConversationPanel({
       if (!failUiRun(payload)) {
         return;
       }
+      streamingTextRef.current = '';
       setStreamingText('');
       setStreamingThinking('');
       if (vfsMutatedInRunRef.current) {
@@ -421,6 +437,7 @@ export function ConversationPanel({
         showToast(result.error.message);
         return;
       }
+      streamingTextRef.current = '';
       setStreamingText('');
       await reloadMessages();
       if (!options?.skipVfsReconcile) {
@@ -476,6 +493,7 @@ export function ConversationPanel({
           showToast(result.error.message);
           return;
         }
+        streamingTextRef.current = '';
         setStreamingText('');
         await openSession(result.data, projectName ?? '—');
         return;
