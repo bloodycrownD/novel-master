@@ -1,9 +1,13 @@
 /**
  * Generates Electron app icons from assets/icon.webp.
- * Outputs: build/icons/icon.png (256), icon-512.png, icon.ico; icon.icns on macOS.
+ * Outputs: build/icons/icon.png (256), icon-512.png, icon.ico;
+ *          icon-mac.png (512 preview); icon.icns on macOS.
  *
- * macOS: artwork is scaled into Apple's safe zone on an opaque background.
- * Do not bake squircle corners — macOS applies the mask in Dock/Finder.
+ * macOS (Big Sur+): icons are NOT full-bleed. Apple's grid uses an
+ * 824×824 plate centered on a 1024×1024 canvas (~100px transparent
+ * gutter). Bake rounded corners + transparency; Dock does not shrink
+ * a full-bleed square for you — that makes the icon look larger than
+ * neighbouring apps.
  *
  * Usage: npm run build:icons -w @novel-master/desktop
  */
@@ -20,73 +24,88 @@ const repoRoot = path.resolve(desktopRoot, "../..");
 const sourceWebp = path.join(repoRoot, "assets/icon.webp");
 const outDir = path.join(desktopRoot, "build/icons");
 
+/** Apple macOS app-icon grid: 824/1024 content plate. */
+const MAC_PLATE_RATIO = 824 / 1024;
+/** Continuous-corner radius on the 824 plate (Apple template ≈ 185.4). */
+const MAC_CORNER_RATIO = 185.4 / 824;
+
 /**
- * macOS squircle mask clips outer ~10% per edge; keep artwork inside ~80% canvas.
- * Corners must be opaque (sampled backdrop), not transparent.
+ * Rounded plate on transparent canvas (macOS Dock / Finder size parity).
+ * Reference (1024): 100px gutter, rx≈185.4, shadow 28/12 @ 50% black.
  */
-const MAC_CONTENT_SCALE = 0.8;
+async function renderMacIconPng(input, size) {
+  const plateSize = Math.max(1, Math.round(size * MAC_PLATE_RATIO));
+  const offset = Math.floor((size - plateSize) / 2);
+  const radius = Math.max(1, Math.round(plateSize * MAC_CORNER_RATIO));
 
-/** Average RGB from image corners (matches icon backdrop). */
-async function sampleBackgroundColor(input) {
-  const { data, info } = await sharp(input)
-    .ensureAlpha()
-    .raw()
-    .toBuffer({ resolveWithObject: true });
-  const { width, height } = info;
-  const points = [
-    [0, 0],
-    [width - 1, 0],
-    [0, height - 1],
-    [width - 1, height - 1],
-  ];
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  for (const [x, y] of points) {
-    const i = (y * width + x) * 4;
-    r += data[i];
-    g += data[i + 1];
-    b += data[i + 2];
-  }
-  const n = points.length;
-  return {
-    r: Math.round(r / n),
-    g: Math.round(g / n),
-    b: Math.round(b / n),
-  };
-}
-
-async function scaledArtwork(input, contentSize) {
-  return sharp(input)
-    .resize(contentSize, contentSize, {
-      fit: "contain",
+  const plate = await sharp(input)
+    .resize(plateSize, plateSize, {
+      fit: "cover",
       kernel: sharp.kernel.lanczos3,
     })
+    .ensureAlpha()
     .png()
     .toBuffer();
-}
 
-/** Square icon: solid bg + centered artwork (macOS icns iconset). */
-async function renderMacIconPng(input, size, bg) {
-  const contentSize = Math.max(1, Math.round(size * MAC_CONTENT_SCALE));
-  const offset = Math.floor((size - contentSize) / 2);
-  const art = await scaledArtwork(input, contentSize);
+  const roundMask = Buffer.from(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${plateSize}" height="${plateSize}">
+      <rect width="${plateSize}" height="${plateSize}" rx="${radius}" ry="${radius}" fill="#fff"/>
+    </svg>`,
+  );
+
+  const roundedPlate = await sharp(plate)
+    .composite([{ input: roundMask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+
+  const layers = [];
+  if (size >= 64) {
+    const scale = size / 1024;
+    const blurSigma = Math.max(0.5, 14 * scale);
+    const shadowY = Math.round(12 * scale);
+    const { data, info } = await sharp(roundedPlate)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 0;
+      data[i + 1] = 0;
+      data[i + 2] = 0;
+      data[i + 3] = Math.round(data[i + 3] * 0.5);
+    }
+    const shadow = await sharp(data, {
+      raw: { width: info.width, height: info.height, channels: 4 },
+    })
+      .blur(blurSigma)
+      .png()
+      .toBuffer();
+    layers.push({
+      input: shadow,
+      left: offset,
+      top: Math.min(size - plateSize, offset + shadowY),
+    });
+  }
+  layers.push({ input: roundedPlate, left: offset, top: offset });
+
   return sharp({
     create: {
       width: size,
       height: size,
-      channels: 3,
-      background: bg,
+      channels: 4,
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
     },
   })
-    .composite([{ input: art, left: offset, top: offset }])
+    .composite(layers)
     .png();
 }
 
 async function writePng(size, filename) {
   const outPath = path.join(outDir, filename);
   await sharp(sourceWebp)
-    .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(size, size, {
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
     .png()
     .toFile(outPath);
   return outPath;
@@ -97,7 +116,10 @@ async function writeIco() {
   const buffers = await Promise.all(
     sizes.map((size) =>
       sharp(sourceWebp)
-        .resize(size, size, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+        .resize(size, size, {
+          fit: "contain",
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
         .png()
         .toBuffer(),
     ),
@@ -106,11 +128,16 @@ async function writeIco() {
   await fs.writeFile(path.join(outDir, "icon.ico"), ico);
 }
 
+async function writeMacPreviewPng() {
+  const pipeline = await renderMacIconPng(sourceWebp, 512);
+  await pipeline.toFile(path.join(outDir, "icon-mac.png"));
+}
+
 async function writeIcnsMac() {
   if (process.platform !== "darwin") {
+    console.log("[desktop] skip icon.icns (iconutil requires macOS)");
     return;
   }
-  const bg = await sampleBackgroundColor(sourceWebp);
   const iconsetDir = path.join(outDir, "icon.iconset");
   await fs.rm(iconsetDir, { recursive: true, force: true });
   await fs.mkdir(iconsetDir, { recursive: true });
@@ -127,10 +154,12 @@ async function writeIcnsMac() {
     [1024, "icon_512x512@2x.png"],
   ];
   for (const [size, name] of spec) {
-    const pipeline = await renderMacIconPng(sourceWebp, size, bg);
+    const pipeline = await renderMacIconPng(sourceWebp, size);
     await pipeline.toFile(path.join(iconsetDir, name));
   }
-  execSync(`iconutil -c icns "${iconsetDir}" -o "${path.join(outDir, "icon.icns")}"`);
+  execSync(
+    `iconutil -c icns "${iconsetDir}" -o "${path.join(outDir, "icon.icns")}"`,
+  );
   await fs.rm(iconsetDir, { recursive: true, force: true });
 }
 
@@ -139,6 +168,7 @@ async function main() {
   await writePng(256, "icon.png");
   await writePng(512, "icon-512.png");
   await writeIco();
+  await writeMacPreviewPng();
   await writeIcnsMac();
   console.log(`[desktop] icons written to ${outDir}`);
 }
