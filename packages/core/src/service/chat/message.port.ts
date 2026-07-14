@@ -4,7 +4,11 @@
  * @module service/chat/message.port
  */
 
-import type { ChatMessage, MessageContent } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageAttachment,
+  MessageContent,
+} from "@/domain/chat/model/message.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
 
 /** Message CRUD and fork (branch) operations. */
@@ -25,7 +29,12 @@ export interface MessageService {
     sessionId: string,
     role: string,
     content: MessageContent,
-    options?: { provider?: string | null; raw?: Record<string, unknown> | null },
+    options?: {
+      provider?: string | null;
+      raw?: Record<string, unknown> | null;
+      /** 结构化附件；写入 `attachments_json`，不写入 `content_json`。 */
+      attachments?: readonly MessageAttachment[];
+    },
   ): Promise<ChatMessage>;
 
   delete(id: string): Promise<void>;

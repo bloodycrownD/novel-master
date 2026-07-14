@@ -137,4 +137,43 @@ describe("normalizeForLlmExport", () => {
     assert.equal(messageBodyText(out[1]!), TOOL_TURN_BRIDGE_TEXT);
     assert.equal(messageBodyText(out[2]!), "chat");
   });
+
+  it("T-PR1: 已 wrap 的带 attachments user 不与相邻 plain user merge", () => {
+    const withAtt: ChatMessage = {
+      ...msg("user", "<attachment>\n  <attach></attach>\n</attachment>\n<user-input>\nhi\n</user-input>", {
+        id: "u-att",
+      }),
+      attachments: [
+        {
+          name: "/a.md",
+          source: "attach",
+          type: "text",
+          content: null,
+          path: "/a.md",
+        },
+      ],
+    };
+    const plain = msg("user", "next", { id: "u-plain" });
+    const out = normalizeForLlmExport([withAtt, plain], "anthropic", {
+      persistCount: 0,
+      dynamicCount: 0,
+    });
+    assert.equal(out.length, 2);
+    assert.equal(out[0]!.id, "u-att");
+    assert.equal(out[1]!.id, "u-plain");
+  });
+
+  it("T-PR2: normalizeForLlmExport 仍为 sync（无 Promise / 无 async）", () => {
+    const result = normalizeForLlmExport(
+      [msg("user", "a"), msg("user", "b")],
+      "anthropic",
+    );
+    assert.equal(typeof (result as { then?: unknown }).then, "undefined");
+    assert.ok(Array.isArray(result));
+    assert.equal(
+      normalizeForLlmExport.constructor.name,
+      "Function",
+      "须为普通 sync function，而非 AsyncFunction",
+    );
+  });
 });

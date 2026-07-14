@@ -24,6 +24,12 @@ export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
       "ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
   },
   {
+    table: "chat_message",
+    column: "attachments_json",
+    addColumnSql:
+      "ALTER TABLE chat_message ADD COLUMN attachments_json TEXT NULL",
+  },
+  {
     table: "chat_session",
     column: "user_vfs_pending_json",
     addColumnSql:

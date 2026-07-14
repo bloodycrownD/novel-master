@@ -12,14 +12,24 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { parseMessageContent } from "../../content/parse-message-content.js";
+import {
+  parseAttachmentsJson,
+  serializeAttachmentsJson,
+} from "../../model/message-attachment.schema.js";
 import type { ChatMessage } from "../../model/message.js";
 import type { MessageRepository } from "../message.port.js";
+
+const MESSAGE_SELECT_COLUMNS =
+  `id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json`;
 
 function parseContent(json: string) {
   return parseMessageContent(json);
 }
 
 function rowToMessage(row: Row): ChatMessage {
+  const attachments = parseAttachmentsJson(
+    row.attachments_json == null ? null : String(row.attachments_json),
+  );
   return {
     id: String(row.id),
     sessionId: String(row.session_id),
@@ -34,6 +44,7 @@ function rowToMessage(row: Row): ChatMessage {
     createdAtMs: Number(row.created_at_ms),
     // Parse hidden column: 1 = true, 0 = false
     hidden: Number(row.hidden) === 1,
+    ...(attachments != null ? { attachments } : {}),
   };
 }
 
@@ -47,7 +58,7 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message WHERE session_id = #{sessionId} ORDER BY seq ASC`,
       { sessionId },
     );
@@ -59,9 +70,9 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM (
-         SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+         SELECT ${MESSAGE_SELECT_COLUMNS}
          FROM chat_message
          WHERE session_id = #{sessionId}
          ORDER BY seq DESC
@@ -82,9 +93,9 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM (
-         SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+         SELECT ${MESSAGE_SELECT_COLUMNS}
          FROM chat_message
          WHERE session_id = #{sessionId}
            AND (#{beforeSeq} IS NULL OR seq < #{beforeSeq})
@@ -101,7 +112,7 @@ export class SqliteMessageRepository implements MessageRepository {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden
+      `SELECT ${MESSAGE_SELECT_COLUMNS}
        FROM chat_message WHERE id = #{id}`,
       { id },
     );
@@ -137,8 +148,8 @@ export class SqliteMessageRepository implements MessageRepository {
       this.conn,
       this.parser,
       `INSERT INTO chat_message
-       (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden)
-       VALUES (#{id}, #{sessionId}, #{seq}, #{role}, #{contentJson}, #{provider}, #{rawJson}, #{createdAtMs}, #{hidden})`,
+       (id, session_id, seq, role, content_json, provider, raw_json, created_at_ms, hidden, attachments_json)
+       VALUES (#{id}, #{sessionId}, #{seq}, #{role}, #{contentJson}, #{provider}, #{rawJson}, #{createdAtMs}, #{hidden}, #{attachmentsJson})`,
       {
         id: message.id,
         sessionId: message.sessionId,
@@ -150,6 +161,7 @@ export class SqliteMessageRepository implements MessageRepository {
         createdAtMs: message.createdAtMs,
         // Convert boolean to integer: true = 1, false = 0
         hidden: message.hidden ? 1 : 0,
+        attachmentsJson: serializeAttachmentsJson(message.attachments),
       },
     );
   }

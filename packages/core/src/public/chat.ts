@@ -17,8 +17,25 @@ export {
 export type { ChatSession } from '../domain/chat/model/session.js';
 export type {
   ChatMessage,
+  MessageAttachment,
   MessageContent,
 } from '../domain/chat/model/message.js';
+export {
+  messageAttachmentSchema,
+  messageAttachmentsSchema,
+  parseAttachmentsJson,
+  serializeAttachmentsJson,
+} from '../domain/chat/model/message-attachment.schema.js';
+export { wrapUserMessageForLlm } from '../domain/chat/logic/wrap-user-message-for-llm.js';
+export {
+  prepareUserMessagesForPrompt,
+} from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+export {
+  ATTACH_DIR_TREE_MAX_UTF8_BYTES,
+  renderDirAttachTree,
+} from '../domain/chat/logic/render-dir-attach-tree.js';
+export type { RenderDirAttachTreeDeps } from '../domain/chat/logic/render-dir-attach-tree.js';
 export type {
   ContentBlock,
   TextBlock,
