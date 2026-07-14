@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
@@ -10,14 +11,19 @@ import {
   ipcMessagesAppendToolTurnBridge,
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
+  onComposerAttachmentsSuggest,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
+import { AttachmentDraftChips } from "./AttachmentDraftChips";
+import { FileReferencePicker } from "./FileReferencePicker";
 
 interface ChatComposerProps {
   projectId: string;
   sessionId: string;
   value: string;
   onChange: (text: string) => void;
+  attachments: readonly MessageAttachmentDto[];
+  onAttachmentsChange: (attachments: MessageAttachmentDto[]) => void;
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
@@ -37,11 +43,37 @@ interface ChatComposerProps {
   onOpenSessionActions?: (anchor: HTMLElement) => void;
 }
 
+function mergeAttachmentsByPath(
+  existing: readonly MessageAttachmentDto[],
+  incoming: readonly MessageAttachmentDto[],
+): MessageAttachmentDto[] {
+  const out = [...existing];
+  const seen = new Set(
+    existing
+      .map(a => (a.path != null && a.path !== "" ? `path:${a.path}` : null))
+      .filter((k): k is string => k != null),
+  );
+  for (const item of incoming) {
+    const key =
+      item.path != null && item.path !== "" ? `path:${item.path}` : null;
+    if (key != null && seen.has(key)) {
+      continue;
+    }
+    if (key != null) {
+      seen.add(key);
+    }
+    out.push(item);
+  }
+  return out;
+}
+
 export function ChatComposer({
   projectId,
   sessionId,
   value,
   onChange,
+  attachments,
+  onAttachmentsChange,
   running,
   canResumeWithoutInput,
   lastMessageHasToolResult,
@@ -61,7 +93,11 @@ export function ChatComposer({
   const [bridgePendingText, setBridgePendingText] = useState<string | null>(
     null,
   );
+  const [bridgePendingAttachments, setBridgePendingAttachments] = useState<
+    MessageAttachmentDto[]
+  >([]);
   const [bridgeBusy, setBridgeBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });
@@ -75,6 +111,20 @@ export function ChatComposer({
   useEffect(() => {
     void checkModel();
   }, [checkModel, sessionId, agentConfigRevision]);
+
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
+  useEffect(() => {
+    return onComposerAttachmentsSuggest(payload => {
+      if (payload.sessionId !== sessionId) {
+        return;
+      }
+      onAttachmentsChange(
+        mergeAttachmentsByPath(attachmentsRef.current, payload.attachments),
+      );
+    });
+  }, [sessionId, onAttachmentsChange]);
 
   useAutoResizeTextarea(textareaRef, value, 200);
 
@@ -93,7 +143,11 @@ export function ChatComposer({
   );
 
   const runAgent = useCallback(
-    async (content: string, allowResumeWithoutInput: boolean) => {
+    async (
+      content: string,
+      allowResumeWithoutInput: boolean,
+      runAttachments: readonly MessageAttachmentDto[],
+    ) => {
       const modelCheck = await ipcPromptAgentMeta({ projectId, sessionId });
       if (
         modelCheck.ok &&
@@ -107,8 +161,9 @@ export function ChatComposer({
       reportError(undefined);
       onStreamReset();
       beginUiRun();
-      if (content) {
+      if (content || runAttachments.length > 0) {
         onChange("");
+        onAttachmentsChange([]);
       }
 
       const streamResult = await ipcPreferencesGetLlmStream();
@@ -119,6 +174,9 @@ export function ChatComposer({
         userContent: content,
         stream,
         allowResumeWithoutInput,
+        ...(runAttachments.length > 0
+          ? { attachments: runAttachments }
+          : {}),
       });
 
       if (!result.ok) {
@@ -139,6 +197,7 @@ export function ChatComposer({
       reportError,
       sessionId,
       onChange,
+      onAttachmentsChange,
     ],
   );
 
@@ -150,27 +209,31 @@ export function ChatComposer({
     }
 
     const content = value.trim();
-    const allowResumeWithoutInput = !content && canResumeWithoutInput;
-    if (!content && !allowResumeWithoutInput) {
+    const hasAttachments = attachments.length > 0;
+    const allowResumeWithoutInput =
+      !content && !hasAttachments && canResumeWithoutInput;
+    if (!content && !hasAttachments && !allowResumeWithoutInput) {
       return;
     }
 
-    if (content && lastMessageIsPlainUserText) {
+    if ((content || hasAttachments) && lastMessageIsPlainUserText) {
       return;
     }
 
     if (content && lastMessageHasToolResult) {
       setBridgePendingText(content);
+      setBridgePendingAttachments([...attachments]);
       return;
     }
 
-    await runAgent(content, allowResumeWithoutInput);
+    await runAgent(content, allowResumeWithoutInput, attachments);
   };
 
   const confirmBridge = async () => {
     const content = bridgePendingText?.trim();
     if (!content) {
       setBridgePendingText(null);
+      setBridgePendingAttachments([]);
       return;
     }
     setBridgeBusy(true);
@@ -181,8 +244,10 @@ export function ChatComposer({
         return;
       }
       await onMessagesChanged();
+      const pendingAttachments = bridgePendingAttachments;
       setBridgePendingText(null);
-      await runAgent(content, false);
+      setBridgePendingAttachments([]);
+      await runAgent(content, false, pendingAttachments);
     } finally {
       setBridgeBusy(false);
     }
@@ -191,7 +256,11 @@ export function ChatComposer({
   const inputDisabled =
     (!hasModel && !running) || lastMessageIsPlainUserText;
   const sendDisabled =
-    !hasModel || (!running && !value.trim() && !canResumeWithoutInput);
+    !hasModel ||
+    (!running &&
+      !value.trim() &&
+      attachments.length === 0 &&
+      !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel
     ? "输入消息…（Ctrl+Enter 发送）"
@@ -204,6 +273,13 @@ export function ChatComposer({
       ) : null}
       <div className="chat-composer" id="chat-composer">
         <div className="chat-composer__box">
+          <AttachmentDraftChips
+            attachments={attachments}
+            disabled={inputDisabled}
+            onRemove={index => {
+              onAttachmentsChange(attachments.filter((_, i) => i !== index));
+            }}
+          />
           <textarea
             ref={textareaRef}
             className="chat-composer__input"
@@ -237,6 +313,18 @@ export function ChatComposer({
                 ⋯
               </button>
             </Tooltip>
+            <div className="chat-composer__toolbar-spacer" />
+            <Tooltip content="引用文件">
+              <button
+                type="button"
+                className="chat-composer__at"
+                aria-label="引用文件"
+                disabled={inputDisabled}
+                onClick={() => setPickerOpen(true)}
+              >
+                @
+              </button>
+            </Tooltip>
             <Tooltip content={running ? "停止" : "发送"}>
               <button
                 type="button"
@@ -251,6 +339,15 @@ export function ChatComposer({
           </div>
         </div>
       </div>
+      <FileReferencePicker
+        open={pickerOpen}
+        projectId={projectId}
+        sessionId={sessionId}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={picked => {
+          onAttachmentsChange(mergeAttachmentsByPath(attachments, picked));
+        }}
+      />
       <ConfirmModal
         open={bridgePendingText != null}
         title="插入桥接消息"
@@ -258,7 +355,10 @@ export function ChatComposer({
         confirmLabel="确认并发送"
         busy={bridgeBusy}
         onConfirm={() => void confirmBridge()}
-        onCancel={() => setBridgePendingText(null)}
+        onCancel={() => {
+          setBridgePendingText(null);
+          setBridgePendingAttachments([]);
+        }}
       />
     </>
   );

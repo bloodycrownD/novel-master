@@ -21,8 +21,12 @@ import { NovelMasterProvider } from './providers/NovelMasterProvider';
 import { ShellNavProvider, useShellNav } from './providers/ShellNavProvider';
 import { ToastHost } from './components/ui/ToastHost';
 import { ThemeProvider } from './providers/ThemeProvider';
+import { PickerModal } from './components/ui/PickerModal';
 import {
-  ipcWorktreeCaptureSessionBlock,
+  ipcAgentListPicker,
+  ipcAgentSetCurrent,
+  ipcModelListPicker,
+  ipcModelSetCurrent,
   ipcSessionsRename,
 } from './ipc/client';
 
@@ -75,6 +79,14 @@ function DesktopOverlays() {
   const [confirmCompact, setConfirmCompact] = useState(false);
   const [sessionRenamePrompt, setSessionRenamePrompt] =
     useState<SessionRenamePromptState | null>(null);
+  const [agentPickerOpen, setAgentPickerOpen] = useState(false);
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [agentRows, setAgentRows] = useState<
+    Array<{ agentId: string; label: string }>
+  >([]);
+  const [modelRows, setModelRows] = useState<
+    Array<{ savedModelId: string; label: string }>
+  >([]);
 
   const closeMenus = useCallback(() => {
     setWorkspaceMenu(null);
@@ -342,28 +354,6 @@ function DesktopOverlays() {
         </button>
         <button
           type="button"
-          data-session-action="refresh-worktree"
-          onClick={() => {
-            closeMenus();
-            if (projectId && sessionId) {
-              void (async () => {
-                const result = await ipcWorktreeCaptureSessionBlock({
-                  projectId,
-                  sessionId,
-                });
-                if (result.ok) {
-                  showToast('已更新工作树快照');
-                } else {
-                  showToast(result.error.message);
-                }
-              })();
-            }
-          }}
-        >
-          工作树快照
-        </button>
-        <button
-          type="button"
           data-session-action="compact-chat"
           onClick={() => {
             closeMenus();
@@ -374,7 +364,72 @@ function DesktopOverlays() {
         >
           压缩上下文
         </button>
+        <button
+          type="button"
+          data-session-action="switch-model"
+          onClick={() => {
+            closeMenus();
+            void (async () => {
+              const result = await ipcModelListPicker();
+              if (!result.ok || result.data.rows.length === 0) {
+                showToast('暂无模型，请先在设置中配置 Provider。');
+                return;
+              }
+              setModelRows(result.data.rows);
+              setModelPickerOpen(true);
+            })();
+          }}
+        >
+          切换模型
+        </button>
+        <button
+          type="button"
+          data-session-action="switch-agent"
+          onClick={() => {
+            closeMenus();
+            void (async () => {
+              const result = await ipcAgentListPicker();
+              if (!result.ok || result.data.rows.length === 0) {
+                showToast('暂无 Agent，请先在设置中配置。');
+                return;
+              }
+              setAgentRows(result.data.rows);
+              setAgentPickerOpen(true);
+            })();
+          }}
+        >
+          切换 Agent
+        </button>
       </div>
+
+      <PickerModal
+        open={modelPickerOpen}
+        title="选择模型"
+        rows={modelRows.map(r => ({ id: r.savedModelId, label: r.label }))}
+        onClose={() => setModelPickerOpen(false)}
+        onSelect={savedModelId => {
+          if (savedModelId == null) {
+            return;
+          }
+          void ipcModelSetCurrent({ savedModelId }).then(() => {
+            notifyAgentConfigChanged();
+          });
+        }}
+      />
+      <PickerModal
+        open={agentPickerOpen}
+        title="选择 Agent"
+        rows={agentRows.map(r => ({ id: r.agentId, label: r.label }))}
+        onClose={() => setAgentPickerOpen(false)}
+        onSelect={agentId => {
+          if (agentId == null) {
+            return;
+          }
+          void ipcAgentSetCurrent({ agentId }).then(() => {
+            notifyAgentConfigChanged();
+          });
+        }}
+      />
 
       <ConfirmModal
         open={confirmCompact}

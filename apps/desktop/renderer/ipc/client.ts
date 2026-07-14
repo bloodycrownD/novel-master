@@ -178,7 +178,7 @@ export function onWorkspaceMutated(
   );
 }
 
-/** 订阅规则差集 workplace 附件建议（Composer chips；Step 9/10 消费）。 */
+/** 订阅规则差集 workplace 附件建议（Composer chips）。 */
 export function onComposerAttachmentsSuggest(
   callback: (payload: ComposerAttachmentsSuggestPayload) => void,
 ): () => void {

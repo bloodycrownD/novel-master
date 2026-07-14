@@ -4,7 +4,10 @@ import {
   type RollbackMode,
 } from '@novel-master/core/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ChatMessageDto } from '@shared/ipc-types';
+import type {
+  ChatMessageDto,
+  MessageAttachmentDto,
+} from '@shared/ipc-types';
 import type {
   AgentRunFailedPayload,
   AgentRunFinishedPayload,
@@ -133,6 +136,9 @@ export function ConversationPanel({
   } = useAgentStreamMetrics(running);
   const [composerError, setComposerError] = useState<string | undefined>();
   const [composerText, setComposerText] = useState('');
+  const [composerAttachments, setComposerAttachments] = useState<
+    MessageAttachmentDto[]
+  >([]);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -167,6 +173,7 @@ export function ConversationPanel({
     onStreamReset();
     setComposerError(undefined);
     setComposerText('');
+    setComposerAttachments([]);
   }, [sessionId, resetUiForSessionChange, onStreamReset]);
 
   useEffect(() => {
@@ -721,6 +728,8 @@ export function ConversationPanel({
           sessionId={sessionId}
           value={composerText}
           onChange={setComposerText}
+          attachments={composerAttachments}
+          onAttachmentsChange={setComposerAttachments}
           running={running}
           canResumeWithoutInput={composerSendState.canResumeWithoutInput}
           lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}

@@ -14,6 +14,25 @@ const bySession = new Map<string, ChatComposerDraft>();
 
 const EMPTY: ChatComposerDraft = { text: '', attachments: [] };
 
+type DraftListener = (sessionId: string) => void;
+const listeners = new Set<DraftListener>();
+
+/** 订阅草稿变更（attachments 合并等）；返回取消订阅。 */
+export function subscribeChatComposerDraft(
+  listener: DraftListener,
+): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+function notifyDraftListeners(sessionId: string): void {
+  for (const listener of listeners) {
+    listener(sessionId);
+  }
+}
+
 export function readChatComposerDraftState(
   sessionId: string | undefined,
 ): ChatComposerDraft {
@@ -47,6 +66,32 @@ export function writeChatComposerDraft(
   bySession.set(sessionId, { text, attachments: [...attachments] });
 }
 
+/** 写入完整草稿 `{ text, attachments }`。 */
+export function writeChatComposerDraftState(
+  sessionId: string | undefined,
+  draft: ChatComposerDraft,
+): void {
+  if (sessionId == null || sessionId === '') {
+    return;
+  }
+  if (!draft.text && draft.attachments.length === 0) {
+    bySession.delete(sessionId);
+    return;
+  }
+  bySession.set(sessionId, {
+    text: draft.text,
+    attachments: [...draft.attachments],
+  });
+}
+
+/** 清空会话草稿（发送成功后）。 */
+export function clearChatComposerDraft(sessionId: string | undefined): void {
+  if (sessionId == null || sessionId === '') {
+    return;
+  }
+  bySession.delete(sessionId);
+}
+
 /**
  * 规则差集 / @ 选择器：按 path（或 name）去重合并 attachments。
  * 回调形状与 Desktop `composerAttachmentsSuggest` 一致：`{ sessionId, attachments }`。
@@ -63,9 +108,11 @@ export function applyComposerAttachmentsSuggest(payload: {
   const merged = mergeAttachmentsByPath(prev.attachments, attachments);
   if (!prev.text && merged.length === 0) {
     bySession.delete(sessionId);
+    notifyDraftListeners(sessionId);
     return;
   }
   bySession.set(sessionId, { text: prev.text, attachments: merged });
+  notifyDraftListeners(sessionId);
 }
 
 function mergeAttachmentsByPath(

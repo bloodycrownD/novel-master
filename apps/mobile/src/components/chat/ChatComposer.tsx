@@ -1,7 +1,5 @@
 /**
-
- * Chat input: disabled without workspace model; send → user append + agent run.
-
+ * Chat input: 大框 + 框内「更多 / @ / 发送」；attachments draft。
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -17,7 +15,10 @@ import {
 
 import Svg, { Path, Rect } from 'react-native-svg';
 
-import { TOOL_TURN_BRIDGE_TEXT } from '@novel-master/core/chat';
+import {
+  TOOL_TURN_BRIDGE_TEXT,
+  type MessageAttachment,
+} from '@novel-master/core/chat';
 
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -33,9 +34,15 @@ import {
 } from '@/runtime/agent-activity';
 
 import {
-  readChatComposerDraft,
-  writeChatComposerDraft,
+  applyComposerAttachmentsSuggest,
+  clearChatComposerDraft,
+  readChatComposerDraftState,
+  subscribeChatComposerDraft,
+  writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
+
+import { AttachmentDraftChips } from './AttachmentDraftChips';
+import { FileReferencePicker } from './FileReferencePicker';
 
 type Props = {
   scope: AgentRunScope;
@@ -55,108 +62,115 @@ type Props = {
   onNeedModel: () => void;
 
   /** 末条为 user 时可空发续跑。 */
-
   canResumeWithoutInput: boolean;
 
   /** 末条 user 含 tool_result。 */
-
   lastMessageHasToolResult: boolean;
 
   /** 末条为 plain user 文本时禁用输入。 */
-
   lastMessageIsPlainUserText: boolean;
 
   /** undo_send 回滚成功后递增，触发从 draft 刷新输入框。 */
-
   draftRestoreToken?: number;
+
+  /** 打开更多菜单（压缩 / 模型 / Agent 等）。 */
+  onOpenMore?: () => void;
 };
 
 export function ChatComposer({
   scope,
-
   hasModel,
-
   running,
-
   beginUiRun,
-
   abortUiRun,
-
   onStreamReset,
-
   onMessagesChanged,
-
   onNeedModel,
-
   canResumeWithoutInput,
-
   lastMessageHasToolResult,
-
   lastMessageIsPlainUserText,
-
   draftRestoreToken,
+  onOpenMore,
 }: Props) {
   const { tokens } = useTheme();
-
   const runtime = useRuntime();
-
   const { sessionId } = scope;
-
-  const [text, setText] = useState(() => readChatComposerDraft(sessionId));
-
+  const initial = readChatComposerDraftState(sessionId);
+  const [text, setText] = useState(initial.text);
+  const [attachments, setAttachments] = useState<MessageAttachment[]>([
+    ...initial.attachments,
+  ]);
   const [error, setError] = useState<string | undefined>();
-
   const [runAbortController, setRunAbortController] =
     useState<AbortController | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const streamHandlersRef = useRef({
     onMessagesChanged,
-
     onStreamReset,
   });
-
   streamHandlersRef.current = {
     onMessagesChanged,
-
     onStreamReset,
   };
 
+  const persistDraft = useCallback(
+    (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
+      writeChatComposerDraftState(sessionId, {
+        text: nextText,
+        attachments: nextAttachments,
+      });
+    },
+    [sessionId],
+  );
+
   useEffect(() => {
-    setText(readChatComposerDraft(sessionId));
+    const draft = readChatComposerDraftState(sessionId);
+    setText(draft.text);
+    setAttachments([...draft.attachments]);
   }, [sessionId, draftRestoreToken]);
 
+  useEffect(() => {
+    return subscribeChatComposerDraft(changedSessionId => {
+      if (changedSessionId !== sessionId) {
+        return;
+      }
+      const draft = readChatComposerDraftState(sessionId);
+      setText(draft.text);
+      setAttachments([...draft.attachments]);
+    });
+  }, [sessionId]);
+
   const executeRun = useCallback(
-    async (content: string, allowResumeWithoutInput: boolean) => {
+    async (
+      content: string,
+      allowResumeWithoutInput: boolean,
+      runAttachments: readonly MessageAttachment[],
+    ) => {
       if (isMobileAgentActive()) {
         return;
       }
 
       const controller = new AbortController();
-
       setError(undefined);
-
       onStreamReset();
-
       beginUiRun();
 
-      if (content) {
-        writeChatComposerDraft(sessionId, '');
-
+      if (content || runAttachments.length > 0) {
+        clearChatComposerDraft(sessionId);
         setText('');
+        setAttachments([]);
       }
 
       setRunAbortController(controller);
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
-
         await runAgentTurn(runtime, scope, content, {
           stream,
-
           allowResumeWithoutInput,
-
+          attachments: runAttachments.length > 0 ? runAttachments : undefined,
           signal: controller.signal,
-
           onUserMessageAppended: () => {
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
@@ -167,70 +181,56 @@ export function ChatComposer({
         if (err instanceof Error && err.name === 'AbortError') {
           return;
         }
-
         if (typeof __DEV__ !== 'undefined' && __DEV__) {
           const detail =
             err instanceof Error
               ? {
                   name: err.name,
-
                   message: err.message,
-
                   stack: err.stack,
-
                   cause: String(
                     (err as Error & { cause?: unknown }).cause ?? '',
                   ),
                 }
               : { name: typeof err, message: String(err) };
-
           console.error('[novel-master/chat] run failed', detail);
         }
-
         setError(formatError(err));
       } finally {
         setRunAbortController(null);
-
-        // 正常路径由 useChatStreamRuntime 在 RUN_FINISHED/FAILED 递减 agentActive；
-        // 此处仅兜底 beginUiRun 已 increment 但未收到匹配 FINISHED/FAILED 的早退。
         if (isMobileAgentActive()) {
           decrementAgentActive();
         }
       }
     },
-
-    [runtime, scope, sessionId, beginUiRun, onStreamReset, onMessagesChanged],
+    [runtime, scope, sessionId, beginUiRun, onStreamReset],
   );
 
   const sendWithBridgeIfNeeded = useCallback(
-    async (content: string, allowResumeWithoutInput: boolean) => {
+    async (
+      content: string,
+      allowResumeWithoutInput: boolean,
+      runAttachments: readonly MessageAttachment[],
+    ) => {
       if (content && lastMessageHasToolResult) {
         return new Promise<void>(resolve => {
           Alert.alert(
             '插入桥接消息',
-
             `为保证对话连续，将插入 Assistant 消息「${TOOL_TURN_BRIDGE_TEXT}」，再发送您的消息。`,
-
             [
               {
                 text: '取消',
-
                 style: 'cancel',
-
                 onPress: () => resolve(),
               },
-
               {
                 text: '确认并发送',
-
                 onPress: () => {
                   void (async () => {
                     try {
                       await runtime.appendToolTurnBridge(sessionId);
-
                       await streamHandlersRef.current.onMessagesChanged();
-
-                      await executeRun(content, false);
+                      await executeRun(content, false, runAttachments);
                     } catch (err) {
                       setError(formatError(err));
                     } finally {
@@ -244,64 +244,61 @@ export function ChatComposer({
         });
       }
 
-      await executeRun(content, allowResumeWithoutInput);
+      await executeRun(content, allowResumeWithoutInput, runAttachments);
     },
-
     [lastMessageHasToolResult, runtime, sessionId, executeRun],
   );
 
   const send = useCallback(async () => {
     if (!hasModel) {
       onNeedModel();
-
       return;
     }
 
     if (running) {
       runAbortController?.abort();
-
       abortUiRun();
-
       return;
     }
 
     const content = text.trim();
+    const hasAttachments = attachments.length > 0;
+    const allowResumeWithoutInput =
+      !content && !hasAttachments && canResumeWithoutInput;
 
-    const allowResumeWithoutInput = !content && canResumeWithoutInput;
-
-    if (!content && !allowResumeWithoutInput) {
+    if (!content && !hasAttachments && !allowResumeWithoutInput) {
       return;
     }
 
-    if (content && lastMessageIsPlainUserText) {
+    if ((content || hasAttachments) && lastMessageIsPlainUserText) {
       return;
     }
 
-    await sendWithBridgeIfNeeded(content, allowResumeWithoutInput);
+    await sendWithBridgeIfNeeded(
+      content,
+      allowResumeWithoutInput,
+      attachments,
+    );
   }, [
     hasModel,
-
     running,
-
     text,
-
+    attachments,
     canResumeWithoutInput,
-
     lastMessageIsPlainUserText,
-
     runAbortController,
-
     abortUiRun,
-
     onNeedModel,
-
     sendWithBridgeIfNeeded,
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
-
   const sendDisabled =
-    !hasModel || (!running && !text.trim() && !canResumeWithoutInput);
+    !hasModel ||
+    (!running &&
+      !text.trim() &&
+      attachments.length === 0 &&
+      !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
@@ -317,51 +314,88 @@ export function ChatComposer({
         <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
       ) : null}
 
-      <View style={styles.row}>
+      <View
+        style={[
+          styles.box,
+          { backgroundColor: tokens.surface, borderColor: tokens.border },
+        ]}
+      >
+        <AttachmentDraftChips
+          attachments={attachments}
+          disabled={inputDisabled}
+          onRemove={index => {
+            setAttachments(prev => {
+              const next = prev.filter((_, i) => i !== index);
+              persistDraft(text, next);
+              return next;
+            });
+          }}
+        />
         <TextInput
           testID="chat-composer-input"
-          style={[
-            styles.input,
-
-            {
-              color: tokens.text,
-
-              backgroundColor: tokens.surface,
-
-              borderColor: tokens.border,
-            },
-          ]}
+          style={[styles.input, { color: tokens.text }]}
           placeholder={inputPlaceholder}
           placeholderTextColor={tokens.textSecondary}
           value={text}
           onChangeText={next => {
             setText(next);
-
-            writeChatComposerDraft(sessionId, next);
+            persistDraft(next, attachments);
           }}
           editable={!inputDisabled}
           multiline
         />
-
-        <Pressable
-          onPress={send}
-          disabled={sendDisabled}
-          style={[
-            styles.sendBtn,
-
-            {
-              backgroundColor: sendDisabled
-                ? tokens.border
-                : running
-                ? tokens.danger
-                : tokens.primary,
-            },
-          ]}
-          accessibilityLabel={running ? '终止' : '发送'}
-        >
-          {running ? <TerminateIcon /> : <SendIcon />}
-        </Pressable>
+        <View style={styles.toolbar}>
+          <Pressable
+            onPress={onOpenMore}
+            disabled={onOpenMore == null}
+            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            accessibilityLabel="更多选项"
+          >
+            <Text style={{ color: tokens.textSecondary, fontSize: 18 }}>⋯</Text>
+          </Pressable>
+          <View style={styles.toolbarSpacer} />
+          <Pressable
+            onPress={() => setPickerOpen(true)}
+            disabled={inputDisabled}
+            style={[styles.toolBtn, { borderColor: tokens.border }]}
+            accessibilityLabel="引用文件"
+          >
+            <Text style={{ color: tokens.textSecondary, fontSize: 16 }}>@</Text>
+          </Pressable>
+          <Pressable
+            onPress={send}
+            disabled={sendDisabled}
+            style={[
+              styles.sendBtn,
+              {
+                backgroundColor: sendDisabled
+                  ? tokens.border
+                  : running
+                    ? tokens.danger
+                    : tokens.primary,
+              },
+            ]}
+            accessibilityLabel={running ? '终止' : '发送'}
+          >
+            {running ? <TerminateIcon /> : <SendIcon />}
+          </Pressable>
+        </View>
       </View>
+
+      <FileReferencePicker
+        visible={pickerOpen}
+        projectId={scope.projectId}
+        sessionId={sessionId}
+        onClose={() => setPickerOpen(false)}
+        onConfirm={picked => {
+          applyComposerAttachmentsSuggest({
+            sessionId,
+            attachments: picked,
+          });
+          const draft = readChatComposerDraftState(sessionId);
+          setAttachments([...draft.attachments]);
+        }}
+      />
     </View>
   );
 }
@@ -376,7 +410,6 @@ function SendIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-
       <Path
         d="M22 2L15 22L11 13L2 9L22 2Z"
         stroke="#fff"
@@ -399,47 +432,48 @@ function TerminateIcon() {
 const styles = StyleSheet.create({
   dock: {
     borderTopWidth: StyleSheet.hairlineWidth,
-
     paddingHorizontal: 12,
-
     paddingVertical: 8,
-
     gap: 6,
   },
-
   hintRow: { paddingVertical: 4 },
-
   error: { fontSize: 12 },
-
-  row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-
-  input: {
-    flex: 1,
-
-    minHeight: 40,
-
-    maxHeight: 120,
-
+  box: {
     borderWidth: StyleSheet.hairlineWidth,
-
-    borderRadius: 8,
-
-    paddingHorizontal: 12,
-
-    paddingVertical: 8,
-
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 4,
+  },
+  input: {
+    minHeight: 56,
+    maxHeight: 160,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
     fontSize: 16,
   },
-
-  sendBtn: {
-    minWidth: 56,
-
-    height: 40,
-
-    borderRadius: 8,
-
+  toolbar: {
+    flexDirection: 'row',
     alignItems: 'center',
-
+    gap: 8,
+    marginTop: 4,
+  },
+  toolbarSpacer: { flex: 1 },
+  toolBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
     justifyContent: 'center',
+  },
+  sendBtn: {
+    minWidth: 44,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
   },
 });
