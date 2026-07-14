@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
-import { TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import {
+  hasComposerSendableInput,
+  TOOL_TURN_BRIDGE_TEXT,
+} from "@novel-master/core/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
@@ -27,6 +30,8 @@ interface ChatComposerProps {
   running: boolean;
   /** 末条为 user 时可空发续跑。 */
   canResumeWithoutInput: boolean;
+  /** 会话有 pending→user_ops（空发门闩）。 */
+  hasPendingUserOps: boolean;
   /** 末条 user 含 tool_result。 */
   lastMessageHasToolResult: boolean;
   /** 末条为 plain user 文本时禁用输入。 */
@@ -76,6 +81,7 @@ export function ChatComposer({
   onAttachmentsChange,
   running,
   canResumeWithoutInput,
+  hasPendingUserOps,
   lastMessageHasToolResult,
   lastMessageIsPlainUserText,
   error: controlledError,
@@ -210,9 +216,14 @@ export function ChatComposer({
 
     const content = value.trim();
     const hasAttachments = attachments.length > 0;
+    const hasSendable = hasComposerSendableInput({
+      text: content,
+      attachmentCount: attachments.length,
+      hasPendingUserOps,
+    });
     const allowResumeWithoutInput =
       !content && !hasAttachments && canResumeWithoutInput;
-    if (!content && !hasAttachments && !allowResumeWithoutInput) {
+    if (!hasSendable && !allowResumeWithoutInput) {
       return;
     }
 
@@ -258,8 +269,11 @@ export function ChatComposer({
   const sendDisabled =
     !hasModel ||
     (!running &&
-      !value.trim() &&
-      attachments.length === 0 &&
+      !hasComposerSendableInput({
+        text: value,
+        attachmentCount: attachments.length,
+        hasPendingUserOps,
+      }) &&
       !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel

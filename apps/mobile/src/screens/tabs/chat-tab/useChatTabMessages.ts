@@ -26,7 +26,7 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import { writeChatComposerDraft } from '@/storage/chat-composer-draft';
+import { writeChatComposerDraftState } from '@/storage/chat-composer-draft';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
@@ -403,10 +403,14 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
+      const restoreAttachments = target.attachments ?? [];
 
       const applyComposerRestore = () => {
         if (mode === 'undo_send' && restoreText != null) {
-          writeChatComposerDraft(sessionId, restoreText);
+          writeChatComposerDraftState(sessionId, {
+            text: restoreText,
+            attachments: restoreAttachments,
+          });
           setDraftRestoreToken(t => t + 1);
         }
       };
@@ -580,6 +584,14 @@ export function useChatTabMessageActions({
           showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
+        // T-TX2：编辑回填 Composer 原文 + attachments chips
+        if (sessionId != null) {
+          writeChatComposerDraftState(sessionId, {
+            text: initial,
+            attachments: target.attachments ?? [],
+          });
+          setDraftRestoreToken(t => t + 1);
+        }
         setMessageEditPrompt({
           messageId: target.id,
           initialText: initial,
@@ -604,6 +616,8 @@ export function useChatTabMessageActions({
       handleForkFromMessage,
       handleSetFloorFromMessage,
       handleRollbackFromMessage,
+      sessionId,
+      setDraftRestoreToken,
       setMessageEditPrompt,
       showToast,
     ],

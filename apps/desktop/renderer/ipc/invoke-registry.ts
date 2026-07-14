@@ -54,6 +54,7 @@ import {
   type SessionListByProjectRequest,
   type SessionPullTemplateRequest,
   type SessionRenameRequest,
+  type UserVfsHasPendingRequest,
   type VfsDeleteRequest,
   type VfsMkdirRequest,
   type VfsReadRequest,
@@ -215,6 +216,10 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.VFS_ZIP_IMPORT,
     ),
+    ipcUserVfsHasPending: withReq<
+      UserVfsHasPendingRequest,
+      IpcResult<boolean>
+    >(invoke, IPC_CHANNELS.USER_VFS_HAS_PENDING),
     ipcProjectsPullTemplate: withReq<
       ProjectPullTemplateRequest,
       IpcResult<void>

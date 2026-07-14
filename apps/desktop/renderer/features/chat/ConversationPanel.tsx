@@ -26,6 +26,8 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesSetFloor,
+  ipcUserVfsHasPending,
+  onWorkspaceMutated,
 } from '@/ipc/client';
 import { useShellNav } from '@/providers/ShellNavProvider';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
@@ -41,7 +43,7 @@ import {
   buildMessageActionItems,
   editableTextFromMessage,
 } from './message-edit';
-import { resolveComposerTextAfterRollbackSuccess } from './rollback-composer';
+import { resolveComposerDraftAfterRollbackSuccess } from './rollback-composer';
 import { MessageEditModal } from './MessageEditModal';
 import {
   handleRunFinishedAbortRetain,
@@ -61,6 +63,7 @@ interface ConversationPanelProps {
 type RollbackConfirmContext = {
   rollbackMode: RollbackMode;
   restoreText: string | null;
+  restoreAttachments: readonly MessageAttachmentDto[] | null;
 };
 
 type ConfirmState =
@@ -139,6 +142,7 @@ export function ConversationPanel({
   const [composerAttachments, setComposerAttachments] = useState<
     MessageAttachmentDto[]
   >([]);
+  const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
     message: ChatMessageDto;
@@ -151,12 +155,20 @@ export function ConversationPanel({
   } | null>(null);
   const [confirmState, setConfirmState] = useState<ConfirmState>(null);
 
+  const refreshPendingUserOps = useCallback(async () => {
+    const result = await ipcUserVfsHasPending({ sessionId });
+    if (result.ok) {
+      setHasPendingUserOps(result.data);
+    }
+  }, [sessionId]);
+
   const reloadMessages = useCallback(async () => {
     const result = await ipcMessagesList({ sessionId });
     if (result.ok) {
       setMessages(result.data);
     }
-  }, [sessionId]);
+    await refreshPendingUserOps();
+  }, [sessionId, refreshPendingUserOps]);
 
   const composerSendState = useMemo(
     () => deriveComposerSendState(findLastVisibleMessageDto(messages)),
@@ -167,6 +179,14 @@ export function ConversationPanel({
     void reloadMessages();
   }, [reloadMessages]);
 
+  useEffect(() => {
+    return onWorkspaceMutated(payload => {
+      if (payload.sessionId === sessionId) {
+        void refreshPendingUserOps();
+      }
+    });
+  }, [sessionId, refreshPendingUserOps]);
+
   // 切换会话时重置 UI 运行态与输入框（对齐 Mobile draft 切换语义）
   useEffect(() => {
     resetUiForSessionChange();
@@ -174,6 +194,7 @@ export function ConversationPanel({
     setComposerError(undefined);
     setComposerText('');
     setComposerAttachments([]);
+    setHasPendingUserOps(false);
   }, [sessionId, resetUiForSessionChange, onStreamReset]);
 
   useEffect(() => {
@@ -382,7 +403,11 @@ export function ConversationPanel({
     (messageId: string): RollbackConfirmContext => {
       const target = messages.find(m => m.id === messageId);
       if (target == null) {
-        return { rollbackMode: 'rewind', restoreText: null };
+        return {
+          rollbackMode: 'rewind',
+          restoreText: null,
+          restoreAttachments: null,
+        };
       }
       const chatMsg = chatMessageFromDto(target);
       return {
@@ -390,6 +415,7 @@ export function ConversationPanel({
           ? 'undo_send'
           : 'rewind',
         restoreText: editableTextFromMessage(target),
+        restoreAttachments: target.attachments ?? null,
       };
     },
     [messages],
@@ -418,10 +444,12 @@ export function ConversationPanel({
         revisionHeadBackfill?: boolean;
         rollbackMode?: RollbackMode;
         restoreText?: string | null;
+        restoreAttachments?: readonly MessageAttachmentDto[] | null;
       },
     ) => {
       const rollbackMode = options?.rollbackMode ?? 'rewind';
       const restoreText = options?.restoreText ?? null;
+      const restoreAttachments = options?.restoreAttachments ?? null;
       const result = await ipcMessagesRollback({
         projectId,
         sessionId,
@@ -439,6 +467,7 @@ export function ConversationPanel({
             missingLogicalPaths: result.error.missingLogicalPaths ?? [],
             rollbackMode,
             restoreText,
+            restoreAttachments,
           });
           return;
         }
@@ -449,6 +478,7 @@ export function ConversationPanel({
             errorMessage: result.error.message,
             rollbackMode,
             restoreText,
+            restoreAttachments,
           });
           return;
         }
@@ -461,18 +491,26 @@ export function ConversationPanel({
       if (!options?.skipVfsReconcile) {
         notifyWorkspaceMutated();
       }
-      setComposerText(prev =>
-        resolveComposerTextAfterRollbackSuccess(
-          prev,
+      setComposerText(prevText => {
+        const next = resolveComposerDraftAfterRollbackSuccess(
+          { text: prevText, attachments: composerAttachments },
           rollbackMode,
-          restoreText,
-        ),
-      );
+          { text: restoreText, attachments: restoreAttachments },
+        );
+        setComposerAttachments([...next.attachments]);
+        return next.text;
+      });
       showToast(
         options?.skipVfsReconcile ? '对话已截断，工作区未恢复' : '回滚成功',
       );
     },
-    [projectId, sessionId, reloadMessages, notifyWorkspaceMutated],
+    [
+      projectId,
+      sessionId,
+      reloadMessages,
+      notifyWorkspaceMutated,
+      composerAttachments,
+    ],
   );
 
   const handleMessageAction = useCallback(
@@ -483,6 +521,9 @@ export function ConversationPanel({
           showToast('该消息没有可编辑的文本');
           return;
         }
+        // T-TX2：编辑回填 Composer 原文 + attachments chips
+        setComposerText(initial);
+        setComposerAttachments([...(message.attachments ?? [])]);
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }
@@ -550,18 +591,21 @@ export function ConversationPanel({
       await executeRollback(state.messageId, {
         rollbackMode: state.rollbackMode,
         restoreText: state.restoreText,
+        restoreAttachments: state.restoreAttachments,
       });
     } else if (state.kind === 'rollback-backfill') {
       await executeRollback(state.messageId, {
         revisionHeadBackfill: true,
         rollbackMode: state.rollbackMode,
         restoreText: state.restoreText,
+        restoreAttachments: state.restoreAttachments,
       });
     } else if (state.kind === 'rollback-degraded') {
       await executeRollback(state.messageId, {
         skipVfsReconcile: true,
         rollbackMode: state.rollbackMode,
         restoreText: state.restoreText,
+        restoreAttachments: state.restoreAttachments,
       });
     } else if (state.kind === 'set-floor') {
       const result = await ipcMessagesSetFloor({
@@ -732,6 +776,7 @@ export function ConversationPanel({
           onAttachmentsChange={setComposerAttachments}
           running={running}
           canResumeWithoutInput={composerSendState.canResumeWithoutInput}
+          hasPendingUserOps={hasPendingUserOps}
           lastMessageHasToolResult={composerSendState.lastMessageHasToolResult}
           lastMessageIsPlainUserText={
             composerSendState.lastMessageIsPlainUserText

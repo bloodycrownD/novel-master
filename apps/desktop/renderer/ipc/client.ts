@@ -64,6 +64,7 @@ export const {
   ipcVfsRename,
   ipcVfsZipExport,
   ipcVfsZipImport,
+  ipcUserVfsHasPending,
   ipcProjectsPullTemplate,
   ipcSessionsPullTemplate,
   ipcMessagesList,

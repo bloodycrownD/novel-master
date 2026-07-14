@@ -14,6 +14,8 @@ export const IPC_CHANNELS = {
   WORKSPACE_MUTATED: 'nm:workspace/mutated',
   /** Main → renderer：规则差集 → Composer workplace 附件建议（不含 workspaceMutated） */
   COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
+  /** Renderer → main：会话是否有 pending→user_ops（Composer 空发门闩） */
+  USER_VFS_HAS_PENDING: 'nm:userVfs/hasPending',
 
   SCOPE_GET: 'nm:scope/get',
   SCOPE_SET_PROJECT: 'nm:scope/setProject',
@@ -654,6 +656,10 @@ export type MessageAttachmentDto = {
 export type ComposerAttachmentsSuggestPayload = {
   readonly sessionId: string;
   readonly attachments: readonly MessageAttachmentDto[];
+};
+
+export type UserVfsHasPendingRequest = {
+  readonly sessionId: string;
 };
 
 export type PreviewFileSelection = {

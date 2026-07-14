@@ -3,9 +3,13 @@
  *
  * @module services/user-vfs-turn-execute.service
  */
-import { type UserVfsTurnOp } from "@novel-master/core/chat";
+import {
+  previewPendingUserOpsAttachment,
+  type UserVfsTurnOp,
+} from "@novel-master/core/chat";
 
 import { type VfsScope } from "@novel-master/core/vfs";
+import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */
@@ -25,4 +29,11 @@ export async function executeSessionUserVfsOp(
   if (!result.ok) {
     throw result.error;
   }
+  const toolNames = [...new Set(op.tools.map(t => t.name))];
+  const name =
+    toolNames.length > 0 ? toolNames.join(", ") : "用户操作";
+  notifyComposerAttachmentsSuggestToRenderer({
+    sessionId,
+    attachments: [previewPendingUserOpsAttachment(name)],
+  });
 }

@@ -16,6 +16,7 @@ import {
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import {
+  hasComposerSendableInput,
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -100,6 +101,7 @@ export function ChatComposer({
   const [attachments, setAttachments] = useState<MessageAttachment[]>([
     ...initial.attachments,
   ]);
+  const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [runAbortController, setRunAbortController] =
     useState<AbortController | null>(null);
@@ -124,11 +126,25 @@ export function ChatComposer({
     [sessionId],
   );
 
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
+  const refreshPendingUserOps = useCallback(async () => {
+    try {
+      const pending =
+        await runtimeRef.current.userVfsTurn.hasPendingTurns(sessionId);
+      setHasPendingUserOps(pending);
+    } catch {
+      setHasPendingUserOps(false);
+    }
+  }, [sessionId]);
+
   useEffect(() => {
     const draft = readChatComposerDraftState(sessionId);
     setText(draft.text);
     setAttachments([...draft.attachments]);
-  }, [sessionId, draftRestoreToken]);
+    void refreshPendingUserOps();
+  }, [sessionId, draftRestoreToken, refreshPendingUserOps]);
 
   useEffect(() => {
     return subscribeChatComposerDraft(changedSessionId => {
@@ -138,8 +154,9 @@ export function ChatComposer({
       const draft = readChatComposerDraftState(sessionId);
       setText(draft.text);
       setAttachments([...draft.attachments]);
+      void refreshPendingUserOps();
     });
-  }, [sessionId]);
+  }, [sessionId, refreshPendingUserOps]);
 
   const executeRun = useCallback(
     async (
@@ -201,9 +218,10 @@ export function ChatComposer({
         if (isMobileAgentActive()) {
           decrementAgentActive();
         }
+        void refreshPendingUserOps();
       }
     },
-    [runtime, scope, sessionId, beginUiRun, onStreamReset],
+    [runtime, scope, sessionId, beginUiRun, onStreamReset, refreshPendingUserOps],
   );
 
   const sendWithBridgeIfNeeded = useCallback(
@@ -263,10 +281,15 @@ export function ChatComposer({
 
     const content = text.trim();
     const hasAttachments = attachments.length > 0;
+    const hasSendable = hasComposerSendableInput({
+      text: content,
+      attachmentCount: attachments.length,
+      hasPendingUserOps,
+    });
     const allowResumeWithoutInput =
       !content && !hasAttachments && canResumeWithoutInput;
 
-    if (!content && !hasAttachments && !allowResumeWithoutInput) {
+    if (!hasSendable && !allowResumeWithoutInput) {
       return;
     }
 
@@ -284,6 +307,7 @@ export function ChatComposer({
     running,
     text,
     attachments,
+    hasPendingUserOps,
     canResumeWithoutInput,
     lastMessageIsPlainUserText,
     runAbortController,
@@ -296,8 +320,11 @@ export function ChatComposer({
   const sendDisabled =
     !hasModel ||
     (!running &&
-      !text.trim() &&
-      attachments.length === 0 &&
+      !hasComposerSendableInput({
+        text,
+        attachmentCount: attachments.length,
+        hasPendingUserOps,
+      }) &&
       !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';

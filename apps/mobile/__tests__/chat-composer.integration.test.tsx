@@ -20,6 +20,26 @@ jest.mock('@novel-master/core', () => ({
   AgentError: class AgentError extends Error {},
 }));
 
+jest.mock('@novel-master/core/chat', () => ({
+  TOOL_TURN_BRIDGE_TEXT: '继续',
+  hasComposerSendableInput: (input: {
+    text: string;
+    attachmentCount: number;
+    hasPendingUserOps: boolean;
+  }) =>
+    input.text.trim() !== '' ||
+    input.attachmentCount > 0 ||
+    input.hasPendingUserOps,
+}));
+
+jest.mock('../src/components/chat/FileReferencePicker', () => ({
+  FileReferencePicker: () => null,
+}));
+
+jest.mock('../src/components/chat/AttachmentDraftChips', () => ({
+  AttachmentDraftChips: () => null,
+}));
+
 (global as any).__DEV__ = false;
 
 jest.mock('../src/runtime/novel-master-context', () => ({
@@ -27,6 +47,7 @@ jest.mock('../src/runtime/novel-master-context', () => ({
 }));
 
 const mockGetLlmStreamEnabled = jest.fn(async () => true);
+const mockHasPendingTurns = jest.fn(async () => false);
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
@@ -34,6 +55,9 @@ jest.mock('../src/hooks/useRuntime', () => ({
     },
     preferences: {
       getLlmStreamEnabled: mockGetLlmStreamEnabled,
+    },
+    userVfsTurn: {
+      hasPendingTurns: (...args: unknown[]) => mockHasPendingTurns(...args),
     },
   }),
 }));
