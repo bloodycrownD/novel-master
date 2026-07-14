@@ -52,7 +52,7 @@ export function mockWorktreeSnapshot(
   return mockWorktreeBlockStore(worktreeDisplay);
 }
 
-/** 最小 WorktreeService mock（不调用 materialize）。 */
+/** 最小 WorktreeService mock（assemble 走 kkv；evaluateRuleView 仅兜底）。 */
 export function mockWorktreeService(
   worktreeDisplay = "WT",
   projectId = "test-project",
@@ -63,6 +63,10 @@ export function mockWorktreeService(
     renderDisplay: async () => worktreeDisplay,
     buildListRows: async () => [],
     materializePersistBlock: async () => ({ worktreeDisplay }),
+    evaluateRuleView: async () => ({
+      rows: [],
+      displayByPath: new Map(),
+    }),
   } as unknown as WorktreeService;
 }
 
