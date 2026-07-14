@@ -153,7 +153,7 @@ describe("worktree ipc handlers", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("captureSessionBlock 遗留 IPC 清空 session kkv", async () => {
+  it("遗留 captureSessionBlock IPC 清空 session kkv（非 BlockStore）", async () => {
     const rt = await getDesktopRuntime();
     await rt.sessionKkv.set(
       sessionId,

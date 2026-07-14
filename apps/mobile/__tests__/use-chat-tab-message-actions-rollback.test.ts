@@ -33,10 +33,6 @@ jest.mock('../src/services/message-rollback.service', () => ({
   rollbackToMessage: (...args: unknown[]) => mockRollbackToMessage(...args),
 }));
 
-jest.mock('../src/services/worktree-block.service', () => ({
-  captureAfterManualCompactionEmit: jest.fn(),
-}));
-
 jest.mock('react-native', () => ({
   Alert: {
     alert: jest.fn(

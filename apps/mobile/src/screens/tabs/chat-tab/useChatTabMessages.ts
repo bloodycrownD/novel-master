@@ -30,9 +30,6 @@ import { writeChatComposerDraftState } from '@/storage/chat-composer-draft';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
-  captureAfterManualCompactionEmit,
-} from '@/services/worktree-block.service';
-import {
   getSessionViewCache,
   sessionViewCacheKey,
   setSessionViewCache,
@@ -327,11 +324,6 @@ export function useChatTabMessageActions({
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
-                await captureAfterManualCompactionEmit(
-                  runtime,
-                  { projectId, sessionId },
-                  true,
-                );
                 showToast('已压缩');
               }
             } catch (error) {
