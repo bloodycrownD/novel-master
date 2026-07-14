@@ -70,3 +70,14 @@ export {
   SessionWorktreeBlockScopeError,
   type CaptureSessionWorktreeBlockRuntime,
 } from "../service/prompt/capture-session-worktree-block.js";
+export {
+  assembleWorkplaceDisplay,
+  layoutHasWorktreeBlock,
+  type AssembleWorkplaceDisplayDeps,
+} from "../service/workplace/assemble-workplace-display.js";
+export {
+  ruleViewToSnapshotEntries,
+  parseRuleSnapshotJson,
+  serializeRuleSnapshot,
+  type RuleSnapshotEntry,
+} from "../domain/worktree/logic/rule-snapshot-codec.js";

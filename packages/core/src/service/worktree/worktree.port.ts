@@ -11,6 +11,7 @@ import type {
   WorktreeListRow,
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
+import type { WorktreeRuleView } from "@/domain/worktree/model/worktree-rule-view.js";
 
 /** 消费方 ①：工作区列表 + `{{$filetree}}` 宏，单次元数据遍历产出。 */
 export interface WorktreeLiveView {
@@ -59,6 +60,12 @@ export interface WorktreeService {
 
   /** 消费方 ②：仅持久 worktree 块（供快照缓存与提示词）。 */
   materializePersistBlock(): Promise<WorktreePersistBlock>;
+
+  /**
+   * 评估规则视图（不含文件正文）。
+   * 供常驻工作区 assemble 在空 `rule_snapshot` 时写入快照。
+   */
+  evaluateRuleView(): Promise<WorktreeRuleView>;
 
   /** 工作区列表行（委托 {@link materializeLiveView}）。 */
   buildListRows(): Promise<WorktreeListRow[]>;

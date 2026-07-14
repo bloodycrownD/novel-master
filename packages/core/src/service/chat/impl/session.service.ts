@@ -19,6 +19,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { initializeSessionWorkspace } from "@/service/template/logic/initialize-session-workspace.js";
 import type { SessionService } from "../session.port.js";
 
@@ -107,6 +108,7 @@ export class DefaultSessionService implements SessionService {
       const r = reposFor(tx);
       await r.messages.deleteBySession(id);
       await deleteSessionFsData(tx, id);
+      await createSessionKkvService(tx).clearSession(id);
       await deleteVfsPrefix(
         r.vfs,
         `/projects/${session.projectId}/sessions/${id}`,
@@ -125,6 +127,11 @@ export class DefaultSessionService implements SessionService {
     );
   }
 
+  /**
+   * 复制会话（VFS + 消息）。
+   *
+   * @remarks **不**复制 `session_kkv_entry`；新会话侧 kkv 为空，首次拼装重建。
+   */
   async copy(id: string): Promise<ChatSession> {
     const source = await this.get(id);
     return this.deps.conn.transaction(async (tx) => {
@@ -139,6 +146,7 @@ export class DefaultSessionService implements SessionService {
         updatedAtMs: now,
       };
       await r.sessions.insert(copy);
+      // 刻意不复制 session_kkv（SPEC：fork/copy 不复制 kkv）
       await copyVfsTree(
         r.vfs,
         `/projects/${source.projectId}/sessions/${source.id}`,

@@ -78,6 +78,11 @@
       "types": "./dist/service/kkv/index.d.ts",
       "import": "./dist/service/kkv/index.js"
     },
+    "./session-kkv": {
+      "types": "./dist/service/session-kkv/index.d.ts",
+      "import": "./dist/service/session-kkv/index.js"
+    },
+
     "./config-forms": {
       "types": "./dist/config-forms/index.d.ts",
       "import": "./dist/config-forms/index.js"

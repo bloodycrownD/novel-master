@@ -27,6 +27,12 @@ import {
   truncateLine,
 } from "../logic/tool-output-limits.js";
 import { ToolError } from "@/errors/tool-errors.js";
+import {
+  fileCacheKey,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { serializeFileCachePayload } from "@/domain/worktree/logic/rule-snapshot-codec.js";
+import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
 
 /** Registered builtin file tool names (insertion order). */
 export const FILE_TOOL_NAMES = [
@@ -235,12 +241,15 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
     outputSchema: z.object({ version: z.number().int() }),
     async run(input, ctx) {
       const versionCheck = input.options?.versionCheck ?? false;
-      return await ctx.vfs.write(input.path, input.content, {
+      const result = await ctx.vfs.write(input.path, input.content, {
         versionCheck,
         ...(input.options?.expectedVersion != null
           ? { expectedVersion: input.options.expectedVersion }
           : {}),
       });
+      // 整文件 write 成功 → upsert file_cache full:{path}（edit 等不碰缓存）
+      await upsertFileCacheAfterWrite(ctx, input.path, input.content);
+      return result;
     },
   };
 
@@ -483,6 +492,28 @@ export function createVfsTools(): readonly Tool<any, any, BuiltinToolContext>[] 
   };
 
   return [read, write, edit, fs, glob, grep];
+}
+
+/**
+ * 整文件 write 成功后写入 session `file_cache` 的 `full:{path}`。
+ * 无 `sessionKkv` 时跳过（运行时未注入）。
+ */
+async function upsertFileCacheAfterWrite(
+  ctx: BuiltinToolContext,
+  path: string,
+  content: string,
+): Promise<void> {
+  if (ctx.sessionKkv == null) {
+    return;
+  }
+  const logicalPath = normalizePath(path);
+  const key = fileCacheKey("full", logicalPath);
+  await ctx.sessionKkv.set(
+    ctx.sessionId,
+    SESSION_KKV_DOMAIN_FILE_CACHE,
+    key,
+    serializeFileCachePayload({ body: content, mtimeMs: Date.now() }),
+  );
 }
 
 export type { VfsReadResult };

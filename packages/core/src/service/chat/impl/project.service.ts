@@ -28,6 +28,7 @@ import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-
 import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
 import { SqliteVfsEntryRepository } from "@/domain/vfs/repositories/impl/sqlite-vfs-entry.repository.js";
 import { deleteSessionFsData } from "@/service/session-fs/create-session-fs-service.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { DefaultTemplatePullService } from "@/service/template/impl/template-pull.service.js";
 import type { ProjectService } from "../project.port.js";
 
@@ -138,9 +139,11 @@ export class DefaultProjectService implements ProjectService {
         throw chatNotFound("project", id);
       }
       const sessionList = await r.sessions.listByProject(id);
+      const sessionKkv = createSessionKkvService(tx);
       for (const session of sessionList) {
         await r.messages.deleteBySession(session.id);
         await deleteSessionFsData(tx, session.id);
+        await sessionKkv.clearSession(session.id);
         await deleteVfsPrefix(
           r.vfs,
           `/projects/${id}/sessions/${session.id}`,
