@@ -259,6 +259,7 @@ describe("event orchestrator (bus integration)", () => {
           }) as never,
         sessionVfs: () => ({}) as never,
         messageCheckpoint: {} as never,
+        sessionKkv: {} as never,
         eventBus: bus,
         getWorkspaceModelId: async () => "anthropic/claude",
       },

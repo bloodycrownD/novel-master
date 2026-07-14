@@ -8,6 +8,12 @@ import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
 import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT, USER_VFS_TURN_ACK_TEXT } from "@novel-master/core/chat";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {
+  fileCacheKey,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { parseFileCachePayload } from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
 
 import { prepareUserVfsTurnForAgentRun } from "../../src/service/agent/logic/prepare-user-vfs-turn-for-agent-run.js";
 
@@ -53,6 +59,7 @@ function makeToolCtx(
     projectId,
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
+    sessionKkv: createSessionKkvService(conn),
   };
 }
 
@@ -692,6 +699,30 @@ describe("UserVfsTurnService", () => {
     );
     assert.equal(result.ok, true);
     await assert.rejects(() => svfs.list("/55"));
+  });
+
+  it("T-FC1 assembly: createUserVfsTurnServiceBundle write 后有 file_cache full:{path}", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const sk = createSessionKkvService(ctx.conn);
+
+    const result = await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/asm-fc.md", "from-bundle"),
+    );
+    assert.equal(result.ok, true);
+
+    const raw = await sk.get(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      fileCacheKey("full", "/asm-fc.md"),
+    );
+    assert.ok(raw != null, "sessionKkv 须经 resolveToolCtx 注入");
+    const payload = parseFileCachePayload(raw!);
+    assert.ok(payload != null);
+    assert.equal(payload!.body, "from-bundle");
   });
 
 });

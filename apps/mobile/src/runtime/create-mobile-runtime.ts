@@ -40,6 +40,7 @@ import {
   createWorktreeService,
 } from '@novel-master/core/worktree';
 import { createKkvService } from '@novel-master/core/kkv';
+import { createSessionKkvService } from '@novel-master/core/session-kkv';
 import { createCompositeSecretStore } from '@novel-master/core/sksp';
 import { createAndroidSecretStore } from '@novel-master/sksp-android';
 import { getMobileConnection } from '../db/connection';
@@ -74,6 +75,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn, appendToolTurnBridge } =
     createUserVfsTurnServiceBundle(conn);
 
@@ -100,6 +102,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
       messageCheckpoint: createMessageCheckpointService(conn),
+      sessionKkv,
       eventBus,
       state,
       regexConfig,
@@ -126,6 +129,7 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
+    sessionKkv,
     globalVfs: () => createScopedVfsService(conn, { kind: 'global' }),
     projectVfs: projectId =>
       createScopedVfsService(conn, { kind: 'project', projectId }),

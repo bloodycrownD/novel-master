@@ -21,6 +21,7 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -104,6 +105,7 @@ function makeRuntime(
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],
     userVfsTurn,
+    sessionKkv: createSessionKkvService(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
     worktree: (scope) =>
       ({

@@ -49,6 +49,7 @@ import {
   createWorktreeService,
 } from "@novel-master/core/worktree";
 import { createKkvService } from "@novel-master/core/kkv";
+import { createSessionKkvService } from "@novel-master/core/session-kkv";
 import {
   createCompositeSecretStore,
   createEnvSecretStore,
@@ -97,6 +98,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn, appendToolTurnBridge } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -126,6 +128,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
           sessionId,
         }),
       messageCheckpoint: createMessageCheckpointService(conn),
+      sessionKkv,
       eventBus,
       state,
       regexConfig,
@@ -153,6 +156,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
+    sessionKkv,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

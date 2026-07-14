@@ -80,6 +80,13 @@ function makeRuntime(
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay: "" }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+    sessionKkv: {
+      get: async () => null,
+      set: async () => undefined,
+      delete: async () => undefined,
+      clearSession: async () => undefined,
+      listKeys: async () => [],
+    },
     userVfsTurn: mockUserVfsTurn(),
   };
 }

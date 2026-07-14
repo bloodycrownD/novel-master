@@ -67,6 +67,7 @@ function baseOrchestrator(
           worktree: () => ({}) as never,
           sessionVfs: () => ({}) as never,
           messageCheckpoint: {} as never,
+          sessionKkv: {} as never,
           eventBus: {} as never,
           getWorkspaceModelId: async () => "m",
         }

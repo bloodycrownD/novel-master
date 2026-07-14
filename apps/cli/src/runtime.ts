@@ -64,6 +64,10 @@ import {
   type SessionWorktreeBlockStore,
   type WorktreeService,
 } from "@novel-master/core/worktree";
+import {
+  createSessionKkvService,
+  type SessionKkvService,
+} from "@novel-master/core/session-kkv";
 import type { AgentRegistryService } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
@@ -125,6 +129,8 @@ export interface NovelMasterRuntime {
   readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
   /** 用户 VFS U-A-U-A 落库；runAgentTurn flush 前置。 */
   readonly userVfsTurn: UserVfsTurnService;
+  /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
+  readonly sessionKkv: SessionKkvService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;
@@ -181,6 +187,7 @@ export async function createNovelMasterRuntime(
   const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -206,6 +213,7 @@ export async function createNovelMasterRuntime(
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
       messageCheckpoint: createMessageCheckpointService(conn),
+      sessionKkv,
       eventBus,
       state,
       regexConfig,
@@ -231,6 +239,7 @@ export async function createNovelMasterRuntime(
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
+    sessionKkv,
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>

@@ -16,6 +16,7 @@ import { registerBuiltinTools } from "@/domain/tool/builtin/register-builtin-too
 import type { BuiltinToolContext } from "@/domain/tool/builtin/builtin-tool-context.js";
 import { createScopedVfsService } from "@/service/vfs/create-scoped-vfs-service.js";
 import { createMessageCheckpointService } from "@/service/message-checkpoint/create-message-checkpoint-services.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
 import { DefaultMessageService } from "./impl/message.service.js";
 import { DefaultUserVfsTurnService } from "./impl/user-vfs-turn.service.js";
 import { createAppendToolTurnBridge } from "./impl/append-tool-turn-bridge.js";
@@ -54,6 +55,7 @@ export function createUserVfsTurnServiceBundle(
   const registry = new ToolRegistry<BuiltinToolContext>();
   registerBuiltinTools(registry);
   const toolRunner = new ToolRunner(registry);
+  const sessionKkv = createSessionKkvService(conn);
 
   const resolveToolCtx = (
     sessionId: string,
@@ -67,6 +69,7 @@ export function createUserVfsTurnServiceBundle(
     projectId,
     sessionId,
     listSessionMessages: () => messageRepo.listBySession(sessionId),
+    sessionKkv,
   });
 
   const userVfsTurn = new DefaultUserVfsTurnService({

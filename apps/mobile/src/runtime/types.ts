@@ -44,6 +44,7 @@ import type {
   WorktreeService,
 } from '@novel-master/core/worktree';
 import type { KkvService } from '@novel-master/core/kkv';
+import type { SessionKkvService } from '@novel-master/core/session-kkv';
 
 /** Open connection with domain services (no CLI scope resolver or mock LLM). */
 export interface MobileNovelMasterRuntime {
@@ -52,6 +53,8 @@ export interface MobileNovelMasterRuntime {
   readonly preferences: PersistentPreferences;
   /** Internal KKV handle for `AppUiPreferences` only — prefer `preferences` / `state`. */
   readonly kkv: KkvService;
+  /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
+  readonly sessionKkv: SessionKkvService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;

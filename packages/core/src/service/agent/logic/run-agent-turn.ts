@@ -29,6 +29,7 @@ import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { ProjectService } from "@/service/chat/project.port.js";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { isUserVfsUnifiedToolTurnEnabled } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
 import { createAgentRunner } from "../create-agent-runner.js";
 import { ChatAgentSession } from "../impl/chat-agent-session.js";
@@ -61,6 +62,8 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly eventOrchestrator: EventOrchestrator;
   /** 用户 VFS U-A-U-A 落库；发送成功路径 flush 前置。 */
   readonly userVfsTurn?: UserVfsTurnService;
+  /** write 成功后 upsert `file_cache`；须由 runtime 注入。 */
+  readonly sessionKkv: SessionKkvService;
   readonly state: AgentRunRuntimePort["state"] & {
     getCurrentRegexGroupId(): Promise<string | null | undefined>;
   };
@@ -244,6 +247,7 @@ export async function runAgentTurn(
         sessionId: scope.sessionId,
         listSessionMessages: (): Promise<readonly ChatMessage[]> =>
           runtime.messages.listBySession(scope.sessionId),
+        sessionKkv: runtime.sessionKkv,
       },
       includeCompactionOrchestrator: true,
     }),

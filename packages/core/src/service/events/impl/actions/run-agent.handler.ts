@@ -22,6 +22,7 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
@@ -37,6 +38,7 @@ export interface RunAgentHandlerDeps {
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
+  readonly sessionKkv: SessionKkvService;
   readonly eventBus: SimpleEventBus;
   readonly getWorkspaceModelId: () => Promise<string | undefined>;
   readonly regexConfig?: RegexConfigService;
@@ -83,6 +85,7 @@ export async function runRunAgentAction(
         projectId: ctx.projectId,
         sessionId: ctx.sessionId,
         listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
+        sessionKkv: deps.sessionKkv,
       },
       includeCompactionOrchestrator: false,
     }),

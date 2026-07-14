@@ -16,6 +16,7 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
@@ -44,6 +45,7 @@ export function createRunAgentHandlerDeps(input: {
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
+  readonly sessionKkv: SessionKkvService;
   readonly eventBus: SimpleEventBus;
   readonly state: PersistentState;
   readonly regexConfig?: RegexConfigService;
@@ -57,6 +59,7 @@ export function createRunAgentHandlerDeps(input: {
     worktree: input.worktree,
     sessionVfs: input.sessionVfs,
     messageCheckpoint: input.messageCheckpoint,
+    sessionKkv: input.sessionKkv,
     eventBus: input.eventBus,
     getWorkspaceModelId: () => input.state.getCurrentModelId(),
     regexConfig: input.regexConfig,
