@@ -2,7 +2,7 @@
  * Builds {@link PromptLlmInput} for current agent + session (real prompt / token count).
  */
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
-
+import { prepareUserMessagesForPrompt } from "@novel-master/core/chat";
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
 import { assembleWorkplaceDisplay } from "@novel-master/core/worktree";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
@@ -32,7 +32,7 @@ export async function buildSessionPromptInput(
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter((m) => !m.hidden);
   const activeGroupId = await runtime.state.getCurrentRegexGroupId();
-  const messages = await applyActiveRegexChannel(
+  const regexMessages = await applyActiveRegexChannel(
     runtime.regexConfig,
     activeGroupId,
     allMessages,
@@ -46,6 +46,12 @@ export async function buildSessionPromptInput(
   };
   const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  // prepare 须在 regex 之后、layout 之前（与 agent-runner 同源）。
+  const messages = await prepareUserMessagesForPrompt(regexMessages, {
+    sessionId: scope.sessionId,
+    sessionKkv: runtime.sessionKkv,
+    vfs,
+  });
   const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
     worktree: wt,

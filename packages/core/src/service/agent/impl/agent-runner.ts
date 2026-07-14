@@ -31,6 +31,7 @@ import { buildPromptLlmInputFromLayout, computeLlmExportZonesFromLayout } from "
 import { applyRegexChannelForLlm } from "../../prompt/apply-regex-channel-for-llm.js";
 import { normalizeOrphanToolResultsForLlm } from "../../prompt/normalize-orphan-tool-results-for-llm.js";
 import { normalizeForLlmExport } from "@/domain/prompt/logic/normalize-for-llm-export.js";
+import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { inferLlmProtocolFromSavedModelId } from "@/domain/provider/logic/infer-llm-protocol-from-model-id.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "../../regex/regex-config.port.js";
@@ -156,6 +157,17 @@ export class DefaultAgentRunner implements AgentRunner {
           options,
           visible,
         );
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
+        // prepare 须在 regex 之后、layout 之前（P1）。
+        visible = await prepareUserMessagesForPrompt(visible, {
+          sessionId,
+          sessionKkv: this.deps.sessionKkv,
+          vfs: this.deps.toolCtx.vfs,
+        });
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;

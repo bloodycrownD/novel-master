@@ -285,6 +285,7 @@ export async function handleAgentRun(
       {
         stream: req.stream !== false,
         allowResumeWithoutInput: req.allowResumeWithoutInput,
+        attachments: req.attachments,
         signal: controller.signal,
       },
     )

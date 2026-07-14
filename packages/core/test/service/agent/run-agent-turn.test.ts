@@ -387,6 +387,100 @@ describe("runAgentTurn", () => {
     assert.deepEqual(order, ["flush"]);
   });
 
+  it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let appendedContent: unknown;
+    let appendedOptions: { attachments?: readonly { path?: string; source?: string }[] } | undefined;
+    const runtime = makeRuntime({
+      append: async (_sid, _role, content, opts) => {
+        appendedContent = content;
+        appendedOptions = opts;
+        return { id: "m-at5" };
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "请看 @notes/a.md",
+      );
+    } catch {
+      // runner deps stubbed
+    }
+    assert.deepEqual(appendedContent, {
+      blocks: [{ type: "text", text: "请看 @notes/a.md" }],
+    });
+    assert.equal(appendedOptions?.attachments?.length, 1);
+    assert.equal(appendedOptions?.attachments?.[0]?.source, "attach");
+    assert.equal(appendedOptions?.attachments?.[0]?.path, "notes/a.md");
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("T-AT6: chips 与手输同一 @path 发送时按 path 去重", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let appendedOptions: { attachments?: readonly { path?: string }[] } | undefined;
+    const runtime = makeRuntime({
+      append: async (_sid, _role, _content, opts) => {
+        appendedOptions = opts;
+        return { id: "m-at6" };
+      },
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p", sessionId: "s" },
+        "再提 @notes/a.md",
+        {
+          attachments: [
+            {
+              name: "a.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "notes/a.md",
+            },
+          ],
+        },
+      );
+    } catch {
+      // runner deps stubbed
+    }
+    assert.equal(appendedOptions?.attachments?.length, 1);
+    assert.equal(appendedOptions?.attachments?.[0]?.path, "notes/a.md");
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
+  it("仅 attachments 非空允许发送并 append", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    let appended = false;
+    const runtime = makeRuntime({
+      append: async () => {
+        appended = true;
+        return { id: "m-attach-only" };
+      },
+    });
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+        attachments: [
+          {
+            name: "a.md",
+            source: "workplace",
+            type: "text",
+            content: null,
+            path: "/a.md",
+          },
+        ],
+      });
+    } catch {
+      // runner deps stubbed
+    }
+    assert.equal(appended, true);
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
   it("flush 失败时仍写回已删末条 user", async () => {
     const order: string[] = [];
     const runtime = makeRuntime({

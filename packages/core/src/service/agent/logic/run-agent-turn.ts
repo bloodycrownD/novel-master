@@ -15,6 +15,8 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -107,6 +109,8 @@ export interface RunAgentTurnOptions {
    * 非空时跳过 resolveAgentForProject。
    */
   readonly definitionOverride?: AgentDefinition;
+  /** Composer / workplace / @ attachments; merged with scanned `@path` and pending user_ops. */
+  readonly attachments?: readonly MessageAttachment[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
@@ -145,6 +149,7 @@ export async function runAgentTurn(
   const trimmed = userContent.trim();
   const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
   const allowAssistantContinue = options?.allowAssistantContinue === true;
+  const composerAttachments = options?.attachments ?? [];
 
   if (allowResumeWithoutInput && allowAssistantContinue) {
     throw new AgentTurnError(
@@ -152,7 +157,14 @@ export async function runAgentTurn(
     );
   }
 
-  if (trimmed === "" && !allowResumeWithoutInput && !allowAssistantContinue) {
+  const hasPending =
+    isUserVfsUnifiedToolTurnEnabled() &&
+    runtime.userVfsTurn != null &&
+    (await runtime.userVfsTurn.hasPendingTurns(scope.sessionId));
+  const hasInput =
+    trimmed !== "" || composerAttachments.length > 0 || hasPending;
+
+  if (!hasInput && !allowResumeWithoutInput && !allowAssistantContinue) {
     throw new AgentTurnError("消息不能为空");
   }
   if (trimmed === "" && allowAssistantContinue) {
@@ -162,7 +174,7 @@ export async function runAgentTurn(
       );
     }
   }
-  if (trimmed === "" && allowResumeWithoutInput) {
+  if (!hasInput && allowResumeWithoutInput) {
     stage = "resume-check-last-message";
     const list = await runtime.messages.listBySession(scope.sessionId);
     const last = list[list.length - 1];
@@ -192,16 +204,24 @@ export async function runAgentTurn(
     stream,
   });
 
+  // Scan typed @path into attach; dedupe with chips; keep tokens in body text.
+  const scannedComposer = mergeAttachmentsWithScannedAtPaths(
+    trimmed,
+    composerAttachments,
+  );
+
   let userOpsAttachments: Awaited<
     ReturnType<typeof prepareUserVfsTurnForAgentRun>
   >["attachments"] = [];
   let checkpointAnchorMessageId: string | undefined;
+  let reAppended = false;
 
-  // 仅在能把 user_ops 挂到 user 消息时 flush（新发文字或空续跑）；assistant-continue 不吞 pending。
+  // Flush when we can attach user_ops to a user message; assistant-continue skips pending.
   if (
     isUserVfsUnifiedToolTurnEnabled() &&
     runtime.userVfsTurn != null &&
-    (trimmed !== "" || allowResumeWithoutInput)
+    (hasInput || allowResumeWithoutInput) &&
+    !allowAssistantContinue
   ) {
     stage = "flush-pending-user-vfs-turns";
     const prepared = await prepareUserVfsTurnForAgentRun({
@@ -210,23 +230,39 @@ export async function runAgentTurn(
       sessionId: scope.sessionId,
       trimmedInput: trimmed,
       allowResumeWithoutInput,
+      composerAttachments: scannedComposer,
     });
     userOpsAttachments = prepared.attachments;
-    if (prepared.flushed && prepared.reAppendedUserMessageId != null) {
-      checkpointAnchorMessageId = prepared.reAppendedUserMessageId;
+    if (prepared.reAppendedUserMessageId != null) {
+      reAppended = true;
+      if (prepared.flushed) {
+        checkpointAnchorMessageId = prepared.reAppendedUserMessageId;
+      }
     }
   }
 
-  if (trimmed !== "") {
+  const mergedAttachments = mergeAttachmentsWithScannedAtPaths("", [
+    ...userOpsAttachments,
+    ...scannedComposer,
+  ]);
+
+  const shouldAppendNewUser =
+    !reAppended &&
+    (trimmed !== "" ||
+      scannedComposer.length > 0 ||
+      userOpsAttachments.length > 0);
+
+  if (shouldAppendNewUser) {
     stage = "append-user-message";
     const appended = await runtime.messages.append(
       scope.sessionId,
       "user",
       textBlocks(trimmed),
-      userOpsAttachments.length > 0
-        ? { attachments: userOpsAttachments }
+      mergedAttachments.length > 0
+        ? { attachments: mergedAttachments }
         : undefined,
     );
+    // Checkpoint still anchors on user append that carries user_ops (P1).
     if (userOpsAttachments.length > 0) {
       checkpointAnchorMessageId = appended.id;
     }

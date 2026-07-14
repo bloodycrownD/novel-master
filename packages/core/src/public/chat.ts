@@ -36,6 +36,11 @@ export {
   renderDirAttachTree,
 } from '../domain/chat/logic/render-dir-attach-tree.js';
 export type { RenderDirAttachTreeDeps } from '../domain/chat/logic/render-dir-attach-tree.js';
+export {
+  mergeAttachmentsByPath,
+  mergeAttachmentsWithScannedAtPaths,
+  scanAtPathAttachments,
+} from '../domain/chat/logic/scan-at-path-attachments.js';
 export type {
   ContentBlock,
   TextBlock,

@@ -406,7 +406,7 @@ export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
 };
 
-/** 手动工作树快照：立即 capture 写入 block store（消费方 ②）。 */
+/** 手动重置常驻工作区缓存（清空 session kkv，下次拼装重建）。 */
 export type WorktreeCaptureSessionBlockRequest = {
   readonly projectId: string;
   readonly sessionId: string;
@@ -475,6 +475,8 @@ export type ChatMessageDto = {
   readonly contentBlocks: readonly ContentBlockDto[];
   /** synthetic 识别（VFS UA 折叠等）；无则 undefined。 */
   readonly metadata?: MessageMetadataDto;
+  /** 结构化附件；与 Core `ChatMessage.attachments` 对齐。 */
+  readonly attachments?: readonly MessageAttachmentDto[];
 };
 
 export type MessagesAppendRequest = {
@@ -545,6 +547,8 @@ export type AgentRunRequest = {
   readonly userContent: string;
   readonly stream?: boolean;
   readonly allowResumeWithoutInput?: boolean;
+  /** Composer 附件（workplace / attach / user_ops）；Core 发送时再扫描合并 `@path`。 */
+  readonly attachments?: readonly MessageAttachmentDto[];
 };
 
 export type AgentAbortRequest = {

@@ -39,6 +39,10 @@ export interface PrepareUserVfsTurnForAgentRunInput {
    * 禁止「仅 attachments、非 resume」因 trimmed==="" 误删末条。
    */
   readonly allowResumeWithoutInput?: boolean;
+  /**
+   * Composer 附件：空续跑 re-append 时并入写回消息，避免丢 chip。
+   */
+  readonly composerAttachments?: readonly MessageAttachment[];
 }
 
 export interface PrepareUserVfsTurnForAgentRunResult {
@@ -74,6 +78,7 @@ export async function prepareUserVfsTurnForAgentRun(
     sessionId,
     trimmedInput,
     allowResumeWithoutInput,
+    composerAttachments,
   } = input;
 
   let trailingUser: TrailingUserSnapshot | null = null;
@@ -107,10 +112,11 @@ export async function prepareUserVfsTurnForAgentRun(
   }
 
   if (trailingUser != null) {
-    const merged = mergeAttachments(
-      trailingUser.attachments,
-      flushedAttachments,
-    );
+    const withComposer = [
+      ...(trailingUser.attachments ?? []),
+      ...(composerAttachments ?? []),
+    ];
+    const merged = mergeAttachments(withComposer, flushedAttachments);
     const reAppended = await messages.append(
       sessionId,
       "user",

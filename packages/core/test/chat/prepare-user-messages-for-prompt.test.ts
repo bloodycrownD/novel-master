@@ -256,7 +256,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.match(body, /workplace-body/);
   });
 
-  it("hidden user 不 hydrate/wrap（T-HD1 核心逻辑；接线属 Step 11）", async () => {
+  it("hidden user 不 hydrate/wrap（T-HD1；agent-runner / session-prompt-input 已接线 prepare）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);

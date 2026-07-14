@@ -75,6 +75,9 @@ function toDto(msg: ChatMessage): ChatMessageDto {
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),
     ...(metadata != null ? { metadata } : {}),
+    ...(msg.attachments != null && msg.attachments.length > 0
+      ? { attachments: msg.attachments }
+      : {}),
   };
 }
 

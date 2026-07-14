@@ -2,6 +2,7 @@
  * Mobile agent run — thin wrapper over core {@link runAgentTurn}.
  */
 import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
+import type { MessageAttachment } from "@novel-master/core/chat";
 import type {MobileNovelMasterRuntime} from '../runtime/types';
 
 export type AgentRunScope = AgentTurnScope;
@@ -49,6 +50,7 @@ export async function runAgentTurn(
   options?: {
     readonly stream?: boolean;
     readonly allowResumeWithoutInput?: boolean;
+    readonly attachments?: readonly MessageAttachment[];
     readonly signal?: AbortSignal;
     readonly onUserMessageAppended?: () => void | Promise<void>;
   },
