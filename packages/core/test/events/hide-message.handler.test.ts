@@ -16,7 +16,6 @@ import {
   testIsolationSuffix,
 } from "../helpers/novel-master-fixture.js";
 
-import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 import { createMessageTranscriptEffectsService } from "../../src/service/chat/create-message-transcript-effects.js";
 
 novelMasterTestFixture();
@@ -54,7 +53,6 @@ describe("runHideMessageAction", () => {
     const range = resolveHideMessageRange(visible, slice, ids);
     assert.ok(range);
 
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await runHideMessageAction(
@@ -70,10 +68,6 @@ describe("runHideMessageAction", () => {
         message.seq >= range.fromSeq && message.seq <= range.toSeq;
       assert.equal(message.hidden, hidden, `seq ${message.seq}`);
     }
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, sessionRow.id),
-      undefined,
-    );
   });
 
   it("有 endDepth 时仍 hide slice 内 min~max seq", async () => {
@@ -112,7 +106,7 @@ describe("runHideMessageAction", () => {
     }
   });
 
-  it("T-WEC12：runHideMessageAction 单独执行不 capture", async () => {
+  it("T-WEC12：runHideMessageAction 单独执行完成", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const sessionRow = await ctx.sessions.create(project.id);
@@ -122,7 +116,6 @@ describe("runHideMessageAction", () => {
     await appendText(chatSession, "assistant", "a1");
 
     const slice = { startDepth: 1 };
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await runHideMessageAction(
@@ -132,9 +125,5 @@ describe("runHideMessageAction", () => {
       { messages: ctx.messages, messageTranscriptEffects: effects },
     );
 
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, sessionRow.id),
-      undefined,
-    );
   });
 });

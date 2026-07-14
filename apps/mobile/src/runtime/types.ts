@@ -40,7 +40,6 @@ import type { MessageCheckpointService } from '@novel-master/core/message-checkp
 import type { SessionFsService } from '@novel-master/core/session-fs';
 import type { VfsScope, VfsService } from '@novel-master/core/vfs';
 import type {
-  SessionWorktreeBlockStore,
   WorktreeService,
 } from '@novel-master/core/worktree';
 import type { KkvService } from '@novel-master/core/kkv';
@@ -68,7 +67,6 @@ export interface MobileNovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;

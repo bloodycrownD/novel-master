@@ -1,5 +1,5 @@
 /**
- * T-WEC4b：Mobile runSetFloor 编排链（setMessageFloorAtMessage → capture → reload → bump）。
+ * T-SF1：Mobile runSetFloor 编排链（setMessageFloorAtMessage → reload → bump；不调 capture）。
  */
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import React from 'react';
@@ -104,12 +104,11 @@ describe('useChatTabMessageActions set-floor', () => {
       hiddenCount: 1,
       shownCount: 1,
     });
-    mockCapture.mockResolvedValue({ worktreeDisplay: 'wt', capturedAtMs: 1 });
     mockReloadMessages.mockResolvedValue(undefined);
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);
   });
 
-  it('T-WEC4b: runSetFloor 链 setMessageFloor → capture → reload → bump', async () => {
+  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump，不调 capture', async () => {
     const api = mountActions();
 
     await act(async () => {
@@ -119,22 +118,17 @@ describe('useChatTabMessageActions set-floor', () => {
     });
 
     expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith('p1', 's1', 'm1');
-    expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
+    expect(mockCapture).not.toHaveBeenCalled();
     expect(mockReloadMessages).toHaveBeenCalledWith(true);
     expect(mockBumpWorktreeUiToken).toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledWith('已置位');
 
     const order = [
       mockSetMessageFloorAtMessage.mock.invocationCallOrder[0],
-      mockCapture.mock.invocationCallOrder[0],
       mockReloadMessages.mock.invocationCallOrder[0],
       mockBumpWorktreeUiToken.mock.invocationCallOrder[0],
     ];
     expect(order[0]).toBeLessThan(order[1]!);
     expect(order[1]).toBeLessThan(order[2]!);
-    expect(order[2]).toBeLessThan(order[3]!);
   });
 });

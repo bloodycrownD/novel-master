@@ -8,7 +8,6 @@ import {
   EVENT_SESSION_COMPACTION_REQUESTED,
   EVENT_SESSION_MESSAGE_RECEIVED,
 } from "../../src/domain/events/model/event-types.js";
-import { createSessionWorktreeBlockStore } from "../../src/service/prompt/create-session-worktree-block-store.js";
 import { SimpleEventBus } from "../../src/infra/events/simple-event-bus.js";
 import { detachEventOrchestratorFromBus } from "../../src/service/events/create-event-orchestrator.js";
 import { runRunAgentAction } from "../../src/service/events/impl/actions/run-agent.handler.js";
@@ -73,6 +72,17 @@ function createOrchestrator(input: {
         return baseMessages();
       },
     } as never,
+    sessionKkv: {
+      async get() {
+        return null;
+      },
+      async set() {},
+      async delete() {},
+      async clearSession() {},
+      async listKeys() {
+        return [];
+      },
+    },
     messageTranscriptEffects: {
       async hideMessagesInRange() {
         hideCalls += 1;
@@ -249,7 +259,6 @@ describe("event orchestrator (bus integration)", () => {
             };
           },
         } as never,
-        worktreeBlockStore: createSessionWorktreeBlockStore(),
         worktree: () =>
           ({
             scope: { kind: "session", projectId: "p1", sessionId: "s1" },

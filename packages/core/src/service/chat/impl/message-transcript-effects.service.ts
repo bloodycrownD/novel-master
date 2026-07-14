@@ -14,6 +14,7 @@ import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
 } from '@/service/message-checkpoint/truncate-tail-wiring.js';
+import type { SessionKkvService } from '@/service/session-kkv/session-kkv.port.js';
 import type { MessageService } from '../message.port.js';
 import type {
   MessageTranscriptEffectsService,
@@ -24,6 +25,7 @@ import type {
 export interface MessageTranscriptEffectsServiceDeps {
   readonly conn: TdbcConnection;
   readonly messages: MessageService;
+  readonly sessionKkv: SessionKkvService;
 }
 
 /**
@@ -107,6 +109,9 @@ export class DefaultMessageTranscriptEffectsService
         showSuffix.toSeq,
       );
     }
+
+    // 置位成功：清空 session kkv，下次 assemble 按新可见域重建常驻前缀
+    await this.deps.sessionKkv.clearSession(sessionId);
 
     return { hiddenCount, shownCount };
   }

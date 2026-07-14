@@ -5,8 +5,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { textBlocks } from '@novel-master/core/chat';
-import { createSessionWorktreeBlockStore } from '@novel-master/core/worktree';
 import { createMessageTranscriptEffectsService } from '../../src/service/chat/create-message-transcript-effects.js';
+import { createSessionKkvService } from '../../src/service/session-kkv/create-session-kkv-service.js';
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -16,11 +16,10 @@ import {
 novelMasterTestFixture();
 
 describe('MessageTranscriptEffectsService', () => {
-  it('T-WEC1：hideMessagesInRange 更新 hidden 且不 capture', async () => {
+  it('T-WEC1：hideMessagesInRange 更新 hidden', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u'));
@@ -35,20 +34,15 @@ describe('MessageTranscriptEffectsService', () => {
       2,
     );
     assert.equal(count, 2);
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, session.id),
-      undefined,
-    );
 
     const updated = await ctx.messages.get(assistant.id);
     assert.equal(updated.hidden, true);
   });
 
-  it('T-WEC2：showMessagesInRange 更新 hidden 且不 capture', async () => {
+  it('T-WEC2：showMessagesInRange 更新 hidden', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await ctx.messages.append(session.id, 'user', textBlocks('u'));
@@ -58,21 +52,16 @@ describe('MessageTranscriptEffectsService', () => {
     await ctx.messages.hideRange(session.id, 1, 2);
 
     await effects.showMessagesInRange(project.id, session.id, 1, 2);
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, session.id),
-      undefined,
-    );
 
     const messages = await ctx.messages.listBySession(session.id);
     assert.ok(messages.every(m => !m.hidden));
   });
 
-  it('truncateMessagesAfter 删除 tail 且不 capture，VFS 不变', async () => {
+  it('truncateMessagesAfter 删除 tail，VFS 不变', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     await svfs.write('/keep.md', 'stable', { versionCheck: false });
@@ -86,15 +75,28 @@ describe('MessageTranscriptEffectsService', () => {
 
     await effects.truncateMessagesAfter(project.id, session.id, m1.seq);
 
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, session.id),
-      undefined,
-    );
     const left = await ctx.messages.listBySession(session.id);
     assert.equal(left.length, 1);
     assert.equal(left[0]!.id, m1.id);
     assert.equal((await svfs.read('/keep.md')).content, 'stable');
     assert.equal((await svfs.read('/tail.md')).content, 'tail');
+  });
+
+  it('T-SF1：setMessageFloorAtMessage 清空 session kkv（不依赖 capture）', async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const effects = createMessageTranscriptEffectsService(ctx.conn);
+    const sk = createSessionKkvService(ctx.conn);
+    await sk.set(
+      session.id,
+      'file_cache',
+      'full:/a.md',
+      JSON.stringify({ body: 'x', mtimeMs: 1 }),
+    );
+    const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
+    await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
+    assert.equal(await sk.get(session.id, 'file_cache', 'full:/a.md'), null);
   });
 
   it('T-SF4：setMessageFloorAtMessage 后 prefix hidden、suffix visible', async () => {
@@ -132,11 +134,10 @@ describe('MessageTranscriptEffectsService', () => {
     }
   });
 
-  it('T-WEC3：setMessageFloorAtMessage Core 路径不 capture', async () => {
+  it('T-WEC3：setMessageFloorAtMessage Core 路径可置位', async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const blockStore = createSessionWorktreeBlockStore();
     const effects = createMessageTranscriptEffectsService(ctx.conn);
 
     const anchor = await ctx.messages.append(session.id, 'user', textBlocks('u'));
@@ -145,10 +146,6 @@ describe('MessageTranscriptEffectsService', () => {
     });
 
     await effects.setMessageFloorAtMessage(project.id, session.id, anchor.id);
-    assert.equal(
-      blockStore.getCapturedBlock(project.id, session.id),
-      undefined,
-    );
   });
 
   it('T-SF6：置位不 truncate，消息条数不变', async () => {

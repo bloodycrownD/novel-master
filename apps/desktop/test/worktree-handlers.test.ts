@@ -1,5 +1,5 @@
 /**
- * Worktree IPC 处理器测试：session 列表走实时 buildListRows；规则 / 手动 capture。
+ * Worktree IPC：规则保存不 capture；遗留 captureSessionBlock IPC 改为 clear kkv。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -47,16 +47,7 @@ describe("worktree ipc handlers", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("session buildListRows 不经 block store capture", async () => {
-    const rt = await getDesktopRuntime();
-    let captureCalls = 0;
-    const originalCapture =
-      rt.worktreeBlockStore.capture.bind(rt.worktreeBlockStore);
-    rt.worktreeBlockStore.capture = (...args) => {
-      captureCalls += 1;
-      return originalCapture(...args);
-    };
-
+  it("session buildListRows 成功", async () => {
     const result = await handleWorktreeBuildListRows({
       workspaceScope: "chat",
       projectId,
@@ -64,19 +55,14 @@ describe("worktree ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    assert.equal(captureCalls, 0);
     if (result.ok) {
       assert.ok(Array.isArray(result.data));
     }
   });
 
-  it("T-WEC6: setDirRule 成功后 capture", async () => {
+  it("setDirRule 成功且不写 file_cache（无 capture）", async () => {
     const rt = await getDesktopRuntime();
-    rt.worktreeBlockStore.clear(projectId, sessionId);
-    assert.equal(
-      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
-      undefined,
-    );
+    const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
     const result = await handleWorktreeSetDirRule({
       workspaceScope: "chat",
@@ -87,14 +73,13 @@ describe("worktree ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
-    assert.notEqual(block, undefined);
-    assert.equal(typeof block!.capturedAtMs, "number");
+    const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
+    assert.deepEqual(keysAfter, keysBefore);
   });
 
-  it("T-WEC6: setFileRule 成功后 capture", async () => {
+  it("setFileRule 成功且不写 file_cache（无 capture）", async () => {
     const rt = await getDesktopRuntime();
-    rt.worktreeBlockStore.clear(projectId, sessionId);
+    const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
     const result = await handleWorktreeSetFileRule({
       workspaceScope: "chat",
@@ -105,17 +90,17 @@ describe("worktree ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
-    assert.notEqual(block, undefined);
-    assert.equal(typeof block!.capturedAtMs, "number");
+    const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
+    assert.deepEqual(keysAfter, keysBefore);
   });
 
-  it("T-WEC8: captureSessionBlock 立即 capture，不经 buildListRows store", async () => {
+  it("captureSessionBlock 遗留 IPC 清空 session kkv", async () => {
     const rt = await getDesktopRuntime();
-    rt.worktreeBlockStore.clear(projectId, sessionId);
-    assert.equal(
-      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
-      undefined,
+    await rt.sessionKkv.set(
+      sessionId,
+      "file_cache",
+      "full:/z.md",
+      JSON.stringify({ body: "z", mtimeMs: 1 }),
     );
 
     const result = await handleWorktreeCaptureSessionBlock({
@@ -124,8 +109,9 @@ describe("worktree ipc handlers", () => {
     });
 
     assert.equal(result.ok, true);
-    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
-    assert.notEqual(block, undefined);
-    assert.equal(typeof block!.capturedAtMs, "number");
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, "file_cache", "full:/z.md"),
+      null,
+    );
   });
 });

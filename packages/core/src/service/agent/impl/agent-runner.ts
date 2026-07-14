@@ -37,8 +37,8 @@ import type { RegexConfigService } from "../../regex/regex-config.port.js";
 import type { AgentRunOptions, AgentRunner } from "../agent.port.js";
 import { EphemeralOverlayAgentSession } from "./ephemeral-overlay-agent-session.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
-import { getCapturedBlockOrCapture } from "@/service/prompt/capture-session-worktree-block.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
+import { assembleWorkplaceDisplay } from "@/service/workplace/assemble-workplace-display.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
@@ -65,11 +65,11 @@ export interface DefaultAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
+  readonly sessionKkv: SessionKkvService;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   /**
-   * mutating ���߲��� settled ��ͬ�� capture��ʧ�ܻ��жϵ�ǰ agent run��
-   * @remarks �� append tool_results ֮ǰ await������Ի��������� checkpoint��
+   * mutating 工具并行 settled 后同步 checkpoint；失败会中断当前 agent run。
+   * @remarks 在 append tool_results 之前 await，避免对话继续但无 checkpoint。
    */
   readonly messageCheckpoint?: MessageCheckpointService;
   readonly compactionConditions?: CompactionConditionEvaluator;
@@ -139,25 +139,12 @@ export class DefaultAgentRunner implements AgentRunner {
     };
 
     try {
-      await getCapturedBlockOrCapture(wtScope, {
-        worktree: this.deps.worktree,
-        worktreeBlockStore: this.deps.worktreeBlockStore,
-      });
-
       for (let step = 0; step < maxSteps; step++) {
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;
         }
         let stepCompactionEmitted = false;
-
-        const block = this.deps.worktreeBlockStore.getCapturedBlock(
-          projectId,
-          sessionId,
-        );
-        if (block == null) {
-          throw new Error("worktree 块未 capture");
-        }
 
         let visible = await session.list();
         if (signal?.aborted) {
@@ -175,8 +162,14 @@ export class DefaultAgentRunner implements AgentRunner {
         }
 
         const wt = this.deps.worktree(wtScope);
+        const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
+          sessionKkv: this.deps.sessionKkv,
+          worktree: wt,
+          vfs: this.deps.toolCtx.vfs,
+          layout: options.definition.prompts,
+        });
         const promptRenderCtx = {
-          worktreeDisplay: block.worktreeDisplay,
+          worktreeDisplay,
           messages: visible,
           vfs: this.deps.toolCtx.vfs,
           worktree: wt,

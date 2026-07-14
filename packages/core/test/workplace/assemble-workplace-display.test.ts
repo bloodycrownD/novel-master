@@ -208,6 +208,56 @@ describe("assembleWorkplaceDisplay", () => {
     assert.equal((await vfs.read("/e.md")).content, "beta");
   });
 
+  it("T-WP4: clearSession 后再度 assemble 重新跑规则引擎并写快照", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/again.md", "v1");
+    await createWorktreeService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    }).setFileRule({ logicalPath: "/again.md", inclusionMode: "show" });
+
+    const wt = createWorktreeService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const scope = {
+      kind: "session" as const,
+      projectId: project.id,
+      sessionId: session.id,
+    };
+    const deps = {
+      sessionKkv: sk,
+      worktree: wt,
+      vfs,
+      layout: layoutWithWorktree(),
+    };
+    await assembleWorkplaceDisplay(scope, deps);
+    assert.ok(
+      (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
+        null,
+    );
+
+    await sk.clearSession(session.id);
+    assert.equal(
+      await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
+      null,
+    );
+
+    await vfs.replace("/again.md", "v1", "v2-after-clear");
+    const out = await assembleWorkplaceDisplay(scope, deps);
+    assert.match(out, /v2-after-clear/);
+    assert.ok(
+      (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
+        null,
+    );
+  });
+
   it("T-FC3: delete/rename/move 不碰 file_cache 原 key", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);

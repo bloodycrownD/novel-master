@@ -14,7 +14,6 @@ import type {
 } from "../../../../shared/ipc-types.js";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
-  captureSessionWorktreeBlockForScope,
   getWorktreeForScope,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
@@ -81,9 +80,7 @@ export async function handleWorktreeSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    if (scope.kind === "session") {
-      await captureSessionWorktreeBlockForScope(rt, scope);
-    }
+    // 规则变更不写 capture；workplace 草稿推送见 Step 8
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
@@ -102,9 +99,6 @@ export async function handleWorktreeSetFileRule(
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
     });
-    if (scope.kind === "session") {
-      await captureSessionWorktreeBlockForScope(rt, scope);
-    }
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
     return { ok: true, data: undefined };
   } catch (err) {
@@ -112,17 +106,16 @@ export async function handleWorktreeSetFileRule(
   }
 }
 
-/** 手动工作树快照：立即 capture，不重载消费方 ① 列表。 */
+/**
+ * 已退役的「工作树快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
+ * UI 入口将在 Step 9 删除。
+ */
 export async function handleWorktreeCaptureSessionBlock(
   req: WorktreeCaptureSessionBlockRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await captureSessionWorktreeBlockForScope(rt, {
-      kind: "session",
-      projectId: req.projectId,
-      sessionId: req.sessionId,
-    });
+    await rt.sessionKkv.clearSession(req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

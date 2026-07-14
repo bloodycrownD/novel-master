@@ -4,7 +4,7 @@
 import { type AgentDefinition, resolveAgentForProject } from "@novel-master/core/agent";
 
 import { buildPromptLlmInputFromLayout, type AgentPromptLayout, type PromptLlmInput, type PromptRenderContext } from "@novel-master/core/prompt";
-import { getCapturedBlockOrCapture } from "@novel-master/core/worktree";
+import { assembleWorkplaceDisplay } from "@novel-master/core/worktree";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 import { applyActiveRegexChannel } from "./regex-apply-channel.service.js";
 
@@ -39,25 +39,21 @@ export async function buildSessionPromptInput(
     visible,
     "llm",
   );
-  const block = await getCapturedBlockOrCapture(
-    {
-      kind: "session",
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    },
-    {
-      worktree: (s) => runtime.worktree(s),
-      worktreeBlockStore: runtime.worktreeBlockStore,
-    },
-  );
-  const wt = runtime.worktree({
-    kind: "session",
+  const wtScope = {
+    kind: "session" as const,
     projectId: scope.projectId,
     sessionId: scope.sessionId,
-  });
+  };
+  const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
+    sessionKkv: runtime.sessionKkv,
+    worktree: wt,
+    vfs,
+    layout: resolved.prompts,
+  });
   const ctx: PromptRenderContext = {
-    worktreeDisplay: block.worktreeDisplay,
+    worktreeDisplay,
     messages,
     worktree: wt,
     vfs,

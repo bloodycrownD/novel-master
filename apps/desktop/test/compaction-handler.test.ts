@@ -1,5 +1,5 @@
 /**
- * T-WEC5：manual 压缩 emit 成功后 capture；condition 压缩不 capture。
+ * Manual / condition 压缩：emit 成功后 clear session kkv（无 BlockStore capture）。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -58,24 +58,31 @@ describe("handleCompactionManual", () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-WEC5: manual 压缩 emit 成功后 capture", async () => {
+  it("manual 压缩 emit 成功后 clear session kkv", async () => {
     const rt = await getDesktopRuntime();
-    assert.equal(
-      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
-      undefined,
+    await rt.sessionKkv.set(
+      sessionId,
+      "file_cache",
+      "full:/a.md",
+      JSON.stringify({ body: "x", mtimeMs: 1 }),
     );
 
     const result = await handleCompactionManual({ projectId, sessionId });
     assert.equal(result.ok, true);
-
-    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
-    assert.notEqual(block, undefined);
-    assert.equal(typeof block!.capturedAtMs, "number");
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, "file_cache", "full:/a.md"),
+      null,
+    );
   });
 
-  it("T-WEC5: condition 压缩 orchestrator.emit 不 capture", async () => {
+  it("condition 压缩 orchestrator.emit 成功后亦 clear session kkv", async () => {
     const rt = await getDesktopRuntime();
-    rt.worktreeBlockStore.clear(projectId, sessionId);
+    await rt.sessionKkv.set(
+      sessionId,
+      "file_cache",
+      "full:/b.md",
+      JSON.stringify({ body: "y", mtimeMs: 2 }),
+    );
 
     const emitResult = await rt.eventOrchestrator.emit(
       EVENT_SESSION_COMPACTION_REQUESTED,
@@ -86,10 +93,9 @@ describe("handleCompactionManual", () => {
       },
     );
     assert.equal(emitResult.ok, true);
-
     assert.equal(
-      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
-      undefined,
+      await rt.sessionKkv.get(sessionId, "file_cache", "full:/b.md"),
+      null,
     );
   });
 });

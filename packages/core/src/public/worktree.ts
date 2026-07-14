@@ -59,17 +59,6 @@ export type {
 } from "../service/worktree/worktree.port.js";
 export { createTemplatePullService } from "../service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
-export type {
-  SessionWorktreeBlock,
-  SessionWorktreeBlockStore,
-} from "../service/prompt/session-worktree-block.port.js";
-export { createSessionWorktreeBlockStore } from "../service/prompt/create-session-worktree-block-store.js";
-export {
-  captureSessionWorktreeBlock,
-  getCapturedBlockOrCapture,
-  SessionWorktreeBlockScopeError,
-  type CaptureSessionWorktreeBlockRuntime,
-} from "../service/prompt/capture-session-worktree-block.js";
 export {
   assembleWorkplaceDisplay,
   layoutHasWorktreeBlock,

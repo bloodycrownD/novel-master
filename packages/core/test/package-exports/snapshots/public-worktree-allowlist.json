@@ -1,10 +1,7 @@
 [
   "DEFAULT_WORKTREE_DIR_RULE",
-  "SessionWorktreeBlockScopeError",
   "assembleWorkplaceDisplay",
-  "captureSessionWorktreeBlock",
   "computeHeadTailIndices",
-  "createSessionWorktreeBlockStore",
   "createTemplatePullService",
   "createWorktreeService",
   "displayStateLabel",
@@ -12,7 +9,6 @@
   "evaluateWorktreeRuleView",
   "filetreeMacroLoadStateLabel",
   "formatLocalMtime",
-  "getCapturedBlockOrCapture",
   "inclusionModeLabel",
   "joinFileBlocks",
   "layoutHasWorktreeBlock",

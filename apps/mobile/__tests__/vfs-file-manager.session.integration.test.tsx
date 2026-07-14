@@ -293,17 +293,12 @@ describe('VfsFileManager session worktree snapshot', () => {
       await flushPromises();
     });
 
-    await waitFor(() => mockCapture.mock.calls.length > 0);
-
     expect(setDirRule).toHaveBeenCalled();
-    expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
+    expect(mockCapture).not.toHaveBeenCalled();
     expect(buildListRows).toHaveBeenCalled();
   });
 
-  it('file toggle-include 调用 captureSessionWorktreeBlockForMobile', async () => {
+  it('file toggle-include 不调用 capture（规则变更无 capture）', async () => {
     mockCapture.mockResolvedValue({
       worktreeDisplay: 'wt',
       capturedAtMs: 1,
@@ -327,9 +322,6 @@ describe('VfsFileManager session worktree snapshot', () => {
     });
 
     expect(cycleFileInclusion).toHaveBeenCalled();
-    expect(mockCapture).toHaveBeenCalledWith(mockRuntime, {
-      projectId: 'p1',
-      sessionId: 's1',
-    });
+    expect(mockCapture).not.toHaveBeenCalled();
   });
 });

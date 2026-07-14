@@ -36,7 +36,6 @@ import { createMessageCheckpointService } from '@novel-master/core/message-check
 import { createSessionFsService } from '@novel-master/core/session-fs';
 import { createScopedVfsService, type VfsScope } from '@novel-master/core/vfs';
 import {
-  createSessionWorktreeBlockStore,
   createWorktreeService,
 } from '@novel-master/core/worktree';
 import { createKkvService } from '@novel-master/core/kkv';
@@ -72,7 +71,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
@@ -92,12 +90,12 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventBus,
     messages,
     messageTranscriptEffects,
+    sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeBlockStore,
       worktree: s => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: 'session', projectId, sessionId }),
@@ -118,7 +116,6 @@ export async function createMobileNovelMasterRuntime(): Promise<MobileNovelMaste
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

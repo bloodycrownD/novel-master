@@ -45,7 +45,6 @@ import {
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
-  createSessionWorktreeBlockStore,
   createWorktreeService,
 } from "@novel-master/core/worktree";
 import { createKkvService } from "@novel-master/core/kkv";
@@ -95,7 +94,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
@@ -114,12 +112,12 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventBus,
     messages,
     messageTranscriptEffects,
+    sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
@@ -145,7 +143,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

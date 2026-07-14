@@ -1,6 +1,5 @@
 /**
- * T-WEC9：Agent run 内 VFS write 不触发 block re-capture。
- * 无 DB fixture，仅 mock worktreeBlockStore + vfs。
+ * Agent run 内 VFS write：不走已退役的 BlockStore.capture；write 可 upsert file_cache。
  */
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
@@ -20,8 +19,12 @@ import {
   type LlmChatResult,
   type ModelRequestService,
 } from "@novel-master/core/provider";
-import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "@novel-master/core/session-kkv";
 import { type VfsService } from "@novel-master/core/vfs";
+import { createMemorySessionKkv } from "../../helpers/prompt-layout-test-helpers.js";
 import { noopSavedModelRepository } from "../../helpers/noop-saved-model-repo.js";
 
 const MOCK_PROJECT_ID = "test-project";
@@ -66,12 +69,16 @@ function mockVfs(): VfsService {
   } as unknown as VfsService;
 }
 
-function mockToolCtx(vfs: VfsService): BuiltinToolContext {
+function mockToolCtx(
+  vfs: VfsService,
+  sessionKkv: ReturnType<typeof createMemorySessionKkv>,
+): BuiltinToolContext {
   return {
     vfs,
     projectId: MOCK_PROJECT_ID,
     sessionId: MOCK_SESSION_ID,
     listSessionMessages: async () => [],
+    sessionKkv,
   };
 }
 
@@ -92,25 +99,18 @@ function createMockModel(
   };
 }
 
-describe("AgentRunner captured block (T-WEC9)", () => {
-  it("T-WEC9: Agent run 内 VFS write 后 getCapturedBlock 不变", async () => {
+describe("AgentRunner workplace assemble (retire capture)", () => {
+  it("T-WEC9: Agent run 内 VFS write 不调 materialize；可 upsert file_cache", async () => {
     const session = new InMemoryAgentSession();
     await session.append("user", textBlocks("write file"));
 
-    const blockStore = createSessionWorktreeBlockStore();
-    blockStore.capture(MOCK_PROJECT_ID, MOCK_SESSION_ID, {
-      worktreeDisplay: "run-start-block",
-    });
-    const beforeBlock = blockStore.getCapturedBlock(
-      MOCK_PROJECT_ID,
+    const sessionKkv = createMemorySessionKkv();
+    await sessionKkv.set(
       MOCK_SESSION_ID,
-    )!;
-    let captureCalls = 0;
-    const originalCapture = blockStore.capture.bind(blockStore);
-    blockStore.capture = (...args) => {
-      captureCalls += 1;
-      return originalCapture(...args);
-    };
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      "canon",
+      "[]",
+    );
 
     const vfs = mockVfs();
     const materializePersistBlock = mock.fn(async () => ({
@@ -143,9 +143,9 @@ describe("AgentRunner captured block (T-WEC9)", () => {
       session,
       modelRequests: model,
       registry,
-      toolCtx: mockToolCtx(vfs),
+      toolCtx: mockToolCtx(vfs, sessionKkv),
       eventBus: new SimpleEventBus(),
-      worktreeBlockStore: blockStore,
+      sessionKkv,
       savedModels: noopSavedModelRepository(),
       worktree: () =>
         ({
@@ -169,14 +169,15 @@ describe("AgentRunner captured block (T-WEC9)", () => {
       workspaceModelId: RUN_MODEL_ID,
     });
 
-    const afterBlock = blockStore.getCapturedBlock(
-      MOCK_PROJECT_ID,
-      MOCK_SESSION_ID,
-    );
-    assert.equal(afterBlock?.worktreeDisplay, beforeBlock.worktreeDisplay);
-    assert.equal(afterBlock?.capturedAtMs, beforeBlock.capturedAtMs);
-    assert.equal(captureCalls, 0);
     assert.equal(materializePersistBlock.mock.callCount(), 0);
     assert.equal((await vfs.read("/out.txt")).content, "mutated");
+    const cacheKeys = await sessionKkv.listKeys(
+      MOCK_SESSION_ID,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    );
+    assert.ok(
+      cacheKeys.some((k) => k.includes("/out.txt")),
+      `write 应 upsert file_cache，实际 keys=${JSON.stringify(cacheKeys)}`,
+    );
   });
 });

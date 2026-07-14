@@ -12,9 +12,9 @@ import {
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core/prompt';
+import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { applyActiveRegexChannel } from './regex-apply-channel';
-import { getCapturedBlockOrCaptureForMobile } from './worktree-block.service';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -48,15 +48,21 @@ export async function buildSessionPromptInput(
     visible,
     'llm',
   );
-  const block = await getCapturedBlockOrCaptureForMobile(runtime, scope);
-  const wt = runtime.worktree({
-    kind: 'session',
+  const wtScope = {
+    kind: 'session' as const,
     projectId: scope.projectId,
     sessionId: scope.sessionId,
-  });
+  };
+  const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
+    sessionKkv: runtime.sessionKkv,
+    worktree: wt,
+    vfs,
+    layout: resolved.prompts,
+  });
   const ctx: PromptRenderContext = {
-    worktreeDisplay: block.worktreeDisplay,
+    worktreeDisplay,
     messages,
     worktree: wt,
     vfs,

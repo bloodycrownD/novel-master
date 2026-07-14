@@ -43,6 +43,17 @@ function baseOrchestrator(
         return messages;
       },
     } as never,
+    sessionKkv: {
+      async get() {
+        return null;
+      },
+      async set() {},
+      async delete() {},
+      async clearSession() {},
+      async listKeys() {
+        return [];
+      },
+    },
     messageTranscriptEffects: {
       async hideMessagesInRange(
         _projectId: string,
@@ -63,7 +74,6 @@ function baseOrchestrator(
           messages: {} as never,
           agentRegistry: {} as never,
           modelRequests: {} as never,
-          worktreeBlockStore: {} as never,
           worktree: () => ({}) as never,
           sessionVfs: () => ({}) as never,
           messageCheckpoint: {} as never,

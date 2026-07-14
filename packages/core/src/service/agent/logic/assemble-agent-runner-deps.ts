@@ -24,7 +24,7 @@ export interface AssembleAgentRunnerDepsInput {
     | "modelRequests"
     | "messageCheckpoint"
     | "eventBus"
-    | "worktreeBlockStore"
+    | "sessionKkv"
     | "worktree"
   > & {
     readonly regexConfig?: RegexConfigService;
@@ -56,7 +56,7 @@ export function assembleAgentRunnerDeps(
     messageCheckpoint: input.runtime.messageCheckpoint,
     regexConfig: input.runtime.regexConfig,
     eventBus: input.runtime.eventBus,
-    worktreeBlockStore: input.runtime.worktreeBlockStore,
+    sessionKkv: input.runtime.sessionKkv,
     worktree: input.runtime.worktree,
     listAllSessionMessages: () =>
       input.runtime.messages.listBySession(input.toolCtx.sessionId),

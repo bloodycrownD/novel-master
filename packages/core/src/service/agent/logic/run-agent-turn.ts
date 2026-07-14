@@ -22,8 +22,6 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { LlmStreamEvent } from "@/infra/llm-protocol/ports/adapter.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
-import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
-import { getCapturedBlockOrCapture } from "@/service/prompt/capture-session-worktree-block.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
@@ -55,7 +53,6 @@ export interface AgentTurnRuntimePort extends AgentRunRuntimePort {
   readonly messageCheckpoint: MessageCheckpointService;
   readonly modelRequests: ModelRequestService;
   readonly savedModelRepo: SavedModelRepository;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventBus: SimpleEventBus;
   readonly regexConfig: RegexConfigService;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
@@ -226,16 +223,6 @@ export async function runAgentTurn(
   const registry = resolveAgentToolRegistry(toolProbe, definition);
   const session = new ChatAgentSession(runtime.messages, scope.sessionId);
   const activeRegexGroupId = await runtime.state.getCurrentRegexGroupId();
-  const wtScope: VfsScope = {
-    kind: "session",
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-  };
-  await getCapturedBlockOrCapture(wtScope, {
-    worktree: runtime.worktree,
-    worktreeBlockStore: runtime.worktreeBlockStore,
-  });
-
   const runner = createAgentRunner(
     assembleAgentRunnerDeps({
       session,

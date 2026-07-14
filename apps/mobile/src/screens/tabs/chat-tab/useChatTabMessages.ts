@@ -31,7 +31,6 @@ import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
   captureAfterManualCompactionEmit,
-  captureSessionWorktreeBlockForMobile,
 } from '@/services/worktree-block.service';
 import {
   getSessionViewCache,
@@ -530,16 +529,13 @@ export function useChatTabMessageActions({
 
       const runSetFloor = async () => {
         try {
+          // clear session kkv 由 Core setMessageFloorAtMessage 完成
           const result =
             await runtime.messageTranscriptEffects.setMessageFloorAtMessage(
               projectId,
               sessionId,
               messageId,
             );
-          await captureSessionWorktreeBlockForMobile(runtime, {
-            projectId,
-            sessionId,
-          });
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();

@@ -59,9 +59,7 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import {
-  createSessionWorktreeBlockStore,
   createWorktreeService,
-  type SessionWorktreeBlockStore,
   type WorktreeService,
 } from "@novel-master/core/worktree";
 import {
@@ -114,7 +112,6 @@ export interface NovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -184,7 +181,6 @@ export async function createNovelMasterRuntime(
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
   const sessionKkv = createSessionKkvService(conn);
@@ -203,12 +199,12 @@ export async function createNovelMasterRuntime(
     eventBus,
     messages,
     messageTranscriptEffects,
+    sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
@@ -229,7 +225,6 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,

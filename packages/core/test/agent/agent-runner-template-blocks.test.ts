@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
@@ -16,7 +16,7 @@ import {
 } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 
 const RUN_MODEL_ID = "anthropic/claude";
@@ -67,7 +67,7 @@ import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 function runnerDeps(
   deps: Omit<
     CreateAgentRunnerDeps,
-    "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"
+    "eventBus" | "sessionKkv" | "worktree" | "savedModels"
   > &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
   worktreeDisplay: string
@@ -76,11 +76,7 @@ function runnerDeps(
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktreeBlockStore: mockWorktreeBlockStore(
-      worktreeDisplay,
-      PROJECT_ID,
-      SESSION_ID,
-    ),
+    sessionKkv: createMemorySessionKkv(),
     worktree: () =>
       ({
         scope: {
