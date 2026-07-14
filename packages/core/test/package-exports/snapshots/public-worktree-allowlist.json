@@ -4,12 +4,14 @@
   "computeHeadTailIndices",
   "createTemplatePullService",
   "createWorktreeService",
+  "diffWorkplacePaths",
   "displayStateLabel",
   "evaluateFileDisplay",
   "evaluateWorktreeRuleView",
   "filetreeMacroLoadStateLabel",
   "formatLocalMtime",
   "inclusionModeLabel",
+  "isWorkplacePathLoadedInCache",
   "joinFileBlocks",
   "layoutHasWorktreeBlock",
   "mapProjectWorktreePathToSession",
@@ -24,5 +26,7 @@
   "sortDirPaths",
   "sortFilesForDir",
   "splitMarkdownFrontMatter",
+  "workplaceAttachmentsFromNeededPaths",
+  "workplaceAttachmentsFromRuleDelta",
   "worktreeFileTreeRootLabel"
 ]

@@ -70,3 +70,10 @@ export {
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
 } from "../domain/worktree/logic/rule-snapshot-codec.js";
+export {
+  diffWorkplacePaths,
+  isWorkplacePathLoadedInCache,
+  workplaceAttachmentsFromNeededPaths,
+  workplaceAttachmentsFromRuleDelta,
+  type WorkplaceLivePath,
+} from "../domain/worktree/logic/diff-workplace-paths.js";

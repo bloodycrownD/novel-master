@@ -12,6 +12,12 @@ import type {
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
+import {
+  ruleViewToSnapshotEntries,
+  workplaceAttachmentsFromRuleDelta,
+  type WorktreeService,
+} from "@novel-master/core/worktree";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@novel-master/core/session-kkv";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorktreeForScope,
@@ -21,7 +27,9 @@ import {
   notifyWorkspaceMutatedToRenderer,
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
+import { notifyComposerAttachmentsSuggestToRenderer } from "../forward-composer-attachments-suggest.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -52,6 +60,28 @@ async function loadWorktreeRows(
   return wt.buildListRows();
 }
 
+/**
+ * 规则保存后：实时规则 vs file_cache → Composer workplace 建议。
+ * 不刷新规则快照、不 capture。
+ */
+async function suggestWorkplaceAttachmentsAfterRuleChange(
+  rt: DesktopNovelMasterRuntime,
+  wt: WorktreeService,
+  sessionId: string | undefined,
+): Promise<void> {
+  if (sessionId == null || sessionId === "") {
+    return;
+  }
+  const view = await wt.evaluateRuleView();
+  const live = ruleViewToSnapshotEntries(view);
+  const cacheKeys = await rt.sessionKkv.listKeys(
+    sessionId,
+    SESSION_KKV_DOMAIN_FILE_CACHE,
+  );
+  const attachments = workplaceAttachmentsFromRuleDelta(live, cacheKeys);
+  notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
+}
+
 export async function handleWorktreeBuildListRows(
   req: WorktreeBuildListRowsRequest,
 ): Promise<IpcResult<WorktreeListRowDto[]>> {
@@ -80,8 +110,9 @@ export async function handleWorktreeSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    // 规则变更不写 capture；workplace 草稿推送见 Step 8
+    // 规则变更不写 capture；不刷新规则快照；workplace 草稿见 composerAttachmentsSuggest
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -100,6 +131,7 @@ export async function handleWorktreeSetFileRule(
       inclusionMode: req.inclusionMode,
     });
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

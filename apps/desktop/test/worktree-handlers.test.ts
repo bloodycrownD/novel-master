@@ -1,5 +1,5 @@
 /**
- * Worktree IPC：规则保存不 capture；遗留 captureSessionBlock IPC 改为 clear kkv。
+ * Worktree IPC：规则保存不 capture；差集经 composerAttachmentsSuggest；遗留 capture → clear kkv。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -12,6 +12,11 @@ import {
   handleWorktreeSetDirRule,
   handleWorktreeSetFileRule,
 } from "../src/main/ipc/handlers/worktree.js";
+import {
+  setComposerAttachmentsSuggestForwardTarget,
+  notifyComposerAttachmentsSuggestToRenderer,
+} from "../src/main/ipc/forward-composer-attachments-suggest.js";
+import { IPC_CHANNELS } from "../shared/ipc-types.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -44,6 +49,7 @@ describe("worktree ipc handlers", () => {
   });
 
   after(async () => {
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
     await teardownDesktopDbTestEnv(tempDir);
   });
 
@@ -92,6 +98,59 @@ describe("worktree ipc handlers", () => {
     assert.equal(result.ok, true);
     const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
     assert.deepEqual(keysAfter, keysBefore);
+  });
+
+  it("composerAttachmentsSuggest 通道独立；空 attachments 不 send", async () => {
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
+
+    notifyComposerAttachmentsSuggestToRenderer({
+      sessionId,
+      attachments: [
+        {
+          name: "/x.md",
+          source: "workplace",
+          type: "text",
+          content: null,
+          path: "/x.md",
+        },
+      ],
+    });
+    notifyComposerAttachmentsSuggestToRenderer({
+      sessionId,
+      attachments: [],
+    });
+
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
+    assert.deepEqual(sent[0]?.payload, {
+      sessionId,
+      attachments: [
+        {
+          name: "/x.md",
+          source: "workplace",
+          type: "text",
+          content: null,
+          path: "/x.md",
+        },
+      ],
+    });
+
+    const result = await handleWorktreeSetDirRule({
+      workspaceScope: "chat",
+      projectId,
+      sessionId,
+      logicalPath: "/",
+      ruleEnabled: true,
+    });
+    assert.equal(result.ok, true);
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
   it("captureSessionBlock 遗留 IPC 清空 session kkv", async () => {

@@ -12,6 +12,8 @@ export const IPC_CHANNELS = {
   AGENT_ACTIVITY_GET: 'nm:agent/activity/get',
   /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
   WORKSPACE_MUTATED: 'nm:workspace/mutated',
+  /** Main → renderer：规则差集 → Composer workplace 附件建议（不含 workspaceMutated） */
+  COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
 
   SCOPE_GET: 'nm:scope/get',
   SCOPE_SET_PROJECT: 'nm:scope/setProject',
@@ -630,6 +632,24 @@ export type WorkspaceMutatedPayload = {
   readonly workspaceScope: WorkspacePanelScope;
   readonly projectId?: string;
   readonly sessionId?: string;
+};
+
+/** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
+export type MessageAttachmentDto = {
+  readonly name: string;
+  readonly source: 'workplace' | 'attach' | 'user_ops';
+  readonly type: 'text' | 'image' | 'dir';
+  readonly content: string | null;
+  readonly path?: string;
+};
+
+/**
+ * 规则变更差集推送：Composer 追加 workplace 草稿。
+ * 职责与 {@link WorkspaceMutatedPayload} 分离，禁止塞进 workspaceMutated。
+ */
+export type ComposerAttachmentsSuggestPayload = {
+  readonly sessionId: string;
+  readonly attachments: readonly MessageAttachmentDto[];
 };
 
 export type PreviewFileSelection = {

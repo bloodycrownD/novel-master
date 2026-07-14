@@ -7,6 +7,7 @@ import {
   type AgentActivityPayload,
   type VfsScopeRequest,
   type WorkspaceMutatedPayload,
+  type ComposerAttachmentsSuggestPayload,
 } from '@shared/ipc-types';
 import { createInvokeClient } from './invoke-registry';
 
@@ -173,6 +174,16 @@ export function onWorkspaceMutated(
 ): () => void {
   return bridge().on(
     IPC_CHANNELS.WORKSPACE_MUTATED,
+    callback as (p: unknown) => void,
+  );
+}
+
+/** 订阅规则差集 workplace 附件建议（Composer chips；Step 9/10 消费）。 */
+export function onComposerAttachmentsSuggest(
+  callback: (payload: ComposerAttachmentsSuggestPayload) => void,
+): () => void {
+  return bridge().on(
+    IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
     callback as (p: unknown) => void,
   );
 }

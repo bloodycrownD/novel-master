@@ -76,6 +76,7 @@ import {
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
+import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workplace-rule-delta-draft.service';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
@@ -319,7 +320,18 @@ export const VfsFileManager = forwardRef<
 
   const reloadAfterRuleChange = useCallback(async () => {
     await reload();
-  }, [reload]);
+    if (sessionId != null) {
+      try {
+        await suggestWorkplaceAttachmentsToComposerDraft(
+          runtime,
+          worktree,
+          sessionId,
+        );
+      } catch {
+        // 差集推送失败不阻断列表刷新
+      }
+    }
+  }, [reload, runtime, sessionId, worktree]);
 
   useImperativeHandle(
     ref,
@@ -469,6 +481,17 @@ export const VfsFileManager = forwardRef<
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
           await refreshVisibleRowsFromWorktree();
+          if (sessionId != null) {
+            try {
+              await suggestWorkplaceAttachmentsToComposerDraft(
+                runtime,
+                worktree,
+                sessionId,
+              );
+            } catch {
+              // ignore
+            }
+          }
           return;
         }
         if (menuRow.kind === 'dir') {
@@ -496,6 +519,17 @@ export const VfsFileManager = forwardRef<
             currentPath.startsWith(`${menuPath}/`)
           ) {
             await reload();
+          }
+          if (sessionId != null) {
+            try {
+              await suggestWorkplaceAttachmentsToComposerDraft(
+                runtime,
+                worktree,
+                sessionId,
+              );
+            } catch {
+              // ignore
+            }
           }
           return;
         }
