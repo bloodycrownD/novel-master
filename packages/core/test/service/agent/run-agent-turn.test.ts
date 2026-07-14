@@ -20,7 +20,7 @@ function mockUserVfsTurn(overrides: {
     executeOp: async () => ({ ok: true }),
     flushPendingUserVfsTurns:
       overrides.flushPendingUserVfsTurns ??
-      (async () => ({ flushed: false })),
+      (async () => ({ flushed: false, attachments: [] })),
     hasPendingTurns:
       overrides.hasPendingTurns ?? (async () => false),
   };
@@ -162,7 +162,7 @@ describe("runAgentTurn", () => {
       userVfsTurn: mockUserVfsTurn({
         flushPendingUserVfsTurns: async () => {
           flushCalled = true;
-          return { flushed: false };
+          return { flushed: false, attachments: [] };
         },
       }),
       append: async () => ({ id: "m-new" }),
@@ -182,7 +182,7 @@ describe("runAgentTurn", () => {
       userVfsTurn: mockUserVfsTurn({
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
-          return { flushed: false };
+          return { flushed: false, attachments: [] };
         },
       }),
       append: async () => {
@@ -212,7 +212,17 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
-          return { flushed: true };
+          return {
+            flushed: true,
+            attachments: [
+              {
+                name: "write",
+                source: "user_ops",
+                type: "text",
+                content: '<user-vfs-action kind="save" path="/x.md" />',
+              },
+            ],
+          };
         },
       }),
       append: async () => {
@@ -255,7 +265,7 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
-          return { flushed: true };
+          return { flushed: true, attachments: [] };
         },
       }),
       append: async () => {
@@ -269,6 +279,7 @@ describe("runAgentTurn", () => {
       userVfsTurn: runtime.userVfsTurn!,
       sessionId: "s",
       trimmedInput: "",
+      allowResumeWithoutInput: true,
     });
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
@@ -291,7 +302,7 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => true,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
-          return { flushed: false };
+          return { flushed: false, attachments: [] };
         },
       }),
       append: async () => {
@@ -305,6 +316,7 @@ describe("runAgentTurn", () => {
       userVfsTurn: runtime.userVfsTurn!,
       sessionId: "s",
       trimmedInput: "",
+      allowResumeWithoutInput: true,
     });
 
     assert.deepEqual(order, ["delete:u-trail", "flush", "append"]);
@@ -323,7 +335,40 @@ describe("runAgentTurn", () => {
         hasPendingTurns: async () => false,
         flushPendingUserVfsTurns: async () => {
           order.push("flush");
-          return { flushed: false };
+          return { flushed: false, attachments: [] };
+        },
+      }),
+      append: async () => {
+        order.push("append");
+        return { id: "u-reappended" };
+      },
+    });
+
+    await prepareUserVfsTurnForAgentRun({
+      messages: runtime.messages,
+      userVfsTurn: runtime.userVfsTurn!,
+      sessionId: "s",
+      trimmedInput: "",
+      allowResumeWithoutInput: true,
+    });
+
+    assert.deepEqual(order, ["flush"]);
+  });
+
+  it("无 allowResumeWithoutInput 时 trimmed 空不删末条 user", async () => {
+    const order: string[] = [];
+    const runtime = makeRuntime({
+      listBySession: async () => [
+        { id: "u-trail", role: "user", content: { blocks: [] } },
+      ],
+      delete: async (id) => {
+        order.push(`delete:${id}`);
+      },
+      userVfsTurn: mockUserVfsTurn({
+        hasPendingTurns: async () => true,
+        flushPendingUserVfsTurns: async () => {
+          order.push("flush");
+          return { flushed: true, attachments: [] };
         },
       }),
       append: async () => {
@@ -375,6 +420,7 @@ describe("runAgentTurn", () => {
           userVfsTurn: runtime.userVfsTurn!,
           sessionId: "s",
           trimmedInput: "",
+          allowResumeWithoutInput: true,
         }),
       /flush failed/,
     );

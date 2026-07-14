@@ -7,7 +7,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
-import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT, USER_VFS_TURN_ACK_TEXT } from "@novel-master/core/chat";
+import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   fileCacheKey,
@@ -114,7 +114,7 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 }
 
 describe("UserVfsTurnService", () => {
-  it("F1：A+U pending 空续跑 flush 后顺序为 A, U_vfs, A_ack, U", async () => {
+  it("F1：A+U pending 空续跑后顺序为 A, U（含 user_ops，无 UA）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -130,19 +130,23 @@ describe("UserVfsTurnService", () => {
       userVfsTurn,
       sessionId: session.id,
       trimmedInput: "",
+      allowResumeWithoutInput: true,
     });
 
     const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 4);
+    assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
-    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_ack");
-    assert.equal(listed[3]!.role, "user");
-    const tailText = listed[3]!.content.blocks[0];
+    assert.equal(listed[1]!.role, "user");
+    const tailText = listed[1]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "用户续跑");
+    assert.ok(
+      listed.some((m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action") ===
+        false,
+    );
+    assert.equal(listed[1]!.attachments?.[0]?.source, "user_ops");
   });
 
-  it("F2：A + pending 发送 hi 后顺序为 A, U_vfs, A_ack, U(hi)", async () => {
+  it("F2：A + pending 发送 hi 后顺序为 A, U(hi+user_ops)", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -151,25 +155,26 @@ describe("UserVfsTurnService", () => {
     await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
     await userVfsTurn.executeOp(session.id, writeOp("/f2.md", "content"));
 
-    await prepareUserVfsTurnForAgentRun({
+    const prepared = await prepareUserVfsTurnForAgentRun({
       messages: ctx.messages,
       userVfsTurn,
       sessionId: session.id,
       trimmedInput: "hi",
     });
-    await ctx.messages.append(session.id, "user", textBlocks("hi"));
+    await ctx.messages.append(session.id, "user", textBlocks("hi"), {
+      attachments: prepared.attachments,
+    });
 
     const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 4);
+    assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
-    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_ack");
-    assert.equal(listed[3]!.role, "user");
-    const tailText = listed[3]!.content.blocks[0];
+    assert.equal(listed[1]!.role, "user");
+    const tailText = listed[1]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "hi");
+    assert.equal(listed[1]!.attachments?.[0]?.source, "user_ops");
   });
 
-  it("F3：仅 U + pending 空续跑 flush 后顺序为 U_vfs, A_ack, U", async () => {
+  it("F3：仅 U + pending 空续跑后顺序为 U（含 user_ops）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -183,15 +188,15 @@ describe("UserVfsTurnService", () => {
       userVfsTurn,
       sessionId: session.id,
       trimmedInput: "",
+      allowResumeWithoutInput: true,
     });
 
     const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 3);
-    assert.equal(readMessageMetadata(listed[0]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_ack");
-    assert.equal(listed[2]!.role, "user");
-    const tailText = listed[2]!.content.blocks[0];
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0]!.role, "user");
+    const tailText = listed[0]!.content.blocks[0];
     assert.equal(tailText?.type === "text" ? tailText.text : "", "用户续跑");
+    assert.equal(listed[0]!.attachments?.[0]?.source, "user_ops");
   });
 
   it("F4：pending 空时空续跑不写 UA、末条 user 保留", async () => {
@@ -212,6 +217,7 @@ describe("UserVfsTurnService", () => {
       userVfsTurn,
       sessionId: session.id,
       trimmedInput: "",
+      allowResumeWithoutInput: true,
     });
 
     const listed = await ctx.messages.listBySession(session.id);
@@ -255,43 +261,44 @@ describe("UserVfsTurnService", () => {
     assert.equal((pending[0] as { tools: { id: string }[] }).tools[0]?.id, "tu_ok");
   });
 
-  it("flush 落库 2 条消息且 metadata 符合 spec", async () => {
+  it("T-UO1：flush 不产生 user_vfs_action 行，仅产出 attachments 并清 pending", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sessionRepo = new SqliteSessionRepository(ctx.conn);
+
+    await userVfsTurn.executeOp(session.id, writeOp("/a.md", "A"));
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(flush.attachments.length, 1);
+    assert.equal(flush.attachments[0]!.source, "user_ops");
+
+    const messages = await ctx.messages.listBySession(session.id);
+    assert.equal(messages.length, 0);
+    assert.equal(
+      messages.some(
+        (m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action",
+      ),
+      false,
+    );
+    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+  });
+
+  it("T-UO3：user_ops attachment.content 为 action XML（非 JSON）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
 
-    await userVfsTurn.executeOp(session.id, writeOp("/a.md", "A"));
+    await userVfsTurn.executeOp(session.id, writeOp("/uo3.md", "body"));
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
-
-    const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 2);
-
-    const [m1, m2] = messages;
-    assert.equal(m1!.role, "user");
-    assert.equal(m2!.role, "assistant");
-
-    assert.equal(readMessageMetadata(m1!.raw)?.source, "user");
-    assert.equal(readMessageMetadata(m1!.raw)?.kind, "user_vfs_action");
-    assert.match(
-      m1!.content.blocks[0]?.type === "text" ? m1!.content.blocks[0].text : "",
-      /<system-message>/,
-    );
-    assert.match(
-      m1!.content.blocks[0]?.type === "text" ? m1!.content.blocks[0].text : "",
-      /<user-vfs-action/,
-    );
-
-    assert.equal(readMessageMetadata(m2!.raw)?.kind, "user_vfs_ack");
-    assert.equal(m2!.content.blocks[0]?.type, "text");
-    if (m2!.content.blocks[0]?.type === "text") {
-      assert.equal(m2!.content.blocks[0].text, USER_VFS_TURN_ACK_TEXT);
-    }
-    assert.equal(
-      m2!.content.blocks.some((b) => b.type === "tool_use"),
-      false,
-    );
+    const content = flush.attachments[0]!.content;
+    assert.ok(typeof content === "string");
+    assert.match(content!, /<user-vfs-action/);
+    assert.equal(content!.trimStart().startsWith("{"), false);
+    assert.equal(content!.includes("<system-message>"), false);
   });
 
   it("flush 空 pending 跳过", async () => {
@@ -336,7 +343,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(runParallelCalls, 1);
   });
 
-  it("burst 3 次 pending flush 为 1×UA（2 条消息）", async () => {
+  it("burst 3 次 pending flush 为 1×user_ops 附件且无消息行", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -346,26 +353,17 @@ describe("UserVfsTurnService", () => {
     await userVfsTurn.executeOp(session.id, writeOp("/2.md", "two", "tu_2"));
     await userVfsTurn.executeOp(session.id, writeOp("/3.md", "three", "tu_3"));
 
-    await userVfsTurn.flushPendingUserVfsTurns(session.id);
-    const messages = await ctx.messages.listBySession(session.id);
-    assert.equal(messages.length, 2);
-
-    const userMsg = messages[0]!;
-    assert.equal(userMsg.role, "user");
-    const text =
-      userMsg.content.blocks[0]?.type === "text"
-        ? userMsg.content.blocks[0].text
-        : "";
-    assert.ok(text.includes("/1.md"));
-    assert.ok(text.includes("/2.md"));
-    assert.ok(text.includes("/3.md"));
-    assert.equal(
-      messages[1]!.content.blocks.some((b) => b.type === "tool_use"),
-      false,
-    );
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(flush.attachments.length, 1);
+    const content = flush.attachments[0]!.content ?? "";
+    assert.ok(content.includes("/1.md"));
+    assert.ok(content.includes("/2.md"));
+    assert.ok(content.includes("/3.md"));
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
   });
 
-  it("flush 后 checkpoint 锚定 U 条 user_vfs_action message", async () => {
+  it("flush 本身不 capture；带 user_ops 的 user append 后可锚定 checkpoint", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -384,26 +382,65 @@ describe("UserVfsTurnService", () => {
     const userVfsTurn = new DefaultUserVfsTurnService(deps);
 
     await userVfsTurn.executeOp(session.id, writeOp("/cp.md", "checkpoint"));
-    await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(captureCalls.length, 0);
 
-    const listed = await deps.messages.listBySession(session.id);
-    const actionUser = listed[0]!;
-    assert.equal(actionUser.role, "user");
-    assert.equal(readMessageMetadata(actionUser.raw)?.kind, "user_vfs_action");
-
-    assert.equal(captureCalls.length, 1);
-    assert.equal(captureCalls[0]!.messageId, actionUser.id);
+    const userMsg = await deps.messages.append(
+      session.id,
+      "user",
+      textBlocks("带 ops"),
+      { attachments: flush.attachments },
+    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, userMsg.id);
 
     await svfs.write("/extra.md", "x", { versionCheck: false });
-    await ctx.messageCheckpoint.capture(
-      session.id,
-      project.id,
-      actionUser.id,
-    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, userMsg.id);
     const repo = new SqliteMessageCheckpointRepository(ctx.conn);
-    const tree = await repo.loadFileTree(session.id, actionUser.id);
+    const tree = await repo.loadFileTree(session.id, userMsg.id);
     assert.ok(tree);
     assert.equal(tree.has("/cp.md"), true);
+  });
+
+  it("T-TS1：空续跑重排 delete+re-append 不丢末条 attachments", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const priorAttachments = [
+      {
+        name: "/prior.md",
+        source: "attach" as const,
+        type: "text" as const,
+        content: null,
+        path: "/prior.md",
+      },
+    ];
+    await ctx.messages.append(session.id, "user", textBlocks("续跑原文"), {
+      attachments: priorAttachments,
+    });
+    await userVfsTurn.executeOp(session.id, writeOp("/ts1.md", "ops"));
+
+    await prepareUserVfsTurnForAgentRun({
+      messages: ctx.messages,
+      userVfsTurn,
+      sessionId: session.id,
+      trimmedInput: "",
+      allowResumeWithoutInput: true,
+    });
+
+    const listed = await ctx.messages.listBySession(session.id);
+    assert.equal(listed.length, 1);
+    const att = listed[0]!.attachments ?? [];
+    assert.ok(att.some((a) => a.source === "attach" && a.path === "/prior.md"));
+    assert.ok(att.some((a) => a.source === "user_ops"));
+    const body = listed[0]!.content.blocks[0];
+    assert.equal(body?.type === "text" ? body.text : "", "续跑原文");
+    assert.equal(
+      (body?.type === "text" ? body.text : "").includes("<attachment>"),
+      false,
+    );
   });
 
   it("appendToolTurnBridge 追加 kind=tool_turn_bridge assistant", async () => {
@@ -547,73 +584,53 @@ describe("UserVfsTurnService", () => {
     assert.equal((await svfs.read("/2.md")).content, "two");
   });
 
-  it("T3：flush 事务第二次 insert 失败时无消息且 pending 不变", async () => {
+  it("T3：flush 不 insert message（attachments 仅返回）", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
-
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const toolRunner = new ToolRunner(registry);
 
     const userVfsTurn = new DefaultUserVfsTurnService(makeUserVfsTurnDeps(ctx.conn));
 
     await userVfsTurn.executeOp(session.id, writeOp("/tx.md", "body"));
-    const pendingBefore = await sessionRepo.getUserVfsPendingJson(session.id);
-    assert.ok(pendingBefore);
-
     let insertCount = 0;
     const origInsert = SqliteMessageRepository.prototype.insert;
     SqliteMessageRepository.prototype.insert = async function insertSpy(message) {
       insertCount += 1;
-      if (insertCount === 2) {
-        throw new Error("flush insert aborted");
-      }
       return origInsert.call(this, message);
     };
 
     try {
-      await assert.rejects(() =>
-        userVfsTurn.flushPendingUserVfsTurns(session.id),
-      );
+      const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+      assert.equal(flush.flushed, true);
+      assert.equal(insertCount, 0);
       assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
-      assert.equal(
-        await sessionRepo.getUserVfsPendingJson(session.id),
-        pendingBefore,
-      );
     } finally {
       SqliteMessageRepository.prototype.insert = origInsert;
     }
   });
 
-  it("T5：capture 失败时 flush 抛错且已落库 2 条消息、pending 已清空", async () => {
+  it("T5：flush 清 pending 且不调用 capture、不落库消息", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
-    const registry = new ToolRegistry<BuiltinToolContext>();
-    registerBuiltinTools(registry);
-    const toolRunner = new ToolRunner(registry);
-
+    let captureCalled = false;
     const deps = makeUserVfsTurnDeps(ctx.conn, {
-      toolRunner,
       messageCheckpoint: {
         capture: async () => {
-          throw new Error("capture failed");
+          captureCalled = true;
+          throw new Error("capture should not run");
         },
       },
     });
     const userVfsTurn = new DefaultUserVfsTurnService(deps);
 
     await userVfsTurn.executeOp(session.id, writeOp("/cap.md", "x"));
-    await assert.rejects(() =>
-      userVfsTurn.flushPendingUserVfsTurns(session.id),
-    );
-
-    const listed = await deps.messages.listBySession(session.id);
-    assert.equal(listed.length, 2);
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(captureCalled, false);
+    assert.equal((await deps.messages.listBySession(session.id)).length, 0);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
   });
 
@@ -629,11 +646,12 @@ describe("UserVfsTurnService", () => {
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, false);
+    assert.deepEqual(flush.attachments, []);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
   });
 
-  it("F4 flush：真删除仍有 U+A", async () => {
+  it("F4 flush：真删除仍产出 user_ops（含 delete action XML）", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -645,23 +663,24 @@ describe("UserVfsTurnService", () => {
     assert.equal(firstFlush.flushed, true);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
 
+    // 第一次 ops 需落 checkpoint 才能作为后续 delete 的 baseline
+    const anchor = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks(""),
+      { attachments: firstFlush.attachments },
+    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, anchor.id);
+
     await userVfsTurn.executeOp(
       session.id,
       buildUserVfsDeleteOp("/gone.md", false),
     );
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
-
-    const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 4);
-    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[3]!.raw)?.kind, "user_vfs_ack");
-    const deleteText =
-      listed[2]!.content.blocks[0]?.type === "text"
-        ? listed[2]!.content.blocks[0].text
-        : "";
-    assert.match(deleteText, /\/gone\.md/);
-    assert.match(deleteText, /kind="delete"/);
+    assert.match(flush.attachments[0]!.content ?? "", /\/gone\.md/);
+    assert.match(flush.attachments[0]!.content ?? "", /kind="delete"/);
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
   });
 
   it("F4 flush：删文件再 write 同路径同内容 → net diff 空", async () => {
@@ -672,14 +691,21 @@ describe("UserVfsTurnService", () => {
     const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same"));
-    await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    const first = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    const anchor = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks(""),
+      { attachments: first.attachments },
+    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, anchor.id);
 
     await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/round.md", false));
     await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same", "tu_rewrite"));
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, false);
-    assert.equal((await ctx.messages.listBySession(session.id)).length, 2);
+    assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
     assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
   });
 

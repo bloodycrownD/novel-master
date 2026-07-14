@@ -39,7 +39,7 @@ const customDefinition: AgentDefinition = {
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    flushPendingUserVfsTurns: async () => ({ flushed: false }),
+    flushPendingUserVfsTurns: async () => ({ flushed: false, attachments: [] }),
     hasPendingTurns: async () => false,
   };
 }

@@ -66,7 +66,7 @@ describe("deriveToolUsesFromVfsActions", () => {
 });
 
 describe("matchUserVfsTurnAt", () => {
-  it("识别完整 UA 两段", () => {
+  it("T-UO2：旧 fixture UA 两段仍能 match 展示卡", () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages: ChatMessage[] = [
       msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }], {

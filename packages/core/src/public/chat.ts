@@ -91,6 +91,7 @@ export type {
   WorkspaceFlushAddedFile,
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
 export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
+export { buildUserOpsAttachment } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,

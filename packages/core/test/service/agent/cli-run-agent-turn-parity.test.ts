@@ -205,11 +205,16 @@ describe("cli-run-agent-turn parity", () => {
     );
 
     const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 4);
+    assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
-    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_ack");
-    assert.equal(listed[3]!.role, "user");
+    assert.equal(listed[1]!.role, "user");
+    assert.equal(
+      listed.some(
+        (m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action",
+      ),
+      false,
+    );
+    assert.equal(listed[1]!.attachments?.[0]?.source, "user_ops");
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });

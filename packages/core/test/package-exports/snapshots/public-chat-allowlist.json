@@ -8,6 +8,7 @@
   "USER_VFS_TURN_ACK_TEXT",
   "USER_VFS_TURN_SPAN",
   "assertMessageContent",
+  "buildUserOpsAttachment",
   "buildUserVfsTurnView",
   "computeHideRangeFromSelection",
   "computeSetFloorRanges",

@@ -192,24 +192,54 @@ export async function runAgentTurn(
     stream,
   });
 
-  if (isUserVfsUnifiedToolTurnEnabled() && runtime.userVfsTurn != null) {
+  let userOpsAttachments: Awaited<
+    ReturnType<typeof prepareUserVfsTurnForAgentRun>
+  >["attachments"] = [];
+  let checkpointAnchorMessageId: string | undefined;
+
+  // 仅在能把 user_ops 挂到 user 消息时 flush（新发文字或空续跑）；assistant-continue 不吞 pending。
+  if (
+    isUserVfsUnifiedToolTurnEnabled() &&
+    runtime.userVfsTurn != null &&
+    (trimmed !== "" || allowResumeWithoutInput)
+  ) {
     stage = "flush-pending-user-vfs-turns";
-    await prepareUserVfsTurnForAgentRun({
+    const prepared = await prepareUserVfsTurnForAgentRun({
       messages: runtime.messages,
       userVfsTurn: runtime.userVfsTurn,
       sessionId: scope.sessionId,
       trimmedInput: trimmed,
+      allowResumeWithoutInput,
     });
+    userOpsAttachments = prepared.attachments;
+    if (prepared.flushed && prepared.reAppendedUserMessageId != null) {
+      checkpointAnchorMessageId = prepared.reAppendedUserMessageId;
+    }
   }
 
   if (trimmed !== "") {
     stage = "append-user-message";
-    await runtime.messages.append(
+    const appended = await runtime.messages.append(
       scope.sessionId,
       "user",
       textBlocks(trimmed),
+      userOpsAttachments.length > 0
+        ? { attachments: userOpsAttachments }
+        : undefined,
     );
+    if (userOpsAttachments.length > 0) {
+      checkpointAnchorMessageId = appended.id;
+    }
     await options?.onUserMessageAppended?.();
+  }
+
+  if (checkpointAnchorMessageId != null) {
+    stage = "capture-checkpoint-after-user-ops";
+    await runtime.messageCheckpoint.capture(
+      scope.sessionId,
+      scope.projectId,
+      checkpointAnchorMessageId,
+    );
   }
 
   stage = "validate-agent-definition";
