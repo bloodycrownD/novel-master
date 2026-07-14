@@ -255,7 +255,7 @@ describe('VfsFileManager session worktree snapshot', () => {
     expect(buildListRows).toHaveBeenCalled();
   });
 
-  it('T-WEC6: setDirRule 经 VfsFileManager 触发 capture，列表不经 snapshot', async () => {
+  it('T-WEC6: setDirRule 经 VfsFileManager 成功且不触发 capture', async () => {
     mockCapture.mockResolvedValue({
       worktreeDisplay: 'wt',
       capturedAtMs: 1,
