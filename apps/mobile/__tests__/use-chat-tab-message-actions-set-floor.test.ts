@@ -1,5 +1,6 @@
 /**
- * T-SF1：Mobile runSetFloor 编排链（setMessageFloorAtMessage → reload → bump；不调 capture）。
+ * T-SF1：Mobile runSetFloor 编排链（setMessageFloorAtMessage → reload → bump；
+ * clear session kkv 由 Core 完成，UI 不再调 capture）。
  */
 import { describe, expect, it, jest, beforeEach } from '@jest/globals';
 import React from 'react';
@@ -9,7 +10,6 @@ import { type ChatMessage } from '@novel-master/core/chat';
 import { useChatTabMessageActions } from '../src/screens/tabs/chat-tab/useChatTabMessages';
 
 const mockSetMessageFloorAtMessage = jest.fn();
-const mockCapture = jest.fn();
 const mockReloadMessages = jest.fn();
 const mockBumpWorktreeUiToken = jest.fn();
 const mockRefreshChatTokenLabel = jest.fn();
@@ -31,8 +31,6 @@ jest.mock('../src/services/message-rollback.service', () => ({
 
 jest.mock('../src/services/worktree-block.service', () => ({
   captureAfterManualCompactionEmit: jest.fn(),
-  captureSessionWorktreeBlockForMobile: (...args: unknown[]) =>
-    mockCapture(...args),
 }));
 
 jest.mock('react-native', () => ({
@@ -108,7 +106,7 @@ describe('useChatTabMessageActions set-floor', () => {
     mockRefreshChatTokenLabel.mockResolvedValue(undefined);
   });
 
-  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump，不调 capture', async () => {
+  it('T-SF1: runSetFloor 链 setMessageFloor → reload → bump（kkv 由 Core clear）', async () => {
     const api = mountActions();
 
     await act(async () => {
@@ -118,7 +116,6 @@ describe('useChatTabMessageActions set-floor', () => {
     });
 
     expect(mockSetMessageFloorAtMessage).toHaveBeenCalledWith('p1', 's1', 'm1');
-    expect(mockCapture).not.toHaveBeenCalled();
     expect(mockReloadMessages).toHaveBeenCalledWith(true);
     expect(mockBumpWorktreeUiToken).toHaveBeenCalled();
     expect(mockShowToast).toHaveBeenCalledWith('已置位');

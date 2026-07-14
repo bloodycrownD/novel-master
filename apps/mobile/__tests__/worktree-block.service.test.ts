@@ -1,5 +1,5 @@
 /**
- * worktree-block.service：capture 业务壳已退役；手动刷新 → clearSession。
+ * worktree-block.service：遗留 capture 壳与手动刷新 → clearSession。
  */
 import { describe, expect, it, jest } from '@jest/globals';
 import {
@@ -9,7 +9,7 @@ import {
 } from '../src/services/worktree-block.service';
 
 describe('worktree-block.service', () => {
-  it('captureSessionWorktreeBlockForMobile 为无操作兼容壳', async () => {
+  it('遗留 capture 壳为无操作，不写 kkv', async () => {
     const clearSession = jest.fn(async () => undefined);
     const runtime = {
       sessionKkv: { clearSession },
