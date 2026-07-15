@@ -32,6 +32,9 @@ export const IPC_CHANNELS = {
   SESSIONS_CREATE: 'nm:sessions/create',
   SESSIONS_RENAME: 'nm:sessions/rename',
   SESSIONS_DELETE: 'nm:sessions/delete',
+  SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
+  SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
+  SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
 
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
@@ -269,6 +272,20 @@ export type SessionRenameRequest = {
 
 export type SessionDeleteRequest = {
   readonly id: string;
+};
+
+export type SessionGetComposerDraftRequest = {
+  readonly sessionId: string;
+};
+
+export type SessionSetComposerDraftRequest = {
+  readonly sessionId: string;
+  /** 原始 JSON；null 清空列。 */
+  readonly draftJson: string | null;
+};
+
+export type SessionProjectComposerStatusRequest = {
+  readonly sessionId: string;
 };
 
 export type AppUiGetRequest = {

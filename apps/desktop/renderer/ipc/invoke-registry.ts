@@ -17,6 +17,7 @@ import {
   type ChatMessageDto,
   type CompactionManualRequest,
   type IpcResult,
+  type MessageAttachmentDto,
   type MessagesAppendRequest,
   type MessagesAppendToolTurnBridgeRequest,
   type MessagesDeleteRequest,
@@ -51,9 +52,12 @@ import {
   type SessionDeleteRequest,
   type SessionDto,
   type SessionFsRollbackRequest,
+  type SessionGetComposerDraftRequest,
   type SessionListByProjectRequest,
+  type SessionProjectComposerStatusRequest,
   type SessionPullTemplateRequest,
   type SessionRenameRequest,
+  type SessionSetComposerDraftRequest,
   type UserVfsHasPendingRequest,
   type VfsDeleteRequest,
   type VfsMkdirRequest,
@@ -159,6 +163,18 @@ export function createInvokeClient(invoke: InvokeFn) {
       invoke,
       IPC_CHANNELS.SESSIONS_DELETE,
     ),
+    ipcSessionsGetComposerDraft: withReq<
+      SessionGetComposerDraftRequest,
+      IpcResult<string | null>
+    >(invoke, IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT),
+    ipcSessionsSetComposerDraft: withReq<
+      SessionSetComposerDraftRequest,
+      IpcResult<boolean>
+    >(invoke, IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT),
+    ipcSessionsProjectComposerStatus: withReq<
+      SessionProjectComposerStatusRequest,
+      IpcResult<MessageAttachmentDto[]>
+    >(invoke, IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS),
     ipcAppUiGet: (key: string) =>
       invoke<AppUiGetResponse>(IPC_CHANNELS.APP_UI_GET, { key }),
     ipcAppUiSet: (key: string, value: string) =>

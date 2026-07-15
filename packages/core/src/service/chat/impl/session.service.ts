@@ -126,6 +126,19 @@ export class DefaultSessionService implements SessionService {
     );
   }
 
+  async getComposerDraftJson(id: string): Promise<string | null> {
+    await this.get(id);
+    return this.deps.sessions.getComposerDraftJson(id);
+  }
+
+  async setComposerDraftJson(
+    id: string,
+    draftJson: string | null,
+  ): Promise<boolean> {
+    await this.get(id);
+    return this.deps.sessions.setComposerDraftJson(id, draftJson);
+  }
+
   /**
    * 复制会话（VFS + 消息）。
    *
