@@ -4174,7 +4174,7 @@ html[data-theme="dark"] .chat-batch-bar {
   cursor: pointer;
 }
 
-.file-ref-picker__row--dir {
+.file-ref-picker__row--split {
   padding: 0;
   gap: 0;
   cursor: default;
@@ -4216,8 +4216,8 @@ html[data-theme="dark"] .chat-batch-bar {
 
 .file-ref-picker__row:hover,
 .file-ref-picker__row.is-selected,
-.file-ref-picker__row--dir:hover,
-.file-ref-picker__row--dir.is-selected {
+.file-ref-picker__row--split:hover,
+.file-ref-picker__row--split.is-selected {
   background: var(--background);
 }
 

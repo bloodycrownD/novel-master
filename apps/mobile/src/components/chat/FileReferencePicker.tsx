@@ -1,5 +1,5 @@
 /**
- * 只读文件/目录引用选择器：层级浏览 + 多选文件 + 单目录确认。
+ * 只读文件/目录引用选择器：层级浏览 + 多选文件与目录。
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -47,31 +47,33 @@ function toAttach(
   };
 }
 
-/** 当前目录下的直子行（不含 cwd 自身；隐藏文件排除）。 */
+/** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
 export function listPickerChildRows(
   rows: readonly WorktreeListRow[],
   currentPath: string,
 ): WorktreeListRow[] {
-  return rows.filter(r => {
-    if (!isDirectChild(currentPath, r.path)) {
-      return false;
-    }
-    if (r.kind === 'dir') {
-      return true;
-    }
-    return r.displayState !== 'hidden';
-  });
+  return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
-/** 根据目录/文件互斥选中态生成确认附件。 */
+/** 根据目录/文件多选态生成确认附件（先 dir 后 text，各按 path）。 */
 export function attachmentsFromPickerSelection(
-  selectedDir: string | null,
+  selectedDirs: Iterable<string>,
   selectedFiles: Iterable<string>,
 ): MessageAttachment[] {
-  if (selectedDir != null) {
-    return [toAttach(selectedDir, 'dir')];
+  return [
+    ...[...selectedDirs].map(p => toAttach(p, 'dir')),
+    ...[...selectedFiles].map(p => toAttach(p, 'text')),
+  ];
+}
+
+function toggleInSet(prev: Set<string>, path: string): Set<string> {
+  const next = new Set(prev);
+  if (next.has(path)) {
+    next.delete(path);
+  } else {
+    next.add(path);
   }
-  return [...selectedFiles].map(p => toAttach(p, 'text'));
+  return next;
 }
 
 export function FileReferencePicker({
@@ -86,7 +88,7 @@ export function FileReferencePicker({
   const [rows, setRows] = useState<WorktreeListRow[]>([]);
   const [currentPath, setCurrentPath] = useState('/');
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [selectedDir, setSelectedDir] = useState<string | null>(null);
+  const [selectedDirs, setSelectedDirs] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
 
@@ -115,7 +117,7 @@ export function FileReferencePicker({
     // 打开时重置 cwd 与选中集；仅依赖 visible/scope，避免 load 引用抖动导致死循环
     setCurrentPath('/');
     setSelectedFiles(new Set());
-    setSelectedDir(null);
+    setSelectedDirs(new Set());
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 打开瞬时拉一次列表
   }, [visible, projectId, sessionId]);
@@ -127,34 +129,23 @@ export function FileReferencePicker({
 
   const parentPath = parentLogicalPath(currentPath);
   const canGoUp = parentPath != null;
-  const canConfirm = selectedFiles.size > 0 || selectedDir != null;
-  const currentDirSelected = selectedDir === currentPath;
+  const canConfirm = selectedFiles.size > 0 || selectedDirs.size > 0;
+  const currentDirSelected = selectedDirs.has(currentPath);
 
   const navigateInto = (dirPath: string) => {
     setCurrentPath(dirPath);
   };
 
   const toggleDirSelect = (dirPath: string) => {
-    setSelectedFiles(new Set());
-    setSelectedDir(prev => (prev === dirPath ? null : dirPath));
+    setSelectedDirs(prev => toggleInSet(prev, dirPath));
   };
 
   const selectCurrentDir = () => {
-    setSelectedFiles(new Set());
-    setSelectedDir(prev => (prev === currentPath ? null : currentPath));
+    setSelectedDirs(prev => toggleInSet(prev, currentPath));
   };
 
   const toggleFile = (filePath: string) => {
-    setSelectedDir(null);
-    setSelectedFiles(prev => {
-      const next = new Set(prev);
-      if (next.has(filePath)) {
-        next.delete(filePath);
-      } else {
-        next.add(filePath);
-      }
-      return next;
-    });
+    setSelectedFiles(prev => toggleInSet(prev, filePath));
   };
 
   return (
@@ -169,7 +160,7 @@ export function FileReferencePicker({
         <View style={[styles.panel, { backgroundColor: tokens.surface }]}>
           <Text style={[styles.title, { color: tokens.text }]}>引用文件</Text>
           <Text style={{ color: tokens.textSecondary, marginBottom: 8 }}>
-            多选文件，或选择一个目录
+            可多选文件与目录
           </Text>
           <View style={styles.navBar}>
             <Text
@@ -220,7 +211,7 @@ export function FileReferencePicker({
               renderItem={({ item }) => {
                 const label = basename(item.path) || item.path;
                 if (item.kind === 'dir') {
-                  const checked = selectedDir === item.path;
+                  const checked = selectedDirs.has(item.path);
                   return (
                     <View
                       style={[
@@ -255,18 +246,34 @@ export function FileReferencePicker({
                 }
                 const checked = selectedFiles.has(item.path);
                 return (
-                  <Pressable
+                  <View
                     style={[
                       styles.row,
                       checked && { backgroundColor: tokens.border },
                     ]}
-                    onPress={() => toggleFile(item.path)}
-                    testID={`file-ref-file-${item.path}`}
+                    testID={`file-ref-file-row-${item.path}`}
                   >
-                    <Text style={{ color: tokens.text }}>
-                      {checked ? '☑' : '☐'} {label}
-                    </Text>
-                  </Pressable>
+                    <Pressable
+                      onPress={() => toggleFile(item.path)}
+                      style={styles.checkHit}
+                      testID={`file-ref-file-${item.path}`}
+                      accessibilityLabel={`选用文件 ${label}`}
+                    >
+                      <Text style={{ color: tokens.text }}>
+                        {checked ? '☑' : '☐'}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.rowBody}
+                      onPress={() => toggleFile(item.path)}
+                      testID={`file-ref-file-label-${item.path}`}
+                      accessibilityLabel={`选用文件 ${label}`}
+                    >
+                      <Text style={{ color: tokens.text, flex: 1 }}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  </View>
                 );
               }}
               ListEmptyComponent={
@@ -289,7 +296,7 @@ export function FileReferencePicker({
               testID="file-ref-confirm"
               onPress={() => {
                 onConfirm(
-                  attachmentsFromPickerSelection(selectedDir, selectedFiles),
+                  attachmentsFromPickerSelection(selectedDirs, selectedFiles),
                 );
                 onClose();
               }}
