@@ -35,11 +35,11 @@ const fixtureRows: WorktreeListRowDto[] = [
   },
 ];
 
-test("listPickerChildRows：点目录进 cwd 后仅显示直子", () => {
+test("listPickerChildRows：点目录进 cwd 后仅显示直子（含隐藏文件）", () => {
   const atRoot = listPickerChildRows(fixtureRows, "/");
   assert.deepEqual(
     atRoot.map((r) => r.path),
-    ["/notes", "/a.md"],
+    ["/notes", "/a.md", "/hidden.md"],
   );
 
   // 相当于点目录进入 /notes 后的列表
@@ -51,7 +51,7 @@ test("listPickerChildRows：点目录进 cwd 后仅显示直子", () => {
 });
 
 test("勾选目录确认产出 dir attachment", () => {
-  assert.deepEqual(attachmentsFromPickerSelection("/notes", []), [
+  assert.deepEqual(attachmentsFromPickerSelection(["/notes"], []), [
     {
       name: "notes",
       source: "attach",
@@ -61,7 +61,7 @@ test("勾选目录确认产出 dir attachment", () => {
     },
   ]);
   // 根目录 / 允许选择
-  assert.deepEqual(attachmentsFromPickerSelection("/", []), [
+  assert.deepEqual(attachmentsFromPickerSelection(["/"], []), [
     {
       name: "/",
       source: "attach",
@@ -74,8 +74,47 @@ test("勾选目录确认产出 dir attachment", () => {
 
 test("文件多选确认产出多条 text attachment", () => {
   assert.deepEqual(
-    attachmentsFromPickerSelection(null, ["/a.md", "/notes/b.md"]),
+    attachmentsFromPickerSelection([], ["/a.md", "/notes/b.md"]),
     [
+      {
+        name: "a.md",
+        source: "attach",
+        type: "text",
+        content: null,
+        path: "/a.md",
+      },
+      {
+        name: "b.md",
+        source: "attach",
+        type: "text",
+        content: null,
+        path: "/notes/b.md",
+      },
+    ],
+  );
+});
+
+test("多目录与多文件同确认不互斥", () => {
+  assert.deepEqual(
+    attachmentsFromPickerSelection(
+      ["/notes", "/"],
+      ["/a.md", "/notes/b.md"],
+    ),
+    [
+      {
+        name: "notes",
+        source: "attach",
+        type: "dir",
+        content: null,
+        path: "/notes",
+      },
+      {
+        name: "/",
+        source: "attach",
+        type: "dir",
+        content: null,
+        path: "/",
+      },
       {
         name: "a.md",
         source: "attach",

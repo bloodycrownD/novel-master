@@ -93,16 +93,22 @@ function findByTestId(root: TestRenderer.ReactTestInstance, testID: string) {
 }
 
 describe('listPickerChildRows / attachmentsFromPickerSelection', () => {
-  it('只列出 cwd 直子且排除隐藏文件与 cwd 自身', () => {
+  it('只列出 cwd 直子（含隐藏文件，不含 cwd 自身）', () => {
     const atRoot = listPickerChildRows(fixtureRows, '/');
-    expect(atRoot.map(r => r.path)).toEqual(['/notes', '/a.md']);
+    expect(atRoot.map(r => r.path)).toEqual([
+      '/notes',
+      '/a.md',
+      '/hidden.md',
+    ]);
 
     const inNotes = listPickerChildRows(fixtureRows, '/notes');
     expect(inNotes.map(r => r.path)).toEqual(['/notes/b.md', '/notes/c.md']);
   });
 
-  it('目录选中确认产出 dir attachment；文件多选产出 text', () => {
-    expect(attachmentsFromPickerSelection('/notes', [])).toEqual([
+  it('目录多选 + 文件多选同确认产出 dir 与 text', () => {
+    expect(
+      attachmentsFromPickerSelection(['/notes', '/'], ['/a.md', '/notes/b.md']),
+    ).toEqual([
       {
         name: 'notes',
         source: 'attach',
@@ -110,10 +116,13 @@ describe('listPickerChildRows / attachmentsFromPickerSelection', () => {
         content: null,
         path: '/notes',
       },
-    ]);
-    expect(
-      attachmentsFromPickerSelection(null, ['/a.md', '/notes/b.md']),
-    ).toEqual([
+      {
+        name: '/',
+        source: 'attach',
+        type: 'dir',
+        content: null,
+        path: '/',
+      },
       {
         name: 'a.md',
         source: 'attach',
@@ -260,6 +269,58 @@ describe('FileReferencePicker', () => {
         type: 'dir',
         content: null,
         path: '/',
+      },
+    ]);
+  });
+
+  it('隐藏文件可见；勾选目录与文件不互斥', async () => {
+    const onConfirm = jest.fn();
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <FileReferencePicker
+          visible
+          projectId="p1"
+          sessionId="s1"
+          onClose={jest.fn()}
+          onConfirm={onConfirm}
+        />,
+      );
+    });
+
+    // 根列表含隐藏文件
+    expect(findByTestId(tree!.root, 'file-ref-file-/hidden.md')).toBeTruthy();
+
+    await act(async () => {
+      findByTestId(tree!.root, 'file-ref-dir-check-/notes').props.onPress();
+      findByTestId(tree!.root, 'file-ref-file-/a.md').props.onPress();
+      findByTestId(tree!.root, 'file-ref-file-/hidden.md').props.onPress();
+    });
+    await act(async () => {
+      findByTestId(tree!.root, 'file-ref-confirm').props.onPress();
+    });
+
+    expect(onConfirm).toHaveBeenCalledWith([
+      {
+        name: 'notes',
+        source: 'attach',
+        type: 'dir',
+        content: null,
+        path: '/notes',
+      },
+      {
+        name: 'a.md',
+        source: 'attach',
+        type: 'text',
+        content: null,
+        path: '/a.md',
+      },
+      {
+        name: 'hidden.md',
+        source: 'attach',
+        type: 'text',
+        content: null,
+        path: '/hidden.md',
       },
     ]);
   });
