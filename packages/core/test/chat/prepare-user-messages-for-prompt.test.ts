@@ -96,7 +96,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(messageBodyText(reloaded), "继续");
   });
 
-  it("T-AT3: dir attach → 仅 depth=1 直子名字，无深层 path、无正文、不写 file_cache", async () => {
+  it("T-AT3: dir attach → $filetree ASCII depth=1，无深层 path、无正文、不写 file_cache", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -113,15 +113,21 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       vfs,
     });
 
-    // 根 + 直子名字；目录带尾 /
-    assert.equal(tree, "/notes/\n  a.md\n  sub/");
-    // 禁止嵌套展开与文件正文
+    // 根标签 basename+/（与 worktreeFileTreeRootLabel 口径）；├──/└──；dirs 先 files 后
+    assert.equal(
+      tree,
+      ["notes/", "├── sub/", "└── a.md"].join("\n"),
+    );
+    assert.ok(tree.includes("├──"));
+    assert.ok(tree.includes("└──"));
+    // 禁止嵌套展开、文件正文、XML、加载后缀
     assert.ok(!tree.includes("b.md"));
-    assert.ok(!tree.includes("/notes/sub"));
+    assert.ok(!tree.includes("/notes"));
     assert.ok(!tree.includes("AAA"));
     assert.ok(!tree.includes("BBB"));
     assert.ok(!tree.includes("<file"));
     assert.ok(!tree.includes("<dir"));
+    assert.ok(!tree.includes("全部加载"));
 
     const cacheKeysBefore = await sk.listKeys(
       session.id,
@@ -147,11 +153,15 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     });
     const body = messageBodyText(prepared[0]!);
     assert.match(body, /<attach>/);
-    assert.match(body, /\/notes\//);
+    assert.match(body, /notes\//);
+    assert.match(body, /├──/);
+    assert.match(body, /└──/);
     assert.match(body, /a\.md/);
     assert.match(body, /sub\//);
     assert.ok(!body.includes("AAA"));
     assert.ok(!body.includes("b.md"));
+    assert.ok(!body.includes("<file"));
+    assert.ok(!body.includes("<dir"));
 
     const cacheKeysAfter = await sk.listKeys(
       session.id,
