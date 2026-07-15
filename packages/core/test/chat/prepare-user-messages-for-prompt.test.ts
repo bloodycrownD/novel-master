@@ -96,7 +96,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(messageBodyText(reloaded), "继续");
   });
 
-  it("T-AT3: dir attach → export 含嵌套 dir，非顶层展平", async () => {
+  it("T-AT3: dir attach → 仅 depth=1 直子名字，无深层 path、无正文、不写 file_cache", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -112,12 +112,21 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       sessionKkv: sk,
       vfs,
     });
-    assert.match(tree, /<dir path="\/notes\/">/);
-    assert.match(tree, /<dir path="\/notes\/sub\/">/);
-    assert.match(tree, /path="\/notes\/a\.md"/);
-    assert.match(tree, /path="\/notes\/sub\/b\.md"/);
-    // 禁止把子文件拆成与根同级的并列顶层 file 而无 dir 包裹
-    assert.ok(tree.indexOf("<dir path=\"/notes/\">") < tree.indexOf('path="/notes/a.md"'));
+
+    // 根 + 直子名字；目录带尾 /
+    assert.equal(tree, "/notes/\n  a.md\n  sub/");
+    // 禁止嵌套展开与文件正文
+    assert.ok(!tree.includes("b.md"));
+    assert.ok(!tree.includes("/notes/sub"));
+    assert.ok(!tree.includes("AAA"));
+    assert.ok(!tree.includes("BBB"));
+    assert.ok(!tree.includes("<file"));
+    assert.ok(!tree.includes("<dir"));
+
+    const cacheKeysBefore = await sk.listKeys(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    );
 
     const msg = userMsg("看目录", {
       sessionId: session.id,
@@ -138,8 +147,17 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     });
     const body = messageBodyText(prepared[0]!);
     assert.match(body, /<attach>/);
-    assert.match(body, /<dir path="\/notes\/">/);
-    assert.match(body, /<dir path="\/notes\/sub\/">/);
+    assert.match(body, /\/notes\//);
+    assert.match(body, /a\.md/);
+    assert.match(body, /sub\//);
+    assert.ok(!body.includes("AAA"));
+    assert.ok(!body.includes("b.md"));
+
+    const cacheKeysAfter = await sk.listKeys(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    );
+    assert.deepEqual(cacheKeysAfter, cacheKeysBefore);
   });
 
   it("T-AT4: @ 文本写 full；@ 二进制写 filename", async () => {
