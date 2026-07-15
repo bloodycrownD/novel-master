@@ -1,5 +1,6 @@
 /**
- * `@` 目录附件：仅列出根下直子名字（文件 / 文件夹），不读正文、不写 file_cache。
+ * `@` 目录附件：仅列出根下直子名字（文件 / 文件夹），`$filetree` 风格 ASCII，
+ * 不读正文、不写 file_cache、无加载状态后缀。
  *
  * @module domain/chat/logic/render-dir-attach-tree
  */
@@ -20,15 +21,24 @@ export interface RenderDirAttachTreeDeps {
   readonly maxUtf8Bytes?: number;
 }
 
+type ChildEntry = { readonly kind: "dir" | "file"; readonly name: string };
+
 function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
 }
 
-function withTrailingSlash(dirPath: string): string {
-  if (dirPath === "" || dirPath === "/") {
-    return dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
+/**
+ * 根行标签：与 {@link worktreeFileTreeRootLabel} 口径一致——
+ * `/` → `/`；其它 path → `basename/`（例 `/notes` → `notes/`）。
+ */
+function attachDirTreeRootLabel(rootDir: string): string {
+  const normalized = rootDir.replace(/\/+$/, "") || "/";
+  if (normalized === "/") {
+    return "/";
   }
-  return dirPath.endsWith("/") ? dirPath : `${dirPath}/`;
+  const idx = normalized.lastIndexOf("/");
+  const base = idx >= 0 ? normalized.slice(idx + 1) : normalized;
+  return base.length > 0 ? `${base}/` : "/";
 }
 
 /** 取 path 末段名；目录带尾 `/`。 */
@@ -42,13 +52,13 @@ function entryDisplayName(
 }
 
 /**
- * 渲染以 `rootDir` 为根的 depth=1 名字树；超长截断并在末尾追加 `[truncated]` 注释行。
+ * 渲染以 `rootDir` 为根的 depth=1 `$filetree` ASCII 树；超长截断并在末尾追加 `[truncated]` 注释行。
  *
  * 例：
  * ```
- * /notes/
- *   a.md
- *   sub/
+ * notes/
+ * ├── a.md
+ * └── sub/
  * ```
  */
 export async function renderDirAttachTree(
@@ -57,7 +67,7 @@ export async function renderDirAttachTree(
 ): Promise<string> {
   const maxBytes = deps.maxUtf8Bytes ?? ATTACH_DIR_TREE_MAX_UTF8_BYTES;
   const normalizedRoot = rootDir.replace(/\/+$/, "") || "/";
-  const rootLine = withTrailingSlash(normalizedRoot);
+  const rootLine = attachDirTreeRootLabel(normalizedRoot);
 
   let entries: Awaited<ReturnType<VfsService["list"]>>;
   try {
@@ -67,16 +77,27 @@ export async function renderDirAttachTree(
     return rootLine;
   }
 
-  const childLines = entries
-    .map((e) => entryDisplayName(e.path, e.kind))
-    .sort((a, b) => a.localeCompare(b));
+  const dirs: ChildEntry[] = [];
+  const files: ChildEntry[] = [];
+  for (const e of entries) {
+    if (e.kind === "directory") {
+      dirs.push({ kind: "dir", name: entryDisplayName(e.path, "directory") });
+    } else {
+      files.push({ kind: "file", name: entryDisplayName(e.path, "file") });
+    }
+  }
+  dirs.sort((a, b) => a.name.localeCompare(b.name));
+  files.sort((a, b) => a.name.localeCompare(b.name));
+  const children = [...dirs, ...files];
 
-  // 根行 + 直子名字（两空格缩进）；目录名带尾 /
+  // 根行 + 直子（├── / └──）；单层无需 │ 深层前缀
   const parts: string[] = [`${rootLine}\n`];
   let truncated = false;
 
-  for (const name of childLines) {
-    const chunk = `  ${name}\n`;
+  for (let i = 0; i < children.length; i++) {
+    const isLast = i === children.length - 1;
+    const branch = isLast ? "└── " : "├── ";
+    const chunk = `${branch}${children[i]!.name}\n`;
     const next = parts.join("") + chunk;
     if (utf8ByteLength(next) > maxBytes) {
       truncated = true;
