@@ -113,6 +113,13 @@ export {
   buildUserOpsAttachment,
   previewPendingUserOpsAttachment,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
+export {
+  buildComposerStatusAttachments,
+  projectComposerStatusAttachments,
+  replaceComposerStatusAttachments,
+  userOpsAttachmentsFromChangedPaths,
+} from '../domain/chat/logic/project-composer-status-attachments.js';
+export type { ProjectComposerStatusAttachmentsDeps } from '../domain/chat/logic/project-composer-status-attachments.js';
 export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
