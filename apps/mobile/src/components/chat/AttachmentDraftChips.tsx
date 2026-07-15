@@ -12,13 +12,22 @@ export type AttachmentDraftChipsProps = {
   disabled?: boolean;
 };
 
-function chipLabel(a: MessageAttachment): string {
+/** 目录 chip（非 workplace）文案：`@${path}`（@ 与 path 无空格）。文件保持 `@ ${path}`。 */
+export function formatAttachmentChipLabel(a: MessageAttachment): string {
   if (a.source === 'user_ops') {
     return a.name || '用户操作';
   }
-  const prefix =
-    a.source === 'workplace' ? '工作区' : a.type === 'dir' ? '目录' : '@';
-  return `${prefix} ${a.path ?? a.name}`;
+  if (a.source === 'workplace') {
+    return `工作区 ${a.path ?? a.name}`;
+  }
+  if (a.type === 'dir') {
+    return `@${a.path ?? a.name}`;
+  }
+  return `@ ${a.path ?? a.name}`;
+}
+
+function isDirAttachChip(a: MessageAttachment): boolean {
+  return a.source !== 'workplace' && a.source !== 'user_ops' && a.type === 'dir';
 }
 
 export function AttachmentDraftChips({
@@ -37,30 +46,44 @@ export function AttachmentDraftChips({
       style={styles.row}
       contentContainerStyle={styles.content}
     >
-      {attachments.map((a, index) => (
-        <View
-          key={`${a.source}:${a.path ?? a.name}:${index}`}
-          style={[
-            styles.chip,
-            { backgroundColor: tokens.surface, borderColor: tokens.border },
-          ]}
-        >
-          <Text
-            style={[styles.label, { color: tokens.text }]}
-            numberOfLines={1}
+      {attachments.map((a, index) => {
+        const label = formatAttachmentChipLabel(a);
+        const dirChip = isDirAttachChip(a);
+        const labelColor = dirChip ? tokens.warning : tokens.text;
+        return (
+          <View
+            key={`${a.source}:${a.path ?? a.name}:${index}`}
+            style={[
+              styles.chip,
+              {
+                backgroundColor: tokens.surface,
+                borderColor: dirChip ? tokens.warning : tokens.border,
+              },
+            ]}
           >
-            {chipLabel(a)}
-          </Text>
-          <Pressable
-            accessibilityLabel={`移除 ${chipLabel(a)}`}
-            disabled={disabled}
-            onPress={() => onRemove(index)}
-            hitSlop={8}
-          >
-            <Text style={{ color: tokens.textSecondary }}>×</Text>
-          </Pressable>
-        </View>
-      ))}
+            <Text
+              style={[styles.label, { color: labelColor }]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+            <Pressable
+              accessibilityLabel={`移除 ${label}`}
+              disabled={disabled}
+              onPress={() => onRemove(index)}
+              hitSlop={8}
+            >
+              <Text
+                style={{
+                  color: dirChip ? tokens.warning : tokens.textSecondary,
+                }}
+              >
+                ×
+              </Text>
+            </Pressable>
+          </View>
+        );
+      })}
     </ScrollView>
   );
 }

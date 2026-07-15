@@ -4025,6 +4025,16 @@ html[data-theme="dark"] .chat-batch-bar {
   flex-shrink: 0;
 }
 
+/* 非 workplace 目录附件：目录黄 */
+.chat-composer__chip--dir {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 40%, var(--border-light));
+}
+
+.chat-composer__chip--dir .chat-composer__chip-remove {
+  color: var(--warning);
+}
+
 .chat-composer__chip-label {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4214,10 +4224,9 @@ html[data-theme="dark"] .chat-batch-bar {
   color: var(--text-secondary);
 }
 
+/* 选中仅靠勾选框 ☑/☐ 表达，不再给 is-selected 铺背景 */
 .file-ref-picker__row:hover,
-.file-ref-picker__row.is-selected,
-.file-ref-picker__row--split:hover,
-.file-ref-picker__row--split.is-selected {
+.file-ref-picker__row--split:hover {
   background: var(--background);
 }
 

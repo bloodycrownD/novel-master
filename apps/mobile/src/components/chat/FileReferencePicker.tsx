@@ -214,10 +214,7 @@ export function FileReferencePicker({
                   const checked = selectedDirs.has(item.path);
                   return (
                     <View
-                      style={[
-                        styles.row,
-                        checked && { backgroundColor: tokens.border },
-                      ]}
+                      style={styles.row}
                       testID={`file-ref-dir-${item.path}`}
                     >
                       <Pressable
@@ -247,10 +244,7 @@ export function FileReferencePicker({
                 const checked = selectedFiles.has(item.path);
                 return (
                   <View
-                    style={[
-                      styles.row,
-                      checked && { backgroundColor: tokens.border },
-                    ]}
+                    style={styles.row}
                     testID={`file-ref-file-row-${item.path}`}
                   >
                     <Pressable
