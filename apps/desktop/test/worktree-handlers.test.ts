@@ -157,7 +157,7 @@ describe("worktree ipc handlers", () => {
     setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 
-  it("遗留 captureSessionBlock IPC 清空 session kkv（非 BlockStore）", async () => {
+  it("遗留 captureSessionBlock IPC 清空 session kkv 并推空状态条", async () => {
     const rt = await getDesktopRuntime();
     await rt.sessionKkv.set(
       sessionId,
@@ -165,6 +165,15 @@ describe("worktree ipc handlers", () => {
       "full:/z.md",
       JSON.stringify({ body: "z", mtimeMs: 1 }),
     );
+
+    const sent: Array<{ channel: string; payload: unknown }> = [];
+    setComposerAttachmentsSuggestForwardTarget(() => {
+      return {
+        send(channel: string, payload: unknown) {
+          sent.push({ channel, payload });
+        },
+      } as never;
+    });
 
     const result = await handleWorktreeCaptureSessionBlock({
       projectId,
@@ -176,5 +185,19 @@ describe("worktree ipc handlers", () => {
       await rt.sessionKkv.get(sessionId, "file_cache", "full:/z.md"),
       null,
     );
+    assert.ok(
+      sent.some(
+        s =>
+          s.channel === IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST &&
+          (s.payload as { sessionId: string; attachments: unknown[] })
+            .sessionId === sessionId &&
+          Array.isArray(
+            (s.payload as { attachments: unknown[] }).attachments,
+          ) &&
+          (s.payload as { attachments: unknown[] }).attachments.length === 0,
+      ),
+      "重置常驻缓存后应推空状态条",
+    );
+    setComposerAttachmentsSuggestForwardTarget(() => undefined);
   });
 });

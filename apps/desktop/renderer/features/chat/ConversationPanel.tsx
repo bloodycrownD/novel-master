@@ -864,9 +864,19 @@ export function ConversationPanel({
   );
 }
 
+/** 手动压缩：ok 收尾 Toast；上条清空由 main 投影推送 COMPOSER_ATTACHMENTS_SUGGEST。 */
 export async function runCompaction(
   projectId: string,
   sessionId: string,
 ): Promise<void> {
-  await ipcCompactionManual({ projectId, sessionId });
+  const result = await ipcCompactionManual({ projectId, sessionId });
+  if (!result.ok) {
+    showToast(result.error.message);
+    return;
+  }
+  if (!result.data.ok) {
+    showToast('压缩部分失败');
+    return;
+  }
+  showToast('已压缩');
 }

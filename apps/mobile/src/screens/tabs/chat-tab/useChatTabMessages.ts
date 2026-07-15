@@ -27,6 +27,7 @@ import {
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
 import { writeChatComposerDraftState } from '@/storage/chat-composer-draft';
+import { refreshComposerStatusAfterSessionKkvCleared } from '@/services/project-composer-status.service';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
 import {
@@ -324,6 +325,10 @@ export function useChatTabMessageActions({
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
+                await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+                  projectId,
+                  sessionId,
+                });
                 showToast('已压缩');
               }
             } catch (error) {
@@ -539,6 +544,10 @@ export function useChatTabMessageActions({
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
+          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            projectId,
+            sessionId,
+          });
           const changed = result.hiddenCount + result.shownCount;
           showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
         } catch (error) {

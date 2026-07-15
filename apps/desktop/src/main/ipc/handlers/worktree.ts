@@ -25,6 +25,7 @@ import {
 import { notifyComposerAttachmentsSuggestToRenderer } from "../forward-composer-attachments-suggest.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
+import { notifyComposerStatusAfterSessionKkvCleared } from "../../services/notify-composer-status-after-kkv-clear.js";
 import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
 function toIpcFillPolicy(
@@ -142,6 +143,8 @@ export async function handleWorktreeCaptureSessionBlock(
   try {
     const rt = await getDesktopRuntime();
     await rt.sessionKkv.clearSession(req.sessionId);
+    // 手动「重置常驻缓存」同清上条状态 chip
+    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

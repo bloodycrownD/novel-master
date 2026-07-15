@@ -7,6 +7,12 @@ import {
   parseComposerDraftJson,
   serializeComposerDraftJson,
 } from "../../src/domain/chat/model/composer-draft.schema.js";
+import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
+import {
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
@@ -83,6 +89,76 @@ describe("SqliteSessionRepository", () => {
     const repoAfterRestart = new SqliteSessionRepository(ctx.conn);
     const again = await repoAfterRestart.getComposerDraftJson(session.id);
     assert.deepEqual(parseComposerDraftJson(again), draft);
+  });
+
+  it("T-LF1：clearSession 后 composer_draft 仍保留；状态投影空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteSessionRepository(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "draft-lf1-clear");
+
+    const draft = {
+      text: "置位后正文仍在",
+      attachments: [
+        {
+          name: "/keep.md",
+          source: "attach" as const,
+          type: "text" as const,
+          content: null,
+          path: "/keep.md",
+        },
+      ],
+    };
+    assert.equal(
+      await repo.setComposerDraftJson(
+        session.id,
+        serializeComposerDraftJson(draft),
+      ),
+      true,
+    );
+
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+      "full:/stale.md",
+      JSON.stringify({ body: "x", mtimeMs: 1 }),
+    );
+    await ctx.sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+      "[]",
+    );
+
+    await ctx.sessionKkv.clearSession(session.id);
+
+    assert.deepEqual(
+      parseComposerDraftJson(await repo.getComposerDraftJson(session.id)),
+      draft,
+    );
+    assert.equal(
+      await ctx.sessionKkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_FILE_CACHE,
+        "full:/stale.md",
+      ),
+      null,
+    );
+    assert.equal(
+      await ctx.sessionKkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        USER_VFS_PENDING_QUEUE_KEY,
+      ),
+      null,
+    );
+
+    const status = await projectComposerStatusAttachments(session.id, {
+      sessionKkv: ctx.sessionKkv,
+      loadLiveWorkplacePaths: async () => [],
+      previewUserOpsChangedPaths: async () => [],
+    });
+    assert.deepEqual(status, []);
   });
 });
 

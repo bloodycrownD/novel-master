@@ -5,6 +5,7 @@
  */
 import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
+import { refreshComposerStatusAfterSessionKkvCleared } from './project-composer-status.service';
 
 export interface SessionWorktreeBlockScope {
   readonly projectId: string;
@@ -30,11 +31,12 @@ export async function assembleWorkplaceForMobile(
   return { worktreeDisplay, capturedAtMs: Date.now() };
 }
 
-/** 手动重置常驻工作区缓存：clear session kkv，下次拼装重建。 */
+/** 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。 */
 export async function clearSessionWorkplaceKkv(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorktreeBlockScope,
 ) {
   await runtime.sessionKkv.clearSession(scope.sessionId);
+  await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
   return { worktreeDisplay: '', capturedAtMs: Date.now() };
 }
