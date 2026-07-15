@@ -10,12 +10,19 @@ export const SESSION_KKV_DOMAIN_RULE_SNAPSHOT = "rule_snapshot" as const;
 /** 文件缓存域：按展示档位缓存的正文。 */
 export const SESSION_KKV_DOMAIN_FILE_CACHE = "file_cache" as const;
 
+/** 用户 VFS pending 队列域（随 clearSession 清空）。 */
+export const SESSION_KKV_DOMAIN_USER_VFS_PENDING = "user_vfs_pending" as const;
+
 /** 规则快照域单键：`canon`。 */
 export const RULE_SNAPSHOT_CANON_KEY = "canon" as const;
+
+/** user_vfs_pending 域单键：FIFO 队列 JSON。 */
+export const USER_VFS_PENDING_QUEUE_KEY = "queue" as const;
 
 export type SessionKkvDomain =
   | typeof SESSION_KKV_DOMAIN_RULE_SNAPSHOT
   | typeof SESSION_KKV_DOMAIN_FILE_CACHE
+  | typeof SESSION_KKV_DOMAIN_USER_VFS_PENDING
   | (string & {});
 
 /** 可写入 file_cache 的展示档位（不含 hidden）。 */

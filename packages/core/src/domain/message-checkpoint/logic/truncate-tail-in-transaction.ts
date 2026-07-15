@@ -6,7 +6,11 @@
 
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
+import {
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import type { SessionKkvRepository } from "@/domain/session-kkv/repositories/session-kkv.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
 import type { VfsRevisionRepository } from "@/domain/vfs/repositories/vfs-revision.port.js";
 import { sweepSessionRevisions } from "./revision-gc.js";
@@ -23,7 +27,8 @@ export type TruncateTailParams = {
 export type TruncateTailDeps = {
   readonly messages: MessageRepository;
   readonly checkpoints: MessageCheckpointRepository;
-  readonly sessions: SessionRepository;
+  /** pending 队列：session kkv（tail 非空时清空）。 */
+  readonly sessionKkv: SessionKkvRepository;
   readonly revisions: VfsRevisionRepository;
   readonly entries: VfsEntryRepository;
 };
@@ -35,7 +40,7 @@ export type TruncateTailDeps = {
  * 2. deleteCheckpointsForMessages(sessionId, tailIds)
  * 3. messages.deleteAfterSeq(sessionId, afterSeq)
  * 4. 若 sweepRevisions → sweepSessionRevisions(...)
- * 5. 若 tail 非空 → sessions.setUserVfsPendingJson(sessionId, null)
+ * 5. 若 tail 非空 → 清空 session kkv `user_vfs_pending` 队列键
  */
 export async function truncateTailInTransaction(
   deps: TruncateTailDeps,
@@ -61,6 +66,10 @@ export async function truncateTailInTransaction(
   }
 
   if (tailIds.length > 0) {
-    await deps.sessions.setUserVfsPendingJson(sessionId, null);
+    await deps.sessionKkv.delete(
+      sessionId,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+    );
   }
 }

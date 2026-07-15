@@ -23,13 +23,4 @@ export interface SessionRepository {
   delete(id: string): Promise<boolean>;
 
   deleteByProject(projectId: string): Promise<void>;
-
-  /** 读取会话 `user_vfs_pending_json` 列；无行时返回 `null`。 */
-  getUserVfsPendingJson(sessionId: string): Promise<string | null>;
-
-  /** 写入或清空会话 `user_vfs_pending_json` 列。 */
-  setUserVfsPendingJson(
-    sessionId: string,
-    json: string | null,
-  ): Promise<boolean>;
 }

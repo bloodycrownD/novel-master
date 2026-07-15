@@ -12,6 +12,8 @@ import { createSessionKkvService } from "../../src/service/session-kkv/create-se
 import {
   fileCacheKey,
   SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
 } from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import { parseFileCachePayload } from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
 
@@ -43,6 +45,18 @@ import {
 } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
+
+/** T-OP1：pending 存于 session kkv，不经 chat_session 列。 */
+async function loadPendingQueueJson(
+  conn: TdbcConnection,
+  sessionId: string,
+): Promise<string | null> {
+  return createSessionKkvService(conn).get(
+    sessionId,
+    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+    USER_VFS_PENDING_QUEUE_KEY,
+  );
+}
 
 function makeToolCtx(
   conn: TdbcConnection,
@@ -88,6 +102,7 @@ function makeUserVfsTurnDeps(
   return {
     conn,
     sessions: sessionRepo,
+    sessionKkv: createSessionKkvService(conn),
     messages,
     chatMessages: messageRepo,
     checkpoints: checkpointRepo,
@@ -234,7 +249,6 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     const fail = await userVfsTurn.executeOp(session.id, {
       actionXml: '<user-vfs-action kind="save" path="/x.md" method="write" />',
@@ -247,14 +261,14 @@ describe("UserVfsTurnService", () => {
       ],
     });
     assert.equal(fail.ok, false);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
 
     const ok = await userVfsTurn.executeOp(
       session.id,
       writeOp("/ok.md", "hello", "tu_ok"),
     );
     assert.equal(ok.ok, true);
-    const pendingJson = await sessionRepo.getUserVfsPendingJson(session.id);
+    const pendingJson = await loadPendingQueueJson(ctx.conn, session.id);
     assert.ok(pendingJson);
     const pending = JSON.parse(pendingJson!) as unknown[];
     assert.equal(pending.length, 1);
@@ -266,7 +280,6 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     await userVfsTurn.executeOp(session.id, writeOp("/a.md", "A"));
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
@@ -282,7 +295,7 @@ describe("UserVfsTurnService", () => {
       ),
       false,
     );
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
   it("T-UO3：user_ops attachment.content 为 action XML（非 JSON）", async () => {
@@ -462,7 +475,6 @@ describe("UserVfsTurnService", () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
     registry.register({
@@ -484,7 +496,7 @@ describe("UserVfsTurnService", () => {
       tools: [{ id: "tu_boom", name: "test.boom", input: {} }],
     });
     assert.equal(result.ok, false);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
 
@@ -492,7 +504,6 @@ describe("UserVfsTurnService", () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -541,7 +552,7 @@ describe("UserVfsTurnService", () => {
     });
 
     assert.equal(result.ok, false);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
     await assert.rejects(() => svfs.read("/a.md"));
     await assert.rejects(() => svfs.read("/b.md"));
   });
@@ -550,7 +561,6 @@ describe("UserVfsTurnService", () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
     const svfs = ctx.sessionVfs(project.id, session.id);
 
     const registry = new ToolRegistry<BuiltinToolContext>();
@@ -577,7 +587,7 @@ describe("UserVfsTurnService", () => {
     });
     assert.equal(ok.ok, true);
 
-    const pendingJson = await sessionRepo.getUserVfsPendingJson(session.id);
+    const pendingJson = await loadPendingQueueJson(ctx.conn, session.id);
     assert.ok(pendingJson);
     assert.equal(JSON.parse(pendingJson).length, 1);
     assert.equal((await svfs.read("/1.md")).content, "one");
@@ -613,7 +623,6 @@ describe("UserVfsTurnService", () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     let captureCalled = false;
     const deps = makeUserVfsTurnDeps(ctx.conn, {
@@ -631,7 +640,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.flushed, true);
     assert.equal(captureCalled, false);
     assert.equal((await deps.messages.listBySession(session.id)).length, 0);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
   it("F4 flush：pending 非空但 net diff 空（删目录再 mkdir 同路径）→ 无 message、pending 清空", async () => {
@@ -639,7 +648,6 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     await userVfsTurn.executeOp(session.id, buildUserVfsMkdirOp("/drafts"));
     await userVfsTurn.executeOp(session.id, buildUserVfsDeleteOp("/drafts", true));
@@ -648,7 +656,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.flushed, false);
     assert.deepEqual(flush.attachments, []);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
   it("F4 flush：真删除仍产出 user_ops（含 delete action XML）", async () => {
@@ -656,12 +664,11 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     await userVfsTurn.executeOp(session.id, writeOp("/gone.md", "bye"));
     const firstFlush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(firstFlush.flushed, true);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
 
     // 第一次 ops 需落 checkpoint 才能作为后续 delete 的 baseline
     const anchor = await ctx.messages.append(
@@ -688,7 +695,6 @@ describe("UserVfsTurnService", () => {
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessionRepo = new SqliteSessionRepository(ctx.conn);
 
     await userVfsTurn.executeOp(session.id, writeOp("/round.md", "same"));
     const first = await userVfsTurn.flushPendingUserVfsTurns(session.id);
@@ -706,7 +712,7 @@ describe("UserVfsTurnService", () => {
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, false);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
-    assert.equal(await sessionRepo.getUserVfsPendingJson(session.id), null);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
   });
 
   it("executeOp 可递归删除目录（不触发 IS_DIRECTORY）", async () => {

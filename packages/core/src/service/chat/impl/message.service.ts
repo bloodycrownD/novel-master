@@ -203,7 +203,6 @@ export class DefaultMessageService implements MessageService {
         id: randomUUID(),
         projectId: source.projectId,
         title: forkTitle,
-        userVfsPendingJson: source.userVfsPendingJson,
         createdAtMs: now,
         updatedAtMs: now,
       };

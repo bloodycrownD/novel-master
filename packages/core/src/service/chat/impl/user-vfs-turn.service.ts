@@ -17,6 +17,10 @@ import type { MessageRepository } from "@/domain/chat/repositories/message.port.
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
 import {
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
+import {
   toPhysicalPath,
   type VfsScope,
 } from "@/domain/vfs/logic/vfs-path-mapper.js";
@@ -41,6 +45,7 @@ import {
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
 import type {
   UserVfsFlushResult,
@@ -53,6 +58,8 @@ import type {
 export interface UserVfsTurnServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
+  /** pending 队列：session kkv 域 `user_vfs_pending`。 */
+  readonly sessionKkv: SessionKkvService;
   readonly messages: MessageService;
   /** flush 基准解析：会话消息 seq 上界。 */
   readonly chatMessages: MessageRepository;
@@ -115,10 +122,14 @@ async function loadWorkspaceFlushContentMaps(
 }
 
 async function loadPendingQueue(
-  sessions: SessionRepository,
+  sessionKkv: SessionKkvService,
   sessionId: string,
 ): Promise<UserVfsPendingQueue> {
-  const json = await sessions.getUserVfsPendingJson(sessionId);
+  const json = await sessionKkv.get(
+    sessionId,
+    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+    USER_VFS_PENDING_QUEUE_KEY,
+  );
   if (json == null || json.trim() === "") {
     return [];
   }
@@ -126,15 +137,24 @@ async function loadPendingQueue(
 }
 
 async function savePendingQueue(
-  sessions: SessionRepository,
+  sessionKkv: SessionKkvService,
   sessionId: string,
   queue: UserVfsPendingQueue,
 ): Promise<void> {
   if (queue.length === 0) {
-    await sessions.setUserVfsPendingJson(sessionId, null);
+    await sessionKkv.delete(
+      sessionId,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+    );
     return;
   }
-  await sessions.setUserVfsPendingJson(sessionId, JSON.stringify(queue));
+  await sessionKkv.set(
+    sessionId,
+    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+    USER_VFS_PENDING_QUEUE_KEY,
+    JSON.stringify(queue),
+  );
 }
 
 /**
@@ -208,14 +228,14 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { ok: false, error: failed.error, partialFailure: true };
     }
 
-    const queue = await loadPendingQueue(this.deps.sessions, sessionId);
+    const queue = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     const entry: UserVfsPendingEntry = {
       actionXml: op.actionXml,
       tools: op.tools.map((tool) => ({ id: tool.id, name: tool.name })),
       createdAtMs: Date.now(),
     };
     queue.push(entry);
-    await savePendingQueue(this.deps.sessions, sessionId, queue);
+    await savePendingQueue(this.deps.sessionKkv, sessionId, queue);
     return { ok: true };
   }
 
@@ -227,7 +247,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       throw chatNotFound("session", sessionId);
     }
 
-    const pending = await loadPendingQueue(this.deps.sessions, sessionId);
+    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     if (pending.length === 0) {
       return { flushed: false, attachments: [] };
     }
@@ -264,7 +284,7 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     const actionsXml = synthesizeUserVfsFlushActions(diff);
 
     if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
-      await savePendingQueue(this.deps.sessions, sessionId, []);
+      await savePendingQueue(this.deps.sessionKkv, sessionId, []);
       return { flushed: false, attachments: [] };
     }
 
@@ -273,12 +293,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       toolNames.length > 0 ? [...new Set(toolNames)].join(", ") : "user_ops";
     const attachments = [buildUserOpsAttachment(actionsXml, name)];
 
-    await savePendingQueue(this.deps.sessions, sessionId, []);
+    await savePendingQueue(this.deps.sessionKkv, sessionId, []);
     return { flushed: true, attachments };
   }
 
   async hasPendingTurns(sessionId: string): Promise<boolean> {
-    const pending = await loadPendingQueue(this.deps.sessions, sessionId);
+    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     return pending.length > 0;
   }
 }

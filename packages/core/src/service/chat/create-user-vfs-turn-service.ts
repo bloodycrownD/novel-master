@@ -75,6 +75,7 @@ export function createUserVfsTurnServiceBundle(
   const userVfsTurn = new DefaultUserVfsTurnService({
     conn,
     sessions: sessionRepo,
+    sessionKkv,
     messages,
     chatMessages: messageRepo,
     checkpoints: checkpointRepo,
