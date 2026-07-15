@@ -8,6 +8,7 @@ import { z } from "zod";
 import { type BuiltinToolContext, type TdbcConnection } from "@novel-master/core";
 
 import { createUserVfsTurnServiceBundle, readMessageMetadata, textBlocks, TOOL_TURN_BRIDGE_TEXT } from "@novel-master/core/chat";
+import { projectComposerStatusAttachments } from "../../src/domain/chat/logic/project-composer-status-attachments.js";
 import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   fileCacheKey,
@@ -826,6 +827,55 @@ describe("UserVfsTurnService", () => {
     assert.deepEqual([...preview], []);
     assert.equal(await userVfsTurn.hasPendingTurns(session.id), true);
     assert.ok(await loadPendingQueueJson(ctx.conn, session.id));
+  });
+
+  it("T-SD1：发送 flush 出 user_ops → pending 空且 checkpoint 后上条空", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/sd1.md", "payload", "tu_sd1"),
+    );
+
+    const statusDeps = {
+      sessionKkv: ctx.sessionKkv,
+      loadLiveWorkplacePaths: async () => [] as const,
+      previewUserOpsChangedPaths: (id: string) =>
+        userVfsTurn.previewUserOpsChangedPaths(id),
+    };
+
+    const before = await projectComposerStatusAttachments(
+      session.id,
+      statusDeps,
+    );
+    assert.ok(
+      before.some(a => a.source === "user_ops" && a.path === "/sd1.md"),
+      "flush 前应有 user_ops 状态 chip",
+    );
+
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(await userVfsTurn.hasPendingTurns(session.id), false);
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+
+    // 现网发送：append 带 user_ops → capture checkpoint（投影相对新基线）
+    const anchor = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("send"),
+      { attachments: flush.attachments },
+    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, anchor.id);
+
+    const after = await projectComposerStatusAttachments(session.id, statusDeps);
+    assert.equal(
+      after.filter(a => a.source === "user_ops").length,
+      0,
+      "发送收尾后上条不应再有 user_ops",
+    );
   });
 
 });

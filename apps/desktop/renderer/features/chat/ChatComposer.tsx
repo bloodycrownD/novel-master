@@ -15,6 +15,7 @@ import {
   ipcMessagesAppendToolTurnBridge,
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
+  ipcSessionsProjectComposerStatus,
   onComposerAttachmentsSuggest,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
@@ -196,6 +197,16 @@ export function ChatComposer({
       }
 
       await onMessagesChanged();
+      // 发送 flush 后 pending 空 → 上条应空（整清 draft 后仍重投影保险）
+      const statusRes = await ipcSessionsProjectComposerStatus({ sessionId });
+      if (statusRes.ok) {
+        onAttachmentsChange(
+          replaceComposerStatusAttachments(
+            attachmentsRef.current,
+            statusRes.data,
+          ),
+        );
+      }
       return true;
     },
     [

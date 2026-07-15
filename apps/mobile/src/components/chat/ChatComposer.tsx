@@ -238,6 +238,26 @@ export function ChatComposer({
             ).catch(() => undefined);
           },
         });
+        // 发送 flush 后 pending 空 → 上条应空
+        try {
+          const session = await runtime.sessions.get(sessionId);
+          const worktree = runtime.worktree({
+            kind: 'session',
+            projectId: session.projectId,
+            sessionId,
+          });
+          const status = await projectComposerStatusForSession(
+            runtime,
+            worktree,
+            sessionId,
+          );
+          applyComposerStatusAttachmentsReplace({
+            sessionId,
+            attachments: status,
+          });
+        } catch {
+          // 投影失败不影响发送结果
+        }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           return;
