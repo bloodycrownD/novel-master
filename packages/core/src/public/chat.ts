@@ -86,6 +86,7 @@ export {
 export { resolveFlushBaselineTree } from '../domain/chat/logic/resolve-flush-baseline-tree.js';
 export { resolveCurrentWorkspaceSnapshot } from '../domain/chat/logic/resolve-current-workspace-snapshot.js';
 export {
+  collectUserOpsChangedPaths,
   diffWorkspaceForUserVfsFlush,
   isWorkspaceFlushDiffEmpty,
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';

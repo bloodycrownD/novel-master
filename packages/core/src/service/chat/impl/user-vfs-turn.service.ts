@@ -6,8 +6,10 @@
 
 import { buildUserOpsAttachment } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import {
+  collectUserOpsChangedPaths,
   diffWorkspaceForUserVfsFlush,
   isWorkspaceFlushDiffEmpty,
+  type WorkspaceFlushDiff,
 } from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
 import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
 import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
@@ -252,35 +254,10 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { flushed: false, attachments: [] };
     }
 
-    const baseline = await resolveFlushBaselineTree(
-      this.deps.checkpoints,
-      this.deps.chatMessages,
+    const diff = await this.resolveWorkspaceFlushDiff(
       sessionId,
-    );
-    const current = await resolveCurrentWorkspaceSnapshot(
-      this.deps.entries,
       session.projectId,
-      sessionId,
     );
-    const scope: VfsScope = {
-      kind: "session",
-      projectId: session.projectId,
-      sessionId,
-    };
-    const { baselineContentByPath, currentContentByPath } =
-      await loadWorkspaceFlushContentMaps(
-        this.deps.revisions,
-        scope,
-        baseline,
-        current,
-      );
-
-    const diff = diffWorkspaceForUserVfsFlush({
-      baseline,
-      current,
-      baselineContentByPath,
-      currentContentByPath,
-    });
     const actionsXml = synthesizeUserVfsFlushActions(diff);
 
     if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
@@ -297,8 +274,62 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     return { flushed: true, attachments };
   }
 
+  /**
+   * 相对 checkpoint 的净 path 集；不读 pending 也不改队列。
+   */
+  async previewUserOpsChangedPaths(
+    sessionId: string,
+  ): Promise<readonly string[]> {
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+
+    const diff = await this.resolveWorkspaceFlushDiff(
+      sessionId,
+      session.projectId,
+    );
+    return collectUserOpsChangedPaths(diff);
+  }
+
   async hasPendingTurns(sessionId: string): Promise<boolean> {
     const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     return pending.length > 0;
+  }
+
+  /** flush / preview 共用：baseline + current + 正文 → 净 diff。 */
+  private async resolveWorkspaceFlushDiff(
+    sessionId: string,
+    projectId: string,
+  ): Promise<WorkspaceFlushDiff> {
+    const baseline = await resolveFlushBaselineTree(
+      this.deps.checkpoints,
+      this.deps.chatMessages,
+      sessionId,
+    );
+    const current = await resolveCurrentWorkspaceSnapshot(
+      this.deps.entries,
+      projectId,
+      sessionId,
+    );
+    const scope: VfsScope = {
+      kind: "session",
+      projectId,
+      sessionId,
+    };
+    const { baselineContentByPath, currentContentByPath } =
+      await loadWorkspaceFlushContentMaps(
+        this.deps.revisions,
+        scope,
+        baseline,
+        current,
+      );
+
+    return diffWorkspaceForUserVfsFlush({
+      baseline,
+      current,
+      baselineContentByPath,
+      currentContentByPath,
+    });
   }
 }

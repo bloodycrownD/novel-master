@@ -111,6 +111,37 @@ export function isWorkspaceFlushDiffEmpty(diff: WorkspaceFlushDiff): boolean {
 }
 
 /**
+ * 从 flush 净 diff 收集受影响 path（稳定排序）。
+ *
+ * @remarks rename 计入 `from` 与 `to`；供 Composer `user_ops` chip 投影与 preview API 复用。
+ */
+export function collectUserOpsChangedPaths(
+  diff: WorkspaceFlushDiff,
+): readonly string[] {
+  const paths = new Set<string>();
+  for (const path of diff.deletedFiles) {
+    paths.add(path);
+  }
+  for (const { path } of diff.addedFiles) {
+    paths.add(path);
+  }
+  for (const { path } of diff.changedFiles) {
+    paths.add(path);
+  }
+  for (const dir of diff.addedDirs) {
+    paths.add(dir);
+  }
+  for (const dir of diff.deletedDirs) {
+    paths.add(dir);
+  }
+  for (const { from, to } of diff.renames) {
+    paths.add(from);
+    paths.add(to);
+  }
+  return [...paths].sort();
+}
+
+/**
  * 对比 baseline 与 current 快照，产出 flush 用净变更。
  *
  * @remarks 双方共有 path 且正文相等则跳过（含 edit 后改回）；rename 优先于 delete+write。

@@ -4,6 +4,7 @@
   "buildUserOpsAttachment",
   "buildUserVfsTurnView",
   "ChatError",
+  "collectUserOpsChangedPaths",
   "computeHideRangeFromSelection",
   "computeSetFloorRanges",
   "computeShowRangeFromSelection",

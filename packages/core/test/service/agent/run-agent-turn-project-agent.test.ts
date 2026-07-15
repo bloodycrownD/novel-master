@@ -40,6 +40,7 @@ function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
     flushPendingUserVfsTurns: async () => ({ flushed: false, attachments: [] }),
+    previewUserOpsChangedPaths: async () => [],
     hasPendingTurns: async () => false,
   };
 }

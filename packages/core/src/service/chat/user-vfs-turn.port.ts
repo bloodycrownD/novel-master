@@ -52,6 +52,13 @@ export interface UserVfsTurnService {
    */
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;
 
+  /**
+   * 相对上次发送 checkpoint 的净变更 path 集（稳定排序）；**不清** pending。
+   *
+   * @remarks 复用 flush 同源 baseline / current / diff；禁止调用 flush 或 `savePendingQueue([])`。
+   */
+  previewUserOpsChangedPaths(sessionId: string): Promise<readonly string[]>;
+
   /** 会话是否存在待 flush 的 VFS pending 条目。 */
   hasPendingTurns(sessionId: string): Promise<boolean>;
 }

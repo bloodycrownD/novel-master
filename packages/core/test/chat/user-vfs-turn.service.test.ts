@@ -128,6 +128,15 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
   };
 }
 
+/** 从 user_ops attachment XML 抽取 path/from/to（稳定排序）。 */
+function pathsFromUserOpsXml(content: string): string[] {
+  const paths = new Set<string>();
+  for (const match of content.matchAll(/\b(?:path|from|to)="([^"]+)"/g)) {
+    paths.add(match[1]!);
+  }
+  return [...paths].sort();
+}
+
 describe("UserVfsTurnService", () => {
   it("F1：A+U pending 空续跑后顺序为 A, U（含 user_ops，无 UA）", async () => {
     const ctx = getNovelMasterTestContext();
@@ -755,6 +764,68 @@ describe("UserVfsTurnService", () => {
     const payload = parseFileCachePayload(raw!);
     assert.ok(payload != null);
     assert.equal(payload!.body, "from-bundle");
+  });
+
+  it("T-OP2：preview path 与即将 flush 的 path 集一致，且不清 pending", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await userVfsTurn.executeOp(session.id, writeOp("/op2-a.md", "A", "tu_a"));
+    await userVfsTurn.executeOp(session.id, writeOp("/op2-b.md", "B", "tu_b"));
+
+    const preview = await userVfsTurn.previewUserOpsChangedPaths(session.id);
+    assert.deepEqual([...preview], ["/op2-a.md", "/op2-b.md"]);
+    assert.equal(await userVfsTurn.hasPendingTurns(session.id), true);
+    assert.ok(await loadPendingQueueJson(ctx.conn, session.id));
+
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.deepEqual(
+      pathsFromUserOpsXml(flush.attachments[0]!.content ?? ""),
+      [...preview],
+    );
+    assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
+  });
+
+  it("T-OP3：同 path 写 A 再写回 baseline → preview 空集且不清 pending", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/op3.md", "baseline", "tu_base"),
+    );
+    const firstFlush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(firstFlush.flushed, true);
+    const anchor = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks(""),
+      { attachments: firstFlush.attachments },
+    );
+    await ctx.messageCheckpoint.capture(session.id, project.id, anchor.id);
+
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/op3.md", "changed", "tu_a"),
+    );
+    assert.deepEqual(
+      [...(await userVfsTurn.previewUserOpsChangedPaths(session.id))],
+      ["/op3.md"],
+    );
+
+    await userVfsTurn.executeOp(
+      session.id,
+      writeOp("/op3.md", "baseline", "tu_back"),
+    );
+    const preview = await userVfsTurn.previewUserOpsChangedPaths(session.id);
+    assert.deepEqual([...preview], []);
+    assert.equal(await userVfsTurn.hasPendingTurns(session.id), true);
+    assert.ok(await loadPendingQueueJson(ctx.conn, session.id));
   });
 
 });

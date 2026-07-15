@@ -15,12 +15,15 @@ import {
 function mockUserVfsTurn(overrides: {
   readonly flushPendingUserVfsTurns?: UserVfsTurnService["flushPendingUserVfsTurns"];
   readonly hasPendingTurns?: UserVfsTurnService["hasPendingTurns"];
+  readonly previewUserOpsChangedPaths?: UserVfsTurnService["previewUserOpsChangedPaths"];
 }): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
     flushPendingUserVfsTurns:
       overrides.flushPendingUserVfsTurns ??
       (async () => ({ flushed: false, attachments: [] })),
+    previewUserOpsChangedPaths:
+      overrides.previewUserOpsChangedPaths ?? (async () => []),
     hasPendingTurns:
       overrides.hasPendingTurns ?? (async () => false),
   };
