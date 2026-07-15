@@ -35,19 +35,22 @@ async function up(tx: TdbcConnection): Promise<void> {
   // bootstrap canonical DDL 可能已创建同名索引，先删避免新表建索引时冲突。
   await tx.execute(`DROP INDEX IF EXISTS idx_chat_session_project`);
 
+  // 与当前 canonical DDL 对齐（含 composer_draft_json；旧 pending 库通常尚无该列 → NULL）
   await tx.execute(`
     CREATE TABLE chat_session_new (
       id TEXT PRIMARY KEY,
       project_id TEXT NOT NULL,
       title TEXT,
+      composer_draft_json TEXT NULL,
       created_at_ms INTEGER NOT NULL,
       updated_at_ms INTEGER NOT NULL
     )
   `);
 
+  const copyDraft = columns.has("composer_draft_json");
   await tx.execute(`
-    INSERT INTO chat_session_new (id, project_id, title, created_at_ms, updated_at_ms)
-    SELECT id, project_id, title, created_at_ms, updated_at_ms
+    INSERT INTO chat_session_new (id, project_id, title, composer_draft_json, created_at_ms, updated_at_ms)
+    SELECT id, project_id, title, ${copyDraft ? "composer_draft_json" : "NULL"}, created_at_ms, updated_at_ms
     FROM chat_session
   `);
 

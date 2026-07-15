@@ -18,6 +18,12 @@ export type SchemaColumnAlignment = {
 /** 当前版本运行必需的 legacy 列清单（顺序无关，逐项幂等）。 */
 export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   {
+    table: "chat_session",
+    column: "composer_draft_json",
+    addColumnSql:
+      "ALTER TABLE chat_session ADD COLUMN composer_draft_json TEXT NULL",
+  },
+  {
     table: "chat_message",
     column: "hidden",
     addColumnSql:

@@ -26,6 +26,18 @@ export {
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from '../domain/chat/model/message-attachment.schema.js';
+export {
+  EMPTY_COMPOSER_DRAFT,
+  composerDraftAttachmentSchema,
+  composerDraftSchema,
+  isComposerDraftAttachment,
+  parseComposerDraftJson,
+  serializeComposerDraftJson,
+} from '../domain/chat/model/composer-draft.schema.js';
+export type {
+  ComposerDraft,
+  ComposerDraftAttachment,
+} from '../domain/chat/model/composer-draft.schema.js';
 export { wrapUserMessageForLlm } from '../domain/chat/logic/wrap-user-message-for-llm.js';
 export {
   prepareUserMessagesForPrompt,

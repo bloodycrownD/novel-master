@@ -4,6 +4,10 @@ import { describe, it } from "node:test";
 import { bootstrapNovelMaster, open } from "@novel-master/core";
 import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
 import {
+  parseComposerDraftJson,
+  serializeComposerDraftJson,
+} from "../../src/domain/chat/model/composer-draft.schema.js";
+import {
   BETTER_SQLITE3_DRIVER_NAME,
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
@@ -45,6 +49,40 @@ describe("SqliteSessionRepository", () => {
     assert.ok(loaded);
     assert.equal(loaded.title, "after");
     assert.equal(loaded.updatedAtMs, now);
+  });
+
+  it("T-LF1：写 composer_draft_json → 读回 text+attach", async () => {
+    const ctx = getNovelMasterTestContext();
+    const repo = new SqliteSessionRepository(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id, "draft-lf1");
+
+    assert.equal(await repo.getComposerDraftJson(session.id), null);
+
+    const draft = {
+      text: "杀进程应仍在",
+      attachments: [
+        {
+          name: "/chapter.md",
+          source: "attach" as const,
+          type: "text" as const,
+          content: null,
+          path: "/chapter.md",
+        },
+      ],
+    };
+    const draftJson = serializeComposerDraftJson(draft);
+    assert.ok(draftJson != null);
+    assert.equal(await repo.setComposerDraftJson(session.id, draftJson), true);
+
+    const raw = await repo.getComposerDraftJson(session.id);
+    assert.equal(raw, draftJson);
+    assert.deepEqual(parseComposerDraftJson(raw), draft);
+
+    // 模拟「重启」：新 repo 实例读同一连接
+    const repoAfterRestart = new SqliteSessionRepository(ctx.conn);
+    const again = await repoAfterRestart.getComposerDraftJson(session.id);
+    assert.deepEqual(parseComposerDraftJson(again), draft);
   });
 });
 

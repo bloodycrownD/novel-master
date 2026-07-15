@@ -58,6 +58,7 @@ describe("schema 列对齐（T-B3）", () => {
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.equal(columns.has("user_vfs_pending_json"), false);
+    assert.ok(columns.has("composer_draft_json"));
 
     const repo = new SqliteSessionRepository(conn);
     const sessions = await repo.listByProject(randomUUID());
@@ -157,6 +158,7 @@ describe("schema 列对齐（T-B3）", () => {
 
     const sessionCols = await tableColumnNames(conn, "chat_session");
     assert.equal(sessionCols.has("user_vfs_pending_json"), false);
+    assert.ok(sessionCols.has("composer_draft_json"));
 
     await conn.close();
   });
@@ -179,6 +181,9 @@ describe("schema 列对齐（T-B3）", () => {
     assert.equal(
       (await tableColumnNames(conn, "chat_session")).has("user_vfs_pending_json"),
       false,
+    );
+    assert.ok(
+      (await tableColumnNames(conn, "chat_session")).has("composer_draft_json"),
     );
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
     assert.ok((await tableColumnNames(conn, "chat_project")).has("agent_config_json"));
@@ -218,6 +223,7 @@ describe("schema 列对齐（T-B3）", () => {
 
     const columns = await tableColumnNames(conn, "chat_session");
     assert.equal(columns.has("user_vfs_pending_json"), false);
+    assert.ok(columns.has("composer_draft_json"));
 
     const sessionKkv = createSessionKkvService(conn);
     const pendingJson = JSON.stringify([

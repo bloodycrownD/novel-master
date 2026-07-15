@@ -111,4 +111,32 @@ export class SqliteSessionRepository implements SessionRepository {
       { projectId },
     );
   }
+
+  async getComposerDraftJson(id: string): Promise<string | null> {
+    const rows = await queryTemplate(
+      this.conn,
+      this.parser,
+      `SELECT composer_draft_json FROM chat_session WHERE id = #{id}`,
+      { id },
+    );
+    if (rows.length === 0) {
+      return null;
+    }
+    const value = rows[0]!.composer_draft_json;
+    return value == null ? null : String(value);
+  }
+
+  async setComposerDraftJson(
+    id: string,
+    draftJson: string | null,
+  ): Promise<boolean> {
+    const result = await executeTemplate(
+      this.conn,
+      this.parser,
+      `UPDATE chat_session SET composer_draft_json = #{draftJson}
+       WHERE id = #{id}`,
+      { id, draftJson },
+    );
+    return result.changes > 0;
+  }
 }
