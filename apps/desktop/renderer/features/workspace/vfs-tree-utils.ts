@@ -50,6 +50,11 @@ export function parentLogicalPath(path: string): string | null {
   return path.slice(0, idx);
 }
 
+/** `childPath` 是否为 `dirPath` 的直子路径。 */
+export function isDirectChild(dirPath: string, childPath: string): boolean {
+  return parentLogicalPath(childPath) === dirPath;
+}
+
 /** Whether `childPath` is under `ancestorPath` (strict descendant). */
 export function isDescendantPath(
   ancestorPath: string,
