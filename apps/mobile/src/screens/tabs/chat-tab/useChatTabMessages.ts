@@ -399,10 +399,14 @@ export function useChatTabMessageActions({
 
       const applyComposerRestore = () => {
         if (mode === 'undo_send' && restoreText != null) {
-          writeChatComposerDraftState(sessionId, {
-            text: restoreText,
-            attachments: restoreAttachments,
-          });
+          writeChatComposerDraftState(
+            sessionId,
+            {
+              text: restoreText,
+              attachments: restoreAttachments,
+            },
+            runtime.sessions,
+          );
           setDraftRestoreToken(t => t + 1);
         }
       };
@@ -578,10 +582,14 @@ export function useChatTabMessageActions({
         }
         // T-TX2：编辑回填 Composer 原文 + attachments chips
         if (sessionId != null) {
-          writeChatComposerDraftState(sessionId, {
-            text: initial,
-            attachments: target.attachments ?? [],
-          });
+          writeChatComposerDraftState(
+            sessionId,
+            {
+              text: initial,
+              attachments: target.attachments ?? [],
+            },
+            runtime.sessions,
+          );
           setDraftRestoreToken(t => t + 1);
         }
         setMessageEditPrompt({

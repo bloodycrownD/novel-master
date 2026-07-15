@@ -12,12 +12,7 @@ import type {
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
-import {
-  ruleViewToSnapshotEntries,
-  workplaceAttachmentsFromRuleDelta,
-  type WorktreeService,
-} from "@novel-master/core/worktree";
-import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@novel-master/core/session-kkv";
+import { type WorktreeService } from "@novel-master/core/worktree";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
   getWorktreeForScope,
@@ -30,6 +25,7 @@ import {
 import { notifyComposerAttachmentsSuggestToRenderer } from "../forward-composer-attachments-suggest.js";
 import { formatIpcError } from "../format-ipc-error.js";
 import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
+import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -61,7 +57,7 @@ async function loadWorktreeRows(
 }
 
 /**
- * 规则保存后：实时规则 vs file_cache → Composer workplace 建议。
+ * 规则保存后：投影 Composer 状态条（workplace + user_ops）整表替换。
  * 不刷新规则快照、不 capture。
  */
 async function suggestWorkplaceAttachmentsAfterRuleChange(
@@ -72,13 +68,11 @@ async function suggestWorkplaceAttachmentsAfterRuleChange(
   if (sessionId == null || sessionId === "") {
     return;
   }
-  const view = await wt.evaluateRuleView();
-  const live = ruleViewToSnapshotEntries(view);
-  const cacheKeys = await rt.sessionKkv.listKeys(
+  const attachments = await projectComposerStatusForSession(
+    rt,
+    wt,
     sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
   );
-  const attachments = workplaceAttachmentsFromRuleDelta(live, cacheKeys);
   notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
 }
 

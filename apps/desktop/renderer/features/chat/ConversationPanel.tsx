@@ -1,6 +1,9 @@
 import {
   isPlainUserUndoSendEligible,
+  parseComposerDraftJson,
+  replaceComposerStatusAttachments,
   resolveRollbackConfirmMessage,
+  serializeComposerDraftJson,
   type RollbackMode,
 } from '@novel-master/core/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -26,6 +29,9 @@ import {
   ipcMessagesList,
   ipcMessagesRollback,
   ipcMessagesSetFloor,
+  ipcSessionsGetComposerDraft,
+  ipcSessionsProjectComposerStatus,
+  ipcSessionsSetComposerDraft,
   ipcUserVfsHasPending,
   onWorkspaceMutated,
 } from '@/ipc/client';
@@ -142,6 +148,7 @@ export function ConversationPanel({
   const [composerAttachments, setComposerAttachments] = useState<
     MessageAttachmentDto[]
   >([]);
+  const composerDraftHydratedRef = useRef(false);
   const [hasPendingUserOps, setHasPendingUserOps] = useState(false);
   const [chatRichText, setChatRichText] = useState(true);
   const [messageMenu, setMessageMenu] = useState<{
@@ -187,15 +194,52 @@ export function ConversationPanel({
     });
   }, [sessionId, refreshPendingUserOps]);
 
-  // 切换会话时重置 UI 运行态与输入框（对齐 Mobile draft 切换语义）
+  // 切换会话：重置 UI 运行态；从 DB 水化 attach+text 并投影状态条
   useEffect(() => {
     resetUiForSessionChange();
     onStreamReset();
     setComposerError(undefined);
+    setHasPendingUserOps(false);
+    composerDraftHydratedRef.current = false;
     setComposerText('');
     setComposerAttachments([]);
-    setHasPendingUserOps(false);
+
+    let cancelled = false;
+    void (async () => {
+      const [draftRes, statusRes] = await Promise.all([
+        ipcSessionsGetComposerDraft({ sessionId }),
+        ipcSessionsProjectComposerStatus({ sessionId }),
+      ]);
+      if (cancelled) {
+        return;
+      }
+      const draft = parseComposerDraftJson(
+        draftRes.ok ? draftRes.data : null,
+      );
+      const status = statusRes.ok ? statusRes.data : [];
+      setComposerText(draft.text);
+      setComposerAttachments(
+        replaceComposerStatusAttachments(draft.attachments, status),
+      );
+      composerDraftHydratedRef.current = true;
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, resetUiForSessionChange, onStreamReset]);
+
+  // 水化完成后：仅持久 attach+text（状态条不进列）
+  useEffect(() => {
+    if (!composerDraftHydratedRef.current) {
+      return;
+    }
+    const draftJson = serializeComposerDraftJson({
+      text: composerText,
+      attachments: composerAttachments,
+    });
+    void ipcSessionsSetComposerDraft({ sessionId, draftJson });
+  }, [sessionId, composerText, composerAttachments]);
 
   useEffect(() => {
     ipcAppUiGet('chatRichText')

@@ -4,6 +4,7 @@ import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
   hasComposerSendableInput,
+  replaceComposerStatusAttachments,
   TOOL_TURN_BRIDGE_TEXT,
 } from "@novel-master/core/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
@@ -17,7 +18,7 @@ import {
   onComposerAttachmentsSuggest,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
-import { AttachmentDraftChips } from "./AttachmentDraftChips";
+import { ComposerDualAttachmentChips } from "./AttachmentDraftChips";
 import { FileReferencePicker } from "./FileReferencePicker";
 
 interface ChatComposerProps {
@@ -127,7 +128,10 @@ export function ChatComposer({
         return;
       }
       onAttachmentsChange(
-        mergeAttachmentsByPath(attachmentsRef.current, payload.attachments),
+        replaceComposerStatusAttachments(
+          attachmentsRef.current,
+          payload.attachments,
+        ),
       );
     });
   }, [sessionId, onAttachmentsChange]);
@@ -287,11 +291,20 @@ export function ChatComposer({
       ) : null}
       <div className="chat-composer" id="chat-composer">
         <div className="chat-composer__box">
-          <AttachmentDraftChips
+          <ComposerDualAttachmentChips
             attachments={attachments}
             disabled={inputDisabled}
-            onRemove={index => {
-              onAttachmentsChange(attachments.filter((_, i) => i !== index));
+            onRemoveAttach={attachIndex => {
+              let seen = -1;
+              onAttachmentsChange(
+                attachments.filter(a => {
+                  if (a.source !== "attach") {
+                    return true;
+                  }
+                  seen += 1;
+                  return seen !== attachIndex;
+                }),
+              );
             }}
           />
           <textarea

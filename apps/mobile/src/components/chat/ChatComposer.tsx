@@ -35,14 +35,18 @@ import {
 } from '@/runtime/agent-activity';
 
 import {
-  applyComposerAttachmentsSuggest,
+  applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
+  hydrateChatComposerDraftFromDb,
+  mergeComposerAttachAttachments,
   readChatComposerDraftState,
   subscribeChatComposerDraft,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
 
-import { AttachmentDraftChips } from './AttachmentDraftChips';
+import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
+
+import { ComposerDualAttachmentChips } from './AttachmentDraftChips';
 import { FileReferencePicker } from './FileReferencePicker';
 
 type Props = {
@@ -116,18 +120,22 @@ export function ChatComposer({
     onStreamReset,
   };
 
+  const runtimeRef = useRef(runtime);
+  runtimeRef.current = runtime;
+
   const persistDraft = useCallback(
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
-      writeChatComposerDraftState(sessionId, {
-        text: nextText,
-        attachments: nextAttachments,
-      });
+      writeChatComposerDraftState(
+        sessionId,
+        {
+          text: nextText,
+          attachments: nextAttachments,
+        },
+        runtimeRef.current.sessions,
+      );
     },
     [sessionId],
   );
-
-  const runtimeRef = useRef(runtime);
-  runtimeRef.current = runtime;
 
   const refreshPendingUserOps = useCallback(async () => {
     try {
@@ -140,10 +148,46 @@ export function ChatComposer({
   }, [sessionId]);
 
   useEffect(() => {
-    const draft = readChatComposerDraftState(sessionId);
-    setText(draft.text);
-    setAttachments([...draft.attachments]);
-    void refreshPendingUserOps();
+    let cancelled = false;
+    void (async () => {
+      const rt = runtimeRef.current;
+      await hydrateChatComposerDraftFromDb(sessionId, rt.sessions);
+      if (cancelled) {
+        return;
+      }
+      try {
+        const session = await rt.sessions.get(sessionId);
+        const worktree = rt.worktree({
+          kind: 'session',
+          projectId: session.projectId,
+          sessionId,
+        });
+        const status = await projectComposerStatusForSession(
+          rt,
+          worktree,
+          sessionId,
+        );
+        if (cancelled) {
+          return;
+        }
+        applyComposerStatusAttachmentsReplace({
+          sessionId,
+          attachments: status,
+        });
+      } catch {
+        // 投影失败时仍用已水化的 attach+text
+      }
+      if (cancelled) {
+        return;
+      }
+      const draft = readChatComposerDraftState(sessionId);
+      setText(draft.text);
+      setAttachments([...draft.attachments]);
+      void refreshPendingUserOps();
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, draftRestoreToken, refreshPendingUserOps]);
 
   useEffect(() => {
@@ -174,7 +218,7 @@ export function ChatComposer({
       beginUiRun();
 
       if (content || runAttachments.length > 0) {
-        clearChatComposerDraft(sessionId);
+        clearChatComposerDraft(sessionId, runtime.sessions);
         setText('');
         setAttachments([]);
       }
@@ -347,12 +391,19 @@ export function ChatComposer({
           { backgroundColor: tokens.surface, borderColor: tokens.border },
         ]}
       >
-        <AttachmentDraftChips
+        <ComposerDualAttachmentChips
           attachments={attachments}
           disabled={inputDisabled}
-          onRemove={index => {
+          onRemoveAttach={attachIndex => {
             setAttachments(prev => {
-              const next = prev.filter((_, i) => i !== index);
+              let seen = -1;
+              const next = prev.filter(a => {
+                if (a.source !== 'attach') {
+                  return true;
+                }
+                seen += 1;
+                return seen !== attachIndex;
+              });
               persistDraft(text, next);
               return next;
             });
@@ -415,10 +466,11 @@ export function ChatComposer({
         sessionId={sessionId}
         onClose={() => setPickerOpen(false)}
         onConfirm={picked => {
-          applyComposerAttachmentsSuggest({
+          mergeComposerAttachAttachments(
             sessionId,
-            attachments: picked,
-          });
+            picked,
+            runtimeRef.current.sessions,
+          );
           const draft = readChatComposerDraftState(sessionId);
           setAttachments([...draft.attachments]);
         }}

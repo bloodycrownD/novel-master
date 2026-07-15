@@ -100,7 +100,7 @@ describe("worktree ipc handlers", () => {
     assert.deepEqual(keysAfter, keysBefore);
   });
 
-  it("composerAttachmentsSuggest 通道独立；空 attachments 不 send", async () => {
+  it("composerAttachmentsSuggest 通道独立；空 attachments 仍 send（整表替换）", async () => {
     const sent: Array<{ channel: string; payload: unknown }> = [];
     setComposerAttachmentsSuggestForwardTarget(() => {
       return {
@@ -127,7 +127,7 @@ describe("worktree ipc handlers", () => {
       attachments: [],
     });
 
-    assert.equal(sent.length, 1);
+    assert.equal(sent.length, 2);
     assert.equal(sent[0]?.channel, IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST);
     assert.deepEqual(sent[0]?.payload, {
       sessionId,
@@ -140,6 +140,10 @@ describe("worktree ipc handlers", () => {
           path: "/x.md",
         },
       ],
+    });
+    assert.deepEqual(sent[1]?.payload, {
+      sessionId,
+      attachments: [],
     });
 
     const result = await handleWorktreeSetDirRule({

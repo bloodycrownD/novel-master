@@ -1,9 +1,10 @@
 import {describe, expect, it} from '@jest/globals';
 import {
-  applyComposerAttachmentsSuggest,
+  applyComposerStatusAttachmentsReplace,
   readChatComposerDraft,
   readChatComposerDraftState,
   writeChatComposerDraft,
+  writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
 
 describe('chat-composer-draft', () => {
@@ -19,21 +20,20 @@ describe('chat-composer-draft', () => {
     expect(readChatComposerDraft('s3')).toBe('');
   });
 
-  it('merges composerAttachmentsSuggest 形状到 attachments（按 path 去重）', () => {
-    writeChatComposerDraft('s-rd', 'keep');
-    applyComposerAttachmentsSuggest({
-      sessionId: 's-rd',
+  it('整表替换状态条；保留 attach（T-UI1 方向）', () => {
+    writeChatComposerDraftState('s-rd', {
+      text: 'keep',
       attachments: [
         {
-          name: '/a.md',
-          source: 'workplace',
+          name: '/ref.md',
+          source: 'attach',
           type: 'text',
           content: null,
-          path: '/a.md',
+          path: '/ref.md',
         },
       ],
     });
-    applyComposerAttachmentsSuggest({
+    applyComposerStatusAttachmentsReplace({
       sessionId: 's-rd',
       attachments: [
         {
@@ -43,6 +43,18 @@ describe('chat-composer-draft', () => {
           content: null,
           path: '/a.md',
         },
+        {
+          name: '/u.md',
+          source: 'user_ops',
+          type: 'text',
+          content: null,
+          path: '/u.md',
+        },
+      ],
+    });
+    applyComposerStatusAttachmentsReplace({
+      sessionId: 's-rd',
+      attachments: [
         {
           name: '/b.md',
           source: 'workplace',
@@ -54,6 +66,9 @@ describe('chat-composer-draft', () => {
     });
     const state = readChatComposerDraftState('s-rd');
     expect(state.text).toBe('keep');
-    expect(state.attachments.map(a => a.path)).toEqual(['/a.md', '/b.md']);
+    expect(state.attachments.map(a => `${a.source}:${a.path}`)).toEqual([
+      'workplace:/b.md',
+      'attach:/ref.md',
+    ]);
   });
 });
