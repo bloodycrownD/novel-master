@@ -239,9 +239,7 @@ export function closeContextMenu(notifyHost?: boolean): void {
     state.menuOverlayHandler = null;
   }
   // 经注册卸载（render(null, #menu-portal)）；禁止裸 .remove() 甩掉 Preact 根
-  if (_renderContextMenuView) {
-    _renderContextMenuView(null);
-  }
+  invokeRegisteredRenderContextMenu(null);
   if (notifyHost !== false) post('menuClosed', {});
 }
 
@@ -282,17 +280,20 @@ export function handleMenuOverlayEvent(event: Event): void {
 /**
  * 上下文菜单门面：已注册 MenuOverlay 刷新 + overlay 监听。
  * 壳 DOM 由 main → #menu-portal；P1-4 measure/layout 在 MenuOverlay useLayoutEffect。
- * 本函数不含 JSX / 不 createElement 挂 body。
+ * 本函数不含 JSX / 不 createElement 挂 body；开/关与 row-logic 对称走 invokeRegistered*。
  */
 export function renderContextMenu(): void {
   if (!state.menu) return;
-  if (!_renderContextMenuView) return;
   const menu = state.menu;
-  _renderContextMenuView({
-    messageId: menu.messageId,
-    items: menu.items,
-    anchor: menu.anchor,
-  });
+  if (
+    !invokeRegisteredRenderContextMenu({
+      messageId: menu.messageId,
+      items: menu.items,
+      anchor: menu.anchor,
+    })
+  ) {
+    return;
+  }
   document.body.classList.add('menu-open');
   attachMenuNativeTextBlock();
   state.menuOverlayHandler = handleMenuOverlayEvent;
