@@ -1,6 +1,9 @@
 /**
  * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
+ * 三列矩阵见 mobile-webview-preact-htm SPEC（必须保留 / 可改为 token / 允许删除）。
  */
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   ANCHORED_MENU_GAP,
@@ -32,6 +35,14 @@ function appCss(): string {
 }
 
 describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
+  it('T-PH-07: build-webview 保持 minify:false（SYNC 依赖可读 var）', () => {
+    const buildScript = readFileSync(
+      join(__dirname, '../scripts/build-webview.mjs'),
+      'utf8',
+    );
+    expect(buildScript).toMatch(/minify:\s*false/);
+  });
+
   it('T-BR-ASM-01: script parses and has readyState fallback', () => {
     const script = bootScript();
     expect(script).toContain('readyState === "loading"');
