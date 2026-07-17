@@ -16,7 +16,7 @@ export function summarizeToolInput(
   try {
     const raw = JSON.stringify(input);
     return raw.length > 120 ? raw.slice(0, 117) + '…' : raw;
-  } catch (_e) {
+  } catch {
     return keys.join(', ');
   }
 }

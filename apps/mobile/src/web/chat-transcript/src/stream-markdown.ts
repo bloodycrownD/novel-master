@@ -119,7 +119,6 @@ export function flushStreamRichUpgrade(): void {
   streamRichUpgrade.timer = null;
   const tail = document.getElementById('stream-tail');
   if (!tail) return;
-  const paintStart = Date.now();
   if (streamRichUpgrade.kinds.text) {
     paintStreamRichKind(tail, 'text');
     streamRichUpgrade.kinds.text = false;
@@ -130,7 +129,6 @@ export function flushStreamRichUpgrade(): void {
     streamRichUpgrade.kinds.thinking = false;
     streamRichUpgrade.plainMode.thinking = false;
   }
-  void paintStart;
   scheduleStickIfNearBottom();
 }
 

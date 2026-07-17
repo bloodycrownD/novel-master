@@ -51,7 +51,7 @@ export function resolveVfsToolFilePath(
   if (typeof raw !== 'string') return null;
   try {
     return resolveLogicalPathForToolCard(raw);
-  } catch (_e) {
+  } catch {
     return null;
   }
 }

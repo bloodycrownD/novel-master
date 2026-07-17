@@ -51,7 +51,7 @@ export function handleHostMessage(raw: unknown): void {
   let msg: { v?: number; type?: string; payload?: Record<string, unknown> };
   try {
     msg = typeof raw === 'string' ? JSON.parse(raw) : (raw as typeof msg);
-  } catch (_e) {
+  } catch {
     return;
   }
   if (!msg || msg.v !== BRIDGE_V || !msg.type) return;
