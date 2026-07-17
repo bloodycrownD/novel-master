@@ -96,10 +96,9 @@ async function bundleAppJs(pkgId, entryAbs) {
     target: ['es2018'],
     outfile,
     logLevel: 'warning',
-    // Preact classic JSX（源码显式 import { h, Fragment } from 'preact'）
-    jsx: 'transform',
-    jsxFactory: 'h',
-    jsxFragment: 'Fragment',
+    // Preact automatic JSX（jsxImportSource → preact/jsx-runtime）
+    jsx: 'automatic',
+    jsxImportSource: 'preact',
     // 仅允许解析 web/shared 与本包；禁止拉进 RN 组件树
     packages: 'bundle',
     alias: webAlias,
