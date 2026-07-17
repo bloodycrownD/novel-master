@@ -1,5 +1,5 @@
-import { escapeHtml } from './html-escape';
-import { state } from './state';
+import { escapeHtml } from '../util/html-escape';
+import { state } from '../state/state';
 import type {
   AttachmentChip,
   MessageRow,
@@ -7,7 +7,7 @@ import type {
   TranscriptFlags,
   TranscriptRow,
   UserVfsTurnRow,
-} from './state';
+} from '../state/state';
 import {
   renderToolGroupSection,
   renderToolInvokingBar,
@@ -15,7 +15,7 @@ import {
 import {
   assistantBubbleExtraClasses,
   renderStreamTailRow,
-} from './stream';
+} from '../stream/stream';
 /**
  * 消息行 / 思考 / 附件 / 助手气泡 / 用户 VFS 行渲染。
  */

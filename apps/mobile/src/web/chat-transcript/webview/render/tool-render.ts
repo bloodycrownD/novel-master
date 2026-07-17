@@ -1,6 +1,6 @@
-import { escapeHtml } from './html-escape';
-import { vfsToolFilePath } from './vfs-tool-path';
-import type { ToolCallRow } from './state';
+import { escapeHtml } from '../util/html-escape';
+import { vfsToolFilePath } from '../util/vfs-tool-path';
+import type { ToolCallRow } from '../state/state';
 
 /**
  * 工具调用摘要、状态标签与工具组 HTML 渲染。

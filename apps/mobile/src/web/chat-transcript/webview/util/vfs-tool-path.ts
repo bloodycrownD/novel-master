@@ -1,4 +1,4 @@
-import { VFS_FILE_TOOLS } from './state';
+import { VFS_FILE_TOOLS } from '../state/state';
 
 export function normalizePathForToolCard(path: string): string {
   if (typeof path !== 'string' || path.length === 0) {

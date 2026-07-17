@@ -12,17 +12,17 @@ import {
   MESSAGE_ACTION_MENU_ITEM_COUNT,
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../../shared/constants';
-import { escapeHtml } from './html-escape';
-import { state } from './state';
+} from '../../../shared/constants';
+import { escapeHtml } from '../util/html-escape';
+import { state } from '../state/state';
 import type {
   MenuAnchor,
   MenuItem,
   MessageRow,
   TranscriptRow,
   UserVfsTurnRow,
-} from './state';
-import { post } from './bridge';
+} from '../state/state';
+import { post } from '../bridge/bridge';
 
 /**
  * 消息长按菜单：布局、打开/关闭与指针手势。

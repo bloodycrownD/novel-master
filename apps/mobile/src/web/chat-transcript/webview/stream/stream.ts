@@ -1,9 +1,9 @@
-import { escapeHtml } from './html-escape';
-import { state } from './state';
-import type { ToolCallRow } from './state';
-import { scheduleStickIfNearBottom } from './scroll';
-import { renderAssistantBubbleInner, renderRows } from './row-render';
-import { renderToolInvokingBar } from './tool-render';
+import { escapeHtml } from '../util/html-escape';
+import { state } from '../state/state';
+import type { ToolCallRow } from '../state/state';
+import { scheduleStickIfNearBottom } from '../scroll/scroll';
+import { renderAssistantBubbleInner, renderRows } from '../render/row-render';
+import { renderToolInvokingBar } from '../render/tool-render';
 import { scheduleStreamRichUpgrade, streamRichUpgrade } from './stream-markdown';
 
 export type StreamKind = 'text' | 'thinking';

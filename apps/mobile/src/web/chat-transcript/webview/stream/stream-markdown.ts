@@ -1,7 +1,7 @@
-import { decodeLiteralHtmlEntities } from '../../shared/decode-entities';
-import { escapeHtmlRaw } from './html-escape';
-import { state } from './state';
-import { scheduleStickIfNearBottom } from './scroll';
+import { decodeLiteralHtmlEntities } from '../../../shared/decode-entities';
+import { escapeHtmlRaw } from '../util/html-escape';
+import { state } from '../state/state';
+import { scheduleStickIfNearBottom } from '../scroll/scroll';
 import {
   assistantBubbleExtraClasses,
   ensureStreamTextBody,

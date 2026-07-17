@@ -1,18 +1,18 @@
-import { state, BRIDGE_V, type TranscriptFlags } from './state';
+import { state, BRIDGE_V, type TranscriptFlags } from '../state/state';
 import {
   applySnapshot,
   applyPrependPage,
   applyAppendTailRows,
   applyStreamCommit,
-} from './snapshot';
+} from '../render/snapshot';
 import {
   appendStreamDelta,
   applyStreamBatch,
   setStreamToolInvokingDom,
-} from './stream';
-import { clearStreamRichUpgrade } from './stream-markdown';
-import { closeContextMenu } from './menu';
-import { flagsEqual, renderRows } from './row-render';
+} from '../stream/stream';
+import { clearStreamRichUpgrade } from '../stream/stream-markdown';
+import { closeContextMenu } from '../menu/menu';
+import { flagsEqual, renderRows } from '../render/row-render';
 
 /** 宿主下发的主题 token（最小字段）。 */
 export type HostTheme = {

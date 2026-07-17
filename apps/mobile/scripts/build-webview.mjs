@@ -1,7 +1,7 @@
 /**
  * 用 esbuild 双入口打包 WebView 资源（chat-transcript / rich-document）。
  *
- * 真源：`src/web/{pkg}/src/main.ts` + styles + 短 index.html
+ * 真源：`src/web/{pkg}/webview/main.ts` + styles + 短 index.html
  * 产出（gitignore）：`webview-dist/{pkg}/index.html` + `app.js` + `app.css`
  *
  * 可选 `--copy-native`：拷贝到 Android assets 与 iOS Bundle 源目录。
@@ -31,14 +31,14 @@ const copyNative = process.argv.includes('--copy-native');
 const PACKAGES = [
   {
     id: 'chat-transcript',
-    entryRel: 'chat-transcript/src/main.ts',
+    entryRel: 'chat-transcript/webview/main.ts',
     cssRel: 'chat-transcript/styles/transcript.css',
     htmlRel: 'chat-transcript/index.html',
     richCssKey: 'CHAT_TRANSCRIPT_RICH_CSS',
   },
   {
     id: 'rich-document',
-    entryRel: 'rich-document/src/main.ts',
+    entryRel: 'rich-document/webview/main.ts',
     cssRel: 'rich-document/styles/document.css',
     htmlRel: 'rich-document/index.html',
     richCssKey: 'RICH_DOCUMENT_RICH_CSS',

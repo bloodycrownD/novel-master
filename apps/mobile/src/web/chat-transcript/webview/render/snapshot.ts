@@ -1,14 +1,14 @@
-import { state } from './state';
-import type { MessageRow, TranscriptRow } from './state';
+import { state } from '../state/state';
+import type { MessageRow, TranscriptRow } from '../state/state';
 import {
   offsetFromBottom,
   isNearBottom,
   stickToBottom,
   emitScrollSnapshot,
-} from './scroll';
-import { closeContextMenu } from './menu';
+} from '../scroll/scroll';
+import { closeContextMenu } from '../menu/menu';
 import { renderRow, renderRows } from './row-render';
-import { setStreamToolInvokingDom } from './stream';
+import { setStreamToolInvokingDom } from '../stream/stream';
 
 export type RestoreScroll = {
   nearBottom?: boolean;

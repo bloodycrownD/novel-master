@@ -1,8 +1,8 @@
-import { state } from './state';
-import { post } from './bridge';
-import { closeContextMenu } from './menu';
+import { state } from '../state/state';
+import { post } from '../bridge/bridge';
+import { closeContextMenu } from '../menu/menu';
 import { renderRows } from './row-render';
-import { requestLoadOlder } from './scroll';
+import { requestLoadOlder } from '../scroll/scroll';
 /**
  * #rows 点击：折叠开关、打开工具文件、加载更早等。
  */

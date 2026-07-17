@@ -1,15 +1,15 @@
 /**
  * chat-transcript WebView 打包入口（esbuild → IIFE app.js）。
  */
-import { state } from './state';
-import { post, onHostMessage } from './bridge';
-import { onScroll } from './scroll';
-import { onRowsClick } from './rows-click';
+import { state } from './state/state';
+import { post, onHostMessage } from './bridge/bridge';
+import { onScroll } from './scroll/scroll';
+import { onRowsClick } from './render/rows-click';
 import {
   onMessagePointerDown,
   onMessagePointerMove,
   onMessagePointerUp,
-} from './menu';
+} from './menu/menu';
 /**
  * chat-transcript boot 入口收尾：宿主 message 监听 + bootTranscript + readyState 兜底。
  */
