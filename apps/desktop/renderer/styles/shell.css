@@ -3841,6 +3841,10 @@ html[data-theme="dark"] .chat-message {
   color: var(--text-tertiary);
 }
 
+.chat-message__attach-group {
+  margin-top: 4px;
+}
+
 .chat-batch-bar {
   position: sticky;
   bottom: 0;

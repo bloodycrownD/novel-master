@@ -308,10 +308,12 @@ export function buildChatListItems(
       return view;
     });
 
+    // 空正文但有 attachments（如仅 flush 的 user_ops / materialize workplace）仍须进列表
     if (
       textParts.length > 0 ||
       thinkingParts.length > 0 ||
-      hasToolUse
+      hasToolUse ||
+      (message.attachments?.length ?? 0) > 0
     ) {
       items.push({
         kind: "message",

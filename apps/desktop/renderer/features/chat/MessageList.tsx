@@ -3,6 +3,7 @@ import remarkGfm from 'remark-gfm';
 import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
 import { ToolCallGroupCard } from './ToolCallGroupCard';
+import { MessageAttachmentGroupCard } from './MessageAttachmentGroupCard';
 import {
   parseUserVfsActionFromText,
   UserVfsActionBody,
@@ -166,6 +167,13 @@ export function MessageList({
                     alwaysRichText={msg.role === 'assistant'}
                   />
                 )
+              ) : null}
+              {msg.role === "user" &&
+              (msg.attachments?.length ?? 0) > 0 ? (
+                <MessageAttachmentGroupCard
+                  attachments={msg.attachments!}
+                  dimmed={msg.hidden}
+                />
               ) : null}
               {item.tools.length > 0 ? (
                 <ToolCallGroupCard
