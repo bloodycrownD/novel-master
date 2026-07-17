@@ -3,8 +3,10 @@ import { vfsToolFilePath } from '../util/vfs-tool-path';
 import type { ToolCallRow } from '../state/state';
 
 /**
- * 工具调用摘要、状态标签与工具组 HTML 渲染。
+ * 工具调用摘要、状态标签与（流式增量仍依赖的）工具组 HTML 字符串。
+ * 结构主路径已迁 ui/render/ToolGroup；本文件仅非 JSX 逻辑 + stream 拼串。
  */
+
 export function summarizeToolInput(
   _name: string,
   input: Record<string, unknown> | null | undefined,
@@ -42,6 +44,15 @@ export function toolStatusLabel(status: string | undefined): string {
   return '';
 }
 
+/** 工具状态对应 CSS 修饰类名。 */
+export function toolStatusClass(status: string | undefined): string {
+  if (status === 'error') return 'error';
+  if (status === 'pending') return 'pending';
+  if (status === 'interrupted') return 'interrupted';
+  return 'success';
+}
+
+/** 流式 setStreamToolInvokingDom 仍用字符串插入。 */
 export function renderToolInvokingBar(): string {
   return (
     '<div class="tool-invoking-bar">' +
@@ -54,16 +65,7 @@ export function renderToolGroupItem(tool: ToolCallRow): string {
   const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
   const canOpen = filePath != null;
   const summary = toolCallSummary(tool);
-  let statusClass: string;
-  if (tool.status === 'error') {
-    statusClass = 'error';
-  } else if (tool.status === 'pending') {
-    statusClass = 'pending';
-  } else if (tool.status === 'interrupted') {
-    statusClass = 'interrupted';
-  } else {
-    statusClass = 'success';
-  }
+  const statusClass = toolStatusClass(tool.status);
   const statusInner = toolStatusLabel(tool.status);
   let html =
     '<div class="tool-group-item tool-card' +

@@ -15,17 +15,18 @@ import {
 } from './runtime/menu/menu';
 import { registerRenderRows } from './runtime/render/row-logic';
 import { ContextMenu } from './ui/menu/ContextMenu';
-// TrustedHtml 边界：组件供后续 ui；applyTrustedHtml 供 runtime 例外 import（Step 5 行渲染）
-import { TrustedHtml, applyTrustedHtml } from '../../shared/ui/TrustedHtml';
+import { RowList } from './ui/render/RowList';
 
 // P0-3：注册上下文菜单 Preact 结构（runtime 仅门面调用）
 registerRenderContextMenu(({ menuRoot, messageId, items }) => {
   render(h(ContextMenu, { messageId, items }), menuRoot);
 });
-// P0-3 预留：renderRows 占位，保证门面 + TrustedHtml 边界进入 IIFE（Step 5 替换）
+
+// P0-3：注册行列表 Preact 实现（消毒 HTML 经 TrustedHtml，见 ui/render）
 registerRenderRows(() => {
-  void TrustedHtml;
-  void applyTrustedHtml;
+  const list = document.getElementById('rows');
+  if (!list) return;
+  render(h(RowList, null), list);
 });
 
 /**

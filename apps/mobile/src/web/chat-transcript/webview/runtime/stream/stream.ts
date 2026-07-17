@@ -2,8 +2,8 @@ import { escapeHtml } from '../util/html-escape';
 import { state } from '../state/state';
 import type { ToolCallRow } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
-import { renderAssistantBubbleInner, renderRows } from '../render/row-render';
-import { renderToolInvokingBar } from '../render/tool-render';
+import { renderAssistantBubbleInner, renderRows } from '../render/row-logic';
+import { renderToolInvokingBar } from '../render/tool-logic';
 import { scheduleStreamRichUpgrade, streamRichUpgrade } from './stream-markdown';
 
 export type StreamKind = 'text' | 'thinking';
@@ -27,38 +27,8 @@ export function getStreamTailPhase(): StreamTailPhase {
   return streamHasContent() ? 'idle-after-content' : 'waiting-first';
 }
 
-export function renderStreamWaitingFirstRow(): string {
-  return (
-    '<div class="row stream stream--waiting-first" id="stream-tail">' +
-    '<div class="stream-waiting-indicator">' +
-    '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
-    '<span class="tool-invoking-label">生成中</span></div></div>'
-  );
-}
-
 export function shouldRenderStreamTail(): boolean {
   return streamHasContent() || state.stream.toolInvoking;
-}
-
-export function renderStreamTailRow(): string {
-  if (!shouldRenderStreamTail()) {
-    return '';
-  }
-  if (getStreamTailPhase() === 'waiting-first') {
-    return renderStreamWaitingFirstRow();
-  }
-  return (
-    '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
-    assistantBubbleExtraClasses(
-      state.stream.textHtml,
-      [],
-      state.stream.text,
-      state.stream.thinking,
-    ) +
-    '">' +
-    renderStreamBubbleInner() +
-    '</div></div>'
-  );
 }
 
 export function streamThinkingHtml(): string | null {

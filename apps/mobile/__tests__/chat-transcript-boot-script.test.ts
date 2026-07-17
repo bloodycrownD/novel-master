@@ -59,6 +59,18 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('bootTranscript');
   });
 
+  it('T-PH-05: renderRows Preact 装配 + TrustedHtml（行/工具）', () => {
+    const script = bootScript();
+    expect(script).toContain('registerRenderRows');
+    expect(script).toContain('RowList');
+    expect(script).toContain('MessageRow');
+    expect(script).toContain('ToolGroup');
+    expect(script).toContain('TrustedHtml');
+    expect(script).toContain('renderRows();');
+    // 行列表主路径不再 list.innerHTML = 拼串骨架
+    expect(script).not.toMatch(/list\.innerHTML\s*=\s*html/);
+  });
+
   it('T-BR-CT-01: menu overlay / grace / layoutContextMenu contracts', () => {
     const script = bootScript();
     // 必须保留（三列矩阵）
@@ -112,30 +124,34 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
     const script = bootScript();
-    expect(script).toContain('stream--waiting-first');
-    expect(script).toContain('stream-waiting-indicator');
-    expect(script).toContain('renderStreamWaitingFirstRow');
+    // 必须保留：相位 / 增量 / 符号
     expect(script).toContain('getStreamTailPhase');
     expect(script).toContain('streamHasContent');
-    expect(script).toContain('stream--waiting-first');
-    expect(script).toContain('querySelector(".bubble")');
+    expect(script).toContain('setStreamToolInvokingDom');
+    expect(script).toContain('ensureStreamTextBody');
+    expect(script).toContain('updateStreamBubble');
     expect(script).toContain('renderStreamBubbleInner');
     expect(script).toContain('renderAssistantBubbleInner');
-    expect(script).toContain('ensureStreamTextBody');
-    expect(script).toContain('data-text-shell');
-    expect(script).toContain('setStreamToolInvokingDom');
     expect(script).toContain('streamThinkingHtml');
-    expect(script).toContain('updateStreamBubble');
+    expect(script).toContain('appendStreamDeltaIncremental');
+    expect(script).toContain('appendStreamDelta');
+    expect(script).toContain('applyStreamBatch');
+    expect(script).toContain('renderStreamingMarkdown');
+    expect(script).toContain('scheduleStreamRichUpgrade');
+    expect(script).toContain('case "streamBatch"');
+    // 可改为 token：waiting-first / text-shell（壳已迁 StreamTailRow TSX）
+    expect(script).toContain('stream--waiting-first');
+    expect(script).toContain('stream-waiting-indicator');
+    expect(script).toContain('data-text-shell');
+    expect(script).toContain('querySelector(".bubble")');
+    // 允许删除：renderStreamWaitingFirstRow 等纯 HTML 壳函数名
+    expect(script).not.toContain('renderStreamWaitingFirstRow');
+    expect(script).not.toContain('renderStreamTailRow');
     // 局部名可能因 Preact 打包重命名（p → p2）；保留 payload.html 意图
     expect(script).toMatch(/\w+\.html\s*\|\|\s*[\"'][\"']/);
     expect(script).toContain('state.stream.textHtml = ""');
     expect(script).toContain('state.stream.thinkingHtml = ""');
     expect(script).toContain('body.innerHTML = html');
-    expect(script).toContain('renderStreamingMarkdown');
-    expect(script).toContain('scheduleStreamRichUpgrade');
-    expect(script).toContain('appendStreamDeltaIncremental');
-    expect(script).toContain('applyStreamBatch');
-    expect(script).toContain('case "streamBatch"');
     expect(script).toContain('if (!incremental && kind !== "text") {');
     expect(script).toContain('updateStreamBubble(tail);');
     expect(script).toContain('if (!tail) {');
@@ -165,19 +181,16 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
     const script = bootScript();
+    // 意图：文本壳 / fill-width；壳可由 TSX 产出，断言改 token
     expect(script).toContain('bubble--fill-width');
     expect(script).toContain('hasThinking');
     expect(script).toContain('hasTools');
+    expect(script).toContain('data-text-shell');
+    expect(script).toContain('getStreamTailPhase');
+    expect(script).toContain('idle-after-content');
+    // 流式增量仍保留助手气泡拼串路径中的壳逻辑
     expect(script).toContain('} else if (hasThinking) {');
-    expect(script).toContain(
-      'const richShellBubble = state.flags.richText && textHtml ? " rich" : "";',
-    );
-    expect(script).toContain(
-      `html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';`,
-    );
-    expect(script).toContain(
-      'const showIdleBar = getStreamTailPhase() === "idle-after-content"',
-    );
+    expect(script).toContain('richShellBubble');
   });
 
   it('T-BR-CT-07: no parseUserVfsAction / user-vfs-action regression', () => {

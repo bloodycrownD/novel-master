@@ -12,7 +12,7 @@ import {
 } from '../stream/stream';
 import { clearStreamRichUpgrade } from '../stream/stream-markdown';
 import { closeContextMenu } from '../menu/menu';
-import { flagsEqual, renderRows } from '../render/row-render';
+import { flagsEqual, renderRows } from '../render/row-logic';
 
 /** 宿主下发的主题 token（最小字段）。 */
 export type HostTheme = {

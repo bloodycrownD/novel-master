@@ -7,7 +7,7 @@ import {
   emitScrollSnapshot,
 } from '../scroll/scroll';
 import { closeContextMenu } from '../menu/menu';
-import { renderRow, renderRows } from './row-render';
+import { renderRows } from './row-logic';
 import { setStreamToolInvokingDom } from '../stream/stream';
 
 export type RestoreScroll = {
@@ -103,8 +103,7 @@ export function applySnapshot(payload: SnapshotPayload): void {
 }
 
 /**
- * appendTailRows: append persisted rows at end without full renderRows.
- * Preserves stream tail and scroll anchor when not near bottom.
+ * appendTailRows: 追加落库行；全量路径走 Preact renderRows（保留滚动锚点）。
  */
 export function applyAppendTailRows(payload: RowsPayload): void {
   const newRows = (payload.rows || []).slice();
@@ -115,29 +114,7 @@ export function applyAppendTailRows(payload: RowsPayload): void {
   const wasNearBottom = state.nearBottom;
   const prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
   state.rows = state.rows.concat(newRows);
-  let html = '';
-  for (let i = 0; i < newRows.length; i++) {
-    const row = newRows[i];
-    if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
-      html += renderRow(row);
-    }
-  }
-  const list = document.getElementById('rows');
-  if (!list) {
-    return;
-  }
-  const streamTail = document.getElementById('stream-tail');
-  if (streamTail) {
-    streamTail.insertAdjacentHTML('beforebegin', html);
-  } else {
-    const empty = list.querySelector('.empty-state');
-    if (empty) {
-      empty.insertAdjacentHTML('beforebegin', html);
-      empty.remove();
-    } else {
-      list.insertAdjacentHTML('beforeend', html);
-    }
-  }
+  renderRows();
   if (scroller) {
     if (wasNearBottom) {
       stickToBottom(scroller);
@@ -163,11 +140,8 @@ export function promoteStreamTailToRow(row: TranscriptRow): boolean {
   if (!streamTail) {
     return false;
   }
-  const rowHtml = renderRow(row);
-  if (!rowHtml) {
-    return false;
-  }
-  streamTail.outerHTML = rowHtml;
+  // Preact 全量路径：调用方已清 stream 并写入 rows，交由 renderRows 刷新
+  renderRows();
   return true;
 }
 
