@@ -13,7 +13,6 @@ import {
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
 } from '../../../../shared/constants';
-import { escapeHtml } from '../util/html-escape';
 import { state } from '../state/state';
 import type {
   MenuAnchor,
@@ -25,24 +24,32 @@ import type {
 import { post } from '../bridge/bridge';
 
 /**
- * P0-3：renderContextMenu UI 刷新注册门面（预留）。
- * 本步现网拼串仍在本文件；后续 Step 由 main 注册 Preact 实现。
+ * P0-3：renderContextMenu UI 结构刷新注册门面。
+ * Preact ContextMenu 由 main 注册；本文件只持有实现引用，不 import ui / 不 preact.render。
  */
-export type RenderContextMenuView = () => void;
+export type RenderContextMenuView = (args: {
+  menuRoot: HTMLElement;
+  messageId: string;
+  items: MenuItem[];
+}) => void;
 
 let _renderContextMenuView: RenderContextMenuView | null = null;
 
-/** 由 main 注册 Preact（或其它）上下文菜单刷新实现。 */
+/** 由 main 注册 Preact（或其它）上下文菜单结构刷新实现。 */
 export function registerRenderContextMenu(fn: RenderContextMenuView): void {
   _renderContextMenuView = fn;
 }
 
 /**
- * 调用已注册实现；未注册时返回 false（调用方继续走现网拼串路径）。
+ * 调用已注册实现；未注册时返回 false。
  */
-export function invokeRegisteredRenderContextMenu(): boolean {
+export function invokeRegisteredRenderContextMenu(args: {
+  menuRoot: HTMLElement;
+  messageId: string;
+  items: MenuItem[];
+}): boolean {
   if (!_renderContextMenuView) return false;
-  _renderContextMenuView();
+  _renderContextMenuView(args);
   return true;
 }
 
@@ -271,8 +278,13 @@ export function handleMenuOverlayEvent(event: Event): void {
   closeContextMenu(true);
 }
 
+/**
+ * 上下文菜单门面：宿主节点 + 已注册结构刷新 + measure/layout（P1-4）+ overlay。
+ * 结构由 main 注册的 Preact 实现写入；本函数不含 JSX / 不拼菜单项 HTML。
+ */
 export function renderContextMenu(): void {
   if (!state.menu) return;
+  if (!_renderContextMenuView) return;
   const menu = state.menu;
   const existingMenu = document.getElementById('context-menu');
   if (existingMenu) existingMenu.remove();
@@ -286,30 +298,21 @@ export function renderContextMenu(): void {
   menuEl.id = 'context-menu';
   menuEl.className = 'context-menu';
   const menuWidth = computeContextMenuWidth(menu.items);
-  let html = '';
-  for (let i = 0; i < menu.items.length; i++) {
-    const item = menu.items[i];
-    html +=
-      '<button type="button" class="menu-item' +
-      (item.danger ? ' danger' : '') +
-      '" data-action="menu-action" data-message-id="' +
-      escapeHtml(menu.messageId) +
-      '" data-menu-action="' +
-      escapeHtml(item.action) +
-      '">' +
-      escapeHtml(item.label) +
-      '</button>';
-  }
-  menuEl.innerHTML = html;
   document.body.appendChild(backdrop);
   document.body.appendChild(menuEl);
-  // Measure rendered rows (CSS min-height + borders); estimate 48px/row overshoots on device.
+  // P1-4：mount 后、对用户可见前完成 measure + layoutContextMenu
   menuEl.style.position = 'fixed';
   menuEl.style.visibility = 'hidden';
   menuEl.style.left = '0';
   menuEl.style.top = '0';
   menuEl.style.width = menuWidth + 'px';
   menuEl.style.maxHeight = 'none';
+  _renderContextMenuView({
+    menuRoot: menuEl,
+    messageId: menu.messageId,
+    items: menu.items,
+  });
+  // 测量已渲染行高（CSS min-height + borders）；估算 48px/行在真机易偏大
   const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
   const contentHeight =
     measuredHeight > 0

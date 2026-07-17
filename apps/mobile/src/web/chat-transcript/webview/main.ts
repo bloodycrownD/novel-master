@@ -2,6 +2,7 @@
  * chat-transcript WebView 打包入口（esbuild → IIFE app.js）。
  * P0-3：本文件为唯一可同时触及 ui 与 runtime、并完成 UI 刷新注册的装配点。
  */
+import { h, render } from 'preact';
 import { state } from './runtime/state/state';
 import { post, onHostMessage } from './runtime/bridge/bridge';
 import { onScroll } from './runtime/scroll/scroll';
@@ -13,17 +14,16 @@ import {
   registerRenderContextMenu,
 } from './runtime/menu/menu';
 import { registerRenderRows } from './runtime/render/row-logic';
-// 冒烟：确保 shared/ui TSX + preact 进入 IIFE（phase-toolchain）
-import { Smoke } from '../../shared/ui/Smoke';
-// TrustedHtml 边界：组件供后续 ui；applyTrustedHtml 供 runtime 例外 import
+import { ContextMenu } from './ui/menu/ContextMenu';
+// TrustedHtml 边界：组件供后续 ui；applyTrustedHtml 供 runtime 例外 import（Step 5 行渲染）
 import { TrustedHtml, applyTrustedHtml } from '../../shared/ui/TrustedHtml';
-void Smoke;
-// P0-3 预留：注册 no-op 占位，保证门面 + TrustedHtml 边界进入 IIFE
-registerRenderRows(() => {
-  void TrustedHtml;
-  void applyTrustedHtml;
+
+// P0-3：注册上下文菜单 Preact 结构（runtime 仅门面调用）
+registerRenderContextMenu(({ menuRoot, messageId, items }) => {
+  render(h(ContextMenu, { messageId, items }), menuRoot);
 });
-registerRenderContextMenu(() => {
+// P0-3 预留：renderRows 占位，保证门面 + TrustedHtml 边界进入 IIFE（Step 5 替换）
+registerRenderRows(() => {
   void TrustedHtml;
   void applyTrustedHtml;
 });
