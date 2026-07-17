@@ -176,3 +176,74 @@ test("vfsToolFilePath：相对 path 规范化为绝对逻辑路径", () => {
     "/relative.md",
   );
 });
+
+test("T-SR3：空正文 + 仅 user_ops attachments 仍进列表", () => {
+  const opsOnly: ChatMessageDto = {
+    id: "u-ops",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [{ type: "text", text: "" }],
+    attachments: [
+      {
+        name: "mkdir:/notes",
+        source: "user_ops",
+        type: "text",
+        content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+        path: "/notes",
+      },
+    ],
+  };
+  const items = buildChatListItems([opsOnly]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.kind, "message");
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].textParts.length, 0);
+    assert.equal(items[0].message.attachments?.length, 1);
+    assert.equal(items[0].message.attachments?.[0]?.source, "user_ops");
+  }
+});
+
+test("T-SR3：空正文 + workplace attachments 仍进列表", () => {
+  const workplaceOnly: ChatMessageDto = {
+    id: "u-wp",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [],
+    attachments: [
+      {
+        name: "w.md",
+        source: "workplace",
+        type: "text",
+        content: null,
+        path: "/w.md",
+      },
+    ],
+  };
+  const items = buildChatListItems([workplaceOnly]);
+  assert.equal(items.length, 1);
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].message.attachments?.[0]?.source, "workplace");
+  }
+});
+
+test("T-SR3：空正文且无 attachments 不进列表", () => {
+  const empty: ChatMessageDto = {
+    id: "u-empty",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [{ type: "text", text: "   " }],
+  };
+  assert.equal(buildChatListItems([empty]).length, 0);
+});
