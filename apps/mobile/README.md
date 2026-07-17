@@ -164,7 +164,27 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 ## WebView 资源（最短开发路径）
 
-聊天 Transcript 与富文档预览各为一包：Web 真源在 `src/web/{chat-transcript,rich-document}/webview/`（chat-transcript 按 `bridge` / `state` / `scroll` / `menu` / `stream` / `render` / `util` 分子目录，无 barrel），RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+聊天 Transcript 与富文档预览各为一包。Web 真源在 `src/web/{chat-transcript,rich-document}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+
+### Preact + TSX 与目录分层
+
+双包视图主写法为 **Preact + TSX**（不上 `htm` 主路径）。每个包 `webview/` 内强制：
+
+| 目录 | 内容 |
+|------|------|
+| `ui/**/*.tsx` | 仅结构组件（菜单 / 行列表 / 流式壳 / DocumentApp 等） |
+| `runtime/**/*.ts` | 仅非 UI（桥 / 状态 / 滚动 / 流式增量 DOM / 门面）；CT 保留 `menu` / `render` 等职责子目录 |
+| `main.ts` | 唯一根入口（本身无 JSX） |
+
+禁止同目录混放 TSX 与业务 TS；禁止 `index.ts` barrel。职责心智仍按「改菜单找 menu、改行找 render、改流式找 stream」。终局树以 Preact 迭代 SPEC 为准（不再以 layout-cleanup 七类**顶层**为验收）。
+
+### P0-3 装配契约（最短）
+
+结构在 `ui/*.tsx`；`runtime` 只保留同名门面（如 `renderRows` / `renderContextMenu` / `setDocument`），**不** import `ui/**`（例外：`shared/ui/TrustedHtml`）、**不**在 runtime 内 `preact.render`。
+
+**唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `registerRenderRows` + `registerRenderContextMenu`；RD `registerSetDocumentView`。
+
+Spec: `.apm/kb/docs/Iterations/mobile-webview-preact-htm/spec.md`
 
 **最短路径（改真源 → 真机生效）：**
 
@@ -193,7 +213,7 @@ npm run ios -w @novel-master/mobile
 npm test -w @novel-master/mobile -- --testPathPattern="boot-script|webview-uri|chat-transcript-rich-styles"
 ```
 
-Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
+Bundler / 产物路径 Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
 
 ## Chat transcript (WebView engine)
 
