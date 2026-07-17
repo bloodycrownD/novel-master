@@ -164,6 +164,7 @@ export function StreamTail() {
             seedText={textSeed.seedText}
           />
         ) : null}
+        {/* tool-invoking 单路径：仅此处声明式产出，runtime 不得再 createElement 插条 */}
         {showIdleBar ? <ToolInvokingBar key="stream-invoking" /> : null}
       </div>
     </div>

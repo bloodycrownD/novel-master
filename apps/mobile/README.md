@@ -186,7 +186,7 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 **唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `registerRenderRows` + `registerRenderContextMenu`；RD `registerSetDocumentView`。
 
-**壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking bar 在 bubble 内的命令式旁路为**已知限制**，不纳入必清。
+**壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamTail` → `ToolInvokingBar`）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
 
 Spec: `.apm/kb/docs/Iterations/mobile-webview-preact-htm/spec.md` · 壳债：`features/webview-imperative-shell-debt/spec.md`
 

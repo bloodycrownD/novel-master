@@ -183,6 +183,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('const streamTextBody = ensureStreamTextBody(bubble)');
     expect(script).toContain('insertAdjacentHTML');
     expect(script).toContain('escapeHtml(delta)');
+    // tool-invoking 单路径：壳归 Preact ToolInvokingBar；runtime 不得再拼串/createElement 插条
+    expect(script).toContain('ToolInvokingBar');
+    expect(script).not.toContain('renderToolInvokingBar');
   });
 
   it('T-PH-06: 流式壳/增量分离与 P0-2 所有权', () => {

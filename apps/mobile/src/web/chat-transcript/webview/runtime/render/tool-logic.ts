@@ -52,15 +52,6 @@ export function toolStatusClass(status: string | undefined): string {
   return 'success';
 }
 
-/** 流式 setStreamToolInvokingDom 仍用字符串插入。 */
-export function renderToolInvokingBar(): string {
-  return (
-    '<div class="tool-invoking-bar">' +
-    '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
-    '<span class="tool-invoking-label">生成中</span></div>'
-  );
-}
-
 export function renderToolGroupItem(tool: ToolCallRow): string {
   const filePath = vfsToolFilePath(tool.name || '', tool.input || {});
   const canOpen = filePath != null;

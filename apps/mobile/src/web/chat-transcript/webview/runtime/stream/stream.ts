@@ -4,7 +4,6 @@ import { state } from '../state/state';
 import type { ToolCallRow } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
 import { renderRows } from '../render/row-logic';
-import { renderToolInvokingBar } from '../render/tool-logic';
 import { scheduleStreamRichUpgrade, streamRichUpgrade } from './stream-markdown';
 
 export type StreamKind = 'text' | 'thinking';
@@ -14,7 +13,8 @@ export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
  * 流式尾部相位、增量 DOM 与 batch/delta 提交（不含 stream-markdown）。
  * P0-2 / ISD **非债**：壳/相位在 ui/stream；本文件 body 子树的 createElement /
  * insertAdjacentHTML 为刻意增量岛屿，禁止本迭代迁 Preact。
- * tool-invoking bar 的 createElement 旁路为 **已知限制**，不纳入壳债必清。
+ * tool-invoking「生成中」条：有且仅有一条 Preact 路径（StreamTail → ToolInvokingBar）；
+ * 本文件只改 state.stream.toolInvoking 并 renderRows，禁止 bubble 内 createElement 插条。
  */
 export function streamHasContent(): boolean {
   return (
@@ -100,24 +100,7 @@ function syncStreamBodiesFromState(bubble: Element): void {
       setStreamBodyRichClass(textBody, false);
     }
   }
-
-  const showIdleBar = getStreamTailPhase() === 'idle-after-content';
-  const existing = bubble.querySelector('.tool-invoking-bar');
-  if (showIdleBar && !existing) {
-    const holder = document.createElement('div');
-    holder.innerHTML = renderToolInvokingBar();
-    const bar = holder.firstElementChild;
-    if (bar) {
-      const textBody = bubble.querySelector('.bubble-body');
-      if (textBody) {
-        textBody.insertAdjacentElement('afterend', bar);
-      } else {
-        bubble.appendChild(bar);
-      }
-    }
-  } else if (!showIdleBar && existing) {
-    existing.remove();
-  }
+  // tool-invoking 条由 StreamTail/ToolInvokingBar 声明式产出，此处不碰
 }
 
 /**
@@ -313,63 +296,15 @@ export function appendStreamDeltaIncremental(
   return false;
 }
 
+/**
+ * 更新 toolInvoking 并经 Preact 壳刷新「生成中」条（单路径）。
+ * 不在 bubble 内 createElement；StreamBodyHost 稳定 key + shouldComponentUpdate=false
+ * 保证 renderRows 不会毁掉 P0-2 body 增量岛。
+ */
 export function setStreamToolInvokingDom(active: boolean): void {
   state.stream.toolInvoking = !!active;
-  const tail = document.getElementById('stream-tail');
-  if (!tail) {
-    if (shouldRenderStreamTail()) {
-      renderRows();
-      scheduleStickIfNearBottom();
-    }
-    return;
-  }
-  const isWaitingShell = tail.classList.contains('stream--waiting-first');
-  const phase = getStreamTailPhase();
-  if (isWaitingShell && phase !== 'waiting-first') {
-    renderRows();
-    scheduleStickIfNearBottom();
-    return;
-  }
-  if (!isWaitingShell && phase === 'waiting-first') {
-    renderRows();
-    scheduleStickIfNearBottom();
-    return;
-  }
-  if (phase === 'waiting-first') {
-    if (!active && !streamHasContent()) {
-      renderRows();
-      scheduleStickIfNearBottom();
-    }
-    return;
-  }
-  const bubble = tail.querySelector('.bubble');
-  if (!bubble) {
-    renderRows();
-    scheduleStickIfNearBottom();
-    return;
-  }
-  const existing = bubble.querySelector('.tool-invoking-bar');
-  if (active) {
-    if (!existing) {
-      const holder = document.createElement('div');
-      holder.innerHTML = renderToolInvokingBar();
-      const bar = holder.firstElementChild;
-      if (bar) {
-        const textBody = bubble.querySelector('.bubble-body');
-        if (textBody) {
-          textBody.insertAdjacentElement('afterend', bar);
-        } else {
-          bubble.appendChild(bar);
-        }
-      }
-    }
-  } else if (existing) {
-    existing.remove();
-  }
-  if (!shouldRenderStreamTail()) {
-    renderRows();
-    scheduleStickIfNearBottom();
-  }
+  renderRows();
+  scheduleStickIfNearBottom();
 }
 
 export function appendStreamDelta(

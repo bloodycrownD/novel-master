@@ -25,7 +25,7 @@ date: 2026-07-18
 | 菜单 overlay / grace / `menu-open` / layout 逻辑 | 逻辑非债 | 保留在 `runtime/menu`；不再依赖手搓壳前提 |
 | `ContextMenu` 菜单项 | 已声明式 | 扩展为完整 Overlay 或拆分组件 |
 | 流式 `createElement(.bubble-body)` / `insertAdjacentHTML` / `StreamBodyHost` | **非债 P0-2** | 禁止本迭代改造 |
-| tool-invoking 命令式旁路（bubble 内 holder） | **已知限制** | 标明；不纳入必清 |
+| tool-invoking「生成中」条 | **已清（单路径）** | 壳归 Preact `ToolInvokingBar`；runtime 只 state + `renderRows` |
 | boot 壳委托 / 桥主题 / 静态 html 锚点 / TrustedHtml | **非债** | 不动 |
 | `renderToolGroup*` 无引用拼串 | 可选死代码 | 非门禁；可顺手删 |
 
