@@ -2,14 +2,12 @@ import {
   ANCHORED_MENU_GAP,
   ANCHORED_MENU_SCREEN_MARGIN,
   ANCHORED_MENU_ITEM_MIN_HEIGHT,
-  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
   ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
   ANCHORED_MENU_MAX_HEIGHT_CAP,
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_MAX_WIDTH,
   ANCHORED_MENU_H_PADDING,
   ANCHORED_MENU_CHAR_WIDTH_EST,
-  MESSAGE_ACTION_MENU_ITEM_COUNT,
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
 } from '@web/shared/constants';
@@ -24,18 +22,23 @@ import type {
 import { post } from '../bridge/bridge';
 
 /**
- * P0-3：renderContextMenu UI 结构刷新注册门面。
- * Preact ContextMenu 由 main 注册；本文件只持有实现引用，不 import ui / 不 preact.render。
+ * ISD 债/非债（菜单）：
+ * - **债（已清）**：`#menu-backdrop` + `#context-menu` 的 createElement + body.appendChild / 裸 .remove()
+ * - **非债（保留）**：layout / grace / menu-open / overlay 手势 / 长按
+ * P0-3：完整 MenuOverlay 由 main 注册到 #menu-portal；本文件只持有实现引用，不 import ui / 不 preact.render。
  */
-export type RenderContextMenuView = (args: {
-  menuRoot: HTMLElement;
+export type MenuOverlayViewProps = {
   messageId: string;
   items: MenuItem[];
-}) => void;
+  anchor: MenuAnchor;
+};
+
+/** null = 卸载（render(null, portal)）；非 null = 刷新完整 overlay。 */
+export type RenderContextMenuView = (props: MenuOverlayViewProps | null) => void;
 
 let _renderContextMenuView: RenderContextMenuView | null = null;
 
-/** 由 main 注册 Preact（或其它）上下文菜单结构刷新实现。 */
+/** 由 main 注册 Preact MenuOverlay 刷新/卸载实现。 */
 export function registerRenderContextMenu(fn: RenderContextMenuView): void {
   _renderContextMenuView = fn;
 }
@@ -43,13 +46,11 @@ export function registerRenderContextMenu(fn: RenderContextMenuView): void {
 /**
  * 调用已注册实现；未注册时返回 false。
  */
-export function invokeRegisteredRenderContextMenu(args: {
-  menuRoot: HTMLElement;
-  messageId: string;
-  items: MenuItem[];
-}): boolean {
+export function invokeRegisteredRenderContextMenu(
+  props: MenuOverlayViewProps | null,
+): boolean {
   if (!_renderContextMenuView) return false;
-  _renderContextMenuView(args);
+  _renderContextMenuView(props);
   return true;
 }
 
@@ -237,10 +238,10 @@ export function closeContextMenu(notifyHost?: boolean): void {
     document.removeEventListener('touchend', state.menuOverlayHandler, true);
     state.menuOverlayHandler = null;
   }
-  const menuEl = document.getElementById('context-menu');
-  if (menuEl) menuEl.remove();
-  const backdrop = document.getElementById('menu-backdrop');
-  if (backdrop) backdrop.remove();
+  // 经注册卸载（render(null, #menu-portal)）；禁止裸 .remove() 甩掉 Preact 根
+  if (_renderContextMenuView) {
+    _renderContextMenuView(null);
+  }
   if (notifyHost !== false) post('menuClosed', {});
 }
 
@@ -279,67 +280,19 @@ export function handleMenuOverlayEvent(event: Event): void {
 }
 
 /**
- * 上下文菜单门面：宿主节点 + 已注册结构刷新 + measure/layout（P1-4）+ overlay。
- * 结构由 main 注册的 Preact 实现写入；本函数不含 JSX / 不拼菜单项 HTML。
+ * 上下文菜单门面：已注册 MenuOverlay 刷新 + overlay 监听。
+ * 壳 DOM 由 main → #menu-portal；P1-4 measure/layout 在 MenuOverlay useLayoutEffect。
+ * 本函数不含 JSX / 不 createElement 挂 body。
  */
 export function renderContextMenu(): void {
   if (!state.menu) return;
   if (!_renderContextMenuView) return;
   const menu = state.menu;
-  const existingMenu = document.getElementById('context-menu');
-  if (existingMenu) existingMenu.remove();
-  const existingBackdrop = document.getElementById('menu-backdrop');
-  if (existingBackdrop) existingBackdrop.remove();
-  const backdrop = document.createElement('div');
-  backdrop.id = 'menu-backdrop';
-  backdrop.className = 'menu-backdrop';
-  backdrop.setAttribute('data-action', 'close-menu');
-  const menuEl = document.createElement('div');
-  menuEl.id = 'context-menu';
-  menuEl.className = 'context-menu';
-  const menuWidth = computeContextMenuWidth(menu.items);
-  document.body.appendChild(backdrop);
-  document.body.appendChild(menuEl);
-  // P1-4：mount 后、对用户可见前完成 measure + layoutContextMenu
-  menuEl.style.position = 'fixed';
-  menuEl.style.visibility = 'hidden';
-  menuEl.style.left = '0';
-  menuEl.style.top = '0';
-  menuEl.style.width = menuWidth + 'px';
-  menuEl.style.maxHeight = 'none';
   _renderContextMenuView({
-    menuRoot: menuEl,
     messageId: menu.messageId,
     items: menu.items,
+    anchor: menu.anchor,
   });
-  // 测量已渲染行高（CSS min-height + borders）；估算 48px/行在真机易偏大
-  const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
-  const contentHeight =
-    measuredHeight > 0
-      ? measuredHeight
-      : menu.items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
-  let layout = layoutContextMenu(menu.anchor, contentHeight, menuWidth);
-  if (menu.items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
-    layout = {
-      left: layout.left,
-      top: layout.top,
-      width: layout.width,
-      maxHeight: contentHeight,
-      scrollable: false,
-    };
-  }
-  menuEl.style.visibility = '';
-  menuEl.style.left = layout.left + 'px';
-  menuEl.style.top = layout.top + 'px';
-  menuEl.style.width = layout.width + 'px';
-  menuEl.style.height = 'auto';
-  if (layout.scrollable) {
-    menuEl.className = 'context-menu scrollable';
-    menuEl.style.maxHeight = layout.maxHeight + 'px';
-  } else {
-    menuEl.className = 'context-menu';
-    menuEl.style.maxHeight = 'none';
-  }
   document.body.classList.add('menu-open');
   attachMenuNativeTextBlock();
   state.menuOverlayHandler = handleMenuOverlayEvent;
