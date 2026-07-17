@@ -1,4 +1,4 @@
-import { NEAR_BOTTOM } from '../../../../shared/constants';
+import { NEAR_BOTTOM } from '@web/shared/constants';
 import { state, SCHEMA_V } from '../state/state';
 import { post } from '../bridge/bridge';
 import { clearLongPress } from '../menu/menu';

@@ -12,7 +12,7 @@ import {
   MESSAGE_ACTION_MENU_ITEM_COUNT,
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../../../../shared/constants';
+} from '@web/shared/constants';
 import { state } from '../state/state';
 import type {
   MenuAnchor,

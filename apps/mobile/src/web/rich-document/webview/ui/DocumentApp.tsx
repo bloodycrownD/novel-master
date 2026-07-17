@@ -4,7 +4,7 @@
  */
 import { h } from 'preact';
 import type { ComponentChildren } from 'preact';
-import { TrustedHtml } from '../../../shared/ui/TrustedHtml';
+import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
 import {
   OVER_LIMIT_HINT,
   type DocumentPayload,

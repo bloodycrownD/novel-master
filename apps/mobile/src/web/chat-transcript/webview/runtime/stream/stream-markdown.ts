@@ -1,5 +1,5 @@
-import { decodeLiteralHtmlEntities } from '../../../../shared/decode-entities';
-import { applyTrustedHtml } from '../../../../shared/ui/TrustedHtml';
+import { decodeLiteralHtmlEntities } from '@web/shared/decode-entities';
+import { applyTrustedHtml } from '@web/shared/ui/TrustedHtml';
 import { escapeHtmlRaw } from '../util/html-escape';
 import { state } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';

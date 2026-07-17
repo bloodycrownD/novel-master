@@ -1,4 +1,4 @@
-import { decodeLiteralHtmlEntities } from '../../../../shared/decode-entities';
+import { decodeLiteralHtmlEntities } from '@web/shared/decode-entities';
 /**
  * HTML 转义工具（供 stream-markdown 与行渲染共用）。
  */
