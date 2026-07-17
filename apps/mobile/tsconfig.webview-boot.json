@@ -11,7 +11,11 @@
     "esModuleInterop": true,
     "jsx": "react",
     "jsxFactory": "h",
-    "jsxFragmentFactory": "Fragment"
+    "jsxFragmentFactory": "Fragment",
+    "baseUrl": ".",
+    "paths": {
+      "@web/*": ["src/web/*"]
+    }
   },
   "include": [
     "src/web/chat-transcript/webview/**/*.ts",

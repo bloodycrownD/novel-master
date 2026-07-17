@@ -52,6 +52,9 @@ function readWeb(rel) {
 /**
  * 从 shared/rich-content-styles.ts 加载富文本 CSS（单源，禁止内嵌第二份规则）。
  */
+/** WebView boot 路径别名：`@web/*` → `src/web/*`（勿与 RN Metro `@/` 混用） */
+const webAlias = { '@web': webRoot };
+
 async function loadRichContentStyles() {
   const result = await esbuild.build({
     entryPoints: [join(webRoot, 'shared/rich-content-styles.ts')],
@@ -60,6 +63,7 @@ async function loadRichContentStyles() {
     format: 'esm',
     platform: 'neutral',
     logLevel: 'warning',
+    alias: webAlias,
   });
   const code = result.outputFiles[0].text;
   const mod = await import(
@@ -98,6 +102,7 @@ async function bundleAppJs(pkgId, entryAbs) {
     jsxFragment: 'Fragment',
     // 仅允许解析 web/shared 与本包；禁止拉进 RN 组件树
     packages: 'bundle',
+    alias: webAlias,
   });
   return outfile;
 }
