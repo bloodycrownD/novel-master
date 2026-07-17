@@ -16,20 +16,24 @@ import {
   MENU_OPEN_GRACE_MS,
 } from '../src/web/chat-transcript/menu-overlay-guards';
 import { NEAR_BOTTOM_THRESHOLD_PX } from '../src/web/chat-transcript/scroll';
-import {
-  CHAT_TRANSCRIPT_BASE_URL,
-  CHAT_TRANSCRIPT_HTML,
-} from '../src/web/chat-transcript/transcript-html';
-import { extractBootScriptFromHtml } from './helpers/extract-webview-boot-script';
+import { readWebViewDistFile } from './helpers/read-webview-dist';
 
 function bootScript(): string {
-  return extractBootScriptFromHtml(CHAT_TRANSCRIPT_HTML);
+  return readWebViewDistFile('chat-transcript', 'app.js');
 }
 
-describe('chat-transcript WebView boot (T-BR)', () => {
+function indexHtml(): string {
+  return readWebViewDistFile('chat-transcript', 'index.html');
+}
+
+function appCss(): string {
+  return readWebViewDistFile('chat-transcript', 'app.css');
+}
+
+describe('chat-transcript WebView boot (T-BR / dist)', () => {
   it('T-BR-ASM-01: script parses and has readyState fallback', () => {
     const script = bootScript();
-    expect(script).toContain("readyState === 'loading'");
+    expect(script).toContain('readyState === "loading"');
     expect(script).toContain('bootTranscript');
     expect(() => {
       // eslint-disable-next-line no-new-func -- 语法守护：boot IIFE 不可损坏
@@ -37,15 +41,18 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     }).not.toThrow();
   });
 
-  it('T-BR-ASM-03: shell has scroller/rows; BASE_URL unchanged', () => {
-    expect(CHAT_TRANSCRIPT_HTML).toContain('id="scroller"');
-    expect(CHAT_TRANSCRIPT_HTML).toContain('id="rows"');
-    expect(CHAT_TRANSCRIPT_BASE_URL).toBe('https://novel-master.local/');
+  it('T-BR-ASM-03: shell has scroller/rows; relative app.js/app.css（无 BASE_URL）', () => {
+    const html = indexHtml();
+    expect(html).toContain('id="scroller"');
+    expect(html).toContain('id="rows"');
+    expect(html).toContain('./app.js');
+    expect(html).toContain('./app.css');
+    expect(html).not.toContain('https://novel-master.local/');
   });
 
   it('T-BR-ASM-04: ready post and bootTranscript present', () => {
     const script = bootScript();
-    expect(script).toContain("post('ready'");
+    expect(script).toContain('post("ready"');
     expect(script).toContain('bootTranscript');
   });
 
@@ -54,17 +61,15 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     expect(script).toContain('menuOverlayHandler');
     expect(script).toContain('handleMenuOverlayEvent');
     expect(script).toContain(
-      "document.addEventListener('click', state.menuOverlayHandler, true)",
+      'document.addEventListener("click", state.menuOverlayHandler, true)',
     );
-    expect(script).toContain('Backdrop lives on document.body outside #rows');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
     expect(script).toContain('state.menuOpenedAt');
     expect(script).toContain('layoutContextMenu');
     expect(script).toContain('scrollable');
     expect(script).toContain('resolveMenuAnchor');
     expect(script).toContain('touch.clientX');
-    expect(script).toContain("querySelector('.bubble')");
-    expect(script).toContain('Long-press finger point');
+    expect(script).toContain('querySelector(".bubble")');
     expect(script).toContain('menu.items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT');
     expect(script).toContain('measuredHeight');
     expect(script).toContain('onMessagePointerMove');
@@ -97,8 +102,8 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     expect(script).toContain('renderStreamWaitingFirstRow');
     expect(script).toContain('getStreamTailPhase');
     expect(script).toContain('streamHasContent');
-    expect(script).toContain("tail.classList.contains('stream--waiting-first')");
-    expect(script).toContain("!tail.querySelector('.bubble')");
+    expect(script).toContain('stream--waiting-first');
+    expect(script).toContain('querySelector(".bubble")');
     expect(script).toContain('renderStreamBubbleInner');
     expect(script).toContain('renderAssistantBubbleInner');
     expect(script).toContain('ensureStreamTextBody');
@@ -107,29 +112,29 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     expect(script).toContain('streamThinkingHtml');
     expect(script).toContain('updateStreamBubble');
     expect(script).toContain('p.html');
-    expect(script).toContain("state.stream.textHtml = ''");
-    expect(script).toContain("state.stream.thinkingHtml = ''");
+    expect(script).toContain('state.stream.textHtml = ""');
+    expect(script).toContain('state.stream.thinkingHtml = ""');
     expect(script).toContain('body.innerHTML = html');
     expect(script).toContain('renderStreamingMarkdown');
     expect(script).toContain('scheduleStreamRichUpgrade');
     expect(script).toContain('appendStreamDeltaIncremental');
     expect(script).toContain('applyStreamBatch');
-    expect(script).toContain("case 'streamBatch'");
-    expect(script).toContain("if (!incremental && kind !== 'text') {");
+    expect(script).toContain('case "streamBatch"');
+    expect(script).toContain('if (!incremental && kind !== "text") {');
     expect(script).toContain('updateStreamBubble(tail);');
     expect(script).toContain('if (!tail) {');
     expect(script).toContain('renderRows();');
-    expect(script).toContain("if (state.flags.richText && !html) {");
-    expect(script).toContain("} else if (kind === 'text') {");
+    expect(script).toContain('if (state.flags.richText && !html) {');
+    expect(script).toContain('} else if (kind === "text") {');
     expect(script).toContain('var streamTextBody = ensureStreamTextBody(bubble);');
     expect(script).toContain(
-      "streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));",
+      'streamTextBody.insertAdjacentHTML("beforeend", escapeHtml(delta));',
     );
   });
 
   it('T-BR-CT-04: streamCommit / promote tail', () => {
     const script = bootScript();
-    expect(script).toContain("case 'streamCommit':");
+    expect(script).toContain('case "streamCommit":');
     expect(script).toContain('function applyStreamCommit(payload)');
     expect(script).toContain('function promoteStreamTailToRow(row)');
     expect(script).toContain('state.rows = state.rows.concat(toAppend)');
@@ -139,7 +144,7 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     const script = bootScript();
     expect(script).toContain('resolveVfsToolFilePath');
     expect(script).toContain('resolveLogicalPathForToolCard');
-    expect(script).toContain("return normalizePathForToolCard('/' + trimmed);");
+    expect(script).toContain("return normalizePathForToolCard(\"/\" + trimmed);");
   });
 
   it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
@@ -149,13 +154,13 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     expect(script).toContain('hasTools');
     expect(script).toContain('} else if (hasThinking) {');
     expect(script).toContain(
-      "var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';",
+      'var richShellBubble = state.flags.richText && textHtml ? " rich" : "";',
     );
     expect(script).toContain(
       `html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';`,
     );
     expect(script).toContain(
-      "var showIdleBar = getStreamTailPhase() === 'idle-after-content'",
+      'var showIdleBar = getStreamTailPhase() === "idle-after-content"',
     );
   });
 
@@ -165,18 +170,22 @@ describe('chat-transcript WebView boot (T-BR)', () => {
     expect(script).not.toContain('parseUserVfsAction');
   });
 
-  it('T-BR-CSS-01: rich list padding in assembled HTML', () => {
-    expect(CHAT_TRANSCRIPT_HTML).toContain('.bubble.rich ol');
-    expect(CHAT_TRANSCRIPT_HTML).toContain('.bubble.rich ul');
-    expect(CHAT_TRANSCRIPT_HTML).toContain('padding-left: 1.5em');
-    expect(CHAT_TRANSCRIPT_HTML).toContain(
+  it('T-BR-CSS-01: rich list padding in app.css', () => {
+    const css = appCss();
+    expect(css).toContain('.bubble.rich ol');
+    expect(css).toContain('.bubble.rich ul');
+    expect(css).toContain('padding-left: 1.5em');
+    expect(css).toContain(
       'outside markers stay inside the content area',
     );
   });
 
   it('T-BR-SYNC-01…14: boot constants match TS sources', () => {
     const script = bootScript();
-    expect(script).toContain(`var NEAR_BOTTOM = ${NEAR_BOTTOM_THRESHOLD_PX};`);
+    expect(script).toContain(
+      `var NEAR_BOTTOM_THRESHOLD_PX = ${NEAR_BOTTOM_THRESHOLD_PX};`,
+    );
+    expect(script).toContain('var NEAR_BOTTOM = NEAR_BOTTOM_THRESHOLD_PX;');
     expect(script).toContain(`var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};`);
     expect(script).toContain(
       `var LONG_PRESS_MOVE_TOLERANCE_PX = ${LONG_PRESS_MOVE_TOLERANCE_PX};`,

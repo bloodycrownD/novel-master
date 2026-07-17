@@ -8,6 +8,7 @@ import {
   afterEach,
 } from '@jest/globals';
 import TestRenderer, { act } from 'react-test-renderer';
+import { Platform } from 'react-native';
 import { type ChatMessage } from '@novel-master/core/chat';
 import {
   CHAT_TRANSCRIPT_BRIDGE_VERSION,
@@ -40,6 +41,21 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 jest.mock('../src/services/chat-transcript-telemetry', () => ({
   emitChatTranscriptTelemetry: jest.fn(),
 }));
+
+jest.mock('react-native-blob-util', () => ({
+  __esModule: true,
+  default: {
+    fs: {
+      dirs: { MainBundleDir: '/App/NovelMaster.app' },
+    },
+  },
+}));
+
+// URI helper 在 Android 走恒定案串，避免 Jest 默认 iOS 依赖 Bundle 路径
+Object.defineProperty(Platform, 'OS', {
+  configurable: true,
+  get: () => 'android',
+});
 
 function sampleMessage(id: string, seq: number): ChatMessage {
   return {
