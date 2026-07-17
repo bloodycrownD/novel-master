@@ -6,7 +6,7 @@
  * 壳 re-render（相位条、bubble class）不得销毁 runtime 已写入的 body DOM。
  * 稳定 key 保证 thinking 段插入时 text host 不 remount。
  */
-import { h, Component } from 'preact';
+import { Component } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { TrustedHtml } from '../../../../shared/ui/TrustedHtml';
 import { state } from '../../runtime/state/state';

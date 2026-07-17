@@ -2,7 +2,6 @@
  * 上下文菜单结构：仅渲染菜单项按钮。
  * 布局 / overlay / 测量 / 开关由 runtime/menu 负责（P0-3 / P1-4）。
  */
-import { h } from 'preact';
 import type { MenuItem } from '../../runtime/state/state';
 
 export type ContextMenuProps = {

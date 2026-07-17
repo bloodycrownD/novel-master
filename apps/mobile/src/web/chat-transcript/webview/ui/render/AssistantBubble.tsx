@@ -2,7 +2,6 @@
  * 助手气泡内层：思考 / 正文 / 生成中条 / 工具组。
  * 宿主消毒 HTML（textHtml / thinkingHtml）一律经 TrustedHtml。
  */
-import { h } from 'preact';
 import type { ComponentChildren } from 'preact';
 import type { ToolCallRow } from '../../runtime/state/state';
 import { TrustedHtml } from '../../../../shared/ui/TrustedHtml';

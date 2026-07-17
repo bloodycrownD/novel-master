@@ -1,7 +1,6 @@
 /**
  * 行列表根：加载更早 / 消息行 / 流式尾 / 空态。
  */
-import { h } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { state } from '../../runtime/state/state';
 import { MessageRow } from './MessageRow';

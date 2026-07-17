@@ -1,7 +1,6 @@
 /**
  * 消息附件组：对齐工具组折叠交互。
  */
-import { h } from 'preact';
 import type { AttachmentChip } from '../../runtime/state/state';
 import {
   attachmentChipLabel,

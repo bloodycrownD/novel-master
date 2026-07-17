@@ -2,7 +2,6 @@
  * rich-document 整页视图：主题 CSS 变量由 runtime applyTheme 写入；
  * 本组件负责文档结构；富片段与 frontMatterHtml 一律走 TrustedHtml。
  */
-import { h } from 'preact';
 import type { ComponentChildren } from 'preact';
 import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
 import {

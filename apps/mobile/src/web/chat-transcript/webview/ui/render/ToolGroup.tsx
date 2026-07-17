@@ -1,7 +1,6 @@
 /**
  * 工具调用组：可折叠 header + 卡片列表。
  */
-import { h } from 'preact';
 import type { ToolCallRow } from '../../runtime/state/state';
 import {
   toolCallSummary,

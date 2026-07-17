@@ -1,7 +1,6 @@
 /**
  * 普通消息行（user / assistant）。
  */
-import { h } from 'preact';
 import type { MessageRow as MessageRowModel } from '../../runtime/state/state';
 import { state } from '../../runtime/state/state';
 import { assistantBubbleExtraClasses } from '../../runtime/stream/stream';

@@ -3,7 +3,6 @@
  * - ui：`<TrustedHtml html={…} />`
  * - runtime：`applyTrustedHtml(el, html)`（runtime 唯一允许 import 的 shared/ui 模块）
  */
-import { h } from 'preact';
 import type { JSX } from 'preact';
 
 export type TrustedHtmlProps = {

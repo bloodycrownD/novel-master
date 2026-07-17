@@ -1,7 +1,6 @@
 /**
  * 用户 VFS 回合行：仅工具组气泡。
  */
-import { h } from 'preact';
 import type { UserVfsTurnRow as UserVfsTurnRowModel } from '../../runtime/state/state';
 import { state } from '../../runtime/state/state';
 import { ToolGroup } from './ToolGroup';

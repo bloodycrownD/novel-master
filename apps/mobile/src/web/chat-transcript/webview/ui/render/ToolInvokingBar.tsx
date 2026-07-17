@@ -1,8 +1,6 @@
 /**
  * 工具「生成中」条。
  */
-import { h } from 'preact';
-
 export function ToolInvokingBar() {
   return (
     <div className="tool-invoking-bar">
