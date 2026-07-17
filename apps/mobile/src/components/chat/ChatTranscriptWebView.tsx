@@ -33,9 +33,9 @@ import {
   selectTailTranscriptRows,
 } from './message-blocks';
 import {
-  CHAT_TRANSCRIPT_BASE_URL,
-  CHAT_TRANSCRIPT_HTML,
-} from '@/web/chat-transcript/transcript-html';
+  getChatTranscriptPackageDirUri,
+  getChatTranscriptUri,
+} from '@/web/chat-transcript/uri';
 import { emitChatTranscriptTelemetry } from '@/services/chat-transcript-telemetry';
 import { useTheme } from '@/theme/ThemeProvider';
 import { prepareStreamTailHtml } from './prepare-stream-tail-html';
@@ -711,9 +711,10 @@ export const ChatTranscriptWebView = memo(
 
       const handleMessage = useCallback(
         (event: WebViewMessageEvent) => {
+          const raw = event.nativeEvent.data;
           let message;
           try {
-            message = decodeTranscriptToHost(event.nativeEvent.data);
+            message = decodeTranscriptToHost(raw);
           } catch {
             return;
           }
@@ -999,10 +1000,10 @@ export const ChatTranscriptWebView = memo(
             ref={webRef}
             style={styles.fill}
             originWhitelist={['*']}
-            source={{
-              html: CHAT_TRANSCRIPT_HTML,
-              baseUrl: CHAT_TRANSCRIPT_BASE_URL,
-            }}
+            source={{ uri: getChatTranscriptUri() }}
+            allowFileAccess
+            allowFileAccessFromFileURLs
+            allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
             onMessage={handleMessage}
             javaScriptEnabled
             domStorageEnabled

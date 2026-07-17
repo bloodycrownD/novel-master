@@ -12,9 +12,9 @@ import {
   type RichDocumentTheme,
 } from './RichDocumentBridge';
 import {
-  RICH_DOCUMENT_BASE_URL,
-  RICH_DOCUMENT_HTML,
-} from '../../web/rich-document/document-html';
+  getRichDocumentPackageDirUri,
+  getRichDocumentUri,
+} from '../../web/rich-document/uri';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export type RichDocumentWebViewProps = {
@@ -127,7 +127,10 @@ export function RichDocumentWebView({
         ref={webRef}
         style={styles.fill}
         originWhitelist={['*']}
-        source={{html: RICH_DOCUMENT_HTML, baseUrl: RICH_DOCUMENT_BASE_URL}}
+        source={{uri: getRichDocumentUri()}}
+        allowFileAccess
+        allowFileAccessFromFileURLs
+        allowingReadAccessToURL={getRichDocumentPackageDirUri()}
         onMessage={handleMessage}
         javaScriptEnabled
         domStorageEnabled
