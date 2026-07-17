@@ -1,12 +1,61 @@
-import {buildTranscriptBootScript} from '../src/web/chat-transcript/main';
-import {MENU_OPEN_GRACE_MS} from '../src/web/chat-transcript/menu-overlay-guards';
+import {
+  ANCHORED_MENU_CHAR_WIDTH_EST,
+  ANCHORED_MENU_GAP,
+  ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
+  ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_MAX_HEIGHT_CAP,
+  ANCHORED_MENU_MAX_WIDTH,
+  ANCHORED_MENU_MIN_WIDTH,
+  ANCHORED_MENU_SCREEN_MARGIN,
+  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
+  MESSAGE_ACTION_MENU_ITEM_COUNT,
+} from '../src/components/chat/anchored-menu-layout';
+import {
+  LONG_PRESS_MOVE_TOLERANCE_PX,
+  MENU_OPEN_GRACE_MS,
+} from '../src/web/chat-transcript/menu-overlay-guards';
+import { NEAR_BOTTOM_THRESHOLD_PX } from '../src/web/chat-transcript/scroll';
+import {
+  CHAT_TRANSCRIPT_BASE_URL,
+  CHAT_TRANSCRIPT_HTML,
+} from '../src/web/chat-transcript/transcript-html';
+import { extractBootScriptFromHtml } from './helpers/extract-webview-boot-script';
 
-describe('chat-transcript boot script', () => {
-  it('dismisses context menu via document capture (outside #rows)', () => {
-    const script = buildTranscriptBootScript();
+function bootScript(): string {
+  return extractBootScriptFromHtml(CHAT_TRANSCRIPT_HTML);
+}
+
+describe('chat-transcript WebView boot (T-BR)', () => {
+  it('T-BR-ASM-01: script parses and has readyState fallback', () => {
+    const script = bootScript();
+    expect(script).toContain("readyState === 'loading'");
+    expect(script).toContain('bootTranscript');
+    expect(() => {
+      // eslint-disable-next-line no-new-func -- 语法守护：boot IIFE 不可损坏
+      new Function(script);
+    }).not.toThrow();
+  });
+
+  it('T-BR-ASM-03: shell has scroller/rows; BASE_URL unchanged', () => {
+    expect(CHAT_TRANSCRIPT_HTML).toContain('id="scroller"');
+    expect(CHAT_TRANSCRIPT_HTML).toContain('id="rows"');
+    expect(CHAT_TRANSCRIPT_BASE_URL).toBe('https://novel-master.local/');
+  });
+
+  it('T-BR-ASM-04: ready post and bootTranscript present', () => {
+    const script = bootScript();
+    expect(script).toContain("post('ready'");
+    expect(script).toContain('bootTranscript');
+  });
+
+  it('T-BR-CT-01: menu overlay / grace / layoutContextMenu contracts', () => {
+    const script = bootScript();
     expect(script).toContain('menuOverlayHandler');
     expect(script).toContain('handleMenuOverlayEvent');
-    expect(script).toContain("document.addEventListener('click', state.menuOverlayHandler, true)");
+    expect(script).toContain(
+      "document.addEventListener('click', state.menuOverlayHandler, true)",
+    );
     expect(script).toContain('Backdrop lives on document.body outside #rows');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
     expect(script).toContain('state.menuOpenedAt');
@@ -14,9 +63,9 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('scrollable');
     expect(script).toContain('resolveMenuAnchor');
     expect(script).toContain('touch.clientX');
-    expect(script).toContain('querySelector(\'.bubble\')');
+    expect(script).toContain("querySelector('.bubble')");
     expect(script).toContain('Long-press finger point');
-    expect(script).toContain('menu.items.length <= 5');
+    expect(script).toContain('menu.items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT');
     expect(script).toContain('measuredHeight');
     expect(script).toContain('onMessagePointerMove');
     expect(script).toContain('shouldCancelLongPressForMove');
@@ -27,39 +76,29 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('touchH');
   });
 
-  it('widens thinking/tools-only assistant bubbles', () => {
-    const script = buildTranscriptBootScript();
-    expect(script).toContain('bubble--fill-width');
-    expect(script).toContain('hasThinking');
-    expect(script).toContain('hasTools');
+  it('T-BR-CT-02: shouldCancelLongPressForMove has function body or inline hypot', () => {
+    const script = bootScript();
+    const hasFnBody = /function\s+shouldCancelLongPressForMove\s*\(/.test(script);
+    const hasInlineHypot =
+      /Math\.hypot\s*\(\s*dx\s*,\s*dy\s*\)/.test(script) ||
+      /Math\.hypot\s*\(\s*deltaX\s*,\s*deltaY\s*\)/.test(script);
+    expect(hasFnBody || hasInlineHypot).toBe(true);
+    if (hasFnBody) {
+      expect(script).toMatch(
+        /function\s+shouldCancelLongPressForMove\s*\([^)]*\)\s*\{[\s\S]*?Math\.hypot/,
+      );
+    }
   });
 
-  it('pre-seeds empty bubble body for thinking-only stream bubbles', () => {
-    const script = buildTranscriptBootScript();
-    // 守护 spec：当仅有 thinking、正文为空时预置 .bubble-body，避免后续 text 增量时退回整泡重建。
-    expect(script).toContain('} else if (hasThinking) {');
-    expect(script).toContain("var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';");
-    expect(script).toContain("html += '<div class=\"bubble-body' + richShellBubble + '\" data-text-shell=\"1\"></div>';");
-    expect(script).toContain("var showIdleBar = getStreamTailPhase() === 'idle-after-content'");
-  });
-
-  it('renders compact waiting-first stream tail when idle without content', () => {
-    const script = buildTranscriptBootScript();
+  it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
+    const script = bootScript();
     expect(script).toContain('stream--waiting-first');
     expect(script).toContain('stream-waiting-indicator');
     expect(script).toContain('renderStreamWaitingFirstRow');
     expect(script).toContain('getStreamTailPhase');
     expect(script).toContain('streamHasContent');
-  });
-
-  it('rebuilds stream tail from waiting-first shell on delta', () => {
-    const script = buildTranscriptBootScript();
     expect(script).toContain("tail.classList.contains('stream--waiting-first')");
-    expect(script).toContain('!tail.querySelector(\'.bubble\')');
-  });
-
-  it('renders stream tail with rich HTML when streamDelta.html is present', () => {
-    const script = buildTranscriptBootScript();
+    expect(script).toContain("!tail.querySelector('.bubble')");
     expect(script).toContain('renderStreamBubbleInner');
     expect(script).toContain('renderAssistantBubbleInner');
     expect(script).toContain('ensureStreamTextBody');
@@ -70,49 +109,104 @@ describe('chat-transcript boot script', () => {
     expect(script).toContain('p.html');
     expect(script).toContain("state.stream.textHtml = ''");
     expect(script).toContain("state.stream.thinkingHtml = ''");
-  });
-
-  it('updates stream tail incrementally when streamDelta.html is present', () => {
-    const script = buildTranscriptBootScript();
     expect(script).toContain('body.innerHTML = html');
     expect(script).toContain('renderStreamingMarkdown');
     expect(script).toContain('scheduleStreamRichUpgrade');
     expect(script).toContain('appendStreamDeltaIncremental');
     expect(script).toContain('applyStreamBatch');
     expect(script).toContain("case 'streamBatch'");
-  });
-
-  it('does not rebuild whole bubble when text incremental update fails', () => {
-    const script = buildTranscriptBootScript();
-    // 守护 spec：text 路径 incremental===false 时不能调用 updateStreamBubble，防回归到“text 首包失败整泡重建”旧逻辑。
     expect(script).toContain("if (!incremental && kind !== 'text') {");
     expect(script).toContain('updateStreamBubble(tail);');
-    // 守护 spec：仅在 stream tail 不存在时，允许 fallback 到 renderRows。
     expect(script).toContain('if (!tail) {');
     expect(script).toContain('renderRows();');
-  });
-
-  it('appends text delta when richText=true and html is missing', () => {
-    const script = buildTranscriptBootScript();
-    // 守护 spec：text 在 rich+noHtml 场景必须直接 insertAdjacentHTML，不受 streamRichDomReady 门槛影响。
     expect(script).toContain("if (state.flags.richText && !html) {");
     expect(script).toContain("} else if (kind === 'text') {");
-    expect(script).toContain("var streamTextBody = ensureStreamTextBody(bubble);");
-    expect(script).toContain("streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));");
+    expect(script).toContain('var streamTextBody = ensureStreamTextBody(bubble);');
+    expect(script).toContain(
+      "streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));",
+    );
   });
 
-  it('normalizes relative vfs tool paths in boot script', () => {
-    const script = buildTranscriptBootScript();
+  it('T-BR-CT-04: streamCommit / promote tail', () => {
+    const script = bootScript();
+    expect(script).toContain("case 'streamCommit':");
+    expect(script).toContain('function applyStreamCommit(payload)');
+    expect(script).toContain('function promoteStreamTailToRow(row)');
+    expect(script).toContain('state.rows = state.rows.concat(toAppend)');
+  });
+
+  it('T-BR-CT-05: vfs tool path normalize symbols', () => {
+    const script = bootScript();
     expect(script).toContain('resolveVfsToolFilePath');
     expect(script).toContain('resolveLogicalPathForToolCard');
     expect(script).toContain("return normalizePathForToolCard('/' + trimmed);");
   });
 
-  it('handles streamCommit for end-of-stream single renderRows', () => {
-    const script = buildTranscriptBootScript();
-    expect(script).toContain("case 'streamCommit':");
-    expect(script).toContain('function applyStreamCommit(payload)');
-    expect(script).toContain('function promoteStreamTailToRow(row)');
-    expect(script).toContain('state.rows = state.rows.concat(toAppend)');
+  it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
+    const script = bootScript();
+    expect(script).toContain('bubble--fill-width');
+    expect(script).toContain('hasThinking');
+    expect(script).toContain('hasTools');
+    expect(script).toContain('} else if (hasThinking) {');
+    expect(script).toContain(
+      "var richShellBubble = state.flags.richText && textHtml ? ' rich' : '';",
+    );
+    expect(script).toContain(
+      `html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';`,
+    );
+    expect(script).toContain(
+      "var showIdleBar = getStreamTailPhase() === 'idle-after-content'",
+    );
+  });
+
+  it('T-BR-CT-07: no parseUserVfsAction / user-vfs-action regression', () => {
+    const script = bootScript();
+    expect(script).not.toContain('user-vfs-action');
+    expect(script).not.toContain('parseUserVfsAction');
+  });
+
+  it('T-BR-CSS-01: rich list padding in assembled HTML', () => {
+    expect(CHAT_TRANSCRIPT_HTML).toContain('.bubble.rich ol');
+    expect(CHAT_TRANSCRIPT_HTML).toContain('.bubble.rich ul');
+    expect(CHAT_TRANSCRIPT_HTML).toContain('padding-left: 1.5em');
+    expect(CHAT_TRANSCRIPT_HTML).toContain(
+      'outside markers stay inside the content area',
+    );
+  });
+
+  it('T-BR-SYNC-01…14: boot constants match TS sources', () => {
+    const script = bootScript();
+    expect(script).toContain(`var NEAR_BOTTOM = ${NEAR_BOTTOM_THRESHOLD_PX};`);
+    expect(script).toContain(`var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};`);
+    expect(script).toContain(
+      `var LONG_PRESS_MOVE_TOLERANCE_PX = ${LONG_PRESS_MOVE_TOLERANCE_PX};`,
+    );
+    expect(script).toContain(`var ANCHORED_MENU_GAP = ${ANCHORED_MENU_GAP};`);
+    expect(script).toContain(
+      `var ANCHORED_MENU_SCREEN_MARGIN = ${ANCHORED_MENU_SCREEN_MARGIN};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_ITEM_MIN_HEIGHT = ${ANCHORED_MENU_ITEM_MIN_HEIGHT};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_ITEM_LAYOUT_HEIGHT = ${ANCHORED_MENU_ITEM_LAYOUT_HEIGHT};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_MAX_HEIGHT_CAP = ${ANCHORED_MENU_MAX_HEIGHT_CAP};`,
+    );
+    expect(script).toContain(`var ANCHORED_MENU_MIN_WIDTH = ${ANCHORED_MENU_MIN_WIDTH};`);
+    expect(script).toContain(`var ANCHORED_MENU_MAX_WIDTH = ${ANCHORED_MENU_MAX_WIDTH};`);
+    expect(script).toContain(
+      `var ANCHORED_MENU_H_PADDING = ${ANCHORED_MENU_H_PADDING};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_CHAR_WIDTH_EST = ${ANCHORED_MENU_CHAR_WIDTH_EST};`,
+    );
+    expect(script).toContain(
+      `var MESSAGE_ACTION_MENU_ITEM_COUNT = ${MESSAGE_ACTION_MENU_ITEM_COUNT};`,
+    );
   });
 });

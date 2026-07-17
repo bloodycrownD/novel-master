@@ -13,7 +13,7 @@ type HitEl = {
   closest?: (selector: string) => unknown;
 };
 
-/** Mirrors apps/mobile/src/web/chat-transcript/main.ts buildMenuItems set-floor rules. */
+/** Mirrors apps/mobile/src/web/chat-transcript/boot/runtime.js buildMenuItems set-floor rules. */
 function buildWebViewMenuActions(
   row: WebViewMenuRow,
   hitEl?: HitEl | null,
