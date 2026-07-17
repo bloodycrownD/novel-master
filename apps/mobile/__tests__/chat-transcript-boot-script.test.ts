@@ -1,3 +1,6 @@
+/**
+ * T-BB-06：chat-transcript 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
+ */
 import {
   ANCHORED_MENU_CHAR_WIDTH_EST,
   ANCHORED_MENU_GAP,
@@ -9,13 +12,11 @@ import {
   ANCHORED_MENU_MIN_WIDTH,
   ANCHORED_MENU_SCREEN_MARGIN,
   ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
-  MESSAGE_ACTION_MENU_ITEM_COUNT,
-} from '../src/components/chat/anchored-menu-layout';
-import {
   LONG_PRESS_MOVE_TOLERANCE_PX,
   MENU_OPEN_GRACE_MS,
-} from '../src/web/chat-transcript/menu-overlay-guards';
-import { NEAR_BOTTOM_THRESHOLD_PX } from '../src/web/chat-transcript/scroll';
+  MESSAGE_ACTION_MENU_ITEM_COUNT,
+  NEAR_BOTTOM_THRESHOLD_PX,
+} from '../src/web/shared/constants';
 import { readWebViewDistFile } from './helpers/read-webview-dist';
 
 function bootScript(): string {
@@ -30,7 +31,7 @@ function appCss(): string {
   return readWebViewDistFile('chat-transcript', 'app.css');
 }
 
-describe('chat-transcript WebView boot (T-BR / dist)', () => {
+describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
   it('T-BR-ASM-01: script parses and has readyState fallback', () => {
     const script = bootScript();
     expect(script).toContain('readyState === "loading"');
@@ -47,6 +48,8 @@ describe('chat-transcript WebView boot (T-BR / dist)', () => {
     expect(html).toContain('id="rows"');
     expect(html).toContain('./app.js');
     expect(html).toContain('./app.css');
+    expect(html).toContain('<script src="./app.js"');
+    expect(html).not.toContain('type="module"');
     expect(html).not.toContain('https://novel-master.local/');
   });
 

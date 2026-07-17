@@ -1,3 +1,6 @@
+/**
+ * T-BB-07：rich-document 契约测迁移矩阵 — 读 webview-dist 产物（pretest 已 build:webview）。
+ */
 import { readWebViewDistFile } from './helpers/read-webview-dist';
 
 function bootScript(): string {
@@ -12,7 +15,7 @@ function appCss(): string {
   return readWebViewDistFile('rich-document', 'app.css');
 }
 
-describe('rich-document WebView boot (T-BR / dist)', () => {
+describe('rich-document WebView boot (T-BB-07 / dist)', () => {
   it('T-BR-ASM-02: script parses', () => {
     const script = bootScript();
     expect(() => {
@@ -26,6 +29,8 @@ describe('rich-document WebView boot (T-BR / dist)', () => {
     expect(html).toContain('id="doc"');
     expect(html).toContain('./app.js');
     expect(html).toContain('./app.css');
+    expect(html).toContain('<script src="./app.js"');
+    expect(html).not.toContain('type="module"');
     expect(html).not.toContain('https://novel-master.local/');
   });
 
