@@ -12,7 +12,9 @@ export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
 
 /**
  * 流式尾部相位、增量 DOM 与 batch/delta 提交（不含 stream-markdown）。
- * P0-2：壳/相位在 ui/stream；本文件只写 body 子树与相位 DOM 辅助。
+ * P0-2 / ISD **非债**：壳/相位在 ui/stream；本文件 body 子树的 createElement /
+ * insertAdjacentHTML 为刻意增量岛屿，禁止本迭代迁 Preact。
+ * tool-invoking bar 的 createElement 旁路为 **已知限制**，不纳入壳债必清。
  */
 export function streamHasContent(): boolean {
   return (
