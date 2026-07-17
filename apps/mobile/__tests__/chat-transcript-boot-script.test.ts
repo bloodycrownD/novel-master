@@ -84,7 +84,8 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-01: menu overlay / grace / layoutContextMenu contracts', () => {
     const script = bootScript();
-    // 必须保留（三列矩阵）
+    const html = indexHtml();
+    // 必须保留（ISD SPEC 契约测修订矩阵）
     expect(script).toContain('layoutContextMenu');
     expect(script).toContain('menuOverlayHandler');
     expect(script).toContain('handleMenuOverlayEvent');
@@ -92,31 +93,39 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('attachMenuNativeTextBlock');
     expect(script).toContain('menu-open');
     expect(script).toContain(`MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS}`);
-    // 可改为 token / 弱断言（允许删整行字面）
-    expect(script).toMatch(
-      /addEventListener\s*\(\s*["']click["']\s*,\s*state\.menuOverlayHandler/,
-    );
+    // 可改为 token：壳 DOM / 注册 / Overlay（已迁 MenuOverlay → #menu-portal）
     expect(script).toContain('context-menu');
     expect(script).toContain('menu-backdrop');
     expect(script).toContain('data-action');
     expect(script).toContain('menu-item');
-    // 布局 / measure / 手势意图
+    expect(script).toContain('registerRenderContextMenu');
+    expect(script).toContain('MenuOverlay');
+    expect(script).toContain('ContextMenu');
+    expect(html).toContain('id="menu-portal"');
+    expect(script).toContain('menu-portal');
+    // P1-4 弱证据（visibility / measuredHeight；useLayoutEffect 打包后可能改名）
+    expect(script).toContain('visibility');
+    expect(script).toContain('measuredHeight');
+    // 布局 / 手势意图
     expect(script).toContain('state.menuOpenedAt');
     expect(script).toContain('scrollable');
     expect(script).toContain('touch.clientX');
     expect(script).toContain('querySelector(".bubble")');
-    expect(script).toContain('menu.items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT');
-    expect(script).toContain('measuredHeight');
-    expect(script).toContain('visibility');
+    // 项数门禁已迁 MenuOverlay（不再是 menu.items.length）
+    expect(script).toContain('items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT');
     expect(script).toContain('onMessagePointerMove');
     expect(script).toContain('shouldCancelLongPressForMove');
     expect(script).toContain('decodeLiteralHtmlEntities');
     expect(script).toContain('richToggledOn');
     expect(script).toContain('touchH');
-    // P0-3：main 注册门面；结构在 ContextMenu（非手拼 html +=）
-    expect(script).toContain('registerRenderContextMenu');
-    expect(script).toContain('ContextMenu');
+    // 菜单项不再手拼 html +=
     expect(script).not.toMatch(/html\s*\+=\s*['"]<button[^'"]*menu-item/);
+    // 防回潮：菜单壳不得再 createElement + appendChild(body)
+    expect(script).not.toMatch(
+      /document\.createElement\([\s\S]{0,400}?\.appendChild\s*\(\s*(?:document\.)?body\s*\)/,
+    );
+    // overlay 关闭入口可检（允许删精确 addEventListener 整行字面）
+    expect(script).toMatch(/addEventListener\s*\(\s*["']click["']/);
   });
 
   it('T-BR-CT-02: shouldCancelLongPressForMove has function body or inline hypot', () => {
