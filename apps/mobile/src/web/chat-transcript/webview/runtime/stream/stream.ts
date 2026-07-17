@@ -1,4 +1,4 @@
-import { applyTrustedHtml } from '../../../../shared/ui/TrustedHtml';
+import { applyTrustedHtml } from '@web/shared/ui/TrustedHtml';
 import { escapeHtml } from '../util/html-escape';
 import { state } from '../state/state';
 import type { ToolCallRow } from '../state/state';

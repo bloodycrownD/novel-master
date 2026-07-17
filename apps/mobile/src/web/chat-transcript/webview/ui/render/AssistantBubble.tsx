@@ -4,7 +4,7 @@
  */
 import type { ComponentChildren } from 'preact';
 import type { ToolCallRow } from '../../runtime/state/state';
-import { TrustedHtml } from '../../../../shared/ui/TrustedHtml';
+import { TrustedHtml } from '@web/shared/ui/TrustedHtml';
 import { ThinkingSection } from './ThinkingSection';
 import { ToolInvokingBar } from './ToolInvokingBar';
 import { ToolGroup } from './ToolGroup';
