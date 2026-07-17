@@ -1,6 +1,6 @@
 /**
- * 由 assemble-webview-html.mjs 从 TS 源抽取生成，禁止手改。
- * 重新生成：npm run assemble:webview-html -w @novel-master/mobile
+ * 由 build-webview.mjs 从 TS 源抽取生成，禁止手改。
+ * 重新生成：npm run build:webview -w @novel-master/mobile
  */
 var NEAR_BOTTOM = 80;
 var MENU_OPEN_GRACE_MS = 400;
