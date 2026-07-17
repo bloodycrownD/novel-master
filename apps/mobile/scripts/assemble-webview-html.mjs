@@ -1,5 +1,5 @@
 /**
- * 组装 chat-transcript / rich-document WebView HTML 生成物。
+ * 组装 chat-transcript / rich-document WebView 真实 HTML 产物（*.assembled.html）。
  *
  * chat-transcript boot concat 顺序（定案，勿改相对顺序；共享 IIFE 词法作用域，无 import/export）：
  *   1. generated-constants.js（本脚本写出）
@@ -233,24 +233,16 @@ function assembleHtml(shellHtml, css, boot) {
   return shellHtml.replace('__CSS__', css).replace('__BOOT__', boot);
 }
 
-/** 将 HTML 写成可 import 的 TS 字符串常量（转义 ` \\ ${）。 */
-function toTsStringLiteral(html) {
-  return html
-    .replace(/\\/g, '\\\\')
-    .replace(/`/g, '\\`')
-    .replace(/\$\{/g, '\\${');
-}
-
-function writeGeneratedTs(outRel, exportName, html) {
+/**
+ * 写出真实 HTML 组装产物（提交入库；禁止巨型 *.generated.ts 整页内嵌）。
+ * @param {string} outRel mobile 包内相对路径
+ * @param {string} html
+ */
+function writeAssembledHtml(outRel, html) {
   const outPath = join(mobileRoot, outRel);
   mkdirSync(dirname(outPath), { recursive: true });
-  const content = `/**
- * 由 assemble-webview-html.mjs 生成，禁止手改。
- * 重新生成：npm run assemble:webview-html -w @novel-master/mobile
- */
-export const ${exportName} = \`${toTsStringLiteral(html)}\`;
-`;
-  writeFileSync(outPath, content, 'utf8');
+  const banner = `<!-- 由 assemble-webview-html.mjs 生成，禁止手改。重新生成：npm run assemble:webview-html -w @novel-master/mobile -->\n`;
+  writeFileSync(outPath, banner + html, 'utf8');
   return outPath;
 }
 
@@ -275,14 +267,12 @@ function main() {
     concatDocumentBoot(),
   );
 
-  const tPath = writeGeneratedTs(
-    'src/web/chat-transcript/transcript-html.generated.ts',
-    'CHAT_TRANSCRIPT_HTML',
+  const tPath = writeAssembledHtml(
+    'src/web/chat-transcript/transcript.assembled.html',
     transcriptHtml,
   );
-  const dPath = writeGeneratedTs(
-    'src/web/rich-document/document-html.generated.ts',
-    'RICH_DOCUMENT_HTML',
+  const dPath = writeAssembledHtml(
+    'src/web/rich-document/document.assembled.html',
     documentHtml,
   );
 

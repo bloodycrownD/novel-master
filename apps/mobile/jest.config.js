@@ -11,6 +11,10 @@ module.exports = {
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes)/)',
   ],
+  // 与 Metro 对称：`import x from '*.html'` → UTF-8 字符串
+  transform: {
+    '^.+\\.html$': '<rootDir>/test-utils/html-string-transformer.js',
+  },
   moduleNameMapper: {
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
     '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',
