@@ -42,7 +42,6 @@ jest.mock('../src/components/chat/AttachmentDraftChips', () => {
     AttachmentDraftChips: () => null,
     ComposerStatusChips: () => null,
     ComposerAttachChips: () => null,
-    ComposerDualAttachmentChips: () => null,
   };
 });
 
