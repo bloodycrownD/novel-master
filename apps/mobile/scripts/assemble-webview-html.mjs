@@ -1,13 +1,22 @@
 /**
  * 组装 chat-transcript / rich-document WebView HTML 生成物。
  *
- * chat-transcript boot concat 顺序（定案，勿改相对顺序）：
+ * chat-transcript boot concat 顺序（定案，勿改相对顺序；共享 IIFE 词法作用域，无 import/export）：
  *   1. generated-constants.js（本脚本写出）
  *   2. shared/boot/decode-entities.js
- *   3. chat-transcript/boot/stream-markdown.js
- *   4. chat-transcript/boot/vfs-tool-path.js
- *   5. chat-transcript/boot/runtime.js（其余运行时）
- *   6. chat-transcript/boot/main.js（入口收尾）
+ *   3. chat-transcript/boot/html-escape.js（提前，供 stream-markdown 使用 escapeHtmlRaw）
+ *   4. chat-transcript/boot/stream-markdown.js
+ *   5. chat-transcript/boot/state.js（VFS_FILE_TOOLS 供 vfs-tool-path）
+ *   6. chat-transcript/boot/vfs-tool-path.js
+ *   7. chat-transcript/boot/scroll.js
+ *   8. chat-transcript/boot/tool-render.js
+ *   9. chat-transcript/boot/row-render.js
+ *  10. chat-transcript/boot/menu.js
+ *  11. chat-transcript/boot/stream.js
+ *  12. chat-transcript/boot/snapshot.js
+ *  13. chat-transcript/boot/rows-click.js
+ *  14. chat-transcript/boot/bridge.js
+ *  15. chat-transcript/boot/main.js（入口收尾）
  *
  * 用法：npm run assemble:webview-html -w @novel-master/mobile
  */
@@ -188,9 +197,18 @@ function concatTranscriptBoot() {
   const parts = [
     read('src/web/chat-transcript/boot/generated-constants.js'),
     read('src/web/shared/boot/decode-entities.js'),
+    read('src/web/chat-transcript/boot/html-escape.js'),
     read('src/web/chat-transcript/boot/stream-markdown.js'),
+    read('src/web/chat-transcript/boot/state.js'),
     read('src/web/chat-transcript/boot/vfs-tool-path.js'),
-    read('src/web/chat-transcript/boot/runtime.js'),
+    read('src/web/chat-transcript/boot/scroll.js'),
+    read('src/web/chat-transcript/boot/tool-render.js'),
+    read('src/web/chat-transcript/boot/row-render.js'),
+    read('src/web/chat-transcript/boot/menu.js'),
+    read('src/web/chat-transcript/boot/stream.js'),
+    read('src/web/chat-transcript/boot/snapshot.js'),
+    read('src/web/chat-transcript/boot/rows-click.js'),
+    read('src/web/chat-transcript/boot/bridge.js'),
     read('src/web/chat-transcript/boot/main.js'),
   ];
   return `(function () {\n${parts.join('\n')}\n})();`;

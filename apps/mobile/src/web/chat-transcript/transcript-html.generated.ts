@@ -172,6 +172,21 @@ function decodeLiteralHtmlEntities(text) {
     return current;
   }
 
+/**
+ * HTML 转义工具（供 stream-markdown 与行渲染共用）。
+ */
+  function escapeHtml(s) {
+    return escapeHtmlRaw(decodeLiteralHtmlEntities(s));
+  }
+
+  function escapeHtmlRaw(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
 var STREAM_RICH_UPGRADE_MS = 350;
   var streamRichUpgrade = {
     timer: null,
@@ -286,6 +301,33 @@ var STREAM_RICH_UPGRADE_MS = 350;
     streamRichUpgrade.timer = setTimeout(flushStreamRichUpgrade, STREAM_RICH_UPGRADE_MS);
   }
 
+/**
+ * chat-transcript boot 共享状态与版本常量。
+ */
+  var SCHEMA_V = 2;
+  var BRIDGE_V = 1;
+  var VFS_FILE_TOOLS = { read: 1, write: 1, edit: 1 };
+  var state = {
+    ready: false,
+    nearBottom: true,
+    sessionKey: '',
+    rows: [],
+    hasMore: false,
+    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
+    flags: { richText: false, menuDisabled: false },
+    menu: null,
+    menuOverlayHandler: null,
+    menuNativeTextBlockHandler: null,
+    thinkingExpanded: {},
+    toolGroupExpanded: {},
+    attachGroupExpanded: {},
+    scrollRaf: null,
+    loadOlderArmed: true,
+    longPressTimer: null,
+    longPressTarget: null,
+    menuOpenedAt: 0,
+  };
+
 function normalizePathForToolCard(path) {
     if (typeof path !== 'string' || path.length === 0) {
       throw new Error('invalid path');
@@ -344,41 +386,9 @@ function normalizePathForToolCard(path) {
   }
 
 /**
- * chat-transcript WebView boot 运行时（状态 / 渲染 / 菜单 / 桥）。
- * 组装 concat 顺序见 scripts/assemble-webview-html.mjs 顶部注释。
+ * 滚动锚点、贴底与加载更早消息。
  */
 var SCROLL_TOP_LOAD_OLDER = 24;
-  var SCHEMA_V = 2;
-  var BRIDGE_V = 1;
-  var VFS_FILE_TOOLS = { read: 1, write: 1, edit: 1 };
-  var state = {
-    ready: false,
-    nearBottom: true,
-    sessionKey: '',
-    rows: [],
-    hasMore: false,
-    stream: { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false },
-    flags: { richText: false, menuDisabled: false },
-    menu: null,
-    menuOverlayHandler: null,
-    menuNativeTextBlockHandler: null,
-    thinkingExpanded: {},
-    toolGroupExpanded: {},
-    attachGroupExpanded: {},
-    scrollRaf: null,
-    loadOlderArmed: true,
-    longPressTimer: null,
-    longPressTarget: null,
-    menuOpenedAt: 0,
-  };
-
-  function post(type, payload) {
-    var msg = JSON.stringify({ v: BRIDGE_V, type: type, payload: payload || {} });
-    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-      window.ReactNativeWebView.postMessage(msg);
-    }
-  }
-
   function offsetFromBottom(el) {
     return Math.max(0, el.scrollHeight - el.scrollTop - el.clientHeight);
   }
@@ -447,18 +457,9 @@ var SCROLL_TOP_LOAD_OLDER = 24;
     }, 100);
   }
 
-  function escapeHtml(s) {
-    return escapeHtmlRaw(decodeLiteralHtmlEntities(s));
-  }
-
-  function escapeHtmlRaw(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
+/**
+ * 工具调用摘要、状态标签与工具组 HTML 渲染。
+ */
 function summarizeToolInput(name, input) {
     var path = input && (input.path || input.dir || input.from);
     if (typeof path === 'string') return path;
@@ -498,83 +499,6 @@ function summarizeToolInput(name, input) {
       '<div class="tool-invoking-bar">' +
       '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
       '<span class="tool-invoking-label">生成中</span></div>'
-    );
-  }
-
-  function streamHasContent() {
-    return (
-      (state.stream.text && String(state.stream.text).trim().length > 0) ||
-      (state.stream.thinking && String(state.stream.thinking).trim().length > 0)
-    );
-  }
-
-  /** active | waiting-first | idle-after-content */
-  function getStreamTailPhase() {
-    if (!state.stream.toolInvoking) {
-      return 'active';
-    }
-    return streamHasContent() ? 'idle-after-content' : 'waiting-first';
-  }
-
-  function renderStreamWaitingFirstRow() {
-    return (
-      '<div class="row stream stream--waiting-first" id="stream-tail">' +
-      '<div class="stream-waiting-indicator">' +
-      '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
-      '<span class="tool-invoking-label">生成中</span></div></div>'
-    );
-  }
-
-  function shouldRenderStreamTail() {
-    return streamHasContent() || state.stream.toolInvoking;
-  }
-
-  function renderStreamTailRow() {
-    if (!shouldRenderStreamTail()) {
-      return '';
-    }
-    if (getStreamTailPhase() === 'waiting-first') {
-      return renderStreamWaitingFirstRow();
-    }
-    return (
-      '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
-      assistantBubbleExtraClasses(
-        state.stream.textHtml,
-        [],
-        state.stream.text,
-        state.stream.thinking
-      ) + '">' +
-      renderStreamBubbleInner() +
-      '</div></div>'
-    );
-  }
-
-  function thinkingBodyInner(text, thinkingHtml) {
-    var trimmed = String(text || '').trim();
-    if (!trimmed) return '';
-    if (state.flags.richText && thinkingHtml) {
-      return thinkingHtml;
-    }
-    return escapeHtml(trimmed);
-  }
-
-  function renderThinkingSection(text, key, expanded, thinkingHtml, showDividerBelow) {
-    var trimmed = String(text || '').trim();
-    if (!trimmed) return '';
-    var chevron = expanded ? '▼' : '▶';
-    var richClass = state.flags.richText && thinkingHtml ? ' rich' : '';
-    var bodyClass = 'thinking-body' + richClass;
-    if (expanded && showDividerBelow) {
-      bodyClass += ' thinking-body-divided';
-    }
-    var body = expanded
-      ? '<div class="' + bodyClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
-      : '';
-    return (
-      '<div class="thinking-section" data-thinking-key="' + escapeHtml(key) + '">' +
-      '<div class="thinking-header" data-action="toggle-thinking" data-thinking-key="' + escapeHtml(key) + '">' +
-      '<span class="thinking-title">思考过程</span>' +
-      '<span class="thinking-chevron">' + chevron + '</span></div>' + body + '</div>'
     );
   }
 
@@ -629,6 +553,38 @@ function summarizeToolInput(name, input) {
     }
     html += '</div>';
     return html;
+  }
+
+/**
+ * 消息行 / 思考 / 附件 / 助手气泡 / 用户 VFS 行渲染。
+ */
+  function thinkingBodyInner(text, thinkingHtml) {
+    var trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    if (state.flags.richText && thinkingHtml) {
+      return thinkingHtml;
+    }
+    return escapeHtml(trimmed);
+  }
+
+  function renderThinkingSection(text, key, expanded, thinkingHtml, showDividerBelow) {
+    var trimmed = String(text || '').trim();
+    if (!trimmed) return '';
+    var chevron = expanded ? '▼' : '▶';
+    var richClass = state.flags.richText && thinkingHtml ? ' rich' : '';
+    var bodyClass = 'thinking-body' + richClass;
+    if (expanded && showDividerBelow) {
+      bodyClass += ' thinking-body-divided';
+    }
+    var body = expanded
+      ? '<div class="' + bodyClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
+      : '';
+    return (
+      '<div class="thinking-section" data-thinking-key="' + escapeHtml(key) + '">' +
+      '<div class="thinking-header" data-action="toggle-thinking" data-thinking-key="' + escapeHtml(key) + '">' +
+      '<span class="thinking-title">思考过程</span>' +
+      '<span class="thinking-chevron">' + chevron + '</span></div>' + body + '</div>'
+    );
   }
 
   function attachmentChipLabel(a) {
@@ -742,6 +698,149 @@ function summarizeToolInput(name, input) {
     return html;
   }
 
+  function renderToolOnlyBubble(tools, toolGroupKey, toolGroupExpanded, options) {
+    var bubbleClass = 'bubble bubble--fill-width';
+    if (options && options.bubbleExtraClass) {
+      bubbleClass += ' ' + options.bubbleExtraClass;
+    }
+    var sectionOpts = options && options.groupTitle
+      ? { groupTitle: options.groupTitle }
+      : undefined;
+    return '<div class="' + bubbleClass + '">' +
+      renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false, sectionOpts) +
+      '</div>';
+  }
+
+  function renderUserVfsTurnRow(row) {
+    if (!row.tools || row.tools.length === 0) {
+      return '';
+    }
+    var hidden = row.hidden ? ' hidden' : '';
+    var html = '<div class="row message user vfs-turn-row' + hidden + '" data-id="' + escapeHtml(row.id) + '">';
+    var toolGroupKey = 'vfs-turn:' + row.id;
+    var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+    html += renderToolOnlyBubble(
+      row.tools,
+      toolGroupKey,
+      toolGroupExpanded,
+      {
+        groupTitle: '用户操作 (' + row.tools.length + ')',
+        bubbleExtraClass: 'vfs-turn-bubble',
+      },
+    );
+    html += '</div>';
+    return html;
+  }
+
+  function renderRow(row) {
+    if (row.kind === 'user_vfs_turn') {
+      return renderUserVfsTurnRow(row);
+    }
+    if (row.kind === 'message') {
+      return renderMessageRow(row);
+    }
+    return '';
+  }
+
+  function renderUserBubbleContent(text) {
+    // VFS 操作卡只走结构化 row.kind === 'user_vfs_turn'；正文不再兜底解析 <action>
+    return escapeHtml(text);
+  }
+
+  function renderMessageRow(row) {
+    var role = row.role === 'user' ? 'user' : 'assistant';
+    var hidden = row.hidden ? ' hidden' : '';
+    var thinkingKey = 'msg:' + row.id;
+    var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
+    var html = '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
+    if (role === 'user') {
+      var attachments = row.attachments || [];
+      var hasAttach = attachments.length > 0;
+      var hasText = !!(row.text && String(row.text).length > 0);
+      if (hasAttach || hasText) {
+        if (hasAttach) {
+          // 正文在上、附件组在下，合进同一条 bubble
+          var attachKey = 'attach:' + row.id;
+          var attachExpanded = !!state.attachGroupExpanded[attachKey];
+          html +=
+            '<div class="bubble bubble--fill-width bubble--user-compose">' +
+            (hasText
+              ? '<div class="bubble-body">' +
+                renderUserBubbleContent(row.text) +
+                '</div>'
+              : '') +
+            renderAttachGroupSection(
+              attachments,
+              attachKey,
+              attachExpanded,
+              hasText,
+            ) +
+            '</div>';
+        } else {
+          html +=
+            '<div class="bubble">' +
+            renderUserBubbleContent(row.text) +
+            '</div>';
+        }
+      }
+    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
+      var toolGroupKey = 'msg:' + row.id;
+      var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
+      html += '<div class="bubble' + assistantBubbleExtraClasses(row.textHtml, row.tools, row.text, row.thinking) + '">' +
+        renderAssistantBubbleInner(
+          row.text,
+          row.textHtml,
+          row.thinking,
+          thinkingKey,
+          thinkingExpanded,
+          row.thinkingHtml,
+          row.tools,
+          toolGroupKey,
+          toolGroupExpanded,
+          false
+        ) +
+        '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderLoadOlder() {
+    if (!state.hasMore) return '';
+    return '<button type="button" class="load-older" data-action="load-older">加载更早消息</button>';
+  }
+
+  function renderEmptyState() {
+    var hasStream = !!(state.stream.text || state.stream.thinking || state.stream.toolInvoking);
+    if (state.rows.length > 0 || hasStream) return '';
+    return '<div class="empty-state">暂无消息</div>';
+  }
+
+  function flagsEqual(a, b) {
+    return (
+      a.richText === b.richText &&
+      a.menuDisabled === b.menuDisabled
+    );
+  }
+
+  function renderRows() {
+    var list = document.getElementById('rows');
+    if (!list) return;
+    var html = renderLoadOlder();
+    for (var i = 0; i < state.rows.length; i++) {
+      var row = state.rows[i];
+      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
+        html += renderRow(row);
+      }
+    }
+    html += renderStreamTailRow();
+    html += renderEmptyState();
+    list.innerHTML = html;
+  }
+
+/**
+ * 消息长按菜单：布局、打开/关闭与指针手势。
+ */
   function computeContextMenuWidth(items) {
     var longest = 0;
     for (var i = 0; i < items.length; i++) {
@@ -806,55 +905,6 @@ function summarizeToolInput(name, input) {
       }
     }
     return null;
-  }
-
-  function renderToolOnlyBubble(tools, toolGroupKey, toolGroupExpanded, options) {
-    var bubbleClass = 'bubble bubble--fill-width';
-    if (options && options.bubbleExtraClass) {
-      bubbleClass += ' ' + options.bubbleExtraClass;
-    }
-    var sectionOpts = options && options.groupTitle
-      ? { groupTitle: options.groupTitle }
-      : undefined;
-    return '<div class="' + bubbleClass + '">' +
-      renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false, sectionOpts) +
-      '</div>';
-  }
-
-  function renderUserVfsTurnRow(row) {
-    if (!row.tools || row.tools.length === 0) {
-      return '';
-    }
-    var hidden = row.hidden ? ' hidden' : '';
-    var html = '<div class="row message user vfs-turn-row' + hidden + '" data-id="' + escapeHtml(row.id) + '">';
-    var toolGroupKey = 'vfs-turn:' + row.id;
-    var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
-    html += renderToolOnlyBubble(
-      row.tools,
-      toolGroupKey,
-      toolGroupExpanded,
-      {
-        groupTitle: '用户操作 (' + row.tools.length + ')',
-        bubbleExtraClass: 'vfs-turn-bubble',
-      },
-    );
-    html += '</div>';
-    return html;
-  }
-
-  function renderRow(row) {
-    if (row.kind === 'user_vfs_turn') {
-      return renderUserVfsTurnRow(row);
-    }
-    if (row.kind === 'message') {
-      return renderMessageRow(row);
-    }
-    return '';
-  }
-
-  function renderUserBubbleContent(text) {
-    // VFS 操作卡只走结构化 row.kind === 'user_vfs_turn'；正文不再兜底解析 <action>
-    return escapeHtml(text);
   }
 
   function buildMenuItems(row, hitEl) {
@@ -1078,74 +1128,55 @@ function summarizeToolInput(name, input) {
     clearLongPress();
   }
 
-  function applyTheme(theme) {
-    if (!theme) return;
-    var root = document.documentElement;
-    root.style.setProperty('--bg', theme.background || '#fff');
-    root.style.setProperty('--text', theme.text || '#111');
-    root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
-    root.style.setProperty('--primary', theme.primary || '#007aff');
-    root.style.setProperty('--danger', theme.danger || '#d92d20');
-    root.style.setProperty('--surface', theme.surface || '#f2f2f7');
-    root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
+/**
+ * 流式尾部相位、增量 DOM 与 batch/delta 提交（不含 stream-markdown）。
+ */
+  function streamHasContent() {
+    return (
+      (state.stream.text && String(state.stream.text).trim().length > 0) ||
+      (state.stream.thinking && String(state.stream.thinking).trim().length > 0)
+    );
   }
 
-  function renderMessageRow(row) {
-    var role = row.role === 'user' ? 'user' : 'assistant';
-    var hidden = row.hidden ? ' hidden' : '';
-    var thinkingKey = 'msg:' + row.id;
-    var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
-    var html = '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
-    if (role === 'user') {
-      var attachments = row.attachments || [];
-      var hasAttach = attachments.length > 0;
-      var hasText = !!(row.text && String(row.text).length > 0);
-      if (hasAttach || hasText) {
-        if (hasAttach) {
-          // 正文在上、附件组在下，合进同一条 bubble
-          var attachKey = 'attach:' + row.id;
-          var attachExpanded = !!state.attachGroupExpanded[attachKey];
-          html +=
-            '<div class="bubble bubble--fill-width bubble--user-compose">' +
-            (hasText
-              ? '<div class="bubble-body">' +
-                renderUserBubbleContent(row.text) +
-                '</div>'
-              : '') +
-            renderAttachGroupSection(
-              attachments,
-              attachKey,
-              attachExpanded,
-              hasText,
-            ) +
-            '</div>';
-        } else {
-          html +=
-            '<div class="bubble">' +
-            renderUserBubbleContent(row.text) +
-            '</div>';
-        }
-      }
-    } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
-      var toolGroupKey = 'msg:' + row.id;
-      var toolGroupExpanded = !!state.toolGroupExpanded[toolGroupKey];
-      html += '<div class="bubble' + assistantBubbleExtraClasses(row.textHtml, row.tools, row.text, row.thinking) + '">' +
-        renderAssistantBubbleInner(
-          row.text,
-          row.textHtml,
-          row.thinking,
-          thinkingKey,
-          thinkingExpanded,
-          row.thinkingHtml,
-          row.tools,
-          toolGroupKey,
-          toolGroupExpanded,
-          false
-        ) +
-        '</div>';
+  /** active | waiting-first | idle-after-content */
+  function getStreamTailPhase() {
+    if (!state.stream.toolInvoking) {
+      return 'active';
     }
-    html += '</div>';
-    return html;
+    return streamHasContent() ? 'idle-after-content' : 'waiting-first';
+  }
+
+  function renderStreamWaitingFirstRow() {
+    return (
+      '<div class="row stream stream--waiting-first" id="stream-tail">' +
+      '<div class="stream-waiting-indicator">' +
+      '<span class="tool-invoking-dot" aria-hidden="true"></span>' +
+      '<span class="tool-invoking-label">生成中</span></div></div>'
+    );
+  }
+
+  function shouldRenderStreamTail() {
+    return streamHasContent() || state.stream.toolInvoking;
+  }
+
+  function renderStreamTailRow() {
+    if (!shouldRenderStreamTail()) {
+      return '';
+    }
+    if (getStreamTailPhase() === 'waiting-first') {
+      return renderStreamWaitingFirstRow();
+    }
+    return (
+      '<div class="row stream" id="stream-tail"><div class="bubble assistant' +
+      assistantBubbleExtraClasses(
+        state.stream.textHtml,
+        [],
+        state.stream.text,
+        state.stream.thinking
+      ) + '">' +
+      renderStreamBubbleInner() +
+      '</div></div>'
+    );
   }
 
   function streamThinkingHtml() {
@@ -1201,248 +1232,6 @@ function summarizeToolInput(name, input) {
     el.className = bubbleClass;
     el.innerHTML = inner;
     tail.appendChild(el);
-  }
-
-  function renderLoadOlder() {
-    if (!state.hasMore) return '';
-    return '<button type="button" class="load-older" data-action="load-older">加载更早消息</button>';
-  }
-
-  function renderEmptyState() {
-    var hasStream = !!(state.stream.text || state.stream.thinking || state.stream.toolInvoking);
-    if (state.rows.length > 0 || hasStream) return '';
-    return '<div class="empty-state">暂无消息</div>';
-  }
-
-  function flagsEqual(a, b) {
-    return (
-      a.richText === b.richText &&
-      a.menuDisabled === b.menuDisabled
-    );
-  }
-
-  function renderRows() {
-    var list = document.getElementById('rows');
-    if (!list) return;
-    var html = renderLoadOlder();
-    for (var i = 0; i < state.rows.length; i++) {
-      var row = state.rows[i];
-      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
-        html += renderRow(row);
-      }
-    }
-    html += renderStreamTailRow();
-    html += renderEmptyState();
-    list.innerHTML = html;
-  }
-
-  /**
-   * I1/I2: scrollIntent from RN — stick on open, restore offsetY from cache, preserve on append.
-   * C1: never apply payload.stream; stream tail owned by streamDelta/streamReset only.
-   */
-  function applySnapshot(payload) {
-    var intent = payload.scrollIntent || 'stick';
-    var scroller = document.getElementById('scroller');
-    var wasNearBottom = state.nearBottom;
-    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-    var sessionChanged = payload.sessionKey && payload.sessionKey !== state.sessionKey;
-
-    state.sessionKey = payload.sessionKey || state.sessionKey;
-    state.rows = (payload.rows || []).slice();
-    state.hasMore = !!payload.hasMore;
-    state.loadOlderArmed = true;
-    if (intent !== 'preserve' || sessionChanged) {
-      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
-    }
-    if (sessionChanged) {
-      closeContextMenu(false);
-    }
-    var scrollAfterRender = function () {
-      if (!scroller) return;
-      if (intent === 'stick') {
-        stickToBottom(scroller);
-      } else if (intent === 'restore' && payload.restoreScroll) {
-      var rs = payload.restoreScroll;
-      if (rs.nearBottom) {
-        stickToBottom(scroller);
-      } else {
-        scroller.scrollTop = Math.max(
-          0,
-          scroller.scrollHeight - scroller.clientHeight - rs.offsetY
-        );
-      }
-      } else if (intent === 'preserve') {
-        if (wasNearBottom) {
-          stickToBottom(scroller);
-        } else {
-          // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
-          scroller.scrollTop = Math.max(
-            0,
-            scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
-          );
-        }
-      }
-      state.nearBottom = isNearBottom(scroller);
-      emitScrollSnapshot();
-    };
-    requestAnimationFrame(function () {
-      if (intent === 'stick' && scroller) {
-        scroller.scrollTop = 0;
-      }
-      renderRows();
-      if (payload.generating) {
-        setStreamToolInvokingDom(true);
-      }
-      if (intent === 'stick') {
-        requestAnimationFrame(function () {
-          scrollAfterRender();
-        });
-      } else {
-        scrollAfterRender();
-      }
-    });
-  }
-
-  /**
-   * appendTailRows: append persisted rows at end without full renderRows.
-   * Preserves stream tail and scroll anchor when not near bottom.
-   */
-  function applyAppendTailRows(payload) {
-    var newRows = (payload.rows || []).slice();
-    if (newRows.length === 0) {
-      return;
-    }
-    var scroller = document.getElementById('scroller');
-    var wasNearBottom = state.nearBottom;
-    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-    state.rows = state.rows.concat(newRows);
-    var html = '';
-    for (var i = 0; i < newRows.length; i++) {
-      var row = newRows[i];
-      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
-        html += renderRow(row);
-      }
-    }
-    var list = document.getElementById('rows');
-    if (!list) {
-      return;
-    }
-    var streamTail = document.getElementById('stream-tail');
-    if (streamTail) {
-      streamTail.insertAdjacentHTML('beforebegin', html);
-    } else {
-      var empty = list.querySelector('.empty-state');
-      if (empty) {
-        empty.insertAdjacentHTML('beforebegin', html);
-        empty.remove();
-      } else {
-        list.insertAdjacentHTML('beforeend', html);
-      }
-    }
-    if (scroller) {
-      if (wasNearBottom) {
-        stickToBottom(scroller);
-      } else {
-        scroller.scrollTop = Math.max(
-          0,
-          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
-        );
-      }
-      state.nearBottom = isNearBottom(scroller);
-      emitScrollSnapshot();
-    }
-  }
-
-  /**
-   * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
-   */
-  function promoteStreamTailToRow(row) {
-    if (!row || row.kind !== 'message') {
-      return false;
-    }
-    var streamTail = document.getElementById('stream-tail');
-    if (!streamTail) {
-      return false;
-    }
-    var rowHtml = renderRow(row);
-    if (!rowHtml) {
-      return false;
-    }
-    streamTail.outerHTML = rowHtml;
-    return true;
-  }
-
-  function applyStreamCommit(payload) {
-    var newRows = (payload.rows || []).slice();
-    var toAppend = [];
-    for (var i = 0; i < newRows.length; i++) {
-      var row = newRows[i];
-      if (row.kind !== 'message' && row.kind !== 'user_vfs_turn') {
-        continue;
-      }
-      var dup = false;
-      for (var j = 0; j < state.rows.length; j++) {
-        var existing = state.rows[j];
-        if (
-          (existing.kind === 'message' || existing.kind === 'user_vfs_turn') &&
-          existing.id === row.id
-        ) {
-          dup = true;
-          break;
-        }
-      }
-      if (!dup) {
-        toAppend.push(row);
-      }
-    }
-    if (toAppend.length === 0) {
-      renderRows();
-      return;
-    }
-    var scroller = document.getElementById('scroller');
-    var wasNearBottom = state.nearBottom;
-    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
-    state.rows = state.rows.concat(toAppend);
-    var promoted =
-      toAppend.length === 1 &&
-      toAppend[0].kind === 'message' &&
-      promoteStreamTailToRow(toAppend[0]);
-    if (!promoted) {
-      renderRows();
-    }
-    var scrollIntent = payload.scrollIntent || 'preserve';
-    if (scroller) {
-      if (scrollIntent === 'preserve' && wasNearBottom) {
-        stickToBottom(scroller);
-      } else if (scrollIntent === 'preserve') {
-        scroller.scrollTop = Math.max(
-          0,
-          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
-        );
-      }
-      state.nearBottom = isNearBottom(scroller);
-      emitScrollSnapshot();
-    }
-  }
-
-  /**
-   * prependPage: only new older rows — NOT a full sessionSnapshot reload.
-   * Anchor reading position: scrollTop += scrollHeight - prependedScrollHeight.
-   */
-  function applyPrependPage(payload) {
-    var newRows = (payload.rows || []).slice();
-    var scroller = document.getElementById('scroller');
-    var prependedScrollHeight = scroller ? scroller.scrollHeight : 0;
-    var prependedScrollTop = scroller ? scroller.scrollTop : 0;
-    state.rows = newRows.concat(state.rows);
-    state.loadOlderArmed = true;
-    renderRows();
-    if (scroller) {
-      var nextScrollHeight = scroller.scrollHeight;
-      scroller.scrollTop = prependedScrollTop + (nextScrollHeight - prependedScrollHeight);
-      state.nearBottom = isNearBottom(scroller);
-    }
-    emitScrollSnapshot();
   }
 
   function ensureStreamTextBody(bubble) {
@@ -1701,6 +1490,217 @@ function summarizeToolInput(name, input) {
     scheduleStickIfNearBottom();
   }
 
+/**
+ * 会话快照、prepend/append 与 streamCommit 编排。
+ */
+  function applySnapshot(payload) {
+    var intent = payload.scrollIntent || 'stick';
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
+    var sessionChanged = payload.sessionKey && payload.sessionKey !== state.sessionKey;
+
+    state.sessionKey = payload.sessionKey || state.sessionKey;
+    state.rows = (payload.rows || []).slice();
+    state.hasMore = !!payload.hasMore;
+    state.loadOlderArmed = true;
+    if (intent !== 'preserve' || sessionChanged) {
+      state.stream = { text: '', thinking: '', textHtml: '', thinkingHtml: '', toolInvoking: false };
+    }
+    if (sessionChanged) {
+      closeContextMenu(false);
+    }
+    var scrollAfterRender = function () {
+      if (!scroller) return;
+      if (intent === 'stick') {
+        stickToBottom(scroller);
+      } else if (intent === 'restore' && payload.restoreScroll) {
+      var rs = payload.restoreScroll;
+      if (rs.nearBottom) {
+        stickToBottom(scroller);
+      } else {
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - rs.offsetY
+        );
+      }
+      } else if (intent === 'preserve') {
+        if (wasNearBottom) {
+          stickToBottom(scroller);
+        } else {
+          // WHY: flex-end layout shrinks tail — restore distance-from-bottom, not raw scrollTop.
+          scroller.scrollTop = Math.max(
+            0,
+            scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+          );
+        }
+      }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
+    };
+    requestAnimationFrame(function () {
+      if (intent === 'stick' && scroller) {
+        scroller.scrollTop = 0;
+      }
+      renderRows();
+      if (payload.generating) {
+        setStreamToolInvokingDom(true);
+      }
+      if (intent === 'stick') {
+        requestAnimationFrame(function () {
+          scrollAfterRender();
+        });
+      } else {
+        scrollAfterRender();
+      }
+    });
+  }
+
+  /**
+   * appendTailRows: append persisted rows at end without full renderRows.
+   * Preserves stream tail and scroll anchor when not near bottom.
+   */
+  function applyAppendTailRows(payload) {
+    var newRows = (payload.rows || []).slice();
+    if (newRows.length === 0) {
+      return;
+    }
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
+    state.rows = state.rows.concat(newRows);
+    var html = '';
+    for (var i = 0; i < newRows.length; i++) {
+      var row = newRows[i];
+      if (row.kind === 'message' || row.kind === 'user_vfs_turn') {
+        html += renderRow(row);
+      }
+    }
+    var list = document.getElementById('rows');
+    if (!list) {
+      return;
+    }
+    var streamTail = document.getElementById('stream-tail');
+    if (streamTail) {
+      streamTail.insertAdjacentHTML('beforebegin', html);
+    } else {
+      var empty = list.querySelector('.empty-state');
+      if (empty) {
+        empty.insertAdjacentHTML('beforebegin', html);
+        empty.remove();
+      } else {
+        list.insertAdjacentHTML('beforeend', html);
+      }
+    }
+    if (scroller) {
+      if (wasNearBottom) {
+        stickToBottom(scroller);
+      } else {
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+        );
+      }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
+    }
+  }
+
+  /**
+   * streamCommit: 流式结束单次提交 — 清 stream 状态、追加落库行；优先 promote #stream-tail。
+   */
+  function promoteStreamTailToRow(row) {
+    if (!row || row.kind !== 'message') {
+      return false;
+    }
+    var streamTail = document.getElementById('stream-tail');
+    if (!streamTail) {
+      return false;
+    }
+    var rowHtml = renderRow(row);
+    if (!rowHtml) {
+      return false;
+    }
+    streamTail.outerHTML = rowHtml;
+    return true;
+  }
+
+  function applyStreamCommit(payload) {
+    var newRows = (payload.rows || []).slice();
+    var toAppend = [];
+    for (var i = 0; i < newRows.length; i++) {
+      var row = newRows[i];
+      if (row.kind !== 'message' && row.kind !== 'user_vfs_turn') {
+        continue;
+      }
+      var dup = false;
+      for (var j = 0; j < state.rows.length; j++) {
+        var existing = state.rows[j];
+        if (
+          (existing.kind === 'message' || existing.kind === 'user_vfs_turn') &&
+          existing.id === row.id
+        ) {
+          dup = true;
+          break;
+        }
+      }
+      if (!dup) {
+        toAppend.push(row);
+      }
+    }
+    if (toAppend.length === 0) {
+      renderRows();
+      return;
+    }
+    var scroller = document.getElementById('scroller');
+    var wasNearBottom = state.nearBottom;
+    var prevOffsetFromBottom = scroller ? offsetFromBottom(scroller) : 0;
+    state.rows = state.rows.concat(toAppend);
+    var promoted =
+      toAppend.length === 1 &&
+      toAppend[0].kind === 'message' &&
+      promoteStreamTailToRow(toAppend[0]);
+    if (!promoted) {
+      renderRows();
+    }
+    var scrollIntent = payload.scrollIntent || 'preserve';
+    if (scroller) {
+      if (scrollIntent === 'preserve' && wasNearBottom) {
+        stickToBottom(scroller);
+      } else if (scrollIntent === 'preserve') {
+        scroller.scrollTop = Math.max(
+          0,
+          scroller.scrollHeight - scroller.clientHeight - prevOffsetFromBottom
+        );
+      }
+      state.nearBottom = isNearBottom(scroller);
+      emitScrollSnapshot();
+    }
+  }
+
+  /**
+   * prependPage: only new older rows — NOT a full sessionSnapshot reload.
+   * Anchor reading position: scrollTop += scrollHeight - prependedScrollHeight.
+   */
+  function applyPrependPage(payload) {
+    var newRows = (payload.rows || []).slice();
+    var scroller = document.getElementById('scroller');
+    var prependedScrollHeight = scroller ? scroller.scrollHeight : 0;
+    var prependedScrollTop = scroller ? scroller.scrollTop : 0;
+    state.rows = newRows.concat(state.rows);
+    state.loadOlderArmed = true;
+    renderRows();
+    if (scroller) {
+      var nextScrollHeight = scroller.scrollHeight;
+      scroller.scrollTop = prependedScrollTop + (nextScrollHeight - prependedScrollHeight);
+      state.nearBottom = isNearBottom(scroller);
+    }
+    emitScrollSnapshot();
+  }
+
+/**
+ * #rows 点击：折叠开关、打开工具文件、加载更早等。
+ */
   function onRowsClick(event) {
     var target = event.target;
     if (!target || !target.closest) return;
@@ -1752,6 +1752,28 @@ function summarizeToolInput(name, input) {
     if (action === 'load-older') {
       requestLoadOlder();
     }
+  }
+
+/**
+ * RN 桥：postMessage、主题应用与宿主消息分发。
+ */
+  function post(type, payload) {
+    var msg = JSON.stringify({ v: BRIDGE_V, type: type, payload: payload || {} });
+    if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+      window.ReactNativeWebView.postMessage(msg);
+    }
+  }
+
+  function applyTheme(theme) {
+    if (!theme) return;
+    var root = document.documentElement;
+    root.style.setProperty('--bg', theme.background || '#fff');
+    root.style.setProperty('--text', theme.text || '#111');
+    root.style.setProperty('--text-secondary', theme.textSecondary || '#666');
+    root.style.setProperty('--primary', theme.primary || '#007aff');
+    root.style.setProperty('--danger', theme.danger || '#d92d20');
+    root.style.setProperty('--surface', theme.surface || '#f2f2f7');
+    root.style.setProperty('--border', theme.borderLight || '#e5e5ea');
   }
 
   function handleHostMessage(raw) {
