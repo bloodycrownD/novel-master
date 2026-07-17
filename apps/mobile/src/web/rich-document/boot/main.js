@@ -1,11 +1,7 @@
 /**
- * WebView document preview boot script (IIFE) — minimal bridge: init / setDocument / themeUpdate.
- * No scroll, stream, or menu handlers (unlike chat-transcript).
+ * rich-document WebView boot 正文（assemble 外包 IIFE）。
  */
-export function buildRichDocumentBootScript(): string {
-  return `
-(function () {
-  var BRIDGE_V = 1;
+var BRIDGE_V = 1;
   var OVER_LIMIT_HINT = '内容过长，已显示原文';
 
   function post(type, payload) {
@@ -82,6 +78,3 @@ export function buildRichDocumentBootScript(): string {
   });
 
   post('ready', { version: 1 });
-})();
-`.trim();
-}

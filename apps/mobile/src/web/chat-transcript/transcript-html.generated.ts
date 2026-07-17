@@ -1,36 +1,353 @@
 /**
- * WebView transcript boot script (IIFE) — mirrors scroll.ts semantics in the WebView.
- * Bundled into CHAT_TRANSCRIPT_HTML; keep nearBottom threshold in sync with scroll.ts.
+ * 由 assemble-webview-html.mjs 生成，禁止手改。
+ * 重新生成：npm run assemble:webview-html -w @novel-master/mobile
  */
-import {
-  LONG_PRESS_MOVE_TOLERANCE_PX,
-  MENU_OPEN_GRACE_MS,
-  shouldCancelLongPressForMove,
-} from './menu-overlay-guards';
-import { NEAR_BOTTOM_THRESHOLD_PX } from './scroll';
-import {
-  ANCHORED_MENU_CHAR_WIDTH_EST,
-  ANCHORED_MENU_GAP,
-  ANCHORED_MENU_H_PADDING,
-  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
-  ANCHORED_MENU_ITEM_MIN_HEIGHT,
-  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
-  MESSAGE_ACTION_MENU_ITEM_COUNT,
-  ANCHORED_MENU_MAX_HEIGHT_CAP,
-  ANCHORED_MENU_MAX_WIDTH,
-  ANCHORED_MENU_MIN_WIDTH,
-  ANCHORED_MENU_SCREEN_MARGIN,
-} from '../../components/chat/anchored-menu-layout';
-import { DECODE_LITERAL_HTML_ENTITIES_BOOT } from '../../components/rich-content/decode-literal-html-entities';
-import { STREAM_MARKDOWN_BOOT } from './stream-markdown.boot';
-import { VFS_TOOL_FILE_PATH_BOOT } from './vfs-tool-file-path-boot';
+export const CHAT_TRANSCRIPT_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111); font-family: system-ui, -apple-system, sans-serif; }
+#scroller { height: 100%; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overflow-anchor: none; }
+#rows { display: flex; flex-direction: column; min-height: 100%; justify-content: flex-end; padding: 8px 12px 12px; gap: 8px; }
+.row { display: flex; width: 100%; flex-direction: column; }
+.row.user { align-items: flex-end; }
+.row.assistant, .row.stream, .row.tool { align-items: flex-start; }
+.bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
+.row.user .bubble { background: var(--primary, #007aff); color: #fff; }
+/* 含附件：仍用用户蓝气泡，附件组嵌在同条消息内；卡片用半透明玻璃态适配蓝底 */
+.row.user .bubble.bubble--user-compose {
+  width: 85%; max-width: 85%; box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 0;
+}
+.row.user .bubble.bubble--user-compose .tool-group-title,
+.row.user .bubble.bubble--user-compose .tool-group-chevron {
+  color: rgba(255, 255, 255, 0.85);
+}
+.row.user .bubble.bubble--user-compose .tool-group-divided {
+  border-bottom-color: rgba(255, 255, 255, 0.35);
+}
+.row.user .bubble.bubble--user-compose .attach-group-divided-above {
+  padding-top: 8px; margin-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+}
+.row.user .bubble.bubble--user-compose .attach-card.tool-card {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.row.user .bubble.bubble--user-compose .attach-card .tool-name {
+  color: #fff;
+}
+.row.user .bubble.bubble--user-compose .attach-card .tool-status,
+.row.user .bubble.bubble--user-compose .attach-card .tool-status.success {
+  color: rgba(255, 255, 255, 0.8);
+}
+.row.user .bubble.bubble--user-compose .bubble-body {
+  color: #fff; white-space: pre-wrap; word-break: break-word;
+}
+.row.assistant .bubble, .row.stream .bubble { background: var(--surface, #f2f2f7); color: var(--text, #111); }
+.row.hidden .bubble { opacity: 0.45; }
+.bubble .thinking-section { margin: 0; padding: 0; border: none; background: transparent; max-width: none; }
+.thinking-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.thinking-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); }
+.thinking-chevron { font-size: 10px; color: var(--text-secondary, #888); }
+.thinking-body { margin-top: 6px; font-size: 13px; line-height: 1.45; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
+.thinking-body.rich { white-space: normal; }
+.thinking-body-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
+.bubble-body { font-size: 15px; line-height: 1.4; color: inherit; white-space: pre-wrap; word-break: break-word; }
+.bubble .tool-group-section { margin: 0; padding: 0; border: none; background: transparent; max-width: none; }
+.tool-group-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+.tool-group-title { font-size: 12px; font-weight: 600; color: var(--text-secondary, #666); }
+.tool-group-chevron { font-size: 10px; color: var(--text-secondary, #888); }
+.tool-group-items { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.tool-group-divided { padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--border, #e5e5ea); }
+.tool-card { max-width: 92%; width: 100%; margin: 2px 0; padding: 12px; border-radius: 8px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); }
+.bubble .tool-group-item.tool-card { max-width: none; width: 100%; margin: 0; background: var(--bg, #fff); }
+.tool-card.tappable { border-color: var(--primary, #007aff); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.tool-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tool-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-status { font-size: 12px; font-weight: 500; }
+.tool-status.success { color: var(--primary, #007aff); }
+.tool-status.error { color: #ff3b30; }
+.tool-status.pending { color: var(--text-secondary, #888); }
+.tool-status.interrupted { color: var(--text-secondary, #888); }
+.tool-phase-bar { margin-top: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary, #888); }
+.tool-invoking-bar { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border, #e5e5ea); font-size: 12px; font-weight: 600; color: var(--primary, #007aff); }
+.tool-invoking-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 4px; background: var(--primary, #007aff); animation: tool-invoking-pulse 1.2s ease-in-out infinite; }
+.row.stream.stream--waiting-first { align-items: flex-start; width: 100%; }
+.stream-waiting-indicator { display: flex; align-items: center; gap: 8px; padding: 6px 2px; font-size: 12px; font-weight: 600; color: var(--primary, #007aff); }
+.stream--waiting-first .stream-waiting-indicator { border-top: none; margin-top: 0; padding-top: 0; }
+@keyframes tool-invoking-pulse { 0%, 100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+.tool-summary { margin-top: 6px; font-size: 13px; color: var(--text-secondary, #666); white-space: pre-wrap; word-break: break-word; }
+.tool-open-hint { margin-top: 8px; font-size: 12px; font-weight: 500; color: var(--primary, #007aff); }
+.load-older { align-self: center; padding: 10px 16px; font-size: 14px; color: var(--primary, #007aff); background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.bubble.rich, .bubble-body.rich, .thinking-body.rich { white-space: normal; overflow-wrap: anywhere; }
+    .bubble.rich p, .bubble-body.rich p, .thinking-body.rich p { margin: 0.35em 0; }
+    .bubble.rich p, .bubble-body.rich p, .thinking-body.rich p:first-child { margin-top: 0; }
+    .bubble.rich p, .bubble-body.rich p, .thinking-body.rich p:last-child { margin-bottom: 0; }
+    /* Global reset strips list padding; indent so outside markers stay inside the content area. */
+    .bubble.rich ol, .bubble-body.rich ol, .thinking-body.rich ol, .bubble.rich ul, .bubble-body.rich ul, .thinking-body.rich ul { margin: 0.35em 0; padding-left: 1.5em; list-style-position: outside; }
+    .bubble.rich ul ul, .bubble.rich ol ol, .bubble.rich ul ol, .bubble.rich ol ul, .bubble-body.rich ul ul, .bubble-body.rich ol ol, .bubble-body.rich ul ol, .bubble-body.rich ol ul, .thinking-body.rich ul ul, .thinking-body.rich ol ol, .thinking-body.rich ul ol, .thinking-body.rich ol ul { margin-top: 0.2em; margin-bottom: 0; padding-left: 1.25em; }
+    .bubble.rich li, .bubble-body.rich li, .thinking-body.rich li { margin: 0.15em 0; }
+    .bubble.rich li + li, .bubble-body.rich li + li, .thinking-body.rich li + li { margin-top: 0.25em; }
+    .bubble.rich li > p, .bubble-body.rich li > p, .thinking-body.rich li > p { margin: 0; }
+    .bubble.rich strong, .bubble-body.rich strong, .thinking-body.rich strong, .bubble.rich b, .bubble-body.rich b, .thinking-body.rich b { font-weight: 600; }
+    .bubble.rich hr, .bubble-body.rich hr, .thinking-body.rich hr {
+      border: none;
+      border-top: 1px solid var(--border, #e5e5ea);
+      margin: 0.5em 0;
+      opacity: 0.85;
+    }
+    .bubble.rich blockquote, .bubble-body.rich blockquote, .thinking-body.rich blockquote {
+      margin: 0.35em 0; padding-left: 0.75em;
+      border-left: 3px solid var(--border, #e5e5ea);
+    }
+    .bubble.rich h1, .bubble-body.rich h1, .thinking-body.rich h1 { font-size: 1.15em; font-weight: 700; margin: 0.4em 0 0.3em; }
+    .bubble.rich h2, .bubble-body.rich h2, .thinking-body.rich h2 { font-size: 1.08em; font-weight: 700; margin: 0.38em 0 0.28em; }
+    .bubble.rich h3, .bubble-body.rich h3, .thinking-body.rich h3 { font-size: 1em; font-weight: 700; margin: 0.35em 0; }
+    .bubble.rich code, .bubble-body.rich code, .thinking-body.rich code { font-family: ui-monospace, monospace; font-size: 0.9em; background: rgba(0,0,0,0.06); padding: 0.1em 0.25em; border-radius: 4px; }
+    .bubble.rich pre, .bubble-body.rich pre, .thinking-body.rich pre { overflow-x: auto; margin: 0.35em 0; }
+    .bubble.rich a, .bubble-body.rich a, .thinking-body.rich a { color: var(--primary, #007aff); }
+.bubble-body.rich { white-space: normal; }
+.row.assistant .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
+.row.user.vfs-turn-row .bubble.bubble--fill-width { width: 85%; max-width: 85%; box-sizing: border-box; }
+.empty-state { align-self: center; margin-top: 32px; padding: 0 24px; text-align: center; color: var(--text-secondary, #666); font-size: 14px; }
+.menu-backdrop { position: fixed; inset: 0; z-index: 9998; background: rgba(0,0,0,0.35); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.context-menu { position: fixed; z-index: 9999; display: flex; flex-direction: column; flex-shrink: 0; height: fit-content; min-width: 132px; max-width: 200px; border-radius: 10px; border: 1px solid var(--border, #e5e5ea); background: var(--surface, #f2f2f7); overflow-x: hidden; overflow-y: hidden; box-shadow: 0 4px 16px rgba(0,0,0,0.15); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+.context-menu.scrollable { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.menu-item { flex: 0 0 auto; display: block; width: 100%; min-height: 44px; padding: 0 12px; border: none; border-bottom: 1px solid var(--border, #e5e5ea); background: transparent; color: var(--text, #111); font-size: 15px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; }
+body.menu-open { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.menu-item:last-child { border-bottom: none; }
+.row.user.vfs-turn-row .vfs-turn-bubble {
+  background: var(--surface, #f2f2f7);
+  color: var(--text, #111);
+  text-align: left;
+}
+.row.user.vfs-turn-row .tool-group-title { color: var(--primary, #007aff); }
+.menu-item.danger { color: #ff3b30; }
 
-export function buildTranscriptBootScript(): string {
-  return `
-(function () {
-  var NEAR_BOTTOM = ${NEAR_BOTTOM_THRESHOLD_PX};
-  var MENU_OPEN_GRACE_MS = ${MENU_OPEN_GRACE_MS};
-  var SCROLL_TOP_LOAD_OLDER = 24;
+  </style>
+</head>
+<body>
+  <div id="scroller"><div id="rows"></div></div>
+  <script>(function () {
+/**
+ * 由 assemble-webview-html.mjs 从 TS 源抽取生成，禁止手改。
+ * 重新生成：npm run assemble:webview-html -w @novel-master/mobile
+ */
+var NEAR_BOTTOM = 80;
+var MENU_OPEN_GRACE_MS = 400;
+var LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+var ANCHORED_MENU_GAP = 8;
+var ANCHORED_MENU_SCREEN_MARGIN = 12;
+var ANCHORED_MENU_ITEM_MIN_HEIGHT = 44;
+var ANCHORED_MENU_ITEM_LAYOUT_HEIGHT = 48;
+var ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = 32;
+var ANCHORED_MENU_MAX_HEIGHT_CAP = 360;
+var ANCHORED_MENU_MIN_WIDTH = 132;
+var ANCHORED_MENU_MAX_WIDTH = 200;
+var ANCHORED_MENU_H_PADDING = 32;
+var ANCHORED_MENU_CHAR_WIDTH_EST = 14;
+var MESSAGE_ACTION_MENU_ITEM_COUNT = 5;
+
+function decodeLiteralHtmlEntities(text) {
+    var current = String(text || '');
+    var previous = '';
+    var pass = 0;
+    while (current !== previous && pass < 3) {
+      previous = current;
+      current = current
+        .replace(/&amp;/gi, '&')
+        .replace(/&quot;/gi, '"')
+        .replace(/&#(?:0*34|x0*22);/gi, '"')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/&apos;/gi, "'")
+        .replace(/&#(?:0*39|x0*27);/gi, "'");
+      pass += 1;
+    }
+    return current;
+  }
+
+var STREAM_RICH_UPGRADE_MS = 350;
+  var streamRichUpgrade = {
+    timer: null,
+    kinds: { text: false, thinking: false },
+    plainMode: { text: true, thinking: true }
+  };
+
+  function renderStreamingInline(s) {
+    var escaped = escapeHtmlRaw(s);
+    return escaped
+      .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
+      .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
+      .replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+  }
+
+  function renderStreamingMarkdown(text) {
+    var normalized = decodeLiteralHtmlEntities(String(text || '').trim());
+    if (!normalized) return '';
+    var lines = normalized.split(/\\n/);
+    var html = '';
+    var inList = false;
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var bullet = /^\\s*[-*+]\\s+(.+)$/.exec(line);
+      var ordered = /^\\s*\\d+\\.\\s+(.+)$/.exec(line);
+      if (bullet) {
+        if (!inList) { html += '<ul>'; inList = 'ul'; }
+        else if (inList === 'ol') { html += '</ol><ul>'; inList = 'ul'; }
+        html += '<li>' + renderStreamingInline(bullet[1]) + '</li>';
+        continue;
+      }
+      if (ordered) {
+        if (!inList) { html += '<ol>'; inList = 'ol'; }
+        else if (inList === 'ul') { html += '</ul><ol>'; inList = 'ol'; }
+        html += '<li>' + renderStreamingInline(ordered[1]) + '</li>';
+        continue;
+      }
+      if (inList) {
+        html += inList === 'ul' ? '</ul>' : '</ol>';
+        inList = false;
+      }
+      if (line.trim() === '') continue;
+      html += '<p>' + renderStreamingInline(line) + '</p>';
+    }
+    if (inList) html += inList === 'ul' ? '</ul>' : '</ol>';
+    return html;
+  }
+
+  function clearStreamRichUpgrade() {
+    if (streamRichUpgrade.timer != null) {
+      clearTimeout(streamRichUpgrade.timer);
+      streamRichUpgrade.timer = null;
+    }
+    streamRichUpgrade.kinds.text = false;
+    streamRichUpgrade.kinds.thinking = false;
+    streamRichUpgrade.plainMode.text = true;
+    streamRichUpgrade.plainMode.thinking = true;
+  }
+
+  function paintStreamRichKind(tail, kind) {
+    var bubble = tail.querySelector('.bubble');
+    if (!bubble) return;
+    if (kind === 'thinking') {
+      var section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
+      var body = section ? section.querySelector('.thinking-body') : null;
+      if (!body) return;
+      var thinkingHtml = renderStreamingMarkdown(state.stream.thinking);
+      if (!thinkingHtml) return;
+      body.innerHTML = thinkingHtml;
+      setStreamBodyRichClass(body, true);
+      state.stream.thinkingHtml = thinkingHtml;
+    } else {
+      var textBody = ensureStreamTextBody(bubble);
+      var textHtml = renderStreamingMarkdown(state.stream.text);
+      if (!textHtml) return;
+      textBody.innerHTML = textHtml;
+      setStreamBodyRichClass(textBody, true);
+      state.stream.textHtml = textHtml;
+    }
+    bubble.className = 'bubble assistant' + assistantBubbleExtraClasses(
+      state.stream.textHtml,
+      [],
+      state.stream.text,
+      state.stream.thinking,
+      undefined
+    );
+  }
+
+  function flushStreamRichUpgrade() {
+    streamRichUpgrade.timer = null;
+    var tail = document.getElementById('stream-tail');
+    if (!tail) return;
+    var paintStart = Date.now();
+    if (streamRichUpgrade.kinds.text) {
+      paintStreamRichKind(tail, 'text');
+      streamRichUpgrade.kinds.text = false;
+      streamRichUpgrade.plainMode.text = false;
+    }
+    if (streamRichUpgrade.kinds.thinking) {
+      paintStreamRichKind(tail, 'thinking');
+      streamRichUpgrade.kinds.thinking = false;
+      streamRichUpgrade.plainMode.thinking = false;
+    }
+    void paintStart;
+    scheduleStickIfNearBottom();
+  }
+
+  function scheduleStreamRichUpgrade(kind) {
+    if (!state.flags.richText) return;
+    streamRichUpgrade.kinds[kind] = true;
+    if (streamRichUpgrade.timer != null) return;
+    streamRichUpgrade.timer = setTimeout(flushStreamRichUpgrade, STREAM_RICH_UPGRADE_MS);
+  }
+
+function normalizePathForToolCard(path) {
+    if (typeof path !== 'string' || path.length === 0) {
+      throw new Error('invalid path');
+    }
+    var normalized = path.replace(/\\\\/g, '/');
+    if (normalized.charAt(0) !== '/') {
+      throw new Error('invalid path');
+    }
+    var segments = normalized.split('/');
+    var stack = [];
+    for (var si = 0; si < segments.length; si++) {
+      var segment = segments[si];
+      if (segment === '' || segment === '.') {
+        continue;
+      }
+      if (segment === '..') {
+        if (stack.length === 0) {
+          throw new Error('path escapes above root');
+        }
+        stack.pop();
+        continue;
+      }
+      stack.push(segment);
+    }
+    if (stack.length === 0) {
+      return '/';
+    }
+    return '/' + stack.join('/');
+  }
+
+  function resolveLogicalPathForToolCard(input) {
+    var trimmed = String(input).replace(/^\\s+|\\s+$/g, '');
+    if (trimmed.length === 0) {
+      throw new Error('invalid path');
+    }
+    if (trimmed.charAt(0) === '/') {
+      return normalizePathForToolCard(trimmed);
+    }
+    return normalizePathForToolCard('/' + trimmed);
+  }
+
+  function resolveVfsToolFilePath(name, input) {
+    if (name.indexOf('vfs.') === 0) name = name.slice(4);
+    if (!VFS_FILE_TOOLS[name]) return null;
+    var raw = input && input.path;
+    if (typeof raw !== 'string') return null;
+    try {
+      return resolveLogicalPathForToolCard(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function vfsToolFilePath(name, input) {
+    return resolveVfsToolFilePath(name, input);
+  }
+
+/**
+ * chat-transcript WebView boot 运行时（状态 / 渲染 / 菜单 / 桥）。
+ * 组装 concat 顺序见 scripts/assemble-webview-html.mjs 顶部注释。
+ */
+var SCROLL_TOP_LOAD_OLDER = 24;
   var SCHEMA_V = 2;
   var BRIDGE_V = 1;
   var VFS_FILE_TOOLS = { read: 1, write: 1, edit: 1 };
@@ -142,13 +459,7 @@ export function buildTranscriptBootScript(): string {
       .replace(/"/g, '&quot;');
   }
 
-  ${DECODE_LITERAL_HTML_ENTITIES_BOOT}
-
-  ${STREAM_MARKDOWN_BOOT}
-
-  ${VFS_TOOL_FILE_PATH_BOOT}
-
-  function summarizeToolInput(name, input) {
+function summarizeToolInput(name, input) {
     var path = input && (input.path || input.dir || input.from);
     if (typeof path === 'string') return path;
     var keys = input ? Object.keys(input) : [];
@@ -436,9 +747,9 @@ export function buildTranscriptBootScript(): string {
     for (var i = 0; i < items.length; i++) {
       if (items[i].label.length > longest) longest = items[i].label.length;
     }
-    var byLabel = longest * ${ANCHORED_MENU_CHAR_WIDTH_EST} + ${ANCHORED_MENU_H_PADDING};
-    var cap = window.innerWidth - ${ANCHORED_MENU_SCREEN_MARGIN} * 2;
-    return Math.min(cap, ${ANCHORED_MENU_MAX_WIDTH}, Math.max(${ANCHORED_MENU_MIN_WIDTH}, byLabel));
+    var byLabel = longest * ANCHORED_MENU_CHAR_WIDTH_EST + ANCHORED_MENU_H_PADDING;
+    var cap = window.innerWidth - ANCHORED_MENU_SCREEN_MARGIN * 2;
+    return Math.min(cap, ANCHORED_MENU_MAX_WIDTH, Math.max(ANCHORED_MENU_MIN_WIDTH, byLabel));
   }
 
   function viewportHeight() {
@@ -450,32 +761,32 @@ export function buildTranscriptBootScript(): string {
   function layoutContextMenu(anchor, contentHeight, menuWidth) {
     var screenW = window.innerWidth;
     var screenH = viewportHeight();
-    var heightCap = Math.min(${ANCHORED_MENU_MAX_HEIGHT_CAP}, screenH * 0.45);
+    var heightCap = Math.min(ANCHORED_MENU_MAX_HEIGHT_CAP, screenH * 0.45);
     var flipEstimate = Math.min(contentHeight, heightCap);
     var anchorCenterX = anchor.x + anchor.width / 2;
     var left = anchorCenterX - menuWidth / 2;
-    left = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(left, screenW - menuWidth - ${ANCHORED_MENU_SCREEN_MARGIN}));
+    left = Math.max(ANCHORED_MENU_SCREEN_MARGIN, Math.min(left, screenW - menuWidth - ANCHORED_MENU_SCREEN_MARGIN));
     var spaceAbove = anchor.y;
     var spaceBelow = screenH - (anchor.y + anchor.height);
     // Prefer below; flip above when bottom space is too tight.
-    var placeAbove = spaceBelow < flipEstimate + ${ANCHORED_MENU_GAP} && spaceAbove >= spaceBelow;
-    var availableSpace = (placeAbove ? spaceAbove : spaceBelow) - ${ANCHORED_MENU_GAP} - ${ANCHORED_MENU_SCREEN_MARGIN};
-    var availableMax = Math.max(${ANCHORED_MENU_ITEM_MIN_HEIGHT}, availableSpace);
+    var placeAbove = spaceBelow < flipEstimate + ANCHORED_MENU_GAP && spaceAbove >= spaceBelow;
+    var availableSpace = (placeAbove ? spaceAbove : spaceBelow) - ANCHORED_MENU_GAP - ANCHORED_MENU_SCREEN_MARGIN;
+    var availableMax = Math.max(ANCHORED_MENU_ITEM_MIN_HEIGHT, availableSpace);
     var scrollable = contentHeight > availableMax + 1;
     var menuHeight = scrollable ? Math.min(contentHeight, availableMax) : contentHeight;
     if (scrollable && menuHeight > heightCap) {
       menuHeight = heightCap;
     }
     var top = placeAbove
-      ? anchor.y - menuHeight - ${ANCHORED_MENU_GAP}
-      : anchor.y + anchor.height + ${ANCHORED_MENU_GAP};
-    top = Math.max(${ANCHORED_MENU_SCREEN_MARGIN}, Math.min(top, screenH - menuHeight - ${ANCHORED_MENU_SCREEN_MARGIN}));
+      ? anchor.y - menuHeight - ANCHORED_MENU_GAP
+      : anchor.y + anchor.height + ANCHORED_MENU_GAP;
+    top = Math.max(ANCHORED_MENU_SCREEN_MARGIN, Math.min(top, screenH - menuHeight - ANCHORED_MENU_SCREEN_MARGIN));
     return { left: left, top: top, width: menuWidth, maxHeight: menuHeight, scrollable: scrollable };
   }
 
   function resolveMenuAnchor(messageId, clientX, clientY) {
     // Long-press finger point (viewport coords); clamp Y inside bubble for tall messages.
-    var touchH = ${ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT};
+    var touchH = ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT;
     var y = clientY - touchH * 0.5;
     var x = clientX;
     var rowEl = document.querySelector('.row.message[data-id="' + messageId + '"]');
@@ -495,62 +806,6 @@ export function buildTranscriptBootScript(): string {
       }
     }
     return null;
-  }
-
-  function parseUserVfsAction(text) {
-    if (!text || text.indexOf('<action') < 0) return null;
-    function unescapeXml(s) {
-      return String(s)
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&amp;/g, '&');
-    }
-    var am = text.match(/<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/);
-    if (!am) return null;
-    var name = (am[1].match(/name="([^"]+)"/) || [])[1] || '';
-    var path = '';
-    var method = '';
-    var hunks = [];
-    try {
-      var params = JSON.parse(unescapeXml(am[2] || '').trim());
-      if (name === 'rename') {
-        path = String(params.from || '') + '→' + String(params.to || '');
-      } else {
-        path = String(params.path || '');
-      }
-      if (name === 'write' || name === 'edit') method = name;
-      if (name === 'edit') {
-        hunks.push({
-          index: '1',
-          old: String(params.oldString || ''),
-          new: String(params.newString || ''),
-        });
-      }
-    } catch (e) {}
-    return { kind: name, path: path, method: method, hunks: hunks };
-  }
-
-  function renderUserVfsActions(actions) {
-    var html = '';
-    for (var ai = 0; ai < actions.length; ai++) {
-      var action = actions[ai];
-      html += '<div class="vfs-action-card">';
-      html += '<div class="vfs-action-title">' + escapeHtml(action.kind) + ' · ' + escapeHtml(action.path) + '</div>';
-      if (action.method) {
-        html += '<div class="vfs-action-meta">method: ' + escapeHtml(action.method) + '</div>';
-      }
-      var hunks = action.hunks || [];
-      for (var hi = 0; hi < hunks.length; hi++) {
-        var h = hunks[hi];
-        html += '<details class="edit-hunk"><summary>edit-hunk #' + escapeHtml(h.index) + '</summary>';
-        html += '<div class="edit-hunk-old"><span class="edit-hunk-label">old</span><pre>' + escapeHtml(h.old) + '</pre></div>';
-        html += '<div class="edit-hunk-new"><span class="edit-hunk-label">new</span><pre>' + escapeHtml(h.new) + '</pre></div>';
-        html += '</details>';
-      }
-      html += '</div>';
-    }
-    return html;
   }
 
   function renderToolOnlyBubble(tools, toolGroupKey, toolGroupExpanded, options) {
@@ -597,15 +852,8 @@ export function buildTranscriptBootScript(): string {
     return '';
   }
 
-  function renderUserVfsActionCard(action) {
-    return renderUserVfsActions([action]);
-  }
-
   function renderUserBubbleContent(text) {
-    var action = parseUserVfsAction(text);
-    if (action != null) {
-      return renderUserVfsActionCard(action);
-    }
+    // VFS 操作卡只走结构化 row.kind === 'user_vfs_turn'；正文不再兜底解析 <action>
     return escapeHtml(text);
   }
 
@@ -731,9 +979,9 @@ export function buildTranscriptBootScript(): string {
     var measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
     var contentHeight = measuredHeight > 0
       ? measuredHeight
-      : menu.items.length * ${ANCHORED_MENU_ITEM_LAYOUT_HEIGHT};
+      : menu.items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
     var layout = layoutContextMenu(menu.anchor, contentHeight, menuWidth);
-    if (menu.items.length <= ${MESSAGE_ACTION_MENU_ITEM_COUNT}) {
+    if (menu.items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
       layout = {
         left: layout.left,
         top: layout.top,
@@ -809,13 +1057,19 @@ export function buildTranscriptBootScript(): string {
     }, 450);
   }
 
+  
+  function shouldCancelLongPressForMove(deltaX, deltaY, tolerancePx) {
+    if (tolerancePx == null) tolerancePx = LONG_PRESS_MOVE_TOLERANCE_PX;
+    return Math.hypot(deltaX, deltaY) > tolerancePx;
+  }
+
   function onMessagePointerMove(event) {
     if (!state.longPressTarget) return;
     var touch = event.touches && event.touches[0];
     if (!touch) return;
     var dx = touch.clientX - state.longPressTarget.pageX;
     var dy = touch.clientY - state.longPressTarget.pageY;
-    if (shouldCancelLongPressForMove(dx, dy, ${LONG_PRESS_MOVE_TOLERANCE_PX})) {
+    if (shouldCancelLongPressForMove(dx, dy, LONG_PRESS_MOVE_TOLERANCE_PX)) {
       clearLongPress();
     }
   }
@@ -1586,10 +1840,13 @@ export function buildTranscriptBootScript(): string {
     handleHostMessage(data);
   }
 
-  document.addEventListener('message', onHostMessage);
+/**
+ * chat-transcript boot 入口收尾：宿主 message 监听 + bootTranscript + readyState 兜底。
+ */
+document.addEventListener('message', onHostMessage);
   window.addEventListener('message', onHostMessage);
 
-  document.addEventListener('DOMContentLoaded', function () {
+  function bootTranscript() {
     var scroller = document.getElementById('scroller');
     var rows = document.getElementById('rows');
     if (scroller) scroller.addEventListener('scroll', onScroll, { passive: true });
@@ -1600,9 +1857,17 @@ export function buildTranscriptBootScript(): string {
       rows.addEventListener('touchend', onMessagePointerUp, { passive: true });
       rows.addEventListener('touchcancel', onMessagePointerUp, { passive: true });
     }
-    post('ready', { version: 'm3' });
+    // RN WebView html source 上 DOMContentLoaded 可能已错过；readyState 兜底
+    post('ready', { version: 'm3', readyState: document.readyState });
     state.ready = true;
-  });
-})();
-`.trim();
-}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootTranscript);
+  } else {
+    bootTranscript();
+  }
+
+})();</script>
+</body>
+</html>
+`;

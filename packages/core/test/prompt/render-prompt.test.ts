@@ -211,7 +211,7 @@ describe("buildPromptAssemblyFromLayout", () => {
   });
 
   it("UA 两段按两条普通 message 展示（不合并摘要）", async () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/test.md" />';
+    const actionXml = '<action name="delete">\n{"path":"/test.md"}\n</action>';
     const wrapped = `<system-message>\n${actionXml}\n</system-message>`;
     const messages: ChatMessage[] = [
       {
@@ -248,7 +248,8 @@ describe("buildPromptAssemblyFromLayout", () => {
     });
     const chat = segments.filter((s) => s.source === "message");
     assert.equal(chat.length, 2);
-    assert.match(chat[0]!.body, /<user-vfs-action/);
+    assert.match(chat[0]!.body, /<action\b/);
+
     assert.equal(chat[1]!.body, "收到通知");
     assert.ok(chat.every((s) => !s.body.includes("【用户 VFS 操作】")));
   });
@@ -334,6 +335,26 @@ describe("persistEnabled / dynamicEnabled 开关", () => {
     const segments = await buildPromptAssemblyFromLayout(layout, ctx);
     assert.ok(segments.some((s) => s.id === "prompt-worktree-canon"));
     assert.ok(segments.every((s) => !s.id.startsWith("persist-")));
+  });
+
+  it("worktreeDisplay 空时不注入 worktree 双段（避免 OpenAI 缺 content）", async () => {
+    const layout: AgentPromptLayout = {
+      persistEnabled: false,
+      persist: [{ name: "canon", type: "worktree" }],
+      dynamic: [],
+    };
+    const ctx = {
+      worktreeDisplay: "",
+      messages: [message("user", "hi", 1)],
+      now: fixedNow,
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, ctx);
+    assert.equal(input.messages.length, 1);
+    assert.equal(input.messages[0]!.id, "m1");
+    const zones = computeLlmExportZonesFromLayout(layout, {
+      worktreeDisplay: "",
+    });
+    assert.equal(zones.persistCount, 0);
   });
 
   it("T-WT7: wire role assistant on canon 仍注入 user+done", async () => {

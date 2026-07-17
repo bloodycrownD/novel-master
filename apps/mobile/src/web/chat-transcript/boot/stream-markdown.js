@@ -1,12 +1,4 @@
-/**
- * Lightweight streaming markdown for WebView tail (no markdown-it).
- * Persisted rows still use RN prepareTranscriptRichHtml + sanitize.
- *
- * Hot path: append escaped plain deltas immediately.
- * Debounced upgrade: full renderStreamingMarkdown after idle (cheap during fast token burst).
- */
-export const STREAM_MARKDOWN_BOOT = `
-  var STREAM_RICH_UPGRADE_MS = 350;
+var STREAM_RICH_UPGRADE_MS = 350;
   var streamRichUpgrade = {
     timer: null,
     kinds: { text: false, thinking: false },
@@ -16,21 +8,21 @@ export const STREAM_MARKDOWN_BOOT = `
   function renderStreamingInline(s) {
     var escaped = escapeHtmlRaw(s);
     return escaped
-      .replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>')
-      .replace(/\\*(.+?)\\*/g, '<em>$1</em>')
-      .replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>');
   }
 
   function renderStreamingMarkdown(text) {
     var normalized = decodeLiteralHtmlEntities(String(text || '').trim());
     if (!normalized) return '';
-    var lines = normalized.split(/\\n/);
+    var lines = normalized.split(/\n/);
     var html = '';
     var inList = false;
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
-      var bullet = /^\\s*[-*+]\\s+(.+)$/.exec(line);
-      var ordered = /^\\s*\\d+\\.\\s+(.+)$/.exec(line);
+      var bullet = /^\s*[-*+]\s+(.+)$/.exec(line);
+      var ordered = /^\s*\d+\.\s+(.+)$/.exec(line);
       if (bullet) {
         if (!inList) { html += '<ul>'; inList = 'ul'; }
         else if (inList === 'ol') { html += '</ol><ul>'; inList = 'ul'; }
@@ -119,4 +111,3 @@ export const STREAM_MARKDOWN_BOOT = `
     if (streamRichUpgrade.timer != null) return;
     streamRichUpgrade.timer = setTimeout(flushStreamRichUpgrade, STREAM_RICH_UPGRADE_MS);
   }
-`;

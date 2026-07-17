@@ -1,15 +1,8 @@
-/**
- * WebView boot 内联片段：与 Core resolveVfsToolFilePath / resolveLogicalPath 行为等价。
- * 不能直接 import Core，由 main.ts 注入 buildTranscriptBootScript。
- */
-
-/** 与 normalizePath + resolveLogicalPath + resolveVfsToolFilePath 对齐；依赖 boot 内 VFS_FILE_TOOLS。 */
-export const VFS_TOOL_FILE_PATH_BOOT = `
-  function normalizePathForToolCard(path) {
+function normalizePathForToolCard(path) {
     if (typeof path !== 'string' || path.length === 0) {
       throw new Error('invalid path');
     }
-    var normalized = path.replace(/\\\\/g, '/');
+    var normalized = path.replace(/\\/g, '/');
     if (normalized.charAt(0) !== '/') {
       throw new Error('invalid path');
     }
@@ -36,7 +29,7 @@ export const VFS_TOOL_FILE_PATH_BOOT = `
   }
 
   function resolveLogicalPathForToolCard(input) {
-    var trimmed = String(input).replace(/^\\s+|\\s+$/g, '');
+    var trimmed = String(input).replace(/^\s+|\s+$/g, '');
     if (trimmed.length === 0) {
       throw new Error('invalid path');
     }
@@ -61,4 +54,3 @@ export const VFS_TOOL_FILE_PATH_BOOT = `
   function vfsToolFilePath(name, input) {
     return resolveVfsToolFilePath(name, input);
   }
-`.trim();
