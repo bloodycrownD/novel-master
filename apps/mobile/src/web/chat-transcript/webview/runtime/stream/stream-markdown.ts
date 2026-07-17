@@ -1,4 +1,5 @@
 import { decodeLiteralHtmlEntities } from '../../../../shared/decode-entities';
+import { applyTrustedHtml } from '../../../../shared/ui/TrustedHtml';
 import { escapeHtmlRaw } from '../util/html-escape';
 import { state } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
@@ -94,14 +95,14 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
     if (!body) return;
     const thinkingHtml = renderStreamingMarkdown(state.stream.thinking);
     if (!thinkingHtml) return;
-    body.innerHTML = thinkingHtml;
+    applyTrustedHtml(body, thinkingHtml);
     setStreamBodyRichClass(body, true);
     state.stream.thinkingHtml = thinkingHtml;
   } else {
     const textBody = ensureStreamTextBody(bubble);
     const textHtml = renderStreamingMarkdown(state.stream.text);
     if (!textHtml) return;
-    textBody.innerHTML = textHtml;
+    applyTrustedHtml(textBody, textHtml);
     setStreamBodyRichClass(textBody, true);
     state.stream.textHtml = textHtml;
   }

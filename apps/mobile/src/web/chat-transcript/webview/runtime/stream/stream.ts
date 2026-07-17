@@ -1,8 +1,9 @@
+import { applyTrustedHtml } from '../../../../shared/ui/TrustedHtml';
 import { escapeHtml } from '../util/html-escape';
 import { state } from '../state/state';
 import type { ToolCallRow } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
-import { renderAssistantBubbleInner, renderRows } from '../render/row-logic';
+import { renderRows } from '../render/row-logic';
 import { renderToolInvokingBar } from '../render/tool-logic';
 import { scheduleStreamRichUpgrade, streamRichUpgrade } from './stream-markdown';
 
@@ -11,6 +12,7 @@ export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
 
 /**
  * 流式尾部相位、增量 DOM 与 batch/delta 提交（不含 stream-markdown）。
+ * P0-2：壳/相位在 ui/stream；本文件只写 body 子树与相位 DOM 辅助。
  */
 export function streamHasContent(): boolean {
   return (
@@ -54,22 +56,72 @@ export function assistantBubbleExtraClasses(
   return extra;
 }
 
-export function renderStreamBubbleInner(): string {
-  const showIdleBar = getStreamTailPhase() === 'idle-after-content';
-  return renderAssistantBubbleInner(
-    state.stream.text,
-    state.stream.textHtml,
-    state.stream.thinking,
-    'stream:thinking',
-    true,
-    streamThinkingHtml(),
-    [],
-    'stream:tools',
-    false,
-    showIdleBar,
+/**
+ * 将当前 stream 状态同步进已有 bubble 的 body 挂载点（非整泡 innerHTML）。
+ * 壳结构缺失时回退 renderRows，避免与 Preact VDOM 分叉。
+ */
+function syncStreamBodiesFromState(bubble: Element): void {
+  const hasThinking = !!(
+    state.stream.thinking && String(state.stream.thinking).trim()
   );
+  const hasText = !!(state.stream.text && String(state.stream.text).trim());
+
+  if (hasThinking) {
+    const section = bubble.querySelector(
+      '[data-thinking-key="stream:thinking"]',
+    );
+    const body = section ? section.querySelector('.thinking-body') : null;
+    if (!body) {
+      renderRows();
+      return;
+    }
+    const th = streamThinkingHtml();
+    if (state.flags.richText && th) {
+      applyTrustedHtml(body, th);
+      setStreamBodyRichClass(body, true);
+    } else {
+      body.textContent = String(state.stream.thinking || '');
+      setStreamBodyRichClass(body, false);
+    }
+    if (hasText || getStreamTailPhase() === 'idle-after-content') {
+      body.classList.add('thinking-body-divided');
+    }
+  }
+
+  if (hasText || hasThinking) {
+    const textBody = ensureStreamTextBody(bubble);
+    if (state.flags.richText && state.stream.textHtml) {
+      applyTrustedHtml(textBody, state.stream.textHtml);
+      setStreamBodyRichClass(textBody, true);
+    } else if (hasText) {
+      textBody.textContent = String(state.stream.text || '');
+      setStreamBodyRichClass(textBody, false);
+    }
+  }
+
+  const showIdleBar = getStreamTailPhase() === 'idle-after-content';
+  const existing = bubble.querySelector('.tool-invoking-bar');
+  if (showIdleBar && !existing) {
+    const holder = document.createElement('div');
+    holder.innerHTML = renderToolInvokingBar();
+    const bar = holder.firstElementChild;
+    if (bar) {
+      const textBody = bubble.querySelector('.bubble-body');
+      if (textBody) {
+        textBody.insertAdjacentElement('afterend', bar);
+      } else {
+        bubble.appendChild(bar);
+      }
+    }
+  } else if (!showIdleBar && existing) {
+    existing.remove();
+  }
 }
 
+/**
+ * 现网回退：增量失败时按状态刷新 body（对齐原 updateStreamBubble 语义）。
+ * 不再整泡拼串 innerHTML，以免毁掉 Preact 壳与 StreamBodyHost。
+ */
 export function updateStreamBubble(tail: Element): void {
   let bubble = tail.querySelector('.bubble');
   const bubbleClass =
@@ -80,17 +132,23 @@ export function updateStreamBubble(tail: Element): void {
       state.stream.text,
       state.stream.thinking,
     );
-  const inner = renderStreamBubbleInner();
-  if (!inner) return;
-  if (bubble) {
-    bubble.className = bubbleClass;
-    bubble.innerHTML = inner;
+  const hasThinking = !!(
+    state.stream.thinking && String(state.stream.thinking).trim()
+  );
+  if (!bubble) {
+    renderRows();
     return;
   }
-  const el = document.createElement('div');
-  el.className = bubbleClass;
-  el.innerHTML = inner;
-  tail.appendChild(el);
+  if (
+    hasThinking &&
+    !bubble.querySelector('[data-thinking-key="stream:thinking"]')
+  ) {
+    // 缺 thinking 壳：整表建壳（BodyHost 带稳定 key，text body 可保留）
+    renderRows();
+    return;
+  }
+  bubble.className = bubbleClass;
+  syncStreamBodiesFromState(bubble);
 }
 
 export function ensureStreamTextBody(bubble: Element): HTMLElement {
@@ -198,7 +256,7 @@ export function appendStreamDeltaIncremental(
       return false;
     }
     if (html && state.flags.richText) {
-      body.innerHTML = html;
+      applyTrustedHtml(body, html);
       setStreamBodyRichClass(body, true);
       bubble.className =
         'bubble assistant' +
@@ -221,8 +279,8 @@ export function appendStreamDeltaIncremental(
     const textBody = ensureStreamTextBody(bubble);
     if (html && state.flags.richText) {
       // WHY: 保持与 RN prepareStreamTailHtml 的 rich 复用语义一致：
-      // 有 html 且 rich 打开时直接 innerHTML 替换；否则走 delta 增量追加，避免整泡 updateStreamBubble 重建。
-      textBody.innerHTML = html;
+      // 有 html 且 rich 打开时直接信任边界替换；否则走 delta 增量追加，避免整泡重建。
+      applyTrustedHtml(textBody, html);
       setStreamBodyRichClass(textBody, true);
       bubble.className =
         'bubble assistant' +
@@ -342,6 +400,7 @@ export function appendStreamDelta(
     tail.classList.contains('stream--waiting-first') ||
     !tail.querySelector('.bubble')
   ) {
+    // 相位建壳：允许一次整表 Preact；非 delta 热路径上的内容根 remount
     renderRows();
     scheduleStickIfNearBottom();
     return;
@@ -349,7 +408,7 @@ export function appendStreamDelta(
   const incremental = appendStreamDeltaIncremental(tail, kind, delta, html || '');
   if (!incremental && kind !== 'text') {
     // WHY: 正文 text 不能在增量失败时整泡重建（会触发 thinking DOM 相关副作用）。
-    // 只有在不存在 #stream-tail 时，我们才允许一次性 fallback 到 renderRows()。
+    // 非 text：对齐现网 updateStreamBubble 回退（非一律 renderRows）。
     updateStreamBubble(tail);
     if (state.flags.richText) {
       scheduleStreamRichUpgrade(kind);

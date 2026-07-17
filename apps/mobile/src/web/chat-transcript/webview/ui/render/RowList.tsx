@@ -6,7 +6,7 @@ import type { ComponentChildren } from 'preact';
 import { state } from '../../runtime/state/state';
 import { MessageRow } from './MessageRow';
 import { UserVfsTurnRow } from './UserVfsTurnRow';
-import { StreamTailRow } from './StreamTailRow';
+import { StreamTail } from '../stream/StreamTail';
 
 export function RowList() {
   const hasStream = !!(
@@ -32,7 +32,7 @@ export function RowList() {
       children.push(<MessageRow key={row.id} row={row} />);
     }
   }
-  children.push(<StreamTailRow key="stream-tail" />);
+  children.push(<StreamTail key="stream-tail" />);
   if (showEmpty) {
     children.push(<div className="empty-state">暂无消息</div>);
   }

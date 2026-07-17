@@ -1,12 +1,9 @@
-import { escapeHtml } from '../util/html-escape';
-import { state } from '../state/state';
-import type { ToolCallRow, TranscriptFlags } from '../state/state';
-import { renderToolGroupSection, renderToolInvokingBar } from './tool-logic';
-
 /**
- * P0-3：renderRows 门面 + flagsEqual + 流式仍依赖的助手气泡 HTML 拼串。
+ * P0-3：renderRows 门面 + flagsEqual + 附件标签辅助。
  * 行列表结构主路径在 ui/render；由 main 注册 Preact 实现。
+ * 流式壳已迁 ui/stream；不再保留 renderAssistantBubbleInner 拼串。
  */
+import type { TranscriptFlags } from '../state/state';
 
 export type RenderRowsView = () => void;
 
@@ -64,99 +61,4 @@ export function attachmentSourceLabel(a: {
     return '';
   }
   return a.type === 'dir' ? '目录' : '文件';
-}
-
-export function thinkingBodyInner(
-  text: unknown,
-  thinkingHtml: string | null | undefined,
-): string {
-  const trimmed = String(text || '').trim();
-  if (!trimmed) return '';
-  if (state.flags.richText && thinkingHtml) {
-    return thinkingHtml;
-  }
-  return escapeHtml(trimmed);
-}
-
-export function renderThinkingSection(
-  text: unknown,
-  key: string,
-  expanded: boolean,
-  thinkingHtml: string | null | undefined,
-  showDividerBelow: boolean,
-): string {
-  const trimmed = String(text || '').trim();
-  if (!trimmed) return '';
-  const chevron = expanded ? '▼' : '▶';
-  const richClass = state.flags.richText && thinkingHtml ? ' rich' : '';
-  let bodyClass = 'thinking-body' + richClass;
-  if (expanded && showDividerBelow) {
-    bodyClass += ' thinking-body-divided';
-  }
-  const body = expanded
-    ? '<div class="' + bodyClass + '">' + thinkingBodyInner(text, thinkingHtml) + '</div>'
-    : '';
-  return (
-    '<div class="thinking-section" data-thinking-key="' +
-    escapeHtml(key) +
-    '">' +
-    '<div class="thinking-header" data-action="toggle-thinking" data-thinking-key="' +
-    escapeHtml(key) +
-    '">' +
-    '<span class="thinking-title">思考过程</span>' +
-    '<span class="thinking-chevron">' +
-    chevron +
-    '</span></div>' +
-    body +
-    '</div>'
-  );
-}
-
-/**
- * 流式 updateStreamBubble / renderStreamBubbleInner 仍用字符串整泡替换。
- * 消息行主路径已迁 ui/render/AssistantBubble。
- */
-export function renderAssistantBubbleInner(
-  text: unknown,
-  textHtml: string | null | undefined,
-  thinking: unknown,
-  thinkingKey: string,
-  thinkingExpanded: boolean,
-  thinkingHtml: string | null | undefined,
-  tools: ToolCallRow[] | null | undefined,
-  toolGroupKey: string,
-  toolGroupExpanded: boolean,
-  showToolInvoking: boolean,
-): string {
-  let html = '';
-  const hasThinking = !!(thinking && String(thinking).trim());
-  const hasTools = !!(tools && tools.length > 0);
-  const hasInvoking = !!showToolInvoking;
-  const hasText = !!(text && String(text).trim());
-  if (hasThinking) {
-    html += renderThinkingSection(
-      thinking,
-      thinkingKey,
-      thinkingExpanded,
-      thinkingHtml,
-      hasText || hasTools || hasInvoking,
-    );
-  }
-  if (hasText) {
-    const richBubble = state.flags.richText && textHtml ? ' rich' : '';
-    const inner = textHtml || escapeHtml(text || '');
-    html += '<div class="bubble-body' + richBubble + '">' + inner + '</div>';
-  } else if (hasThinking) {
-    // WHY: 仅有 thinking、正文为空时预置空 .bubble-body，供后续 text 增量挂载。
-    const richShellBubble = state.flags.richText && textHtml ? ' rich' : '';
-    html +=
-      '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';
-  }
-  if (hasInvoking) {
-    html += renderToolInvokingBar();
-  }
-  if (hasTools) {
-    html += renderToolGroupSection(tools, toolGroupKey, toolGroupExpanded, false);
-  }
-  return html;
 }

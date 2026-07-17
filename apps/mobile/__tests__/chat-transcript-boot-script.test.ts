@@ -124,14 +124,12 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-03: stream waiting-first / incremental / rich+noHtml', () => {
     const script = bootScript();
-    // 必须保留：相位 / 增量 / 符号
+    // 必须保留：相位 / 增量 / 符号（三列矩阵）
     expect(script).toContain('getStreamTailPhase');
     expect(script).toContain('streamHasContent');
     expect(script).toContain('setStreamToolInvokingDom');
     expect(script).toContain('ensureStreamTextBody');
     expect(script).toContain('updateStreamBubble');
-    expect(script).toContain('renderStreamBubbleInner');
-    expect(script).toContain('renderAssistantBubbleInner');
     expect(script).toContain('streamThinkingHtml');
     expect(script).toContain('appendStreamDeltaIncremental');
     expect(script).toContain('appendStreamDelta');
@@ -139,29 +137,45 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('renderStreamingMarkdown');
     expect(script).toContain('scheduleStreamRichUpgrade');
     expect(script).toContain('case "streamBatch"');
-    // 可改为 token：waiting-first / text-shell（壳已迁 StreamTailRow TSX）
+    // 可改为 token：waiting-first / text-shell / TrustedHtml（壳已迁 ui/stream）
     expect(script).toContain('stream--waiting-first');
     expect(script).toContain('stream-waiting-indicator');
     expect(script).toContain('data-text-shell');
     expect(script).toContain('querySelector(".bubble")');
-    // 允许删除：renderStreamWaitingFirstRow 等纯 HTML 壳函数名
+    expect(script).toContain('applyTrustedHtml');
+    expect(script).toContain('StreamTail');
+    expect(script).toContain('StreamBodyHost');
+    // 允许删除：renderStream* / renderAssistantBubbleInner 纯 HTML 壳函数
     expect(script).not.toContain('renderStreamWaitingFirstRow');
     expect(script).not.toContain('renderStreamTailRow');
-    // 局部名可能因 Preact 打包重命名（p → p2）；保留 payload.html 意图
+    expect(script).not.toContain('renderStreamBubbleInner');
+    expect(script).not.toContain('renderAssistantBubbleInner');
+    // 局部名可能因 Preact 打包重命名；保留 payload.html / 增量回退意图
     expect(script).toMatch(/\w+\.html\s*\|\|\s*[\"'][\"']/);
     expect(script).toContain('state.stream.textHtml = ""');
     expect(script).toContain('state.stream.thinkingHtml = ""');
-    expect(script).toContain('body.innerHTML = html');
-    expect(script).toContain('if (!incremental && kind !== "text") {');
-    expect(script).toContain('updateStreamBubble(tail);');
-    expect(script).toContain('if (!tail) {');
-    expect(script).toContain('renderRows();');
-    expect(script).toContain('if (state.flags.richText && !html) {');
-    expect(script).toContain('} else if (kind === "text") {');
-    expect(script).toContain('const streamTextBody = ensureStreamTextBody(bubble);');
-    expect(script).toContain(
-      'streamTextBody.insertAdjacentHTML("beforeend", escapeHtml(delta));',
-    );
+    expect(script).toContain('if (!incremental && kind !== "text")');
+    expect(script).toContain('updateStreamBubble(tail)');
+    expect(script).toContain('if (!tail)');
+    expect(script).toContain('renderRows()');
+    expect(script).toContain('if (state.flags.richText && !html)');
+    expect(script).toContain('} else if (kind === "text")');
+    expect(script).toContain('const streamTextBody = ensureStreamTextBody(bubble)');
+    expect(script).toContain('insertAdjacentHTML');
+    expect(script).toContain('escapeHtml(delta)');
+  });
+
+  it('T-PH-06: 流式壳/增量分离与 P0-2 所有权', () => {
+    const script = bootScript();
+    expect(script).toContain('appendStreamDeltaIncremental');
+    expect(script).toContain('appendStreamDelta');
+    expect(script).toContain('StreamTail');
+    expect(script).toContain('StreamBodyHost');
+    expect(script).toContain('shouldComponentUpdate');
+    expect(script).toContain('applyTrustedHtml');
+    // delta 热路径不得整表重建 #stream-tail 内容根：增量优先，失败才 updateStreamBubble
+    expect(script).toContain('appendStreamDeltaIncremental(tail');
+    expect(script).toContain('if (!incremental && kind !== "text")');
   });
 
   it('T-BR-CT-04: streamCommit / promote tail', () => {
@@ -181,16 +195,13 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
     const script = bootScript();
-    // 意图：文本壳 / fill-width；壳可由 TSX 产出，断言改 token
+    // 意图：文本壳 / fill-width；壳可由 TSX 产出，断言改 token（三列矩阵）
     expect(script).toContain('bubble--fill-width');
     expect(script).toContain('hasThinking');
     expect(script).toContain('hasTools');
     expect(script).toContain('data-text-shell');
     expect(script).toContain('getStreamTailPhase');
     expect(script).toContain('idle-after-content');
-    // 流式增量仍保留助手气泡拼串路径中的壳逻辑
-    expect(script).toContain('} else if (hasThinking) {');
-    expect(script).toContain('richShellBubble');
   });
 
   it('T-BR-CT-07: no parseUserVfsAction / user-vfs-action regression', () => {
