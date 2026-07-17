@@ -131,10 +131,7 @@ body.menu-open { -webkit-user-select: none; user-select: none; -webkit-touch-cal
 <body>
   <div id="scroller"><div id="rows"></div></div>
   <script>(function () {
-/**
- * 由 assemble-webview-html.mjs 从 TS 源抽取生成，禁止手改。
- * 重新生成：npm run assemble:webview-html -w @novel-master/mobile
- */
+/** 由 assemble 从 shared/constants.ts 内联（遗留；不落盘）。 */
 var NEAR_BOTTOM = 80;
 var MENU_OPEN_GRACE_MS = 400;
 var LONG_PRESS_MOVE_TOLERANCE_PX = 10;
@@ -150,24 +147,28 @@ var ANCHORED_MENU_H_PADDING = 32;
 var ANCHORED_MENU_CHAR_WIDTH_EST = 14;
 var MESSAGE_ACTION_MENU_ITEM_COUNT = 5;
 
-function decodeLiteralHtmlEntities(text) {
-    var current = String(text || '');
-    var previous = '';
-    var pass = 0;
-    while (current !== previous && pass < 3) {
-      previous = current;
-      current = current
-        .replace(/&amp;/gi, '&')
-        .replace(/&quot;/gi, '"')
-        .replace(/&#(?:0*34|x0*22);/gi, '"')
-        .replace(/&lt;/gi, '<')
-        .replace(/&gt;/gi, '>')
-        .replace(/&apos;/gi, "'")
-        .replace(/&#(?:0*39|x0*27);/gi, "'");
-      pass += 1;
-    }
-    return current;
+/**
+ * 遗留 assemble concat 用（Step 8 删除）。
+ * 真源：`src/web/shared/decode-entities.ts` — 须保持行为一致。
+ */
+function decodeLiteralHtmlEntities(text) {
+  var current = String(text || '');
+  var previous = '';
+  var pass = 0;
+  while (current !== previous && pass < 3) {
+    previous = current;
+    current = current
+      .replace(/&amp;/gi, '&')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#(?:0*34|x0*22);/gi, '"')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&apos;/gi, "'")
+      .replace(/&#(?:0*39|x0*27);/gi, "'");
+    pass += 1;
   }
+  return current;
+}
 
 /**
  * HTML 转义工具（供 stream-markdown 与行渲染共用）。
