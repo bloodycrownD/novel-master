@@ -17,11 +17,11 @@ import { RichDocumentWebView } from '../src/components/vfs/RichDocumentWebView';
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
-} from '../src/web/chat-transcript/uri';
+} from '../src/webview-host/chat-transcript/uri';
 import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
-} from '../src/web/rich-document/uri';
+} from '../src/webview-host/rich-document/uri';
 
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({

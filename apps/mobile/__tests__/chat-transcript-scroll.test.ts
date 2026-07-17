@@ -6,7 +6,7 @@ import {
   scrollTopAfterPrepend,
   scrollTopForBottom,
   scrollTopForOffsetFromBottom,
-} from '../src/web/chat-transcript/scroll';
+} from '../src/webview-host/chat-transcript/scroll';
 
 describe('chat-transcript scroll (forward DOM)', () => {
   it('computes offset from visual bottom', () => {

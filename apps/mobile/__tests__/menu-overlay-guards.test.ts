@@ -3,7 +3,7 @@ import {
   MENU_OPEN_GRACE_MS,
   shouldCancelLongPressForMove,
   shouldIgnoreMenuOutsideDismiss,
-} from '../src/web/chat-transcript/menu-overlay-guards';
+} from '../src/webview-host/chat-transcript/menu-overlay-guards';
 
 describe('menu-overlay-guards', () => {
   it('ignores bubble touchend during grace after long-press open', () => {

@@ -1,14 +1,14 @@
 /**
- * 菜单 overlay 手势守卫。数值常量真源：`shared/constants.ts`。
+ * 菜单 overlay 手势守卫。数值常量真源：`web/shared/constants.ts`。
  */
 export {
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../shared/constants';
+} from '../../web/shared/constants';
 import {
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../shared/constants';
+} from '../../web/shared/constants';
 
 export function shouldCancelLongPressForMove(
   deltaX: number,

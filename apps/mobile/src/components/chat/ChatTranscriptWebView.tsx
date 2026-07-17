@@ -35,7 +35,7 @@ import {
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
-} from '@/web/chat-transcript/uri';
+} from '@/webview-host/chat-transcript/uri';
 import { emitChatTranscriptTelemetry } from '@/services/chat-transcript-telemetry';
 import { useTheme } from '@/theme/ThemeProvider';
 import { prepareStreamTailHtml } from './prepare-stream-tail-html';

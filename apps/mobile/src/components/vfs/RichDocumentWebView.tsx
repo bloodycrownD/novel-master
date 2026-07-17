@@ -14,7 +14,7 @@ import {
 import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
-} from '../../web/rich-document/uri';
+} from '@/webview-host/rich-document/uri';
 import {useTheme} from '../../theme/ThemeProvider';
 
 export type RichDocumentWebViewProps = {

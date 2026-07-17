@@ -2,10 +2,10 @@
  * Forward DOM scroll helpers for WebView transcript (no column-reverse / inverted).
  * nearBottom: distance from visual bottom ≤ threshold ⇒ stick on stream updates.
  *
- * 数值常量真源：`shared/constants.ts`。
+ * 数值常量真源：`web/shared/constants.ts`。
  */
-export { NEAR_BOTTOM_THRESHOLD_PX } from '../shared/constants';
-import { NEAR_BOTTOM_THRESHOLD_PX } from '../shared/constants';
+export { NEAR_BOTTOM_THRESHOLD_PX } from '../../web/shared/constants';
+import { NEAR_BOTTOM_THRESHOLD_PX } from '../../web/shared/constants';
 
 /** True when scrollTop is within threshold of the visual bottom. */
 export function nearBottom(
