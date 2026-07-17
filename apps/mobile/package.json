@@ -10,7 +10,6 @@
     "format:check": "prettier --check .",
     "start": "react-native start",
     "pretest": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 && npm run build:webview",
-    "assemble:webview-html": "node scripts/assemble-webview-html.mjs",
     "build:webview": "node scripts/build-webview.mjs",
     "build:webview:native": "node scripts/build-webview.mjs --copy-native",
     "test": "jest",

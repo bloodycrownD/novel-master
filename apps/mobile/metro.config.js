@@ -70,12 +70,6 @@ const markdownEntitiesJson = path.resolve(
 const defaultConfig = getDefaultConfig(__dirname);
 const defaultResolveRequest = defaultConfig.resolver.resolveRequest;
 
-/** `.html` 按源码字符串模块导入（非 asset）；与 Jest html-string-transformer 对称。 */
-const assetExts = (defaultConfig.resolver.assetExts ?? []).filter(
-  (ext) => ext !== 'html',
-);
-const sourceExts = [...(defaultConfig.resolver.sourceExts ?? []), 'html'];
-
 function isTiktokenModule(moduleName) {
   return moduleName === 'tiktoken' || moduleName.startsWith('tiktoken/');
 }
@@ -227,8 +221,7 @@ const config = {
   watchFolders: [monorepoRoot],
   resolver: {
     blockList: metroBlockList,
-    assetExts: [...assetExts, 'model'],
-    sourceExts,
+    assetExts: [...(defaultConfig.resolver.assetExts ?? []), 'model'],
     nodeModulesPaths: [
       path.resolve(__dirname, 'node_modules'),
       path.resolve(monorepoRoot, 'node_modules'),
@@ -298,11 +291,6 @@ const config = {
       }
       return context.resolveRequest(context, moduleName, platform);
     },
-  },
-  transformer: {
-    ...defaultConfig.transformer,
-    assetRegistryPath: defaultConfig.transformer?.assetRegistryPath,
-    babelTransformerPath: require.resolve('./metro-html-transformer.js'),
   },
 };
 
