@@ -158,7 +158,41 @@ File editor preview body uses a single `react-native-webview` (`RichDocumentWebV
 npm test -w @novel-master/mobile -- --testPathPattern="rich-document|rich-content-styles|vfs-markdown|FileMarkdown|prepare-transcript"
 ```
 
+改 boot/样式后的真机验证见「WebView 资源（最短开发路径）」。
+
 Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
+
+## WebView 资源（最短开发路径）
+
+聊天 Transcript 与富文档预览各为一包，真源在 `src/web/{chat-transcript,rich-document}/`，经 esbuild 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+
+**最短路径（改真源 → 真机生效）：**
+
+```bash
+# 1. 改真源：src/web/chat-transcript/** 或 src/web/rich-document/**
+# 2. 重建产物（也可由 pretest / prestart / preandroid / preios 挂钩）
+npm run build:webview -w @novel-master/mobile
+# 3. 安装到设备/模拟器（会走 preandroid/preios → build:webview:native 拷贝原生落点）
+npm run android -w @novel-master/mobile
+# 或
+npm run ios -w @novel-master/mobile
+```
+
+| 命令 | 作用 |
+|------|------|
+| `build:webview` | 写出 `webview-dist/{pkg}/index.html` + `app.js` + `app.css` |
+| `build:webview:native` | 同上，并拷贝到 Android `assets/webview/` 与 iOS `WebViewDist/` |
+| `npm start` / `prestart` | **只保证** dist 已生成；**不会**把新资产 merge 进已安装包 |
+
+**仅 `npm start`（Metro）不足以更新真机 WebView。** 设备上看到的是原生 assets/bundle 内副本；须 `run-android` / `run-ios`（或等价 `build:webview:native` + 重装）后新页面才生效。
+
+契约测（`pretest` 会先 `build:webview`）从 `webview-dist` 读产物，例如：
+
+```bash
+npm test -w @novel-master/mobile -- --testPathPattern="boot-script|webview-uri|chat-transcript-rich-styles"
+```
+
+Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
 
 ## Chat transcript (WebView engine)
 
@@ -178,6 +212,8 @@ Conversation messages render in a single `react-native-webview` (`ChatTranscript
 ```bash
 npm test -w @novel-master/mobile -- --testPathPattern="chat-transcript|build-transcript"
 ```
+
+改 boot/样式后的真机验证见上方「WebView 资源（最短开发路径）」。
 
 Spec: `.apm/kb/docs/Iterations/mobile-webview-chat-transcript/spec.md`
 
