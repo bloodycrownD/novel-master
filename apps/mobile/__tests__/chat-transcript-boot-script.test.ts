@@ -129,7 +129,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('renderRows();');
     expect(script).toContain('if (state.flags.richText && !html) {');
     expect(script).toContain('} else if (kind === "text") {');
-    expect(script).toContain('var streamTextBody = ensureStreamTextBody(bubble);');
+    expect(script).toContain('const streamTextBody = ensureStreamTextBody(bubble);');
     expect(script).toContain(
       'streamTextBody.insertAdjacentHTML("beforeend", escapeHtml(delta));',
     );
@@ -157,13 +157,13 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('hasTools');
     expect(script).toContain('} else if (hasThinking) {');
     expect(script).toContain(
-      'var richShellBubble = state.flags.richText && textHtml ? " rich" : "";',
+      'const richShellBubble = state.flags.richText && textHtml ? " rich" : "";',
     );
     expect(script).toContain(
       `html += '<div class="bubble-body' + richShellBubble + '" data-text-shell="1"></div>';`,
     );
     expect(script).toContain(
-      'var showIdleBar = getStreamTailPhase() === "idle-after-content"',
+      'const showIdleBar = getStreamTailPhase() === "idle-after-content"',
     );
   });
 

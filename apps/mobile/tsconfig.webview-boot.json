@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2018", "DOM"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/web/chat-transcript/src/**/*.ts",
+    "src/web/rich-document/src/**/*.ts",
+    "src/web/shared/**/*.ts"
+  ],
+  "exclude": [
+    "src/web/webview-asset-uri.ts"
+  ]
+}
