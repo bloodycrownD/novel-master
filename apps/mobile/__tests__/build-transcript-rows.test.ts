@@ -36,6 +36,114 @@ describe('buildTranscriptRows', () => {
     expect(rowKinds).toEqual(listKinds);
   });
 
+  it('user 带 attachments → row.attachments 摘要', () => {
+    const withAttach: ChatMessage = {
+      ...msg('u1', 'user', [{ type: 'text', text: '看这个' }], 1),
+      attachments: [
+        {
+          name: '/a.md',
+          source: 'attach',
+          type: 'text',
+          content: null,
+          path: '/a.md',
+        },
+        {
+          name: '/b',
+          source: 'attach',
+          type: 'dir',
+          content: null,
+          path: '/b',
+        },
+      ],
+    };
+    const row = buildTranscriptRows([withAttach])[0];
+    expect(row).toMatchObject({
+      kind: 'message',
+      role: 'user',
+      attachments: [
+        {
+          source: 'attach',
+          type: 'text',
+          name: '/a.md',
+          path: '/a.md',
+        },
+        {
+          source: 'attach',
+          type: 'dir',
+          name: '/b',
+          path: '/b',
+        },
+      ],
+    });
+    const plain = buildTranscriptRows([
+      msg('u2', 'user', [{ type: 'text', text: '无附件' }], 1),
+    ])[0];
+    expect(plain).toMatchObject({ kind: 'message', role: 'user' });
+    expect(
+      plain && plain.kind === 'message' ? plain.attachments : undefined,
+    ).toBeUndefined();
+  });
+
+  it('T-SR3: 空正文 + 仅 user_ops attachments 仍进 transcript（与真实提示词一致）', () => {
+    const opsOnly: ChatMessage = {
+      ...msg('u-ops', 'user', [{ type: 'text', text: '' }], 3),
+      attachments: [
+        {
+          name: 'mkdir:/notes',
+          source: 'user_ops',
+          type: 'text',
+          content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+        },
+      ],
+    };
+    const rows = buildTranscriptRows([opsOnly]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'message',
+      role: 'user',
+      text: '',
+      attachments: [
+        {
+          source: 'user_ops',
+          name: 'mkdir:/notes',
+        },
+      ],
+    });
+  });
+
+  it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {
+    const emptyWithMixed: ChatMessage = {
+      ...msg('u-mix', 'user', [{ type: 'text', text: '   ' }], 1),
+      attachments: [
+        {
+          name: '/w.md',
+          source: 'workplace',
+          type: 'text',
+          content: null,
+          path: '/w.md',
+        },
+        {
+          name: '/a.md',
+          source: 'attach',
+          type: 'text',
+          content: null,
+          path: '/a.md',
+        },
+      ],
+    };
+    const rows = buildTranscriptRows([emptyWithMixed]);
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    expect(rows[0]).toMatchObject({
+      kind: 'message',
+      role: 'user',
+      text: '',
+      attachments: [
+        { source: 'workplace', name: '/w.md', path: '/w.md' },
+        { source: 'attach', name: '/a.md', path: '/a.md' },
+      ],
+    });
+  });
+
   it('appends stream tail row when streaming (text/thinking only)', () => {
     const messages = [msg('u1', 'user', [{type: 'text', text: 'q'}], 1)];
     const rows = buildTranscriptRows(messages, {text: 'partial', thinking: ''});

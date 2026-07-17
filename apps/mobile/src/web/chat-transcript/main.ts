@@ -47,6 +47,7 @@ export function buildTranscriptBootScript(): string {
     menuNativeTextBlockHandler: null,
     thinkingExpanded: {},
     toolGroupExpanded: {},
+    attachGroupExpanded: {},
     scrollRaf: null,
     loadOlderArmed: true,
     longPressTimer: null,
@@ -319,6 +320,73 @@ export function buildTranscriptBootScript(): string {
     return html;
   }
 
+  function attachmentChipLabel(a) {
+    if (a.source === 'user_ops') {
+      return a.name || '';
+    }
+    var path = a.path || a.name || '';
+    if (a.type === 'dir') {
+      return '📁' + path;
+    }
+    return '📄' + path;
+  }
+
+  function attachmentSourceLabel(a) {
+    if (a.source === 'workplace') {
+      return '工作区';
+    }
+    if (a.source === 'user_ops') {
+      return '';
+    }
+    return a.type === 'dir' ? '目录' : '文件';
+  }
+
+  /** 对齐工具调用组：可折叠 header + surface 卡片列表。 */
+  function renderAttachGroupSection(attachments, key, expanded, showDividerAbove) {
+    if (!attachments || attachments.length === 0) {
+      return '';
+    }
+    var isExpanded = !!expanded;
+    var chevron = isExpanded ? '▼' : '▶';
+    var divided = showDividerAbove ? ' attach-group-divided-above' : '';
+    var html =
+      '<div class="tool-group-section attach-group-section' +
+      divided +
+      '" data-attach-group-key="' +
+      escapeHtml(key) +
+      '">' +
+      '<div class="tool-group-header" data-action="toggle-attach-group" data-attach-group-key="' +
+      escapeHtml(key) +
+      '">' +
+      '<span class="tool-group-title">消息附件 (' +
+      attachments.length +
+      ')</span>' +
+      '<span class="tool-group-chevron">' +
+      chevron +
+      '</span></div>';
+    if (isExpanded) {
+      html += '<div class="tool-group-items">';
+      for (var ai = 0; ai < attachments.length; ai++) {
+        var a = attachments[ai];
+        html +=
+          '<div class="tool-group-item tool-card attach-card">' +
+          '<div class="tool-header">' +
+          '<span class="tool-name">' +
+          escapeHtml(attachmentChipLabel(a)) +
+          '</span>' +
+          (attachmentSourceLabel(a)
+            ? '<span class="tool-status success">' +
+              escapeHtml(attachmentSourceLabel(a)) +
+              '</span>'
+            : '') +
+          '</div></div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderAssistantBubbleInner(
     text,
     textHtml,
@@ -430,21 +498,37 @@ export function buildTranscriptBootScript(): string {
   }
 
   function parseUserVfsAction(text) {
-    if (!text || text.indexOf('<user-vfs-action') < 0) return null;
-    var match = text.match(/<user-vfs-action\\s+([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/user-vfs-action>)/);
-    if (!match) return null;
-    var attrs = match[1];
-    var inner = match[2] || '';
-    var kind = (attrs.match(/kind="([^"]+)"/) || [])[1] || '';
-    var path = (attrs.match(/path="([^"]+)"/) || [])[1] || '';
-    var method = (attrs.match(/method="([^"]+)"/) || [])[1] || '';
-    var hunks = [];
-    var hunkRe = /<edit-hunk[^>]*index="(\\d+)"[^>]*>[\\s\\S]*?<old>([\\s\\S]*?)<\\/old>[\\s\\S]*?<new>([\\s\\S]*?)<\\/new>[\\s\\S]*?<\\/edit-hunk>/g;
-    var hm;
-    while ((hm = hunkRe.exec(inner)) !== null) {
-      hunks.push({ index: hm[1], old: hm[2], new: hm[3] });
+    if (!text || text.indexOf('<action') < 0) return null;
+    function unescapeXml(s) {
+      return String(s)
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&');
     }
-    return { kind: kind, path: path, method: method, hunks: hunks };
+    var am = text.match(/<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/);
+    if (!am) return null;
+    var name = (am[1].match(/name="([^"]+)"/) || [])[1] || '';
+    var path = '';
+    var method = '';
+    var hunks = [];
+    try {
+      var params = JSON.parse(unescapeXml(am[2] || '').trim());
+      if (name === 'rename') {
+        path = String(params.from || '') + '→' + String(params.to || '');
+      } else {
+        path = String(params.path || '');
+      }
+      if (name === 'write' || name === 'edit') method = name;
+      if (name === 'edit') {
+        hunks.push({
+          index: '1',
+          old: String(params.oldString || ''),
+          new: String(params.newString || ''),
+        });
+      }
+    } catch (e) {}
+    return { kind: name, path: path, method: method, hunks: hunks };
   }
 
   function renderUserVfsActions(actions) {
@@ -759,8 +843,34 @@ export function buildTranscriptBootScript(): string {
     var thinkingExpanded = !!state.thinkingExpanded[thinkingKey];
     var html = '<div class="row message ' + role + hidden + '" data-id="' + escapeHtml(row.id) + '">';
     if (role === 'user') {
-      if (row.text) {
-        html += '<div class="bubble">' + renderUserBubbleContent(row.text) + '</div>';
+      var attachments = row.attachments || [];
+      var hasAttach = attachments.length > 0;
+      var hasText = !!(row.text && String(row.text).length > 0);
+      if (hasAttach || hasText) {
+        if (hasAttach) {
+          // 正文在上、附件组在下，合进同一条 bubble
+          var attachKey = 'attach:' + row.id;
+          var attachExpanded = !!state.attachGroupExpanded[attachKey];
+          html +=
+            '<div class="bubble bubble--fill-width bubble--user-compose">' +
+            (hasText
+              ? '<div class="bubble-body">' +
+                renderUserBubbleContent(row.text) +
+                '</div>'
+              : '') +
+            renderAttachGroupSection(
+              attachments,
+              attachKey,
+              attachExpanded,
+              hasText,
+            ) +
+            '</div>';
+        } else {
+          html +=
+            '<div class="bubble">' +
+            renderUserBubbleContent(row.text) +
+            '</div>';
+        }
       }
     } else if (row.thinking || row.text || (row.tools && row.tools.length > 0)) {
       var toolGroupKey = 'msg:' + row.id;
@@ -1368,6 +1478,14 @@ export function buildTranscriptBootScript(): string {
       var tgKey = actionEl.getAttribute('data-tool-group-key');
       if (tgKey) {
         state.toolGroupExpanded[tgKey] = !state.toolGroupExpanded[tgKey];
+        renderRows();
+      }
+      return;
+    }
+    if (action === 'toggle-attach-group') {
+      var agKey = actionEl.getAttribute('data-attach-group-key');
+      if (agKey) {
+        state.attachGroupExpanded[agKey] = !state.attachGroupExpanded[agKey];
         renderRows();
       }
       return;

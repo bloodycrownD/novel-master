@@ -3,6 +3,10 @@
  *
  * @deprecated Transcript path uses {@link ChatTranscriptWebView}; retained only when
  * Rollback path when `chatTranscriptEngine` KKV is set to `legacy-rn`.
+ *
+ * **known-limit（T-SR3 不纳入）**：legacy FlatList **未**完整渲染「空正文 + attachments」
+ * 附件卡契约；生产主路径以 WebView / `buildTranscriptRows` 为准。勿再启用本组件作主 UI
+ * 除非补齐 attachments 展示。
  */
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import {

@@ -31,6 +31,13 @@ export type TranscriptUserVfsAction = {
 };
 
 /** Rows sent to Web (seq ascending; Web renders forward DOM order). */
+export type TranscriptAttachmentView = {
+  readonly source: 'workplace' | 'attach' | 'user_ops';
+  readonly type: 'text' | 'image' | 'dir';
+  readonly name: string;
+  readonly path: string;
+};
+
 export type TranscriptRow =
   | {
       readonly kind: 'message';
@@ -44,6 +51,8 @@ export type TranscriptRow =
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
       readonly textHtml?: string;
       readonly thinkingHtml?: string;
+      /** user 消息附件摘要（展开为工具调用风格卡片）。 */
+      readonly attachments?: readonly TranscriptAttachmentView[];
     }
   | {
       readonly kind: 'user_vfs_turn';

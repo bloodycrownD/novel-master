@@ -533,6 +533,38 @@ describe('message-blocks', () => {
     }
   });
 
+  it('T-SR3: 空正文 + attachments 仍进 buildChatListItems', () => {
+    const emptyBodyWithAttach: ChatMessage = {
+      ...msg('u-att', 'user', [{ type: 'text', text: '' }], 1),
+      attachments: [
+        {
+          name: '/w.md',
+          source: 'workplace',
+          type: 'text',
+          content: null,
+          path: '/w.md',
+        },
+        {
+          name: 'mkdir:/notes',
+          source: 'user_ops',
+          type: 'text',
+          content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+        },
+      ],
+    };
+    const items = buildChatListItems([emptyBodyWithAttach]);
+    expect(items).toHaveLength(1);
+    expect(items[0]?.kind).toBe('message');
+    if (items[0]?.kind === 'message') {
+      expect(items[0].textParts).toEqual([]);
+      expect(items[0].message.attachments).toHaveLength(2);
+      expect(items[0].message.attachments?.map(a => a.source)).toEqual([
+        'workplace',
+        'user_ops',
+      ]);
+    }
+  });
+
   it('omits tool_results-only user messages from list', () => {
     const messages = [
       msg(
@@ -666,7 +698,7 @@ describe('message-blocks', () => {
   });
 
   it('B2-4b: hidden UA 两段仍折叠为 user_vfs_turn', () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [
       msg(
         'u1',
@@ -700,7 +732,7 @@ describe('message-blocks', () => {
   });
 
   it('B2-4: UA 两段折叠为单个 user_vfs_turn', () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
+    const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [
       msg(
         'u1',
@@ -743,7 +775,7 @@ describe('message-blocks', () => {
         [
           {
             type: 'text',
-            text: '<user-vfs-action kind="delete" path="/a.md" />',
+            text: '<action name="delete">\n{"path":"/a.md"}\n</action>',
           },
         ],
         1,

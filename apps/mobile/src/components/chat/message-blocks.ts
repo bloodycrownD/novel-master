@@ -324,6 +324,7 @@ export function buildChatListItems(
     }
 
     const hasToolUse = toolUses.length > 0;
+    const hasAttachments = (message.attachments?.length ?? 0) > 0;
     const unpairedStatus = hasToolUse
       ? resolveUnpairedToolStatus(
           message,
@@ -340,7 +341,13 @@ export function buildChatListItems(
       return view;
     });
 
-    if (textParts.length > 0 || thinkingParts.length > 0 || hasToolUse) {
+    // 空正文但有 attachments（如仅 flush 的 user_ops）仍须进列表；否则真实提示词看得到、UI 没有
+    if (
+      textParts.length > 0 ||
+      thinkingParts.length > 0 ||
+      hasToolUse ||
+      hasAttachments
+    ) {
       items.push({
         kind: 'message',
         message,
@@ -417,6 +424,16 @@ export function buildTranscriptRows(
       });
       continue;
     }
+    const userAttachments =
+      item.message.role === 'user' &&
+      (item.message.attachments?.length ?? 0) > 0
+        ? item.message.attachments!.map(a => ({
+            source: a.source,
+            type: a.type,
+            name: a.name,
+            path: a.path ?? a.name,
+          }))
+        : undefined;
     rows.push({
       kind: 'message',
       id: item.message.id,
@@ -424,6 +441,7 @@ export function buildTranscriptRows(
       hidden: item.message.hidden,
       text: decodeLiteralHtmlEntities(item.textParts.join('\n')),
       thinking: decodeLiteralHtmlEntities(item.thinkingParts.join('\n')),
+      ...(userAttachments != null ? { attachments: userAttachments } : {}),
       ...(item.tools.length > 0
         ? {
             tools: item.tools.map(t => ({

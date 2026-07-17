@@ -19,6 +19,37 @@ const HTML_TEMPLATE = `<!DOCTYPE html>
     .row.assistant, .row.stream, .row.tool { align-items: flex-start; }
     .bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.4; }
     .row.user .bubble { background: var(--primary, #007aff); color: #fff; }
+    /* 含附件：仍用用户蓝气泡，附件组嵌在同条消息内；卡片用半透明玻璃态适配蓝底 */
+    .row.user .bubble.bubble--user-compose {
+      width: 85%; max-width: 85%; box-sizing: border-box;
+      display: flex; flex-direction: column; gap: 0;
+    }
+    .row.user .bubble.bubble--user-compose .tool-group-title,
+    .row.user .bubble.bubble--user-compose .tool-group-chevron {
+      color: rgba(255, 255, 255, 0.85);
+    }
+    .row.user .bubble.bubble--user-compose .tool-group-divided {
+      border-bottom-color: rgba(255, 255, 255, 0.35);
+    }
+    .row.user .bubble.bubble--user-compose .attach-group-divided-above {
+      padding-top: 8px; margin-top: 8px;
+      border-top: 1px solid rgba(255, 255, 255, 0.35);
+    }
+    .row.user .bubble.bubble--user-compose .attach-card.tool-card {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.28);
+      color: #fff;
+    }
+    .row.user .bubble.bubble--user-compose .attach-card .tool-name {
+      color: #fff;
+    }
+    .row.user .bubble.bubble--user-compose .attach-card .tool-status,
+    .row.user .bubble.bubble--user-compose .attach-card .tool-status.success {
+      color: rgba(255, 255, 255, 0.8);
+    }
+    .row.user .bubble.bubble--user-compose .bubble-body {
+      color: #fff; white-space: pre-wrap; word-break: break-word;
+    }
     .row.assistant .bubble, .row.stream .bubble { background: var(--surface, #f2f2f7); color: var(--text, #111); }
     .row.hidden .bubble { opacity: 0.45; }
     .bubble .thinking-section { margin: 0; padding: 0; border: none; background: transparent; max-width: none; }

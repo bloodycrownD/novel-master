@@ -1000,5 +1000,5 @@ export const ChatTranscriptWebView = memo(
 );
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, minHeight: 0 },
+  fill: { flex: 1, minHeight: 0, overflow: 'hidden' },
 });
