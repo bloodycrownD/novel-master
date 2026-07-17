@@ -3,7 +3,6 @@ import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
-  hasComposerSendableInput,
   replaceComposerStatusAttachments,
   TOOL_TURN_BRIDGE_TEXT,
 } from "@novel-master/core/chat";
@@ -22,8 +21,8 @@ import { useShellNav } from "@/providers/ShellNavProvider";
 import {
   ComposerAttachChips,
   ComposerStatusChips,
-  partitionComposerChipAttachments,
 } from "./AttachmentDraftChips";
+import { resolveComposerSendIntent } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 
 interface ChatComposerProps {
@@ -244,19 +243,18 @@ export function ChatComposer({
       return;
     }
 
-    const content = value.trim();
-    const { attach: attachOnly } = partitionComposerChipAttachments(attachments);
-    // 状态条有 source:workplace → 可发；有差集时禁止纯 resume
-    const hasWorkplaceDelta = attachments.some(a => a.source === "workplace");
-    const hasAttachments = attachOnly.length > 0;
-    const hasSendable = hasComposerSendableInput({
-      text: content,
-      attachmentCount: attachOnly.length,
+    const intent = resolveComposerSendIntent({
+      text: value,
+      attachments,
       hasPendingUserOps,
-      hasWorkplaceDelta,
+      canResumeWithoutInput,
+      hasModel,
+      running,
     });
-    // 仅当无可发输入（含无 workplace 差集）且 canResume 时才 resume
-    const allowResumeWithoutInput = !hasSendable && canResumeWithoutInput;
+    const content = value.trim();
+    const { attachOnly, hasWorkplaceDelta, hasSendable, allowResumeWithoutInput } =
+      intent;
+    const hasAttachments = attachOnly.length > 0;
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
     }
@@ -308,20 +306,14 @@ export function ChatComposer({
 
   const inputDisabled =
     (!hasModel && !running) || lastMessageIsPlainUserText;
-  const hasWorkplaceDeltaForSend = attachments.some(
-    a => a.source === "workplace",
-  );
-  const sendDisabled =
-    !hasModel ||
-    (!running &&
-      !hasComposerSendableInput({
-        text: value,
-        attachmentCount: partitionComposerChipAttachments(attachments).attach
-          .length,
-        hasPendingUserOps,
-        hasWorkplaceDelta: hasWorkplaceDeltaForSend,
-      }) &&
-      !canResumeWithoutInput);
+  const sendDisabled = resolveComposerSendIntent({
+    text: value,
+    attachments,
+    hasPendingUserOps,
+    canResumeWithoutInput,
+    hasModel,
+    running,
+  }).sendDisabled;
 
   const inputPlaceholder = hasModel
     ? "输入消息…（Ctrl+Enter 发送）"

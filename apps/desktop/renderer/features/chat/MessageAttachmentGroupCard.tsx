@@ -2,22 +2,12 @@
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
 import type { MessageAttachmentDto } from '@shared/ipc-types';
+import { formatAttachmentChipLabel } from './AttachmentDraftChips';
 
 export type MessageAttachmentGroupCardProps = {
   attachments: readonly MessageAttachmentDto[];
   dimmed?: boolean;
 };
-
-function chipLabel(a: MessageAttachmentDto): string {
-  if (a.source === 'user_ops') {
-    return a.name;
-  }
-  const path = a.path ?? a.name;
-  if (a.type === 'dir') {
-    return `📁${path}`;
-  }
-  return `📄${path}`;
-}
 
 function sourceLabel(a: MessageAttachmentDto): string {
   if (a.source === 'workplace') {
@@ -51,7 +41,9 @@ export function MessageAttachmentGroupCard({
             className="tool-call-card tool-call-card--group-item"
           >
             <div className="tool-call-card__header">
-              <span className="tool-call-card__name">{chipLabel(a)}</span>
+              <span className="tool-call-card__name">
+                {formatAttachmentChipLabel(a)}
+              </span>
               {sourceLabel(a) ? (
                 <span className="tool-call-card__status tool-call-card__status--success">
                   {sourceLabel(a)}

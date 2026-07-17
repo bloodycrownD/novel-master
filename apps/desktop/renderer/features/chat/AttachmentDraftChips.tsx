@@ -146,27 +146,3 @@ export function ComposerAttachChips({
     />
   );
 }
-
-/**
- * @deprecated 布局已拆为框外状态条 + 框内附件条；保留供旧调用兼容。
- */
-export function ComposerDualAttachmentChips({
-  attachments,
-  onRemoveAttach,
-  disabled,
-}: {
-  attachments: readonly MessageAttachmentDto[];
-  onRemoveAttach: (attachIndex: number) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <>
-      <ComposerStatusChips attachments={attachments} disabled={disabled} />
-      <ComposerAttachChips
-        attachments={attachments}
-        onRemoveAttach={onRemoveAttach}
-        disabled={disabled}
-      />
-    </>
-  );
-}

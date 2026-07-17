@@ -4015,6 +4015,12 @@ html[data-theme="dark"] .chat-batch-bar {
   padding-bottom: 2px;
 }
 
+/* 状态条：透明行底（对齐 Mobile rowTransparent） */
+.chat-composer__chips--status {
+  background: transparent;
+  margin-bottom: 4px;
+}
+
 .chat-composer__chip {
   display: inline-flex;
   align-items: center;
