@@ -17,6 +17,8 @@
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
  * - `hasInput` / `shouldAppendNewUser` 在 materialize 非空时为真（真源差集由 Core 算）。
  * - 有 workplace 差集时禁止 `allowResumeWithoutInput` 纯 resume（差集=新输入）。
+ * - `allowAssistantContinue`（空正文续跑）约定不 append user；即便有 workplace 差集也不因
+ *   `hasWorkplaceDelta` 误 append 空 user（continue 时忽略差集对 append 的驱动）。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
  *
  * @module service/agent/logic/run-agent-turn
@@ -310,8 +312,10 @@ export async function runAgentTurn(
     ...scannedComposer,
   ]);
 
+  // allowAssistantContinue：空正文续跑约定不 append user；continue 时忽略 hasWorkplaceDelta
   const shouldAppendNewUser =
     !reAppended &&
+    !allowAssistantContinue &&
     (trimmed !== "" ||
       scannedComposer.length > 0 ||
       userOpsAttachments.length > 0 ||

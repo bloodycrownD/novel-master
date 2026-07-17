@@ -633,6 +633,45 @@ describe("runAgentTurn", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
+  it("B-01：allowAssistantContinue + 有规则可见文件 + 空 cache → 不因 workplace 差集误 append 空 user", async () => {
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+    refreshUserVfsUnifiedToolTurnSnapshot(false);
+    const existing = [
+      {
+        id: "a1",
+        role: "assistant" as const,
+        content: { blocks: [{ type: "text" as const, text: "模型回复" }] },
+      },
+    ];
+    let appendCount = 0;
+    const runtime = makeRuntime({
+      evaluateRuleView: async () => ruleViewWithFile("/visible.md"),
+      listKeys: async () => [], // 空 file_cache → materialize 有差集
+      listBySession: async () => existing,
+      append: async () => {
+        appendCount += 1;
+        return { id: "m-b01-bad" };
+      },
+    });
+    try {
+      await runAgentTurn(runtime, { projectId: "p", sessionId: "s" }, "", {
+        allowAssistantContinue: true,
+        maxStepsOverride: 1,
+      });
+    } catch {
+      // runner deps stubbed
+    }
+    assert.equal(appendCount, 0, "continue 时不得因 hasWorkplaceDelta 误 append");
+    const after = await runtime.messages.listBySession("s");
+    assert.equal(after.length, existing.length, "listBySession 长度不变");
+    assert.equal(
+      after.some((m) => m.role === "user"),
+      false,
+      "不得新增空 user",
+    );
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
+  });
+
   it("T-SR8：re-append merge 含 materialize workplace 且不丢 flush/attach/trailing", async () => {
     let reAppendedAtts:
       | readonly { source?: string; path?: string }[]

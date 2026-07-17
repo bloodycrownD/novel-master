@@ -315,6 +315,56 @@ describe("cli-run-agent-turn parity", () => {
     assert.equal(after[0]!.role, "assistant");
   });
 
+  it("B-01：allowAssistantContinue + 有规则可见文件 + 空 cache → list 长度不变、无新 user", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
+    const before = await ctx.messages.listBySession(session.id);
+    assert.equal(before.length, 1);
+
+    const base = makeRuntime(ctx, registry);
+    const runtime: AgentTurnRuntimePort = {
+      ...base,
+      worktree: (_scope) =>
+        ({
+          renderDisplay: async () => "",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+          evaluateRuleView: async () => ({
+            rows: [
+              {
+                kind: "file" as const,
+                path: "/visible.md",
+                inclusionMode: "include" as const,
+                displayState: "full" as const,
+              },
+            ],
+            displayByPath: new Map([["/visible.md", "full" as const]]),
+          }),
+        }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+    };
+
+    await runUntilRunner(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "",
+      { allowAssistantContinue: true, maxStepsOverride: 1 },
+    );
+
+    const after = await ctx.messages.listBySession(session.id);
+    assert.equal(after.length, before.length, "listBySession 长度不变");
+    assert.equal(
+      after.some((m) => m.role === "user"),
+      false,
+      "不得因 workplace 差集误 append 空 user",
+    );
+    assert.equal(after[0]!.role, "assistant");
+  });
+
   it("T-R2-cont：allowAssistantContinue 无 maxStepsOverride:1 时拒绝", async () => {
     const ctx = getNovelMasterTestContext();
     const registry = createAgentRegistryService(ctx.conn, ctx.state);
