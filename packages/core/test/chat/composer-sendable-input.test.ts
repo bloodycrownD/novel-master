@@ -36,6 +36,38 @@ describe("hasComposerSendableInput", () => {
     );
   });
 
+  it("T-SR1b：仅 hasWorkplaceDelta → 可发", () => {
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasWorkplaceDelta: true,
+      }),
+      true,
+    );
+  });
+
+  it("hasWorkplaceDelta 缺省/false → 不可发（兼容旧调用）", () => {
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+      }),
+      false,
+    );
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasWorkplaceDelta: false,
+      }),
+      false,
+    );
+  });
+
   it("三者皆空 → 不可发", () => {
     assert.equal(
       hasComposerSendableInput({
