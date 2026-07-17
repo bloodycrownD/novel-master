@@ -531,7 +531,13 @@ export const ChatTranscriptWebView = memo(
             payload: { rows },
           });
         },
-        [postToWeb, flags?.richText, agentRunning, messages, transcriptListOptions],
+        [
+          postToWeb,
+          flags?.richText,
+          agentRunning,
+          messages,
+          transcriptListOptions,
+        ],
       );
 
       const commitStreamTail = useCallback(
@@ -600,7 +606,13 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = allMessages[0]?.id;
           return true;
         },
-        [webReady, flags?.richText, agentRunning, commitStreamTail, transcriptListOptions],
+        [
+          webReady,
+          flags?.richText,
+          agentRunning,
+          commitStreamTail,
+          transcriptListOptions,
+        ],
       );
 
       const commitAbortOverlaySnapshot = useCallback((): boolean => {
@@ -688,7 +700,13 @@ export const ChatTranscriptWebView = memo(
             },
           });
         },
-        [messages, postToWeb, flags?.richText, agentRunning, transcriptListOptions],
+        [
+          messages,
+          postToWeb,
+          flags?.richText,
+          agentRunning,
+          transcriptListOptions,
+        ],
       );
 
       const handleMessage = useCallback(

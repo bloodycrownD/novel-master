@@ -69,10 +69,7 @@ export function AttachmentDraftChips({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={[
-        styles.row,
-        transparentRow ? styles.rowTransparent : null,
-      ]}
+      style={[styles.row, transparentRow ? styles.rowTransparent : null]}
       contentContainerStyle={styles.content}
       accessibilityLabel={accessibilityLabel}
     >

@@ -143,8 +143,9 @@ export function ChatComposer({
 
   const refreshPendingUserOps = useCallback(async () => {
     try {
-      const pending =
-        await runtimeRef.current.userVfsTurn.hasPendingTurns(sessionId);
+      const pending = await runtimeRef.current.userVfsTurn.hasPendingTurns(
+        sessionId,
+      );
       setHasPendingUserOps(pending);
     } catch {
       setHasPendingUserOps(false);
@@ -391,7 +392,8 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    const { attach: attachOnly } = partitionComposerChipAttachments(attachments);
+    const { attach: attachOnly } =
+      partitionComposerChipAttachments(attachments);
     // 状态条 workplace 差集 = 可发输入；有差集禁止纯 resume
     const hasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
     const hasAttachments = attachOnly.length > 0;
@@ -402,8 +404,7 @@ export function ChatComposer({
       hasWorkplaceDelta,
     });
     // 仅当无可发输入（含无 workplace）且 canResume 时才允许空续跑
-    const allowResumeWithoutInput =
-      !hasSendable && canResumeWithoutInput;
+    const allowResumeWithoutInput = !hasSendable && canResumeWithoutInput;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -434,16 +435,14 @@ export function ChatComposer({
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
-  const sendHasWorkplaceDelta = attachments.some(
-    a => a.source === 'workplace',
-  );
+  const sendHasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
   const sendDisabled =
     !hasModel ||
     (!running &&
       !hasComposerSendableInput({
         text,
-        attachmentCount: partitionComposerChipAttachments(attachments).attach
-          .length,
+        attachmentCount:
+          partitionComposerChipAttachments(attachments).attach.length,
         hasPendingUserOps,
         hasWorkplaceDelta: sendHasWorkplaceDelta,
       }) &&
@@ -452,9 +451,7 @@ export function ChatComposer({
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View
-      style={[styles.dock, { backgroundColor: tokens.background }]}
-    >
+    <View style={[styles.dock, { backgroundColor: tokens.background }]}>
       {!hasModel ? (
         <Pressable onPress={onNeedModel} style={styles.hintRow}>
           <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>
@@ -539,8 +536,8 @@ export function ChatComposer({
                 backgroundColor: sendDisabled
                   ? tokens.border
                   : running
-                    ? tokens.danger
-                    : tokens.primary,
+                  ? tokens.danger
+                  : tokens.primary,
               },
             ]}
             accessibilityLabel={running ? '终止' : '发送'}

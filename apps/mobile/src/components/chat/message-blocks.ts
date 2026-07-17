@@ -326,12 +326,7 @@ export function buildChatListItems(
     const hasToolUse = toolUses.length > 0;
     const hasAttachments = (message.attachments?.length ?? 0) > 0;
     const unpairedStatus = hasToolUse
-      ? resolveUnpairedToolStatus(
-          message,
-          messages,
-          agentRunning,
-          runUiStopped,
-        )
+      ? resolveUnpairedToolStatus(message, messages, agentRunning, runUiStopped)
       : undefined;
     const tools = toolUses.map(use => {
       const view = toolCallViewFromUse(use, results);

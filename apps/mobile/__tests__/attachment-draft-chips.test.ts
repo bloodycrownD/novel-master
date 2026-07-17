@@ -1,13 +1,13 @@
 /**
  * AttachmentDraftChips：emoji 文案、双条拆分、目录无 warning 色（T-UI1/T-UI2）。
  */
-import {describe, expect, it, jest} from '@jest/globals';
+import { describe, expect, it, jest } from '@jest/globals';
 import {
   formatAttachmentChipLabel,
   isComposerStatusAttachment,
   partitionComposerChipAttachments,
 } from '../src/components/chat/AttachmentDraftChips';
-import type {MessageAttachment} from '@novel-master/core/chat';
+import type { MessageAttachment } from '@novel-master/core/chat';
 
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -37,7 +37,7 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
   it('attach 目录为 📁/path', () => {
     expect(
       formatAttachmentChipLabel(
-        attach({source: 'attach', type: 'dir', path: '/555', name: '555'}),
+        attach({ source: 'attach', type: 'dir', path: '/555', name: '555' }),
       ),
     ).toBe('📁/555');
   });
@@ -85,11 +85,11 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
 describe('partitionComposerChipAttachments (T-UI1)', () => {
   it('三类并存 → 上条 workplace+user_ops、下条 attach', () => {
     const items = [
-      attach({source: 'workplace', type: 'text', path: '/w.md'}),
-      attach({source: 'user_ops', type: 'text', path: '/u.md'}),
-      attach({source: 'attach', type: 'text', path: '/a.md'}),
+      attach({ source: 'workplace', type: 'text', path: '/w.md' }),
+      attach({ source: 'user_ops', type: 'text', path: '/u.md' }),
+      attach({ source: 'attach', type: 'text', path: '/a.md' }),
     ];
-    const {status, attach: attachOnly} =
+    const { status, attach: attachOnly } =
       partitionComposerChipAttachments(items);
     expect(status.map(a => a.source)).toEqual(['workplace', 'user_ops']);
     expect(attachOnly.map(a => a.source)).toEqual(['attach']);
@@ -101,7 +101,7 @@ describe('partitionComposerChipAttachments (T-UI1)', () => {
 describe('T-UI2 目录无 warning 依赖', () => {
   it('目录 label 用 📁 且不依赖 warning token 文案', () => {
     const label = formatAttachmentChipLabel(
-      attach({source: 'attach', type: 'dir', path: '/d', name: 'd'}),
+      attach({ source: 'attach', type: 'dir', path: '/d', name: 'd' }),
     );
     expect(label).toBe('📁/d');
     expect(label.includes('warning')).toBe(false);

@@ -1,6 +1,6 @@
 import React from 'react';
-import {describe, expect, it, jest} from '@jest/globals';
-import TestRenderer, {act} from 'react-test-renderer';
+import { describe, expect, it, jest } from '@jest/globals';
+import TestRenderer, { act } from 'react-test-renderer';
 
 jest.mock('../src/errors/format-error', () => ({
   formatError: (err: unknown) => String(err),
@@ -48,17 +48,19 @@ jest.mock('../src/components/chat/AttachmentDraftChips', () => {
 (global as any).__DEV__ = false;
 
 jest.mock('../src/runtime/novel-master-context', () => ({
-  useNovelMaster: () => ({appUi: null}),
+  useNovelMaster: () => ({ appUi: null }),
 }));
 
 const mockGetLlmStreamEnabled = jest.fn(async () => true);
 const mockHasPendingTurns = jest.fn(async () => false);
-const mockGetComposerDraftJson = jest.fn(async (): Promise<string | null> => null);
+const mockGetComposerDraftJson = jest.fn(
+  async (): Promise<string | null> => null,
+);
 const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
-      subscribe: () => ({unsubscribe: () => undefined}),
+      subscribe: () => ({ unsubscribe: () => undefined }),
     },
     preferences: {
       getLlmStreamEnabled: mockGetLlmStreamEnabled,
@@ -70,7 +72,7 @@ jest.mock('../src/hooks/useRuntime', () => ({
       getComposerDraftJson: (...args: unknown[]) =>
         mockGetComposerDraftJson(...args),
       setComposerDraftJson: async () => true,
-      get: async () => ({projectId: 'p'}),
+      get: async () => ({ projectId: 'p' }),
     },
     worktree: () => ({}),
     appendToolTurnBridge: async () => undefined,
@@ -82,34 +84,36 @@ jest.mock('../src/services/project-composer-status.service', () => ({
     mockProjectComposerStatus(...args),
 }));
 
-const mockRunAgentTurn = jest.fn(async (_runtime, _scope, _content, options) => {
-  return new Promise<void>((resolve, reject) => {
-    const signal: AbortSignal | undefined = options?.signal;
-    if (signal?.aborted) {
-      reject(new DOMException('aborted', 'AbortError'));
-      return;
-    }
-    signal?.addEventListener(
-      'abort',
-      () => reject(new DOMException('aborted', 'AbortError')),
-      {once: true},
-    );
-  });
-});
+const mockRunAgentTurn = jest.fn(
+  async (_runtime, _scope, _content, options) => {
+    return new Promise<void>((resolve, reject) => {
+      const signal: AbortSignal | undefined = options?.signal;
+      if (signal?.aborted) {
+        reject(new DOMException('aborted', 'AbortError'));
+        return;
+      }
+      signal?.addEventListener(
+        'abort',
+        () => reject(new DOMException('aborted', 'AbortError')),
+        { once: true },
+      );
+    });
+  },
+);
 
 jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
-import {serializeComposerDraftJson} from '@novel-master/core/chat';
-import {ChatComposer} from '../src/components/chat/ChatComposer';
-import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
+import { serializeComposerDraftJson } from '@novel-master/core/chat';
+import { ChatComposer } from '../src/components/chat/ChatComposer';
+import { useAgentRunLifecycle } from '../src/hooks/useAgentRunLifecycle';
 import {
   decrementAgentActive,
   isMobileAgentActive,
   setMobileAgentActive,
 } from '../src/runtime/agent-activity';
-import {ThemeProvider} from '../src/theme/ThemeProvider';
+import { ThemeProvider } from '../src/theme/ThemeProvider';
 import {
   clearChatComposerDraft,
   writeChatComposerDraft,
@@ -125,7 +129,7 @@ function Harness(props: {
   return (
     <ThemeProvider>
       <ChatComposer
-        scope={{projectId: 'p', sessionId: 's'}}
+        scope={{ projectId: 'p', sessionId: 's' }}
         hasModel={true}
         running={lifecycle.uiRunning}
         beginUiRun={lifecycle.beginUiRun}
@@ -343,7 +347,7 @@ describe('ChatComposer integration', () => {
     expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
     const opts = mockRunAgentTurn.mock.calls[0]?.[3] as {
       allowResumeWithoutInput?: boolean;
-      attachments?: readonly {source: string}[];
+      attachments?: readonly { source: string }[];
     };
     expect(opts.allowResumeWithoutInput).toBe(false);
     expect(opts.attachments?.every(a => a.source === 'attach')).toBe(true);
@@ -387,4 +391,3 @@ describe('ChatComposer integration', () => {
     });
   });
 });
-
