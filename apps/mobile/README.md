@@ -58,6 +58,8 @@ Mobile 源码使用 `@/` 指向 `apps/mobile/src/`（`tsconfig.json` paths、`me
 
 跨 workspace 包请用包名导入，例如 `@novel-master/core`、`@novel-master/tdbc-driver-rn`；**不要**用 `@/` 引用 `packages/` 内代码。
 
+WebView boot（`src/web/**`）使用 `@web/*` → `src/web/*`（`tsconfig.webview-boot.json` + `scripts/build-webview.mjs`）；**不要**用 `@/` 写 WebView 源码。
+
 ## App launcher icon
 
 Source: [`assets/icon.webp`](../../assets/icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
