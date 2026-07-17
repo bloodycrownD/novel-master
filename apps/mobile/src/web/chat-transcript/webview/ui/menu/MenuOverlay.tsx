@@ -1,9 +1,10 @@
 /**
  * 上下文菜单完整 overlay：backdrop + #context-menu 容器 + 菜单项。
- * P1-4：初始 visibility:hidden → useLayoutEffect 内 measure + layoutContextMenu → 可见
- * （禁止先可见再跳位）。挂载由 main `render` 到 `#menu-portal`（Portal 等价）。
+ * P1-4：初始 visibility:hidden → useLayoutEffect 内只读 measure → setState 驱动
+ * 最终 style/className → 可见（禁止 effect 内长期命令式双写 DOM；禁止先可见再跳位）。
+ * 挂载由 main `render` 到 `#menu-portal`（Portal 等价）。
  */
-import { useLayoutEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import {
   ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
   MESSAGE_ACTION_MENU_ITEM_COUNT,
@@ -12,6 +13,7 @@ import type { MenuAnchor, MenuItem } from '../../runtime/state/state';
 import {
   computeContextMenuWidth,
   layoutContextMenu,
+  type ContextMenuLayout,
 } from '../../runtime/menu/menu';
 import { ContextMenu } from './ContextMenu';
 
@@ -24,48 +26,59 @@ export type MenuOverlayProps = {
 export function MenuOverlay({ messageId, items, anchor }: MenuOverlayProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const menuWidth = computeContextMenuWidth(items);
+  /** null = 仍隐藏待测；非 null = 已定位，由 state 驱动最终 style/className */
+  const [layout, setLayout] = useState<ContextMenuLayout | null>(null);
+
+  // 输入变更：先回到隐藏，同帧后续 effect 再 measure（避免带着旧坐标测）
+  useLayoutEffect(() => {
+    setLayout(null);
+  }, [messageId, items, anchor, menuWidth]);
 
   useLayoutEffect(() => {
+    if (layout !== null) return;
     const menuEl = menuRef.current;
     if (!menuEl) return;
 
-    // P1-4：mount 后、对用户可见前完成 measure + layoutContextMenu
-    menuEl.style.position = 'fixed';
-    menuEl.style.visibility = 'hidden';
-    menuEl.style.left = '0';
-    menuEl.style.top = '0';
-    menuEl.style.width = menuWidth + 'px';
-    menuEl.style.maxHeight = 'none';
-
-    // 测量已渲染行高（CSS min-height + borders）；估算在真机易偏大
+    // 只读 measure；结果经 setLayout，不写 menuEl.style / className
     const measuredHeight = menuEl.offsetHeight || menuEl.scrollHeight;
     const contentHeight =
       measuredHeight > 0
         ? measuredHeight
         : items.length * ANCHORED_MENU_ITEM_LAYOUT_HEIGHT;
-    let layout = layoutContextMenu(anchor, contentHeight, menuWidth);
+    let next = layoutContextMenu(anchor, contentHeight, menuWidth);
     if (items.length <= MESSAGE_ACTION_MENU_ITEM_COUNT) {
-      layout = {
-        left: layout.left,
-        top: layout.top,
-        width: layout.width,
+      next = {
+        left: next.left,
+        top: next.top,
+        width: next.width,
         maxHeight: contentHeight,
         scrollable: false,
       };
     }
-    menuEl.style.visibility = '';
-    menuEl.style.left = layout.left + 'px';
-    menuEl.style.top = layout.top + 'px';
-    menuEl.style.width = layout.width + 'px';
-    menuEl.style.height = 'auto';
-    if (layout.scrollable) {
-      menuEl.className = 'context-menu scrollable';
-      menuEl.style.maxHeight = layout.maxHeight + 'px';
-    } else {
-      menuEl.className = 'context-menu';
-      menuEl.style.maxHeight = 'none';
-    }
-  }, [messageId, items, anchor, menuWidth]);
+    setLayout(next);
+  }, [layout, messageId, items, anchor, menuWidth]);
+
+  const placed = layout !== null;
+  const className =
+    placed && layout.scrollable ? 'context-menu scrollable' : 'context-menu';
+  const style = placed
+    ? {
+        position: 'fixed' as const,
+        left: layout.left + 'px',
+        top: layout.top + 'px',
+        width: layout.width + 'px',
+        height: 'auto',
+        maxHeight: layout.scrollable ? layout.maxHeight + 'px' : 'none',
+        visibility: 'visible' as const,
+      }
+    : {
+        position: 'fixed' as const,
+        visibility: 'hidden' as const,
+        left: '0',
+        top: '0',
+        width: menuWidth + 'px',
+        maxHeight: 'none',
+      };
 
   return (
     <>
@@ -77,15 +90,8 @@ export function MenuOverlay({ messageId, items, anchor }: MenuOverlayProps) {
       <div
         ref={menuRef}
         id="context-menu"
-        className="context-menu"
-        style={{
-          position: 'fixed',
-          visibility: 'hidden',
-          left: '0',
-          top: '0',
-          width: menuWidth + 'px',
-          maxHeight: 'none',
-        }}
+        className={className}
+        style={style}
       >
         <ContextMenu messageId={messageId} items={items} />
       </div>
