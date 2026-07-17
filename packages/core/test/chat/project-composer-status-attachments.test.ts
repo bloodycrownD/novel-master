@@ -1,16 +1,31 @@
 /**
  * T-WP1：规则差集 → 仅对应 workplace attachment；再隐藏 → 投影空。
- * 顺带覆盖 user_ops path 形状与 replace 预备 API。
+ * T-SR2b：发送 materialize 含 source:workplace；prepare hydrate 后 📄 chip 清空。
+ * 顺带覆盖 user_ops `action:path` 形状与 replace 预备 API。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fileCacheKey } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { textBlocks } from "@novel-master/core/chat";
+import {
+  fileCacheKey,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import {
   buildComposerStatusAttachments,
   projectComposerStatusAttachments,
   replaceComposerStatusAttachments,
   userOpsAttachmentsFromChangedPaths,
 } from "@/domain/chat/logic/project-composer-status-attachments.js";
+import { workplaceAttachmentsFromRuleDelta } from "@/domain/worktree/logic/diff-workplace-paths.js";
+import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
+import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
+import {
+  getNovelMasterTestContext,
+  novelMasterTestFixture,
+  testIsolationSuffix,
+} from "../helpers/novel-master-fixture.js";
+
+novelMasterTestFixture();
 
 describe("projectComposerStatusAttachments (T-WP1)", () => {
   it("T-WP1: 规则差集 → 仅对应 workplace；再隐藏 → 投影空", () => {
@@ -37,15 +52,15 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     );
   });
 
-  it("T-WP1: cache 已加载则 workplace 不再出现；user_ops 按 path 各一条", () => {
+  it("T-WP1: cache 已加载则 workplace 不再出现；user_ops 按 action:path 各一条", () => {
     const live = [
       { path: "/cached.md", status: "full" as const },
       { path: "/need.md", status: "full" as const },
     ];
     const cacheKeys = [fileCacheKey("full", "/cached.md")];
     const out = buildComposerStatusAttachments(live, cacheKeys, [
-      "/ops.md",
-      "/other.md",
+      { action: "edit", path: "/ops.md" },
+      { action: "write", path: "/other.md" },
     ]);
 
     assert.deepEqual(out, [
@@ -57,14 +72,14 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/need.md",
       },
       {
-        name: "/ops.md",
+        name: "edit:/ops.md",
         source: "user_ops",
         type: "text",
         content: null,
         path: "/ops.md",
       },
       {
-        name: "/other.md",
+        name: "write:/other.md",
         source: "user_ops",
         type: "text",
         content: null,
@@ -73,10 +88,10 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ]);
   });
 
-  it("userOpsAttachmentsFromChangedPaths：name/path=该 path，content null", () => {
+  it("userOpsAttachmentsFromChangedPaths：兼容 path-only → write:path", () => {
     assert.deepEqual(userOpsAttachmentsFromChangedPaths(["/a.md"]), [
       {
-        name: "/a.md",
+        name: "write:/a.md",
         source: "user_ops",
         type: "text",
         content: null,
@@ -95,10 +110,11 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/old.md",
       },
       {
-        name: "edit",
+        name: "edit:/x.md",
         source: "user_ops" as const,
         type: "text" as const,
         content: null,
+        path: "/x.md",
       },
       {
         name: "/ref.md",
@@ -149,7 +165,9 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
       loadLiveWorkplacePaths: async () => [
         { path: "/w.md", status: "full" },
       ],
-      previewUserOpsChangedPaths: async () => ["/u.md"],
+      previewUserOpsActions: async () => [
+        { action: "write", path: "/u.md" },
+      ],
     });
     assert.deepEqual(out, [
       {
@@ -160,12 +178,100 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/w.md",
       },
       {
-        name: "/u.md",
+        name: "write:/u.md",
         source: "user_ops",
         type: "text",
         content: null,
         path: "/u.md",
       },
     ]);
+  });
+
+  it("T-SR2b: 落库含 source:workplace；prepare hydrate 后 workplace chip 清空", async () => {
+    // Given 规则差集出现 📄；When 发送 materialize 落库 + prepare 写 file_cache
+    // Then 消息曾含 source:workplace，且差集投影不再产出 workplace chip
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/delta.md", "delta-body");
+    const sk = createSessionKkvService(ctx.conn);
+    const live = [{ path: "/delta.md", status: "full" as const }];
+
+    const beforeChips = workplaceAttachmentsFromRuleDelta(live, []);
+    assert.equal(beforeChips.length, 1);
+    assert.equal(beforeChips[0]!.source, "workplace");
+    assert.equal(beforeChips[0]!.path, "/delta.md");
+    assert.deepEqual(
+      buildComposerStatusAttachments(live, [], []),
+      beforeChips,
+    );
+
+    // 模拟 materialize 落库（与 T-SR1 runAgentTurn 同源形状）
+    const stored = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks(""),
+      {
+        attachments: [
+          {
+            name: "/delta.md",
+            source: "workplace",
+            type: "text",
+            content: null,
+            path: "/delta.md",
+          },
+        ],
+      },
+    );
+    assert.ok(
+      stored.attachments?.some(
+        (a) => a.source === "workplace" && a.path === "/delta.md",
+      ),
+      "消息须含 source:workplace",
+    );
+
+    await prepareUserMessagesForPrompt([stored], {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs,
+    });
+    const cacheKeys = await sk.listKeys(
+      session.id,
+      SESSION_KKV_DOMAIN_FILE_CACHE,
+    );
+    assert.ok(
+      cacheKeys.includes(fileCacheKey("full", "/delta.md")),
+      "prepare hydrate 须写 file_cache",
+    );
+
+    assert.deepEqual(
+      workplaceAttachmentsFromRuleDelta(live, cacheKeys),
+      [],
+      "hydrate 后差集收敛，无 workplace chip",
+    );
+    assert.deepEqual(
+      buildComposerStatusAttachments(live, cacheKeys, []),
+      [],
+      "projectComposerStatusAttachments 同源配方亦应清空 📄",
+    );
+    const projected = await projectComposerStatusAttachments(session.id, {
+      sessionKkv: sk,
+      loadLiveWorkplacePaths: async () => live,
+      previewUserOpsActions: async () => [],
+    });
+    assert.equal(
+      projected.filter((a) => a.source === "workplace").length,
+      0,
+      "发送成功+hydrate 后上条 📄 清空",
+    );
+
+    const reloaded = await ctx.messages.get(stored.id);
+    assert.ok(
+      reloaded?.attachments?.some(
+        (a) => a.source === "workplace" && a.path === "/delta.md",
+      ),
+      "库内消息仍保留曾落库的 source:workplace",
+    );
   });
 });

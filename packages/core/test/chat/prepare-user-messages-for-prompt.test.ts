@@ -1,10 +1,12 @@
 /**
  * Step 6：prepare / wrap / dir tree / file_cache / transcript 原文（T-AT* T-TX*）。
+ * T-SR6：Agent prepare 与 RealPrompt `buildSessionPromptInput` 同源路径用户段 wrap 一致。
  */
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
+import { buildPromptLlmInputFromLayout } from "@novel-master/core/prompt";
 import { messageBodyText } from "../../src/domain/chat/content/message-body-text.js";
 import { extractEditableTextFromMessage } from "../../src/domain/chat/logic/editable-text-from-message.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
@@ -62,7 +64,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const actionXml = `<user-vfs-action kind="write" path="/x.md"/>`;
+    const actionXml = `<action name="write">\n{"path":"/x.md","content":""}\n</action>`;
     const attachments: MessageAttachment[] = [
       {
         name: "ops",
@@ -88,7 +90,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     });
     const body = messageBodyText(prepared[0]!);
     assert.match(body, /<user-ops>/);
-    assert.match(body, /user-vfs-action/);
+    assert.match(body, /<action name="write">/);
     assert.match(body, /<user-input>\n继续\n<\/user-input>/);
     assert.ok((prepared[0]!.attachments?.length ?? 0) > 0);
 
@@ -96,7 +98,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.equal(messageBodyText(reloaded), "继续");
   });
 
-  it("T-AT3: dir attach → $filetree ASCII depth=1，无深层 path、无正文、不写 file_cache", async () => {
+  it("T-AT3: dir attach → <dir path>+$filetree ASCII depth=1，无深层/正文/file_cache", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -113,20 +115,25 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       vfs,
     });
 
-    // 根标签 basename+/（与 worktreeFileTreeRootLabel 口径）；├──/└──；dirs 先 files 后
+    // 外层 <dir path> + 内层 basename+/ ASCII；├──/└──；dirs 先 files 后
     assert.equal(
       tree,
-      ["notes/", "├── sub/", "└── a.md"].join("\n"),
+      [
+        `<dir path="/notes">`,
+        "notes/",
+        "├── sub/",
+        "└── a.md",
+        `</dir>`,
+      ].join("\n"),
     );
     assert.ok(tree.includes("├──"));
     assert.ok(tree.includes("└──"));
-    // 禁止嵌套展开、文件正文、XML、加载后缀
+    // 禁止嵌套展开、文件正文、内嵌 <file>、宏加载后缀
     assert.ok(!tree.includes("b.md"));
-    assert.ok(!tree.includes("/notes"));
+    assert.ok(!tree.includes("/notes/sub"));
     assert.ok(!tree.includes("AAA"));
     assert.ok(!tree.includes("BBB"));
     assert.ok(!tree.includes("<file"));
-    assert.ok(!tree.includes("<dir"));
     assert.ok(!tree.includes("全部加载"));
 
     const cacheKeysBefore = await sk.listKeys(
@@ -153,6 +160,8 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     });
     const body = messageBodyText(prepared[0]!);
     assert.match(body, /<attach>/);
+    assert.match(body, /<dir path="\/notes">/);
+    assert.match(body, /<\/dir>/);
     assert.match(body, /notes\//);
     assert.match(body, /├──/);
     assert.match(body, /└──/);
@@ -161,7 +170,6 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.ok(!body.includes("AAA"));
     assert.ok(!body.includes("b.md"));
     assert.ok(!body.includes("<file"));
-    assert.ok(!body.includes("<dir"));
 
     const cacheKeysAfter = await sk.listKeys(
       session.id,
@@ -319,6 +327,92 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
         fileCacheKey("full", "/h.md"),
       ),
       null,
+    );
+  });
+
+  it("T-SR6: Agent prepare 与 RealPrompt buildSessionPromptInput 同源路径用户段 wrap 一致", async () => {
+    // Desktop/Mobile buildSessionPromptInput = prepare → assemble → buildPromptLlmInputFromLayout；
+    // Agent runner 每 step 同样先 prepare 再 layout。此处钉用户段 wrap 文本一致。
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/wp.md", "workplace-body");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const actionXml =
+      '<action name="write">\n{"path":"/ops.md","content":""}\n</action>';
+    const stored = await ctx.messages.append(
+      session.id,
+      "user",
+      textBlocks("继续"),
+      {
+        attachments: [
+          {
+            name: "/wp.md",
+            source: "workplace",
+            type: "text",
+            content: null,
+            path: "/wp.md",
+          },
+          {
+            name: "write",
+            source: "user_ops",
+            type: "text",
+            content: actionXml,
+          },
+          {
+            name: "/wp.md",
+            source: "attach",
+            type: "text",
+            content: null,
+            path: "/wp.md",
+          },
+        ],
+      },
+    );
+
+    const prepareRuntime = {
+      sessionId: session.id,
+      sessionKkv: sk,
+      vfs,
+    };
+    // Agent 路径：对 DB 原文 prepare
+    const agentPrepared = await prepareUserMessagesForPrompt(
+      [stored],
+      prepareRuntime,
+    );
+    const agentUserWrap = messageBodyText(agentPrepared[0]!);
+
+    // RealPrompt / buildSessionPromptInput 同源：重新 list → prepare → layout
+    const listed = (await ctx.messages.listBySession(session.id)).filter(
+      (m) => !m.hidden,
+    );
+    const realPromptPrepared = await prepareUserMessagesForPrompt(
+      listed,
+      prepareRuntime,
+    );
+    const layout = {
+      persistEnabled: false as const,
+      persist: [] as const,
+      dynamic: [] as const,
+    };
+    const input = await buildPromptLlmInputFromLayout(layout, {
+      worktreeDisplay: "",
+      messages: realPromptPrepared,
+    });
+    const realPromptUser = input.messages.find((m) => m.id === stored.id);
+    assert.ok(realPromptUser, "layout 须含原 user 消息");
+    const realPromptUserWrap = messageBodyText(realPromptUser);
+
+    assert.match(agentUserWrap, /<workplace>/);
+    assert.match(agentUserWrap, /<user-ops>/);
+    assert.match(agentUserWrap, /<attach>/);
+    assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
+    assert.equal(
+      realPromptUserWrap,
+      agentUserWrap,
+      "RealPrompt 用户段 wrap 须与 Agent prepare 一致",
     );
   });
 });

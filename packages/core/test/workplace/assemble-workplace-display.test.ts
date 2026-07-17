@@ -99,6 +99,44 @@ describe("assembleWorkplaceDisplay", () => {
     );
   });
 
+  // T-SR4：kkv canon=[] 后 assemble 仍能对有规则文件产出非空 display（空 [] 不粘住）
+  it("T-SR4: 空 rule_snapshot 数组不粘住：重新 evaluate 后能出工作区", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/note.md", "revived");
+    await createWorktreeService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    }).setFileRule({ logicalPath: "/note.md", inclusionMode: "show" });
+
+    await sk.set(
+      session.id,
+      SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+      RULE_SNAPSHOT_CANON_KEY,
+      "[]",
+    );
+
+    const wt = createWorktreeService(ctx.conn, {
+      kind: "session",
+      projectId: project.id,
+      sessionId: session.id,
+    });
+    const out = await assembleWorkplaceDisplay(
+      { kind: "session", projectId: project.id, sessionId: session.id },
+      {
+        sessionKkv: sk,
+        worktree: wt,
+        vfs,
+        layout: layoutWithWorktree(),
+      },
+    );
+    assert.match(out, /revived/);
+  });
+
   it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
