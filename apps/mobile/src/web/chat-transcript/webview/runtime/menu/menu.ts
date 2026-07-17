@@ -12,7 +12,7 @@ import {
   MESSAGE_ACTION_MENU_ITEM_COUNT,
   MENU_OPEN_GRACE_MS,
   LONG_PRESS_MOVE_TOLERANCE_PX,
-} from '../../../shared/constants';
+} from '../../../../shared/constants';
 import { escapeHtml } from '../util/html-escape';
 import { state } from '../state/state';
 import type {
@@ -23,6 +23,28 @@ import type {
   UserVfsTurnRow,
 } from '../state/state';
 import { post } from '../bridge/bridge';
+
+/**
+ * P0-3：renderContextMenu UI 刷新注册门面（预留）。
+ * 本步现网拼串仍在本文件；后续 Step 由 main 注册 Preact 实现。
+ */
+export type RenderContextMenuView = () => void;
+
+let _renderContextMenuView: RenderContextMenuView | null = null;
+
+/** 由 main 注册 Preact（或其它）上下文菜单刷新实现。 */
+export function registerRenderContextMenu(fn: RenderContextMenuView): void {
+  _renderContextMenuView = fn;
+}
+
+/**
+ * 调用已注册实现；未注册时返回 false（调用方继续走现网拼串路径）。
+ */
+export function invokeRegisteredRenderContextMenu(): boolean {
+  if (!_renderContextMenuView) return false;
+  _renderContextMenuView();
+  return true;
+}
 
 /**
  * 消息长按菜单：布局、打开/关闭与指针手势。
