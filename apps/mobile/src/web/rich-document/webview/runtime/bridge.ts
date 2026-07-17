@@ -1,9 +1,9 @@
 /**
  * rich-document 桥与 setDocument 门面（runtime；无 JSX）。
+ * setDocument 仅调用 main 已注册的视图刷新实现；禁止在此拼串或 preact.render。
  */
 import {
   BRIDGE_V,
-  OVER_LIMIT_HINT,
   type DocumentPayload,
   type HostTheme,
 } from './document-model';
@@ -20,8 +20,8 @@ declare global {
 }
 
 /**
- * P0-3：setDocument 视图刷新注册门面（预留）。
- * 本步现网拼串仍在 setDocument；后续 Step 由 main 注册 Preact DocumentApp。
+ * P0-3：setDocument 视图刷新注册门面。
+ * Preact DocumentApp 由 main 注册；本文件只持有实现引用。
  */
 export type SetDocumentView = (payload: DocumentPayload) => void;
 
@@ -33,7 +33,7 @@ export function registerSetDocumentView(fn: SetDocumentView): void {
 }
 
 /**
- * 调用已注册实现；未注册时返回 false（调用方继续走现网拼串路径）。
+ * 调用已注册实现；未注册时返回 false。
  */
 export function invokeRegisteredSetDocumentView(
   payload: DocumentPayload,
@@ -63,31 +63,9 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
   if (theme.borderLight) root.style.setProperty('--border', theme.borderLight);
 }
 
-export function escapeHtml(text: unknown): string {
-  return String(text)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
+/** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
-  const doc = document.getElementById('doc');
-  if (!doc) return;
-  const fm = (payload && payload.frontMatterHtml) || '';
-  const mode = payload && payload.mode;
-  const overLimit = !!(payload && payload.overLimit);
-  let bodyHtml = '';
-  if (mode === 'html' && payload && payload.html) {
-    bodyHtml = '<div class="doc-body rich">' + payload.html + '</div>';
-  } else if (payload && payload.plain) {
-    bodyHtml =
-      '<div class="doc-body">' + escapeHtml(payload.plain) + '</div>';
-  }
-  const hint = overLimit
-    ? '<div class="over-limit-hint">' + OVER_LIMIT_HINT + '</div>'
-    : '';
-  doc.innerHTML = fm + bodyHtml + hint;
+  invokeRegisteredSetDocumentView(payload ?? {});
 }
 
 export function handleHostMessage(raw: unknown): void {
