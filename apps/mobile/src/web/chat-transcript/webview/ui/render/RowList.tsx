@@ -18,7 +18,12 @@ export function RowList() {
 
   if (state.hasMore) {
     children.push(
-      <button type="button" className="load-older" data-action="load-older">
+      <button
+        type="button"
+        key="load-older"
+        className="load-older"
+        data-action="load-older"
+      >
         加载更早消息
       </button>,
     );
@@ -33,7 +38,11 @@ export function RowList() {
   }
   children.push(<StreamTail key="stream-tail" />);
   if (showEmpty) {
-    children.push(<div className="empty-state">暂无消息</div>);
+    children.push(
+      <div key="empty-state" className="empty-state">
+        暂无消息
+      </div>,
+    );
   }
   return children;
 }
