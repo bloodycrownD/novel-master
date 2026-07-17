@@ -53,8 +53,8 @@ src/web/{pkg}/webview/
 | **ui / runtime 分层** | 每个包 `webview/` **必须**含：`ui/`（**仅** `.tsx`）与 `runtime/`（**仅** `.ts`，禁止 JSX）。根级除 `main.ts` 外 **不得**再放业务 `.ts`/`.tsx`。 |
 | 依赖方向 | **`ui` → `runtime` / `shared`（非 ui）允许**；**`runtime` → `ui/**` 禁止**。**例外**：`runtime` **仅允许** import `shared/ui/TrustedHtml`（组件供 ui；同文件可导出 `applyTrustedHtml` 等非 JSX API 供 runtime imperative）。禁止 import 其它任何 `ui/**` 或 `shared/ui` 下非 TrustedHtml 模块。`main.ts` 可同时 import 两侧。 |
 | **UI 刷新装配（P0-3）** | 见下「runtime 触发 UI 刷新的装配契约」——结构在 `ui/*.tsx`；`runtime` 仅同名门面；**禁止** runtime 直接 import `ui/**` 或在 runtime 内 `preact.render(<…/>)` |
-| JSX 编译 | esbuild **classic**：`jsxFactory: 'h'`、`jsxFragment: 'Fragment'`；源码显式 `import { h, Fragment } from 'preact'`（**不用** inject 隐式全局） |
-| tsconfig | `tsconfig.webview-boot.json`：`jsx: 'react'` + 同上 factory；`include` 含 `**/*.{ts,tsx}`；**不** extends RN tsconfig |
+| JSX 编译 | esbuild **automatic**：`jsx: 'automatic'` + `jsxImportSource: 'preact'`；`.tsx` **不**再为 JSX 显式 `import { h }`。显式 `h(...)` **仅**用于非 JSX 手写（`main.ts` 装配） |
+| tsconfig | `tsconfig.webview-boot.json`：`jsx: 'react-jsx'` + `jsxImportSource: 'preact'`；`include` 含 `**/*.{ts,tsx}`；**不** extends RN tsconfig |
 | deps | `preact`（建议 `^10`）；类型用包内；不装 `@types/preact` / htm |
 | 构建 | 保持 `format:'iife'`、`minify:false`、`packages:'bundle'`；入口 **`webview/main.ts`** |
 | 信任 HTML | 见下「TrustedHtml 边界」 |
@@ -227,7 +227,7 @@ apps/mobile/
 
 | 区域 | 变更 |
 |------|------|
-| 依赖/构建 | `preact`；esbuild JSX classic；webview-boot tsconfig |
+| 依赖/构建 | `preact`；esbuild JSX automatic（`jsxImportSource: 'preact'`）；webview-boot tsconfig |
 | 目录 | 建立 `ui/` + `runtime/`（含 menu/render）；**supersede** layout 七类顶层；迁入并分离扩展名 |
 | RD | UI → `ui/`；桥/`setDocument` 门面 → `runtime/`；富 HTML + **frontMatterHtml** → TrustedHtml；视图刷新经 main 注册 |
 | CT menu/render | 组件 → `ui/…`；门面/逻辑 → `runtime/menu`、`runtime/render`；**main 注册** Preact 实现（P0-3） |
@@ -286,7 +286,7 @@ apps/mobile/
 
 ## 详细实现步骤
 
-- Step 1 — phase-toolchain — blocking: yes — qa: auto：加 `preact`；`build-webview.mjs` 钉 `jsxFactory`/`jsxFragment`；`tsconfig.webview-boot` 支持 tsx；冒烟空组件可打进 IIFE。  
+- Step 1 — phase-toolchain — blocking: yes — qa: auto：加 `preact`；`build-webview.mjs` 钉 `jsx: 'automatic'` + `jsxImportSource: 'preact'`；`tsconfig.webview-boot` 支持 tsx；冒烟空组件可打进 IIFE。  
 - Step 2 — phase-ui-runtime-layout — blocking: yes — qa: auto：双包建立 `ui/` + `runtime/`（CT `runtime` **含 menu/render**）；按映射表迁入；修正 import；保证 `runtime` 仅例外 import TrustedHtml；**预留 register 钩子**（P0-3）；`build:webview` 绿。  
 - Step 3 — phase-rd-preact — blocking: yes — qa: auto：RD `ui/DocumentApp.tsx` + TrustedHtml（**含 frontMatterHtml**）；`main` 注册视图刷新；runtime `setDocument` 门面；行为：富/纯/过限；修订 RD boot-script。  
 - Step 4 — phase-ct-menu — blocking: yes — qa: auto：`ui/menu` TSX + `runtime/menu` 门面；`main` 注册 `renderContextMenu`；**P1-4**：mount 后、对用户可见前完成 measure + `layoutContextMenu`（允许 `useLayoutEffect` 或等价同步回调）；CT-01 三列意图绿。  

@@ -45,7 +45,7 @@ dependency:
 
 ### 包含范围
 
-1. mobile 增加 `preact`（及类型）；esbuild 配置 Preact JSX（`jsxFactory` / `jsxFragment` 等，SPEC 钉死）。  
+1. mobile 增加 `preact`（及类型）；esbuild 配置 Preact JSX（`jsx: 'automatic'` + `jsxImportSource: 'preact'` 等，SPEC 钉死）。  
 2. 每个包 `webview/` 内 **`ui/`（仅 TSX）与 `runtime/`（仅 TS）分离**；CT `runtime` **含 menu/render** 等职责子目录（SPEC 终局树与映射表）。  
 3. **rich-document** 整页迁 Preact + TSX。  
 4. **chat-transcript** 分波：menu → render（含 tool）→ stream；入口 `main` **注册** UI 刷新实现并组装 runtime（SPEC P0-3）。  
