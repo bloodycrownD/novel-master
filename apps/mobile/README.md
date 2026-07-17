@@ -143,7 +143,7 @@ nm vfs list / -r
 
 ### VFS markdown preview (WebView engine)
 
-File editor preview body uses a single `react-native-webview` (`RichDocumentWebView`) when `vfsMarkdownPreviewEngine` is `webview`. Toolbar, stats, and the **Markdown / 文本** toggle stay in RN; Front Matter + body scroll together inside the Web bundle (`src/web/rich-document/`). **文本** mode bypasses WebView and shows the full file buffer as monospace RN `Text`.
+File editor preview body uses a single `react-native-webview` (`RichDocumentWebView`) when `vfsMarkdownPreviewEngine` is `webview`. Toolbar, stats, and the **Markdown / 文本** toggle stay in RN; Front Matter + body scroll together inside the Web bundle (`src/web/rich-document/webview/`). **文本** mode bypasses WebView and shows the full file buffer as monospace RN `Text`.
 
 | Setting | Default | Notes |
 |---------|---------|-------|
@@ -164,12 +164,13 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 ## WebView 资源（最短开发路径）
 
-聊天 Transcript 与富文档预览各为一包，真源在 `src/web/{chat-transcript,rich-document}/`，经 esbuild 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+聊天 Transcript 与富文档预览各为一包：Web 真源在 `src/web/{chat-transcript,rich-document}/webview/`（chat-transcript 按 `bridge` / `state` / `scroll` / `menu` / `stream` / `render` / `util` 分子目录，无 barrel），RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
 
 **最短路径（改真源 → 真机生效）：**
 
 ```bash
-# 1. 改真源：src/web/chat-transcript/** 或 src/web/rich-document/**
+# 1. 改真源：src/web/{pkg}/webview/**（样式/HTML 仍在 src/web/{pkg}/）
+#    改 URI / RN 侧纯函数：src/webview-host/**
 # 2. 重建产物（也可由 pretest / prestart / preandroid / preios 挂钩）
 npm run build:webview -w @novel-master/mobile
 # 3. 安装到设备/模拟器（会走 preandroid/preios → build:webview:native 拷贝原生落点）
@@ -196,7 +197,7 @@ Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
 
 ## Chat transcript (WebView engine)
 
-Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/`).
+Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/webview/`).
 
 | Setting | Default | Notes |
 |---------|---------|-------|
