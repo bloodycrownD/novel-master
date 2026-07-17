@@ -1,20 +1,31 @@
-/** Shared placement math for anchored action menus (RN modal + WebView context menu). */
-
-export const ANCHORED_MENU_GAP = 8;
-export const ANCHORED_MENU_SCREEN_MARGIN = 12;
-export const ANCHORED_MENU_ITEM_MIN_HEIGHT = 44;
-/** Layout estimate per row (borders + device font scale headroom). */
-export const ANCHORED_MENU_ITEM_LAYOUT_HEIGHT = 48;
-/** Press-point anchor height — avoids using full bubble rect for tall messages. */
-export const ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT = 32;
-export const ANCHORED_MENU_MAX_HEIGHT_CAP = 360;
-export const ANCHORED_MENU_MIN_WIDTH = 132;
-export const ANCHORED_MENU_MAX_WIDTH = 200;
-export const ANCHORED_MENU_H_PADDING = 32;
-/** Rough width per glyph for CJK/Latin labels without native measure. */
-export const ANCHORED_MENU_CHAR_WIDTH_EST = 14;
-/** Standard chat message action count — never scroll inside WebView wedge. */
-export const MESSAGE_ACTION_MENU_ITEM_COUNT = 5;
+/**
+ * Shared placement math for anchored action menus (RN modal + WebView context menu).
+ * 数值常量真源：`src/web/shared/constants.ts`。
+ */
+export {
+  ANCHORED_MENU_GAP,
+  ANCHORED_MENU_SCREEN_MARGIN,
+  ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
+  ANCHORED_MENU_TOUCH_ANCHOR_HEIGHT,
+  ANCHORED_MENU_MAX_HEIGHT_CAP,
+  ANCHORED_MENU_MIN_WIDTH,
+  ANCHORED_MENU_MAX_WIDTH,
+  ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_CHAR_WIDTH_EST,
+  MESSAGE_ACTION_MENU_ITEM_COUNT,
+} from '../../web/shared/constants';
+import {
+  ANCHORED_MENU_GAP,
+  ANCHORED_MENU_SCREEN_MARGIN,
+  ANCHORED_MENU_ITEM_MIN_HEIGHT,
+  ANCHORED_MENU_ITEM_LAYOUT_HEIGHT,
+  ANCHORED_MENU_MAX_HEIGHT_CAP,
+  ANCHORED_MENU_MAX_WIDTH,
+  ANCHORED_MENU_MIN_WIDTH,
+  ANCHORED_MENU_H_PADDING,
+  ANCHORED_MENU_CHAR_WIDTH_EST,
+} from '../../web/shared/constants';
 
 export interface MenuAnchor {
   readonly x: number;

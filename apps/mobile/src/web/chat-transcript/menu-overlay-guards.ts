@@ -1,8 +1,14 @@
-/** Grace period after long-press menu open; ignore bubble touchend (finger lift). */
-export const MENU_OPEN_GRACE_MS = 400;
-
-/** Finger movement beyond this cancels long-press (scroll/drag should not open menu). */
-export const LONG_PRESS_MOVE_TOLERANCE_PX = 10;
+/**
+ * 菜单 overlay 手势守卫。数值常量真源：`shared/constants.ts`。
+ */
+export {
+  MENU_OPEN_GRACE_MS,
+  LONG_PRESS_MOVE_TOLERANCE_PX,
+} from '../shared/constants';
+import {
+  MENU_OPEN_GRACE_MS,
+  LONG_PRESS_MOVE_TOLERANCE_PX,
+} from '../shared/constants';
 
 export function shouldCancelLongPressForMove(
   deltaX: number,

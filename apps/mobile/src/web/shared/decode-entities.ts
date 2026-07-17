@@ -1,9 +1,8 @@
 /**
- * LLMs / gateways sometimes emit literal &quot; or &amp;quot; in markdown prose.
- * markdown-it preserves &amp;quot;; sanitize-html does not decode it — decode first.
+ * 解码字面 HTML 实体（供 escape 前归一化）。
  */
-export function decodeLiteralHtmlEntities(text: string): string {
-  let current = text;
+export function decodeLiteralHtmlEntities(text: unknown): string {
+  let current = String(text || '');
   let previous = '';
   let pass = 0;
   while (current !== previous && pass < 3) {
@@ -20,5 +19,3 @@ export function decodeLiteralHtmlEntities(text: string): string {
   }
   return current;
 }
-
-/** WebView boot 真源：`src/web/shared/decode-entities.ts`（须与本函数行为对齐）。 */
