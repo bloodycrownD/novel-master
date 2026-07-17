@@ -1,6 +1,9 @@
 /**
  * rich-document WebView 打包入口（esbuild → IIFE app.js）。
  */
+// 冒烟：确保 shared/ui TSX + preact 进入 IIFE（phase-toolchain）
+import { Smoke } from '../../shared/ui/Smoke';
+void Smoke;
 
 /** RN WebView 注入的 postMessage 桥（宿主 API）。 */
 type ReactNativeWebViewBridge = {

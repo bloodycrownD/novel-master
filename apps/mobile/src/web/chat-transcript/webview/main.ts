@@ -10,6 +10,9 @@ import {
   onMessagePointerMove,
   onMessagePointerUp,
 } from './menu/menu';
+// 冒烟：确保 shared/ui TSX + preact 进入 IIFE（phase-toolchain）
+import { Smoke } from '../../shared/ui/Smoke';
+void Smoke;
 /**
  * chat-transcript boot 入口收尾：宿主 message 监听 + bootTranscript + readyState 兜底。
  */
