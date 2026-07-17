@@ -10,6 +10,8 @@ export type AttachmentDraftChipsProps = {
   onRemove?: (index: number) => void;
   disabled?: boolean;
   'aria-label'?: string;
+  /** 状态条：透明行底。 */
+  transparentRow?: boolean;
 };
 
 /** 是否为状态条附件（workplace / user_ops）。 */
@@ -36,12 +38,12 @@ export function partitionComposerChipAttachments(
   return { status, attach };
 }
 
-/** Chip 文案：`📄` / `📁` / `✏️` + path（无多余空格）。 */
+/** Chip 文案：user_ops → `action:path`；其余 `📄`/`📁` + path。 */
 export function formatAttachmentChipLabel(a: MessageAttachmentDto): string {
-  const path = a.path ?? a.name;
   if (a.source === 'user_ops') {
-    return `✏️${path}`;
+    return a.name;
   }
+  const path = a.path ?? a.name;
   if (a.type === 'dir') {
     return `📁${path}`;
   }
@@ -59,13 +61,18 @@ export function AttachmentDraftChips({
   onRemove,
   disabled,
   'aria-label': ariaLabel,
+  transparentRow = false,
 }: AttachmentDraftChipsProps) {
   if (attachments.length === 0) {
     return null;
   }
   return (
     <div
-      className="chat-composer__chips"
+      className={
+        transparentRow
+          ? 'chat-composer__chips chat-composer__chips--status'
+          : 'chat-composer__chips'
+      }
       role="list"
       aria-label={ariaLabel ?? (showRemove ? '待发送附件' : '状态附件')}
     >
@@ -98,7 +105,51 @@ export function AttachmentDraftChips({
   );
 }
 
-/** 双条：上状态（无叉）/ 下 attach（有叉）；空行不渲染。 */
+/** 状态条（无叉）：由 Composer 放在输入框外上方。 */
+export function ComposerStatusChips({
+  attachments,
+  disabled,
+}: {
+  attachments: readonly MessageAttachmentDto[];
+  disabled?: boolean;
+}) {
+  const { status } = partitionComposerChipAttachments(attachments);
+  return (
+    <AttachmentDraftChips
+      attachments={status}
+      showRemove={false}
+      disabled={disabled}
+      transparentRow
+      aria-label="状态附件"
+    />
+  );
+}
+
+/** 附件条（有叉）：放在输入框内部。 */
+export function ComposerAttachChips({
+  attachments,
+  onRemoveAttach,
+  disabled,
+}: {
+  attachments: readonly MessageAttachmentDto[];
+  onRemoveAttach: (attachIndex: number) => void;
+  disabled?: boolean;
+}) {
+  const { attach } = partitionComposerChipAttachments(attachments);
+  return (
+    <AttachmentDraftChips
+      attachments={attach}
+      showRemove
+      disabled={disabled}
+      onRemove={onRemoveAttach}
+      aria-label="待发送附件"
+    />
+  );
+}
+
+/**
+ * @deprecated 布局已拆为框外状态条 + 框内附件条；保留供旧调用兼容。
+ */
 export function ComposerDualAttachmentChips({
   attachments,
   onRemoveAttach,
@@ -108,21 +159,13 @@ export function ComposerDualAttachmentChips({
   onRemoveAttach: (attachIndex: number) => void;
   disabled?: boolean;
 }) {
-  const { status, attach } = partitionComposerChipAttachments(attachments);
   return (
     <>
-      <AttachmentDraftChips
-        attachments={status}
-        showRemove={false}
+      <ComposerStatusChips attachments={attachments} disabled={disabled} />
+      <ComposerAttachChips
+        attachments={attachments}
+        onRemoveAttach={onRemoveAttach}
         disabled={disabled}
-        aria-label="状态附件"
-      />
-      <AttachmentDraftChips
-        attachments={attach}
-        showRemove
-        disabled={disabled}
-        onRemove={onRemoveAttach}
-        aria-label="待发送附件"
       />
     </>
   );

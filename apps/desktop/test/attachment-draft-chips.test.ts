@@ -55,17 +55,17 @@ test("T-UI1: workplace 为 📄/path", () => {
   );
 });
 
-test("T-UI1: user_ops 为 ✏️/path", () => {
+test("T-UI1: user_ops 为 action:path（无 icon）", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
         source: "user_ops",
         type: "text",
         path: "/ops.md",
-        name: "/ops.md",
+        name: "write:/ops.md",
       }),
     ),
-    "✏️/ops.md",
+    "write:/ops.md",
   );
 });
 
