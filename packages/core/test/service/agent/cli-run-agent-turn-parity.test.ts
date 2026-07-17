@@ -68,7 +68,7 @@ const flagDefinition: AgentDefinition = {
 
 function writeOp(path: string, content: string, toolId = "tu_write") {
   return {
-    actionXml: `<user-vfs-action kind="save" path="${path}" method="write" />`,
+    actionXml: `<action name="write">\n${JSON.stringify({ path, content }, null, 2)}\n</action>`,
     tools: [
       {
         id: toolId,
@@ -106,11 +106,15 @@ function makeRuntime(
     userVfsTurn,
     sessionKkv: createSessionKkvService(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
-    worktree: (scope) =>
+    worktree: (_scope) =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        evaluateRuleView: async () => ({
+          rows: [],
+          displayByPath: new Map(),
+        }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
   };
 }

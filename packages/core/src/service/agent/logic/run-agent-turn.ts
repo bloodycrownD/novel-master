@@ -1,5 +1,23 @@
 /**
- * Shared "one chat turn" orchestration for mobile, desktop, and CLI parity.
+ * 聊天发送编排（编排 2 步 + runner 内 2 步）。
+ *
+ * ## 编排（本模块）
+ * 1. `prepareUserVfsTurnForAgentRun`：flush pending → `user_ops`；
+ *    materialize workplace 差集（定案 A 并入 re-append merge =
+ *    trailing∪flush∪attach∪materialize）；
+ * 2. 外层新 append（`!reAppended`）：merge =
+ *    materialize∪attach∪@扫描∪flush `user_ops` → append(user, 原文, attachments)。
+ *
+ * ## Runner 内（agent-runner 每 step；本模块不调用 wrap/assemble）
+ * 3. `prepareUserMessagesForPrompt`（hydrate+wrap）
+ * 4. `assembleWorkplaceDisplay` → layout → normalize → protocol map
+ *
+ * ## 契约
+ * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
+ *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
+ * - `hasInput` / `shouldAppendNewUser` 在 materialize 非空时为真（真源差集由 Core 算）。
+ * - 有 workplace 差集时禁止 `allowResumeWithoutInput` 纯 resume（差集=新输入）。
+ * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
  *
  * @module service/agent/logic/run-agent-turn
  */
@@ -17,6 +35,9 @@ import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
+import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { ruleViewToSnapshotEntries } from "@/domain/worktree/logic/rule-snapshot-codec.js";
+import { workplaceAttachmentsFromRuleDelta } from "@/domain/worktree/logic/diff-workplace-paths.js";
 import type { CompactionConditionEvaluator } from "@/service/compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "@/service/events/event-orchestrator.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
@@ -90,6 +111,7 @@ export interface RunAgentTurnOptions {
   /**
    * 空 content 续跑且末条为 user（含 App Composer 空发）。
    * 跳过「content 非空」校验；不 append user。
+   * 有 workplace 差集时不得走纯 resume（差集=新输入）。
    */
   readonly allowResumeWithoutInput?: boolean;
   /**
@@ -109,7 +131,10 @@ export interface RunAgentTurnOptions {
    * 非空时跳过 resolveAgentForProject。
    */
   readonly definitionOverride?: AgentDefinition;
-  /** Composer / workplace / @ attachments; merged with scanned `@path` and pending user_ops. */
+  /**
+   * Composer 显式附件；**仅** `source===attach` 生效。
+   * 误传的 workplace/`user_ops` 预览一律丢弃；`@` 扫描由 Core 合并。
+   */
   readonly attachments?: readonly MessageAttachment[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
@@ -136,6 +161,28 @@ async function mapResolveError<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
+ * 与状态条 workplace 半边同源：evaluateRuleView → ruleViewToSnapshotEntries +
+ * file_cache keys → workplaceAttachmentsFromRuleDelta。
+ */
+async function materializeWorkplaceAttachments(
+  runtime: AgentTurnRuntimePort,
+  scope: AgentTurnScope,
+): Promise<readonly MessageAttachment[]> {
+  const wtScope: VfsScope = {
+    kind: "session",
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
+  };
+  const view = await runtime.worktree(wtScope).evaluateRuleView();
+  const live = ruleViewToSnapshotEntries(view);
+  const cacheKeys = await runtime.sessionKkv.listKeys(
+    scope.sessionId,
+    SESSION_KKV_DOMAIN_FILE_CACHE,
+  );
+  return workplaceAttachmentsFromRuleDelta(live, cacheKeys);
+}
+
+/**
  * Appends a user message (optional) and runs the agent loop (streaming via event bus).
  */
 export async function runAgentTurn(
@@ -149,7 +196,11 @@ export async function runAgentTurn(
   const trimmed = userContent.trim();
   const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
   const allowAssistantContinue = options?.allowAssistantContinue === true;
-  const composerAttachments = options?.attachments ?? [];
+
+  // 入参清洗：误传的 workplace / user_ops 预览一律丢弃，只保留 attach
+  const composerAttachOnly = (options?.attachments ?? []).filter(
+    (a) => a.source === "attach",
+  );
 
   if (allowResumeWithoutInput && allowAssistantContinue) {
     throw new AgentTurnError(
@@ -157,12 +208,19 @@ export async function runAgentTurn(
     );
   }
 
+  stage = "materialize-workplace";
+  const workplaceAtts = await materializeWorkplaceAttachments(runtime, scope);
+  const hasWorkplaceDelta = workplaceAtts.length > 0;
+
   const hasPending =
     isUserVfsUnifiedToolTurnEnabled() &&
     runtime.userVfsTurn != null &&
     (await runtime.userVfsTurn.hasPendingTurns(scope.sessionId));
   const hasInput =
-    trimmed !== "" || composerAttachments.length > 0 || hasPending;
+    trimmed !== "" ||
+    composerAttachOnly.length > 0 ||
+    hasPending ||
+    hasWorkplaceDelta;
 
   if (!hasInput && !allowResumeWithoutInput && !allowAssistantContinue) {
     throw new AgentTurnError("消息不能为空");
@@ -174,6 +232,7 @@ export async function runAgentTurn(
       );
     }
   }
+  // 有 workplace 差集 → 禁止纯 resume（差集=新输入）；即便误置 allowResume 也不进此支
   if (!hasInput && allowResumeWithoutInput) {
     stage = "resume-check-last-message";
     const list = await runtime.messages.listBySession(scope.sessionId);
@@ -207,7 +266,7 @@ export async function runAgentTurn(
   // Scan typed @path into attach; dedupe with chips; keep tokens in body text.
   const scannedComposer = mergeAttachmentsWithScannedAtPaths(
     trimmed,
-    composerAttachments,
+    composerAttachOnly,
   );
 
   let userOpsAttachments: Awaited<
@@ -231,6 +290,7 @@ export async function runAgentTurn(
       trimmedInput: trimmed,
       allowResumeWithoutInput,
       composerAttachments: scannedComposer,
+      workplaceAttachments: workplaceAtts,
     });
     userOpsAttachments = prepared.attachments;
     if (prepared.reAppendedUserMessageId != null) {
@@ -238,10 +298,14 @@ export async function runAgentTurn(
       if (prepared.flushed) {
         checkpointAnchorMessageId = prepared.reAppendedUserMessageId;
       }
+      // re-append 也要通知 UI 刷新（否则空续跑写回后列表不更新）
+      await options?.onUserMessageAppended?.();
     }
   }
 
+  // 新 append merge：materialize ∪ attach(@扫描) ∪ flush user_ops
   const mergedAttachments = mergeAttachmentsWithScannedAtPaths("", [
+    ...workplaceAtts,
     ...userOpsAttachments,
     ...scannedComposer,
   ]);
@@ -250,7 +314,8 @@ export async function runAgentTurn(
     !reAppended &&
     (trimmed !== "" ||
       scannedComposer.length > 0 ||
-      userOpsAttachments.length > 0);
+      userOpsAttachments.length > 0 ||
+      hasWorkplaceDelta);
 
   if (shouldAppendNewUser) {
     stage = "append-user-message";

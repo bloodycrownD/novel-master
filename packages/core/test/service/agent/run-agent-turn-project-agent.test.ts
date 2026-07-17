@@ -41,6 +41,7 @@ function mockUserVfsTurn(): UserVfsTurnService {
     executeOp: async () => ({ ok: true }),
     flushPendingUserVfsTurns: async () => ({ flushed: false, attachments: [] }),
     previewUserOpsChangedPaths: async () => [],
+    previewUserOpsActions: async () => [],
     hasPendingTurns: async () => false,
   };
 }
@@ -78,11 +79,16 @@ function makeRuntime(
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        evaluateRuleView: async () => ({
+          rows: [],
+          displayByPath: new Map(),
+        }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
     sessionKkv: {
       get: async () => null,
       set: async () => undefined,
       delete: async () => undefined,
+      clearDomain: async () => undefined,
       clearSession: async () => undefined,
       listKeys: async () => [],
     },
