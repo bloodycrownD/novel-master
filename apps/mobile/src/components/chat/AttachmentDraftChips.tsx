@@ -13,6 +13,8 @@ export type AttachmentDraftChipsProps = {
   onRemove?: (index: number) => void;
   disabled?: boolean;
   accessibilityLabel?: string;
+  /** 行容器透明（状态条叠在对话区上时用）。 */
+  transparentRow?: boolean;
 };
 
 /** 是否为状态条附件（workplace / user_ops）。 */
@@ -39,12 +41,12 @@ export function partitionComposerChipAttachments(
   return { status, attach };
 }
 
-/** Chip 文案：`📄` / `📁` / `✏️` + path（无多余空格）。 */
+/** Chip 文案：user_ops → `action:path`；其余 `📄`/`📁` + path。 */
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
-  const path = a.path ?? a.name;
   if (a.source === 'user_ops') {
-    return `✏️${path}`;
+    return a.name;
   }
+  const path = a.path ?? a.name;
   if (a.type === 'dir') {
     return `📁${path}`;
   }
@@ -57,6 +59,7 @@ export function AttachmentDraftChips({
   onRemove,
   disabled,
   accessibilityLabel,
+  transparentRow = false,
 }: AttachmentDraftChipsProps) {
   const { tokens } = useTheme();
   if (attachments.length === 0) {
@@ -66,7 +69,10 @@ export function AttachmentDraftChips({
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
-      style={styles.row}
+      style={[
+        styles.row,
+        transparentRow ? styles.rowTransparent : null,
+      ]}
       contentContainerStyle={styles.content}
       accessibilityLabel={accessibilityLabel}
     >
@@ -95,8 +101,13 @@ export function AttachmentDraftChips({
                 disabled={disabled}
                 onPress={() => onRemove?.(index)}
                 hitSlop={8}
+                style={styles.removeSlot}
               >
-                <Text style={{ color: tokens.textSecondary }}>×</Text>
+                <Text
+                  style={[styles.removeText, { color: tokens.textSecondary }]}
+                >
+                  ×
+                </Text>
               </Pressable>
             ) : null}
           </View>
@@ -106,7 +117,51 @@ export function AttachmentDraftChips({
   );
 }
 
-/** 双条：上状态（无叉）/ 下 attach（有叉）；空行不渲染。 */
+/** 状态条（无叉）：由 Composer 放在输入框外上方。 */
+export function ComposerStatusChips({
+  attachments,
+  disabled,
+}: {
+  attachments: readonly MessageAttachment[];
+  disabled?: boolean;
+}) {
+  const { status } = partitionComposerChipAttachments(attachments);
+  return (
+    <AttachmentDraftChips
+      attachments={status}
+      showRemove={false}
+      disabled={disabled}
+      transparentRow
+      accessibilityLabel="状态附件"
+    />
+  );
+}
+
+/** 附件条（有叉）：放在输入框内部。 */
+export function ComposerAttachChips({
+  attachments,
+  onRemoveAttach,
+  disabled,
+}: {
+  attachments: readonly MessageAttachment[];
+  onRemoveAttach: (attachIndex: number) => void;
+  disabled?: boolean;
+}) {
+  const { attach } = partitionComposerChipAttachments(attachments);
+  return (
+    <AttachmentDraftChips
+      attachments={attach}
+      showRemove
+      disabled={disabled}
+      onRemove={onRemoveAttach}
+      accessibilityLabel="待发送附件"
+    />
+  );
+}
+
+/**
+ * @deprecated 布局已拆为框外状态条 + 框内附件条；保留供旧调用兼容。
+ */
 export function ComposerDualAttachmentChips({
   attachments,
   onRemoveAttach,
@@ -116,21 +171,13 @@ export function ComposerDualAttachmentChips({
   onRemoveAttach: (attachIndex: number) => void;
   disabled?: boolean;
 }) {
-  const { status, attach } = partitionComposerChipAttachments(attachments);
   return (
     <>
-      <AttachmentDraftChips
-        attachments={status}
-        showRemove={false}
+      <ComposerStatusChips attachments={attachments} disabled={disabled} />
+      <ComposerAttachChips
+        attachments={attachments}
+        onRemoveAttach={onRemoveAttach}
         disabled={disabled}
-        accessibilityLabel="状态附件"
-      />
-      <AttachmentDraftChips
-        attachments={attach}
-        showRemove
-        disabled={disabled}
-        onRemove={onRemoveAttach}
-        accessibilityLabel="待发送附件"
       />
     </>
   );
@@ -138,16 +185,28 @@ export function ComposerDualAttachmentChips({
 
 const styles = StyleSheet.create({
   row: { maxHeight: 36, marginBottom: 6 },
-  content: { gap: 6, paddingRight: 8 },
+  rowTransparent: {
+    backgroundColor: 'transparent',
+    marginBottom: 4,
+  },
+  content: { gap: 6, paddingRight: 8, alignItems: 'center' },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     maxWidth: 200,
-    paddingHorizontal: 10,
     paddingVertical: 6,
+    paddingLeft: 10,
+    // 有/无叉共用右侧内边距基准；叉号挤在固定槽内，避免「整块更胖」
+    paddingRight: 10,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
   },
-  label: { fontSize: 12, flexShrink: 1 },
+  label: { fontSize: 12, flexShrink: 1, maxWidth: 160 },
+  removeSlot: {
+    width: 16,
+    marginLeft: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  removeText: { fontSize: 14, lineHeight: 16 },
 });

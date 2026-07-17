@@ -20,25 +20,31 @@ jest.mock('@novel-master/core', () => ({
   AgentError: class AgentError extends Error {},
 }));
 
-jest.mock('@novel-master/core/chat', () => ({
-  TOOL_TURN_BRIDGE_TEXT: '继续',
-  hasComposerSendableInput: (input: {
-    text: string;
-    attachmentCount: number;
-    hasPendingUserOps: boolean;
-  }) =>
-    input.text.trim() !== '' ||
-    input.attachmentCount > 0 ||
-    input.hasPendingUserOps,
-}));
+jest.mock('@novel-master/core/chat', () => {
+  const actual = jest.requireActual(
+    '@novel-master/core/chat',
+  ) as typeof import('@novel-master/core/chat');
+  return {
+    ...actual,
+  };
+});
 
 jest.mock('../src/components/chat/FileReferencePicker', () => ({
   FileReferencePicker: () => null,
 }));
 
-jest.mock('../src/components/chat/AttachmentDraftChips', () => ({
-  AttachmentDraftChips: () => null,
-}));
+jest.mock('../src/components/chat/AttachmentDraftChips', () => {
+  const actual = jest.requireActual(
+    '../src/components/chat/AttachmentDraftChips',
+  ) as typeof import('../src/components/chat/AttachmentDraftChips');
+  return {
+    ...actual,
+    AttachmentDraftChips: () => null,
+    ComposerStatusChips: () => null,
+    ComposerAttachChips: () => null,
+    ComposerDualAttachmentChips: () => null,
+  };
+});
 
 (global as any).__DEV__ = false;
 
@@ -48,6 +54,8 @@ jest.mock('../src/runtime/novel-master-context', () => ({
 
 const mockGetLlmStreamEnabled = jest.fn(async () => true);
 const mockHasPendingTurns = jest.fn(async () => false);
+const mockGetComposerDraftJson = jest.fn(async (): Promise<string | null> => null);
+const mockProjectComposerStatus = jest.fn(async () => [] as unknown[]);
 jest.mock('../src/hooks/useRuntime', () => ({
   useRuntime: () => ({
     eventBus: {
@@ -59,7 +67,20 @@ jest.mock('../src/hooks/useRuntime', () => ({
     userVfsTurn: {
       hasPendingTurns: (...args: unknown[]) => mockHasPendingTurns(...args),
     },
+    sessions: {
+      getComposerDraftJson: (...args: unknown[]) =>
+        mockGetComposerDraftJson(...args),
+      setComposerDraftJson: async () => true,
+      get: async () => ({projectId: 'p'}),
+    },
+    worktree: () => ({}),
+    appendToolTurnBridge: async () => undefined,
   }),
+}));
+
+jest.mock('../src/services/project-composer-status.service', () => ({
+  projectComposerStatusForSession: (...args: unknown[]) =>
+    mockProjectComposerStatus(...args),
 }));
 
 const mockRunAgentTurn = jest.fn(async (_runtime, _scope, _content, options) => {
@@ -81,6 +102,7 @@ jest.mock('../src/services/agent-run.service', () => ({
   runAgentTurn: (...args: any[]) => mockRunAgentTurn(...args),
 }));
 
+import {serializeComposerDraftJson} from '@novel-master/core/chat';
 import {ChatComposer} from '../src/components/chat/ChatComposer';
 import {useAgentRunLifecycle} from '../src/hooks/useAgentRunLifecycle';
 import {
@@ -90,7 +112,7 @@ import {
 } from '../src/runtime/agent-activity';
 import {ThemeProvider} from '../src/theme/ThemeProvider';
 import {
-  readChatComposerDraft,
+  clearChatComposerDraft,
   writeChatComposerDraft,
 } from '../src/storage/chat-composer-draft';
 
@@ -125,6 +147,13 @@ describe('ChatComposer integration', () => {
   beforeEach(() => {
     setMobileAgentActive(false);
     mockRunAgentTurn.mockClear();
+    mockHasPendingTurns.mockReset();
+    mockHasPendingTurns.mockResolvedValue(false);
+    mockGetComposerDraftJson.mockReset();
+    mockGetComposerDraftJson.mockResolvedValue(null);
+    mockProjectComposerStatus.mockReset();
+    mockProjectComposerStatus.mockResolvedValue([]);
+    clearChatComposerDraft('s');
   });
   it('running-state “终止” action aborts current run', async () => {
     let tree: TestRenderer.ReactTestRenderer;
@@ -220,7 +249,12 @@ describe('ChatComposer integration', () => {
   });
 
   it('draftRestoreToken 变更时从 draft 刷新输入', async () => {
-    writeChatComposerDraft('s', 'restored text');
+    mockGetComposerDraftJson.mockResolvedValue(
+      serializeComposerDraftJson({
+        text: 'restored text',
+        attachments: [],
+      }),
+    );
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
       tree = TestRenderer.create(
@@ -232,6 +266,12 @@ describe('ChatComposer integration', () => {
     );
     expect(input.props.value).toBe('restored text');
 
+    mockGetComposerDraftJson.mockResolvedValue(
+      serializeComposerDraftJson({
+        text: 'after rollback',
+        attachments: [],
+      }),
+    );
     writeChatComposerDraft('s', 'after rollback');
     await act(async () => {
       tree!.update(
@@ -260,6 +300,89 @@ describe('ChatComposer integration', () => {
       sendBtn.props.onPress();
     });
     expect(isMobileAgentActive()).toBe(false);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-SR1b: 仅状态条 workplace 可发且禁纯 resume；入参无预览 chip', async () => {
+    mockRunAgentTurn.mockImplementationOnce(async () => undefined);
+    mockGetComposerDraftJson.mockResolvedValue(
+      serializeComposerDraftJson({
+        text: '',
+        attachments: [
+          {
+            name: '/a.md',
+            source: 'attach',
+            type: 'text',
+            content: null,
+            path: '/a.md',
+          },
+        ],
+      }),
+    );
+    mockProjectComposerStatus.mockResolvedValue([
+      {
+        name: '/w.md',
+        source: 'workplace',
+        type: 'text',
+        content: null,
+        path: '/w.md',
+      },
+    ]);
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={true} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    expect(sendBtn.props.disabled).toBe(false);
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+    const opts = mockRunAgentTurn.mock.calls[0]?.[3] as {
+      allowResumeWithoutInput?: boolean;
+      attachments?: readonly {source: string}[];
+    };
+    expect(opts.allowResumeWithoutInput).toBe(false);
+    expect(opts.attachments?.every(a => a.source === 'attach')).toBe(true);
+    expect(opts.attachments).toHaveLength(1);
+    await act(async () => {
+      (tree as TestRenderer.ReactTestRenderer).unmount();
+    });
+  });
+
+  it('T-SR1b: 仅 workplace 空发可点（非 resume）', async () => {
+    mockRunAgentTurn.mockImplementationOnce(async () => undefined);
+    mockProjectComposerStatus.mockResolvedValue([
+      {
+        name: '/w.md',
+        source: 'workplace',
+        type: 'text',
+        content: null,
+        path: '/w.md',
+      },
+    ]);
+    let tree: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<Harness canResumeWithoutInput={false} />);
+    });
+    const sendBtn = (tree as TestRenderer.ReactTestRenderer).root.find(
+      node => node.props?.accessibilityLabel === '发送',
+    );
+    expect(sendBtn.props.disabled).toBe(false);
+    await act(async () => {
+      sendBtn.props.onPress();
+    });
+    expect(mockRunAgentTurn).toHaveBeenCalledTimes(1);
+    const opts = mockRunAgentTurn.mock.calls[0]?.[3] as {
+      allowResumeWithoutInput?: boolean;
+      attachments?: unknown;
+    };
+    expect(opts.allowResumeWithoutInput).toBe(false);
+    expect(opts.attachments).toBeUndefined();
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

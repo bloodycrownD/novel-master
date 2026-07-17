@@ -46,7 +46,11 @@ import {
 
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
-import { ComposerDualAttachmentChips } from './AttachmentDraftChips';
+import {
+  ComposerAttachChips,
+  ComposerStatusChips,
+  partitionComposerChipAttachments,
+} from './AttachmentDraftChips';
 import { FileReferencePicker } from './FileReferencePicker';
 
 type Props = {
@@ -207,6 +211,8 @@ export function ChatComposer({
       content: string,
       allowResumeWithoutInput: boolean,
       runAttachments: readonly MessageAttachment[],
+      /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
+      hasWorkplaceDelta: boolean,
     ) => {
       if (isMobileAgentActive()) {
         return;
@@ -217,28 +223,46 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      if (content || runAttachments.length > 0) {
+      // 有正文 / attach / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+      const shouldClearComposer =
+        content.trim() !== '' ||
+        runAttachments.length > 0 ||
+        hasPendingUserOps ||
+        hasWorkplaceDelta;
+      let composerCleared = false;
+      const clearComposerNow = () => {
+        if (composerCleared) {
+          return;
+        }
+        composerCleared = true;
         clearChatComposerDraft(sessionId, runtime.sessions);
         setText('');
         setAttachments([]);
-      }
+      };
 
       setRunAbortController(controller);
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
+        // 显式 attachments 仅 attach；workplace 由 Core materialize，勿传预览 chip
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
           attachments: runAttachments.length > 0 ? runAttachments : undefined,
           signal: controller.signal,
           onUserMessageAppended: () => {
+            // append 成功后再清输入，避免失败时「字没了、消息也没落盘」
+            clearComposerNow();
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
             ).catch(() => undefined);
           },
         });
-        // 发送 flush 后 pending 空 → 上条应空
+        // 空续跑 / 仅 flush / 仅 workplace 等路径可能不走 append 回调
+        if (shouldClearComposer) {
+          clearComposerNow();
+        }
+        // 发送 flush 后 pending 空 → 上条应空；以投影为准刷新 chip
         try {
           const session = await runtime.sessions.get(sessionId);
           const worktree = runtime.worktree({
@@ -258,6 +282,10 @@ export function ChatComposer({
         } catch {
           // 投影失败不影响发送结果
         }
+        // 再刷一次列表，覆盖 re-append / 流式末态漏刷新
+        await Promise.resolve(
+          streamHandlersRef.current.onMessagesChanged(),
+        ).catch(() => undefined);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           return;
@@ -285,7 +313,15 @@ export function ChatComposer({
         void refreshPendingUserOps();
       }
     },
-    [runtime, scope, sessionId, beginUiRun, onStreamReset, refreshPendingUserOps],
+    [
+      runtime,
+      scope,
+      sessionId,
+      beginUiRun,
+      onStreamReset,
+      refreshPendingUserOps,
+      hasPendingUserOps,
+    ],
   );
 
   const sendWithBridgeIfNeeded = useCallback(
@@ -293,6 +329,7 @@ export function ChatComposer({
       content: string,
       allowResumeWithoutInput: boolean,
       runAttachments: readonly MessageAttachment[],
+      hasWorkplaceDelta: boolean,
     ) => {
       if (content && lastMessageHasToolResult) {
         return new Promise<void>(resolve => {
@@ -312,7 +349,12 @@ export function ChatComposer({
                     try {
                       await runtime.appendToolTurnBridge(sessionId);
                       await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(content, false, runAttachments);
+                      await executeRun(
+                        content,
+                        false,
+                        runAttachments,
+                        hasWorkplaceDelta,
+                      );
                     } catch (err) {
                       setError(formatError(err));
                     } finally {
@@ -326,7 +368,12 @@ export function ChatComposer({
         });
       }
 
-      await executeRun(content, allowResumeWithoutInput, runAttachments);
+      await executeRun(
+        content,
+        allowResumeWithoutInput,
+        runAttachments,
+        hasWorkplaceDelta,
+      );
     },
     [lastMessageHasToolResult, runtime, sessionId, executeRun],
   );
@@ -344,14 +391,19 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    const hasAttachments = attachments.length > 0;
+    const { attach: attachOnly } = partitionComposerChipAttachments(attachments);
+    // 状态条 workplace 差集 = 可发输入；有差集禁止纯 resume
+    const hasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
+    const hasAttachments = attachOnly.length > 0;
     const hasSendable = hasComposerSendableInput({
       text: content,
-      attachmentCount: attachments.length,
+      attachmentCount: attachOnly.length,
       hasPendingUserOps,
+      hasWorkplaceDelta,
     });
+    // 仅当无可发输入（含无 workplace）且 canResume 时才允许空续跑
     const allowResumeWithoutInput =
-      !content && !hasAttachments && canResumeWithoutInput;
+      !hasSendable && canResumeWithoutInput;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -364,7 +416,8 @@ export function ChatComposer({
     await sendWithBridgeIfNeeded(
       content,
       allowResumeWithoutInput,
-      attachments,
+      attachOnly,
+      hasWorkplaceDelta,
     );
   }, [
     hasModel,
@@ -381,20 +434,27 @@ export function ChatComposer({
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
+  const sendHasWorkplaceDelta = attachments.some(
+    a => a.source === 'workplace',
+  );
   const sendDisabled =
     !hasModel ||
     (!running &&
       !hasComposerSendableInput({
         text,
-        attachmentCount: attachments.length,
+        attachmentCount: partitionComposerChipAttachments(attachments).attach
+          .length,
         hasPendingUserOps,
+        hasWorkplaceDelta: sendHasWorkplaceDelta,
       }) &&
       !canResumeWithoutInput);
 
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View style={[styles.dock, { borderTopColor: tokens.border }]}>
+    <View
+      style={[styles.dock, { backgroundColor: tokens.background }]}
+    >
       {!hasModel ? (
         <Pressable onPress={onNeedModel} style={styles.hintRow}>
           <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>
@@ -405,13 +465,23 @@ export function ChatComposer({
         <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
       ) : null}
 
+      {/* 状态条：输入框外上方；与 dock 同色实底，避免键盘顶起后消息透出 */}
+      <View
+        style={[styles.statusOutside, { backgroundColor: tokens.background }]}
+        pointerEvents="box-none"
+      >
+        <ComposerStatusChips
+          attachments={attachments}
+          disabled={inputDisabled}
+        />
+      </View>
       <View
         style={[
           styles.box,
           { backgroundColor: tokens.surface, borderColor: tokens.border },
         ]}
       >
-        <ComposerDualAttachmentChips
+        <ComposerAttachChips
           attachments={attachments}
           disabled={inputDisabled}
           onRemoveAttach={attachIndex => {
@@ -530,10 +600,17 @@ function TerminateIcon() {
 
 const styles = StyleSheet.create({
   dock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
+    flexShrink: 0,
+    // 实底由 tokens.background 注入；盖住消息区溢出，键盘顶起时不透出
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 6,
+    paddingTop: 4,
+    paddingBottom: 8,
+    gap: 4,
+    zIndex: 2,
+    elevation: 4,
+  },
+  statusOutside: {
+    // 与 dock 同色，形成连续「状态 bar」
   },
   hintRow: { paddingVertical: 4 },
   error: { fontSize: 12 },

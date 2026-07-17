@@ -68,17 +68,17 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
     ).toBe('📄/w.md');
   });
 
-  it('user_ops 为 ✏️/path', () => {
+  it('user_ops 为 action:path（无 icon）', () => {
     expect(
       formatAttachmentChipLabel(
         attach({
           source: 'user_ops',
           type: 'text',
           path: '/ops.md',
-          name: '/ops.md',
+          name: 'edit:/ops.md',
         }),
       ),
-    ).toBe('✏️/ops.md');
+    ).toBe('edit:/ops.md');
   });
 });
 
