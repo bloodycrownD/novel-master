@@ -6,6 +6,7 @@ import { scheduleStickIfNearBottom } from '../scroll/scroll';
 import {
   assistantBubbleExtraClasses,
   ensureStreamTextBody,
+  getStreamThinkingBody,
   setStreamBodyRichClass,
   type StreamKind,
 } from './stream';
@@ -90,8 +91,7 @@ export function paintStreamRichKind(tail: Element, kind: StreamKind): void {
   const bubble = tail.querySelector('.bubble');
   if (!bubble) return;
   if (kind === 'thinking') {
-    const section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
-    const body = section ? section.querySelector('.thinking-body') : null;
+    const body = getStreamThinkingBody(bubble);
     if (!body) return;
     const thinkingHtml = renderStreamingMarkdown(state.stream.thinking);
     if (!thinkingHtml) return;

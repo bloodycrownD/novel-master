@@ -59,6 +59,25 @@ export function assistantBubbleExtraClasses(
 }
 
 /**
+ * 两步查询 stream thinking body（section → .thinking-body）。
+ * 缺 section 或 body 均返回 null，供缺壳判断与增量路径共用。
+ */
+export function getStreamThinkingBody(bubble: Element): Element | null {
+  const section = bubble.querySelector(
+    '[data-thinking-key="stream:thinking"]',
+  );
+  return section ? section.querySelector('.thinking-body') : null;
+}
+
+/**
+ * 转义后追加纯文本 delta，并清除 rich class（禁止明文走 TrustedHtml）。
+ */
+export function appendEscapedDelta(el: Element, delta: string): void {
+  el.insertAdjacentHTML('beforeend', escapeHtml(delta));
+  setStreamBodyRichClass(el, false);
+}
+
+/**
  * 将当前 stream 状态同步进已有 bubble 的 body 挂载点（非整泡 innerHTML）。
  * 壳结构缺失时回退 renderRows，避免与 Preact VDOM 分叉。
  */
@@ -69,10 +88,7 @@ function syncStreamBodiesFromState(bubble: Element): void {
   const hasText = !!(state.stream.text && String(state.stream.text).trim());
 
   if (hasThinking) {
-    const section = bubble.querySelector(
-      '[data-thinking-key="stream:thinking"]',
-    );
-    const body = section ? section.querySelector('.thinking-body') : null;
+    const body = getStreamThinkingBody(bubble);
     if (!body) {
       renderRows();
       return;
@@ -124,11 +140,8 @@ export function updateStreamBubble(tail: Element): void {
     renderRows();
     return;
   }
-  if (
-    hasThinking &&
-    !bubble.querySelector('[data-thinking-key="stream:thinking"]')
-  ) {
-    // 缺 thinking 壳：整表建壳（BodyHost 带稳定 key，text body 可保留）
+  if (hasThinking && !getStreamThinkingBody(bubble)) {
+    // 缺 thinking section/body：整表建壳（BodyHost 带稳定 key，text body 可保留）
     renderRows();
     return;
   }
@@ -145,9 +158,7 @@ export function ensureStreamTextBody(bubble: Element): HTMLElement {
   textBody.className = 'bubble-body';
   textBody.setAttribute('data-text-shell', '1');
   bubble.appendChild(textBody);
-  const thinkingBody = bubble.querySelector(
-    '[data-thinking-key="stream:thinking"] .thinking-body',
-  );
+  const thinkingBody = getStreamThinkingBody(bubble);
   if (thinkingBody) {
     thinkingBody.classList.add('thinking-body-divided');
   }
@@ -168,8 +179,7 @@ export function setStreamBodyRichClass(
 
 export function streamRichDomReady(bubble: Element, kind: StreamKind): boolean {
   if (kind === 'thinking') {
-    const section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
-    const body = section ? section.querySelector('.thinking-body') : null;
+    const body = getStreamThinkingBody(bubble);
     return !!(
       body &&
       (body.innerHTML.length > 0 ||
@@ -211,23 +221,15 @@ export function appendStreamDeltaIncremental(
         scheduleStreamRichUpgrade(kind);
         return true;
       }
-      const thinkSection = bubble.querySelector(
-        '[data-thinking-key="stream:thinking"]',
-      );
-      const thinkBody = thinkSection
-        ? thinkSection.querySelector('.thinking-body')
-        : null;
+      const thinkBody = getStreamThinkingBody(bubble);
       if (!thinkBody) {
         return false;
       }
-      thinkBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
-      setStreamBodyRichClass(thinkBody, false);
+      appendEscapedDelta(thinkBody, delta);
     } else if (kind === 'text') {
       // WHY: richText=true 且 html 缺失时，text 首包必须稳定走 delta append，
       // 不能被 DOM-ready 门槛拦截，否则 appendStreamDeltaIncremental 会返回 false 且 text 分支禁止整泡重建。
-      const streamTextBody = ensureStreamTextBody(bubble);
-      streamTextBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
-      setStreamBodyRichClass(streamTextBody, false);
+      appendEscapedDelta(ensureStreamTextBody(bubble), delta);
     } else {
       return false;
     }
@@ -235,8 +237,7 @@ export function appendStreamDeltaIncremental(
     return true;
   }
   if (kind === 'thinking') {
-    const section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
-    const body = section ? section.querySelector('.thinking-body') : null;
+    const body = getStreamThinkingBody(bubble);
     if (!body) {
       return false;
     }
@@ -256,8 +257,7 @@ export function appendStreamDeltaIncremental(
     if (!delta) {
       return false;
     }
-    body.insertAdjacentHTML('beforeend', escapeHtml(delta));
-    setStreamBodyRichClass(body, false);
+    appendEscapedDelta(body, delta);
     return true;
   }
   if (kind === 'text') {
@@ -281,8 +281,7 @@ export function appendStreamDeltaIncremental(
       return false;
     }
     // WHY: text 从 0->1 仅更新 class/展示，不触发 thinking 重建。
-    textBody.insertAdjacentHTML('beforeend', escapeHtml(delta));
-    setStreamBodyRichClass(textBody, false);
+    appendEscapedDelta(textBody, delta);
     bubble.className =
       'bubble assistant' +
       assistantBubbleExtraClasses(
