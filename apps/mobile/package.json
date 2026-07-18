@@ -26,6 +26,7 @@
     "preios": "npm run build -w @novel-master/core -w @novel-master/cloud-sync-driver-s3 -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn && npm run build:webview:native"
   },
   "dependencies": {
+    "@bsky.app/tapper": "^0.6.1",
     "@gorhom/bottom-sheet": "^5.1.2",
     "@noble/hashes": "^2.2.0",
     "@novel-master/cloud-sync-driver-s3": "*",
@@ -59,6 +60,7 @@
     "react-native-webview": "^13.16.1",
     "readable-stream": "^4.7.0",
     "sanitize-html": "^2.14.0",
+    "tlds": "^1.261.0",
     "web-streams-polyfill": "^4.0.0"
   },
   "devDependencies": {
