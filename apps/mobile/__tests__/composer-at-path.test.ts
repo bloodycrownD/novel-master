@@ -1,49 +1,32 @@
 /**
- * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；tapper facet 口径与原子删。
+ * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；mentions 单层口径与原子删。
  */
 import { describe, expect, it } from '@jest/globals';
-import { Tapper } from '@bsky.app/tapper';
+import { parseValue } from 'react-native-controlled-mentions';
 import { scanAtPathAttachments } from '@novel-master/core/chat';
 import {
-  COMPOSER_AT_PATH_FACET_PATTERN,
   atPathTokensFromPickerSelection,
   countScannedAtPathAttachments,
   filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
+  formatAtPathMentionMarkup,
   formatComposerAtPathToken,
+  mentionValueToPlain,
+  mergeProgrammaticPlainIntoMentionValue,
   replaceActiveAtWithToken,
-  uncommitHandTypedFacet,
+  suggestionFromAtPathToken,
+  tryAtomicMentionDelete,
+  type ComposerAtPathTriggersConfig,
 } from '../src/components/chat/composer-at-path';
 
-/** 用与 tapper 相同的 boundary 剥离逻辑收集 `@token` 列表（单测辅助）。 */
-function matchAtPathFacets(text: string): string[] {
-  const re = new RegExp(
-    COMPOSER_AT_PATH_FACET_PATTERN.source,
-    COMPOSER_AT_PATH_FACET_PATTERN.flags,
-  );
-  const out: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) != null) {
-    const boundaryLen = m[1]?.length ?? 0;
-    out.push(m[0]!.slice(boundaryLen));
-  }
-  return out;
-}
-
-/** 模拟 ComposerAtPathInput：非程序化 facetCommitted → 反标。 */
-function attachHandTypedUncommitGate(
-  tapper: Tapper,
-  programmatic: { current: boolean },
-) {
-  return tapper.on('facetCommitted', facet => {
-    if (programmatic.current) {
-      return;
-    }
-    if (uncommitHandTypedFacet(tapper.nodes, facet)) {
-      tapper.insert('');
-    }
-  });
-}
+const triggersConfig: ComposerAtPathTriggersConfig = {
+  atPath: {
+    trigger: '@',
+    allowedSpacesCount: 0,
+    isInsertSpaceAfterMention: true,
+    getPlainString: mention => `@${mention.name}`,
+  },
+};
 
 describe('composer-at-path (T-ATD*)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
@@ -81,70 +64,59 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(countScannedAtPathAttachments('看')).toBe(0);
   });
 
-  it('facet 正则：识别 @token（含目录尾 /）；正文仍为纯字符串', () => {
-    const text = '见 @/a.md 与 @/notes/ 补充';
-    expect(matchAtPathFacets(text)).toEqual(['@/a.md', '@/notes/']);
-    expect(text.includes('{@}')).toBe(false);
-    expect(text.includes('<span')).toBe(false);
+  it('mention ↔ plain：对外仍为纯字符串，不漏 {@} / HTML', () => {
+    const markup = `见 ${formatAtPathMentionMarkup('/a.md')} 与 ${formatAtPathMentionMarkup('/notes/')} 补充`;
+    const plain = mentionValueToPlain(markup);
+    expect(plain).toBe('见 @/a.md 与 @/notes/ 补充');
+    expect(plain.includes('{@}')).toBe(false);
+    expect(plain.includes('<span')).toBe(false);
+    expect(suggestionFromAtPathToken('@/a.md')).toEqual({
+      id: '/a.md',
+      name: '/a.md',
+    });
   });
 
-  it('程序化 replaceText：已提交 @路径 可原子删；对外 text 仍为纯字符串', () => {
-    const tapper = new Tapper({
-      facets: { atPath: COMPOSER_AT_PATH_FACET_PATTERN },
-      initialText: '',
-    });
-    const programmatic = { current: false };
-    attachHandTypedUncommitGate(tapper, programmatic);
-
-    programmatic.current = true;
-    tapper.replaceText('见 @/a.md ', '见 @/a.md '.length);
-    programmatic.current = false;
-
-    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
-      true,
+  it('程序化 merge：新增 @路径 成 mention，可原子删；手输纯文本不提升', () => {
+    // 先有手输纯文本 @/x
+    const withHandTyped = mergeProgrammaticPlainIntoMentionValue(
+      '见 @/x ',
+      '见 @/x ',
+      triggersConfig,
     );
-    // 光标在 token 末尾空格前：`见 @/a.md| `
-    const tokenEnd = '见 @/a.md'.length;
-    tapper.handleSelectionChange({
-      nativeEvent: { selection: { start: tokenEnd, end: tokenEnd } },
-    });
-    // 模拟退一格（原生会删掉最后一个字符 `d`）
-    const oneCharDeleted = `${tapper.text.slice(0, tokenEnd - 1)}${tapper.text.slice(tokenEnd)}`;
-    tapper.handleTextChange(oneCharDeleted);
-    expect(tapper.text).toBe('见  ');
-    expect(tapper.text.includes('{@}')).toBe(false);
+    expect(withHandTyped).toBe('见 @/x ');
+    expect(withHandTyped.includes('{@}')).toBe(false);
+
+    // 选择器再插入 @/a.md → 仅新增段成 mention
+    const withPicker = mergeProgrammaticPlainIntoMentionValue(
+      withHandTyped,
+      '见 @/x @/a.md ',
+      triggersConfig,
+    );
+    expect(mentionValueToPlain(withPicker)).toBe('见 @/x @/a.md ');
+    expect(withPicker.includes(formatAtPathMentionMarkup('/a.md'))).toBe(true);
+    expect(withPicker.includes(formatAtPathMentionMarkup('/x'))).toBe(false);
+
+    const state = parseValue(withPicker, [triggersConfig.atPath]);
+    expect(state.parts.some(p => p.data != null)).toBe(true);
+
+    // 退一格碰到 mention → 整段删
+    const tokenEnd = '见 @/x @/a.md'.length;
+    const oneCharDeleted = `${state.plainText.slice(0, tokenEnd - 1)}${state.plainText.slice(tokenEnd)}`;
+    const afterAtomic = tryAtomicMentionDelete(
+      withPicker,
+      oneCharDeleted,
+      triggersConfig,
+    );
+    expect(afterAtomic).not.toBeNull();
+    expect(mentionValueToPlain(afterAtomic!)).toBe('见 @/x  ');
+    expect(afterAtomic!.includes('{@}')).toBe(false);
   });
 
-  it('手输完整 @/x 后离开/commit：反标 committed，退格不原子删', () => {
-    const tapper = new Tapper({
-      facets: { atPath: COMPOSER_AT_PATH_FACET_PATTERN },
-      initialText: '',
-    });
-    const programmatic = { current: false };
-    attachHandTypedUncommitGate(tapper, programmatic);
-
-    // 模拟逐字输入完整 token
-    tapper.handleTextChange('@/x');
-    expect(tapper.nodes.some(n => n.type === 'facet')).toBe(true);
-    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
-      false,
-    );
-
-    // 光标离开 facet（移到文首）→ tapper 自动 commit → 门闩反标
-    tapper.handleSelectionChange({
-      nativeEvent: { selection: { start: 0, end: 0 } },
-    });
-    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
-      false,
-    );
-
-    // 移到 token 末尾再退一格：应只删一字，非整段
-    const tokenEnd = '@/x'.length;
-    tapper.handleSelectionChange({
-      nativeEvent: { selection: { start: tokenEnd, end: tokenEnd } },
-    });
-    const oneCharDeleted = `${tapper.text.slice(0, tokenEnd - 1)}${tapper.text.slice(tokenEnd)}`;
-    tapper.handleTextChange(oneCharDeleted);
-    expect(tapper.text).toBe('@/');
+  it('手输纯文本 @/x：退格不原子删', () => {
+    const hand = '见 @/x';
+    const tokenEnd = hand.length;
+    const oneCharDeleted = `${hand.slice(0, tokenEnd - 1)}${hand.slice(tokenEnd)}`;
+    const after = tryAtomicMentionDelete(hand, oneCharDeleted, triggersConfig);
+    expect(after).toBeNull();
   });
 });
