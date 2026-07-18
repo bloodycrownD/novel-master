@@ -56,15 +56,14 @@ export function buildComposerStatusAttachments(
 }
 
 /**
- * 用投影结果整表替换现有列表中的 workplace/user_ops，保留 `attach`。
- * App 侧「替换状态条」预备：`statusProjected` 为空则仅剩 attach。
+ * 用投影结果整表替换 Composer draft attachments。
+ * draft attach 恒空：不再保留 existing attach，仅返回 statusProjected。
  */
 export function replaceComposerStatusAttachments(
-  existing: readonly MessageAttachment[],
+  _existing: readonly MessageAttachment[],
   statusProjected: readonly MessageAttachment[],
 ): MessageAttachment[] {
-  const attachOnly = existing.filter((a) => a.source === "attach");
-  return [...statusProjected, ...attachOnly];
+  return [...statusProjected];
 }
 
 /**

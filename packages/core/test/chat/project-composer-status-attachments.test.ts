@@ -1,7 +1,7 @@
 /**
  * T-WP1：规则差集 → 仅对应 workplace attachment；再隐藏 → 投影空。
  * T-SR2b：发送 materialize 含 source:workplace；prepare hydrate 后 📄 chip 清空。
- * 顺带覆盖 user_ops `action:path` 形状与 replace 预备 API。
+ * 顺带覆盖 user_ops path 形状与 replace（draft attach 恒空）预备 API。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -52,15 +52,15 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     );
   });
 
-  it("T-WP1: cache 已加载则 workplace 不再出现；user_ops 按 action:path 各一条", () => {
+  it("T-WP1: cache 已加载则 workplace 不再出现；user_ops 按 path 各一条", () => {
     const live = [
       { path: "/cached.md", status: "full" as const },
       { path: "/need.md", status: "full" as const },
     ];
     const cacheKeys = [fileCacheKey("full", "/cached.md")];
     const out = buildComposerStatusAttachments(live, cacheKeys, [
-      { action: "edit", path: "/ops.md" },
-      { action: "write", path: "/other.md" },
+      "/ops.md",
+      "/other.md",
     ]);
 
     assert.deepEqual(out, [
@@ -72,14 +72,14 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/need.md",
       },
       {
-        name: "edit:/ops.md",
+        name: "/ops.md",
         source: "user_ops",
         type: "text",
         content: null,
         path: "/ops.md",
       },
       {
-        name: "write:/other.md",
+        name: "/other.md",
         source: "user_ops",
         type: "text",
         content: null,
@@ -88,10 +88,10 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ]);
   });
 
-  it("userOpsAttachmentsFromChangedPaths：兼容 path-only → write:path", () => {
+  it("userOpsAttachmentsFromChangedPaths：path → user_ops attachment", () => {
     assert.deepEqual(userOpsAttachmentsFromChangedPaths(["/a.md"]), [
       {
-        name: "write:/a.md",
+        name: "/a.md",
         source: "user_ops",
         type: "text",
         content: null,
@@ -100,7 +100,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ]);
   });
 
-  it("replaceComposerStatusAttachments：整表替换状态类，保留 attach", () => {
+  it("replaceComposerStatusAttachments：整表替换为投影，不保留 attach", () => {
     const existing = [
       {
         name: "/old.md",
@@ -110,7 +110,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/old.md",
       },
       {
-        name: "edit:/x.md",
+        name: "/x.md",
         source: "user_ops" as const,
         type: "text" as const,
         content: null,
@@ -135,26 +135,9 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ];
     assert.deepEqual(
       replaceComposerStatusAttachments(existing, projected),
-      [
-        ...projected,
-        {
-          name: "/ref.md",
-          source: "attach",
-          type: "text",
-          content: null,
-          path: "/ref.md",
-        },
-      ],
+      projected,
     );
-    assert.deepEqual(replaceComposerStatusAttachments(existing, []), [
-      {
-        name: "/ref.md",
-        source: "attach",
-        type: "text",
-        content: null,
-        path: "/ref.md",
-      },
-    ]);
+    assert.deepEqual(replaceComposerStatusAttachments(existing, []), []);
   });
 
   it("projectComposerStatusAttachments：组装 deps 并合并两侧", async () => {
@@ -165,9 +148,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
       loadLiveWorkplacePaths: async () => [
         { path: "/w.md", status: "full" },
       ],
-      previewUserOpsActions: async () => [
-        { action: "write", path: "/u.md" },
-      ],
+      previewUserOpsChangedPaths: async () => ["/u.md"],
     });
     assert.deepEqual(out, [
       {
@@ -178,7 +159,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/w.md",
       },
       {
-        name: "write:/u.md",
+        name: "/u.md",
         source: "user_ops",
         type: "text",
         content: null,
@@ -258,7 +239,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     const projected = await projectComposerStatusAttachments(session.id, {
       sessionKkv: sk,
       loadLiveWorkplacePaths: async () => live,
-      previewUserOpsActions: async () => [],
+      previewUserOpsChangedPaths: async () => [],
     });
     assert.equal(
       projected.filter((a) => a.source === "workplace").length,
