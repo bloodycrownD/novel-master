@@ -9,8 +9,10 @@ module.exports = {
   preset: '@react-native/jest-preset',
   // @noble/hashes v2 为纯 ESM；须经 babel-jest，否则 Jest 报 Cannot use import statement
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes)/)',
+    // 需转译 ESM：@bsky.app/tapper（Composer @路径 facet）
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes|@bsky\\.app/tapper)/)',
   ],
+
   moduleNameMapper: {
     '^react-native-webview$': '<rootDir>/test-utils/react-native-webview-mock.tsx',
     '^tiktoken$': '<rootDir>/src/shims/tiktoken.js',

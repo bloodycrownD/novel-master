@@ -1,7 +1,15 @@
 /**
- * Mobile：透明 TextInput + 背后 Text 分段着色 `@路径`（value/落库仍为纯字符串）。
+ * Mobile Composer：基于 `@bsky.app/tapper` 的 `@路径` 输入。
+ * 对外 value / onChange 仍为纯字符串（含 `@/path`）；已提交 facet 支持原子退格删除。
  */
-import React, { useMemo, type RefObject } from 'react';
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import {
   StyleSheet,
   Text,
@@ -11,13 +19,9 @@ import {
   type TextInputSelectionChangeEventData,
   type TextStyle,
 } from 'react-native';
+import { Tapper } from '@bsky.app/tapper';
 import { useTheme } from '@/theme/ThemeProvider';
-import { segmentComposerAtPathHighlight } from './composer-at-path-highlight';
-
-export type {
-  ComposerAtPathSegment,
-} from './composer-at-path-highlight';
-export { segmentComposerAtPathHighlight } from './composer-at-path-highlight';
+import { COMPOSER_AT_PATH_FACET_PATTERN } from './composer-at-path';
 
 export type ComposerAtPathInputProps = {
   inputRef?: RefObject<TextInput | null>;
@@ -32,6 +36,11 @@ export type ComposerAtPathInputProps = {
   testID?: string;
   /** 与 ChatComposer 原 input 样式对齐的附加 style。 */
   style?: TextStyle;
+  /**
+   * 外部受控光标（插入 token / typeahead 替换后）。
+   * 仅在 `value` 与内部不一致而 `replaceText` 时使用。
+   */
+  cursor?: number;
 };
 
 export function ComposerAtPathInput({
@@ -44,9 +53,69 @@ export function ComposerAtPathInput({
   placeholderTextColor,
   testID,
   style,
+  cursor = 0,
 }: ComposerAtPathInputProps) {
   const { tokens } = useTheme();
-  const segments = useMemo(() => segmentComposerAtPathHighlight(value), [value]);
+  const cursorRef = useRef(cursor);
+  cursorRef.current = cursor;
+
+  const [tapper] = useState(
+    () =>
+      new Tapper({
+        facets: {
+          // 与 scanAtPath / 历史高亮同口径；boundary 前缀供 tapper 剥离
+          atPath: COMPOSER_AT_PATH_FACET_PATTERN,
+        },
+        initialText: value,
+      }),
+  );
+
+  const state = useSyncExternalStore(tapper.subscribe, tapper.getSnapshot);
+
+  // 外部 value（草稿水化 / 选择器插入 / 清空）→ 内部；匹配 facet 一律标为已提交
+  useLayoutEffect(() => {
+    if (value !== tapper.text) {
+      const pos = Math.max(0, Math.min(cursorRef.current, value.length));
+      tapper.replaceText(value, pos);
+    }
+  }, [value, tapper]);
+
+  const setMergedRef = useCallback(
+    (node: TextInput | null) => {
+      tapper.setInputRef(node);
+      if (inputRef) {
+        (inputRef as React.MutableRefObject<TextInput | null>).current = node;
+      }
+    },
+    [inputRef, tapper],
+  );
+
+  const emitSelection = useCallback(
+    (start: number, end: number) => {
+      onSelectionChange?.({
+        nativeEvent: { selection: { start, end } },
+      } as NativeSyntheticEvent<TextInputSelectionChangeEventData>);
+    },
+    [onSelectionChange],
+  );
+
+  const handleChangeText = useCallback(
+    (next: string) => {
+      tapper.handleTextChange(next);
+      // 原子删后 tapper.text 可能短于 next；边界始终吐纯字符串
+      onChangeText(tapper.text);
+      emitSelection(tapper.selection.start, tapper.selection.end);
+    },
+    [emitSelection, onChangeText, tapper],
+  );
+
+  const handleSelectionChange = useCallback(
+    (e: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
+      tapper.handleSelectionChange(e);
+      emitSelection(tapper.selection.start, tapper.selection.end);
+    },
+    [emitSelection, tapper],
+  );
 
   return (
     <View style={styles.stack}>
@@ -55,42 +124,45 @@ export function ComposerAtPathInput({
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
       >
-        {segments.length === 0 ? (
-          // 占位保持与空输入同高，避免布局塌陷
+        {state.nodes.length === 0 ? (
           <Text>{'\u200b'}</Text>
         ) : (
-          segments.map((seg, i) =>
-            seg.kind === 'at-token' ? (
-              <Text
-                key={`at-${i}`}
-                style={[
-                  styles.atToken,
-                  {
-                    color: tokens.primary,
-                    backgroundColor: `${tokens.primary}29`,
-                  },
-                ]}
-              >
-                {seg.value}
-              </Text>
-            ) : (
-              <Text key={`t-${i}`}>{seg.value}</Text>
-            ),
-          )
+          state.nodes.map(node => {
+            const isAtPath =
+              (node.type === 'facet' || node.type === 'trigger') &&
+              node.facetType === 'atPath';
+            if (isAtPath) {
+              return (
+                <Text
+                  key={node.id}
+                  style={[
+                    styles.atToken,
+                    {
+                      color: tokens.primary,
+                      backgroundColor: `${tokens.primary}29`,
+                    },
+                  ]}
+                >
+                  {node.raw}
+                </Text>
+              );
+            }
+            return <Text key={node.id}>{node.raw}</Text>;
+          })
         )}
       </Text>
       <TextInput
-        ref={inputRef}
+        ref={setMergedRef}
         testID={testID}
         style={[styles.inputOverlay, style, { color: 'transparent' }]}
         placeholder={placeholder}
         placeholderTextColor={placeholderTextColor}
-        value={value}
-        onChangeText={onChangeText}
-        onSelectionChange={onSelectionChange}
+        // 受控：保证 replaceText / 原子删后原生框与纯文本 value 一致
+        value={state.text}
+        onChangeText={handleChangeText}
+        onSelectionChange={handleSelectionChange}
         editable={editable}
         multiline
-        // 透明字 + 可见 caret；高亮层在背后着色
         caretHidden={false}
         selectionColor={tokens.primary}
       />

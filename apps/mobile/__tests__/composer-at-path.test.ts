@@ -1,9 +1,11 @@
 /**
- * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；高亮分段纯函数。
+ * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；tapper facet 口径与原子删。
  */
 import { describe, expect, it } from '@jest/globals';
+import { Tapper } from '@bsky.app/tapper';
 import { scanAtPathAttachments } from '@novel-master/core/chat';
 import {
+  COMPOSER_AT_PATH_FACET_PATTERN,
   atPathTokensFromPickerSelection,
   countScannedAtPathAttachments,
   filterAtPathTypeaheadCandidates,
@@ -11,7 +13,21 @@ import {
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
 } from '../src/components/chat/composer-at-path';
-import { segmentComposerAtPathHighlight } from '../src/components/chat/composer-at-path-highlight';
+
+/** 用与 tapper 相同的 boundary 剥离逻辑收集 `@token` 列表（单测辅助）。 */
+function matchAtPathFacets(text: string): string[] {
+  const re = new RegExp(
+    COMPOSER_AT_PATH_FACET_PATTERN.source,
+    COMPOSER_AT_PATH_FACET_PATTERN.flags,
+  );
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) != null) {
+    const boundaryLen = m[1]?.length ?? 0;
+    out.push(m[0]!.slice(boundaryLen));
+  }
+  return out;
+}
 
 describe('composer-at-path (T-ATD*)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
@@ -49,13 +65,31 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(countScannedAtPathAttachments('看')).toBe(0);
   });
 
-  it('高亮分段：识别 @token；value 仍为纯字符串', () => {
-    const text = '见 @/a.md 与补充';
-    expect(segmentComposerAtPathHighlight(text)).toEqual([
-      { kind: 'text', value: '见 ' },
-      { kind: 'at-token', value: '@/a.md' },
-      { kind: 'text', value: ' 与补充' },
-    ]);
+  it('facet 正则：识别 @token（含目录尾 /）；正文仍为纯字符串', () => {
+    const text = '见 @/a.md 与 @/notes/ 补充';
+    expect(matchAtPathFacets(text)).toEqual(['@/a.md', '@/notes/']);
+    expect(text.includes('{@}')).toBe(false);
     expect(text.includes('<span')).toBe(false);
+  });
+
+  it('tapper：已提交 @路径 退格整段删除；对外 text 仍为纯字符串', () => {
+    const tapper = new Tapper({
+      facets: { atPath: COMPOSER_AT_PATH_FACET_PATTERN },
+      initialText: '见 @/a.md ',
+    });
+    // replaceText / initialText 将匹配 facet 标为 committed
+    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
+      true,
+    );
+    // 光标在 token 末尾空格前：`见 @/a.md| `
+    const tokenEnd = '见 @/a.md'.length;
+    tapper.handleSelectionChange({
+      nativeEvent: { selection: { start: tokenEnd, end: tokenEnd } },
+    });
+    // 模拟退一格（原生会删掉最后一个字符 `d`）
+    const oneCharDeleted = `${tapper.text.slice(0, tokenEnd - 1)}${tapper.text.slice(tokenEnd)}`;
+    tapper.handleTextChange(oneCharDeleted);
+    expect(tapper.text).toBe('见  ');
+    expect(tapper.text.includes('{@}')).toBe(false);
   });
 });

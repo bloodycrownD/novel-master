@@ -558,13 +558,13 @@ export function ChatComposer({
           placeholder={inputPlaceholder}
           placeholderTextColor={tokens.textSecondary}
           value={text}
+          cursor={cursor}
           onChangeText={next => {
             setText(next);
             const statusOnly = attachments.filter(
               a => a.source === 'workplace' || a.source === 'user_ops',
             );
             persistDraft(next, statusOnly);
-            setCursor(next.length);
           }}
           onSelectionChange={e => {
             setCursor(e.nativeEvent.selection.start);
