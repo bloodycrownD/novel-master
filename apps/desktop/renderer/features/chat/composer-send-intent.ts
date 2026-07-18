@@ -1,10 +1,10 @@
 /**
- * Desktop Composer 发送门闩 / 入参清洗（T-SR1 / T-SR1b）。
- * 与 ChatComposer.send / sendDisabled 同源；workplace 预览不进 payload。
+ * Desktop Composer 发送门闩 / 入参清洗（T-SR1 / T-ATD*）。
+ * 文件引用以正文 `@` 扫描为准；draft attach 恒空；workplace 预览不进 payload。
  */
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 import { hasComposerSendableInput } from "@novel-master/core/chat";
-import { partitionComposerChipAttachments } from "./AttachmentDraftChips";
+import { countScannedAtPathAttachments } from "./composer-at-path";
 
 export type ComposerSendIntentInput = {
   text: string;
@@ -19,7 +19,7 @@ export type ComposerSendIntentInput = {
 export type ComposerSendIntent = {
   hasSendable: boolean;
   allowResumeWithoutInput: boolean;
-  /** 显式 attachments 仅 attach；空则 IPC 省略该字段。 */
+  /** 显式 attachments 恒空；Core 从正文扫描 `@`。 */
   attachOnly: MessageAttachmentDto[];
   hasWorkplaceDelta: boolean;
   sendDisabled: boolean;
@@ -29,15 +29,13 @@ export function resolveComposerSendIntent(
   input: ComposerSendIntentInput,
 ): ComposerSendIntent {
   const content = input.text.trim();
-  const { attach: attachOnly } = partitionComposerChipAttachments(
-    input.attachments,
-  );
+  const scannedCount = countScannedAtPathAttachments(input.text);
   const hasWorkplaceDelta = input.attachments.some(
     (a) => a.source === "workplace",
   );
   const hasSendable = hasComposerSendableInput({
     text: content,
-    attachmentCount: attachOnly.length,
+    attachmentCount: scannedCount,
     hasPendingUserOps: input.hasPendingUserOps,
     hasWorkplaceDelta,
   });
@@ -51,7 +49,7 @@ export function resolveComposerSendIntent(
   return {
     hasSendable,
     allowResumeWithoutInput,
-    attachOnly,
+    attachOnly: [],
     hasWorkplaceDelta,
     sendDisabled,
   };

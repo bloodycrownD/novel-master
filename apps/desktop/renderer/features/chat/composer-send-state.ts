@@ -46,6 +46,9 @@ export function chatMessageFromDto(dto: ChatMessageDto): ChatMessage {
         .map(blockFromDto)
         .filter((b): b is ContentBlock => b != null),
     },
+    ...(dto.attachments != null && dto.attachments.length > 0
+      ? { attachments: dto.attachments }
+      : {}),
   };
 }
 

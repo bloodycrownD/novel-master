@@ -1,5 +1,5 @@
 /**
- * AttachmentDraftChips：emoji 文案、双条拆分、目录无 warning 色（T-UI1/T-UI2）。
+ * AttachmentDraftChips：状态 chip；无 attach 可叉行（T-UI1 / T-ATD1）。
  */
 import { describe, expect, it, jest } from '@jest/globals';
 import {
@@ -34,27 +34,6 @@ function attach(
 }
 
 describe('formatAttachmentChipLabel (T-UI1)', () => {
-  it('attach 目录为 📁/path', () => {
-    expect(
-      formatAttachmentChipLabel(
-        attach({ source: 'attach', type: 'dir', path: '/555', name: '555' }),
-      ),
-    ).toBe('📁/555');
-  });
-
-  it('attach 文件为 📄/path', () => {
-    expect(
-      formatAttachmentChipLabel(
-        attach({
-          source: 'attach',
-          type: 'text',
-          path: '/a.md',
-          name: 'a.md',
-        }),
-      ),
-    ).toBe('📄/a.md');
-  });
-
   it('workplace 为 📄/path', () => {
     expect(
       formatAttachmentChipLabel(
@@ -82,28 +61,16 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
   });
 });
 
-describe('partitionComposerChipAttachments (T-UI1)', () => {
-  it('三类并存 → 上条 workplace+user_ops、下条 attach', () => {
+describe('partitionComposerChipAttachments (T-ATD1)', () => {
+  it('仅状态 → 无 attach 可叉行', () => {
     const items = [
       attach({ source: 'workplace', type: 'text', path: '/w.md' }),
       attach({ source: 'user_ops', type: 'text', path: '/u.md' }),
-      attach({ source: 'attach', type: 'text', path: '/a.md' }),
     ];
     const { status, attach: attachOnly } =
       partitionComposerChipAttachments(items);
     expect(status.map(a => a.source)).toEqual(['workplace', 'user_ops']);
-    expect(attachOnly.map(a => a.source)).toEqual(['attach']);
+    expect(attachOnly).toHaveLength(0);
     expect(status.every(isComposerStatusAttachment)).toBe(true);
-    expect(attachOnly.every(a => a.source === 'attach')).toBe(true);
-  });
-});
-
-describe('T-UI2 目录无 warning 依赖', () => {
-  it('目录 label 用 📁 且不依赖 warning token 文案', () => {
-    const label = formatAttachmentChipLabel(
-      attach({ source: 'attach', type: 'dir', path: '/d', name: 'd' }),
-    );
-    expect(label).toBe('📁/d');
-    expect(label.includes('warning')).toBe(false);
   });
 });

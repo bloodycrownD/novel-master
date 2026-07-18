@@ -43,8 +43,8 @@ function resolveRollbackContext(message: ChatMessageDto): {
 }
 
 describe('resolveComposerDraftAfterRollbackSuccess', () => {
-  it('T-W1/T-TX2: plain user undo_send 恢复原文 + attachments chips', () => {
-    const anchorText = '你好';
+  it('T-TX2: plain user undo_send 恢复原文（含 @路径）；无文件引用 attach chip', () => {
+    const anchorText = '请看 @/a.md';
     const attachments: MessageAttachmentDto[] = [
       {
         name: '/w.md',
@@ -52,6 +52,13 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
         type: 'text',
         content: null,
         path: '/w.md',
+      },
+      {
+        name: '/a.md',
+        source: 'attach',
+        type: 'text',
+        content: null,
+        path: '/a.md',
       },
     ];
     const { rollbackMode, restoreText, restoreAttachments } =
@@ -69,11 +76,15 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
       { text: restoreText, attachments: restoreAttachments },
     );
     assert.equal(next.text, anchorText);
-    assert.deepEqual(next.attachments, attachments);
-    assert.equal(next.text.includes('<user-input>'), false);
+    assert.ok(next.text.includes('@/a.md'));
+    assert.equal(next.attachments.length, 0);
+    assert.equal(
+      next.attachments.some((a) => a.source === 'attach'),
+      false,
+    );
   });
 
-  it('T-W2: assistant rewind 回滚后 composer draft 不变', () => {
+  it('T-W2: assistant rewind 保留正文与 @，剥掉 attach chip（状态留给投影）', () => {
     const { rollbackMode, restoreText, restoreAttachments } =
       resolveRollbackContext(
         msg([{ type: 'text', text: 'assistant reply' }], 'assistant'),
@@ -84,8 +95,15 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
 
     const next = resolveComposerDraftAfterRollbackSuccess(
       {
-        text: 'unchanged draft',
+        text: 'draft with @/keep.md',
         attachments: [
+          {
+            name: 'write:/ops.md',
+            source: 'user_ops',
+            type: 'text',
+            content: null,
+            path: '/ops.md',
+          },
           {
             name: '/keep.md',
             source: 'attach',
@@ -98,8 +116,12 @@ describe('resolveComposerDraftAfterRollbackSuccess', () => {
       rollbackMode,
       { text: restoreText, attachments: restoreAttachments },
     );
-    assert.equal(next.text, 'unchanged draft');
+    assert.equal(next.text, 'draft with @/keep.md');
     assert.equal(next.attachments.length, 1);
-    assert.equal(next.attachments[0]?.path, '/keep.md');
+    assert.equal(next.attachments[0]?.source, 'user_ops');
+    assert.equal(
+      next.attachments.some((a) => a.source === 'attach'),
+      false,
+    );
   });
 });

@@ -1,5 +1,6 @@
 /**
- * Composer chip 双条：上条状态（无叉）、下条附件（有叉）。
+ * Composer 状态 chip（不可叉）：workplace + user_ops。
+ * 文件引用不再使用 attach chip（认正文 `@路径`）。
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -8,12 +9,12 @@ import { useTheme } from '@/theme/ThemeProvider';
 
 export type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachment[];
-  /** false = 状态条（无叉）；true = 附件条（有叉）。 */
+  /** false = 状态条（无叉）；true = 附件条（有叉，已废止）。 */
   showRemove?: boolean;
   onRemove?: (index: number) => void;
   disabled?: boolean;
   accessibilityLabel?: string;
-  /** 行容器透明（状态条叠在对话区上时用）。 */
+  /** 行容器透明。 */
   transparentRow?: boolean;
 };
 
@@ -22,7 +23,7 @@ export function isComposerStatusAttachment(a: MessageAttachment): boolean {
   return a.source === 'workplace' || a.source === 'user_ops';
 }
 
-/** 拆成上条（状态）/ 下条（attach）。 */
+/** 拆成状态 / attach（attach 仅兼容旧数据过滤，UI 不再渲染）。 */
 export function partitionComposerChipAttachments(
   attachments: readonly MessageAttachment[],
 ): {
@@ -114,7 +115,7 @@ export function AttachmentDraftChips({
   );
 }
 
-/** 状态条（无叉）：由 Composer 放在输入框外上方。 */
+/** 状态 chip（无叉）：放在输入框内顶部。 */
 export function ComposerStatusChips({
   attachments,
   disabled,
@@ -134,28 +135,6 @@ export function ComposerStatusChips({
   );
 }
 
-/** 附件条（有叉）：放在输入框内部。 */
-export function ComposerAttachChips({
-  attachments,
-  onRemoveAttach,
-  disabled,
-}: {
-  attachments: readonly MessageAttachment[];
-  onRemoveAttach: (attachIndex: number) => void;
-  disabled?: boolean;
-}) {
-  const { attach } = partitionComposerChipAttachments(attachments);
-  return (
-    <AttachmentDraftChips
-      attachments={attach}
-      showRemove
-      disabled={disabled}
-      onRemove={onRemoveAttach}
-      accessibilityLabel="待发送附件"
-    />
-  );
-}
-
 const styles = StyleSheet.create({
   row: { maxHeight: 36, marginBottom: 6 },
   rowTransparent: {
@@ -169,7 +148,6 @@ const styles = StyleSheet.create({
     maxWidth: 200,
     paddingVertical: 6,
     paddingLeft: 10,
-    // 有/无叉共用右侧内边距基准；叉号挤在固定槽内，避免「整块更胖」
     paddingRight: 10,
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,

@@ -6,7 +6,21 @@ export type ComposerDraftSnapshot = {
   readonly attachments: readonly MessageAttachmentDto[];
 };
 
-/** undo_send 成功后将 Composer 恢复为锚点原文 + attachments；rewind 路径保持当前输入不变。 */
+function isComposerStatusAttachment(a: MessageAttachmentDto): boolean {
+  return a.source === 'workplace' || a.source === 'user_ops';
+}
+
+/** 回填仅保留状态投影；文件引用认正文 `@路径`，不再恢复 attach chip。 */
+function statusOnly(
+  attachments: readonly MessageAttachmentDto[],
+): MessageAttachmentDto[] {
+  return attachments.filter(isComposerStatusAttachment);
+}
+
+/**
+ * undo_send：恢复锚点原文（含 `@路径`）；attachments 仅状态投影位（通常由 kkv 清空后重投影填充）。
+ * rewind：保留当前正文，剥掉文件引用 attach chip。
+ */
 export function resolveComposerDraftAfterRollbackSuccess(
   current: ComposerDraftSnapshot,
   rollbackMode: RollbackMode,
@@ -18,12 +32,13 @@ export function resolveComposerDraftAfterRollbackSuccess(
   if (rollbackMode === 'undo_send' && restore.text != null) {
     return {
       text: restore.text,
-      attachments: [...(restore.attachments ?? [])],
+      // 不恢复消息上的 attach chip；状态由投影接管
+      attachments: [],
     };
   }
   return {
     text: current.text,
-    attachments: [...current.attachments],
+    attachments: statusOnly(current.attachments),
   };
 }
 
