@@ -12,7 +12,8 @@ dependency:
 > **平台**：Mobile（Android + iOS）+ Desktop（`apps/mobile`、`apps/desktop`）  
 > **性质**：重构 **常驻工作区**（原 worktree / 提示词文件块）为 **session kkv 双域持久化**；新增 **消息附件（attachment）** 与 **Composer 输入区改版**；移除全部 capture / 刷新能力；统一 UI 命名。  
 > **Supersede**：[`worktree-engine-convergence`](../worktree-engine-convergence/prd.md) 中 **五类 capture 白名单、手动「工作树快照」、run/预览前 lazy capture、进程内 BlockStore**；[`vfs-user-ops-unified-tool-turn`](../vfs-user-ops-unified-tool-turn/prd.md) 中 **transcript `user_vfs_turn` 工具卡片** 与 **发送时 UA 独立消息对** 的用户可见形态；[`agent-worktree-block-ui`](../agent-worktree-block-ui/prd.md) 中 **「工作树」相关 UI 文案**（改为「常驻工作区」）。  
-> **局部 supersede（Feature）**：Composer **双条**、pending→kkv、draft→`chat_session`、ops/workplace **不可叉** —— 见 [`features/composer-ops-chip-lifecycle/`](features/composer-ops-chip-lifecycle/prd.md)。  
+> **局部 supersede（Feature）**：Composer **双条**、pending→kkv、draft→`chat_session`、ops/workplace **不可叉** —— 见 [`features/composer-ops-chip-lifecycle/`](features/composer-ops-chip-lifecycle/prd.md)。再局部 supersede（`@token`、提示词 path 去重、去 UA 折卡、回填口径）—— 见 [`features/composer-at-token-prompt-dedup/`](features/composer-at-token-prompt-dedup/prd.md)。  
+> **废止（以 Feature `composer-at-token-prompt-dedup` 为准）**：**历史 UA 只读折卡**（含 SPEC **T-UO2**）；以及「**每次文件 attach 均全文进提示词**」——改为可见序首次全文、其后短提示。  
 > **不包含**：技术方案、接口设计、库表结构、任务拆分（见后续 SPEC）。
 
 ## 背景
@@ -176,6 +177,7 @@ dependency:
 **单文件引用**
 
 - 落库时 attach 同样 **可不含 content**；**export / 发送拼 prompt** 时 hydrate：文件缓存域命中则用缓存，否则 VFS 加载并写入缓存。加载档位同目录叶子约定（默认文本 full、二进制 filename，见 SPEC）。
+- **废止「每次文件 attach 均全文」**：同一可见上下文中同 path 再次出现时，文本 attach 进提示词为短提示（非常驻/目录等细则见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/prd.md)）。
 
 **G. user_ops 附件**
 
@@ -250,7 +252,7 @@ dependency:
 - **skill 附件**（`source=skill` 仅预留）。
 - worktree **规则表** 结构大改（规则引擎小改）。
 - CLI 全量对齐。
-- 旧会话 UA 消息对 / capture 块迁移细节（SPEC 定义）。
+- ~~旧会话 UA 消息对 / capture 块迁移细节（SPEC 定义）~~：**历史 UA 只读折卡已废止**（按普通消息展示、不做数据升级）；见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/prd.md)。capture 块迁移仍不在本期。
 - 文件引用选择器内的 **规则编辑**（纳入/目录 head-tail）；仍走工作区管理页。
 
 ## 核心需求
@@ -315,7 +317,7 @@ dependency:
 - [ ] **Given** 用户通过 `@` 按钮在文件引用选择器中 **多选两个文件** 并确认，**When** 回到 Composer，**Then** 附件草稿区出现 **两条** `@path` 引用。
 - [ ] **Given** 用户在 Composer 正文手输 `@notes/a.md`（chips 无该 path），**When** 发送，**Then** 消息 attachments 含对应 attach 条目，且气泡/正文 **仍可见** `@notes/a.md`。
 - [ ] **Given** 用户在选择器中选择 **目录** `notes/` 并确认，**When** 发送后查看真实提示词，**Then** prompt 中该引用以 **`notes/` 为根的递归文件树** 呈现，**而非** 将 `notes/` 下所有文件 path 展平为顶层同级列表。
-- [ ] **Given** 用户 `@` 单文件，**When** export / 发送拼 prompt，**Then** hydrate 后按文件缓存域 / VFS 加载单文件内容并参与拼接（档位见 SPEC：默认文本 full、二进制 filename）。
+- [ ] **Given** 用户 `@` 单文件，**When** export / 发送拼 prompt，**Then** hydrate 后按文件缓存域 / VFS 加载单文件内容并参与拼接（档位见 SPEC：默认文本 full、二进制 filename）。**注**：同 path 非首次 → 短提示而非全文，见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/prd.md)（废止「每次均全文」）。
 - [ ] **Given** 同一会话查看真实提示词 / 计算 token / Agent 发送，**When** 对比 user 段附件 wrap，**Then** 三者走同一套 hydrate + wrap 拼装结果（实现入口见 SPEC）。
 
 ### user_ops
@@ -360,7 +362,7 @@ dependency:
 | **目录树深度与 token** | 大目录 `@` 引用时的截断/折叠策略，SPEC 定义 |
 | **规则快照刷新时机** | 改规则后规则快照域何时更新 vs 仅附件增量，SPEC 定义 |
 | **condition 压缩** | 是否清空 kkv |
-| **历史会话** | 旧 UA 对 / capture 会话兼容 |
+| **历史会话** | ~~旧 UA 对只读折卡兼容~~ **已废止**；旧 UA 按普通气泡。capture 会话兼容仍见 SPEC / Feature `composer-at-token-prompt-dedup` |
 | **空发续跑** | 仅附件无文字时的发送序列 |
 | **更多菜单其余项** | 重命名、查看提示词是否后续迁入 Composer，本期不强制 |
 | **图片/二进制 @** | 非文本文件的引用展示与缓存，SPEC 定义 |

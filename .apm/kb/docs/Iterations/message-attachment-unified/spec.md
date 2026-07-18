@@ -12,13 +12,18 @@ date: 2026-07-14
 > - [`vfs-user-ops-unified-tool-turn`](../vfs-user-ops-unified-tool-turn/spec.md) — flush 落 UA 两段 + `user_vfs_turn` 卡片用户形态
 > - [`agent-worktree-block-ui`](../agent-worktree-block-ui/prd.md) — 用户文案「工作树」→「常驻工作区」（wire `type:"worktree"` **可保留**）
 > - [`composer-ops-chip-lifecycle`](features/composer-ops-chip-lifecycle/spec.md) — Composer **双条**、pending→kkv、draft→`chat_session`、ops/workplace **不可叉**（本 Feature 局部 supersede）
+> - [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md) — 再局部 supersede：`@` 以输入框 token 为准、提示词 path 去重/短提示、assemble→prepare+S0、去 UA 折卡、回填不写 attach chip（契约以该 Feature 为准）
+>
+> **废止（以 Feature `composer-at-token-prompt-dedup` 为准）**：
+> - **历史 UA 只读折卡** / 验收 **T-UO2**（`matchUserVfsTurnAtForDisplay` 折叠旧 UA 为工具卡）——改为普通气泡；替代测见该 Feature **T-UO2x**。
+> - **每次文件 attach 均全文进提示词**——改为可见序首次全文、其后短提示（常驻前缀 path 计入已出现）；细则见该 Feature。
 
 ## 设计目标
 
 1. **常驻工作区前缀**：以 session kkv（规则快照域 + 文件缓存域）替代进程内 capture 块；查看提示词 / token / Agent 发送共用执行引擎。
-2. **附件增量**：message attachments + Composer 草稿承载 workplace 新 path、`@` 文件/目录、user_ops；**仅**经异步 `prepareUserMessagesForPrompt` hydrate + wrap 为 `<attachment>…</attachment><user-input>…`（`normalizeForLlmExport` 保持 sync）。
-3. **去 capture / 去 UA 卡**：删除五类 capture、手动快照、lazy capture；新会话不再写 UA 对；旧 UA 只读兼容展示。
-4. **Composer 双端改版**：Mobile 大框 + 框内「更多/@/发送」；Desktop 补 `@`；文件引用选择器；附件 chip。
+2. **附件增量**：message attachments + Composer 草稿承载 workplace 新 path、`@` 文件/目录、user_ops；**仅**经异步 `prepareUserMessagesForPrompt` hydrate + wrap 为 `<attachment>…</attachment><user-input>…`（`normalizeForLlmExport` 保持 sync）。提示词侧 path 去重 / 短提示见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md)。
+3. **去 capture / 去 UA 卡**：删除五类 capture、手动快照、lazy capture；新会话不再写 UA 对。~~旧 UA 只读兼容展示~~ **已废止**（见上；旧消息按普通气泡，不再折卡）。
+4. **Composer 双端改版**：Mobile 大框 + 框内「更多/@/发送」；Desktop 补 `@`；文件引用选择器；附件 chip（文件引用 chip / `@token` 口径以 Feature 为准）。
 5. **最小兼容**：checkpoint 写盘时机不变；Explorer/`$filetree` 仍实时规则引擎不读 kkv。
 
 ## 总体方案
@@ -62,7 +67,7 @@ date: 2026-07-14
 | **文件缓存与写盘** | 见下节「write / edit 与 `file_cache`」：**仅整文件 `write` 成功 → upsert `full:{path}`**；**`edit` / `delete` / `rename` / `move` 均不碰 `file_cache`**（保守：避免删→回滚→再引用时误判为首次加载而重复拼接）。整桶清空仅置位/压缩/删会话。 |
 | **大目录 @** | 递归深度默认 **无硬限制**；单次拼装若 UTF-8 总长 > **512KiB** 截断并在树末追加 `[truncated]` 注释行（可调常量）。 |
 | **二进制 / 图片 @** | 本期按 **filename** 档进缓存（仅 basename 行）；不塞 base64。 |
-| **历史 UA** | **只读兼容**：`matchUserVfsTurnAtForDisplay` 仍折叠旧 UA 为卡片；**新路径绝不再 flush UA**。 |
+| **历史 UA** | **已废止「只读折卡」**（原：`matchUserVfsTurnAtForDisplay` 折叠旧 UA 为卡片）。现口径：旧 `user_vfs_action` / ack 按普通气泡渲染；**新路径绝不再 flush UA**。见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md)。 |
 | **空发续跑** | trim 非空 **或** `attachments` 非空 **或** pending→将产生 `user_ops` → **等价于有输入**；可不要求文字。末条 plain user 禁带字规则：若仅刷新附件续跑，SPEC 允许「仅附件 + allowResume」走 prepare 重排。 |
 | **Wire** | 保留 `type:"worktree"` / `name:"canon"`；UI 文案改「常驻工作区」。 |
 | **session kkv 物理表** | 新表 `session_kkv_entry`，**不**复用全局 `kkv_entry`。 |
@@ -120,7 +125,7 @@ type MessageAttachment = {
 
 1. 遍历 messages；**跳过 hidden**（其 `attachments_json` 可仍在库，但不参与本函数输出侧的 hydrate/wrap）。
 2. 对非 hidden 的 user 消息：读 `content_json` 原文 + `attachments`；
-3. 对 `source=workplace|attach` 且 `content==null` 做 hydrate（file_cache / VFS，并可写回 `file_cache`）；
+3. 对 `source=workplace|attach` 且 `content==null` 做 hydrate（file_cache / VFS，并可写回 `file_cache`）。**废止隐含期望「每次文件 attach 均全文」**：可见序非首次文本 attach → 短提示（不必读盘）；workplace 非首次 → 不进 wrap body；常驻前缀 path 先计入已出现。契约见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md)。
 4. 有附件时产出 wrap 后的 **内存** user 正文（**不写回** `content_json`）：
 
 ```text
@@ -335,7 +340,7 @@ interface TrailingUserSnapshot {
 ### 旧卡片
 
 - 新消息：无 `user_vfs_action`/`ack` → `buildChatListItems` 不合成新卡。
-- 旧消息：保留 matcher；可选后续迁移不在本期。
+- ~~旧消息：保留 matcher；可选后续迁移不在本期。~~ **已废止「历史 UA 只读折卡」**：列表不再调用 `matchUserVfsTurnAtForDisplay`；旧 UA 两段按普通 `message` 行渲染。见 [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md)（替代测 **T-UO2x**）。
 
 ## 最终项目结构（新增重点）
 
@@ -395,7 +400,7 @@ apps/desktop/renderer/features/chat/
 - Step 4 — phase-clear-hooks — blocking: yes — qa: auto：置位、手动压缩、condition 压缩成功 → `clearSession`；双端去掉 capture 调用
 - Step 5 — phase-attachments-schema — blocking: yes — qa: auto：`attachments_json` 列 + Zod `MessageAttachment` + `ChatMessage.attachments` + repository / `MessageService.append` round-trip（见 **API / IPC 契约**）
 - Step 6 — phase-wrap-user — blocking: yes — qa: auto：落地 `prepareUserMessagesForPrompt`（hydrate + wrap，跳过 hidden）+ `wrapUserMessageForLlm`；目录树渲染；attach 写 file_cache status 表；截断常量；`normalizeForLlmExport` **保持 sync**（禁塞 hydrate）且 **attachments 禁 merge**；单测 T-AT* + T-TX* + T-PR*；与 **Step 11** 交叉：发送/预览/token 调用点可本 Step stub、Step 11 收口
-- Step 7 — phase-user-ops-attach — blocking: yes — qa: auto：flush 改产出 attachments（`content`=action XML）并入 append；**不**把 wrap 写入 content_json；不再 insert UA；pending 清空；`prepareUserVfsTurnForAgentRun`：`TrailingUserSnapshot` **含 attachments**，delete+re-append 不丢；旧会话展示回归测保留 matcher；单测 T-UO* + T-TS1
+- Step 7 — phase-user-ops-attach — blocking: yes — qa: auto：flush 改产出 attachments（`content`=action XML）并入 append；**不**把 wrap 写入 content_json；不再 insert UA；pending 清空；`prepareUserVfsTurnForAgentRun`：`TrailingUserSnapshot` **含 attachments**，delete+re-append 不丢；~~旧会话展示回归测保留 matcher~~（**T-UO2 / 折卡已废止**，改见 Feature `composer-at-token-prompt-dedup` **T-UO2x**）；单测 T-UO1 / T-UO3 + T-TS1
 - Step 8 — phase-rule-delta-draft — blocking: yes — qa: auto：`diffWorkplacePaths(live, cacheKeys)`（**任一 status key 命中即已加载**；计入 attach 已写 keys）；规则保存 → Desktop **`composerAttachmentsSuggest`** / Mobile 写 draft（载荷 `{ sessionId, attachments }`）；单测 T-RD*
 - Step 9 — phase-composer-shell — blocking: yes — qa: manual_user：Mobile 大框 + 工具栏；Desktop `@`；更多菜单三项；删快照入口；文案「常驻工作区」
 - Step 10 — phase-composer-draft-picker — blocking: yes — qa: manual_user：chips；FileReferencePicker 多选/目录；draft `{text,attachments}` 接到发送
@@ -422,7 +427,7 @@ apps/desktop/renderer/features/chat/
 - **T-PR1** — blocking: yes — Step 6：**Given** 已 wrap 的带 attachments user + 相邻 plain user；**When** `normalizeForLlmExport`；**Then** **不** merge（与旧 VFS semantic 同待遇）
 - **T-PR2** — blocking: yes — Step 6：`normalizeForLlmExport` 签名/实现仍为 **sync**（无 async hydrate 依赖）
 - **T-UO1** — blocking: yes — Step 7：executeOp+flush/send 路径 **不** 产生 `user_vfs_action` 行
-- **T-UO2** — blocking: yes — Step 7：旧 fixture UA 两段仍能 match 展示卡
+- **T-UO2** — ~~blocking: yes — Step 7：旧 fixture UA 两段仍能 match 展示卡~~ **已废止**（历史 UA 只读折卡）。替代：Feature [`composer-at-token-prompt-dedup`](features/composer-at-token-prompt-dedup/spec.md) **T-UO2x**（历史 UA → 普通 `message`，无 `user_vfs_turn`）
 - **T-UO3** — blocking: yes — Step 7：user_ops attachment.`content` 为 action XML（非 JSON object 字符串）
 - **T-TS1** — blocking: yes — Step 7：**Given** 空续跑重排且末条 user 带 attachments；**When** delete+re-append；**Then** 写回消息 `attachments` 与暂存一致（不丢）
 - **T-RD1** — blocking: yes — Step 8：live 有新 path、cache 无 → diff 返回该 path；全命中（含 attach 已写 key）→ `[]`
