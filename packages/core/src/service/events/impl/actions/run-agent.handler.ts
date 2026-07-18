@@ -20,7 +20,7 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
-import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
@@ -33,7 +33,7 @@ export interface RunAgentHandlerDeps {
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
+  readonly sessionKkv: SessionKkvService;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
@@ -83,6 +83,7 @@ export async function runRunAgentAction(
         projectId: ctx.projectId,
         sessionId: ctx.sessionId,
         listSessionMessages: () => deps.messages.listBySession(ctx.sessionId),
+        sessionKkv: deps.sessionKkv,
       },
       includeCompactionOrchestrator: false,
     }),

@@ -76,10 +76,10 @@ import {
   toggleDirRuleEnabled,
   vfsScopeRootPath,
 } from '../../services/worktree-operations.service';
+import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workplace-rule-delta-draft.service';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
 import { exportVfsZip, importVfsZip } from '../../services/vfs-zip.service';
-import { captureSessionWorktreeBlockForMobile } from '../../services/worktree-block.service';
 import { useTheme } from '../../theme/ThemeProvider';
 import { TemplatePullButton } from '../template/TemplatePullButton';
 import { useToast } from '../chrome/ToastHost';
@@ -205,15 +205,6 @@ export const VfsFileManager = forwardRef<
 
   useDismissOverlaysOnBlur(dismissAllOverlays);
 
-  const captureSessionBlock = useCallback(async () => {
-    if (scope.kind === 'session') {
-      await captureSessionWorktreeBlockForMobile(runtime, {
-        projectId: scope.projectId,
-        sessionId: scope.sessionId,
-      });
-    }
-  }, [runtime, scope]);
-
   useEffect(() => {
     setCurrentPath(root);
   }, [root]);
@@ -328,9 +319,19 @@ export const VfsFileManager = forwardRef<
   }, [reload]);
 
   const reloadAfterRuleChange = useCallback(async () => {
-    await captureSessionBlock();
     await reload();
-  }, [captureSessionBlock, reload]);
+    if (sessionId != null) {
+      try {
+        await suggestWorkplaceAttachmentsToComposerDraft(
+          runtime,
+          worktree,
+          sessionId,
+        );
+      } catch {
+        // 差集推送失败不阻断列表刷新
+      }
+    }
+  }, [reload, runtime, sessionId, worktree]);
 
   useImperativeHandle(
     ref,
@@ -479,8 +480,18 @@ export const VfsFileManager = forwardRef<
       if (action === 'toggle-include' && meta) {
         if (menuRow.kind === 'file' && meta.kind === 'file') {
           await cycleFileInclusion(worktree, menuPath, meta.inclusionMode);
-          await captureSessionBlock();
           await refreshVisibleRowsFromWorktree();
+          if (sessionId != null) {
+            try {
+              await suggestWorkplaceAttachmentsToComposerDraft(
+                runtime,
+                worktree,
+                sessionId,
+              );
+            } catch {
+              // ignore
+            }
+          }
           return;
         }
         if (menuRow.kind === 'dir') {
@@ -502,13 +513,23 @@ export const VfsFileManager = forwardRef<
               row.path === menuPath ? patchDirRuleRow(row, nextEnabled) : row,
             ),
           );
-          await captureSessionBlock();
           // WHY: child file inclusion/display only changes inside the toggled dir.
           if (
             currentPath === menuPath ||
             currentPath.startsWith(`${menuPath}/`)
           ) {
             await reload();
+          }
+          if (sessionId != null) {
+            try {
+              await suggestWorkplaceAttachmentsToComposerDraft(
+                runtime,
+                worktree,
+                sessionId,
+              );
+            } catch {
+              // ignore
+            }
           }
           return;
         }

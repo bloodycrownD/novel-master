@@ -9,6 +9,7 @@ import type { EventsConfigStore } from "@/service/events-config/events-config-st
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { DepthSlice } from "@/domain/depth/logic/depth-slice.js";
 import {
   EVENT_SESSION_COMPACTION_REQUESTED,
@@ -42,6 +43,7 @@ export interface DefaultEventOrchestratorDeps {
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
+  readonly sessionKkv: SessionKkvService;
   readonly runAgent?: RunAgentHandlerDeps;
 }
 
@@ -120,10 +122,18 @@ export class DefaultEventOrchestrator implements EventOrchestrator {
   async emit(eventType: string, ctx: EventEmitContext): Promise<EventRunResult> {
     const config = await this.deps.eventsConfig.getConfig();
     const nodes = config.events[eventType];
-    if (nodes == null) {
-      return { ok: true, partialFailure: false, failures: [] };
+    const result =
+      nodes == null
+        ? ({ ok: true, partialFailure: false, failures: [] } as const)
+        : await this.runDag(nodes, ctx);
+    // 手动 / condition 压缩成功：清空 session kkv（与置位同口径）
+    if (
+      result.ok &&
+      eventType === EVENT_SESSION_COMPACTION_REQUESTED
+    ) {
+      await this.deps.sessionKkv.clearSession(ctx.sessionId);
     }
-    return this.runDag(nodes, ctx);
+    return result;
   }
 
   private async runDag(

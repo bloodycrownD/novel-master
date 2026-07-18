@@ -6,11 +6,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { textBlocks } from "@novel-master/core/chat";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
-import { SqliteSessionRepository } from "../../src/domain/chat/repositories/impl/sqlite-session.repository.js";
+import {
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
 import {
   createTruncateTailDepsFromTx,
   truncateTailInTransaction,
 } from "../../src/service/message-checkpoint/truncate-tail-wiring.js";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
 import { getNovelMasterTestContext, novelMasterTestFixture, testIsolationSuffix } from "../helpers/novel-master-fixture.js";
 
 novelMasterTestFixture();
@@ -49,12 +53,17 @@ describe("truncateTailInTransaction", () => {
     assert.equal((await svfs.read("/a.md")).content, "v1");
   });
 
-  it("tail 非空时清空 user_vfs_pending_json", async () => {
+  it("tail 非空时清空 user_vfs_pending kkv", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessions = new SqliteSessionRepository(ctx.conn);
-    await sessions.setUserVfsPendingJson(session.id, '{"entries":[]}');
+    const sessionKkv = createSessionKkvService(ctx.conn);
+    await sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+      "[]",
+    );
 
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("1"));
     await ctx.messages.append(session.id, "user", textBlocks("2"));
@@ -68,17 +77,28 @@ describe("truncateTailInTransaction", () => {
       });
     });
 
-    const updated = await ctx.sessions.get(session.id);
-    assert.equal(updated.userVfsPendingJson, null);
+    assert.equal(
+      await sessionKkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        USER_VFS_PENDING_QUEUE_KEY,
+      ),
+      null,
+    );
   });
 
   it("afterSeq 之后无消息时不改 pending", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
-    const sessions = new SqliteSessionRepository(ctx.conn);
-    const pendingJson = '{"entries":[]}';
-    await sessions.setUserVfsPendingJson(session.id, pendingJson);
+    const sessionKkv = createSessionKkvService(ctx.conn);
+    const pendingJson = "[]";
+    await sessionKkv.set(
+      session.id,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+      pendingJson,
+    );
 
     const m1 = await ctx.messages.append(session.id, "user", textBlocks("only"));
 
@@ -91,7 +111,13 @@ describe("truncateTailInTransaction", () => {
       });
     });
 
-    const updated = await ctx.sessions.get(session.id);
-    assert.equal(updated.userVfsPendingJson, pendingJson);
+    assert.equal(
+      await sessionKkv.get(
+        session.id,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        USER_VFS_PENDING_QUEUE_KEY,
+      ),
+      pendingJson,
+    );
   });
 });

@@ -2,7 +2,7 @@ import {
   buildRichContentCssRules,
   CHAT_TRANSCRIPT_RICH_CSS,
   RICH_DOCUMENT_RICH_CSS,
-} from '../src/web/rich-content-styles';
+} from '../src/web/shared/rich-content-styles';
 
 describe('rich-content-styles', () => {
   it('includes list padding for shared rich rules', () => {

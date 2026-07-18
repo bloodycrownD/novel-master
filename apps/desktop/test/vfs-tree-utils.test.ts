@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ancestorDirPaths,
+  isDirectChild,
   logicalPathForSegmentIndex,
   logicalPathSegments,
+  parentLogicalPath,
   vfsEntryStatusText,
 } from "@/features/workspace/vfs-tree-utils";
 import type { WorktreeListRowDto } from "@shared/ipc-types";
@@ -40,6 +42,16 @@ test("ancestorDirPaths 返回根到目标目录链", () => {
     "/notes",
     "/notes/ch1.md",
   ]);
+});
+
+test("parentLogicalPath / isDirectChild 与 Mobile 对齐", () => {
+  assert.equal(parentLogicalPath("/"), null);
+  assert.equal(parentLogicalPath("/notes"), "/");
+  assert.equal(parentLogicalPath("/notes/ch1.md"), "/notes");
+  assert.equal(isDirectChild("/", "/a.md"), true);
+  assert.equal(isDirectChild("/", "/sub/a.md"), false);
+  assert.equal(isDirectChild("/notes", "/notes/a.md"), true);
+  assert.equal(isDirectChild("/", "/"), false);
 });
 
 test("T-WEC15：vfsEntryStatusText 正向映射 enum 为中文标签", () => {

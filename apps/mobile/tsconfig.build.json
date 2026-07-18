@@ -4,5 +4,11 @@
     "types": ["jest", "node"]
   },
   "include": ["src/**/*", "index.js"],
-  "exclude": ["**/node_modules", "**/Pods", "__tests__/**/*"]
+  "exclude": [
+    "**/node_modules",
+    "**/Pods",
+    "__tests__/**/*",
+    "src/web/**/webview/**",
+    "src/web/shared/ui/**"
+  ]
 }

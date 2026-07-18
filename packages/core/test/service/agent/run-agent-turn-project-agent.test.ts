@@ -9,7 +9,6 @@ import {
   type AgentTurnRuntimePort,
 } from "@novel-master/core/agent";
 import type { UserVfsTurnService } from "@/service/chat/user-vfs-turn.port.js";
-import { createSessionWorktreeBlockStore } from "@novel-master/core/worktree";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -40,7 +39,9 @@ const customDefinition: AgentDefinition = {
 function mockUserVfsTurn(): UserVfsTurnService {
   return {
     executeOp: async () => ({ ok: true }),
-    flushPendingUserVfsTurns: async () => ({ flushed: false }),
+    flushPendingUserVfsTurns: async () => ({ flushed: false, attachments: [] }),
+    previewUserOpsChangedPaths: async () => [],
+    previewUserOpsActions: async () => [],
     hasPendingTurns: async () => false,
   };
 }
@@ -66,7 +67,6 @@ function makeRuntime(
       capture: async () => undefined,
     } as AgentTurnRuntimePort["messageCheckpoint"],
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    worktreeBlockStore: createSessionWorktreeBlockStore(),
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
@@ -79,7 +79,19 @@ function makeRuntime(
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        evaluateRuleView: async () => ({
+          rows: [],
+          displayByPath: new Map(),
+        }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+    sessionKkv: {
+      get: async () => null,
+      set: async () => undefined,
+      delete: async () => undefined,
+      clearDomain: async () => undefined,
+      clearSession: async () => undefined,
+      listKeys: async () => [],
+    },
     userVfsTurn: mockUserVfsTurn(),
   };
 }

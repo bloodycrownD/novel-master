@@ -5,6 +5,7 @@
  */
 import type {
   IpcResult,
+  UserVfsHasPendingRequest,
   VfsDeleteRequest,
   VfsListEntryDto,
   VfsListRequest,
@@ -43,7 +44,6 @@ import {
   importVfsZipWithDialog,
 } from "../../services/vfs-zip.service.js";
 import {
-  captureSessionWorktreeBlockForScope,
   getVfsForScope,
   getWorktreeForScope,
   resolveVfsScopeFromRequest,
@@ -211,9 +211,6 @@ export async function handleVfsDelete(
 
     const wt = getWorktreeForScope(rt, scope);
     await wt.deleteRulesUnderLogicalPrefix(req.path);
-    if (scope.kind === "session") {
-      await captureSessionWorktreeBlockForScope(rt, scope);
-    }
 
     pushWorkspaceMutated(req);
     return { ok: true, data: undefined };
@@ -284,6 +281,19 @@ export async function handleVfsZipImport(
       focusedWindow(),
     );
     return { ok: true, data: result };
+  } catch (err) {
+    return { ok: false, error: formatIpcError(err) };
+  }
+}
+
+/** Composer 空发门闩：会话是否有 pending→user_ops。 */
+export async function handleUserVfsHasPending(
+  req: UserVfsHasPendingRequest,
+): Promise<IpcResult<boolean>> {
+  try {
+    const rt = await getDesktopRuntime();
+    const has = await rt.userVfsTurn.hasPendingTurns(req.sessionId);
+    return { ok: true, data: has };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }

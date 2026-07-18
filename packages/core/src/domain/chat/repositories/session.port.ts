@@ -24,12 +24,15 @@ export interface SessionRepository {
 
   deleteByProject(projectId: string): Promise<void>;
 
-  /** 读取会话 `user_vfs_pending_json` 列；无行时返回 `null`。 */
-  getUserVfsPendingJson(sessionId: string): Promise<string | null>;
+  /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
+  getComposerDraftJson(id: string): Promise<string | null>;
 
-  /** 写入或清空会话 `user_vfs_pending_json` 列。 */
-  setUserVfsPendingJson(
-    sessionId: string,
-    json: string | null,
+  /**
+   * 写入 `composer_draft_json`；`draftJson` 为 null 时清空列。
+   * 不更新 `updated_at_ms`（草稿高频写，不冒充会话列表活动时间）。
+   */
+  setComposerDraftJson(
+    id: string,
+    draftJson: string | null,
   ): Promise<boolean>;
 }

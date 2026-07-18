@@ -1,5 +1,5 @@
 /**
- * T-WEC4：Desktop IPC handleMessagesSetFloor effects 成功后 capture。
+ * T-SF1：Desktop IPC handleMessagesSetFloor 清空 session kkv，不 capture。
  * T-SF18：幂等置位返回零变更 counts，驱动 Toast「上下文已是最新状态」。
  */
 import assert from 'node:assert/strict';
@@ -66,8 +66,8 @@ describe('handleMessagesSetFloor', () => {
     return result.data.id;
   }
 
-  it('T-WEC4: 委托 messageTranscriptEffects 并 capture block', async () => {
-    const sessionId = await createSession('wec4');
+  it('T-SF1: 置位成功 clear session kkv，不依赖 BlockStore capture', async () => {
+    const sessionId = await createSession('sf1');
     const rt = await getDesktopRuntime();
     await appendMessage(sessionId, 'user', 'u1');
     await appendMessage(sessionId, 'assistant', 'a1');
@@ -75,9 +75,11 @@ describe('handleMessagesSetFloor', () => {
     await appendMessage(sessionId, 'assistant', 'a2');
     await rt.messages.hideRange(sessionId, 3, 4);
 
-    assert.equal(
-      rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId),
-      undefined,
+    await rt.sessionKkv.set(
+      sessionId,
+      'file_cache',
+      'full:/a.md',
+      JSON.stringify({ body: 'x', mtimeMs: 1 }),
     );
 
     const result = await handleMessagesSetFloor({
@@ -92,9 +94,10 @@ describe('handleMessagesSetFloor', () => {
       assert.equal(result.data.shownCount, 2);
     }
 
-    const block = rt.worktreeBlockStore.getCapturedBlock(projectId, sessionId);
-    assert.notEqual(block, undefined);
-    assert.equal(typeof block!.capturedAtMs, 'number');
+    assert.equal(
+      await rt.sessionKkv.get(sessionId, 'file_cache', 'full:/a.md'),
+      null,
+    );
 
     const anchor = await rt.messages.get(anchorId);
     const messages = await rt.messages.listBySession(sessionId);
@@ -109,7 +112,6 @@ describe('handleMessagesSetFloor', () => {
 
   it('T-SF18: 幂等置位返回零变更 counts，Toast「上下文已是最新状态」', async () => {
     const sessionId = await createSession('sf18');
-    const rt = await getDesktopRuntime();
     await appendMessage(sessionId, 'user', 'u1');
     await appendMessage(sessionId, 'assistant', 'a1');
     const anchorId = await appendMessage(sessionId, 'user', 'u2');

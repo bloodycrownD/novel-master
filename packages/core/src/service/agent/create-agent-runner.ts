@@ -13,7 +13,7 @@ import type { SavedModelRepository } from "@/domain/provider/repositories/saved-
 import type { ModelRequestService } from "../provider/model-request.port.js";
 import type { RegexConfigService } from "../regex/regex-config.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
-import type { SessionWorktreeBlockStore } from "../prompt/session-worktree-block.port.js";
+import type { SessionKkvService } from "../session-kkv/session-kkv.port.js";
 import type { WorktreeService } from "../worktree/worktree.port.js";
 import type { CompactionConditionEvaluator } from "../compaction-conditions/create-compaction-condition-evaluator.js";
 import type { EventOrchestrator } from "../events/event-orchestrator.port.js";
@@ -28,10 +28,11 @@ export interface CreateAgentRunnerDeps {
   readonly registry: ToolRegistry<BuiltinToolContext>;
   readonly toolCtx: BuiltinToolContext;
   readonly eventBus: SimpleEventBus;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
+  /** 常驻工作区前缀经 {@link assembleWorkplaceDisplay} 读写。 */
+  readonly sessionKkv: SessionKkvService;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   /**
-   * mutating 工具并行 settled 后同步 capture；失败会中断当前 agent run。
+   * mutating 工具并行 settled 后同步 checkpoint；失败会中断当前 agent run。
    * @remarks 在 append tool_results 之前 await，避免对话继续但无 checkpoint。
    */
   readonly messageCheckpoint?: MessageCheckpointService;

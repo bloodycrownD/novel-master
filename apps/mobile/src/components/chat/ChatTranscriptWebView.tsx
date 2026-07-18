@@ -33,9 +33,9 @@ import {
   selectTailTranscriptRows,
 } from './message-blocks';
 import {
-  CHAT_TRANSCRIPT_BASE_URL,
-  CHAT_TRANSCRIPT_HTML,
-} from '@/web/chat-transcript/transcript-html';
+  getChatTranscriptPackageDirUri,
+  getChatTranscriptUri,
+} from '@/webview-host/chat-transcript/uri';
 import { emitChatTranscriptTelemetry } from '@/services/chat-transcript-telemetry';
 import { useTheme } from '@/theme/ThemeProvider';
 import { prepareStreamTailHtml } from './prepare-stream-tail-html';
@@ -531,7 +531,13 @@ export const ChatTranscriptWebView = memo(
             payload: { rows },
           });
         },
-        [postToWeb, flags?.richText, agentRunning, messages, transcriptListOptions],
+        [
+          postToWeb,
+          flags?.richText,
+          agentRunning,
+          messages,
+          transcriptListOptions,
+        ],
       );
 
       const commitStreamTail = useCallback(
@@ -600,7 +606,13 @@ export const ChatTranscriptWebView = memo(
           prevFirstMessageIdRef.current = allMessages[0]?.id;
           return true;
         },
-        [webReady, flags?.richText, agentRunning, commitStreamTail, transcriptListOptions],
+        [
+          webReady,
+          flags?.richText,
+          agentRunning,
+          commitStreamTail,
+          transcriptListOptions,
+        ],
       );
 
       const commitAbortOverlaySnapshot = useCallback((): boolean => {
@@ -688,14 +700,21 @@ export const ChatTranscriptWebView = memo(
             },
           });
         },
-        [messages, postToWeb, flags?.richText, agentRunning, transcriptListOptions],
+        [
+          messages,
+          postToWeb,
+          flags?.richText,
+          agentRunning,
+          transcriptListOptions,
+        ],
       );
 
       const handleMessage = useCallback(
         (event: WebViewMessageEvent) => {
+          const raw = event.nativeEvent.data;
           let message;
           try {
-            message = decodeTranscriptToHost(event.nativeEvent.data);
+            message = decodeTranscriptToHost(raw);
           } catch {
             return;
           }
@@ -981,10 +1000,10 @@ export const ChatTranscriptWebView = memo(
             ref={webRef}
             style={styles.fill}
             originWhitelist={['*']}
-            source={{
-              html: CHAT_TRANSCRIPT_HTML,
-              baseUrl: CHAT_TRANSCRIPT_BASE_URL,
-            }}
+            source={{ uri: getChatTranscriptUri() }}
+            allowFileAccess
+            allowFileAccessFromFileURLs
+            allowingReadAccessToURL={getChatTranscriptPackageDirUri()}
             onMessage={handleMessage}
             javaScriptEnabled
             domStorageEnabled
@@ -1000,5 +1019,5 @@ export const ChatTranscriptWebView = memo(
 );
 
 const styles = StyleSheet.create({
-  fill: { flex: 1, minHeight: 0 },
+  fill: { flex: 1, minHeight: 0, overflow: 'hidden' },
 });

@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   ChatAgentSession,
@@ -13,7 +13,7 @@ import { EVENT_AGENT_RUN_STARTED, EVENT_AGENT_STEP_COMMITTED, EVENT_AGENT_RUN_FI
 import { isRandomUuidV4 } from "../../src/infra/random-uuid.js";
 import { registerBuiltinTools, ToolRegistry, ToolRunner, type BuiltinToolContext } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import { SqliteMessageCheckpointRepository } from "../../src/domain/message-checkpoint/repositories/impl/sqlite-message-checkpoint.repository.js";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
@@ -31,14 +31,14 @@ const MOCK_PROJECT_ID = "test-project";
 const MOCK_SESSION_ID = "test-session";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"> &
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "worktree" | "savedModels"> &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktreeBlockStore: mockWorktreeBlockStore(),
+    sessionKkv: createMemorySessionKkv(),
     worktree: () =>
       ({
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -152,6 +152,46 @@ describe("AgentRunner", () => {
     assert.equal(result.stopReason, "cancelled");
     assert.equal(model.callCount(), 0);
     assert.equal(result.stepsExecuted, 0);
+  });
+
+  // T-SR5：runner 不 append 仅空 text 的 assistant（hasMeaningfulAssistantBlocks）
+  it("T-SR5: 不 append 仅空 text 的 assistant", async () => {
+    const session = new InMemoryAgentSession();
+    await session.append("user", textBlocks("go"));
+
+    const model = createMockModel([
+      {
+        assistantText: "",
+        blocks: [
+          { type: "text", text: "" },
+          { type: "text", text: "   " },
+        ],
+        raw: {},
+      },
+    ]);
+
+    const registry = new ToolRegistry();
+    registerBuiltinTools(registry);
+    const runner = createAgentRunner(
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(mockVfs()),
+      }),
+    );
+
+    const result = await runner.run({
+      maxSteps: 1,
+      definition: minimalDefinition(),
+      ...defaultRunScope,
+    });
+
+    assert.equal(result.stopReason, "completed");
+    assert.equal(model.callCount(), 1);
+    const msgs = await session.list();
+    assert.equal(msgs.length, 1, "不得落库无意义空 assistant");
+    assert.equal(msgs[0]!.role, "user");
   });
 
   it("T-ARP-C1: abort + text/thinking blocks 落库 partial assistant，无 tool_results", async () => {
@@ -417,7 +457,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeBlockStore: mockWorktreeBlockStore(),
+      sessionKkv: createMemorySessionKkv(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -572,7 +612,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeBlockStore: mockWorktreeBlockStore(),
+      sessionKkv: createMemorySessionKkv(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -625,7 +665,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeBlockStore: mockWorktreeBlockStore(),
+      sessionKkv: createMemorySessionKkv(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },
@@ -697,7 +737,7 @@ describe("AgentRunner", () => {
       registry,
       toolCtx: mockToolCtx(mockVfs()),
       eventBus: bus,
-      worktreeBlockStore: mockWorktreeBlockStore(),
+      sessionKkv: createMemorySessionKkv(),
       worktree: () =>
         ({
           scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },

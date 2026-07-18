@@ -52,18 +52,24 @@ export interface PromptAssemblyOptions {
 
 /**
  * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
+ *
+ * @remarks 传入 `worktreeDisplay` 时与注入逻辑一致：空串不算 worktree 双段。
  */
 export function computeLlmExportZonesFromLayout(
   layout: AgentPromptLayout,
-  options?: PromptAssemblyOptions
+  options?: PromptAssemblyOptions & { readonly worktreeDisplay?: string }
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
-  const hasWorktree = layout.persist.some((block) => block.type === "worktree");
+  const hasWorktreeBlock = layout.persist.some((block) => block.type === "worktree");
+  const injectWorktree =
+    hasWorktreeBlock &&
+    (options?.worktreeDisplay === undefined ||
+      options.worktreeDisplay.trim() !== "");
   const textBlockCount = layout.persist.filter(
     (block) => block.type === "text"
   ).length;
   const persistCount =
-    (hasWorktree ? 2 : 0) +
+    (injectWorktree ? 2 : 0) +
     (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
   if (layout.dynamicEnabled === true) {
@@ -154,14 +160,14 @@ function syntheticWorktreeDoneMessage(
   };
 }
 
-/** 存在 worktree 块时追加 user 文件树 + assistant done 两条合成消息。 */
+/** 存在 worktree 块且展示非空时追加 user 文件树 + assistant done。 */
 function appendWorktreePairIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   messages: ChatMessage[]
 ): void {
   const block = findWorktreeBlock(layout);
-  if (block == null) {
+  if (block == null || ctx.worktreeDisplay.trim() === "") {
     return;
   }
   messages.push(syntheticWorktreeUserMessage(block, ctx.worktreeDisplay, ctx));
@@ -174,7 +180,7 @@ function appendWorktreePairSegmentsIfPresent(
   segments: PromptAssemblySegment[]
 ): void {
   const block = findWorktreeBlock(layout);
-  if (block == null) {
+  if (block == null || ctx.worktreeDisplay.trim() === "") {
     return;
   }
   segments.push({

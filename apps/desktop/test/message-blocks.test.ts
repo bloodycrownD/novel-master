@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+} from "@novel-master/core/chat";
+import {
   buildChatListItems,
   isTurnToolExecuting,
   vfsToolFilePath,
@@ -175,4 +179,114 @@ test("vfsToolFilePath：相对 path 规范化为绝对逻辑路径", () => {
     }),
     "/relative.md",
   );
+});
+
+test("T-SR3：空正文 + 仅 user_ops attachments 仍进列表", () => {
+  const opsOnly: ChatMessageDto = {
+    id: "u-ops",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [{ type: "text", text: "" }],
+    attachments: [
+      {
+        name: "mkdir:/notes",
+        source: "user_ops",
+        type: "text",
+        content: '<action name="mkdir">\n{"path":"/notes"}\n</action>',
+        path: "/notes",
+      },
+    ],
+  };
+  const items = buildChatListItems([opsOnly]);
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.kind, "message");
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].textParts.length, 0);
+    assert.equal(items[0].message.attachments?.length, 1);
+    assert.equal(items[0].message.attachments?.[0]?.source, "user_ops");
+  }
+});
+
+test("T-SR3：空正文 + workplace attachments 仍进列表", () => {
+  const workplaceOnly: ChatMessageDto = {
+    id: "u-wp",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [],
+    attachments: [
+      {
+        name: "w.md",
+        source: "workplace",
+        type: "text",
+        content: null,
+        path: "/w.md",
+      },
+    ],
+  };
+  const items = buildChatListItems([workplaceOnly]);
+  assert.equal(items.length, 1);
+  if (items[0]?.kind === "message") {
+    assert.equal(items[0].message.attachments?.[0]?.source, "workplace");
+  }
+});
+
+test("T-SR3：空正文且无 attachments 不进列表", () => {
+  const empty: ChatMessageDto = {
+    id: "u-empty",
+    sessionId: "s1",
+    seq: 1,
+    role: "user",
+    hidden: false,
+    createdAtMs: 1,
+    bodyText: "",
+    contentBlocks: [{ type: "text", text: "   " }],
+  };
+  assert.equal(buildChatListItems([empty]).length, 0);
+});
+
+test("T-UO2x：历史 UA 两段按普通 message，无 user_vfs_turn", () => {
+  const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
+  const messages: ChatMessageDto[] = [
+    {
+      id: "u1",
+      sessionId: "s1",
+      seq: 1,
+      role: "user",
+      hidden: false,
+      createdAtMs: 1,
+      bodyText: wrapUserVfsActionsForStorage(actionXml),
+      contentBlocks: [
+        { type: "text", text: wrapUserVfsActionsForStorage(actionXml) },
+      ],
+      metadata: {
+        kind: "user_vfs_action",
+        source: "user",
+        synthetic: true,
+      },
+    },
+    {
+      id: "a1",
+      sessionId: "s1",
+      seq: 2,
+      role: "assistant",
+      hidden: false,
+      createdAtMs: 2,
+      bodyText: USER_VFS_TURN_ACK_TEXT,
+      contentBlocks: [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }],
+      metadata: { kind: "user_vfs_ack", synthetic: true },
+    },
+  ];
+  const items = buildChatListItems(messages);
+  assert.equal(items.length, 2);
+  assert.ok(items.every((i) => i.kind === "message"));
+  assert.equal(items[0]?.kind === "message" && items[0].message.id, "u1");
+  assert.equal(items[1]?.kind === "message" && items[1].message.id, "a1");
 });

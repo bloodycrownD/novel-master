@@ -19,7 +19,6 @@ import {
 } from '@novel-master/core/vfs';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { executeSessionUserVfsOp } from './user-vfs-turn-execute.service';
-import { captureSessionWorktreeBlockForMobile } from './worktree-block.service';
 
 /** Create a new file (empty by default). */
 export async function createVfsFile(
@@ -97,12 +96,6 @@ async function cleanupWorktreeAfterVfsDelete(
 ): Promise<void> {
   const wt = runtime.worktree(scope);
   await wt.deleteRulesUnderLogicalPrefix(path);
-  if (scope.kind === 'session') {
-    await captureSessionWorktreeBlockForMobile(runtime, {
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    });
-  }
 }
 
 /** 工作区文件管理器删除：VFS 变更 + worktree 规则清理（与 Desktop handleVfsDelete 对齐）。 */

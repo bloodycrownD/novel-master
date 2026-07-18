@@ -8,8 +8,12 @@ import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
 import type { MessageContent } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type {
+  ChatMessage,
+  MessageAttachment,
+} from "@/domain/chat/model/message.js";
 import type { ChatSession } from "@/domain/chat/model/session.js";
+import { messageAttachmentsSchema } from "@/domain/chat/model/message-attachment.schema.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { VfsEntryRepository } from "@/domain/vfs/repositories/vfs-entry.port.js";
@@ -32,6 +36,15 @@ function reposFor(conn: TdbcConnection) {
     messages: new SqliteMessageRepository(conn),
     vfs: new SqliteVfsEntryRepository(conn),
   };
+}
+
+function normalizeAppendAttachments(
+  attachments: readonly MessageAttachment[] | undefined,
+): MessageAttachment[] | undefined {
+  if (attachments == null || attachments.length === 0) {
+    return undefined;
+  }
+  return messageAttachmentsSchema.parse(attachments);
 }
 
 /** Dependencies for {@link DefaultMessageService}. */
@@ -84,13 +97,18 @@ export class DefaultMessageService implements MessageService {
     sessionId: string,
     role: string,
     content: MessageContent,
-    options?: { provider?: string | null; raw?: Record<string, unknown> | null },
+    options?: {
+      provider?: string | null;
+      raw?: Record<string, unknown> | null;
+      attachments?: readonly MessageAttachment[];
+    },
   ): Promise<ChatMessage> {
     const session = await this.deps.sessions.findById(sessionId);
     if (session == null) {
       throw chatNotFound("session", sessionId);
     }
     assertMessageContent(content);
+    const attachments = normalizeAppendAttachments(options?.attachments);
     const seq = await this.deps.messages.nextSeq(sessionId);
     // New messages are visible by default
     const message: ChatMessage = {
@@ -103,6 +121,7 @@ export class DefaultMessageService implements MessageService {
       raw: options?.raw ?? null,
       createdAtMs: Date.now(),
       hidden: false,
+      ...(attachments != null ? { attachments } : {}),
     };
     await this.deps.messages.insert(message);
     return message;
@@ -184,7 +203,6 @@ export class DefaultMessageService implements MessageService {
         id: randomUUID(),
         projectId: source.projectId,
         title: forkTitle,
-        userVfsPendingJson: source.userVfsPendingJson,
         createdAtMs: now,
         updatedAtMs: now,
       };

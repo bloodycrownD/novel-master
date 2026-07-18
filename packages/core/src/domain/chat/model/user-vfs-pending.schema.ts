@@ -1,5 +1,7 @@
 /**
- * `chat_session.user_vfs_pending_json` 队列 wire 类型与 zod 校验。
+ * 用户 VFS pending 队列 wire 类型与 zod 校验。
+ *
+ * 存储位：session kkv 域 `user_vfs_pending`、键 `queue`。
  *
  * @module domain/chat/model/user-vfs-pending.schema
  */

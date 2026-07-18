@@ -154,7 +154,6 @@ export const USER_VFS_TURN_SPAN = 2 as const;
 
 /**
  * 从 `startIndex` 起 UA 两段结构是否合法（不检查 hidden）。
- * 供 transcript 展示与 LLM 匹配共用。
  */
 function matchUserVfsTurnStructureAt(
   messages: readonly ChatMessage[],
@@ -189,7 +188,7 @@ function matchUserVfsTurnStructureAt(
 
 /**
  * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（均未 hidden）。
- * 用于 LLM 相关路径；transcript 请用 {@link matchUserVfsTurnAtForDisplay}。
+ * 用于 LLM 等相关路径；transcript 不再折叠为工具卡。
  */
 export function matchUserVfsTurnAt(
   messages: readonly ChatMessage[],
@@ -204,17 +203,6 @@ export function matchUserVfsTurnAt(
     return null;
   }
   return turn;
-}
-
-/**
- * 从 `startIndex` 起是否为完整的用户 VFS UA 两段（允许 hidden）。
- * transcript / tail-batch 合成 user_vfs_turn 卡片时使用。
- */
-export function matchUserVfsTurnAtForDisplay(
-  messages: readonly ChatMessage[],
-  startIndex: number,
-): readonly [ChatMessage, ChatMessage] | null {
-  return matchUserVfsTurnStructureAt(messages, startIndex);
 }
 
 export type UserVfsTurnView = {

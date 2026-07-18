@@ -10,6 +10,7 @@ Black-box regression tests for chat rollback, VFS rename conflicts, and transcri
   ```bash
   npm run mobile:e2e:build-apk
   ```
+  > **WebView 资产门禁（T-BB-08）**：`e2e:build-apk` **必须先** `build:webview:native`（esbuild 产出 + 拷贝进 `android/app/src/main/assets/webview/`），再 `gradlew assembleDebug`。不可假设仅靠 Metro/`npm start` 带上 WebView 资产。
 - Appium 2 with UiAutomator2 driver:
 
 ```bash
@@ -22,10 +23,12 @@ npm run mobile:e2e:prepare
 Use this checklist for local smoke / regression (C1 — not runnable in headless agent env):
 
 1. **Start emulator** — Android Studio AVD or `emulator -avd <name>`; confirm `adb devices` lists it.
-2. **Build debug APK** (once per native/testID change):
+2. **Build debug APK** (once per native/testID change；须含 WebView 资产)：
    ```bash
-   cd apps/mobile/android
-   ./gradlew assembleDebug
+   # 推荐：脚本内已先 build:webview:native 再 gradlew
+   npm run e2e:build-apk
+   # 或等价手动：
+   # npm run build:webview:native && cd android && ./gradlew assembleDebug
    ```
 3. **Install / verify package** — WDIO installs via `appium:app`; or `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`.
 4. **Cold-start app once** — creates SQLite at `/data/data/com.novelmaster/files/default/novel_master_vfs`.

@@ -45,10 +45,10 @@ import {
   type VfsScope,
 } from "@novel-master/core/vfs";
 import {
-  createSessionWorktreeBlockStore,
   createWorktreeService,
 } from "@novel-master/core/worktree";
 import { createKkvService } from "@novel-master/core/kkv";
+import { createSessionKkvService } from "@novel-master/core/session-kkv";
 import {
   createCompositeSecretStore,
   createEnvSecretStore,
@@ -94,9 +94,9 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn, appendToolTurnBridge } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -112,12 +112,12 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventBus,
     messages,
     messageTranscriptEffects,
+    sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests: providerBundle.modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, {
@@ -126,6 +126,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
           sessionId,
         }),
       messageCheckpoint: createMessageCheckpointService(conn),
+      sessionKkv,
       eventBus,
       state,
       regexConfig,
@@ -142,7 +143,6 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,
@@ -153,6 +153,7 @@ export async function createDesktopNovelMasterRuntime(): Promise<DesktopNovelMas
     appendToolTurnBridge,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
+    sessionKkv,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>
       createScopedVfsService(conn, { kind: "project", projectId }),

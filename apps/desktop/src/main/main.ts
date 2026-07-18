@@ -18,6 +18,7 @@ import {
   setAgentActivityForwardTarget,
 } from "./ipc/forward-agent-activity.js";
 import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
+import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-composer-attachments-suggest.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -122,14 +123,13 @@ function createMainWindow(): BrowserWindow {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
   });
-  setWorkspaceMutatedForwardTarget(() => {
+  const resolvePushWebContents = () => {
     const focused = BrowserWindow.getFocusedWindow();
     return (focused ?? window).webContents;
-  });
-  setAgentActivityForwardTarget(() => {
-    const focused = BrowserWindow.getFocusedWindow();
-    return (focused ?? window).webContents;
-  });
+  };
+  setWorkspaceMutatedForwardTarget(resolvePushWebContents);
+  setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
+  setAgentActivityForwardTarget(resolvePushWebContents);
 
   if (isDev) {
     void window.loadURL(DEV_SERVER_URL);

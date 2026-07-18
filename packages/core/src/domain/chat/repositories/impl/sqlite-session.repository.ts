@@ -15,17 +15,13 @@ import type { ChatSession } from "../../model/session.js";
 import type { SessionRepository } from "../session.port.js";
 
 const SESSION_COLUMNS =
-  "id, project_id, title, user_vfs_pending_json, created_at_ms, updated_at_ms";
+  "id, project_id, title, created_at_ms, updated_at_ms";
 
 function rowToSession(row: Row): ChatSession {
   return {
     id: String(row.id),
     projectId: String(row.project_id),
     title: row.title == null ? null : String(row.title),
-    userVfsPendingJson:
-      row.user_vfs_pending_json == null
-        ? null
-        : String(row.user_vfs_pending_json),
     createdAtMs: Number(row.created_at_ms),
     updatedAtMs: Number(row.updated_at_ms),
   };
@@ -67,17 +63,15 @@ export class SqliteSessionRepository implements SessionRepository {
       this.conn,
       this.parser,
       `INSERT INTO chat_session (
-         id, project_id, title, user_vfs_pending_json, created_at_ms, updated_at_ms
+         id, project_id, title, created_at_ms, updated_at_ms
        )
        VALUES (
-         #{id}, #{projectId}, #{title}, #{userVfsPendingJson},
-         #{createdAtMs}, #{updatedAtMs}
+         #{id}, #{projectId}, #{title}, #{createdAtMs}, #{updatedAtMs}
        )`,
       {
         id: session.id,
         projectId: session.projectId,
         title: session.title,
-        userVfsPendingJson: session.userVfsPendingJson,
         createdAtMs: session.createdAtMs,
         updatedAtMs: session.updatedAtMs,
       },
@@ -118,31 +112,30 @@ export class SqliteSessionRepository implements SessionRepository {
     );
   }
 
-  async getUserVfsPendingJson(sessionId: string): Promise<string | null> {
+  async getComposerDraftJson(id: string): Promise<string | null> {
     const rows = await queryTemplate(
       this.conn,
       this.parser,
-      `SELECT user_vfs_pending_json
-       FROM chat_session WHERE id = #{sessionId}`,
-      { sessionId },
+      `SELECT composer_draft_json FROM chat_session WHERE id = #{id}`,
+      { id },
     );
     if (rows.length === 0) {
       return null;
     }
-    const value = rows[0]!.user_vfs_pending_json;
+    const value = rows[0]!.composer_draft_json;
     return value == null ? null : String(value);
   }
 
-  async setUserVfsPendingJson(
-    sessionId: string,
-    json: string | null,
+  async setComposerDraftJson(
+    id: string,
+    draftJson: string | null,
   ): Promise<boolean> {
     const result = await executeTemplate(
       this.conn,
       this.parser,
-      `UPDATE chat_session SET user_vfs_pending_json = #{json}
-       WHERE id = #{sessionId}`,
-      { sessionId, json },
+      `UPDATE chat_session SET composer_draft_json = #{draftJson}
+       WHERE id = #{id}`,
+      { id, draftJson },
     );
     return result.changes > 0;
   }

@@ -14,6 +14,11 @@ import {
   registerBetterSqlite3Driver,
 } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import { createSessionKkvService } from "../../src/service/session-kkv/create-session-kkv-service.js";
+import {
   execLegacyChatMessageWithoutHidden,
   execLegacyV107ChatDdl,
   execLegacyVfsEntryTable,
@@ -45,14 +50,15 @@ async function tableColumnNames(
 }
 
 describe("schema 列对齐（T-B3）", () => {
-  it("A1：legacy chat_session 缺 pending 列，bootstrap 后 listByProject 不抛错", async () => {
+  it("A1：legacy chat_session bootstrap 后无 user_vfs_pending_json，listByProject 不抛错", async () => {
     const conn = await openInMemoryConnection();
     await execLegacyV107ChatDdl(conn);
     await execBootstrapSchemaDdl(conn);
     await bootstrapNovelMaster(conn);
 
     const columns = await tableColumnNames(conn, "chat_session");
-    assert.ok(columns.has("user_vfs_pending_json"));
+    assert.equal(columns.has("user_vfs_pending_json"), false);
+    assert.ok(columns.has("composer_draft_json"));
 
     const repo = new SqliteSessionRepository(conn);
     const sessions = await repo.listByProject(randomUUID());
@@ -61,7 +67,7 @@ describe("schema 列对齐（T-B3）", () => {
     await conn.close();
   });
 
-  it("A2：legacy session 行数据 bootstrap 后保留且 pending 为 null", async () => {
+  it("A2：legacy session 行数据 bootstrap 后保留", async () => {
     const conn = await openInMemoryConnection();
     const projectId = randomUUID();
     const sessionId = randomUUID();
@@ -80,7 +86,6 @@ describe("schema 列对齐（T-B3）", () => {
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0]!.id, sessionId);
     assert.equal(sessions[0]!.title, "legacy-session");
-    assert.equal(sessions[0]!.userVfsPendingJson, null);
 
     await conn.close();
   });
@@ -152,11 +157,8 @@ describe("schema 列对齐（T-B3）", () => {
     await bootstrapNovelMaster(conn);
 
     const sessionCols = await tableColumnNames(conn, "chat_session");
-    assert.ok(sessionCols.has("user_vfs_pending_json"));
-    assert.equal(
-      [...sessionCols].filter((name) => name === "user_vfs_pending_json").length,
-      1,
-    );
+    assert.equal(sessionCols.has("user_vfs_pending_json"), false);
+    assert.ok(sessionCols.has("composer_draft_json"));
 
     await conn.close();
   });
@@ -176,7 +178,13 @@ describe("schema 列对齐（T-B3）", () => {
       assert.equal(rows.length, 1, `表 ${tableName} 应存在`);
     }
 
-    assert.ok((await tableColumnNames(conn, "chat_session")).has("user_vfs_pending_json"));
+    assert.equal(
+      (await tableColumnNames(conn, "chat_session")).has("user_vfs_pending_json"),
+      false,
+    );
+    assert.ok(
+      (await tableColumnNames(conn, "chat_session")).has("composer_draft_json"),
+    );
     assert.ok((await tableColumnNames(conn, "chat_message")).has("hidden"));
     assert.ok((await tableColumnNames(conn, "chat_project")).has("agent_config_json"));
     const vfsCols = await tableColumnNames(conn, "vfs_entry");
@@ -186,31 +194,64 @@ describe("schema 列对齐（T-B3）", () => {
     await conn.close();
   });
 
-  it("A7：legacy session bootstrap 后 pending JSON round-trip", async () => {
+  it("A7：T-OP1 pending 仅存 kkv；含旧列库 bootstrap 后物理列删除", async () => {
     const conn = await openInMemoryConnection();
     const sessionId = randomUUID();
     const now = 1_700_000_000_000;
 
-    await execLegacyV107ChatDdl(conn);
-    await execBootstrapSchemaDdl(conn);
+    await conn.execute(`
+      CREATE TABLE chat_session (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        title TEXT,
+        user_vfs_pending_json TEXT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL
+      )
+    `);
+    await conn.execute(`
+      CREATE INDEX idx_chat_session_project ON chat_session(project_id)
+    `);
     await conn.execute(
-      `INSERT INTO chat_session (id, project_id, title, created_at_ms, updated_at_ms)
-       VALUES ('${sessionId}', '${randomUUID()}', 'pending-round-trip', ${now}, ${now})`,
+      `INSERT INTO chat_session (
+         id, project_id, title, user_vfs_pending_json, created_at_ms, updated_at_ms
+       ) VALUES (
+         '${sessionId}', '${randomUUID()}', 'pending-drop', '[]', ${now}, ${now}
+       )`,
     );
     await bootstrapNovelMaster(conn);
 
-    const repo = new SqliteSessionRepository(conn);
+    const columns = await tableColumnNames(conn, "chat_session");
+    assert.equal(columns.has("user_vfs_pending_json"), false);
+    assert.ok(columns.has("composer_draft_json"));
+
+    const sessionKkv = createSessionKkvService(conn);
     const pendingJson = JSON.stringify([
       {
         actionXml: "<user-vfs-action/>",
-        tools: [{ id: "tu_legacy", name: "edit" }],
+        tools: [{ id: "tu_kkv", name: "edit" }],
         createdAtMs: now,
       },
     ]);
+    await sessionKkv.set(
+      sessionId,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+      pendingJson,
+    );
+    assert.equal(
+      await sessionKkv.get(
+        sessionId,
+        SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+        USER_VFS_PENDING_QUEUE_KEY,
+      ),
+      pendingJson,
+    );
 
-    assert.equal(await repo.getUserVfsPendingJson(sessionId), null);
-    assert.equal(await repo.setUserVfsPendingJson(sessionId, pendingJson), true);
-    assert.equal(await repo.getUserVfsPendingJson(sessionId), pendingJson);
+    const repo = new SqliteSessionRepository(conn);
+    const loaded = await repo.findById(sessionId);
+    assert.ok(loaded);
+    assert.equal(loaded.title, "pending-drop");
 
     await conn.close();
   });

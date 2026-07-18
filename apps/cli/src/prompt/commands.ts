@@ -14,7 +14,7 @@ import {
 } from "@novel-master/core/provider";
 
 import { applyRegexChannelForLlm } from "@novel-master/core/regex";
-import { getCapturedBlockOrCapture } from "@novel-master/core/worktree";
+import { assembleWorkplaceDisplay } from "@novel-master/core/worktree";
 import type { NovelMasterRuntime } from "../runtime.js";
 import { loadAgentPromptLayoutFromYaml } from "../config/load-agent-prompt-layout.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
@@ -25,7 +25,7 @@ export async function runPrompt(
     | "messages"
     | "scope"
     | "worktree"
-    | "worktreeBlockStore"
+    | "sessionKkv"
     | "sessionVfs"
     | "state"
     | "regexConfig"
@@ -61,15 +61,15 @@ export async function runPrompt(
     allMessages,
     allMessages.filter((m) => !m.hidden),
   );
-  const block = await getCapturedBlockOrCapture(
-    { kind: "session", projectId, sessionId },
-    {
-      worktree: (s) => rt.worktree(s),
-      worktreeBlockStore: rt.worktreeBlockStore,
-    },
-  );
+  const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
-  const ctx = { worktreeDisplay: block.worktreeDisplay, messages, vfs };
+  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
+    sessionKkv: rt.sessionKkv,
+    worktree: rt.worktree(wtScope),
+    vfs,
+    layout,
+  });
+  const ctx = { worktreeDisplay, messages, vfs };
   const text = await formatPromptLlmInputForCliFromLayout(layout, ctx);
   if (text.length > 0) {
     process.stdout.write(text);

@@ -27,4 +27,16 @@ export interface SessionService {
    * clears session-fs data but not messages.
    */
   pullTemplate(sessionId: string): Promise<void>;
+
+  /** 读取 `composer_draft_json` 原始 JSON；未设置时为 null。 */
+  getComposerDraftJson(id: string): Promise<string | null>;
+
+  /**
+   * 写入 `composer_draft_json`；`draftJson` 为 null 时清空列。
+   * 不更新 `updated_at_ms`。
+   */
+  setComposerDraftJson(
+    id: string,
+    draftJson: string | null,
+  ): Promise<boolean>;
 }

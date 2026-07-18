@@ -6,7 +6,9 @@
 import { type UserVfsTurnOp } from "@novel-master/core/chat";
 
 import { type VfsScope } from "@novel-master/core/vfs";
+import { notifyComposerAttachmentsSuggestToRenderer } from "../ipc/forward-composer-attachments-suggest.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
+import { projectComposerStatusForSession } from "./project-composer-status.service.js";
 
 /** 是否为会话工作区 scope（需走 userVfsTurn）。 */
 export function isSessionVfsScope(
@@ -15,7 +17,7 @@ export function isSessionVfsScope(
   return scope.kind === "session";
 }
 
-/** 经 userVfsTurn 执行；失败抛错供 IPC 格式化。 */
+/** 经 userVfsTurn 执行；失败抛错供 IPC 格式化。成功后投影整表替换状态条。 */
 export async function executeSessionUserVfsOp(
   rt: DesktopNovelMasterRuntime,
   sessionId: string,
@@ -25,4 +27,19 @@ export async function executeSessionUserVfsOp(
   if (!result.ok) {
     throw result.error;
   }
+  const session = await rt.sessions.get(sessionId);
+  const worktree = rt.worktree({
+    kind: "session",
+    projectId: session.projectId,
+    sessionId,
+  });
+  const attachments = await projectComposerStatusForSession(
+    rt,
+    worktree,
+    sessionId,
+  );
+  notifyComposerAttachmentsSuggestToRenderer({
+    sessionId,
+    attachments,
+  });
 }

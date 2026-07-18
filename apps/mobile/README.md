@@ -58,6 +58,8 @@ Mobile 源码使用 `@/` 指向 `apps/mobile/src/`（`tsconfig.json` paths、`me
 
 跨 workspace 包请用包名导入，例如 `@novel-master/core`、`@novel-master/tdbc-driver-rn`；**不要**用 `@/` 引用 `packages/` 内代码。
 
+WebView boot（`src/web/**`）使用 `@web/*` → `src/web/*`（`tsconfig.webview-boot.json` + `scripts/build-webview.mjs`）；**不要**用 `@/` 写 WebView 源码。
+
 ## App launcher icon
 
 Source: [`assets/icon.webp`](../../assets/icon.webp). Android/iOS require PNG mipmaps, not WebP in the manifest.
@@ -143,7 +145,7 @@ nm vfs list / -r
 
 ### VFS markdown preview (WebView engine)
 
-File editor preview body uses a single `react-native-webview` (`RichDocumentWebView`) when `vfsMarkdownPreviewEngine` is `webview`. Toolbar, stats, and the **Markdown / 文本** toggle stay in RN; Front Matter + body scroll together inside the Web bundle (`src/web/rich-document/`). **文本** mode bypasses WebView and shows the full file buffer as monospace RN `Text`.
+File editor preview body uses a single `react-native-webview` (`RichDocumentWebView`) when `vfsMarkdownPreviewEngine` is `webview`. Toolbar, stats, and the **Markdown / 文本** toggle stay in RN; Front Matter + body scroll together inside the Web bundle (`src/web/rich-document/webview/`). **文本** mode bypasses WebView and shows the full file buffer as monospace RN `Text`.
 
 | Setting | Default | Notes |
 |---------|---------|-------|
@@ -158,11 +160,68 @@ File editor preview body uses a single `react-native-webview` (`RichDocumentWebV
 npm test -w @novel-master/mobile -- --testPathPattern="rich-document|rich-content-styles|vfs-markdown|FileMarkdown|prepare-transcript"
 ```
 
+改 boot/样式后的真机验证见「WebView 资源（最短开发路径）」。
+
 Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
+
+## WebView 资源（最短开发路径）
+
+聊天 Transcript 与富文档预览各为一包。Web 真源在 `src/web/{chat-transcript,rich-document}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+
+### Preact + TSX 与目录分层
+
+双包视图主写法为 **Preact + TSX**（不上 `htm` 主路径）。每个包 `webview/` 内强制：
+
+| 目录 | 内容 |
+|------|------|
+| `ui/**/*.tsx` | 仅结构组件（菜单 / 行列表 / 流式壳 / DocumentApp 等） |
+| `runtime/**/*.ts` | 仅非 UI（桥 / 状态 / 滚动 / 流式增量 DOM / 门面）；CT 保留 `menu` / `render` 等职责子目录 |
+| `main.ts` | 唯一根入口（本身无 JSX） |
+
+禁止同目录混放 TSX 与业务 TS；禁止 `index.ts` barrel。职责心智仍按「改菜单找 menu、改行找 render、改流式找 stream」。终局树以 Preact 迭代 SPEC 为准（不再以 layout-cleanup 七类**顶层**为验收）。
+
+### P0-3 装配契约（最短）
+
+结构在 `ui/*.tsx`；`runtime` 只保留同名门面（如 `renderRows` / `renderContextMenu` / `setDocument`），**不** import `ui/**`（例外：`shared/ui/TrustedHtml`）、**不**在 runtime 内 `preact.render`。
+
+**唯一装配点**是 `main.ts`：注册 Preact 实现后，runtime 门面只 notify / 调已注册函数。例：CT `registerRenderRows` + `registerRenderContextMenu`；RD `registerSetDocumentView`。
+
+**壳债 vs 刻意命令式（最短）：** CT 菜单 overlay（`#menu-backdrop` + `#context-menu`）已声明式——`MenuOverlay` 经 main `render` 到 `#menu-portal`（**壳债已清**）。流式 body 增量 `createElement` / `insertAdjacentHTML`（P0-2）为**非债**，禁止顺手 Preact 化。tool-invoking「生成中」条亦归 Preact（`StreamTail` → `ToolInvokingBar`）；runtime 只改 state 并 `renderRows`，禁止 bubble 内 createElement 插条。
+
+Spec: `.apm/kb/docs/Iterations/mobile-webview-preact-htm/spec.md` · 壳债：`features/webview-imperative-shell-debt/spec.md`
+
+**最短路径（改真源 → 真机生效）：**
+
+```bash
+# 1. 改真源：src/web/{pkg}/webview/**（样式/HTML 仍在 src/web/{pkg}/）
+#    改 URI / RN 侧纯函数：src/webview-host/**
+# 2. 重建产物（也可由 pretest / prestart / preandroid / preios 挂钩）
+npm run build:webview -w @novel-master/mobile
+# 3. 安装到设备/模拟器（会走 preandroid/preios → build:webview:native 拷贝原生落点）
+npm run android -w @novel-master/mobile
+# 或
+npm run ios -w @novel-master/mobile
+```
+
+| 命令 | 作用 |
+|------|------|
+| `build:webview` | 写出 `webview-dist/{pkg}/index.html` + `app.js` + `app.css` |
+| `build:webview:native` | 同上，并拷贝到 Android `assets/webview/` 与 iOS `WebViewDist/` |
+| `npm start` / `prestart` | **只保证** dist 已生成；**不会**把新资产 merge 进已安装包 |
+
+**仅 `npm start`（Metro）不足以更新真机 WebView。** 设备上看到的是原生 assets/bundle 内副本；须 `run-android` / `run-ios`（或等价 `build:webview:native` + 重装）后新页面才生效。
+
+契约测（`pretest` 会先 `build:webview`）从 `webview-dist` 读产物，例如：
+
+```bash
+npm test -w @novel-master/mobile -- --testPathPattern="boot-script|webview-uri|chat-transcript-rich-styles"
+```
+
+Bundler / 产物路径 Spec: `.apm/kb/docs/Iterations/mobile-webview-boot-bundler/spec.md`
 
 ## Chat transcript (WebView engine)
 
-Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/`).
+Conversation messages render in a single `react-native-webview` (`ChatTranscriptWebView`) when `chatTranscriptEngine` is `webview`. Composer, runtime, paging, modals, and navigation stay in RN; scroll + rich bubbles live in the embedded Web bundle (`src/web/chat-transcript/webview/`).
 
 | Setting | Default | Notes |
 |---------|---------|-------|
@@ -178,6 +237,8 @@ Conversation messages render in a single `react-native-webview` (`ChatTranscript
 ```bash
 npm test -w @novel-master/mobile -- --testPathPattern="chat-transcript|build-transcript"
 ```
+
+改 boot/样式后的真机验证见上方「WebView 资源（最短开发路径）」。
 
 Spec: `.apm/kb/docs/Iterations/mobile-webview-chat-transcript/spec.md`
 

@@ -31,7 +31,13 @@ function baseRuntime(overrides: Partial<any> = {}) {
       publish: jest.fn(),
       subscribe: () => ({ unsubscribe: () => undefined }),
     },
-    worktreeBlockStore: createSessionWorktreeBlockStore(),
+    sessionKkv: {
+      get: async () => null,
+      set: async () => undefined,
+      delete: async () => undefined,
+      clearSession: async () => undefined,
+      listKeys: async () => [],
+    },
     worktree: () => ({
       materializePersistBlock: async () => ({ worktreeDisplay: '' }),
     }),

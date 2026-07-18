@@ -133,11 +133,15 @@ import {
 import {
   handleSessionsCreate,
   handleSessionsDelete,
+  handleSessionsGetComposerDraft,
   handleSessionsListByProject,
+  handleSessionsProjectComposerStatus,
   handleSessionsPullTemplate,
   handleSessionsRename,
+  handleSessionsSetComposerDraft,
 } from './handlers/sessions.js';
 import {
+  handleUserVfsHasPending,
   handleVfsDelete,
   handleVfsList,
   handleVfsMkdir,
@@ -203,6 +207,12 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.SESSIONS_RENAME, handleSessionsRename);
   bindReq(IPC_CHANNELS.SESSIONS_DELETE, handleSessionsDelete);
   bindReq(IPC_CHANNELS.SESSIONS_PULL_TEMPLATE, handleSessionsPullTemplate);
+  bindReq(IPC_CHANNELS.SESSIONS_GET_COMPOSER_DRAFT, handleSessionsGetComposerDraft);
+  bindReq(IPC_CHANNELS.SESSIONS_SET_COMPOSER_DRAFT, handleSessionsSetComposerDraft);
+  bindReq(
+    IPC_CHANNELS.SESSIONS_PROJECT_COMPOSER_STATUS,
+    handleSessionsProjectComposerStatus,
+  );
 
   bindReq(IPC_CHANNELS.APP_UI_GET, handleAppUiGet);
   bindReq(IPC_CHANNELS.APP_UI_SET, handleAppUiSet);
@@ -215,6 +225,7 @@ export function registerHandlersFromRegistry(): void {
   bindReq(IPC_CHANNELS.VFS_RENAME, handleVfsRename);
   bindReq(IPC_CHANNELS.VFS_ZIP_EXPORT, handleVfsZipExport);
   bindReq(IPC_CHANNELS.VFS_ZIP_IMPORT, handleVfsZipImport);
+  bindReq(IPC_CHANNELS.USER_VFS_HAS_PENDING, handleUserVfsHasPending);
 
   bindReq(IPC_CHANNELS.WORKTREE_BUILD_LIST_ROWS, handleWorktreeBuildListRows);
   bindReq(IPC_CHANNELS.WORKTREE_SET_DIR_RULE, handleWorktreeSetDirRule);

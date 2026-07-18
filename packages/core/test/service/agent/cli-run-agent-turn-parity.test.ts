@@ -21,6 +21,7 @@ import {
   refreshUserVfsUnifiedToolTurnSnapshot,
   resetUserVfsUnifiedToolTurnSnapshotForTests,
 } from "@/domain/feature-flags/user-vfs-unified-tool-turn.js";
+import { createSessionKkvService } from "../../../src/service/session-kkv/create-session-kkv-service.js";
 import {
   getNovelMasterTestContext,
   novelMasterTestFixture,
@@ -67,7 +68,7 @@ const flagDefinition: AgentDefinition = {
 
 function writeOp(path: string, content: string, toolId = "tu_write") {
   return {
-    actionXml: `<user-vfs-action kind="save" path="${path}" method="write" />`,
+    actionXml: `<action name="write">\n${JSON.stringify({ path, content }, null, 2)}\n</action>`,
     tools: [
       {
         id: toolId,
@@ -97,19 +98,23 @@ function makeRuntime(
     } as AgentTurnRuntimePort["savedModelRepo"],
     messageCheckpoint: ctx.messageCheckpoint,
     modelRequests: {} as AgentTurnRuntimePort["modelRequests"],
-    worktreeBlockStore: ctx.worktreeBlockStore,
     eventBus: {} as AgentTurnRuntimePort["eventBus"],
     regexConfig: {} as AgentTurnRuntimePort["regexConfig"],
     compactionConditionEvaluator:
       undefined as unknown as AgentTurnRuntimePort["compactionConditionEvaluator"],
     eventOrchestrator: {} as AgentTurnRuntimePort["eventOrchestrator"],
     userVfsTurn,
+    sessionKkv: createSessionKkvService(ctx.conn),
     sessionVfs: (projectId, sessionId) => ctx.sessionVfs(projectId, sessionId),
-    worktree: (scope) =>
+    worktree: (_scope) =>
       ({
         renderDisplay: async () => "",
         buildListRows: async () => [],
         materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        evaluateRuleView: async () => ({
+          rows: [],
+          displayByPath: new Map(),
+        }),
       }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
   };
 }
@@ -204,11 +209,16 @@ describe("cli-run-agent-turn parity", () => {
     );
 
     const listed = await ctx.messages.listBySession(session.id);
-    assert.equal(listed.length, 4);
+    assert.equal(listed.length, 2);
     assert.equal(listed[0]!.role, "assistant");
-    assert.equal(readMessageMetadata(listed[1]!.raw)?.kind, "user_vfs_action");
-    assert.equal(readMessageMetadata(listed[2]!.raw)?.kind, "user_vfs_ack");
-    assert.equal(listed[3]!.role, "user");
+    assert.equal(listed[1]!.role, "user");
+    assert.equal(
+      listed.some(
+        (m) => readMessageMetadata(m.raw)?.kind === "user_vfs_action",
+      ),
+      false,
+    );
+    assert.equal(listed[1]!.attachments?.[0]?.source, "user_ops");
 
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
@@ -302,6 +312,56 @@ describe("cli-run-agent-turn parity", () => {
 
     const after = await ctx.messages.listBySession(session.id);
     assert.equal(after.length, 1);
+    assert.equal(after[0]!.role, "assistant");
+  });
+
+  it("B-01：allowAssistantContinue + 有规则可见文件 + 空 cache → list 长度不变、无新 user", async () => {
+    const ctx = getNovelMasterTestContext();
+    const registry = createAgentRegistryService(ctx.conn, ctx.state);
+    await ctx.state.setCurrentModelId(TEST_SAVED_MODEL_ID);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    await ctx.messages.append(session.id, "assistant", textBlocks("模型回复"));
+    const before = await ctx.messages.listBySession(session.id);
+    assert.equal(before.length, 1);
+
+    const base = makeRuntime(ctx, registry);
+    const runtime: AgentTurnRuntimePort = {
+      ...base,
+      worktree: (_scope) =>
+        ({
+          renderDisplay: async () => "",
+          buildListRows: async () => [],
+          materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+          evaluateRuleView: async () => ({
+            rows: [
+              {
+                kind: "file" as const,
+                path: "/visible.md",
+                inclusionMode: "include" as const,
+                displayState: "full" as const,
+              },
+            ],
+            displayByPath: new Map([["/visible.md", "full" as const]]),
+          }),
+        }) as ReturnType<AgentTurnRuntimePort["worktree"]>,
+    };
+
+    await runUntilRunner(
+      runtime,
+      { projectId: project.id, sessionId: session.id },
+      "",
+      { allowAssistantContinue: true, maxStepsOverride: 1 },
+    );
+
+    const after = await ctx.messages.listBySession(session.id);
+    assert.equal(after.length, before.length, "listBySession 长度不变");
+    assert.equal(
+      after.some((m) => m.role === "user"),
+      false,
+      "不得因 workplace 差集误 append 空 user",
+    );
     assert.equal(after[0]!.role, "assistant");
   });
 

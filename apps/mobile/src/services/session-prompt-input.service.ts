@@ -6,15 +6,16 @@ import {
   resolveAgentForProject,
 } from '@novel-master/core/agent';
 
+import { prepareUserMessagesForPrompt } from '@novel-master/core/chat';
 import {
   buildPromptLlmInputFromLayout,
   type AgentPromptLayout,
   type PromptLlmInput,
   type PromptRenderContext,
 } from '@novel-master/core/prompt';
+import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
 import { applyActiveRegexChannel } from './regex-apply-channel';
-import { getCapturedBlockOrCaptureForMobile } from './worktree-block.service';
 
 export interface SessionPromptScope {
   readonly projectId: string;
@@ -41,22 +42,38 @@ export async function buildSessionPromptInput(
   const allMessages = await runtime.messages.listBySession(scope.sessionId);
   const visible = allMessages.filter(m => !m.hidden);
   const activeGroupId = await runtime.state.getCurrentRegexGroupId();
-  const messages = await applyActiveRegexChannel(
+  const regexMessages = await applyActiveRegexChannel(
     runtime.regexConfig,
     activeGroupId,
     allMessages,
     visible,
     'llm',
   );
-  const block = await getCapturedBlockOrCaptureForMobile(runtime, scope);
-  const wt = runtime.worktree({
-    kind: 'session',
+  const wtScope = {
+    kind: 'session' as const,
     projectId: scope.projectId,
     sessionId: scope.sessionId,
-  });
+  };
+  const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
+  // assemble → prepare(S0)，与 agent-runner 同源。
+  const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+    wtScope,
+    {
+      sessionKkv: runtime.sessionKkv,
+      worktree: wt,
+      vfs,
+      layout: resolved.prompts,
+    },
+  );
+  const messages = await prepareUserMessagesForPrompt(regexMessages, {
+    sessionId: scope.sessionId,
+    sessionKkv: runtime.sessionKkv,
+    vfs,
+    seenPaths: prefixPaths,
+  });
   const ctx: PromptRenderContext = {
-    worktreeDisplay: block.worktreeDisplay,
+    worktreeDisplay,
     messages,
     worktree: wt,
     vfs,

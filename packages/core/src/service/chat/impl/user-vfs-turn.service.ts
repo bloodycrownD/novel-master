@@ -1,29 +1,27 @@
 /**
- * 用户 VFS UA 两段用例默认实现。
+ * 用户 VFS：execute → pending → flush 产出 user_ops 附件（不再落 UA）。
  *
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-import { assertMessageContent } from "@/domain/chat/content/parse-message-content.js";
+import { buildUserOpsAttachment } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import {
+  collectUserOpsChangedPaths,
   diffWorkspaceForUserVfsFlush,
   isWorkspaceFlushDiffEmpty,
+  type WorkspaceFlushDiff,
 } from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
 import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
 import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
 import { synthesizeUserVfsFlushActions } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
 import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
-import {
-  USER_VFS_TURN_ACK_TEXT,
-  wrapUserVfsActionsForStorage,
-} from "@/domain/chat/logic/user-vfs-turn-constants.js";
-import type { MessageContent } from "@/domain/chat/model/content-block.js";
-import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
-import { SqliteMessageRepository } from "@/domain/chat/repositories/impl/sqlite-message.repository.js";
-import { SqliteSessionRepository } from "@/domain/chat/repositories/impl/sqlite-session.repository.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
 import type { MessageCheckpointRepository } from "@/domain/message-checkpoint/repositories/message-checkpoint.port.js";
+import {
+  SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+  USER_VFS_PENDING_QUEUE_KEY,
+} from "@/domain/session-kkv/model/session-kkv-domains.js";
 import {
   toPhysicalPath,
   type VfsScope,
@@ -47,9 +45,9 @@ import {
   restoreMutatingPathHeads,
 } from "@/domain/vfs/logic/restore-mutating-path-heads.js";
 import { chatInvalidArgument, chatNotFound } from "@/errors/chat-errors.js";
-import { randomUUID } from "@/infra/random-uuid.js";
 import type { TdbcConnection } from "@/infra/tdbc/ports/connection.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { MessageService } from "../message.port.js";
 import type {
   UserVfsFlushResult,
@@ -62,6 +60,8 @@ import type {
 export interface UserVfsTurnServiceDeps {
   readonly conn: TdbcConnection;
   readonly sessions: SessionRepository;
+  /** pending 队列：session kkv 域 `user_vfs_pending`。 */
+  readonly sessionKkv: SessionKkvService;
   readonly messages: MessageService;
   /** flush 基准解析：会话消息 seq 上界。 */
   readonly chatMessages: MessageRepository;
@@ -73,6 +73,9 @@ export interface UserVfsTurnServiceDeps {
     sessionId: string,
     projectId: string,
   ) => BuiltinToolContext;
+  /**
+   * 历史依赖：checkpoint 已改挂带 user_ops 的 user append；保留以便工厂签名稳定。
+   */
   readonly messageCheckpoint: MessageCheckpointService;
 }
 
@@ -121,10 +124,14 @@ async function loadWorkspaceFlushContentMaps(
 }
 
 async function loadPendingQueue(
-  sessions: SessionRepository,
+  sessionKkv: SessionKkvService,
   sessionId: string,
 ): Promise<UserVfsPendingQueue> {
-  const json = await sessions.getUserVfsPendingJson(sessionId);
+  const json = await sessionKkv.get(
+    sessionId,
+    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+    USER_VFS_PENDING_QUEUE_KEY,
+  );
   if (json == null || json.trim() === "") {
     return [];
   }
@@ -132,44 +139,28 @@ async function loadPendingQueue(
 }
 
 async function savePendingQueue(
-  sessions: SessionRepository,
+  sessionKkv: SessionKkvService,
   sessionId: string,
   queue: UserVfsPendingQueue,
 ): Promise<void> {
   if (queue.length === 0) {
-    await sessions.setUserVfsPendingJson(sessionId, null);
+    await sessionKkv.delete(
+      sessionId,
+      SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+      USER_VFS_PENDING_QUEUE_KEY,
+    );
     return;
   }
-  await sessions.setUserVfsPendingJson(sessionId, JSON.stringify(queue));
-}
-
-async function appendMessageInTx(
-  tx: TdbcConnection,
-  sessionId: string,
-  role: string,
-  content: MessageContent,
-  options?: { provider?: string | null; raw?: Record<string, unknown> | null },
-): Promise<ChatMessage> {
-  assertMessageContent(content);
-  const messages = new SqliteMessageRepository(tx);
-  const seq = await messages.nextSeq(sessionId);
-  const message: ChatMessage = {
-    id: randomUUID(),
+  await sessionKkv.set(
     sessionId,
-    seq,
-    role,
-    content,
-    provider: options?.provider ?? null,
-    raw: options?.raw ?? null,
-    createdAtMs: Date.now(),
-    hidden: false,
-  };
-  await messages.insert(message);
-  return message;
+    SESSION_KKV_DOMAIN_USER_VFS_PENDING,
+    USER_VFS_PENDING_QUEUE_KEY,
+    JSON.stringify(queue),
+  );
 }
 
 /**
- * 编排 execute → pending、flush → UA 两段 + checkpoint。
+ * 编排 execute → pending、flush → user_ops 附件（清空 pending，不落 UA）。
  */
 export class DefaultUserVfsTurnService implements UserVfsTurnService {
   constructor(private readonly deps: UserVfsTurnServiceDeps) {}
@@ -239,58 +230,15 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       return { ok: false, error: failed.error, partialFailure: true };
     }
 
-    const queue = await loadPendingQueue(this.deps.sessions, sessionId);
+    const queue = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     const entry: UserVfsPendingEntry = {
       actionXml: op.actionXml,
       tools: op.tools.map((tool) => ({ id: tool.id, name: tool.name })),
       createdAtMs: Date.now(),
     };
     queue.push(entry);
-    await savePendingQueue(this.deps.sessions, sessionId, queue);
+    await savePendingQueue(this.deps.sessionKkv, sessionId, queue);
     return { ok: true };
-  }
-
-  private async flushPendingInTransaction(
-    tx: TdbcConnection,
-    sessionId: string,
-    actionsXml: string,
-  ): Promise<ChatMessage> {
-    const text = wrapUserVfsActionsForStorage(actionsXml);
-
-    const actionUser = await appendMessageInTx(
-      tx,
-      sessionId,
-      "user",
-      { blocks: [{ type: "text", text }] },
-      {
-        raw: {
-          metadata: {
-            source: "user",
-            synthetic: true,
-            kind: "user_vfs_action",
-          },
-        },
-      },
-    );
-
-    await appendMessageInTx(
-      tx,
-      sessionId,
-      "assistant",
-      { blocks: [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }] },
-      {
-        raw: {
-          metadata: {
-            synthetic: true,
-            kind: "user_vfs_ack",
-          },
-        },
-      },
-    );
-
-    const sessions = new SqliteSessionRepository(tx);
-    await sessions.setUserVfsPendingJson(sessionId, null);
-    return actionUser;
   }
 
   async flushPendingUserVfsTurns(
@@ -301,11 +249,59 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       throw chatNotFound("session", sessionId);
     }
 
-    const pending = await loadPendingQueue(this.deps.sessions, sessionId);
+    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
     if (pending.length === 0) {
-      return { flushed: false };
+      return { flushed: false, attachments: [] };
     }
 
+    const diff = await this.resolveWorkspaceFlushDiff(
+      sessionId,
+      session.projectId,
+    );
+    const actionsXml = synthesizeUserVfsFlushActions(diff);
+
+    if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
+      await savePendingQueue(this.deps.sessionKkv, sessionId, []);
+      return { flushed: false, attachments: [] };
+    }
+
+    const toolNames = pending.flatMap((e) => e.tools.map((t) => t.name));
+    const name =
+      toolNames.length > 0 ? [...new Set(toolNames)].join(", ") : "user_ops";
+    const attachments = [buildUserOpsAttachment(actionsXml, name)];
+
+    await savePendingQueue(this.deps.sessionKkv, sessionId, []);
+    return { flushed: true, attachments };
+  }
+
+  /**
+   * 相对 checkpoint 的净 path 集；不读 pending 也不改队列。
+   */
+  async previewUserOpsChangedPaths(
+    sessionId: string,
+  ): Promise<readonly string[]> {
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+
+    const diff = await this.resolveWorkspaceFlushDiff(
+      sessionId,
+      session.projectId,
+    );
+    return collectUserOpsChangedPaths(diff);
+  }
+
+  async hasPendingTurns(sessionId: string): Promise<boolean> {
+    const pending = await loadPendingQueue(this.deps.sessionKkv, sessionId);
+    return pending.length > 0;
+  }
+
+  /** flush / preview 共用：baseline + current + 正文 → 净 diff。 */
+  private async resolveWorkspaceFlushDiff(
+    sessionId: string,
+    projectId: string,
+  ): Promise<WorkspaceFlushDiff> {
     const baseline = await resolveFlushBaselineTree(
       this.deps.checkpoints,
       this.deps.chatMessages,
@@ -313,12 +309,12 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
     );
     const current = await resolveCurrentWorkspaceSnapshot(
       this.deps.entries,
-      session.projectId,
+      projectId,
       sessionId,
     );
     const scope: VfsScope = {
       kind: "session",
-      projectId: session.projectId,
+      projectId,
       sessionId,
     };
     const { baselineContentByPath, currentContentByPath } =
@@ -329,34 +325,11 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
         current,
       );
 
-    const diff = diffWorkspaceForUserVfsFlush({
+    return diffWorkspaceForUserVfsFlush({
       baseline,
       current,
       baselineContentByPath,
       currentContentByPath,
     });
-    const actionsXml = synthesizeUserVfsFlushActions(diff);
-
-    if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
-      await savePendingQueue(this.deps.sessions, sessionId, []);
-      return { flushed: false };
-    }
-
-    const actionUser = await this.deps.conn.transaction((tx) =>
-      this.flushPendingInTransaction(tx, sessionId, actionsXml),
-    );
-
-    await this.deps.messageCheckpoint.capture(
-      sessionId,
-      session.projectId,
-      actionUser.id,
-    );
-
-    return { flushed: true };
-  }
-
-  async hasPendingTurns(sessionId: string): Promise<boolean> {
-    const pending = await loadPendingQueue(this.deps.sessions, sessionId);
-    return pending.length > 0;
   }
 }

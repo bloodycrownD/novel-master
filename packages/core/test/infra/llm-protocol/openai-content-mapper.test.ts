@@ -186,4 +186,36 @@ describe("openai-content-mapper", () => {
       assert.equal(blocks[0].text, "visible reply");
     }
   });
+
+  // T-SR5：chatMessagesToOpenAi 丢弃无 content 且无 tool_calls 的空 user
+  it("T-SR5: 跳过空正文且无 tool_calls 的 user（避免缺 content 触发 400）", () => {
+    const messages: ChatMessage[] = [
+      {
+        id: "u0",
+        sessionId: "s1",
+        seq: 0,
+        role: "user",
+        content: { blocks: [{ type: "text", text: "" }] },
+        provider: null,
+        raw: null,
+        createdAtMs: 0,
+        hidden: false,
+      },
+      {
+        id: "u1",
+        sessionId: "s1",
+        seq: 1,
+        role: "user",
+        content: { blocks: [{ type: "text", text: "hi" }] },
+        provider: null,
+        raw: null,
+        createdAtMs: 1,
+        hidden: false,
+      },
+    ];
+    const out = chatMessagesToOpenAi(messages);
+    assert.equal(out.length, 1);
+    assert.equal(out[0]!.role, "user");
+    assert.equal(out[0]!.content, "hi");
+  });
 });

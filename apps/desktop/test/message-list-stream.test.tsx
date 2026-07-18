@@ -31,3 +31,34 @@ test("T-S2: uiRunning=false 时不渲染 stream tail", () => {
   );
   assert.doesNotMatch(html, /chat-message__stream-tail/);
 });
+
+test("T-SR3：空正文 + attachments 渲染附件摘要卡", () => {
+  const html = renderToStaticMarkup(
+    <MessageList
+      messages={[
+        {
+          id: "u-ops",
+          sessionId: "s1",
+          seq: 1,
+          role: "user",
+          hidden: false,
+          createdAtMs: 1,
+          bodyText: "",
+          contentBlocks: [{ type: "text", text: "" }],
+          attachments: [
+            {
+              name: "mkdir:/notes",
+              source: "user_ops",
+              type: "text",
+              content: null,
+              path: "/notes",
+            },
+          ],
+        },
+      ]}
+    />,
+  );
+  assert.match(html, /消息附件/);
+  assert.match(html, /mkdir:\/notes/);
+  assert.doesNotMatch(html, /暂无消息/);
+});

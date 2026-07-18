@@ -30,7 +30,10 @@ import type {
   WorktreeListRow,
   WorktreeScope,
 } from "@/domain/worktree/model/worktree-types.js";
-import type { WorktreeRuleContext } from "@/domain/worktree/model/worktree-rule-view.js";
+import type {
+  WorktreeRuleContext,
+  WorktreeRuleView,
+} from "@/domain/worktree/model/worktree-rule-view.js";
 import type {
   WorktreeLiveView,
   WorktreeMaterialized,
@@ -157,6 +160,11 @@ export class DefaultWorktreeService implements WorktreeService {
       ctx.mtimeByPath,
     );
     return { worktreeDisplay };
+  }
+
+  async evaluateRuleView(): Promise<WorktreeRuleView> {
+    const ctx = await this.loadContextMetadata();
+    return evaluateWorktreeRuleView(this.scope, ctx);
   }
 
   async buildListRows(): Promise<WorktreeListRow[]> {

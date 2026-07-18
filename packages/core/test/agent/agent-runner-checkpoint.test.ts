@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AgentRunner message checkpoint 同步 capture 行为。
  */
 
@@ -13,7 +13,7 @@ import {
 import { textBlocks } from "@novel-master/core/chat";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
 import { type LlmChatResult, type ModelRequestService } from "@novel-master/core/provider";
-import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
 import type { MessageCheckpointService } from "../../src/service/message-checkpoint/message-checkpoint.port.js";
 
@@ -31,14 +31,14 @@ const MOCK_SESSION_ID = "test-session";
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 
 function runnerDeps(
-  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"> &
+  deps: Omit<CreateAgentRunnerDeps, "eventBus" | "sessionKkv" | "worktree" | "savedModels"> &
     Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
 ): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
     ...deps,
     eventBus: { publish: () => {}, subscribe: () => () => {} } as never,
-    worktreeBlockStore: mockWorktreeBlockStore(),
+    sessionKkv: createMemorySessionKkv(),
     worktree: () =>
       ({
         scope: { kind: "session", projectId: MOCK_PROJECT_ID, sessionId: MOCK_SESSION_ID },

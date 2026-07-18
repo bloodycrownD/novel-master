@@ -26,13 +26,13 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import { writeChatComposerDraft } from '@/storage/chat-composer-draft';
+import {
+  readChatComposerDraftState,
+  writeChatComposerDraftState,
+} from '@/storage/chat-composer-draft';
+import { refreshComposerStatusAfterSessionKkvCleared } from '@/services/project-composer-status.service';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
-import {
-  captureAfterManualCompactionEmit,
-  captureSessionWorktreeBlockForMobile,
-} from '@/services/worktree-block.service';
 import {
   getSessionViewCache,
   sessionViewCacheKey,
@@ -328,11 +328,10 @@ export function useChatTabMessageActions({
                   toastMessage('压缩部分失败', result.failures[0]?.error),
                 );
               } else {
-                await captureAfterManualCompactionEmit(
-                  runtime,
-                  { projectId, sessionId },
-                  true,
-                );
+                await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+                  projectId,
+                  sessionId,
+                });
                 showToast('已压缩');
               }
             } catch (error) {
@@ -407,7 +406,15 @@ export function useChatTabMessageActions({
 
       const applyComposerRestore = () => {
         if (mode === 'undo_send' && restoreText != null) {
-          writeChatComposerDraft(sessionId, restoreText);
+          // T-TX2：仅正文（含 `@路径`）；状态由 kkv 清空后投影；无 attach chip
+          writeChatComposerDraftState(
+            sessionId,
+            {
+              text: restoreText,
+              attachments: [],
+            },
+            runtime.sessions,
+          );
           setDraftRestoreToken(t => t + 1);
         }
       };
@@ -423,6 +430,10 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
+          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            projectId,
+            sessionId,
+          });
           resetStreamingDisplay();
           await reloadMessages(true);
           applyComposerRestore();
@@ -530,19 +541,20 @@ export function useChatTabMessageActions({
 
       const runSetFloor = async () => {
         try {
+          // clear session kkv 由 Core setMessageFloorAtMessage 完成
           const result =
             await runtime.messageTranscriptEffects.setMessageFloorAtMessage(
               projectId,
               sessionId,
               messageId,
             );
-          await captureSessionWorktreeBlockForMobile(runtime, {
-            projectId,
-            sessionId,
-          });
           await reloadMessages(true);
           bumpWorktreeUiToken();
           void refreshChatTokenLabel();
+          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            projectId,
+            sessionId,
+          });
           const changed = result.hiddenCount + result.shownCount;
           showToast(changed > 0 ? '已置位' : '上下文已是最新状态');
         } catch (error) {
@@ -584,6 +596,22 @@ export function useChatTabMessageActions({
           showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
+        // T-TX2：编辑回填仅正文（含 `@路径`）+ 现有状态投影；无文件引用 chip
+        if (sessionId != null) {
+          const prev = readChatComposerDraftState(sessionId);
+          const statusOnly = (prev.attachments ?? []).filter(
+            a => a.source === 'workplace' || a.source === 'user_ops',
+          );
+          writeChatComposerDraftState(
+            sessionId,
+            {
+              text: initial,
+              attachments: statusOnly,
+            },
+            runtime.sessions,
+          );
+          setDraftRestoreToken(t => t + 1);
+        }
         setMessageEditPrompt({
           messageId: target.id,
           initialText: initial,
@@ -608,6 +636,8 @@ export function useChatTabMessageActions({
       handleForkFromMessage,
       handleSetFloorFromMessage,
       handleRollbackFromMessage,
+      sessionId,
+      setDraftRestoreToken,
       setMessageEditPrompt,
       showToast,
     ],

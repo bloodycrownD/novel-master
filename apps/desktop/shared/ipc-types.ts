@@ -12,6 +12,10 @@ export const IPC_CHANNELS = {
   AGENT_ACTIVITY_GET: 'nm:agent/activity/get',
   /** Main → renderer：VFS / worktree 可视变更通知（消费方 ① 刷新 Explorer） */
   WORKSPACE_MUTATED: 'nm:workspace/mutated',
+  /** Main → renderer：规则差集 → Composer workplace 附件建议（不含 workspaceMutated） */
+  COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
+  /** Renderer → main：会话是否有 pending→user_ops（Composer 空发门闩） */
+  USER_VFS_HAS_PENDING: 'nm:userVfs/hasPending',
 
   SCOPE_GET: 'nm:scope/get',
   SCOPE_SET_PROJECT: 'nm:scope/setProject',
@@ -28,6 +32,9 @@ export const IPC_CHANNELS = {
   SESSIONS_CREATE: 'nm:sessions/create',
   SESSIONS_RENAME: 'nm:sessions/rename',
   SESSIONS_DELETE: 'nm:sessions/delete',
+  SESSIONS_GET_COMPOSER_DRAFT: 'nm:sessions/getComposerDraft',
+  SESSIONS_SET_COMPOSER_DRAFT: 'nm:sessions/setComposerDraft',
+  SESSIONS_PROJECT_COMPOSER_STATUS: 'nm:sessions/projectComposerStatus',
 
   APP_UI_GET: 'nm:app-ui/get',
   APP_UI_SET: 'nm:app-ui/set',
@@ -267,6 +274,20 @@ export type SessionDeleteRequest = {
   readonly id: string;
 };
 
+export type SessionGetComposerDraftRequest = {
+  readonly sessionId: string;
+};
+
+export type SessionSetComposerDraftRequest = {
+  readonly sessionId: string;
+  /** 原始 JSON；null 清空列。 */
+  readonly draftJson: string | null;
+};
+
+export type SessionProjectComposerStatusRequest = {
+  readonly sessionId: string;
+};
+
 export type AppUiGetRequest = {
   readonly key: string;
 };
@@ -404,7 +425,7 @@ export type WorktreeGetDirRuleRequest = VfsScopeRequest & {
   readonly logicalPath: string;
 };
 
-/** 手动工作树快照：立即 capture 写入 block store（消费方 ②）。 */
+/** 手动重置常驻工作区缓存（清空 session kkv，下次拼装重建）。 */
 export type WorktreeCaptureSessionBlockRequest = {
   readonly projectId: string;
   readonly sessionId: string;
@@ -473,6 +494,8 @@ export type ChatMessageDto = {
   readonly contentBlocks: readonly ContentBlockDto[];
   /** synthetic 识别（VFS UA 折叠等）；无则 undefined。 */
   readonly metadata?: MessageMetadataDto;
+  /** 结构化附件；与 Core `ChatMessage.attachments` 对齐。 */
+  readonly attachments?: readonly MessageAttachmentDto[];
 };
 
 export type MessagesAppendRequest = {
@@ -543,6 +566,8 @@ export type AgentRunRequest = {
   readonly userContent: string;
   readonly stream?: boolean;
   readonly allowResumeWithoutInput?: boolean;
+  /** Composer 附件（workplace / attach / user_ops）；Core 发送时再扫描合并 `@path`。 */
+  readonly attachments?: readonly MessageAttachmentDto[];
 };
 
 export type AgentAbortRequest = {
@@ -630,6 +655,28 @@ export type WorkspaceMutatedPayload = {
   readonly workspaceScope: WorkspacePanelScope;
   readonly projectId?: string;
   readonly sessionId?: string;
+};
+
+/** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
+export type MessageAttachmentDto = {
+  readonly name: string;
+  readonly source: 'workplace' | 'attach' | 'user_ops';
+  readonly type: 'text' | 'image' | 'dir';
+  readonly content: string | null;
+  readonly path?: string;
+};
+
+/**
+ * 规则变更差集推送：Composer 追加 workplace 草稿。
+ * 职责与 {@link WorkspaceMutatedPayload} 分离，禁止塞进 workspaceMutated。
+ */
+export type ComposerAttachmentsSuggestPayload = {
+  readonly sessionId: string;
+  readonly attachments: readonly MessageAttachmentDto[];
+};
+
+export type UserVfsHasPendingRequest = {
+  readonly sessionId: string;
 };
 
 export type PreviewFileSelection = {

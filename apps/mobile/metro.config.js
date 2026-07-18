@@ -221,7 +221,7 @@ const config = {
   watchFolders: [monorepoRoot],
   resolver: {
     blockList: metroBlockList,
-    assetExts: [...defaultConfig.resolver.assetExts, 'model'],
+    assetExts: [...(defaultConfig.resolver.assetExts ?? []), 'model'],
     nodeModulesPaths: [
       path.resolve(__dirname, 'node_modules'),
       path.resolve(monorepoRoot, 'node_modules'),
@@ -291,10 +291,6 @@ const config = {
       }
       return context.resolveRequest(context, moduleName, platform);
     },
-  },
-  transformer: {
-    ...defaultConfig.transformer,
-    assetRegistryPath: defaultConfig.transformer?.assetRegistryPath,
   },
 };
 

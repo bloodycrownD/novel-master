@@ -32,7 +32,7 @@ import type {
 } from '../../../../shared/ipc-types.js';
 import { formatIpcError } from '../format-ipc-error.js';
 import { getDesktopRuntime } from '../../runtime/desktop-runtime-singleton.js';
-import { captureSessionWorktreeBlockForScope } from '../resolve-vfs-scope.js';
+import { notifyComposerStatusAfterSessionKkvCleared } from '../../services/notify-composer-status-after-kkv-clear.js';
 import { loadSessionMessagesForDisplay } from '../../services/regex-apply-channel.service.js';
 
 function toContentBlockDto(block: ContentBlock): ContentBlockDto | null {
@@ -76,6 +76,9 @@ function toDto(msg: ChatMessage): ChatMessageDto {
       .map(toContentBlockDto)
       .filter((b): b is ContentBlockDto => b != null),
     ...(metadata != null ? { metadata } : {}),
+    ...(msg.attachments != null && msg.attachments.length > 0
+      ? { attachments: msg.attachments }
+      : {}),
   };
 }
 
@@ -279,16 +282,14 @@ export async function handleMessagesSetFloor(
 ): Promise<IpcResult<MessagesSetFloorResult>> {
   try {
     const rt = await getDesktopRuntime();
+    // clear session kkv 由 Core setMessageFloorAtMessage 完成
     const result = await rt.messageTranscriptEffects.setMessageFloorAtMessage(
       req.projectId,
       req.sessionId,
       req.messageId,
     );
-    await captureSessionWorktreeBlockForScope(rt, {
-      kind: "session",
-      projectId: req.projectId,
-      sessionId: req.sessionId,
-    });
+    // 上条状态 chip 重投影（应空）；composer_draft 正文+attach 不动
+    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: result };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

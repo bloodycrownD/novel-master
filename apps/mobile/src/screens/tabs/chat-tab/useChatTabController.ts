@@ -4,7 +4,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { buildMessageActionItems } from '@/components/chat/message-edit';
-import { captureSessionWorktreeBlockOnManualRefresh } from '@/services/worktree-block.service';
+import { clearSessionWorkplaceKkv } from '@/services/worktree-block.service';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabMessageActions } from './useChatTabMessages';
 
@@ -48,13 +48,13 @@ export function useChatTabController() {
     }
     void (async () => {
       try {
-        await captureSessionWorktreeBlockOnManualRefresh(ctx.runtime, {
+        await clearSessionWorkplaceKkv(ctx.runtime, {
           projectId: ctx.projectId!,
           sessionId: ctx.sessionId!,
         });
-        ctx.showToast('已更新工作树快照');
+        ctx.showToast('已重置常驻工作区缓存');
       } catch {
-        ctx.showToast('更新工作树快照失败');
+        ctx.showToast('重置常驻工作区缓存失败');
       }
     })();
   }, [ctx]);

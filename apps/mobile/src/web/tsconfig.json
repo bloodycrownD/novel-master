@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.webview-boot.json",
+  "compilerOptions": {
+    // 本文件位于 src/web/：@web → 当前目录（勿沿用父级 baseUrl=. → apps/mobile，避免 IDE 解析错位）
+    "baseUrl": ".",
+    "paths": {
+      "@web/*": ["./*"]
+    }
+  },
+  "include": [
+    "chat-transcript/webview/**/*.ts",
+    "chat-transcript/webview/**/*.tsx",
+    "rich-document/webview/**/*.ts",
+    "rich-document/webview/**/*.tsx",
+    "shared/**/*.ts",
+    "shared/**/*.tsx"
+  ]
+}

@@ -9,11 +9,31 @@ const CORE_SRC = path.resolve(
   "../../src",
 );
 
-/** 允许直接调用 SessionWorktreeBlockStore.capture 的生产源码路径（相对 CORE_SRC）。 */
-const CAPTURE_ALLOWLIST = new Set([
-  "service/prompt/capture-session-worktree-block.ts",
-  "service/prompt/impl/session-worktree-block-store.service.ts",
-]);
+/** 已退役的进程内 capture / BlockStore API（生产源码不得再引用）。 */
+const FORBIDDEN_CAPTURE_PATTERNS: readonly { label: string; re: RegExp }[] = [
+  { label: "worktreeBlockStore.capture(", re: /worktreeBlockStore\.capture\s*\(/ },
+  {
+    label: "captureSessionWorktreeBlock(",
+    re: /captureSessionWorktreeBlock\s*\(/,
+  },
+  {
+    label: "getCapturedBlockOrCapture(",
+    re: /getCapturedBlockOrCapture\s*\(/,
+  },
+  {
+    label: "createSessionWorktreeBlockStore(",
+    re: /createSessionWorktreeBlockStore\s*\(/,
+  },
+  {
+    label: "SessionWorktreeBlockStore",
+    re: /\bSessionWorktreeBlockStore\b/,
+  },
+];
+
+/** 须经 assembleWorkplaceDisplay 的生产入口（相对 CORE_SRC）。 */
+const MUST_ASSEMBLE = [
+  "service/agent/impl/agent-runner.ts",
+] as const;
 
 async function collectTsFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -29,26 +49,41 @@ async function collectTsFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-describe("worktree block capture allowlist", () => {
-  it("T-WEC17：白名单外生产源码无 worktreeBlockStore.capture", async () => {
+describe("workplace assemble allowlist (retire capture)", () => {
+  it("T-MAU-RC1：生产源码无 BlockStore / capture / lazy API", async () => {
     const files = await collectTsFiles(CORE_SRC);
     const violations: string[] = [];
 
     for (const file of files) {
       const rel = path.relative(CORE_SRC, file).replace(/\\/g, "/");
-      if (CAPTURE_ALLOWLIST.has(rel)) {
-        continue;
-      }
       const source = await readFile(file, "utf8");
-      if (/worktreeBlockStore\.capture\s*\(/.test(source)) {
-        violations.push(rel);
+      for (const { label, re } of FORBIDDEN_CAPTURE_PATTERNS) {
+        if (re.test(source)) {
+          violations.push(`${rel}: ${label}`);
+        }
       }
     }
 
     assert.deepEqual(
       violations,
       [],
-      `以下文件直调 worktreeBlockStore.capture，应改经 captureSessionWorktreeBlock：\n${violations.join("\n")}`,
+      `以下生产源码仍引用已退役 capture：\n${violations.join("\n")}`,
     );
+  });
+
+  it("T-MAU-RC2：agent-runner 须调用 assembleWorkplaceDisplay", async () => {
+    for (const rel of MUST_ASSEMBLE) {
+      const source = await readFile(path.join(CORE_SRC, rel), "utf8");
+      assert.match(
+        source,
+        /assembleWorkplaceDisplay\s*\(/,
+        `${rel} 须调用 assembleWorkplaceDisplay`,
+      );
+      assert.doesNotMatch(
+        source,
+        /getCapturedBlockOrCapture\s*\(/,
+        `${rel} 不得调用 getCapturedBlockOrCapture`,
+      );
+    }
   });
 });

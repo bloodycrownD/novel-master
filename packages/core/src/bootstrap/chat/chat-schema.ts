@@ -17,7 +17,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL,
     title TEXT,
-    user_vfs_pending_json TEXT NULL,
+    composer_draft_json TEXT NULL,
     created_at_ms INTEGER NOT NULL,
     updated_at_ms INTEGER NOT NULL
   )`,
@@ -33,6 +33,7 @@ export const CHAT_SCHEMA_STATEMENTS: readonly string[] = [
     raw_json TEXT,
     created_at_ms INTEGER NOT NULL,
     hidden INTEGER NOT NULL DEFAULT 0,
+    attachments_json TEXT NULL,
     UNIQUE (session_id, seq)
   )`,
 ];

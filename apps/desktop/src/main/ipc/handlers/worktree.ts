@@ -12,9 +12,9 @@ import type {
   WorktreeSetDirRuleRequest,
   WorktreeSetFileRuleRequest,
 } from "../../../../shared/ipc-types.js";
+import { type WorktreeService } from "@novel-master/core/worktree";
 import { getDesktopRuntime } from "../../runtime/desktop-runtime-singleton.js";
 import {
-  captureSessionWorktreeBlockForScope,
   getWorktreeForScope,
   resolveVfsScopeFromRequest,
 } from "../resolve-vfs-scope.js";
@@ -22,7 +22,11 @@ import {
   notifyWorkspaceMutatedToRenderer,
   workspaceMutatedPayloadFromRequest,
 } from "../forward-workspace-mutated.js";
+import { notifyComposerAttachmentsSuggestToRenderer } from "../forward-composer-attachments-suggest.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import type { DesktopNovelMasterRuntime } from "../../runtime/types.js";
+import { notifyComposerStatusAfterSessionKkvCleared } from "../../services/notify-composer-status-after-kkv-clear.js";
+import { projectComposerStatusForSession } from "../../services/project-composer-status.service.js";
 
 function toIpcFillPolicy(
   fillPolicy: string | undefined,
@@ -53,6 +57,26 @@ async function loadWorktreeRows(
   return wt.buildListRows();
 }
 
+/**
+ * 规则保存后：投影 Composer 状态条（workplace + user_ops）整表替换。
+ * 不刷新规则快照、不 capture。
+ */
+async function suggestWorkplaceAttachmentsAfterRuleChange(
+  rt: DesktopNovelMasterRuntime,
+  wt: WorktreeService,
+  sessionId: string | undefined,
+): Promise<void> {
+  if (sessionId == null || sessionId === "") {
+    return;
+  }
+  const attachments = await projectComposerStatusForSession(
+    rt,
+    wt,
+    sessionId,
+  );
+  notifyComposerAttachmentsSuggestToRenderer({ sessionId, attachments });
+}
+
 export async function handleWorktreeBuildListRows(
   req: WorktreeBuildListRowsRequest,
 ): Promise<IpcResult<WorktreeListRowDto[]>> {
@@ -81,10 +105,9 @@ export async function handleWorktreeSetDirRule(
       tailCount: req.tailCount,
       fillPolicy: req.fillPolicy,
     });
-    if (scope.kind === "session") {
-      await captureSessionWorktreeBlockForScope(rt, scope);
-    }
+    // 规则变更不写 capture；不刷新规则快照；workplace 草稿见 composerAttachmentsSuggest
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
@@ -102,27 +125,26 @@ export async function handleWorktreeSetFileRule(
       logicalPath: req.logicalPath,
       inclusionMode: req.inclusionMode,
     });
-    if (scope.kind === "session") {
-      await captureSessionWorktreeBlockForScope(rt, scope);
-    }
     notifyWorkspaceMutatedToRenderer(workspaceMutatedPayloadFromRequest(req));
+    await suggestWorkplaceAttachmentsAfterRuleChange(rt, wt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };
   }
 }
 
-/** 手动工作树快照：立即 capture，不重载消费方 ① 列表。 */
+/**
+ * 已退役的「工作树快照」IPC：改清空 session kkv，下次拼装重建常驻前缀。
+ * UI 入口将在 Step 9 删除。
+ */
 export async function handleWorktreeCaptureSessionBlock(
   req: WorktreeCaptureSessionBlockRequest,
 ): Promise<IpcResult<void>> {
   try {
     const rt = await getDesktopRuntime();
-    await captureSessionWorktreeBlockForScope(rt, {
-      kind: "session",
-      projectId: req.projectId,
-      sessionId: req.sessionId,
-    });
+    await rt.sessionKkv.clearSession(req.sessionId);
+    // 手动「重置常驻缓存」同清上条状态 chip
+    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

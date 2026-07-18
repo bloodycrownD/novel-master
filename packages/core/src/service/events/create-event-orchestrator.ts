@@ -8,7 +8,6 @@ import type { MessageService } from "@/service/chat/message.port.js";
 import type { MessageTranscriptEffectsService } from "@/service/chat/message-transcript-effects.port.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import type { EventsConfigStore } from "@/service/events-config/events-config-store.port.js";
-import type { SessionWorktreeBlockStore } from "@/service/prompt/session-worktree-block.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { RunAgentHandlerDeps } from "./impl/actions/run-agent.handler.js";
@@ -16,6 +15,7 @@ import type { AgentRegistryService } from "@/service/agent/agent-registry.port.j
 import type { ModelRequestService } from "@/service/provider/model-request.port.js";
 import type { SavedModelRepository } from "@/domain/provider/repositories/saved-model.port.js";
 import type { MessageCheckpointService } from "@/service/message-checkpoint/message-checkpoint.port.js";
+import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { VfsService } from "@/service/vfs/vfs.port.js";
 import type { PersistentState } from "@/service/persistent-state/persistent-state.port.js";
 import type { RegexConfigService } from "@/service/regex/regex-config.port.js";
@@ -31,6 +31,7 @@ export interface CreateEventOrchestratorDeps {
   readonly eventBus: SimpleEventBus;
   readonly messages: MessageService;
   readonly messageTranscriptEffects: MessageTranscriptEffectsService;
+  readonly sessionKkv: SessionKkvService;
   readonly runAgent?: RunAgentHandlerDeps;
 }
 
@@ -40,10 +41,10 @@ export function createRunAgentHandlerDeps(input: {
   readonly agentRegistry: AgentRegistryService;
   readonly modelRequests: ModelRequestService;
   readonly savedModels: SavedModelRepository;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly worktree: (scope: VfsScope) => WorktreeService;
   readonly sessionVfs: (projectId: string, sessionId: string) => VfsService;
   readonly messageCheckpoint: MessageCheckpointService;
+  readonly sessionKkv: SessionKkvService;
   readonly eventBus: SimpleEventBus;
   readonly state: PersistentState;
   readonly regexConfig?: RegexConfigService;
@@ -53,10 +54,10 @@ export function createRunAgentHandlerDeps(input: {
     agentRegistry: input.agentRegistry,
     modelRequests: input.modelRequests,
     savedModels: input.savedModels,
-    worktreeBlockStore: input.worktreeBlockStore,
     worktree: input.worktree,
     sessionVfs: input.sessionVfs,
     messageCheckpoint: input.messageCheckpoint,
+    sessionKkv: input.sessionKkv,
     eventBus: input.eventBus,
     getWorkspaceModelId: () => input.state.getCurrentModelId(),
     regexConfig: input.regexConfig,

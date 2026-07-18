@@ -17,8 +17,51 @@ export {
 export type { ChatSession } from '../domain/chat/model/session.js';
 export type {
   ChatMessage,
+  MessageAttachment,
   MessageContent,
 } from '../domain/chat/model/message.js';
+export {
+  messageAttachmentSchema,
+  messageAttachmentsSchema,
+  parseAttachmentsJson,
+  serializeAttachmentsJson,
+} from '../domain/chat/model/message-attachment.schema.js';
+export {
+  EMPTY_COMPOSER_DRAFT,
+  composerDraftAttachmentSchema,
+  composerDraftSchema,
+  isComposerDraftAttachment,
+  parseComposerDraftJson,
+  serializeComposerDraftJson,
+} from '../domain/chat/model/composer-draft.schema.js';
+export type {
+  ComposerDraft,
+  ComposerDraftAttachment,
+} from '../domain/chat/model/composer-draft.schema.js';
+export { wrapUserMessageForLlm } from '../domain/chat/logic/wrap-user-message-for-llm.js';
+export {
+  prepareUserMessagesForPrompt,
+} from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+export {
+  PROMPT_FILE_SEEN_SHORT_TIP,
+  createPromptPathSeenSet,
+  isPromptDirTokenPath,
+  normalizePromptSeenPath,
+  normalizePromptStorePath,
+  renderPromptFileSeenShortTip,
+  tryNormalizePromptSeenPath,
+} from '../domain/chat/logic/prompt-path-seen.js';
+export {
+  ATTACH_DIR_TREE_MAX_UTF8_BYTES,
+  renderDirAttachTree,
+} from '../domain/chat/logic/render-dir-attach-tree.js';
+export type { RenderDirAttachTreeDeps } from '../domain/chat/logic/render-dir-attach-tree.js';
+export {
+  mergeAttachmentsByPath,
+  mergeAttachmentsWithScannedAtPaths,
+  scanAtPathAttachments,
+} from '../domain/chat/logic/scan-at-path-attachments.js';
 export type {
   ContentBlock,
   TextBlock,
@@ -64,6 +107,7 @@ export {
 export { resolveFlushBaselineTree } from '../domain/chat/logic/resolve-flush-baseline-tree.js';
 export { resolveCurrentWorkspaceSnapshot } from '../domain/chat/logic/resolve-current-workspace-snapshot.js';
 export {
+  collectUserOpsChangedPaths,
   diffWorkspaceForUserVfsFlush,
   isWorkspaceFlushDiffEmpty,
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
@@ -75,6 +119,18 @@ export type {
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
 export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
 export {
+  buildUserOpsAttachment,
+  previewPendingUserOpsAttachment,
+} from '../domain/chat/logic/build-user-ops-attachment.js';
+export {
+  buildComposerStatusAttachments,
+  projectComposerStatusAttachments,
+  replaceComposerStatusAttachments,
+  userOpsAttachmentsFromChangedPaths,
+} from '../domain/chat/logic/project-composer-status-attachments.js';
+export type { ProjectComposerStatusAttachmentsDeps } from '../domain/chat/logic/project-composer-status-attachments.js';
+export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';
+export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from '../domain/chat/logic/user-vfs-turn-constants.js';
@@ -83,7 +139,6 @@ export {
   deriveToolUsesFromVfsActions,
   formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
-  matchUserVfsTurnAtForDisplay,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_SPAN,
 } from '../domain/chat/logic/user-vfs-turn-view.js';

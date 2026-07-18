@@ -1,6 +1,5 @@
 /**
- * Session actions drawer: rename, prompt preview, compaction, prompt file block capture.
- * Agent/model selection lives under Profile → 我的.
+ * Session actions drawer: rename, prompt preview, compaction, model/agent.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -13,7 +12,8 @@ type Props = {
   onRename?: () => void;
   onCompact?: () => void;
   onRealPrompt?: () => void;
-  onCapturePromptFileBlock?: () => void;
+  onSwitchModel?: () => void;
+  onSwitchAgent?: () => void;
 };
 
 export function SessionActionsDrawer({
@@ -22,7 +22,8 @@ export function SessionActionsDrawer({
   onRename,
   onCompact,
   onRealPrompt,
-  onCapturePromptFileBlock,
+  onSwitchModel,
+  onSwitchAgent,
 }: Props) {
   const { tokens } = useTheme();
 
@@ -30,7 +31,8 @@ export function SessionActionsDrawer({
     { label: '聊天重命名', action: onRename },
     { label: '查看提示词', action: onRealPrompt },
     { label: '压缩上下文', action: onCompact },
-    { label: '工作树快照', action: onCapturePromptFileBlock },
+    { label: '切换模型', action: onSwitchModel },
+    { label: '切换 Agent', action: onSwitchAgent },
   ];
 
   return (

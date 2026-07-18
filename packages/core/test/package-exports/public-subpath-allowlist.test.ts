@@ -50,8 +50,21 @@ describe("public 子入口 export allowlist 快照", () => {
         `public/worktree 不应导出 ${name}`,
       );
     }
-    assert.ok(snapshot.includes("createSessionWorktreeBlockStore"));
-    assert.ok(snapshot.includes("captureSessionWorktreeBlock"));
-    assert.ok(snapshot.includes("getCapturedBlockOrCapture"));
+    assert.ok(snapshot.includes("assembleWorkplaceDisplay"));
+    assert.equal(
+      snapshot.includes("createSessionWorktreeBlockStore"),
+      false,
+      "public/worktree 不应再导出 createSessionWorktreeBlockStore",
+    );
+    assert.equal(
+      snapshot.includes("captureSessionWorktreeBlock"),
+      false,
+      "public/worktree 不应再导出 captureSessionWorktreeBlock",
+    );
+    assert.equal(
+      snapshot.includes("getCapturedBlockOrCapture"),
+      false,
+      "public/worktree 不应再导出 getCapturedBlockOrCapture",
+    );
   });
 });

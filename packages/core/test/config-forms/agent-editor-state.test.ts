@@ -51,7 +51,7 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   assert.equal(PROMPT_REGION_LABELS.chatTag, "会话消息");
   assert.equal(
     PROMPT_REGION_LABELS.layoutOrder,
-    "系统 → 工作树 → 持久区 → 会话历史 → 动态区"
+    "系统 → 常驻工作区 → 持久区 → 会话历史 → 动态区"
   );
   assert.equal(
     PROMPT_REGION_LABELS.persistRegionHint,

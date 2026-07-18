@@ -197,16 +197,14 @@ describe("worktree materialize", () => {
     assert.match(materialized.filetreeDisplay, /a\.md 全部加载/);
   });
 
-  it("T-WEC11: capture 后 renderDisplay 与快照一致", async () => {
+  it("T-WEC11: materializePersistBlock 与 renderDisplay 一致", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
     const svfs = ctx.sessionVfs(project.id, session.id);
     await svfs.write("/note.md", "hello");
 
-    const { createSessionWorktreeBlockStore, createWorktreeService } =
-      await import("@novel-master/core/worktree");
-    const store = createSessionWorktreeBlockStore();
+    const { createWorktreeService } = await import("@novel-master/core/worktree");
     const wt = createWorktreeService(ctx.conn, {
       kind: "session",
       projectId: project.id,
@@ -214,10 +212,8 @@ describe("worktree materialize", () => {
     });
 
     const { worktreeDisplay } = await wt.materializePersistBlock();
-    store.capture(project.id, session.id, { worktreeDisplay });
-    const block = store.getCapturedBlock(project.id, session.id);
-    assert.ok(block != null && block.worktreeDisplay.length > 0);
+    assert.ok(worktreeDisplay.length > 0);
     const display = await wt.renderDisplay();
-    assert.equal(block!.worktreeDisplay, display);
+    assert.equal(worktreeDisplay, display);
   });
 });

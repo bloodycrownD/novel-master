@@ -39,10 +39,10 @@ import type { SessionFsService } from "@novel-master/core/session-fs";
 import type { RegexConfigService } from "@novel-master/core/regex";
 import type { VfsScope, VfsService } from "@novel-master/core/vfs";
 import type {
-  SessionWorktreeBlockStore,
   WorktreeService,
 } from "@novel-master/core/worktree";
 import type { KkvService } from "@novel-master/core/kkv";
+import type { SessionKkvService } from "@novel-master/core/session-kkv";
 
 /** Open connection with domain services (main-process singleton host). */
 export interface DesktopNovelMasterRuntime {
@@ -52,6 +52,8 @@ export interface DesktopNovelMasterRuntime {
   readonly preferences: PersistentPreferences;
   /** Internal KKV handle for `AppUiPreferences` only — prefer `preferences` / `state`. */
   readonly kkv: KkvService;
+  /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
+  readonly sessionKkv: SessionKkvService;
   readonly projects: ProjectService;
   readonly sessions: SessionService;
   readonly messages: MessageService;
@@ -65,7 +67,6 @@ export interface DesktopNovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;

@@ -73,3 +73,11 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# WebView esbuild 产物与原生落点（仅构建/拷贝产生，不入库）
+webview-dist/**
+!webview-dist/.gitkeep
+android/app/src/main/assets/webview/**
+!android/app/src/main/assets/webview/.gitkeep
+ios/NovelMaster/WebViewDist/**
+!ios/NovelMaster/WebViewDist/.gitkeep

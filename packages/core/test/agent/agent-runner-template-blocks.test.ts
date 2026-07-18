@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
 import {
   createAgentRunner,
@@ -16,12 +16,24 @@ import {
 } from "@novel-master/core/provider";
 import { SimpleEventBus } from "@novel-master/core/events";
 import { registerBuiltinTools, ToolRegistry } from "@novel-master/core";
-import { mockWorktreeBlockStore } from "../helpers/prompt-layout-test-helpers.js";
+import { createMemorySessionKkv } from "../helpers/prompt-layout-test-helpers.js";
 import { type VfsService } from "@novel-master/core/vfs";
+import {
+  fileCacheKey,
+  RULE_SNAPSHOT_CANON_KEY,
+  SESSION_KKV_DOMAIN_FILE_CACHE,
+  SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+} from "../../src/domain/session-kkv/model/session-kkv-domains.js";
+import {
+  serializeFileCachePayload,
+  serializeRuleSnapshot,
+} from "../../src/domain/worktree/logic/rule-snapshot-codec.js";
+import type { SessionKkvService } from "@novel-master/core/session-kkv";
 
 const RUN_MODEL_ID = "anthropic/claude";
 const PROJECT_ID = "p1";
 const SESSION_ID = "s1";
+const SNAPSHOT_BODY = "WORKTREE_SNAPSHOT";
 
 function mockVfs(): VfsService {
   const files = new Map<string, string>();
@@ -64,23 +76,36 @@ function mockToolCtx(vfs: VfsService): BuiltinToolContext {
 
 import { noopSavedModelRepository } from "../helpers/noop-saved-model-repo.js";
 
+async function seedWorkplaceKkv(
+  sessionKkv: SessionKkvService,
+  body: string,
+): Promise<void> {
+  await sessionKkv.set(
+    SESSION_ID,
+    SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
+    RULE_SNAPSHOT_CANON_KEY,
+    serializeRuleSnapshot([{ path: "/snap.md", status: "full" }]),
+  );
+  await sessionKkv.set(
+    SESSION_ID,
+    SESSION_KKV_DOMAIN_FILE_CACHE,
+    fileCacheKey("full", "/snap.md"),
+    serializeFileCachePayload({ body, mtimeMs: 1 }),
+  );
+}
+
 function runnerDeps(
   deps: Omit<
     CreateAgentRunnerDeps,
-    "eventBus" | "worktreeBlockStore" | "worktree" | "savedModels"
+    "eventBus" | "sessionKkv" | "worktree" | "savedModels"
   > &
-    Partial<Pick<CreateAgentRunnerDeps, "savedModels">>,
-  worktreeDisplay: string
+    Partial<Pick<CreateAgentRunnerDeps, "savedModels" | "sessionKkv">>,
 ): CreateAgentRunnerDeps {
   return {
     savedModels: noopSavedModelRepository(),
+    sessionKkv: createMemorySessionKkv(),
     ...deps,
     eventBus: new SimpleEventBus(),
-    worktreeBlockStore: mockWorktreeBlockStore(
-      worktreeDisplay,
-      PROJECT_ID,
-      SESSION_ID,
-    ),
     worktree: () =>
       ({
         scope: {
@@ -88,9 +113,13 @@ function runnerDeps(
           projectId: PROJECT_ID,
           sessionId: SESSION_ID,
         },
-        renderDisplay: async () => worktreeDisplay,
+        renderDisplay: async () => "",
         buildListRows: async () => [],
-        materializePersistBlock: async () => ({ worktreeDisplay }),
+        materializePersistBlock: async () => ({ worktreeDisplay: "" }),
+        evaluateRuleView: async () => ({
+          rows: [],
+          displayByPath: new Map(),
+        }),
       } as never),
   };
 }
@@ -109,6 +138,9 @@ describe("AgentRunner template blocks", () => {
       },
     };
 
+    const sessionKkv = createMemorySessionKkv();
+    await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
+
     const captured: { options?: ModelRequestOptions } = {};
     const model: ModelRequestService = {
       request: mock.fn(async (_modelId, _content, options) => {
@@ -122,15 +154,13 @@ describe("AgentRunner template blocks", () => {
     };
 
     const runner = createAgentRunner(
-      runnerDeps(
-        {
-          session,
-          modelRequests: model,
-          registry: new ToolRegistry(),
-          toolCtx: mockToolCtx(mockVfs()),
-        },
-        "WORKTREE_SNAPSHOT"
-      )
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry: new ToolRegistry(),
+        toolCtx: mockToolCtx(mockVfs()),
+        sessionKkv,
+      }),
     );
 
     await runner.run({
@@ -145,7 +175,7 @@ describe("AgentRunner template blocks", () => {
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 3);
     assert.equal(history[0]!.id, "prompt:worktree:canon");
-    assert.equal(messageBodyText(history[0]!), "WORKTREE_SNAPSHOT");
+    assert.match(messageBodyText(history[0]!), new RegExp(SNAPSHOT_BODY));
     assert.equal(history[1]!.id, "prompt:worktree:canon:done");
     assert.equal(messageBodyText(history[1]!), TOOL_TURN_BRIDGE_TEXT);
     assert.equal(history[2]!.role, "user");
@@ -163,6 +193,9 @@ describe("AgentRunner template blocks", () => {
         dynamic: [],
       },
     };
+
+    const sessionKkv = createMemorySessionKkv();
+    await seedWorkplaceKkv(sessionKkv, SNAPSHOT_BODY);
 
     const histories: ModelRequestOptions[] = [];
     const model: ModelRequestService = {
@@ -194,15 +227,13 @@ describe("AgentRunner template blocks", () => {
     registerBuiltinTools(registry);
     const vfs = mockVfs();
     const runner = createAgentRunner(
-      runnerDeps(
-        {
-          session,
-          modelRequests: model,
-          registry,
-          toolCtx: mockToolCtx(vfs),
-        },
-        "WORKTREE_SNAPSHOT"
-      )
+      runnerDeps({
+        session,
+        modelRequests: model,
+        registry,
+        toolCtx: mockToolCtx(vfs),
+        sessionKkv,
+      }),
     );
 
     await runner.run({
@@ -219,23 +250,23 @@ describe("AgentRunner template blocks", () => {
       const history = opts.history ?? [];
       assert.equal(
         history.some((m) => m.id === "prompt:worktree:canon"),
-        true
+        true,
       );
       assert.equal(
         history.some((m) => m.id === "prompt:worktree:canon:done"),
-        true
+        true,
       );
       const ctxMsg = history.find((m) => m.id === "prompt:worktree:canon");
       const doneMsg = history.find(
-        (m) => m.id === "prompt:worktree:canon:done"
+        (m) => m.id === "prompt:worktree:canon:done",
       );
-      assert.equal(
+      assert.match(
         ctxMsg != null ? messageBodyText(ctxMsg) : "",
-        "WORKTREE_SNAPSHOT"
+        new RegExp(SNAPSHOT_BODY),
       );
       assert.equal(
         doneMsg != null ? messageBodyText(doneMsg) : "",
-        TOOL_TURN_BRIDGE_TEXT
+        TOOL_TURN_BRIDGE_TEXT,
       );
     }
   });

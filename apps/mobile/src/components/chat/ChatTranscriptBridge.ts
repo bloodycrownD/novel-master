@@ -19,18 +19,14 @@ export type TranscriptToolView = {
   readonly summary?: string;
 };
 
-export type TranscriptUserVfsAction = {
-  readonly kind: string;
+/** Rows sent to Web (seq ascending; Web renders forward DOM order). */
+export type TranscriptAttachmentView = {
+  readonly source: 'workplace' | 'attach' | 'user_ops';
+  readonly type: 'text' | 'image' | 'dir';
+  readonly name: string;
   readonly path: string;
-  readonly method?: string;
-  readonly hunks: readonly {
-    readonly index: string;
-    readonly old: string;
-    readonly new: string;
-  }[];
 };
 
-/** Rows sent to Web (seq ascending; Web renders forward DOM order). */
 export type TranscriptRow =
   | {
       readonly kind: 'message';
@@ -44,14 +40,8 @@ export type TranscriptRow =
       /** Pre-rendered assistant HTML when flags.richText (Web innerHTML). */
       readonly textHtml?: string;
       readonly thinkingHtml?: string;
-    }
-  | {
-      readonly kind: 'user_vfs_turn';
-      readonly id: string;
-      readonly hidden: boolean;
-      readonly actions: readonly TranscriptUserVfsAction[];
-      readonly tools: readonly TranscriptToolView[];
-      readonly bridgeText: string;
+      /** user 消息附件摘要（展开为工具调用风格卡片）。 */
+      readonly attachments?: readonly TranscriptAttachmentView[];
     }
   | {
       readonly kind: 'stream';
@@ -154,7 +144,7 @@ export type ChatTranscriptScrollSnapshot = {
 };
 
 export type TranscriptToHostMessage =
-  | BridgeEnvelope<'ready', { version: string }>
+  | BridgeEnvelope<'ready', { version: string; readyState?: string }>
   | BridgeEnvelope<
       'scrollSnapshot',
       ChatTranscriptScrollSnapshot & {

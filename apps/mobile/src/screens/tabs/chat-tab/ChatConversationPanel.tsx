@@ -224,6 +224,7 @@ export function ChatConversationPanel({
               lastMessageHasToolResult={lastMessageHasToolResult}
               lastMessageIsPlainUserText={lastMessageIsPlainUserText}
               draftRestoreToken={draftRestoreToken}
+              onOpenMore={() => setSessionDrawerOpen(true)}
             />
           </View>
           {sessionVfs && sessionWorktree ? (
@@ -278,7 +279,8 @@ export function ChatConversationPanel({
           controller.handleCompactSession();
         }}
         onRealPrompt={controller.onNavigateRealPrompt}
-        onCapturePromptFileBlock={controller.handleCapturePromptFileBlock}
+        onSwitchModel={() => setModelPickerOpen(true)}
+        onSwitchAgent={() => setAgentPickerOpen(true)}
       />
       <MessageActionMenu
         visible={!useWebviewTranscript && messageMenuTarget != null}

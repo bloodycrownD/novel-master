@@ -55,6 +55,11 @@ function isVfsSemanticSegment(message: ChatMessage): boolean {
   return kind != null && VFS_SEMANTIC_KINDS.has(kind);
 }
 
+/** 带非空 attachments 的 user：禁与相邻 plain chat merge（同 VFS semantic）。 */
+function hasNonEmptyAttachments(message: ChatMessage): boolean {
+  return (message.attachments?.length ?? 0) > 0;
+}
+
 function canMergeAdjacent(
   left: ChatMessage,
   right: ChatMessage,
@@ -71,6 +76,9 @@ function canMergeAdjacent(
     return false;
   }
   if (isVfsSemanticSegment(left) || isVfsSemanticSegment(right)) {
+    return false;
+  }
+  if (hasNonEmptyAttachments(left) || hasNonEmptyAttachments(right)) {
     return false;
   }
   return true;
@@ -144,10 +152,11 @@ function applyProviderPostProcess(
 }
 
 /**
- * 在 zone 内 merge 连续同 role 纯文本；跨区、VFS 段、含 tool 块均不 merge。
+ * 在 zone 内 merge 连续同 role 纯文本；跨区、VFS 段、带 attachments、含 tool 块均不 merge。
+ * **保持 sync**：不在此做 async hydrate（须由上游 `prepareUserMessagesForPrompt` 先 wrap）。
  * 不拆分 VFS 语义段（各条不满足 merge 条件时原样保留）。
  *
- * @param messages `buildPromptLlmInputFromLayout` 输出（未 merge）
+ * @param messages 通常为已 wrap 的内存 messages（`prepareUserMessagesForPrompt` 输出）
  * @param provider LLM 协议种类（per-provider 后处理）
  * @param zones 三区边界；缺省时整段视为 chat 区
  */

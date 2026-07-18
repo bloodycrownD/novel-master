@@ -59,11 +59,13 @@ import {
   type VfsService,
 } from "@novel-master/core/vfs";
 import {
-  createSessionWorktreeBlockStore,
   createWorktreeService,
-  type SessionWorktreeBlockStore,
   type WorktreeService,
 } from "@novel-master/core/worktree";
+import {
+  createSessionKkvService,
+  type SessionKkvService,
+} from "@novel-master/core/session-kkv";
 import type { AgentRegistryService } from "@novel-master/core/agent";
 import { registerBetterSqlite3Driver } from "@novel-master/tdbc-driver-better-sqlite3";
 import {
@@ -110,7 +112,6 @@ export interface NovelMasterRuntime {
   readonly eventsConfig: EventsConfigStore;
   readonly compactionConditions: CompactionConditionsStore;
   readonly compactionConditionEvaluator: CompactionConditionEvaluator;
-  readonly worktreeBlockStore: SessionWorktreeBlockStore;
   readonly eventOrchestrator: EventOrchestrator;
   globalVfs(): VfsService;
   projectVfs(projectId: string): VfsService;
@@ -125,6 +126,8 @@ export interface NovelMasterRuntime {
   readonly savedModelRepo: ProviderServiceBundle["savedModelRepo"];
   /** 用户 VFS U-A-U-A 落库；runAgentTurn flush 前置。 */
   readonly userVfsTurn: UserVfsTurnService;
+  /** 会话级规则快照 / file_cache；Agent write upsert 与常驻工作区共用。 */
+  readonly sessionKkv: SessionKkvService;
   readonly regexConfig: RegexConfigService;
   readonly agentRegistry: AgentRegistryService;
   readonly tokenCounters: TokenCounterRegistry;
@@ -178,9 +181,9 @@ export async function createNovelMasterRuntime(
   const eventBus = new SimpleEventBus();
   const eventsConfig = createEventsConfigStore(conn);
   const compactionConditions = createCompactionConditionsStore(conn);
-  const worktreeBlockStore = createSessionWorktreeBlockStore();
   const messages = createMessageService(conn);
   const messageTranscriptEffects = createMessageTranscriptEffectsService(conn);
+  const sessionKkv = createSessionKkvService(conn);
   const { userVfsTurn } = createUserVfsTurnServiceBundle(conn);
 
   const compactionConditionEvaluator = createCompactionConditionEvaluator({
@@ -196,16 +199,17 @@ export async function createNovelMasterRuntime(
     eventBus,
     messages,
     messageTranscriptEffects,
+    sessionKkv,
     runAgent: createRunAgentHandlerDeps({
       messages,
       agentRegistry,
       modelRequests,
       savedModels: providerBundle.savedModelRepo,
-      worktreeBlockStore,
       worktree: (s) => createWorktreeService(conn, s),
       sessionVfs: (projectId, sessionId) =>
         createScopedVfsService(conn, { kind: "session", projectId, sessionId }),
       messageCheckpoint: createMessageCheckpointService(conn),
+      sessionKkv,
       eventBus,
       state,
       regexConfig,
@@ -221,7 +225,6 @@ export async function createNovelMasterRuntime(
     eventsConfig,
     compactionConditions,
     compactionConditionEvaluator,
-    worktreeBlockStore,
     eventOrchestrator,
     agentRegistry,
     tokenCounters,
@@ -231,6 +234,7 @@ export async function createNovelMasterRuntime(
     messageTranscriptEffects,
     sessionFs: createSessionFsService(conn),
     messageCheckpoint: createMessageCheckpointService(conn),
+    sessionKkv,
     scope,
     globalVfs: () => createScopedVfsService(conn, { kind: "global" }),
     projectVfs: (projectId) =>

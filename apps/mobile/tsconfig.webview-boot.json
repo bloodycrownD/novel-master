@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2018", "DOM"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "baseUrl": ".",
+    "paths": {
+      "@web/*": ["src/web/*"]
+    }
+  },
+  "include": [
+    "src/web/chat-transcript/webview/**/*.ts",
+    "src/web/chat-transcript/webview/**/*.tsx",
+    "src/web/rich-document/webview/**/*.ts",
+    "src/web/rich-document/webview/**/*.tsx",
+    "src/web/shared/**/*.ts",
+    "src/web/shared/**/*.tsx"
+  ]
+}

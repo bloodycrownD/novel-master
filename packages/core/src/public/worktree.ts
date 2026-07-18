@@ -59,14 +59,22 @@ export type {
 } from "../service/worktree/worktree.port.js";
 export { createTemplatePullService } from "../service/template/create-template-pull-service.js";
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
-export type {
-  SessionWorktreeBlock,
-  SessionWorktreeBlockStore,
-} from "../service/prompt/session-worktree-block.port.js";
-export { createSessionWorktreeBlockStore } from "../service/prompt/create-session-worktree-block-store.js";
 export {
-  captureSessionWorktreeBlock,
-  getCapturedBlockOrCapture,
-  SessionWorktreeBlockScopeError,
-  type CaptureSessionWorktreeBlockRuntime,
-} from "../service/prompt/capture-session-worktree-block.js";
+  assembleWorkplaceDisplay,
+  layoutHasWorktreeBlock,
+  type AssembleWorkplaceDisplayDeps,
+  type AssembleWorkplaceDisplayResult,
+} from "../service/workplace/assemble-workplace-display.js";
+export {
+  ruleViewToSnapshotEntries,
+  parseRuleSnapshotJson,
+  serializeRuleSnapshot,
+  type RuleSnapshotEntry,
+} from "../domain/worktree/logic/rule-snapshot-codec.js";
+export {
+  diffWorkplacePaths,
+  isWorkplacePathLoadedInCache,
+  workplaceAttachmentsFromNeededPaths,
+  workplaceAttachmentsFromRuleDelta,
+  type WorkplaceLivePath,
+} from "../domain/worktree/logic/diff-workplace-paths.js";

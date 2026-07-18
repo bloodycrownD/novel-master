@@ -18,16 +18,22 @@ export type SchemaColumnAlignment = {
 /** 当前版本运行必需的 legacy 列清单（顺序无关，逐项幂等）。 */
 export const SCHEMA_COLUMN_ALIGNMENTS: readonly SchemaColumnAlignment[] = [
   {
+    table: "chat_session",
+    column: "composer_draft_json",
+    addColumnSql:
+      "ALTER TABLE chat_session ADD COLUMN composer_draft_json TEXT NULL",
+  },
+  {
     table: "chat_message",
     column: "hidden",
     addColumnSql:
       "ALTER TABLE chat_message ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0",
   },
   {
-    table: "chat_session",
-    column: "user_vfs_pending_json",
+    table: "chat_message",
+    column: "attachments_json",
     addColumnSql:
-      "ALTER TABLE chat_session ADD COLUMN user_vfs_pending_json TEXT NULL",
+      "ALTER TABLE chat_message ADD COLUMN attachments_json TEXT NULL",
   },
   {
     table: "chat_project",

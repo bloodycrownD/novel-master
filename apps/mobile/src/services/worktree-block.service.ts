@@ -1,76 +1,42 @@
 /**
- * Session worktree block capture helpers（消费方 ②）。
+ * 常驻工作区 helpers（原 BlockStore capture 已退役）。
  *
  * @module services/worktree-block.service
  */
-import {
-  captureSessionWorktreeBlock as coreCaptureSessionWorktreeBlock,
-  getCapturedBlockOrCapture,
-} from '@novel-master/core/worktree';
+import { assembleWorkplaceDisplay } from '@novel-master/core/worktree';
 import type { MobileNovelMasterRuntime } from '../runtime/types';
+import { refreshComposerStatusAfterSessionKkvCleared } from './project-composer-status.service';
 
 export interface SessionWorktreeBlockScope {
   readonly projectId: string;
   readonly sessionId: string;
 }
 
-function blockRuntime(runtime: MobileNovelMasterRuntime) {
-  return {
-    worktree: (s: Parameters<MobileNovelMasterRuntime['worktree']>[0]) =>
-      runtime.worktree(s),
-    worktreeBlockStore: runtime.worktreeBlockStore,
+/** 显式拼装常驻前缀（预览 / 调试）；生产发送路径用 session-prompt-input。 */
+export async function assembleWorkplaceForMobile(
+  runtime: MobileNovelMasterRuntime,
+  scope: SessionWorktreeBlockScope,
+) {
+  const wtScope = {
+    kind: 'session' as const,
+    projectId: scope.projectId,
+    sessionId: scope.sessionId,
   };
+  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
+    sessionKkv: runtime.sessionKkv,
+    worktree: runtime.worktree(wtScope),
+    vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
+    layout: { persist: [{ type: 'worktree', name: 'canon' }] },
+  });
+  return { worktreeDisplay, capturedAtMs: Date.now() };
 }
 
-/** run / 预览读路径：无条目时显式 capture 一次。 */
-export async function getCapturedBlockOrCaptureForMobile(
+/** 手动重置常驻工作区缓存：clear session kkv，并清 Composer 上条。 */
+export async function clearSessionWorkplaceKkv(
   runtime: MobileNovelMasterRuntime,
   scope: SessionWorktreeBlockScope,
 ) {
-  return getCapturedBlockOrCapture(
-    {
-      kind: 'session',
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    },
-    blockRuntime(runtime),
-  );
-}
-
-/** 置位 / 压缩 / 规则等业务入口：物化并写入 block store。 */
-export async function captureSessionWorktreeBlockForMobile(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionWorktreeBlockScope,
-) {
-  return coreCaptureSessionWorktreeBlock(
-    {
-      kind: 'session',
-      projectId: scope.projectId,
-      sessionId: scope.sessionId,
-    },
-    blockRuntime(runtime),
-  );
-}
-
-/** {@link captureSessionWorktreeBlockForMobile} 的 spec 对齐导出名。 */
-export { captureSessionWorktreeBlockForMobile as captureSessionWorktreeBlock };
-
-/** 手动工作树快照：委托 {@link captureSessionWorktreeBlockForMobile}。 */
-export async function captureSessionWorktreeBlockOnManualRefresh(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionWorktreeBlockScope,
-) {
-  return captureSessionWorktreeBlockForMobile(runtime, scope);
-}
-
-/** manual 压缩 emit 成功后 capture；失败时不 capture（T-WEC5）。 */
-export async function captureAfterManualCompactionEmit(
-  runtime: MobileNovelMasterRuntime,
-  scope: SessionWorktreeBlockScope,
-  emitOk: boolean,
-): Promise<void> {
-  if (!emitOk) {
-    return;
-  }
-  await captureSessionWorktreeBlockForMobile(runtime, scope);
+  await runtime.sessionKkv.clearSession(scope.sessionId);
+  await refreshComposerStatusAfterSessionKkvCleared(runtime, scope);
+  return { worktreeDisplay: '', capturedAtMs: Date.now() };
 }

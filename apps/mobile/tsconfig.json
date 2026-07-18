@@ -3,10 +3,18 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      // 给误用 RN tsconfig 打开 web 文件的工具一条退路；正式类型检查以 tsconfig.webview-boot / src/web/tsconfig 为准
+      "@web/*": ["src/web/*"]
     },
     "types": ["jest"]
   },
   "include": ["src/**/*", "index.js", "__tests__/**/*"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "exclude": [
+    "**/node_modules",
+    "**/Pods",
+    // WebView boot 真源由 tsconfig.webview-boot.json 负责（@web + Preact JSX）；
+    // 勿纳入 RN 工程，否则 IDE 会报找不到 @web、以及 Preact 组件「不能用作 JSX」。
+    "src/web/**"
+  ]
 }

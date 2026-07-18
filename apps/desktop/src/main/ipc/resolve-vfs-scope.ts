@@ -4,7 +4,6 @@
  * @module ipc/resolve-vfs-scope
  */
 import { type VfsScope, type VfsService } from "@novel-master/core/vfs";
-import { captureSessionWorktreeBlock } from "@novel-master/core/worktree";
 import type { VfsScopeRequest } from "../../../shared/ipc-types.js";
 import type { DesktopNovelMasterRuntime } from "../runtime/types.js";
 
@@ -61,15 +60,4 @@ export function getWorktreeForScope(
   scope: VfsScope,
 ) {
   return rt.worktree(scope);
-}
-
-/** 会话 scope 物化并写入 block store。 */
-export async function captureSessionWorktreeBlockForScope(
-  rt: DesktopNovelMasterRuntime,
-  scope: VfsScope,
-) {
-  return captureSessionWorktreeBlock(scope, {
-    worktree: s => rt.worktree(s),
-    worktreeBlockStore: rt.worktreeBlockStore,
-  });
 }

@@ -1,5 +1,5 @@
 /**
- * T-WEC7：VFS delete 后 capture；快照不含已删 path。
+ * VFS delete：清理规则；不再 capture BlockStore。
  */
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
@@ -7,7 +7,6 @@ import { getDesktopRuntime } from "../src/main/runtime/desktop-runtime-singleton
 import { handleProjectsCreate } from "../src/main/ipc/handlers/projects.js";
 import { handleSessionsCreate } from "../src/main/ipc/handlers/sessions.js";
 import { handleVfsDelete, handleVfsWrite } from "../src/main/ipc/handlers/vfs.js";
-import { handleWorktreeCaptureSessionBlock } from "../src/main/ipc/handlers/worktree.js";
 import {
   setupDesktopDbTestEnv,
   teardownDesktopDbTestEnv,
@@ -46,26 +45,15 @@ describe("handleVfsDelete", () => {
       content: "deleted-content",
     });
     assert.equal(write.ok, true);
-
-    const capture = await handleWorktreeCaptureSessionBlock({
-      projectId,
-      sessionId,
-    });
-    assert.equal(capture.ok, true);
   });
 
   after(async () => {
     await teardownDesktopDbTestEnv(tempDir);
   });
 
-  it("T-WEC7: VFS delete 后 capture；快照不含已删 path", async () => {
+  it("VFS delete 成功且不写 file_cache（无 capture）", async () => {
     const rt = await getDesktopRuntime();
-    const beforeBlock = rt.worktreeBlockStore.getCapturedBlock(
-      projectId,
-      sessionId,
-    );
-    assert.notEqual(beforeBlock, undefined);
-    assert.ok(beforeBlock!.worktreeDisplay.includes("gone.md"));
+    const keysBefore = await rt.sessionKkv.listKeys(sessionId, "file_cache");
 
     const result = await handleVfsDelete({
       workspaceScope: "chat",
@@ -75,13 +63,11 @@ describe("handleVfsDelete", () => {
     });
     assert.equal(result.ok, true);
 
-    const afterBlock = rt.worktreeBlockStore.getCapturedBlock(
-      projectId,
-      sessionId,
+    const keysAfter = await rt.sessionKkv.listKeys(sessionId, "file_cache");
+    assert.deepEqual(keysAfter, keysBefore);
+
+    await assert.rejects(
+      () => rt.sessionVfs(projectId, sessionId).read("/gone.md"),
     );
-    assert.notEqual(afterBlock, undefined);
-    assert.equal(typeof afterBlock!.capturedAtMs, "number");
-    assert.ok(!afterBlock!.worktreeDisplay.includes("gone.md"));
-    assert.ok(afterBlock!.capturedAtMs >= beforeBlock!.capturedAtMs);
   });
 });
