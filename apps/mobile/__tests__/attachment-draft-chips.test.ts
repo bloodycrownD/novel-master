@@ -34,7 +34,7 @@ function attach(
 }
 
 describe('formatAttachmentChipLabel (T-UI1)', () => {
-  it('workplace 为 📄/path', () => {
+  it('workplace 为「规则 · /path」', () => {
     expect(
       formatAttachmentChipLabel(
         attach({
@@ -44,10 +44,23 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
           name: 'w.md',
         }),
       ),
-    ).toBe('📄/w.md');
+    ).toBe('规则 · /w.md');
   });
 
-  it('user_ops 为 action:path（无 icon）', () => {
+  it('workplace 目录为「规则 · /dir/」', () => {
+    expect(
+      formatAttachmentChipLabel(
+        attach({
+          source: 'workplace',
+          type: 'dir',
+          path: '/notes',
+          name: 'notes',
+        }),
+      ),
+    ).toBe('规则 · /notes/');
+  });
+
+  it('user_ops 为「改稿 ·」前缀 + name', () => {
     expect(
       formatAttachmentChipLabel(
         attach({
@@ -57,7 +70,7 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
           name: 'edit:/ops.md',
         }),
       ),
-    ).toBe('edit:/ops.md');
+    ).toBe('改稿 · edit:/ops.md');
   });
 });
 

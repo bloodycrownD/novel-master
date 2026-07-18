@@ -23,7 +23,7 @@ function attach(
   };
 }
 
-test("T-UI1: workplace 为 📄/path", () => {
+test("T-UI1: workplace 为「规则 · /path」", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -33,11 +33,25 @@ test("T-UI1: workplace 为 📄/path", () => {
         name: "w.md",
       }),
     ),
-    "📄/w.md",
+    "规则 · /w.md",
   );
 });
 
-test("T-UI1: user_ops 为 action:path（无 icon）", () => {
+test("T-UI1: workplace 目录为「规则 · /dir/」", () => {
+  assert.equal(
+    formatAttachmentChipLabel(
+      attach({
+        source: "workplace",
+        type: "dir",
+        path: "/notes",
+        name: "notes",
+      }),
+    ),
+    "规则 · /notes/",
+  );
+});
+
+test("T-UI1: user_ops 为「改稿 ·」前缀 + name", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -47,7 +61,7 @@ test("T-UI1: user_ops 为 action:path（无 icon）", () => {
         name: "write:/ops.md",
       }),
     ),
-    "write:/ops.md",
+    "改稿 · write:/ops.md",
   );
 });
 

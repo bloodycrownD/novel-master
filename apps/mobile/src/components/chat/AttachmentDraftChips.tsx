@@ -42,16 +42,21 @@ export function partitionComposerChipAttachments(
   return { status, attach };
 }
 
-/** Chip 文案：user_ops → `action:path`；其余 `📄`/`📁` + path。 */
+/**
+ * Chip 文案：与文件引用 `@路径` 区分。
+ * - workplace → `规则 · /path`（目录保留尾 `/`）
+ * - user_ops → `改稿 ·` + name（多为 `action:path`）
+ */
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
   if (a.source === 'user_ops') {
-    return a.name;
+    return `改稿 · ${a.name}`;
   }
   const path = a.path ?? a.name;
   if (a.type === 'dir') {
-    return `📁${path}`;
+    const dirPath = path.endsWith('/') ? path : `${path}/`;
+    return `规则 · ${dirPath}`;
   }
-  return `📄${path}`;
+  return `规则 · ${path}`;
 }
 
 export function AttachmentDraftChips({

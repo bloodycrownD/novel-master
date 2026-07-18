@@ -39,16 +39,21 @@ export function partitionComposerChipAttachments(
   return { status, attach };
 }
 
-/** Chip 文案：user_ops → `action:path`；其余 `📄`/`📁` + path。 */
+/**
+ * Chip 文案：与文件引用 `@路径` 区分。
+ * - workplace → `规则 · /path`（目录保留尾 `/`）
+ * - user_ops → `改稿 ·` + name（多为 `action:path`）
+ */
 export function formatAttachmentChipLabel(a: MessageAttachmentDto): string {
-  if (a.source === 'user_ops') {
-    return a.name;
+  if (a.source === "user_ops") {
+    return `改稿 · ${a.name}`;
   }
   const path = a.path ?? a.name;
-  if (a.type === 'dir') {
-    return `📁${path}`;
+  if (a.type === "dir") {
+    const dirPath = path.endsWith("/") ? path : `${path}/`;
+    return `规则 · ${dirPath}`;
   }
-  return `📄${path}`;
+  return `规则 · ${path}`;
 }
 
 /** chip 根 class（T-UI2：目录不再带 warning 色类）。 */
