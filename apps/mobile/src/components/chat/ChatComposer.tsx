@@ -47,6 +47,7 @@ import {
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
 import { ComposerStatusChips } from './AttachmentDraftChips';
+import { ComposerAtPathInput } from './ComposerAtPathInput';
 import { AtPathTypeahead } from './AtPathTypeahead';
 import {
   type AtPathRef,
@@ -550,10 +551,10 @@ export function ChatComposer({
           candidates={typeaheadCandidates}
           onSelect={applyTypeaheadToken}
         />
-        <TextInput
-          ref={inputRef}
+        <ComposerAtPathInput
+          inputRef={inputRef}
           testID="chat-composer-input"
-          style={[styles.input, { color: tokens.text }]}
+          style={styles.input}
           placeholder={inputPlaceholder}
           placeholderTextColor={tokens.textSecondary}
           value={text}
@@ -569,7 +570,6 @@ export function ChatComposer({
             setCursor(e.nativeEvent.selection.start);
           }}
           editable={!inputDisabled}
-          multiline
         />
         <View style={styles.toolbar}>
           <Pressable
