@@ -9,8 +9,7 @@ module.exports = {
   preset: '@react-native/jest-preset',
   // @noble/hashes v2 为纯 ESM；须经 babel-jest，否则 Jest 报 Cannot use import statement
   transformIgnorePatterns: [
-    // 需转译 ESM：@bsky.app/tapper（Composer @路径 facet）
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes|@bsky\\.app/tapper)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@noble/hashes)/)',
   ],
 
   moduleNameMapper: {
