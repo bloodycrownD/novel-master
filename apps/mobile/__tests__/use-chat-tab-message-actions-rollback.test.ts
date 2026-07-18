@@ -144,8 +144,9 @@ describe('useChatTabMessageActions rollback', () => {
     );
   });
 
-  it('T-M2/T-TX2: undo_send 成功后写 draft 原文 + attachments 并 bump token', async () => {
+  it('T-M2/T-TX2: undo_send 成功后写 draft 原文（含 @路径）；无 attach chip', async () => {
     writeChatComposerDraftState('s1', { text: 'old draft', attachments: [] });
+    const anchorText = '请看 @/a.md';
     const attachments = [
       {
         name: '/w.md',
@@ -154,8 +155,15 @@ describe('useChatTabMessageActions rollback', () => {
         content: null,
         path: '/w.md',
       },
+      {
+        name: '/a.md',
+        source: 'attach' as const,
+        type: 'text' as const,
+        content: null,
+        path: '/a.md',
+      },
     ];
-    const anchor = plainUserMessage('你好', attachments);
+    const anchor = plainUserMessage(anchorText, attachments);
     const api = mountActions([anchor]);
 
     await act(async () => {
@@ -165,14 +173,36 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(mockRollbackToMessage).toHaveBeenCalled();
-    expect(readChatComposerDraft('s1')).toBe('你好');
-    expect(readChatComposerDraftState('s1').attachments).toEqual(attachments);
+    expect(readChatComposerDraft('s1')).toBe(anchorText);
+    expect(readChatComposerDraft('s1')).toContain('@/a.md');
+    const draftAttachments = readChatComposerDraftState('s1').attachments ?? [];
+    expect(draftAttachments).toEqual([]);
+    expect(draftAttachments.some(a => a.source === 'attach')).toBe(false);
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
   });
 
-  it('T-TX2: 编辑回填 Composer draft attachments', async () => {
-    writeChatComposerDraftState('s1', { text: '', attachments: [] });
-    const attachments = [
+  it('T-TX2: 编辑回填仅正文（含 @路径）；不恢复 source:attach', async () => {
+    writeChatComposerDraftState('s1', {
+      text: '',
+      attachments: [
+        {
+          name: '/w.md',
+          source: 'workplace' as const,
+          type: 'text' as const,
+          content: null,
+          path: '/w.md',
+        },
+        {
+          name: '/old.md',
+          source: 'attach' as const,
+          type: 'text' as const,
+          content: null,
+          path: '/old.md',
+        },
+      ],
+    });
+    const editText = '请看 @/a.md';
+    const messageAttachments = [
       {
         name: '/a.md',
         source: 'attach' as const,
@@ -181,7 +211,7 @@ describe('useChatTabMessageActions rollback', () => {
         path: '/a.md',
       },
     ];
-    const target = plainUserMessage('你好', attachments);
+    const target = plainUserMessage(editText, messageAttachments);
     const setMessageEditPrompt = jest.fn();
     let api: ReturnType<typeof useChatTabMessageActions> | undefined;
     function Harness() {
@@ -216,10 +246,21 @@ describe('useChatTabMessageActions rollback', () => {
     });
 
     expect(setMessageEditPrompt).toHaveBeenCalled();
-    expect(readChatComposerDraftState('s1')).toEqual({
-      text: '你好',
-      attachments,
-    });
+    const draft = readChatComposerDraftState('s1');
+    expect(draft.text).toBe(editText);
+    expect(draft.text).toContain('@/a.md');
+    expect(draft.attachments).toEqual([
+      {
+        name: '/w.md',
+        source: 'workplace',
+        type: 'text',
+        content: null,
+        path: '/w.md',
+      },
+    ]);
+    expect((draft.attachments ?? []).some(a => a.source === 'attach')).toBe(
+      false,
+    );
     expect(mockSetDraftRestoreToken).toHaveBeenCalled();
   });
 
