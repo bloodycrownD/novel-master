@@ -43,35 +43,6 @@ export function listPickerChildRows(
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
-/** @deprecated 使用 {@link atPathTokensFromPickerSelection} */
-export function attachmentsFromPickerSelection(
-  selectedDirs: Iterable<string>,
-  selectedFiles: Iterable<string>,
-): {
-  name: string;
-  source: 'attach';
-  type: 'dir' | 'text';
-  content: null;
-  path: string;
-}[] {
-  return [
-    ...[...selectedDirs].map(p => ({
-      name: basename(p) || p,
-      source: 'attach' as const,
-      type: 'dir' as const,
-      content: null,
-      path: p,
-    })),
-    ...[...selectedFiles].map(p => ({
-      name: basename(p),
-      source: 'attach' as const,
-      type: 'text' as const,
-      content: null,
-      path: p,
-    })),
-  ];
-}
-
 export { atPathTokensFromPickerSelection };
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
