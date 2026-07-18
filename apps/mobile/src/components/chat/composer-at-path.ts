@@ -117,6 +117,34 @@ export function countScannedAtPathAttachments(text: string): number {
   return scanAtPathAttachments(text).length;
 }
 
+/**
+ * 手输离开触发 facetCommitted 后反标：不成 tag、不原子删。
+ * 程序化 replaceText / activeFacet.replace 路径勿调用（由 programmatic 门闩跳过）。
+ * @returns 是否改写了某个 node
+ */
+export function uncommitHandTypedFacet(
+  nodes: ReadonlyArray<{
+    type: string;
+    start: number;
+    end: number;
+    committed?: boolean;
+  }>,
+  facet: { readonly range: { readonly start: number; readonly end: number } },
+): boolean {
+  for (const node of nodes) {
+    if (
+      node.type === 'facet' &&
+      node.start === facet.range.start &&
+      node.end === facet.range.end &&
+      node.committed
+    ) {
+      node.committed = false;
+      return true;
+    }
+  }
+  return false;
+}
+
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? path;

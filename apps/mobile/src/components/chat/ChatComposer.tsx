@@ -47,7 +47,10 @@ import {
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
 import { ComposerStatusChips } from './AttachmentDraftChips';
-import { ComposerAtPathInput } from './ComposerAtPathInput';
+import {
+  ComposerAtPathInput,
+  type ComposerAtPathInputHandle,
+} from './ComposerAtPathInput';
 import { AtPathTypeahead } from './AtPathTypeahead';
 import {
   type AtPathRef,
@@ -122,6 +125,8 @@ export function ChatComposer({
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRow[]>([]);
   const inputRef = useRef<TextInput>(null);
+  /** 程序化插入 @path（选择器 / typeahead）走 tapper committed 路径。 */
+  const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
   const streamHandlersRef = useRef({
     onMessagesChanged,
@@ -430,22 +435,36 @@ export function ChatComposer({
       const gapAfter = after.length === 0 || /^\s/.test(after) ? '' : ' ';
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
+      const nextCursor = before.length + inserted.length;
+      // 程序化 API：replaceText → facet 保持 committed（成 tag + 可原子删）
+      if (atPathInputRef.current) {
+        atPathInputRef.current.replaceCommittedText(next, nextCursor);
+        return;
+      }
       const statusOnly = attachments.filter(
         a => a.source === 'workplace' || a.source === 'user_ops',
       );
       setText(next);
       persistDraft(next, statusOnly);
-      setCursor(before.length + inserted.length);
+      setCursor(nextCursor);
     },
     [attachments, cursor, persistDraft, text],
   );
 
   const applyTypeaheadToken = useCallback(
     (token: string) => {
+      // 优先 activeFacet.replace（程序化 commit）；失败再整段 replaceCommittedText
+      if (atPathInputRef.current?.replaceActiveAt(token)) {
+        return;
+      }
       if (activeAt == null) {
         return;
       }
       const next = replaceActiveAtWithToken(text, cursor, activeAt.start, token);
+      if (atPathInputRef.current) {
+        atPathInputRef.current.replaceCommittedText(next.text, next.cursor);
+        return;
+      }
       const statusOnly = attachments.filter(
         a => a.source === 'workplace' || a.source === 'user_ops',
       );
@@ -552,6 +571,7 @@ export function ChatComposer({
           onSelect={applyTypeaheadToken}
         />
         <ComposerAtPathInput
+          ref={atPathInputRef}
           inputRef={inputRef}
           testID="chat-composer-input"
           style={styles.input}
@@ -678,6 +698,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
     fontSize: 16,
+    lineHeight: 22,
   },
   toolbar: {
     flexDirection: 'row',

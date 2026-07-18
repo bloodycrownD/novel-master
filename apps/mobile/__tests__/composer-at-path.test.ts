@@ -12,6 +12,7 @@ import {
   findActiveAtQuery,
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
+  uncommitHandTypedFacet,
 } from '../src/components/chat/composer-at-path';
 
 /** 用与 tapper 相同的 boundary 剥离逻辑收集 `@token` 列表（单测辅助）。 */
@@ -27,6 +28,21 @@ function matchAtPathFacets(text: string): string[] {
     out.push(m[0]!.slice(boundaryLen));
   }
   return out;
+}
+
+/** 模拟 ComposerAtPathInput：非程序化 facetCommitted → 反标。 */
+function attachHandTypedUncommitGate(
+  tapper: Tapper,
+  programmatic: { current: boolean },
+) {
+  return tapper.on('facetCommitted', facet => {
+    if (programmatic.current) {
+      return;
+    }
+    if (uncommitHandTypedFacet(tapper.nodes, facet)) {
+      tapper.insert('');
+    }
+  });
 }
 
 describe('composer-at-path (T-ATD*)', () => {
@@ -72,12 +88,18 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(text.includes('<span')).toBe(false);
   });
 
-  it('tapper：已提交 @路径 退格整段删除；对外 text 仍为纯字符串', () => {
+  it('程序化 replaceText：已提交 @路径 可原子删；对外 text 仍为纯字符串', () => {
     const tapper = new Tapper({
       facets: { atPath: COMPOSER_AT_PATH_FACET_PATTERN },
-      initialText: '见 @/a.md ',
+      initialText: '',
     });
-    // replaceText / initialText 将匹配 facet 标为 committed
+    const programmatic = { current: false };
+    attachHandTypedUncommitGate(tapper, programmatic);
+
+    programmatic.current = true;
+    tapper.replaceText('见 @/a.md ', '见 @/a.md '.length);
+    programmatic.current = false;
+
     expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
       true,
     );
@@ -91,5 +113,38 @@ describe('composer-at-path (T-ATD*)', () => {
     tapper.handleTextChange(oneCharDeleted);
     expect(tapper.text).toBe('见  ');
     expect(tapper.text.includes('{@}')).toBe(false);
+  });
+
+  it('手输完整 @/x 后离开/commit：反标 committed，退格不原子删', () => {
+    const tapper = new Tapper({
+      facets: { atPath: COMPOSER_AT_PATH_FACET_PATTERN },
+      initialText: '',
+    });
+    const programmatic = { current: false };
+    attachHandTypedUncommitGate(tapper, programmatic);
+
+    // 模拟逐字输入完整 token
+    tapper.handleTextChange('@/x');
+    expect(tapper.nodes.some(n => n.type === 'facet')).toBe(true);
+    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
+      false,
+    );
+
+    // 光标离开 facet（移到文首）→ tapper 自动 commit → 门闩反标
+    tapper.handleSelectionChange({
+      nativeEvent: { selection: { start: 0, end: 0 } },
+    });
+    expect(tapper.nodes.some(n => n.type === 'facet' && n.committed)).toBe(
+      false,
+    );
+
+    // 移到 token 末尾再退一格：应只删一字，非整段
+    const tokenEnd = '@/x'.length;
+    tapper.handleSelectionChange({
+      nativeEvent: { selection: { start: tokenEnd, end: tokenEnd } },
+    });
+    const oneCharDeleted = `${tapper.text.slice(0, tokenEnd - 1)}${tapper.text.slice(tokenEnd)}`;
+    tapper.handleTextChange(oneCharDeleted);
+    expect(tapper.text).toBe('@/');
   });
 });
