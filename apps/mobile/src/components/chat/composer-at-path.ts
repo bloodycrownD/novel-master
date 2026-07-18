@@ -6,6 +6,13 @@ import {
   scanAtPathAttachments,
 } from '@novel-master/core/chat';
 
+/**
+ * tapper facet 正则：识别 `@/path`（目录可带尾 `/`）。
+ * 前缀 `(^|\s|\()` 为 tapper boundary 约定，匹配后会从 `raw` 中剥离。
+ * 捕获组与历史 `/@([^\s@]+)/g` 同口径。
+ */
+export const COMPOSER_AT_PATH_FACET_PATTERN = /(^|\s|\()@([^\s@]+)/g;
+
 /** 插入正文的 `@path`（目录带尾 `/`，落库扫描后带前导 `/`）。 */
 export function formatComposerAtPathToken(
   path: string,
