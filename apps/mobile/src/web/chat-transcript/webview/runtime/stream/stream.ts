@@ -4,7 +4,10 @@ import { state } from '../state/state';
 import type { ToolCallRow } from '../state/state';
 import { scheduleStickIfNearBottom } from '../scroll/scroll';
 import { renderRows } from '../render/row-logic';
-import { scheduleStreamRichUpgrade, streamRichUpgrade } from './stream-markdown';
+import {
+  scheduleStreamRichUpgrade,
+  streamRichUpgrade,
+} from './stream-markdown';
 
 export type StreamKind = 'text' | 'thinking';
 export type StreamTailPhase = 'active' | 'waiting-first' | 'idle-after-content';
@@ -63,9 +66,7 @@ export function assistantBubbleExtraClasses(
  * 缺 section 或 body 均返回 null，供缺壳判断与增量路径共用。
  */
 export function getStreamThinkingBody(bubble: Element): Element | null {
-  const section = bubble.querySelector(
-    '[data-thinking-key="stream:thinking"]',
-  );
+  const section = bubble.querySelector('[data-thinking-key="stream:thinking"]');
   return section ? section.querySelector('.thinking-body') : null;
 }
 
@@ -341,7 +342,12 @@ export function appendStreamDelta(
     scheduleStickIfNearBottom();
     return;
   }
-  const incremental = appendStreamDeltaIncremental(tail, kind, delta, html || '');
+  const incremental = appendStreamDeltaIncremental(
+    tail,
+    kind,
+    delta,
+    html || '',
+  );
   if (!incremental && kind !== 'text') {
     // WHY: 正文 text 不能在增量失败时整泡重建（会触发 thinking DOM 相关副作用）。
     // 非 text：对齐现网 updateStreamBubble 回退（非一律 renderRows）。

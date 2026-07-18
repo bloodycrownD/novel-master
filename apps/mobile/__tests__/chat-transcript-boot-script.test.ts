@@ -130,7 +130,9 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
 
   it('T-BR-CT-02: shouldCancelLongPressForMove has function body or inline hypot', () => {
     const script = bootScript();
-    const hasFnBody = /function\s+shouldCancelLongPressForMove\s*\(/.test(script);
+    const hasFnBody = /function\s+shouldCancelLongPressForMove\s*\(/.test(
+      script,
+    );
     const hasInlineHypot =
       /Math\.hypot\s*\(\s*dx\s*,\s*dy\s*\)/.test(script) ||
       /Math\.hypot\s*\(\s*deltaX\s*,\s*deltaY\s*\)/.test(script);
@@ -214,7 +216,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     const script = bootScript();
     expect(script).toContain('resolveVfsToolFilePath');
     expect(script).toContain('resolveLogicalPathForToolCard');
-    expect(script).toContain("return normalizePathForToolCard(\"/\" + trimmed);");
+    expect(script).toContain('return normalizePathForToolCard("/" + trimmed);');
   });
 
   it('T-BR-CT-06: bubble--fill-width / data-text-shell', () => {
@@ -239,9 +241,7 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(css).toContain('.bubble.rich ol');
     expect(css).toContain('.bubble.rich ul');
     expect(css).toContain('padding-left: 1.5em');
-    expect(css).toContain(
-      'outside markers stay inside the content area',
-    );
+    expect(css).toContain('outside markers stay inside the content area');
   });
 
   it('T-BR-SYNC-01…14: boot constants match TS sources', () => {
@@ -270,8 +270,12 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain(
       `var ANCHORED_MENU_MAX_HEIGHT_CAP = ${ANCHORED_MENU_MAX_HEIGHT_CAP};`,
     );
-    expect(script).toContain(`var ANCHORED_MENU_MIN_WIDTH = ${ANCHORED_MENU_MIN_WIDTH};`);
-    expect(script).toContain(`var ANCHORED_MENU_MAX_WIDTH = ${ANCHORED_MENU_MAX_WIDTH};`);
+    expect(script).toContain(
+      `var ANCHORED_MENU_MIN_WIDTH = ${ANCHORED_MENU_MIN_WIDTH};`,
+    );
+    expect(script).toContain(
+      `var ANCHORED_MENU_MAX_WIDTH = ${ANCHORED_MENU_MAX_WIDTH};`,
+    );
     expect(script).toContain(
       `var ANCHORED_MENU_H_PADDING = ${ANCHORED_MENU_H_PADDING};`,
     );
