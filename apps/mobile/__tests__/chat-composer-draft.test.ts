@@ -20,7 +20,7 @@ describe('chat-composer-draft', () => {
     expect(readChatComposerDraft('s3')).toBe('');
   });
 
-  it('整表替换状态条；保留 attach（T-UI1 方向）', () => {
+  it('整表替换状态条；不保留 attach', () => {
     writeChatComposerDraftState('s-rd', {
       text: 'keep',
       attachments: [
@@ -68,7 +68,7 @@ describe('chat-composer-draft', () => {
     expect(state.text).toBe('keep');
     expect(state.attachments.map(a => `${a.source}:${a.path}`)).toEqual([
       'workplace:/b.md',
-      'attach:/ref.md',
     ]);
+    expect(state.attachments.every(a => a.source !== 'attach')).toBe(true);
   });
 });
