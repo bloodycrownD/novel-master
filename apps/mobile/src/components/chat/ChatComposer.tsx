@@ -125,7 +125,7 @@ export function ChatComposer({
   const [cursor, setCursor] = useState(0);
   const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRow[]>([]);
   const inputRef = useRef<TextInput>(null);
-  /** 程序化插入 @path（选择器 / typeahead）走 tapper committed 路径。 */
+  /** 程序化插入 @path（选择器 / typeahead）走 mentions 提交路径。 */
   const atPathInputRef = useRef<ComposerAtPathInputHandle>(null);
 
   const streamHandlersRef = useRef({
@@ -436,7 +436,7 @@ export function ChatComposer({
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       const nextCursor = before.length + inserted.length;
-      // 程序化 API：replaceText → facet 保持 committed（成 tag + 可原子删）
+      // 程序化 API：新增 @path 提成 mention（成 tag + 可原子删）
       if (atPathInputRef.current) {
         atPathInputRef.current.replaceCommittedText(next, nextCursor);
         return;
@@ -453,7 +453,7 @@ export function ChatComposer({
 
   const applyTypeaheadToken = useCallback(
     (token: string) => {
-      // 优先 activeFacet.replace（程序化 commit）；失败再整段 replaceCommittedText
+      // 优先 mentions onSelect；失败再整段 replaceCommittedText
       if (atPathInputRef.current?.replaceActiveAt(token)) {
         return;
       }
