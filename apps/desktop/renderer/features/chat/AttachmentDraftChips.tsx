@@ -2,10 +2,6 @@
  * Composer 状态 chip（不可叉）：workplace + user_ops。
  * 文件引用不再使用 attach chip（认正文 `@路径`）。
  */
-import {
-  scanAtPathAttachments,
-  tryNormalizePromptSeenPath,
-} from '@novel-master/core/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type AttachmentDraftChipsProps = {
@@ -41,32 +37,6 @@ export function partitionComposerChipAttachments(
     }
   }
   return { status, attach };
-}
-
-/**
- * 正文已有 `@path` 时隐藏同 path 的 workplace 状态 chip，避免与蓝色 @tag 叠显。
- * `user_ops` 改稿语义不同，一律保留。
- */
-export function filterStatusAttachmentsHiddenByComposerAtPaths(
-  statusAttachments: readonly MessageAttachmentDto[],
-  composerText: string,
-): MessageAttachmentDto[] {
-  const atSeen = new Set<string>();
-  for (const scanned of scanAtPathAttachments(composerText)) {
-    if (scanned.path == null || scanned.path === '') continue;
-    const key = tryNormalizePromptSeenPath(scanned.path);
-    if (key != null) atSeen.add(key);
-  }
-  if (atSeen.size === 0) {
-    return [...statusAttachments];
-  }
-  return statusAttachments.filter((a) => {
-    if (a.source !== 'workplace') return true;
-    const raw = a.path ?? a.name;
-    const key = tryNormalizePromptSeenPath(raw);
-    if (key == null) return true;
-    return !atSeen.has(key);
-  });
 }
 
 /**
@@ -145,21 +115,14 @@ export function AttachmentDraftChips({
 export function ComposerStatusChips({
   attachments,
   disabled,
-  composerText = '',
 }: {
   attachments: readonly MessageAttachmentDto[];
   disabled?: boolean;
-  /** 当前正文；用于 workplace 与 `@path` 叠显去重。 */
-  composerText?: string;
 }) {
   const { status } = partitionComposerChipAttachments(attachments);
-  const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
-    status,
-    composerText,
-  );
   return (
     <AttachmentDraftChips
-      attachments={visible}
+      attachments={status}
       showRemove={false}
       disabled={disabled}
       transparentRow
