@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   attachmentChipClassName,
+  filterStatusAttachmentsHiddenByComposerAtPaths,
   formatAttachmentChipLabel,
   isComposerStatusAttachment,
   partitionComposerChipAttachments,
@@ -95,4 +96,53 @@ test("T-ATD1: 混有历史 attach 时 partition 仍可拆出，但 UI 不再渲�
 test("T-UI2: 目录 chip class 无 --dir warning 色类", () => {
   assert.equal(attachmentChipClassName(), "chat-composer__chip");
   assert.equal(attachmentChipClassName().includes("--dir"), false);
+});
+
+test("正文含 @/txt.md 时 workplace /txt.md 被滤掉", () => {
+  const status = [
+    attach({ source: "workplace", type: "text", path: "/txt.md" }),
+    attach({
+      source: "user_ops",
+      type: "text",
+      path: "/txt.md",
+      name: "write:/txt.md",
+    }),
+  ];
+  const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+    status,
+    "请看 @/txt.md",
+  );
+  assert.deepEqual(
+    visible.map((a) => a.source),
+    ["user_ops"],
+  );
+});
+
+test("正文无 @ 时 workplace 仍显示", () => {
+  const status = [
+    attach({ source: "workplace", type: "text", path: "/txt.md" }),
+  ];
+  const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+    status,
+    "普通正文",
+  );
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0]?.source, "workplace");
+});
+
+test("user_ops 不因同 path 的 @ 被滤", () => {
+  const status = [
+    attach({
+      source: "user_ops",
+      type: "text",
+      path: "/txt.md",
+      name: "edit:/txt.md",
+    }),
+  ];
+  const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+    status,
+    "@/txt.md",
+  );
+  assert.equal(visible.length, 1);
+  assert.equal(visible[0]?.source, "user_ops");
 });

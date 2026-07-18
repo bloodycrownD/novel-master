@@ -3,6 +3,7 @@
  */
 import { describe, expect, it, jest } from '@jest/globals';
 import {
+  filterStatusAttachmentsHiddenByComposerAtPaths,
   formatAttachmentChipLabel,
   isComposerStatusAttachment,
   partitionComposerChipAttachments,
@@ -85,5 +86,53 @@ describe('partitionComposerChipAttachments (T-ATD1)', () => {
     expect(status.map(a => a.source)).toEqual(['workplace', 'user_ops']);
     expect(attachOnly).toHaveLength(0);
     expect(status.every(isComposerStatusAttachment)).toBe(true);
+  });
+});
+
+describe('filterStatusAttachmentsHiddenByComposerAtPaths', () => {
+  it('正文含 @/txt.md 时 workplace /txt.md 被滤掉', () => {
+    const status = [
+      attach({ source: 'workplace', type: 'text', path: '/txt.md' }),
+      attach({
+        source: 'user_ops',
+        type: 'text',
+        path: '/txt.md',
+        name: 'write:/txt.md',
+      }),
+    ];
+    const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+      status,
+      '请看 @/txt.md',
+    );
+    expect(visible.map(a => a.source)).toEqual(['user_ops']);
+  });
+
+  it('正文无 @ 时 workplace 仍显示', () => {
+    const status = [
+      attach({ source: 'workplace', type: 'text', path: '/txt.md' }),
+    ];
+    const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+      status,
+      '普通正文',
+    );
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.source).toBe('workplace');
+  });
+
+  it('user_ops 不因同 path 的 @ 被滤', () => {
+    const status = [
+      attach({
+        source: 'user_ops',
+        type: 'text',
+        path: '/txt.md',
+        name: 'edit:/txt.md',
+      }),
+    ];
+    const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+      status,
+      '@/txt.md',
+    );
+    expect(visible).toHaveLength(1);
+    expect(visible[0]?.source).toBe('user_ops');
   });
 });

@@ -4,7 +4,11 @@
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { MessageAttachment } from '@novel-master/core/chat';
+import {
+  scanAtPathAttachments,
+  tryNormalizePromptSeenPath,
+  type MessageAttachment,
+} from '@novel-master/core/chat';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export type AttachmentDraftChipsProps = {
@@ -40,6 +44,32 @@ export function partitionComposerChipAttachments(
     }
   }
   return { status, attach };
+}
+
+/**
+ * 正文已有 `@path` 时隐藏同 path 的 workplace 状态 chip，避免与蓝色 @tag 叠显。
+ * `user_ops` 改稿语义不同，一律保留。
+ */
+export function filterStatusAttachmentsHiddenByComposerAtPaths(
+  statusAttachments: readonly MessageAttachment[],
+  composerText: string,
+): MessageAttachment[] {
+  const atSeen = new Set<string>();
+  for (const scanned of scanAtPathAttachments(composerText)) {
+    if (scanned.path == null || scanned.path === '') continue;
+    const key = tryNormalizePromptSeenPath(scanned.path);
+    if (key != null) atSeen.add(key);
+  }
+  if (atSeen.size === 0) {
+    return [...statusAttachments];
+  }
+  return statusAttachments.filter(a => {
+    if (a.source !== 'workplace') return true;
+    const raw = a.path ?? a.name;
+    const key = tryNormalizePromptSeenPath(raw);
+    if (key == null) return true;
+    return !atSeen.has(key);
+  });
 }
 
 /**
@@ -124,14 +154,21 @@ export function AttachmentDraftChips({
 export function ComposerStatusChips({
   attachments,
   disabled,
+  composerText = '',
 }: {
   attachments: readonly MessageAttachment[];
   disabled?: boolean;
+  /** 当前正文；用于 workplace 与 `@path` 叠显去重。 */
+  composerText?: string;
 }) {
   const { status } = partitionComposerChipAttachments(attachments);
+  const visible = filterStatusAttachmentsHiddenByComposerAtPaths(
+    status,
+    composerText,
+  );
   return (
     <AttachmentDraftChips
-      attachments={status}
+      attachments={visible}
       showRemove={false}
       disabled={disabled}
       transparentRow

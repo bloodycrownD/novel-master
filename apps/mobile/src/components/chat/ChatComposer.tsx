@@ -564,6 +564,7 @@ export function ChatComposer({
         <ComposerStatusChips
           attachments={attachments}
           disabled={inputDisabled}
+          composerText={text}
         />
         <AtPathTypeahead
           open={activeAt != null && !inputDisabled}

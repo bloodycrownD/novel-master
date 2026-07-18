@@ -392,6 +392,7 @@ export function ChatComposer({
           <ComposerStatusChips
             attachments={attachments}
             disabled={inputDisabled}
+            composerText={value}
           />
           <div className="chat-composer__input-wrap">
             <AtPathTypeahead
