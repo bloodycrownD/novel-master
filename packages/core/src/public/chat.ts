@@ -117,22 +117,10 @@ export type {
   WorkspaceFlushChangedFile,
   WorkspaceFlushAddedFile,
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export {
-  collectUserOpsActionSummaries,
-  formatUserOpsActionLabel,
-  synthesizeUserVfsFlushActionEntries,
-  synthesizeUserVfsFlushActions,
-} from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
-export type {
-  SynthesizedUserVfsAction,
-  UserOpsActionSummary,
-} from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
+export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
 export {
   buildUserOpsAttachment,
-  buildUserOpsAttachmentFromEntry,
-  buildUserOpsAttachmentsFromEntries,
   previewPendingUserOpsAttachment,
-  userOpsAttachmentsFromSummaries,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
   buildComposerStatusAttachments,
