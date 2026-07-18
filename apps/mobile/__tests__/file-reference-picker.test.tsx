@@ -3,7 +3,7 @@ import {describe, expect, it, jest, beforeEach} from '@jest/globals';
 import TestRenderer, {act} from 'react-test-renderer';
 import type {WorktreeListRow} from '@novel-master/core/worktree';
 import {
-  attachmentsFromPickerSelection,
+  atPathTokensFromPickerSelection,
   FileReferencePicker,
   listPickerChildRows,
 } from '../src/components/chat/FileReferencePicker';
@@ -92,7 +92,7 @@ function findByTestId(root: TestRenderer.ReactTestInstance, testID: string) {
   return root.findByProps({testID});
 }
 
-describe('listPickerChildRows / attachmentsFromPickerSelection', () => {
+describe('listPickerChildRows / atPathTokensFromPickerSelection', () => {
   it('只列出 cwd 直子（含隐藏文件，不含 cwd 自身）', () => {
     const atRoot = listPickerChildRows(fixtureRows, '/');
     expect(atRoot.map(r => r.path)).toEqual([
@@ -105,39 +105,10 @@ describe('listPickerChildRows / attachmentsFromPickerSelection', () => {
     expect(inNotes.map(r => r.path)).toEqual(['/notes/b.md', '/notes/c.md']);
   });
 
-  it('目录多选 + 文件多选同确认产出 dir 与 text', () => {
+  it('目录多选 + 文件多选同确认产出 @path token', () => {
     expect(
-      attachmentsFromPickerSelection(['/notes', '/'], ['/a.md', '/notes/b.md']),
-    ).toEqual([
-      {
-        name: 'notes',
-        source: 'attach',
-        type: 'dir',
-        content: null,
-        path: '/notes',
-      },
-      {
-        name: '/',
-        source: 'attach',
-        type: 'dir',
-        content: null,
-        path: '/',
-      },
-      {
-        name: 'a.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/a.md',
-      },
-      {
-        name: 'b.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/notes/b.md',
-      },
-    ]);
+      atPathTokensFromPickerSelection(['/notes', '/'], ['/a.md', '/notes/b.md']),
+    ).toEqual(['@/notes/', '@/', '@/a.md', '@/notes/b.md']);
   });
 });
 
@@ -147,7 +118,7 @@ describe('FileReferencePicker', () => {
     mockBuildListRows.mockResolvedValue(fixtureRows);
   });
 
-  it('点目录进入改 cwd；勾选目录确认产出 dir attachment', async () => {
+  it('点目录进入改 cwd；勾选目录确认产出 @path/ token', async () => {
     const onConfirm = jest.fn();
     const onClose = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
@@ -184,19 +155,11 @@ describe('FileReferencePicker', () => {
       findByTestId(tree!.root, 'file-ref-confirm').props.onPress();
     });
 
-    expect(onConfirm).toHaveBeenCalledWith([
-      {
-        name: 'notes',
-        source: 'attach',
-        type: 'dir',
-        content: null,
-        path: '/notes',
-      },
-    ]);
+    expect(onConfirm).toHaveBeenCalledWith(['@/notes/']);
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('文件多选确认产出多条 text attachment', async () => {
+  it('文件多选确认产出多条 @path token', async () => {
     const onConfirm = jest.fn();
     let tree: TestRenderer.ReactTestRenderer;
     await act(async () => {
@@ -222,22 +185,7 @@ describe('FileReferencePicker', () => {
       findByTestId(tree!.root, 'file-ref-confirm').props.onPress();
     });
 
-    expect(onConfirm).toHaveBeenCalledWith([
-      {
-        name: 'b.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/notes/b.md',
-      },
-      {
-        name: 'c.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/notes/c.md',
-      },
-    ]);
+    expect(onConfirm).toHaveBeenCalledWith(['@/notes/b.md', '@/notes/c.md']);
   });
 
   it('选择当前文件夹可选根目录 /', async () => {
@@ -262,15 +210,7 @@ describe('FileReferencePicker', () => {
       findByTestId(tree!.root, 'file-ref-confirm').props.onPress();
     });
 
-    expect(onConfirm).toHaveBeenCalledWith([
-      {
-        name: '/',
-        source: 'attach',
-        type: 'dir',
-        content: null,
-        path: '/',
-      },
-    ]);
+    expect(onConfirm).toHaveBeenCalledWith(['@/']);
   });
 
   it('隐藏文件可见；勾选目录与文件不互斥', async () => {
@@ -301,27 +241,9 @@ describe('FileReferencePicker', () => {
     });
 
     expect(onConfirm).toHaveBeenCalledWith([
-      {
-        name: 'notes',
-        source: 'attach',
-        type: 'dir',
-        content: null,
-        path: '/notes',
-      },
-      {
-        name: 'a.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/a.md',
-      },
-      {
-        name: 'hidden.md',
-        source: 'attach',
-        type: 'text',
-        content: null,
-        path: '/hidden.md',
-      },
+      '@/notes/',
+      '@/a.md',
+      '@/hidden.md',
     ]);
   });
 });

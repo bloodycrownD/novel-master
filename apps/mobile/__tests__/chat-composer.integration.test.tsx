@@ -41,7 +41,6 @@ jest.mock('../src/components/chat/AttachmentDraftChips', () => {
     ...actual,
     AttachmentDraftChips: () => null,
     ComposerStatusChips: () => null,
-    ComposerAttachChips: () => null,
   };
 });
 
@@ -308,8 +307,9 @@ describe('ChatComposer integration', () => {
     });
   });
 
-  it('T-SR1b: 仅状态条 workplace 可发且禁纯 resume；入参无预览 chip', async () => {
+  it('T-SR1b: 仅状态条 workplace 可发且禁纯 resume；入参无 attachments', async () => {
     mockRunAgentTurn.mockImplementationOnce(async () => undefined);
+    // 历史 draft attach 水化时丢弃；文件引用只认正文 @
     mockGetComposerDraftJson.mockResolvedValue(
       serializeComposerDraftJson({
         text: '',
@@ -350,8 +350,7 @@ describe('ChatComposer integration', () => {
       attachments?: readonly { source: string }[];
     };
     expect(opts.allowResumeWithoutInput).toBe(false);
-    expect(opts.attachments?.every(a => a.source === 'attach')).toBe(true);
-    expect(opts.attachments).toHaveLength(1);
+    expect(opts.attachments).toBeUndefined();
     await act(async () => {
       (tree as TestRenderer.ReactTestRenderer).unmount();
     });

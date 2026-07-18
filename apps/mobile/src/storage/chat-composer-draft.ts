@@ -66,9 +66,10 @@ async function persistAttachTextDraft(
   sessionId: string,
   draft: ChatComposerDraft,
 ): Promise<void> {
+  // draft attach 恒空；仅持久正文（含 `@路径`）
   const json = serializeComposerDraftJson({
     text: draft.text,
-    attachments: draft.attachments,
+    attachments: [],
   });
   await sessions.setComposerDraftJson(sessionId, json);
 }
@@ -158,7 +159,8 @@ export async function hydrateChatComposerDraftFromDb(
     ) ?? [];
   const next: ChatComposerDraft = {
     text: parsed.text,
-    attachments: [...statusOnly, ...parsed.attachments],
+    // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
+    attachments: [...statusOnly],
   };
   if (!next.text && next.attachments.length === 0) {
     bySession.delete(sessionId);
