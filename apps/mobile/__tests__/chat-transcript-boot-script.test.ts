@@ -180,9 +180,10 @@ describe('chat-transcript WebView boot (T-BB-06 / dist)', () => {
     expect(script).toContain('renderRows()');
     expect(script).toContain('if (state.flags.richText && !html)');
     expect(script).toContain('} else if (kind === "text")');
-    expect(script).toContain('const streamTextBody = ensureStreamTextBody(bubble)');
-    expect(script).toContain('insertAdjacentHTML');
-    expect(script).toContain('escapeHtml(delta)');
+    // 可改为 token：DRY 后局部名 textBody；增量走 appendEscapedDelta helper
+    expect(script).toContain('const textBody = ensureStreamTextBody(bubble)');
+    expect(script).toContain('appendEscapedDelta');
+    expect(script).toContain('getStreamThinkingBody');
     // tool-invoking 单路径：壳归 Preact ToolInvokingBar；runtime 不得再拼串/createElement 插条
     expect(script).toContain('ToolInvokingBar');
     expect(script).not.toContain('renderToolInvokingBar');
