@@ -63,7 +63,7 @@ export async function runPrompt(
   );
   const wtScope = { kind: "session" as const, projectId, sessionId };
   const vfs = rt.sessionVfs(projectId, sessionId);
-  const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
+  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: rt.sessionKkv,
     worktree: rt.worktree(wtScope),
     vfs,

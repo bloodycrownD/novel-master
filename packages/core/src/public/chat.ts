@@ -44,6 +44,15 @@ export {
 } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
 export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
 export {
+  PROMPT_FILE_SEEN_SHORT_TIP,
+  createPromptPathSeenSet,
+  isPromptDirTokenPath,
+  normalizePromptSeenPath,
+  normalizePromptStorePath,
+  renderPromptFileSeenShortTip,
+  tryNormalizePromptSeenPath,
+} from '../domain/chat/logic/prompt-path-seen.js';
+export {
   ATTACH_DIR_TREE_MAX_UTF8_BYTES,
   renderDirAttachTree,
 } from '../domain/chat/logic/render-dir-attach-tree.js';
@@ -108,10 +117,22 @@ export type {
   WorkspaceFlushChangedFile,
   WorkspaceFlushAddedFile,
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
-export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
+export {
+  collectUserOpsActionSummaries,
+  formatUserOpsActionLabel,
+  synthesizeUserVfsFlushActionEntries,
+  synthesizeUserVfsFlushActions,
+} from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
+export type {
+  SynthesizedUserVfsAction,
+  UserOpsActionSummary,
+} from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
 export {
   buildUserOpsAttachment,
+  buildUserOpsAttachmentFromEntry,
+  buildUserOpsAttachmentsFromEntries,
   previewPendingUserOpsAttachment,
+  userOpsAttachmentsFromSummaries,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
   buildComposerStatusAttachments,

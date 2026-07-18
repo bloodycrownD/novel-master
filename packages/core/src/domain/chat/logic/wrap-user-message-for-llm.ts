@@ -16,7 +16,10 @@ function sectionBody(attachments: readonly MessageAttachment[]): string {
 /**
  * 无附件 → 恒等原文；有附件 → `<attachment>…</attachment><user-input>…</user-input>`。
  *
- * 调用方须保证 workplace/attach 的 `content` 已 hydrate（文件块 / 目录树）。
+ * 任一 source 的 section 若 body 全空则省略该标签。
+ * 若全部 section 都无非空 body → **直接返回 `plainText`**，不包空 `<attachment>`。
+ *
+ * 调用方须保证 workplace/attach 的 `content` 已 hydrate（文件块 / 目录树 / 短提示）。
  * `user_ops` 的 `content` 为 action XML。
  */
 export function wrapUserMessageForLlm(
@@ -34,32 +37,25 @@ export function wrapUserMessageForLlm(
   const sections: string[] = [];
   if (workplace.length > 0) {
     const body = sectionBody(workplace);
-    sections.push(
-      body === ""
-        ? "  <workplace></workplace>"
-        : `  <workplace>\n${body}\n  </workplace>`,
-    );
+    if (body !== "") {
+      sections.push(`  <workplace>\n${body}\n  </workplace>`);
+    }
   }
   if (attach.length > 0) {
     const body = sectionBody(attach);
-    sections.push(
-      body === ""
-        ? "  <attach></attach>"
-        : `  <attach>\n${body}\n  </attach>`,
-    );
+    if (body !== "") {
+      sections.push(`  <attach>\n${body}\n  </attach>`);
+    }
   }
   if (userOps.length > 0) {
     const body = sectionBody(userOps);
-    sections.push(
-      body === ""
-        ? "  <user-ops></user-ops>"
-        : `  <user-ops>\n${body}\n  </user-ops>`,
-    );
+    if (body !== "") {
+      sections.push(`  <user-ops>\n${body}\n  </user-ops>`);
+    }
   }
 
-  // 仅有空壳（无任一 section）时仍 wrap，避免「有 attachments 却恒等」歧义
   if (sections.length === 0) {
-    sections.push("  <attach></attach>");
+    return plainText;
   }
 
   return [

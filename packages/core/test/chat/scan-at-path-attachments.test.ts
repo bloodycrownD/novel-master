@@ -1,5 +1,5 @@
 /**
- * T-AT5 / T-AT6：手输 @path 扫描与 path 去重。
+ * T-AT5 / T-AT6：手输 @path 扫描与 path 去重（落库 path 带前导 `/`）。
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -10,12 +10,12 @@ import {
 import type { MessageAttachment } from "../../src/domain/chat/model/message-attachment.schema.js";
 
 describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
-  it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach", () => {
+  it("T-AT5: 正文含手输 @path 且 chips 无该 path → 生成 source:attach（path 带 /）", () => {
     const text = "请看 @notes/a.md 与补充";
     const scanned = scanAtPathAttachments(text);
     assert.equal(scanned.length, 1);
     assert.equal(scanned[0]!.source, "attach");
-    assert.equal(scanned[0]!.path, "notes/a.md");
+    assert.equal(scanned[0]!.path, "/notes/a.md");
     assert.match(text, /@notes\/a\.md/);
   });
 
@@ -24,7 +24,7 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
     const chips: MessageAttachment[] = [];
     const merged = mergeAttachmentsWithScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
-    assert.equal(merged[0]!.path, "notes/a.md");
+    assert.equal(merged[0]!.path, "/notes/a.md");
     assert.ok(text.includes("@notes/a.md"));
   });
 
@@ -41,16 +41,24 @@ describe("scanAtPathAttachments (T-AT5 / T-AT6)", () => {
     ];
     const merged = mergeAttachmentsWithScannedAtPaths(text, chips);
     assert.equal(merged.length, 1);
+    // 已有优先，保留原 path 写法
     assert.equal(merged[0]!.path, "notes/a.md");
   });
 
-  it("允许多个不同 path 与中文路径", () => {
+  it("允许多个不同 path 与中文路径；落库一律带前导 /", () => {
     const text = "见 @docs/说明.md 和 @foo/bar.txt";
     const scanned = scanAtPathAttachments(text);
     assert.equal(scanned.length, 2);
     assert.deepEqual(
       scanned.map((a) => a.path).sort(),
-      ["docs/说明.md", "foo/bar.txt"],
+      ["/docs/说明.md", "/foo/bar.txt"],
     );
+  });
+
+  it("目录尾 /：type=dir，落库可保留尾 /，seen 去重去尾", () => {
+    const scanned = scanAtPathAttachments("树 @notes/ @notes");
+    assert.equal(scanned.length, 1);
+    assert.equal(scanned[0]!.type, "dir");
+    assert.equal(scanned[0]!.path, "/notes/");
   });
 });

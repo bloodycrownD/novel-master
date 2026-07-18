@@ -46,17 +46,21 @@ export async function buildSessionPromptInput(
   };
   const wt = runtime.worktree(wtScope);
   const vfs = runtime.sessionVfs(scope.projectId, scope.sessionId);
-  // prepare 须在 regex 之后、layout 之前（与 agent-runner 同源）。
+  // assemble → prepare(S0)，与 agent-runner 同源。
+  const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+    wtScope,
+    {
+      sessionKkv: runtime.sessionKkv,
+      worktree: wt,
+      vfs,
+      layout: resolved.prompts,
+    },
+  );
   const messages = await prepareUserMessagesForPrompt(regexMessages, {
     sessionId: scope.sessionId,
     sessionKkv: runtime.sessionKkv,
     vfs,
-  });
-  const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
-    sessionKkv: runtime.sessionKkv,
-    worktree: wt,
-    vfs,
-    layout: resolved.prompts,
+    seenPaths: prefixPaths,
   });
   const ctx: PromptRenderContext = {
     worktreeDisplay,

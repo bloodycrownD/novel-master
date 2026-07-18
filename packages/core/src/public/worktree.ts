@@ -63,6 +63,7 @@ export {
   assembleWorkplaceDisplay,
   layoutHasWorktreeBlock,
   type AssembleWorkplaceDisplayDeps,
+  type AssembleWorkplaceDisplayResult,
 } from "../service/workplace/assemble-workplace-display.js";
 export {
   ruleViewToSnapshotEntries,

@@ -26,6 +26,7 @@ import {
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
 } from "@/domain/worktree/logic/rule-snapshot-codec.js";
+import { normalizePromptSeenPath } from "@/domain/chat/logic/prompt-path-seen.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import type { WorktreeService } from "@/service/worktree/worktree.port.js";
 
@@ -34,8 +35,19 @@ export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
   readonly worktree: WorktreeService;
   readonly vfs: VfsService;
-  /** Agent layout；无 `type:"worktree"` 块则短路返回 `""` 且不写 kkv。 */
+  /** Agent layout；无 `type:"worktree"` 块则短路返回空且不写 kkv。 */
   readonly layout: Pick<AgentPromptLayout, "persist">;
+}
+
+/** {@link assembleWorkplaceDisplay} 返回值。 */
+export interface AssembleWorkplaceDisplayResult {
+  /** 常驻前缀展示文本（给模型看的 worktree 块）。 */
+  readonly worktreeDisplay: string;
+  /**
+   * S0：规则快照全部可见 path（filename/header/full），已规范化为 seen key。
+   * 无 worktree 块或快照为空时为 `[]`。
+   */
+  readonly prefixPaths: string[];
 }
 
 /**
@@ -48,29 +60,31 @@ export function layoutHasWorktreeBlock(
 }
 
 /**
- * 拼装常驻工作区前缀文本（替代进程内 capture）。
+ * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
  *
- * 1. 无 worktree 块 → `""`，不触 kkv
+ * 1. 无 worktree 块 → `{ worktreeDisplay: "", prefixPaths: [] }`，不触 kkv
  * 2. 读 `rule_snapshot`/`canon`；空 → 规则引擎 → 写快照
  * 3. 按 path/status 读 `file_cache`；miss → VFS → 写缓存
- * 4. `renderFileBlock` + `joinFileBlocks`
+ * 4. `renderFileBlock` + `joinFileBlocks`；`prefixPaths` = 快照全部可见 path（规范化）
  */
 export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
   deps: AssembleWorkplaceDisplayDeps,
-): Promise<string> {
+): Promise<AssembleWorkplaceDisplayResult> {
   if (!layoutHasWorktreeBlock(deps.layout)) {
-    return "";
+    return { worktreeDisplay: "", prefixPaths: [] };
   }
 
   const sessionId = scope.sessionId;
   const entries = await loadOrCreateRuleSnapshot(sessionId, deps);
   if (entries.length === 0) {
-    return "";
+    return { worktreeDisplay: "", prefixPaths: [] };
   }
 
+  const prefixPaths: string[] = [];
   const blocks: string[] = [];
   for (const entry of entries) {
+    prefixPaths.push(normalizePromptSeenPath(entry.path));
     const cached = await loadOrFillFileCache(sessionId, entry, deps);
     blocks.push(
       renderFileBlock({
@@ -81,7 +95,10 @@ export async function assembleWorkplaceDisplay(
       }),
     );
   }
-  return joinFileBlocks(blocks);
+  return {
+    worktreeDisplay: joinFileBlocks(blocks),
+    prefixPaths,
+  };
 }
 
 async function loadOrCreateRuleSnapshot(
@@ -95,7 +112,8 @@ async function loadOrCreateRuleSnapshot(
   );
   if (raw != null && raw !== "") {
     const parsed = parseRuleSnapshotJson(raw);
-    if (parsed != null) {
+    // 空数组视为未就绪：避免首次空快照粘住后工作区永久消失
+    if (parsed != null && parsed.length > 0) {
       return parsed;
     }
   }

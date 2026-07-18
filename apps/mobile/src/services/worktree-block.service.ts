@@ -22,7 +22,7 @@ export async function assembleWorkplaceForMobile(
     projectId: scope.projectId,
     sessionId: scope.sessionId,
   };
-  const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
+  const { worktreeDisplay } = await assembleWorkplaceDisplay(wtScope, {
     sessionKkv: runtime.sessionKkv,
     worktree: runtime.worktree(wtScope),
     vfs: runtime.sessionVfs(scope.projectId, scope.sessionId),
