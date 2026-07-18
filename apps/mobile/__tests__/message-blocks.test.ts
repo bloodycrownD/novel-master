@@ -697,7 +697,7 @@ describe('message-blocks', () => {
     ).toBe('/notes/a.md');
   });
 
-  it('B2-4b: hidden UA 两段仍折叠为 user_vfs_turn', () => {
+  it('T-UO2x: 历史 UA 两段按普通 message，无 user_vfs_turn', () => {
     const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [
       msg(
@@ -705,7 +705,7 @@ describe('message-blocks', () => {
         'user',
         [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
         1,
-        true,
+        false,
         {
           metadata: {
             kind: 'user_vfs_action',
@@ -719,19 +719,18 @@ describe('message-blocks', () => {
         'assistant',
         [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
         2,
-        true,
+        false,
         { metadata: { kind: 'user_vfs_ack', synthetic: true } },
       ),
     ];
     const items = buildChatListItems(messages);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.kind).toBe('user_vfs_turn');
-    if (items[0]?.kind === 'user_vfs_turn') {
-      expect(items[0].hidden).toBe(true);
-    }
+    expect(items).toHaveLength(2);
+    expect(items.every(i => i.kind === 'message')).toBe(true);
+    expect(items[0]?.kind === 'message' && items[0].message.id).toBe('u1');
+    expect(items[1]?.kind === 'message' && items[1].message.id).toBe('a1');
   });
 
-  it('B2-4: UA 两段折叠为单个 user_vfs_turn', () => {
+  it('T-UO2x: hidden 历史 UA 两段仍为普通 message', () => {
     const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [
       msg(
@@ -739,7 +738,7 @@ describe('message-blocks', () => {
         'user',
         [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
         1,
-        false,
+        true,
         {
           metadata: {
             kind: 'user_vfs_action',
@@ -753,18 +752,14 @@ describe('message-blocks', () => {
         'assistant',
         [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
         2,
-        false,
+        true,
         { metadata: { kind: 'user_vfs_ack', synthetic: true } },
       ),
     ];
     const items = buildChatListItems(messages);
-    expect(items).toHaveLength(1);
-    expect(items[0]?.kind).toBe('user_vfs_turn');
-    if (items[0]?.kind === 'user_vfs_turn') {
-      expect(items[0].id).toBe('u1');
-      expect(items[0].tools.length).toBe(1);
-      expect(items[0].tools[0]?.status).toBe('success');
-    }
+    expect(items).toHaveLength(2);
+    expect(items.every(i => i.kind === 'message')).toBe(true);
+    expect(items[0]?.kind === 'message' && items[0].message.hidden).toBe(true);
   });
 
   it('B2-5: 旧四段 fixture 不产出 user_vfs_turn', () => {
@@ -815,7 +810,7 @@ describe('message-blocks', () => {
       }),
     ];
     const items = buildChatListItems(messages);
-    expect(items.every(i => i.kind !== 'user_vfs_turn')).toBe(true);
+    expect(items.every(i => i.kind === 'message')).toBe(true);
     expect(items.length).toBeGreaterThan(1);
   });
 });

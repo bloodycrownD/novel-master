@@ -1,8 +1,5 @@
 /** Mobile 薄 re-export：可见性 / tail 批量范围逻辑见 @novel-master/core/chat。 */
 import {
-  buildUserVfsTurnView,
-  matchUserVfsTurnAtForDisplay,
-  USER_VFS_TURN_SPAN,
   type ChatMessage,
   type MessageVisibilityBatchMode,
   type TailBatchRow,
@@ -38,38 +35,15 @@ export function isTailBatchMode(
   return mode === 'restore' || mode === 'delete';
 }
 
-/** 将会话消息映射为 tail 批量行（含 user_vfs_turn 卡片）。 */
+/** 将会话消息映射为 tail 批量行。 */
 export function chatMessagesToTailBatchRows(
   messages: readonly ChatMessage[],
 ): readonly TailBatchRow[] {
-  const rows: TailBatchRow[] = [];
-
-  for (let index = 0; index < messages.length; ) {
-    const vfsTurn = matchUserVfsTurnAtForDisplay(messages, index);
-    if (vfsTurn != null) {
-      const view = buildUserVfsTurnView(vfsTurn);
-      const actionMsg = messages[index]!;
-      rows.push({
-        id: view.id,
-        role: 'user',
-        seq: actionMsg.seq,
-        hidden: view.hidden,
-        selectable: true,
-      });
-      index += USER_VFS_TURN_SPAN;
-      continue;
-    }
-
-    const message = messages[index]!;
-    rows.push({
-      id: message.id,
-      role: message.role,
-      seq: message.seq,
-      hidden: message.hidden,
-      selectable: true,
-    });
-    index += 1;
-  }
-
-  return rows;
+  return messages.map(message => ({
+    id: message.id,
+    role: message.role,
+    seq: message.seq,
+    hidden: message.hidden,
+    selectable: true,
+  }));
 }

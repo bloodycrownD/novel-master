@@ -3,10 +3,7 @@ import { describe, it } from "node:test";
 import { formatChatMessageForCliPreview } from "../../src/domain/chat/content/message-body-text.js";
 import {
   buildUserVfsTurnView,
-  deriveToolUsesFromVfsActions,
-  formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
-  matchUserVfsTurnAtForDisplay,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_ACK_TEXT,
 } from "../../src/domain/chat/logic/user-vfs-turn-view.js";
@@ -47,26 +44,8 @@ describe("parseAllUserVfsActionsFromText", () => {
   });
 });
 
-describe("deriveToolUsesFromVfsActions", () => {
-  it("从 action XML 还原完整 tool input", () => {
-    const actions = parseAllUserVfsActionsFromText(
-      '<user-vfs-action kind="delete" path="/test.md" />\n' +
-        '<user-vfs-action kind="save" path="/b.md" method="edit">' +
-        '<edit-hunk index="1"><old>x</old><new>y</new></edit-hunk></user-vfs-action>',
-    );
-    const derived = deriveToolUsesFromVfsActions(actions);
-    assert.equal(derived.length, 2);
-    assert.equal(derived[0]?.name, "fs");
-    assert.match(String(derived[0]?.input.command), /rm.*\/test\.md/);
-    assert.equal(derived[1]?.name, "edit");
-    assert.equal(derived[1]?.input.path, "/b.md");
-    assert.equal(derived[1]?.input.oldString, "x");
-    assert.equal(derived[1]?.input.newString, "y");
-  });
-});
-
 describe("matchUserVfsTurnAt", () => {
-  it("T-UO2：旧 fixture UA 两段仍能 match 展示卡", () => {
+  it("UA 两段可匹配（LLM 路径）", () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages: ChatMessage[] = [
       msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }], {
@@ -79,14 +58,11 @@ describe("matchUserVfsTurnAt", () => {
     const turn = matchUserVfsTurnAt(messages, 0);
     assert.ok(turn != null);
     const view = buildUserVfsTurnView(turn);
-    assert.equal(view.actions.length, 1);
-    assert.equal(view.toolUses.length, 1);
-    assert.equal(view.toolResults.length, 1);
+    assert.equal(view.id, "u1");
     assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
-    assert.match(formatUserVfsTurnPreviewBody(view), /用户 VFS 操作/);
   });
 
-  it("hidden UA 对：ForDisplay 仍匹配，At 返回 null", () => {
+  it("hidden UA 对：At 返回 null", () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const hiddenMessages: ChatMessage[] = [
       msg(
@@ -107,15 +83,10 @@ describe("matchUserVfsTurnAt", () => {
     hiddenMessages[0] = { ...hiddenMessages[0]!, hidden: true };
     hiddenMessages[1] = { ...hiddenMessages[1]!, hidden: true };
 
-    const displayTurn = matchUserVfsTurnAtForDisplay(hiddenMessages, 0);
-    assert.ok(displayTurn != null);
-    const view = buildUserVfsTurnView(displayTurn);
-    assert.equal(view.hidden, true);
-
     assert.equal(matchUserVfsTurnAt(hiddenMessages, 0), null);
   });
 
-  it("仅 ack hidden 时 view.hidden 为 true", () => {
+  it("仅 ack hidden 时 At 返回 null", () => {
     const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages: ChatMessage[] = [
       msg(
@@ -134,9 +105,7 @@ describe("matchUserVfsTurnAt", () => {
       ),
     ];
     messages[1] = { ...messages[1]!, hidden: true };
-    const turn = matchUserVfsTurnAtForDisplay(messages, 0);
-    assert.ok(turn != null);
-    assert.equal(buildUserVfsTurnView(turn).hidden, true);
+    assert.equal(matchUserVfsTurnAt(messages, 0), null);
   });
 
   it("旧 U-A-U-A 四段不匹配", () => {

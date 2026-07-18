@@ -4,10 +4,6 @@ import type { ChatMessageDto } from '@shared/ipc-types';
 import { buildChatListItems } from './message-blocks';
 import { ToolCallGroupCard } from './ToolCallGroupCard';
 import { MessageAttachmentGroupCard } from './MessageAttachmentGroupCard';
-import {
-  parseUserVfsActionFromText,
-  UserVfsActionBody,
-} from './user-vfs-action-transcript';
 
 const ROLE_LABELS: Record<string, string> = {
   user: '用户',
@@ -84,40 +80,8 @@ export function MessageList({
   return (
     <>
       {listItems.map(item => {
-        if (item.kind === 'user_vfs_turn') {
-          if (item.tools.length === 0) {
-            return null;
-          }
-
-          return (
-            <div
-              key={item.id}
-              className={`chat-message chat-message--user${
-                item.hidden ? ' chat-message--hidden' : ''
-              }`}
-              data-message-id={item.id}
-            >
-              <div className="chat-message__body">
-                <span className="chat-message__role">
-                  用户
-                  {item.hidden ? (
-                    <span className="chat-message__hidden-tag">已隐藏</span>
-                  ) : null}
-                </span>
-                <ToolCallGroupCard
-                  tools={item.tools}
-                  dimmed={item.hidden}
-                  onOpenFile={onOpenToolFile}
-                />
-              </div>
-            </div>
-          );
-        }
-
         const msg = item.message;
         const text = item.textParts.join('\n');
-        const userVfsAction =
-          msg.role === 'user' ? parseUserVfsActionFromText(text) : null;
 
         return (
           <div
@@ -158,15 +122,11 @@ export function MessageList({
                 </details>
               ) : null}
               {text ? (
-                userVfsAction != null ? (
-                  <UserVfsActionBody action={userVfsAction} />
-                ) : (
-                  <MessageBody
-                    text={text}
-                    richText={chatRichText}
-                    alwaysRichText={msg.role === 'assistant'}
-                  />
-                )
+                <MessageBody
+                  text={text}
+                  richText={chatRichText}
+                  alwaysRichText={msg.role === 'assistant'}
+                />
               ) : null}
               {msg.role === "user" &&
               (msg.attachments?.length ?? 0) > 0 ? (

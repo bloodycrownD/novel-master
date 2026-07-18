@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChatMessageDto } from "@shared/ipc-types";
 import {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+} from "@novel-master/core/chat";
+import {
   buildChatListItems,
   isTurnToolExecuting,
   vfsToolFilePath,
@@ -246,4 +250,43 @@ test("T-SR3：空正文且无 attachments 不进列表", () => {
     contentBlocks: [{ type: "text", text: "   " }],
   };
   assert.equal(buildChatListItems([empty]).length, 0);
+});
+
+test("T-UO2x：历史 UA 两段按普通 message，无 user_vfs_turn", () => {
+  const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
+  const messages: ChatMessageDto[] = [
+    {
+      id: "u1",
+      sessionId: "s1",
+      seq: 1,
+      role: "user",
+      hidden: false,
+      createdAtMs: 1,
+      bodyText: wrapUserVfsActionsForStorage(actionXml),
+      contentBlocks: [
+        { type: "text", text: wrapUserVfsActionsForStorage(actionXml) },
+      ],
+      metadata: {
+        kind: "user_vfs_action",
+        source: "user",
+        synthetic: true,
+      },
+    },
+    {
+      id: "a1",
+      sessionId: "s1",
+      seq: 2,
+      role: "assistant",
+      hidden: false,
+      createdAtMs: 2,
+      bodyText: USER_VFS_TURN_ACK_TEXT,
+      contentBlocks: [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }],
+      metadata: { kind: "user_vfs_ack", synthetic: true },
+    },
+  ];
+  const items = buildChatListItems(messages);
+  assert.equal(items.length, 2);
+  assert.ok(items.every((i) => i.kind === "message"));
+  assert.equal(items[0]?.kind === "message" && items[0].message.id, "u1");
+  assert.equal(items[1]?.kind === "message" && items[1].message.id, "a1");
 });

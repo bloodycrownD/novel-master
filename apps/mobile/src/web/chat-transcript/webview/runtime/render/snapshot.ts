@@ -150,16 +150,13 @@ export function applyStreamCommit(payload: RowsPayload): void {
   const toAppend: TranscriptRow[] = [];
   for (let i = 0; i < newRows.length; i++) {
     const row = newRows[i];
-    if (row.kind !== 'message' && row.kind !== 'user_vfs_turn') {
+    if (row.kind !== 'message') {
       continue;
     }
     let dup = false;
     for (let j = 0; j < state.rows.length; j++) {
       const existing = state.rows[j];
-      if (
-        (existing.kind === 'message' || existing.kind === 'user_vfs_turn') &&
-        existing.id === row.id
-      ) {
+      if (existing.kind === 'message' && existing.id === row.id) {
         dup = true;
         break;
       }

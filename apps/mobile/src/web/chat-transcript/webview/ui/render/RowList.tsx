@@ -4,7 +4,6 @@
 import type { ComponentChildren } from 'preact';
 import { state } from '../../runtime/state/state';
 import { MessageRow } from './MessageRow';
-import { UserVfsTurnRow } from './UserVfsTurnRow';
 import { StreamTail } from '../stream/StreamTail';
 
 export function RowList() {
@@ -30,9 +29,7 @@ export function RowList() {
   }
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
-    if (row.kind === 'user_vfs_turn') {
-      children.push(<UserVfsTurnRow key={row.id} row={row} />);
-    } else if (row.kind === 'message') {
+    if (row.kind === 'message') {
       children.push(<MessageRow key={row.id} row={row} />);
     }
   }

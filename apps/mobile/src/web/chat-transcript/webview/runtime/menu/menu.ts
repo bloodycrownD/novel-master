@@ -17,7 +17,6 @@ import type {
   MenuItem,
   MessageRow,
   TranscriptRow,
-  UserVfsTurnRow,
 } from '../state/state';
 import { post } from '../bridge/bridge';
 
@@ -160,13 +159,10 @@ export function resolveMenuAnchor(
 
 export function findMessageRow(
   messageId: string,
-): MessageRow | UserVfsTurnRow | null {
+): MessageRow | null {
   for (let i = 0; i < state.rows.length; i++) {
     const row = state.rows[i];
-    if (
-      (row.kind === 'message' || row.kind === 'user_vfs_turn') &&
-      row.id === messageId
-    ) {
+    if (row.kind === 'message' && row.id === messageId) {
       return row;
     }
   }

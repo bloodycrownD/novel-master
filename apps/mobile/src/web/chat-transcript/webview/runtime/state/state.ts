@@ -52,17 +52,7 @@ export type MessageRow = {
   hidden?: boolean;
 };
 
-/** 用户 VFS 回合行。 */
-export type UserVfsTurnRow = {
-  kind: 'user_vfs_turn';
-  id: string;
-  tools?: ToolCallRow[];
-  text?: string;
-  role?: string;
-  hidden?: boolean;
-};
-
-export type TranscriptRow = MessageRow | UserVfsTurnRow;
+export type TranscriptRow = MessageRow;
 
 export type TranscriptFlags = {
   richText: boolean;

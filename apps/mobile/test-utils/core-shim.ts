@@ -76,7 +76,6 @@ export {
   deriveToolUsesFromVfsActions,
   formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
-  matchUserVfsTurnAtForDisplay,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_SPAN,
 } from "../../../packages/core/dist/domain/chat/logic/user-vfs-turn-view.js";
