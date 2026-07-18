@@ -6,7 +6,10 @@ import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachmentDto[];
-  /** false = 状态条（无叉）；true = 附件条（有叉，已废止）。 */
+  /**
+   * 是否显示叉号。默认 `false`：Composer 唯一合法路径为无叉状态 chip
+   *（workplace + user_ops）；有叉 attach 条已废止，勿再默认开启。
+   */
   showRemove?: boolean;
   onRemove?: (index: number) => void;
   disabled?: boolean;
@@ -63,7 +66,7 @@ export function attachmentChipClassName(): string {
 
 export function AttachmentDraftChips({
   attachments,
-  showRemove = true,
+  showRemove = false,
   onRemove,
   disabled,
   'aria-label': ariaLabel,
