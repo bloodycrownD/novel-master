@@ -51,7 +51,7 @@ test("T-UI1: workplace 目录为「规则 · /dir/」", () => {
   );
 });
 
-test("T-UI1: user_ops 为「改稿 ·」前缀 + name", () => {
+test("T-UI1: user_ops 为 name（无「改稿 ·」前缀）", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -61,7 +61,7 @@ test("T-UI1: user_ops 为「改稿 ·」前缀 + name", () => {
         name: "write:/ops.md",
       }),
     ),
-    "改稿 · write:/ops.md",
+    "write:/ops.md",
   );
 });
 

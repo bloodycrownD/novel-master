@@ -60,7 +60,7 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
     ).toBe('规则 · /notes/');
   });
 
-  it('user_ops 为「改稿 ·」前缀 + name', () => {
+  it('user_ops 为 name（无「改稿 ·」前缀）', () => {
     expect(
       formatAttachmentChipLabel(
         attach({
@@ -70,7 +70,7 @@ describe('formatAttachmentChipLabel (T-UI1)', () => {
           name: 'edit:/ops.md',
         }),
       ),
-    ).toBe('改稿 · edit:/ops.md');
+    ).toBe('edit:/ops.md');
   });
 });
 

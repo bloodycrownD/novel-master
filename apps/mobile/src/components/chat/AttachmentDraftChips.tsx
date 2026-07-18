@@ -48,11 +48,11 @@ export function partitionComposerChipAttachments(
 /**
  * Chip 文案：与文件引用 `@路径` 区分。
  * - workplace → `规则 · /path`（目录保留尾 `/`）
- * - user_ops → `改稿 ·` + name（多为 `action:path`）
+ * - user_ops → 直接 `name`（多为 `action:path`，如 `write:/ops.md`）
  */
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
   if (a.source === 'user_ops') {
-    return `改稿 · ${a.name}`;
+    return a.name;
   }
   const path = a.path ?? a.name;
   if (a.type === 'dir') {

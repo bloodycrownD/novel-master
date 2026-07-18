@@ -21,12 +21,12 @@ function sourceLabel(a: MessageAttachmentDto): string {
 /**
  * 消息气泡附件文案（与 Composer chip 分工不同）：
  * - workplace → `规则 · ${path}`
- * - user_ops → `改稿 · ${name}`
+ * - user_ops → 直接 `${name}`（多为 `action:path`）
  * - attach → `@${path}`（禁止落入「规则 ·」）
  */
 export function formatMessageAttachmentLabel(a: MessageAttachmentDto): string {
   if (a.source === 'user_ops') {
-    return `改稿 · ${a.name}`;
+    return a.name;
   }
   if (a.source === 'workplace') {
     const path = a.path ?? a.name;

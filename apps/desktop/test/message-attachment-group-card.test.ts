@@ -44,7 +44,7 @@ test("T-HC5: attach 目录文案为 @path，不含「规则 ·」", () => {
   assert.ok(!label.includes("规则 ·"));
 });
 
-test("T-HC5: workplace 仍为「规则 ·」；user_ops 仍为「改稿 ·」", () => {
+test("T-HC5: workplace 仍为「规则 ·」；user_ops 为 name（无「改稿 ·」）", () => {
   assert.equal(
     formatMessageAttachmentLabel(
       attach({
@@ -65,6 +65,6 @@ test("T-HC5: workplace 仍为「规则 ·」；user_ops 仍为「改稿 ·」", 
         name: "write:/ops.md",
       }),
     ),
-    "改稿 · write:/ops.md",
+    "write:/ops.md",
   );
 });
