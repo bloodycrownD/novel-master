@@ -2,7 +2,6 @@
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
 import type { MessageAttachmentDto } from '@shared/ipc-types';
-import { formatAttachmentChipLabel } from './AttachmentDraftChips';
 
 export type MessageAttachmentGroupCardProps = {
   attachments: readonly MessageAttachmentDto[];
@@ -17,6 +16,28 @@ function sourceLabel(a: MessageAttachmentDto): string {
     return '';
   }
   return a.type === 'dir' ? '目录' : '文件';
+}
+
+/**
+ * 消息气泡附件文案（与 Composer chip 分工不同）：
+ * - workplace → `规则 · ${path}`
+ * - user_ops → `改稿 · ${name}`
+ * - attach → `@${path}`（禁止落入「规则 ·」）
+ */
+export function formatMessageAttachmentLabel(a: MessageAttachmentDto): string {
+  if (a.source === 'user_ops') {
+    return `改稿 · ${a.name}`;
+  }
+  if (a.source === 'workplace') {
+    const path = a.path ?? a.name;
+    if (a.type === 'dir') {
+      const dirPath = path.endsWith('/') ? path : `${path}/`;
+      return `规则 · ${dirPath}`;
+    }
+    return `规则 · ${path}`;
+  }
+  const path = a.path ?? a.name;
+  return path.startsWith('@') ? path : `@${path}`;
 }
 
 export function MessageAttachmentGroupCard({
@@ -42,7 +63,7 @@ export function MessageAttachmentGroupCard({
           >
             <div className="tool-call-card__header">
               <span className="tool-call-card__name">
-                {formatAttachmentChipLabel(a)}
+                {formatMessageAttachmentLabel(a)}
               </span>
               {sourceLabel(a) ? (
                 <span className="tool-call-card__status tool-call-card__status--success">
