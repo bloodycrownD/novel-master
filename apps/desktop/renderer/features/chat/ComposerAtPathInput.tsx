@@ -3,8 +3,10 @@
  */
 import {
   useMemo,
+  useRef,
   type KeyboardEvent,
   type RefObject,
+  type UIEvent,
 } from "react";
 
 const AT_TOKEN_RE = /@([^\s@]+)/g;
@@ -60,6 +62,7 @@ export function ComposerAtPathInput({
   onKeyDown,
   "aria-label": ariaLabel,
 }: ComposerAtPathInputProps) {
+  const highlightRef = useRef<HTMLDivElement>(null);
   const highlightHtml = useMemo(
     () => renderComposerAtPathHighlightHtml(value),
     [value],
@@ -72,9 +75,21 @@ export function ComposerAtPathInput({
     }
   };
 
+  /** 高亮层与透明 textarea 滚动对齐，避免长文时 tag 错位。 */
+  const syncHighlightScroll = (e: UIEvent<HTMLTextAreaElement>) => {
+    const hl = highlightRef.current;
+    if (hl == null) {
+      return;
+    }
+    const ta = e.currentTarget;
+    hl.scrollTop = ta.scrollTop;
+    hl.scrollLeft = ta.scrollLeft;
+  };
+
   return (
     <div className="chat-composer__input-stack">
       <div
+        ref={highlightRef}
         className="chat-composer__highlight"
         aria-hidden
         dangerouslySetInnerHTML={{ __html: highlightHtml || "&#8203;" }}
@@ -90,6 +105,7 @@ export function ComposerAtPathInput({
         onClick={emitCursor}
         onKeyUp={emitCursor}
         onSelect={emitCursor}
+        onScroll={syncHighlightScroll}
         disabled={disabled}
         placeholder={placeholder}
         aria-label={ariaLabel}

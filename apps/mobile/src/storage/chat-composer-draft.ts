@@ -173,7 +173,7 @@ export async function hydrateChatComposerDraftFromDb(
 }
 
 /**
- * 投影结果整表替换状态条（workplace|user_ops）；保留 attach；不写 draft 列。
+ * 投影结果整表替换状态条（workplace|user_ops）；draft attach 恒空，不保留 existing attach。
  */
 export function applyComposerStatusAttachmentsReplace(payload: {
   readonly sessionId: string;

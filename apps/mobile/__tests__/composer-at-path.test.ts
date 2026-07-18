@@ -1,5 +1,5 @@
 /**
- * T-ATD*：Mobile `@路径` 插入与 typeahead≤5。
+ * T-ATD*：Mobile `@路径` 插入与 typeahead≤5；高亮分段纯函数。
  */
 import { describe, expect, it } from '@jest/globals';
 import { scanAtPathAttachments } from '@novel-master/core/chat';
@@ -11,6 +11,7 @@ import {
   formatComposerAtPathToken,
   replaceActiveAtWithToken,
 } from '../src/components/chat/composer-at-path';
+import { segmentComposerAtPathHighlight } from '../src/components/chat/composer-at-path-highlight';
 
 describe('composer-at-path (T-ATD*)', () => {
   it('T-ATD2: Picker token 为 @path；目录尾 /；扫描落库带前导 /', () => {
@@ -46,5 +47,15 @@ describe('composer-at-path (T-ATD*)', () => {
   it('T-ATD4: 删除正文 @path 后扫描为空', () => {
     expect(countScannedAtPathAttachments('看 @/a.md')).toBe(1);
     expect(countScannedAtPathAttachments('看')).toBe(0);
+  });
+
+  it('高亮分段：识别 @token；value 仍为纯字符串', () => {
+    const text = '见 @/a.md 与补充';
+    expect(segmentComposerAtPathHighlight(text)).toEqual([
+      { kind: 'text', value: '见 ' },
+      { kind: 'at-token', value: '@/a.md' },
+      { kind: 'text', value: ' 与补充' },
+    ]);
+    expect(text.includes('<span')).toBe(false);
   });
 });

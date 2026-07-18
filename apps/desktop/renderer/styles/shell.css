@@ -4001,9 +4001,16 @@ html[data-theme="dark"] .chat-batch-bar {
   pointer-events: none;
 }
 
+/* inline tag：muted 底 + primary 字；负 margin 抵消 padding，避免 caret 与透明 textarea 错位 */
 .chat-composer__at-token {
   color: var(--primary);
   font-weight: 500;
+  background-color: var(--primary-muted);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: 0 -4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 .chat-composer__input {
