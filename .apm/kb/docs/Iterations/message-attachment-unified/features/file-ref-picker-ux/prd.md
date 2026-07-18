@@ -3,6 +3,11 @@ date: 2026-07-15
 dependency: Iterations/message-attachment-unified/prd.md
 ---
 
+> **Supersede（Composer UI）**：双条有叉 attach / 确认进 chips 已被
+> `composer-at-token-prompt-dedup` 与 `bugs/composer-two-pipelines-hard-contract` 废止。
+> 现行：状态 chip 仅 workplace+user_ops 且无叉；文件引用仅正文 `@path`。
+> `attachmentsFromPickerSelection` 为废 API（已删除）。
+
 # file-ref-picker-ux Feature PRD
 
 > 合并原 `file-ref-picker-nav-and-select` / `file-ref-picker-multi-and-visibility` / `file-ref-picker-style-and-dir-tree`。  

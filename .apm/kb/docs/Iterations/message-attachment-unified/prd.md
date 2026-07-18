@@ -7,6 +7,10 @@ dependency:
   - Iterations/agent-worktree-block-ui/prd.md
 ---
 
+> **Supersede（Composer UI）**：双条有叉 attach / 确认进 chips / 正文「可叉 `@` chip」叙述已被
+> `composer-at-token-prompt-dedup` 与 `bugs/composer-two-pipelines-hard-contract` 废止。
+> 现行：状态 chip 仅 workplace+user_ops 且无叉；文件引用仅正文 `@path`。
+
 # 常驻工作区与消息附件 PRD
 
 > **平台**：Mobile（Android + iOS）+ Desktop（`apps/mobile`、`apps/desktop`）  

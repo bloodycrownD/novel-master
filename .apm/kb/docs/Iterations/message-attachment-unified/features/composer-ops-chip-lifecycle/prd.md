@@ -3,6 +3,10 @@ date: 2026-07-16
 dependency: Iterations/message-attachment-unified/prd.md
 ---
 
+> **Supersede（Composer UI）**：双条有叉 attach / 确认进 chips 已被
+> `composer-at-token-prompt-dedup` 与 `bugs/composer-two-pipelines-hard-contract` 废止。
+> 现行：状态 chip 仅 workplace+user_ops 且无叉；文件引用仅正文 `@path`。
+
 # composer-ops-chip-lifecycle Feature PRD
 
 ## 背景
