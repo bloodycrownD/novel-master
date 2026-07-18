@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { MessageAttachmentDto } from "@shared/ipc-types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MessageAttachmentDto, WorktreeListRowDto } from "@shared/ipc-types";
 import { useAutoResizeTextarea } from "@/hooks/useAutoResizeTextarea";
 import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
@@ -15,13 +15,20 @@ import {
   ipcPreferencesGetLlmStream,
   ipcPromptAgentMeta,
   ipcSessionsProjectComposerStatus,
+  ipcWorktreeBuildListRows,
   onComposerAttachmentsSuggest,
+  vfsScope,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
+import { ComposerStatusChips } from "./AttachmentDraftChips";
+import { AtPathTypeahead } from "./AtPathTypeahead";
+import { ComposerAtPathInput } from "./ComposerAtPathInput";
 import {
-  ComposerAttachChips,
-  ComposerStatusChips,
-} from "./AttachmentDraftChips";
+  type AtPathRef,
+  filterAtPathTypeaheadCandidates,
+  findActiveAtQuery,
+  replaceActiveAtWithToken,
+} from "./composer-at-path";
 import { resolveComposerSendIntent } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 
@@ -53,28 +60,13 @@ interface ChatComposerProps {
   onOpenSessionActions?: (anchor: HTMLElement) => void;
 }
 
-function mergeAttachmentsByPath(
-  existing: readonly MessageAttachmentDto[],
-  incoming: readonly MessageAttachmentDto[],
-): MessageAttachmentDto[] {
-  const out = [...existing];
-  const seen = new Set(
-    existing
-      .map(a => (a.path != null && a.path !== "" ? `path:${a.path}` : null))
-      .filter((k): k is string => k != null),
-  );
-  for (const item of incoming) {
-    const key =
-      item.path != null && item.path !== "" ? `path:${item.path}` : null;
-    if (key != null && seen.has(key)) {
-      continue;
-    }
-    if (key != null) {
-      seen.add(key);
-    }
-    out.push(item);
-  }
-  return out;
+function rowsToAtPathRefs(rows: readonly WorktreeListRowDto[]): AtPathRef[] {
+  return rows
+    .filter((r) => r.path !== "/")
+    .map((r) => ({
+      path: r.path,
+      kind: r.kind === "dir" ? ("dir" as const) : ("file" as const),
+    }));
 }
 
 export function ChatComposer({
@@ -104,11 +96,10 @@ export function ChatComposer({
   const [bridgePendingText, setBridgePendingText] = useState<string | null>(
     null,
   );
-  const [bridgePendingAttachments, setBridgePendingAttachments] = useState<
-    MessageAttachmentDto[]
-  >([]);
   const [bridgeBusy, setBridgeBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRowDto[]>([]);
 
   const checkModel = useCallback(async () => {
     const result = await ipcPromptAgentMeta({ projectId, sessionId });
@@ -142,6 +133,41 @@ export function ChatComposer({
 
   useAutoResizeTextarea(textareaRef, value, 200);
 
+  const activeAt = useMemo(
+    () => findActiveAtQuery(value, cursor),
+    [value, cursor],
+  );
+
+  useEffect(() => {
+    if (activeAt == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const result = await ipcWorktreeBuildListRows(
+        vfsScope("session", projectId, sessionId),
+      );
+      if (cancelled || !result.ok) {
+        return;
+      }
+      setTypeaheadRows(result.data);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAt != null, projectId, sessionId]);
+
+  const typeaheadCandidates = useMemo(() => {
+    if (activeAt == null) {
+      return [];
+    }
+    return filterAtPathTypeaheadCandidates(
+      rowsToAtPathRefs(typeaheadRows),
+      activeAt.query,
+      5,
+    );
+  }, [activeAt, typeaheadRows]);
+
   const isControlled = onErrorChange != null;
   const displayError = isControlled ? controlledError : localError;
 
@@ -156,11 +182,64 @@ export function ChatComposer({
     [onErrorChange],
   );
 
+  const insertTokensIntoComposer = useCallback(
+    (tokens: readonly string[]) => {
+      if (tokens.length === 0) {
+        return;
+      }
+      const el = textareaRef.current;
+      const start = el?.selectionStart ?? value.length;
+      const end = el?.selectionEnd ?? start;
+      const before = value.slice(0, start);
+      const after = value.slice(end);
+      const gapBefore =
+        before.length === 0 || /\s$/.test(before) ? "" : " ";
+      const joined = tokens.join(" ");
+      const gapAfter = after.length === 0 || /^\s/.test(after) ? "" : " ";
+      const inserted = `${gapBefore}${joined}${gapAfter}`;
+      const next = `${before}${inserted}${after}`;
+      onChange(next);
+      const nextCursor = before.length + inserted.length;
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta != null) {
+          ta.focus();
+          ta.setSelectionRange(nextCursor, nextCursor);
+          setCursor(nextCursor);
+        }
+      });
+    },
+    [onChange, value],
+  );
+
+  const applyTypeaheadToken = useCallback(
+    (token: string) => {
+      if (activeAt == null) {
+        return;
+      }
+      const next = replaceActiveAtWithToken(
+        value,
+        cursor,
+        activeAt.start,
+        token,
+      );
+      onChange(next.text);
+      requestAnimationFrame(() => {
+        const ta = textareaRef.current;
+        if (ta != null) {
+          ta.focus();
+          ta.setSelectionRange(next.cursor, next.cursor);
+          setCursor(next.cursor);
+        }
+      });
+    },
+    [activeAt, cursor, onChange, value],
+  );
+
   const runAgent = useCallback(
     async (
       content: string,
       allowResumeWithoutInput: boolean,
-      runAttachments: readonly MessageAttachmentDto[],
       hasWorkplaceDelta: boolean,
     ) => {
       const modelCheck = await ipcPromptAgentMeta({ projectId, sessionId });
@@ -177,14 +256,12 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 显式 attachments 仅 attach；workplace 由 Core materialize，不随入参上传
+      // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
       const shouldClearComposer =
         content.trim() !== "" ||
-        runAttachments.length > 0 ||
         hasPendingUserOps ||
         hasWorkplaceDelta;
       const previousValue = attachmentsRef.current;
-      // 不在 IPC 前清输入：失败时保留原文；成功后再清
 
       const streamResult = await ipcPreferencesGetLlmStream();
       const stream = streamResult.ok ? streamResult.data : true;
@@ -194,9 +271,6 @@ export function ChatComposer({
         userContent: content,
         stream,
         allowResumeWithoutInput,
-        ...(runAttachments.length > 0
-          ? { attachments: runAttachments }
-          : {}),
       });
 
       if (!result.ok) {
@@ -210,7 +284,6 @@ export function ChatComposer({
         onAttachmentsChange([]);
       }
       await onMessagesChanged();
-      // 发送 flush 后 pending 空 → 上条应空（整清 draft 后仍重投影保险）
       const statusRes = await ipcSessionsProjectComposerStatus({ sessionId });
       if (statusRes.ok) {
         onAttachmentsChange(
@@ -252,36 +325,27 @@ export function ChatComposer({
       running,
     });
     const content = value.trim();
-    const { attachOnly, hasWorkplaceDelta, hasSendable, allowResumeWithoutInput } =
-      intent;
-    const hasAttachments = attachOnly.length > 0;
+    const { hasWorkplaceDelta, hasSendable, allowResumeWithoutInput } = intent;
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
     }
 
-    if ((content || hasAttachments) && lastMessageIsPlainUserText) {
+    if (content && lastMessageIsPlainUserText) {
       return;
     }
 
     if (content && lastMessageHasToolResult) {
       setBridgePendingText(content);
-      setBridgePendingAttachments([...attachOnly]);
       return;
     }
 
-    await runAgent(
-      content,
-      allowResumeWithoutInput,
-      attachOnly,
-      hasWorkplaceDelta,
-    );
+    await runAgent(content, allowResumeWithoutInput, hasWorkplaceDelta);
   };
 
   const confirmBridge = async () => {
     const content = bridgePendingText?.trim();
     if (!content) {
       setBridgePendingText(null);
-      setBridgePendingAttachments([]);
       return;
     }
     setBridgeBusy(true);
@@ -292,13 +356,11 @@ export function ChatComposer({
         return;
       }
       await onMessagesChanged();
-      const pendingAttachments = bridgePendingAttachments;
       setBridgePendingText(null);
-      setBridgePendingAttachments([]);
       const hasWorkplaceDelta = attachmentsRef.current.some(
         a => a.source === "workplace",
       );
-      await runAgent(content, false, pendingAttachments, hasWorkplaceDelta);
+      await runAgent(content, false, hasWorkplaceDelta);
     } finally {
       setBridgeBusy(false);
     }
@@ -325,45 +387,35 @@ export function ChatComposer({
         <p className="chat-composer__error">{displayError}</p>
       ) : null}
       <div className="chat-composer" id="chat-composer">
-        {/* 状态条在输入框外上方：不可叉，与可取消的 @ 附件区分 */}
-        <ComposerStatusChips
-          attachments={attachments}
-          disabled={inputDisabled}
-        />
         <div className="chat-composer__box">
-          <ComposerAttachChips
+          {/* 状态 chip 在输入框内顶部：不可叉；无文件引用 attach chip */}
+          <ComposerStatusChips
             attachments={attachments}
             disabled={inputDisabled}
-            onRemoveAttach={attachIndex => {
-              let seen = -1;
-              onAttachmentsChange(
-                attachments.filter(a => {
-                  if (a.source !== "attach") {
-                    return true;
-                  }
-                  seen += 1;
-                  return seen !== attachIndex;
-                }),
-              );
-            }}
           />
-          <textarea
-            ref={textareaRef}
-            className="chat-composer__input"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            disabled={inputDisabled}
-            placeholder={inputPlaceholder}
-            aria-label="消息输入"
-            rows={1}
-            onKeyDown={(e) => {
-              handleMultilineSubmitKeyDown(
-                e,
-                () => void send(),
-                { disabled: sendDisabled },
-              );
-            }}
-          />
+          <div className="chat-composer__input-wrap">
+            <AtPathTypeahead
+              open={activeAt != null && !inputDisabled}
+              candidates={typeaheadCandidates}
+              onSelect={applyTypeaheadToken}
+            />
+            <ComposerAtPathInput
+              textareaRef={textareaRef}
+              value={value}
+              onChange={onChange}
+              onSelectChange={setCursor}
+              disabled={inputDisabled}
+              placeholder={inputPlaceholder}
+              aria-label="消息输入"
+              onKeyDown={(e) => {
+                handleMultilineSubmitKeyDown(
+                  e,
+                  () => void send(),
+                  { disabled: sendDisabled },
+                );
+              }}
+            />
+          </div>
           <div className="chat-composer__toolbar">
             <Tooltip content="更多选项">
               <button
@@ -411,8 +463,8 @@ export function ChatComposer({
         projectId={projectId}
         sessionId={sessionId}
         onClose={() => setPickerOpen(false)}
-        onConfirm={picked => {
-          onAttachmentsChange(mergeAttachmentsByPath(attachments, picked));
+        onConfirm={(tokens) => {
+          insertTokensIntoComposer(tokens);
         }}
       />
       <ConfirmModal
@@ -424,7 +476,6 @@ export function ChatComposer({
         onConfirm={() => void confirmBridge()}
         onCancel={() => {
           setBridgePendingText(null);
-          setBridgePendingAttachments([]);
         }}
       />
     </>

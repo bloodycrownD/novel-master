@@ -10,7 +10,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { MessageAttachment } from '@novel-master/core/chat';
 import type { WorktreeListRow } from '@novel-master/core/worktree';
 import { AppModal } from '@/components/ui/AppModal';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -20,31 +19,20 @@ import {
   isDirectChild,
   parentLogicalPath,
 } from '@/components/vfs/vfs-row-mapper';
+import { atPathTokensFromPickerSelection } from './composer-at-path';
 
 export type FileReferencePickerProps = {
   visible: boolean;
   projectId: string;
   sessionId: string;
   onClose: () => void;
-  onConfirm: (attachments: MessageAttachment[]) => void;
+  /** 确认后插入正文的 `@path` token（目录带尾 `/`）。 */
+  onConfirm: (atPathTokens: string[]) => void;
 };
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? path;
-}
-
-function toAttach(
-  path: string,
-  type: MessageAttachment['type'],
-): MessageAttachment {
-  return {
-    name: basename(path),
-    source: 'attach',
-    type,
-    content: null,
-    path,
-  };
 }
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
@@ -55,16 +43,36 @@ export function listPickerChildRows(
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
-/** 根据目录/文件多选态生成确认附件（先 dir 后 text，各按 path）。 */
+/** @deprecated 使用 {@link atPathTokensFromPickerSelection} */
 export function attachmentsFromPickerSelection(
   selectedDirs: Iterable<string>,
   selectedFiles: Iterable<string>,
-): MessageAttachment[] {
+): {
+  name: string;
+  source: 'attach';
+  type: 'dir' | 'text';
+  content: null;
+  path: string;
+}[] {
   return [
-    ...[...selectedDirs].map(p => toAttach(p, 'dir')),
-    ...[...selectedFiles].map(p => toAttach(p, 'text')),
+    ...[...selectedDirs].map(p => ({
+      name: basename(p) || p,
+      source: 'attach' as const,
+      type: 'dir' as const,
+      content: null,
+      path: p,
+    })),
+    ...[...selectedFiles].map(p => ({
+      name: basename(p),
+      source: 'attach' as const,
+      type: 'text' as const,
+      content: null,
+      path: p,
+    })),
   ];
 }
+
+export { atPathTokensFromPickerSelection };
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
   const next = new Set(prev);
@@ -264,7 +272,7 @@ export function FileReferencePicker({
                       accessibilityLabel={`选用文件 ${label}`}
                     >
                       <Text style={{ color: tokens.text, flex: 1 }}>
-                        {label}
+                        📄 {label}
                       </Text>
                     </Pressable>
                   </View>
@@ -290,7 +298,7 @@ export function FileReferencePicker({
               testID="file-ref-confirm"
               onPress={() => {
                 onConfirm(
-                  attachmentsFromPickerSelection(selectedDirs, selectedFiles),
+                  atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
                 );
                 onClose();
               }}

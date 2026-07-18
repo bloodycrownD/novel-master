@@ -1,4 +1,8 @@
-import { type ChatMessage } from '@novel-master/core/chat';
+import {
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
+  type ChatMessage,
+} from '@novel-master/core/chat';
 import {
   buildChatListItems,
   buildTranscriptRows,
@@ -11,6 +15,7 @@ function msg(
   blocks: ChatMessage['content']['blocks'],
   seq: number,
   hidden = false,
+  raw: ChatMessage['raw'] = null,
 ): ChatMessage {
   return {
     id,
@@ -19,7 +24,7 @@ function msg(
     role,
     content: { blocks },
     provider: null,
-    raw: null,
+    raw,
     createdAtMs: seq,
     hidden,
   };
@@ -109,6 +114,40 @@ describe('buildTranscriptRows', () => {
         },
       ],
     });
+  });
+
+  it('T-UO2x: 历史 UA fixture → 仅 message，无 user_vfs_turn', () => {
+    const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
+    const messages = [
+      msg(
+        'u1',
+        'user',
+        [{ type: 'text', text: wrapUserVfsActionsForStorage(actionXml) }],
+        1,
+        false,
+        {
+          metadata: {
+            kind: 'user_vfs_action',
+            source: 'user',
+            synthetic: true,
+          },
+        },
+      ),
+      msg(
+        'a1',
+        'assistant',
+        [{ type: 'text', text: USER_VFS_TURN_ACK_TEXT }],
+        2,
+        false,
+        { metadata: { kind: 'user_vfs_ack', synthetic: true } },
+      ),
+    ];
+    const items = buildChatListItems(messages);
+    const rows = buildTranscriptRows(messages);
+    expect(items.every(i => i.kind === 'message')).toBe(true);
+    expect(rows.every(r => r.kind === 'message')).toBe(true);
+    expect(items).toHaveLength(2);
+    expect(rows).toHaveLength(2);
   });
 
   it('T-SR3: 空正文 + workplace/attach 摘要进 ChatTranscriptBridge 行', () => {

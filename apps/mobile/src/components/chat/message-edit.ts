@@ -46,7 +46,7 @@ export function applyTextEditToMessage(
   return { blocks: result };
 }
 
-/** 仅 user 消息行可置位（非 user_vfs_turn 等展示形态由调用方过滤）。 */
+/** 仅 user 消息行可置位（展示形态由调用方过滤）。 */
 export function isSetFloorEligibleMessage(message: ChatMessage): boolean {
   return message.role === 'user';
 }

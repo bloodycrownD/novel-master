@@ -44,14 +44,19 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).not.toContain('openMessageMenu');
   });
 
-  it('T-BR-RD-02: over-limit / frontMatter / doc-body', () => {
+  it('T-BR-RD-02: over-limit / frontMatter / TrustedHtml（三列矩阵）', () => {
     const script = bootScript();
     expect(script).toContain('over-limit-hint');
     expect(script).toContain('frontMatterHtml');
-    expect(script).toContain('doc-body');
     // esbuild IIFE 将中文常量化为 \uXXXX
     expect(script).toContain('OVER_LIMIT_HINT');
     expect(script).toMatch(/\\u5185\\u5BB9\\u8FC7\\u957F/);
+    // token：doc-body / rich / TrustedHtml；装配：registerSetDocumentView
+    expect(script).toContain('doc-body');
+    expect(script).toContain('TrustedHtml');
+    expect(script).toContain('registerSetDocumentView');
+    // 允许删除：手拼 doc-body 整段（已迁 DocumentApp + TrustedHtml）
+    expect(script).not.toContain("'<div class=\"doc-body rich\">'+");
   });
 
   it('T-BR-CSS-02: rich list padding in app.css', () => {

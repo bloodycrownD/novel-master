@@ -3,37 +3,26 @@
  * 复用 worktree listRows IPC，不嵌 VfsFileManager。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { MessageAttachmentDto, WorktreeListRowDto } from '@shared/ipc-types';
+import type { WorktreeListRowDto } from '@shared/ipc-types';
 import { ipcWorktreeBuildListRows, vfsScope } from '@/ipc/client';
 import {
   isDirectChild,
   parentLogicalPath,
 } from '@/features/workspace/vfs-tree-utils';
+import { atPathTokensFromPickerSelection } from './composer-at-path';
 
 export type FileReferencePickerProps = {
   open: boolean;
   projectId: string;
   sessionId: string;
   onClose: () => void;
-  onConfirm: (attachments: MessageAttachmentDto[]) => void;
+  /** 确认后插入正文的 `@path` token（目录带尾 `/`）。 */
+  onConfirm: (atPathTokens: string[]) => void;
 };
 
 function basename(path: string): string {
   const parts = path.split('/').filter(Boolean);
   return parts[parts.length - 1] ?? path;
-}
-
-function toAttach(
-  path: string,
-  type: MessageAttachmentDto['type'],
-): MessageAttachmentDto {
-  return {
-    name: basename(path),
-    source: 'attach',
-    type,
-    content: null,
-    path,
-  };
 }
 
 /** 当前目录下的直子行（不含 cwd 自身；目录与文件均显示，含隐藏文件）。 */
@@ -44,16 +33,30 @@ export function listPickerChildRows(
   return rows.filter(r => isDirectChild(currentPath, r.path));
 }
 
-/** 根据目录/文件多选态生成确认附件（先 dir 后 text，各按 path）。 */
+/** @deprecated 使用 {@link atPathTokensFromPickerSelection} */
 export function attachmentsFromPickerSelection(
   selectedDirs: Iterable<string>,
   selectedFiles: Iterable<string>,
-): MessageAttachmentDto[] {
+): { name: string; source: 'attach'; type: 'dir' | 'text'; content: null; path: string }[] {
   return [
-    ...[...selectedDirs].map(p => toAttach(p, 'dir')),
-    ...[...selectedFiles].map(p => toAttach(p, 'text')),
+    ...[...selectedDirs].map(p => ({
+      name: basename(p) || p,
+      source: 'attach' as const,
+      type: 'dir' as const,
+      content: null,
+      path: p,
+    })),
+    ...[...selectedFiles].map(p => ({
+      name: basename(p),
+      source: 'attach' as const,
+      type: 'text' as const,
+      content: null,
+      path: p,
+    })),
   ];
 }
+
+export { atPathTokensFromPickerSelection };
 
 function toggleInSet(prev: Set<string>, path: string): Set<string> {
   const next = new Set(prev);
@@ -229,6 +232,7 @@ export function FileReferencePicker({
                     aria-label={`选用文件 ${label}`}
                     onClick={() => toggleFile(row.path)}
                   >
+                    <span aria-hidden>📄</span>
                     <span className="file-ref-picker__label">{label}</span>
                   </button>
                 </div>
@@ -246,7 +250,7 @@ export function FileReferencePicker({
             disabled={!canConfirm}
             onClick={() => {
               onConfirm(
-                attachmentsFromPickerSelection(selectedDirs, selectedFiles),
+                atPathTokensFromPickerSelection(selectedDirs, selectedFiles),
               );
               onClose();
             }}

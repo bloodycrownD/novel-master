@@ -1,5 +1,5 @@
 /**
- * AttachmentDraftChips：emoji 文案、双条拆分、目录无 warning 色类（T-UI1/T-UI2）。
+ * AttachmentDraftChips：状态 chip 文案与拆分；无 attach 可叉行（T-UI1 / T-ATD1）。
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -23,25 +23,7 @@ function attach(
   };
 }
 
-test("T-UI1: attach 目录为 📁/path", () => {
-  assert.equal(
-    formatAttachmentChipLabel(
-      attach({ source: "attach", type: "dir", path: "/555", name: "555" }),
-    ),
-    "📁/555",
-  );
-});
-
-test("T-UI1: attach 文件为 📄/path", () => {
-  assert.equal(
-    formatAttachmentChipLabel(
-      attach({ source: "attach", type: "text", path: "/a.md", name: "a.md" }),
-    ),
-    "📄/a.md",
-  );
-});
-
-test("T-UI1: workplace 为 📄/path", () => {
+test("T-UI1: workplace 为「规则 · /path」", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -51,11 +33,25 @@ test("T-UI1: workplace 为 📄/path", () => {
         name: "w.md",
       }),
     ),
-    "📄/w.md",
+    "规则 · /w.md",
   );
 });
 
-test("T-UI1: user_ops 为 action:path（无 icon）", () => {
+test("T-UI1: workplace 目录为「规则 · /dir/」", () => {
+  assert.equal(
+    formatAttachmentChipLabel(
+      attach({
+        source: "workplace",
+        type: "dir",
+        path: "/notes",
+        name: "notes",
+      }),
+    ),
+    "规则 · /notes/",
+  );
+});
+
+test("T-UI1: user_ops 为「改稿 ·」前缀 + name", () => {
   assert.equal(
     formatAttachmentChipLabel(
       attach({
@@ -65,15 +61,14 @@ test("T-UI1: user_ops 为 action:path（无 icon）", () => {
         name: "write:/ops.md",
       }),
     ),
-    "write:/ops.md",
+    "改稿 · write:/ops.md",
   );
 });
 
-test("T-UI1: 三类并存 → 上条 workplace+user_ops、下条 attach", () => {
+test("T-ATD1: 仅状态 attachments → 仅 status，无 attach 可叉行", () => {
   const items = [
     attach({ source: "workplace", type: "text", path: "/w.md" }),
     attach({ source: "user_ops", type: "text", path: "/u.md" }),
-    attach({ source: "attach", type: "text", path: "/a.md" }),
   ];
   const { status, attach: attachOnly } =
     partitionComposerChipAttachments(items);
@@ -81,12 +76,20 @@ test("T-UI1: 三类并存 → 上条 workplace+user_ops、下条 attach", () => 
     status.map((a) => a.source),
     ["workplace", "user_ops"],
   );
-  assert.deepEqual(
-    attachOnly.map((a) => a.source),
-    ["attach"],
-  );
+  assert.equal(attachOnly.length, 0);
   assert.ok(status.every(isComposerStatusAttachment));
-  assert.ok(attachOnly.every((a) => a.source === "attach"));
+});
+
+test("T-ATD1: 混有历史 attach 时 partition 仍可拆出，但 UI 不再渲染 attach 行", () => {
+  const items = [
+    attach({ source: "workplace", type: "text", path: "/w.md" }),
+    attach({ source: "attach", type: "text", path: "/a.md" }),
+  ];
+  const { status, attach: attachOnly } =
+    partitionComposerChipAttachments(items);
+  assert.equal(status.length, 1);
+  assert.equal(attachOnly.length, 1);
+  assert.equal(attachOnly[0]?.source, "attach");
 });
 
 test("T-UI2: 目录 chip class 无 --dir warning 色类", () => {

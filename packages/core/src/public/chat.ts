@@ -44,6 +44,15 @@ export {
 } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
 export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
 export {
+  PROMPT_FILE_SEEN_SHORT_TIP,
+  createPromptPathSeenSet,
+  isPromptDirTokenPath,
+  normalizePromptSeenPath,
+  normalizePromptStorePath,
+  renderPromptFileSeenShortTip,
+  tryNormalizePromptSeenPath,
+} from '../domain/chat/logic/prompt-path-seen.js';
+export {
   ATTACH_DIR_TREE_MAX_UTF8_BYTES,
   renderDirAttachTree,
 } from '../domain/chat/logic/render-dir-attach-tree.js';
@@ -130,7 +139,6 @@ export {
   deriveToolUsesFromVfsActions,
   formatUserVfsTurnPreviewBody,
   matchUserVfsTurnAt,
-  matchUserVfsTurnAtForDisplay,
   parseAllUserVfsActionsFromText,
   USER_VFS_TURN_SPAN,
 } from '../domain/chat/logic/user-vfs-turn-view.js';

@@ -154,6 +154,8 @@ apps/mobile/webview-dist/                 # 不变
 
 > 验收：「web 无 RN + host 集中 + `{pkg}/webview/main.ts` 入口 + CT 七类子目录 + 无 barrel」。子目录内文件名按下方映射表（`bridge/bridge.ts` 等）；**禁止** `index.ts` barrel 与目录裸 import。
 
+> **后续覆盖**：CT `webview/` **七类顶层物理路径**与 **T-WL-07** 已被 [`mobile-webview-preact-htm`](../../../mobile-webview-preact-htm/spec.md) 以 `ui/` + `runtime/{七类}/` 覆盖（supersede）；本 SPEC 职责心智与禁 barrel 仍有效。
+
 ### CT `webview/` 文件映射（现网 → 终局）
 
 | 现网（`{pkg}/src/`） | 终局 |

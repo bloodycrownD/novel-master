@@ -1,6 +1,9 @@
 /**
  * 发送时扫描正文手输 `@path` → `source:attach` 附件（正文 token 保留）。
  *
+ * 落库 path 与提示词 seen key / 短提示 XML 同形：补前导 `/`；目录先按尾 `/` 判 type，
+ * 计入去重时去尾（seen key 无尾斜杠），落库目录可保留尾 `/`。
+ *
  * @module domain/chat/logic/scan-at-path-attachments
  */
 
@@ -9,6 +12,11 @@ import {
   isBinaryAttachPath,
   isImageAttachPath,
 } from "./attach-binary-heuristic.js";
+import {
+  isPromptDirTokenPath,
+  normalizePromptStorePath,
+  tryNormalizePromptSeenPath,
+} from "./prompt-path-seen.js";
 
 /**
  * 合法 `@path`：`@` 后至空白/行尾（允许中文路径）。
@@ -16,7 +24,7 @@ import {
  */
 const AT_PATH_TOKEN_RE = /@([^\s@]+)/g;
 
-/** 从正文扫描 `@path` token，生成 `source:attach` 附件（按 path 去重）。 */
+/** 从正文扫描 `@path` token，生成 `source:attach` 附件（按规范化 seen key 去重）。 */
 export function scanAtPathAttachments(text: string): MessageAttachment[] {
   if (text === "") {
     return [];
@@ -26,12 +34,16 @@ export function scanAtPathAttachments(text: string): MessageAttachment[] {
   AT_PATH_TOKEN_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = AT_PATH_TOKEN_RE.exec(text)) != null) {
-    const path = match[1]!;
-    if (path === "" || seen.has(path)) {
+    const raw = match[1]!;
+    if (raw === "") {
       continue;
     }
-    seen.add(path);
-    out.push(attachFromPath(path));
+    const seenKey = tryNormalizePromptSeenPath(raw);
+    if (seenKey == null || seen.has(seenKey)) {
+      continue;
+    }
+    seen.add(seenKey);
+    out.push(attachFromPath(raw));
   }
   return out;
 }
@@ -73,7 +85,8 @@ export function mergeAttachmentsByPath(
 
 function attachmentDedupeKey(a: MessageAttachment): string | null {
   if (a.path != null && a.path !== "") {
-    return `path:${a.path}`;
+    const seenKey = tryNormalizePromptSeenPath(a.path);
+    return `path:${seenKey ?? a.path}`;
   }
   if (a.source === "user_ops") {
     return `user_ops:${a.name}`;
@@ -81,33 +94,38 @@ function attachmentDedupeKey(a: MessageAttachment): string | null {
   return null;
 }
 
-function attachFromPath(path: string): MessageAttachment {
-  const basename = path.split("/").filter(Boolean).pop() ?? path;
-  if (isImageAttachPath(path)) {
+function attachFromPath(rawPath: string): MessageAttachment {
+  const isDir = isPromptDirTokenPath(rawPath);
+  const storePath = normalizePromptStorePath(rawPath, {
+    keepDirTrailingSlash: isDir,
+  });
+  const seenKey = tryNormalizePromptSeenPath(rawPath) ?? storePath;
+  const basename = seenKey.split("/").filter(Boolean).pop() ?? seenKey;
+  if (isImageAttachPath(seenKey) || isImageAttachPath(rawPath)) {
     return {
       name: basename,
       source: "attach",
       type: "image",
       content: null,
-      path,
+      path: storePath,
     };
   }
-  if (path.endsWith("/") || path.endsWith("\\")) {
+  if (isDir) {
     return {
-      name: basename || path,
+      name: basename || storePath,
       source: "attach",
       type: "dir",
       content: null,
-      path,
+      path: storePath,
     };
   }
-  if (isBinaryAttachPath(path)) {
+  if (isBinaryAttachPath(seenKey) || isBinaryAttachPath(rawPath)) {
     return {
       name: basename,
       source: "attach",
       type: "text",
       content: null,
-      path,
+      path: storePath,
     };
   }
   return {
@@ -115,6 +133,6 @@ function attachFromPath(path: string): MessageAttachment {
     source: "attach",
     type: "text",
     content: null,
-    path,
+    path: storePath,
   };
 }

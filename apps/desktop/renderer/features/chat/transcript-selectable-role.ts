@@ -26,7 +26,7 @@ export {
 /** Desktop 消息批量模式（含 delete）。 */
 export type MessageBatchMode = "hide" | "restore" | "delete";
 
-/** 将会话消息映射为 tail 批量行（含 user_vfs_turn 合成卡片）。 */
+/** 将会话消息映射为 tail 批量行。 */
 export function buildTailBatchRows(
   messages: readonly ChatMessageDto[],
 ): readonly TailBatchRow[] {
@@ -34,20 +34,6 @@ export function buildTailBatchRows(
   const rows: TailBatchRow[] = [];
 
   for (const item of items) {
-    if (item.kind === "user_vfs_turn") {
-      const msg = messages.find((m) => m.id === item.id);
-      if (msg == null) {
-        continue;
-      }
-      rows.push({
-        id: item.id,
-        role: msg.role,
-        seq: msg.seq,
-        hidden: item.hidden,
-        selectable: true,
-      });
-      continue;
-    }
     rows.push({
       id: item.message.id,
       role: item.message.role,

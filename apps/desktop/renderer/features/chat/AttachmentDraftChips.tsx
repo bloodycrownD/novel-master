@@ -1,11 +1,12 @@
 /**
- * Composer chip 双条：上条状态（无叉）、下条附件（有叉）。
+ * Composer 状态 chip（不可叉）：workplace + user_ops。
+ * 文件引用不再使用 attach chip（认正文 `@路径`）。
  */
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type AttachmentDraftChipsProps = {
   attachments: readonly MessageAttachmentDto[];
-  /** false = 状态条（无叉）；true = 附件条（有叉）。 */
+  /** false = 状态条（无叉）；true = 附件条（有叉，已废止）。 */
   showRemove?: boolean;
   onRemove?: (index: number) => void;
   disabled?: boolean;
@@ -19,7 +20,7 @@ export function isComposerStatusAttachment(a: MessageAttachmentDto): boolean {
   return a.source === 'workplace' || a.source === 'user_ops';
 }
 
-/** 拆成上条（状态）/ 下条（attach）。 */
+/** 拆成状态 / attach（attach 仅兼容旧数据过滤，UI 不再渲染）。 */
 export function partitionComposerChipAttachments(
   attachments: readonly MessageAttachmentDto[],
 ): {
@@ -38,16 +39,21 @@ export function partitionComposerChipAttachments(
   return { status, attach };
 }
 
-/** Chip 文案：user_ops → `action:path`；其余 `📄`/`📁` + path。 */
+/**
+ * Chip 文案：与文件引用 `@路径` 区分。
+ * - workplace → `规则 · /path`（目录保留尾 `/`）
+ * - user_ops → `改稿 ·` + name（多为 `action:path`）
+ */
 export function formatAttachmentChipLabel(a: MessageAttachmentDto): string {
-  if (a.source === 'user_ops') {
-    return a.name;
+  if (a.source === "user_ops") {
+    return `改稿 · ${a.name}`;
   }
   const path = a.path ?? a.name;
-  if (a.type === 'dir') {
-    return `📁${path}`;
+  if (a.type === "dir") {
+    const dirPath = path.endsWith("/") ? path : `${path}/`;
+    return `规则 · ${dirPath}`;
   }
-  return `📄${path}`;
+  return `规则 · ${path}`;
 }
 
 /** chip 根 class（T-UI2：目录不再带 warning 色类）。 */
@@ -105,7 +111,7 @@ export function AttachmentDraftChips({
   );
 }
 
-/** 状态条（无叉）：由 Composer 放在输入框外上方。 */
+/** 状态 chip（无叉）：放在输入框内顶部。 */
 export function ComposerStatusChips({
   attachments,
   disabled,
@@ -121,28 +127,6 @@ export function ComposerStatusChips({
       disabled={disabled}
       transparentRow
       aria-label="状态附件"
-    />
-  );
-}
-
-/** 附件条（有叉）：放在输入框内部。 */
-export function ComposerAttachChips({
-  attachments,
-  onRemoveAttach,
-  disabled,
-}: {
-  attachments: readonly MessageAttachmentDto[];
-  onRemoveAttach: (attachIndex: number) => void;
-  disabled?: boolean;
-}) {
-  const { attach } = partitionComposerChipAttachments(attachments);
-  return (
-    <AttachmentDraftChips
-      attachments={attach}
-      showRemove
-      disabled={disabled}
-      onRemove={onRemoveAttach}
-      aria-label="待发送附件"
     />
   );
 }

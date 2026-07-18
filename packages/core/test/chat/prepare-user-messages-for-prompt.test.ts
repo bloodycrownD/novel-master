@@ -11,6 +11,7 @@ import { messageBodyText } from "../../src/domain/chat/content/message-body-text
 import { extractEditableTextFromMessage } from "../../src/domain/chat/logic/editable-text-from-message.js";
 import { prepareUserMessagesForPrompt } from "../../src/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { wrapUserMessageForLlm } from "../../src/domain/chat/logic/wrap-user-message-for-llm.js";
+import { PROMPT_FILE_SEEN_SHORT_TIP } from "../../src/domain/chat/logic/prompt-path-seen.js";
 import {
   renderDirAttachTree,
 } from "../../src/domain/chat/logic/render-dir-attach-tree.js";
@@ -330,9 +331,9 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     );
   });
 
-  it("T-SR6: Agent prepare 与 RealPrompt buildSessionPromptInput 同源路径用户段 wrap 一致", async () => {
-    // Desktop/Mobile buildSessionPromptInput = prepare → assemble → buildPromptLlmInputFromLayout；
-    // Agent runner 每 step 同样先 prepare 再 layout。此处钉用户段 wrap 文本一致。
+  it("T-SR6 / T-PD6: Agent prepare 与 RealPrompt 同源（assemble→prepare(S0)）用户段 wrap 一致", async () => {
+    // Desktop/Mobile buildSessionPromptInput = assemble → prepare(S0) → buildPromptLlmInputFromLayout；
+    // Agent runner 每 step 同样 assemble → prepare(S0)。此处钉用户段 wrap 文本一致。
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -376,6 +377,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       sessionId: session.id,
       sessionKkv: sk,
       vfs,
+      seenPaths: [] as string[],
     };
     // Agent 路径：对 DB 原文 prepare
     const agentPrepared = await prepareUserMessagesForPrompt(
@@ -405,14 +407,354 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.ok(realPromptUser, "layout 须含原 user 消息");
     const realPromptUserWrap = messageBodyText(realPromptUser);
 
-    assert.match(agentUserWrap, /<workplace>/);
-    assert.match(agentUserWrap, /<user-ops>/);
+    // 同 path：attach 优先，workplace 不进；二者同源
     assert.match(agentUserWrap, /<attach>/);
+    assert.match(agentUserWrap, /<user-ops>/);
     assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
+    assert.equal(
+      agentUserWrap.includes("<workplace>"),
+      false,
+      "同 path 时 workplace 应被 attach 抢先 seen 后省略",
+    );
     assert.equal(
       realPromptUserWrap,
       agentUserWrap,
       "RealPrompt 用户段 wrap 须与 Agent prepare 一致",
     );
+  });
+});
+
+describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
+  it("T-PD1: 可见消息首次文件 attach → 提示词含全文 <file（可经 renderFileBlock）", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/a.md", "FULL-BODY-A");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("first", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/a.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/a.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<file /);
+    assert.match(body, /FULL-BODY-A/);
+    assert.match(body, /createdAt=/);
+    assert.equal(body.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+  });
+
+  it("T-PD2: 第二条可见消息同 path 文本 attach → 专用最小短提示", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/a.md", "FULL-BODY-A");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("m1", {
+          id: "u1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/a.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/a.md",
+            },
+          ],
+        }),
+        userMsg("m2", {
+          id: "u2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/a.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/a.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body2 = messageBodyText(prepared[1]!);
+    assert.equal(
+      body2.includes(PROMPT_FILE_SEEN_SHORT_TIP),
+      true,
+    );
+    assert.match(
+      body2,
+      /<file path="\/a\.md">该文件前文已引用，无需读取或加载<\/file>/,
+    );
+    assert.equal(body2.includes("FULL-BODY-A"), false);
+    assert.equal(body2.includes("createdAt="), false);
+    assert.equal(body2.includes("1|"), false);
+  });
+
+  it("T-PD3: 常驻前缀已含 path A 时再 @A（缺前导 /）→ 短提示；落库 path 带 /", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/pref.md", "PREFIX-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("again", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "pref.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              // 故意缺前导 /：规范化后与 S0 同 key
+              path: "pref.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        seenPaths: ["/pref.md"],
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(
+      body,
+      /<file path="\/pref\.md">该文件前文已引用，无需读取或加载<\/file>/,
+    );
+    assert.equal(body.includes("PREFIX-BODY"), false);
+    assert.equal(prepared[0]!.attachments?.[0]?.path, "/pref.md");
+  });
+
+  it("T-PD4: 同条 workplace+attach 同 path，数组 workplace 在前 → 仍仅 attach 有内容", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/same.md", "SAME-BODY");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("conflict", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/same.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/same.md",
+            },
+            {
+              name: "/same.md",
+              source: "attach",
+              type: "text",
+              content: null,
+              path: "/same.md",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<attach>/);
+    assert.match(body, /SAME-BODY/);
+    assert.equal(body.includes("<workplace>"), false);
+    const wp = prepared[0]!.attachments?.find((a) => a.source === "workplace");
+    assert.equal(wp?.content, "");
+  });
+
+  it("T-PD5: 目录 attach 两次均含 <dir 树；目录计 seen 后同 path 文件为非首次", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.mkdir("/notes");
+    await vfs.write("/notes/a.md", "note-a");
+    // 同 seen key：目录 /notes 与文件 /notes 冲突场景用独立文件 path
+    await vfs.write("/notes.md", "FILE-AT-NOTES");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("d1", {
+          id: "d1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/notes",
+              source: "attach",
+              type: "dir",
+              content: null,
+              path: "/notes/",
+            },
+          ],
+        }),
+        userMsg("d2", {
+          id: "d2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/notes",
+              source: "attach",
+              type: "dir",
+              content: null,
+              path: "/notes",
+            },
+          ],
+        }),
+        userMsg("file-after-dir", {
+          id: "f1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/notes",
+              source: "attach",
+              type: "text",
+              content: null,
+              // 与目录 seen key 相同（去尾 /）→ 短提示；此处用 /notes 作为「伪文件」
+              // 实际 VFS 上 /notes 是目录，hydrate 会 missing；我们测 seen 降级即可
+              path: "/notes",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const b1 = messageBodyText(prepared[0]!);
+    const b2 = messageBodyText(prepared[1]!);
+    const b3 = messageBodyText(prepared[2]!);
+    assert.match(b1, /<dir path="\/notes">/);
+    assert.match(b2, /<dir path="\/notes">/);
+    assert.equal(b1.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+    assert.equal(b2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+    assert.match(
+      b3,
+      /<file path="\/notes">该文件前文已引用，无需读取或加载<\/file>/,
+    );
+  });
+
+  it("T-PD7: image/binary attach 非首次 → 仍 filename 档，无中文短提示", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    await vfs.write("/pic.png", "bin");
+    const sk = createSessionKkvService(ctx.conn);
+
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("i1", {
+          id: "i1",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/pic.png",
+              source: "attach",
+              type: "image",
+              content: null,
+              path: "/pic.png",
+            },
+          ],
+        }),
+        userMsg("i2", {
+          id: "i2",
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/pic.png",
+              source: "attach",
+              type: "image",
+              content: null,
+              path: "/pic.png",
+            },
+          ],
+        }),
+      ],
+      { sessionId: session.id, sessionKkv: sk, vfs },
+    );
+    const body2 = messageBodyText(prepared[1]!);
+    assert.match(body2, /<file /);
+    assert.match(body2, /pic\.png/);
+    assert.equal(body2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
+    assert.match(body2, /createdAt=/);
+  });
+
+  it("T-PD8: 仅 workplace/attach 但 hydrate 后全部 body 空 → wrap 等于 plainText", async () => {
+    const plain = "只有原文";
+    const wrapped = wrapUserMessageForLlm(plain, [
+      {
+        name: "/gone.md",
+        source: "workplace",
+        type: "text",
+        content: "",
+        path: "/gone.md",
+      },
+      {
+        name: "/gone.md",
+        source: "attach",
+        type: "text",
+        content: "   ",
+        path: "/gone.md",
+      },
+    ]);
+    assert.equal(wrapped, plain);
+    assert.equal(wrapped.includes("<attachment>"), false);
+
+    // prepare：S0 已含 path → workplace 空；无其它非空 section
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg(plain, {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/gone.md",
+              source: "workplace",
+              type: "text",
+              content: null,
+              path: "/gone.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+        seenPaths: ["/gone.md"],
+      },
+    );
+    assert.equal(messageBodyText(prepared[0]!), plain);
   });
 });

@@ -1,5 +1,5 @@
 /**
- * T-SF11/12：WebView buildMenuItems 置位资格（镜像 main.ts 逻辑，不 export 生产函数）。
+ * T-SF12：WebView buildMenuItems 置位资格（镜像 main.ts 逻辑，不 export 生产函数）。
  */
 
 type WebViewMenuRow = {
@@ -40,14 +40,6 @@ function mockHitEl(matchingSelector: string | null): HitEl {
 }
 
 describe('WebView buildMenuItems set-floor eligibility', () => {
-  it('T-SF11: user_vfs_turn 行菜单无 set-floor', () => {
-    const actions = buildWebViewMenuActions({
-      kind: 'user_vfs_turn',
-      role: 'user',
-    });
-    expect(actions).not.toContain('set-floor');
-  });
-
   it('T-SF12: tool-card hit 时 message 行菜单无 set-floor', () => {
     const actions = buildWebViewMenuActions(
       {

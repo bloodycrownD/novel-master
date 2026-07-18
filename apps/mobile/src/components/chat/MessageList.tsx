@@ -478,9 +478,6 @@ export function MessageList({
         if ('kind' in item && item.kind === 'stream') {
           return 'stream';
         }
-        if (item.kind === 'user_vfs_turn') {
-          return `vfs-turn-${item.id}`;
-        }
         return `msg-${item.message.id}`;
       }}
       ListEmptyComponent={
@@ -516,44 +513,21 @@ export function MessageList({
             </View>
           );
         }
-        if (item.kind === 'user_vfs_turn') {
-          if (item.tools.length === 0) {
-            return null;
-          }
-          const hidden = item.hidden;
-          const colors = chatBubbleColors(tokens, true);
-          const content = (
-            <View
-              style={[
-                styles.bubble,
-                styles.bubbleFillWidth,
-                {
-                  backgroundColor: colors.backgroundColor,
-                  opacity: hidden ? 0.55 : 1,
-                },
-              ]}
-            >
-              <ToolCallGroupCard
-                tools={item.tools}
-                dimmed={hidden}
-                onOpenFile={onOpenToolFile}
-                embedded
-              />
-            </View>
-          );
-          return (
-            <View style={[styles.rowAlign, styles.rowAlignUser]}>
-              {content}
-            </View>
-          );
-        }
 
         const row = item;
         const isUser = row.message.role === 'user';
         const hidden = row.message.hidden;
         const body = row.textParts.join('\n\n');
         const thinking = row.thinkingParts.join('\n\n');
-        if (!body && !thinking && row.tools.length === 0) {
+        const hasAttachments =
+          (row.message.attachments?.length ?? 0) > 0;
+        // 与 message-blocks / WebView 对齐：空正文但有 attachments 仍须展示
+        if (
+          !body &&
+          !thinking &&
+          row.tools.length === 0 &&
+          !hasAttachments
+        ) {
           return null;
         }
         const content = isUser

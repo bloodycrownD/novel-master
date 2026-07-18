@@ -26,7 +26,10 @@ import {
   isRollbackVfsDegradableError,
   readRollbackRevisionBackfillMissingPaths,
 } from '@novel-master/core/session-fs';
-import { writeChatComposerDraftState } from '@/storage/chat-composer-draft';
+import {
+  readChatComposerDraftState,
+  writeChatComposerDraftState,
+} from '@/storage/chat-composer-draft';
 import { refreshComposerStatusAfterSessionKkvCleared } from '@/services/project-composer-status.service';
 import type { RollbackOptions } from '@novel-master/core/message-checkpoint';
 import { rollbackToMessage } from '@/services/message-rollback.service';
@@ -400,15 +403,15 @@ export function useChatTabMessageActions({
 
       const mode = isPlainUserUndoSendEligible(target) ? 'undo_send' : 'rewind';
       const restoreText = editableTextFromMessage(target);
-      const restoreAttachments = target.attachments ?? [];
 
       const applyComposerRestore = () => {
         if (mode === 'undo_send' && restoreText != null) {
+          // T-TX2：仅正文（含 `@路径`）；状态由 kkv 清空后投影；无 attach chip
           writeChatComposerDraftState(
             sessionId,
             {
               text: restoreText,
-              attachments: restoreAttachments,
+              attachments: [],
             },
             runtime.sessions,
           );
@@ -427,6 +430,10 @@ export function useChatTabMessageActions({
             targetMessageId,
             options,
           );
+          await refreshComposerStatusAfterSessionKkvCleared(runtime, {
+            projectId,
+            sessionId,
+          });
           resetStreamingDisplay();
           await reloadMessages(true);
           applyComposerRestore();
@@ -589,13 +596,17 @@ export function useChatTabMessageActions({
           showToast(toastMessage('无法编辑', '该消息没有可编辑的文本'));
           return;
         }
-        // T-TX2：编辑回填 Composer 原文 + attachments chips
+        // T-TX2：编辑回填仅正文（含 `@路径`）+ 现有状态投影；无文件引用 chip
         if (sessionId != null) {
+          const prev = readChatComposerDraftState(sessionId);
+          const statusOnly = (prev.attachments ?? []).filter(
+            a => a.source === 'workplace' || a.source === 'user_ops',
+          );
           writeChatComposerDraftState(
             sessionId,
             {
               text: initial,
-              attachments: target.attachments ?? [],
+              attachments: statusOnly,
             },
             runtime.sessions,
           );

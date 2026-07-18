@@ -20,6 +20,7 @@ import {
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
+import type { WorktreeListRow } from '@novel-master/core/worktree';
 
 import { useTheme } from '@/theme/ThemeProvider';
 
@@ -38,7 +39,6 @@ import {
   applyComposerStatusAttachmentsReplace,
   clearChatComposerDraft,
   hydrateChatComposerDraftFromDb,
-  mergeComposerAttachAttachments,
   readChatComposerDraftState,
   subscribeChatComposerDraft,
   writeChatComposerDraftState,
@@ -46,11 +46,16 @@ import {
 
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
+import { ComposerStatusChips } from './AttachmentDraftChips';
+import { ComposerAtPathInput } from './ComposerAtPathInput';
+import { AtPathTypeahead } from './AtPathTypeahead';
 import {
-  ComposerAttachChips,
-  ComposerStatusChips,
-  partitionComposerChipAttachments,
-} from './AttachmentDraftChips';
+  type AtPathRef,
+  countScannedAtPathAttachments,
+  filterAtPathTypeaheadCandidates,
+  findActiveAtQuery,
+  replaceActiveAtWithToken,
+} from './composer-at-path';
 import { FileReferencePicker } from './FileReferencePicker';
 
 type Props = {
@@ -114,6 +119,9 @@ export function ChatComposer({
   const [runAbortController, setRunAbortController] =
     useState<AbortController | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const [typeaheadRows, setTypeaheadRows] = useState<WorktreeListRow[]>([]);
+  const inputRef = useRef<TextInput>(null);
 
   const streamHandlersRef = useRef({
     onMessagesChanged,
@@ -126,6 +134,49 @@ export function ChatComposer({
 
   const runtimeRef = useRef(runtime);
   runtimeRef.current = runtime;
+
+  const activeAt = findActiveAtQuery(text, cursor);
+
+  useEffect(() => {
+    if (activeAt == null) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const session = await runtimeRef.current.sessions.get(sessionId);
+        const worktree = runtimeRef.current.worktree({
+          kind: 'session',
+          projectId: session.projectId,
+          sessionId,
+        });
+        const rows = await worktree.buildListRows();
+        if (!cancelled) {
+          setTypeaheadRows(rows);
+        }
+      } catch {
+        if (!cancelled) {
+          setTypeaheadRows([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAt != null, sessionId]);
+
+  const typeaheadCandidates = (() => {
+    if (activeAt == null) {
+      return [] as AtPathRef[];
+    }
+    const refs: AtPathRef[] = typeaheadRows
+      .filter(r => r.path !== '/')
+      .map(r => ({
+        path: r.path,
+        kind: r.kind === 'dir' ? ('dir' as const) : ('file' as const),
+      }));
+    return filterAtPathTypeaheadCandidates(refs, activeAt.query, 5);
+  })();
 
   const persistDraft = useCallback(
     (nextText: string, nextAttachments: readonly MessageAttachment[]) => {
@@ -211,7 +262,6 @@ export function ChatComposer({
     async (
       content: string,
       allowResumeWithoutInput: boolean,
-      runAttachments: readonly MessageAttachment[],
       /** 状态条有 workplace 差集：可发且发送后须清上条（由重投影收敛）。 */
       hasWorkplaceDelta: boolean,
     ) => {
@@ -224,10 +274,9 @@ export function ChatComposer({
       onStreamReset();
       beginUiRun();
 
-      // 有正文 / attach / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+      // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
       const shouldClearComposer =
         content.trim() !== '' ||
-        runAttachments.length > 0 ||
         hasPendingUserOps ||
         hasWorkplaceDelta;
       let composerCleared = false;
@@ -245,11 +294,10 @@ export function ChatComposer({
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
-        // 显式 attachments 仅 attach；workplace 由 Core materialize，勿传预览 chip
+        // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
-          attachments: runAttachments.length > 0 ? runAttachments : undefined,
           signal: controller.signal,
           onUserMessageAppended: () => {
             // append 成功后再清输入，避免失败时「字没了、消息也没落盘」
@@ -329,7 +377,6 @@ export function ChatComposer({
     async (
       content: string,
       allowResumeWithoutInput: boolean,
-      runAttachments: readonly MessageAttachment[],
       hasWorkplaceDelta: boolean,
     ) => {
       if (content && lastMessageHasToolResult) {
@@ -350,12 +397,7 @@ export function ChatComposer({
                     try {
                       await runtime.appendToolTurnBridge(sessionId);
                       await streamHandlersRef.current.onMessagesChanged();
-                      await executeRun(
-                        content,
-                        false,
-                        runAttachments,
-                        hasWorkplaceDelta,
-                      );
+                      await executeRun(content, false, hasWorkplaceDelta);
                     } catch (err) {
                       setError(formatError(err));
                     } finally {
@@ -369,14 +411,49 @@ export function ChatComposer({
         });
       }
 
-      await executeRun(
-        content,
-        allowResumeWithoutInput,
-        runAttachments,
-        hasWorkplaceDelta,
-      );
+      await executeRun(content, allowResumeWithoutInput, hasWorkplaceDelta);
     },
     [lastMessageHasToolResult, runtime, sessionId, executeRun],
+  );
+
+  const insertTokensIntoComposer = useCallback(
+    (tokens: readonly string[]) => {
+      if (tokens.length === 0) {
+        return;
+      }
+      const start = cursor;
+      const before = text.slice(0, start);
+      const after = text.slice(start);
+      const gapBefore =
+        before.length === 0 || /\s$/.test(before) ? '' : ' ';
+      const joined = tokens.join(' ');
+      const gapAfter = after.length === 0 || /^\s/.test(after) ? '' : ' ';
+      const inserted = `${gapBefore}${joined}${gapAfter}`;
+      const next = `${before}${inserted}${after}`;
+      const statusOnly = attachments.filter(
+        a => a.source === 'workplace' || a.source === 'user_ops',
+      );
+      setText(next);
+      persistDraft(next, statusOnly);
+      setCursor(before.length + inserted.length);
+    },
+    [attachments, cursor, persistDraft, text],
+  );
+
+  const applyTypeaheadToken = useCallback(
+    (token: string) => {
+      if (activeAt == null) {
+        return;
+      }
+      const next = replaceActiveAtWithToken(text, cursor, activeAt.start, token);
+      const statusOnly = attachments.filter(
+        a => a.source === 'workplace' || a.source === 'user_ops',
+      );
+      setText(next.text);
+      persistDraft(next.text, statusOnly);
+      setCursor(next.cursor);
+    },
+    [activeAt, attachments, cursor, persistDraft, text],
   );
 
   const send = useCallback(async () => {
@@ -392,14 +469,12 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    const { attach: attachOnly } =
-      partitionComposerChipAttachments(attachments);
+    const scannedCount = countScannedAtPathAttachments(text);
     // 状态条 workplace 差集 = 可发输入；有差集禁止纯 resume
     const hasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
-    const hasAttachments = attachOnly.length > 0;
     const hasSendable = hasComposerSendableInput({
       text: content,
-      attachmentCount: attachOnly.length,
+      attachmentCount: scannedCount,
       hasPendingUserOps,
       hasWorkplaceDelta,
     });
@@ -410,14 +485,13 @@ export function ChatComposer({
       return;
     }
 
-    if ((content || hasAttachments) && lastMessageIsPlainUserText) {
+    if (content && lastMessageIsPlainUserText) {
       return;
     }
 
     await sendWithBridgeIfNeeded(
       content,
       allowResumeWithoutInput,
-      attachOnly,
       hasWorkplaceDelta,
     );
   }, [
@@ -441,8 +515,7 @@ export function ChatComposer({
     (!running &&
       !hasComposerSendableInput({
         text,
-        attachmentCount:
-          partitionComposerChipAttachments(attachments).attach.length,
+        attachmentCount: countScannedAtPathAttachments(text),
         hasPendingUserOps,
         hasWorkplaceDelta: sendHasWorkplaceDelta,
       }) &&
@@ -462,52 +535,41 @@ export function ChatComposer({
         <Text style={[styles.error, { color: tokens.danger }]}>{error}</Text>
       ) : null}
 
-      {/* 状态条：输入框外上方；与 dock 同色实底，避免键盘顶起后消息透出 */}
-      <View
-        style={[styles.statusOutside, { backgroundColor: tokens.background }]}
-        pointerEvents="box-none"
-      >
-        <ComposerStatusChips
-          attachments={attachments}
-          disabled={inputDisabled}
-        />
-      </View>
       <View
         style={[
           styles.box,
           { backgroundColor: tokens.surface, borderColor: tokens.border },
         ]}
       >
-        <ComposerAttachChips
+        {/* 状态 chip 在输入框内顶部：不可叉；无文件引用 attach chip */}
+        <ComposerStatusChips
           attachments={attachments}
           disabled={inputDisabled}
-          onRemoveAttach={attachIndex => {
-            setAttachments(prev => {
-              let seen = -1;
-              const next = prev.filter(a => {
-                if (a.source !== 'attach') {
-                  return true;
-                }
-                seen += 1;
-                return seen !== attachIndex;
-              });
-              persistDraft(text, next);
-              return next;
-            });
-          }}
         />
-        <TextInput
+        <AtPathTypeahead
+          open={activeAt != null && !inputDisabled}
+          candidates={typeaheadCandidates}
+          onSelect={applyTypeaheadToken}
+        />
+        <ComposerAtPathInput
+          inputRef={inputRef}
           testID="chat-composer-input"
-          style={[styles.input, { color: tokens.text }]}
+          style={styles.input}
           placeholder={inputPlaceholder}
           placeholderTextColor={tokens.textSecondary}
           value={text}
           onChangeText={next => {
             setText(next);
-            persistDraft(next, attachments);
+            const statusOnly = attachments.filter(
+              a => a.source === 'workplace' || a.source === 'user_ops',
+            );
+            persistDraft(next, statusOnly);
+            setCursor(next.length);
+          }}
+          onSelectionChange={e => {
+            setCursor(e.nativeEvent.selection.start);
           }}
           editable={!inputDisabled}
-          multiline
         />
         <View style={styles.toolbar}>
           <Pressable
@@ -552,14 +614,8 @@ export function ChatComposer({
         projectId={scope.projectId}
         sessionId={sessionId}
         onClose={() => setPickerOpen(false)}
-        onConfirm={picked => {
-          mergeComposerAttachAttachments(
-            sessionId,
-            picked,
-            runtimeRef.current.sessions,
-          );
-          const draft = readChatComposerDraftState(sessionId);
-          setAttachments([...draft.attachments]);
+        onConfirm={tokens => {
+          insertTokensIntoComposer(tokens);
         }}
       />
     </View>
@@ -605,9 +661,6 @@ const styles = StyleSheet.create({
     gap: 4,
     zIndex: 2,
     elevation: 4,
-  },
-  statusOutside: {
-    // 与 dock 同色，形成连续「状态 bar」
   },
   hintRow: { paddingVertical: 4 },
   error: { fontSize: 12 },

@@ -53,7 +53,8 @@ describe("assembleWorkplaceDisplay", () => {
         layout: layoutWithoutWorktree(),
       },
     );
-    assert.equal(out, "");
+    assert.equal(out.worktreeDisplay, "");
+    assert.deepEqual(out.prefixPaths, []);
     assert.equal(
       await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
       null,
@@ -87,8 +88,9 @@ describe("assembleWorkplaceDisplay", () => {
         layout: layoutWithWorktree(),
       },
     );
-    assert.match(out, /<file /);
-    assert.match(out, /hello-world/);
+    assert.match(out.worktreeDisplay, /<file /);
+    assert.match(out.worktreeDisplay, /hello-world/);
+    assert.deepEqual(out.prefixPaths, ["/note.md"]);
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
         null,
@@ -134,9 +136,9 @@ describe("assembleWorkplaceDisplay", () => {
         layout: layoutWithWorktree(),
       },
     );
-    assert.match(out, /revived/);
+    assert.match(out.worktreeDisplay, /revived/);
+    assert.deepEqual(out.prefixPaths, ["/note.md"]);
   });
-
   it("T-WP3: 二次 assemble 不重复 vfs.read", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -289,7 +291,8 @@ describe("assembleWorkplaceDisplay", () => {
 
     await vfs.replace("/again.md", "v1", "v2-after-clear");
     const out = await assembleWorkplaceDisplay(scope, deps);
-    assert.match(out, /v2-after-clear/);
+    assert.match(out.worktreeDisplay, /v2-after-clear/);
+    assert.deepEqual(out.prefixPaths, ["/again.md"]);
     assert.ok(
       (await sk.get(session.id, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY)) !=
         null,

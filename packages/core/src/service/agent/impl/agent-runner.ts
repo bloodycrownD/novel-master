@@ -162,24 +162,33 @@ export class DefaultAgentRunner implements AgentRunner {
           break;
         }
 
-        // prepare 须在 regex 之后、layout 之前（P1）。
+        // assemble 先于 prepare：常驻前缀 S0 计入 seen，与最终提示词可见序一致。
+        const wt = this.deps.worktree(wtScope);
+        const { worktreeDisplay, prefixPaths } = await assembleWorkplaceDisplay(
+          wtScope,
+          {
+            sessionKkv: this.deps.sessionKkv,
+            worktree: wt,
+            vfs: this.deps.toolCtx.vfs,
+            layout: options.definition.prompts,
+          },
+        );
+        if (signal?.aborted) {
+          stopReason = "cancelled";
+          break;
+        }
+
         visible = await prepareUserMessagesForPrompt(visible, {
           sessionId,
           sessionKkv: this.deps.sessionKkv,
           vfs: this.deps.toolCtx.vfs,
+          seenPaths: prefixPaths,
         });
         if (signal?.aborted) {
           stopReason = "cancelled";
           break;
         }
 
-        const wt = this.deps.worktree(wtScope);
-        const worktreeDisplay = await assembleWorkplaceDisplay(wtScope, {
-          sessionKkv: this.deps.sessionKkv,
-          worktree: wt,
-          vfs: this.deps.toolCtx.vfs,
-          layout: options.definition.prompts,
-        });
         const promptRenderCtx = {
           worktreeDisplay,
           messages: visible,

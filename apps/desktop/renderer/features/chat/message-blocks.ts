@@ -1,16 +1,9 @@
 /**
  * Message block parsing and tool_use / tool_result pairing for chat UI.
  */
-import {
-  buildUserVfsTurnView,
-  matchUserVfsTurnAtForDisplay,
-  resolveVfsToolFilePath,
-  USER_VFS_TURN_SPAN,
-  type ParsedUserVfsAction,
-} from "@novel-master/core/chat";
+import { resolveVfsToolFilePath } from "@novel-master/core/chat";
 import { resolveToolResultOk } from "@novel-master/core";
 import type { ChatMessageDto, ContentBlockDto } from "@shared/ipc-types";
-import { chatMessageFromDto } from "./composer-send-state";
 
 export type ToolCallStatus = "success" | "error" | "pending" | "interrupted";
 
@@ -32,16 +25,7 @@ export interface MessageListItem {
   readonly tools: readonly ToolCallView[];
 }
 
-export interface UserVfsTurnListItem {
-  readonly kind: "user_vfs_turn";
-  readonly id: string;
-  readonly hidden: boolean;
-  readonly actions: readonly ParsedUserVfsAction[];
-  readonly tools: readonly ToolCallView[];
-  readonly bridgeText: string;
-}
-
-export type ChatListItem = MessageListItem | UserVfsTurnListItem;
+export type ChatListItem = MessageListItem;
 
 export interface BuildChatListItemsOptions {
   readonly agentRunning?: boolean;
@@ -238,29 +222,9 @@ export function buildChatListItems(
   const agentRunning = options.agentRunning ?? false;
   const runUiStopped = options.runUiStopped ?? false;
   const results = buildToolResultByUseId(messages);
-  const coreMessages = messages.map(chatMessageFromDto);
   const items: ChatListItem[] = [];
 
-  for (let index = 0; index < messages.length; ) {
-    const vfsTurn = matchUserVfsTurnAtForDisplay(coreMessages, index);
-    if (vfsTurn != null) {
-      const view = buildUserVfsTurnView(vfsTurn);
-      // UA flush 后会话内无 tool_result，用 view 内已执行成功的合成结果判定卡片状态。
-      const vfsResults = new Map(
-        view.toolResults.map((result) => [result.toolUseId, result]),
-      );
-      items.push({
-        kind: "user_vfs_turn",
-        id: view.id,
-        hidden: view.hidden,
-        actions: view.actions,
-        tools: view.toolUses.map((use) => toolCallViewFromUse(use, vfsResults)),
-        bridgeText: view.bridgeText,
-      });
-      index += USER_VFS_TURN_SPAN;
-      continue;
-    }
-
+  for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index]!;
     const blocks = blocksForMessage(message);
     const textParts: string[] = [];
@@ -292,7 +256,6 @@ export function buildChatListItems(
     }
 
     if (hasToolResult && textParts.length === 0 && thinkingParts.length === 0) {
-      index += 1;
       continue;
     }
 
@@ -323,8 +286,6 @@ export function buildChatListItems(
         tools,
       });
     }
-
-    index += 1;
   }
 
   return items;

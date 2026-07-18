@@ -218,8 +218,9 @@ export function ConversationPanel({
       );
       const status = statusRes.ok ? statusRes.data : [];
       setComposerText(draft.text);
+      // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
       setComposerAttachments(
-        replaceComposerStatusAttachments(draft.attachments, status),
+        replaceComposerStatusAttachments([], status),
       );
       composerDraftHydratedRef.current = true;
     })();
@@ -234,9 +235,10 @@ export function ConversationPanel({
     if (!composerDraftHydratedRef.current) {
       return;
     }
+    // draft attach 恒空；仅持久正文（含 `@路径`）
     const draftJson = serializeComposerDraftJson({
       text: composerText,
-      attachments: composerAttachments,
+      attachments: [],
     });
     void ipcSessionsSetComposerDraft({ sessionId, draftJson });
   }, [sessionId, composerText, composerAttachments]);
@@ -565,9 +567,13 @@ export function ConversationPanel({
           showToast('该消息没有可编辑的文本');
           return;
         }
-        // T-TX2：编辑回填 Composer 原文 + attachments chips
+        // T-TX2：编辑回填仅正文（含 `@路径`）+ 现有状态投影；无文件引用 chip
         setComposerText(initial);
-        setComposerAttachments([...(message.attachments ?? [])]);
+        setComposerAttachments((prev) =>
+          prev.filter(
+            (a) => a.source === 'workplace' || a.source === 'user_ops',
+          ),
+        );
         setMessageEdit({ messageId: message.id, initialText: initial });
         return;
       }
