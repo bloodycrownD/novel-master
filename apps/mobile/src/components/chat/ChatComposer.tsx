@@ -426,13 +426,16 @@ export function ChatComposer({
       if (tokens.length === 0) {
         return;
       }
-      const start = cursor;
-      const before = text.slice(0, start);
-      const after = text.slice(start);
+      // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
+      const replaceStart = activeAt != null ? activeAt.start : cursor;
+      const before = text.slice(0, replaceStart);
+      const after = text.slice(cursor);
       const gapBefore =
         before.length === 0 || /\s$/.test(before) ? '' : ' ';
       const joined = tokens.join(' ');
-      const gapAfter = after.length === 0 || /^\s/.test(after) ? '' : ' ';
+      // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
+      const gapAfter =
+        after.length === 0 || !/^\s/.test(after) ? ' ' : '';
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       const nextCursor = before.length + inserted.length;
@@ -448,7 +451,7 @@ export function ChatComposer({
       persistDraft(next, statusOnly);
       setCursor(nextCursor);
     },
-    [attachments, cursor, persistDraft, text],
+    [activeAt, attachments, cursor, persistDraft, text],
   );
 
   const applyTypeaheadToken = useCallback(

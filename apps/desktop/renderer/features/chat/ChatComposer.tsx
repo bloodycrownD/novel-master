@@ -188,14 +188,19 @@ export function ChatComposer({
         return;
       }
       const el = textareaRef.current;
-      const start = el?.selectionStart ?? value.length;
-      const end = el?.selectionEnd ?? start;
-      const before = value.slice(0, start);
-      const after = value.slice(end);
+      const selStart = el?.selectionStart ?? value.length;
+      const selEnd = el?.selectionEnd ?? selStart;
+      // 有未完成 @… 时从 @ 起替换到光标，避免残留半截查询
+      const replaceStart = activeAt != null ? activeAt.start : selStart;
+      const replaceEnd = activeAt != null ? selStart : selEnd;
+      const before = value.slice(0, replaceStart);
+      const after = value.slice(replaceEnd);
       const gapBefore =
         before.length === 0 || /\s$/.test(before) ? "" : " ";
       const joined = tokens.join(" ");
-      const gapAfter = after.length === 0 || /^\s/.test(after) ? "" : " ";
+      // 对齐 replaceActiveAtWithToken：after 为空或非空白开头时补尾空格
+      const gapAfter =
+        after.length === 0 || !/^\s/.test(after) ? " " : "";
       const inserted = `${gapBefore}${joined}${gapAfter}`;
       const next = `${before}${inserted}${after}`;
       onChange(next);
@@ -209,7 +214,7 @@ export function ChatComposer({
         }
       });
     },
-    [onChange, value],
+    [activeAt, onChange, value],
   );
 
   const applyTypeaheadToken = useCallback(

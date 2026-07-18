@@ -60,6 +60,14 @@ test("T-ATD3: 手输 @ 搜索列表 ≤5，点选替换为完整 @path", () => {
   assert.ok(next.text.includes("@/ab.md"));
 });
 
+test("findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭", () => {
+  const bare = "@/a.md";
+  assert.ok(findActiveAtQuery(bare, bare.length));
+  assert.equal(findActiveAtQuery(bare, bare.length)!.query, "/a.md");
+  const withSpace = "@/a.md ";
+  assert.equal(findActiveAtQuery(withSpace, withSpace.length), null);
+});
+
 test("T-ATD4: 删除正文 @path 后门闩扫描无该 path；draft attach 不参与", () => {
   const withAt = resolveComposerSendIntent({
     text: "看 @/a.md",

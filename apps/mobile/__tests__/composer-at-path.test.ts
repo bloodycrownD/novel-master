@@ -59,6 +59,13 @@ describe('composer-at-path (T-ATD*)', () => {
     expect(next.text).toBe('见 @/ab.md ');
   });
 
+  it('findActiveAtQuery: @/a.md 无尾空格为活跃；带尾空格则关闭', () => {
+    const bare = '@/a.md';
+    expect(findActiveAtQuery(bare, bare.length)).not.toBeNull();
+    expect(findActiveAtQuery(bare, bare.length)!.query).toBe('/a.md');
+    expect(findActiveAtQuery(`${bare} `, `${bare} `.length)).toBeNull();
+  });
+
   it('T-ATD4: 删除正文 @path 后扫描为空', () => {
     expect(countScannedAtPathAttachments('看 @/a.md')).toBe(1);
     expect(countScannedAtPathAttachments('看')).toBe(0);
