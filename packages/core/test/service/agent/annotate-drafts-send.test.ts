@@ -247,7 +247,8 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
-  it("T-AN6: 同 path 两条 annotate concat 进落库；禁 path 去重丢条", () => {
+  it("T-AN6: 同 path 两条 annotate concat 进落库；禁 path 去重丢条", async () => {
+    refreshUserVfsUnifiedToolTurnSnapshot(true);
     const drafts = [
       {
         id: "1",
@@ -278,6 +279,39 @@ describe("annotateDrafts send (T-AN3/T-AN4/T-AN6 core)", () => {
     assert.equal(matches.length, 2);
     assert.match(wrapped, /"userAnnotation": "一"/);
     assert.match(wrapped, /"userAnnotation": "二"/);
+
+    // 打穿 runAgentTurn append：同 path 两条不得被 path 去重丢掉
+    let appendedAtts: readonly MessageAttachment[] | undefined;
+    const runtime = makeRuntime({
+      append: async (_s, _r, _c, opts) => {
+        appendedAtts = opts?.attachments;
+        return { id: "u-an6" };
+      },
+      userVfsTurn: mockUserVfsTurn(),
+    });
+    try {
+      await runAgentTurn(
+        runtime,
+        { projectId: "p1", sessionId: "s1" },
+        "hello",
+        {
+          annotateDrafts: drafts,
+          definitionOverride: sampleDefinition,
+          stream: false,
+        },
+      );
+    } catch {
+      // runner 可能失败；append 语义仍可检
+    }
+    assert.ok(appendedAtts != null, "须走 append");
+    const ann = (appendedAtts ?? []).filter((a) => a.action === "annotate");
+    assert.equal(ann.length, 2, "同 path 两条 annotate 均须进 append attachments");
+    assert.equal(ann[0]!.path, "/same.md");
+    assert.equal(ann[1]!.path, "/same.md");
+    assert.match(ann[0]!.content ?? "", /"userAnnotation": "一"/);
+    assert.match(ann[1]!.content ?? "", /"userAnnotation": "二"/);
+
+    resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
   it("无输入且无 annotate → 仍抛消息不能为空", async () => {
