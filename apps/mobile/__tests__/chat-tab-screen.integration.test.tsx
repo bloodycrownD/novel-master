@@ -52,8 +52,12 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => cb(),
-  useNavigation: () => ({navigate: jest.fn()}),
+  useNavigation: () => ({navigate: jest.fn(), setOptions: jest.fn()}),
   useIsFocused: () => true,
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
 }));
 
 jest.mock('@novel-master/core', () => ({

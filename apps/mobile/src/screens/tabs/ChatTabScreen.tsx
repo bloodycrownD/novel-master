@@ -1,10 +1,11 @@
 /**
  * Chat tab: session list / template sub-tabs, conversation workspace.
  */
-import React, { useCallback } from 'react';
+import React, { useCallback, useLayoutEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '@/components/chrome/AppHeader';
 import { ProjectDrawer } from '@/components/chrome/ProjectDrawer';
 import { TextPromptModal } from '@/components/ui/TextPromptModal';
@@ -12,6 +13,7 @@ import { useAndroidChatBackHandler } from '@/hooks/useAndroidChatBackHandler';
 import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useMobileScope } from '@/hooks/useMobileScope';
 import { useTheme } from '@/theme/ThemeProvider';
+import { resolveChatTabBarStyle } from '@/navigation/main-tab-bar-style';
 import type { RootStackParamList } from '@/navigation/types';
 import { ChatConversationPanel } from './chat-tab/ChatConversationPanel';
 import { ChatSessionListPanel } from './chat-tab/ChatSessionListPanel';
@@ -43,11 +45,24 @@ function ChatTabScreenContent({
   sessionBatch: ReturnType<typeof useBatchSelection>;
 }) {
   const { tokens } = useTheme();
+  const insets = useSafeAreaInsets();
   const ctx = useChatTabContext();
   const controller = useChatTabController();
   const nav = useChatTabNavigation();
   const { setCurrentProject, setCurrentSession } = useMobileScope();
   const navigation = useNavigation<Nav>();
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      tabBarStyle: resolveChatTabBarStyle(ctx.chatSubview, tokens, insets),
+    });
+    // navigation 在 RN 中引用稳定；勿列入 deps，避免测试 mock 每次新建对象导致死循环
+  }, [
+    ctx.chatSubview,
+    insets.bottom,
+    tokens.borderLight,
+    tokens.tabBarBackground,
+  ]);
 
   useAndroidChatBackHandler(
     {

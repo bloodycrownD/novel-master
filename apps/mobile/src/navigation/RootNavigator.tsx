@@ -5,10 +5,11 @@ import React from 'react';
 import {NavigationContainer} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {Platform, StyleSheet} from 'react-native';
+import {StyleSheet} from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
 import {ChatTabIcon, ProfileTabIcon} from '../components/icons/TabIcons';
 import {HeaderProvider} from './HeaderContext';
+import {buildMainTabBarStyle} from './main-tab-bar-style';
 import {StackScreenLayout} from './StackScreenLayout';
 import type {MainTabParamList, RootStackParamList} from './types';
 import {useTheme} from '../theme/ThemeProvider';
@@ -64,23 +65,7 @@ function MainTabs() {
         tabBarActiveTintColor: tokens.tabBarActive,
         tabBarInactiveTintColor: tokens.tabBarInactive,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: {
-          backgroundColor: tokens.tabBarBackground,
-          borderTopColor: tokens.borderLight,
-          borderTopWidth: StyleSheet.hairlineWidth,
-          paddingTop: 8,
-          paddingBottom: Math.max(8, insets.bottom),
-          height: 56 + insets.bottom,
-          ...Platform.select({
-            android: {elevation: 8},
-            ios: {
-              shadowColor: '#000',
-              shadowOffset: {width: 0, height: -2},
-              shadowOpacity: 0.06,
-              shadowRadius: 8,
-            },
-          }),
-        },
+        tabBarStyle: buildMainTabBarStyle(tokens, insets),
       }}>
       <Tab.Screen
         name="Chat"
