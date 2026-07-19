@@ -92,6 +92,10 @@ jobs:
           npm run build -w @novel-master/cloud-sync-driver-s3
           npm run build -w @novel-master/sksp-android -w @novel-master/tdbc-driver-rn -w @novel-master/tokenizer-driver-rn
 
+      # WebView 产物 gitignore；assemble 前必须拷入 android_asset，否则聊天页 net::ERR_FILE_NOT_FOUND
+      - name: Build WebView native assets
+        run: npm run build:webview:native -w @novel-master/mobile
+
       - name: Prepare release keystore
         id: keystore
         working-directory: apps/mobile/android/app

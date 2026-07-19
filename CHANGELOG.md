@@ -4,6 +4,12 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.02] - 2026-07-20
+
+### 修复
+
+- **Android 聊天页 Error loading page / net::ERR_FILE_NOT_FOUND**：发版 CI 在 `assembleRelease` 前补跑 `build:webview:native`，将 WebView 壳打入 APK；Gradle `preBuild` 缺 `assets/webview/**` 时硬失败，避免再打出坏包
+
 ## [1.4.01] - 2026-07-20
 
 ### 新增

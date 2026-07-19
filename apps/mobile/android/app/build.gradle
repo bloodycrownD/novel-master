@@ -93,7 +93,7 @@ android {
             ?: 1
         def ciVersionName = findProperty("versionName")?.toString()
             ?: System.getenv("VERSION_NAME")
-            ?: "1.4.01"
+            ?: "1.4.02"
         versionCode ciVersionCode
         versionName ciVersionName
     }
@@ -146,6 +146,36 @@ android {
         unitTests.includeAndroidResources = true
     }
 }
+
+/**
+ * WebView 壳（chat-transcript / rich-document）由 `npm run build:webview:native` 拷入
+ * `src/main/assets/webview/`（gitignore）。裸 gradlew 漏拷时 APK 会缺文件 → 运行时
+ * net::ERR_FILE_NOT_FOUND。在 preBuild 前硬失败，避免静默打出坏包。
+ */
+tasks.register("checkWebViewAssets") {
+    doLast {
+        def packages = ["chat-transcript", "rich-document"]
+        def required = ["index.html", "app.js", "app.css"]
+        def missing = []
+        packages.each { pkg ->
+            required.each { name ->
+                def f = file("src/main/assets/webview/${pkg}/${name}")
+                if (!f.isFile()) {
+                    missing << f.path
+                }
+            }
+        }
+        if (!missing.isEmpty()) {
+            throw new GradleException(
+                "Missing WebView assets (APK would hit net::ERR_FILE_NOT_FOUND):\n  " +
+                    missing.join("\n  ") +
+                    "\nRun: npm run build:webview:native -w @novel-master/mobile"
+            )
+        }
+    }
+}
+
+tasks.named("preBuild").configure { dependsOn("checkWebViewAssets") }
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
