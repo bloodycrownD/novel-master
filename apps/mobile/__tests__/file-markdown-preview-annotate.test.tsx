@@ -42,8 +42,8 @@ jest.mock('../src/components/vfs/RichDocumentWebView', () => ({
   }),
 }));
 
-jest.mock('../src/components/ui/TextPromptModal', () => ({
-  TextPromptModal: () => null,
+jest.mock('../src/components/chat/MessageEditModal', () => ({
+  MessageEditModal: () => null,
 }));
 
 import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';

@@ -31,7 +31,7 @@ import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
-import {TextPromptModal} from '../ui/TextPromptModal';
+import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
@@ -303,9 +303,9 @@ export function FileMarkdownPreview({
 
   const annotateModals = (
     <>
-      <TextPromptModal
+      <MessageEditModal
         visible={addVisible}
-        title="添加批注"
+        title="批注"
         label={
           pendingOriginalText.length > 80
             ? `${pendingOriginalText.slice(0, 80)}…`
@@ -316,7 +316,7 @@ export function FileMarkdownPreview({
         onClose={() => setAddVisible(false)}
         onConfirm={handleAddConfirm}
       />
-      <TextPromptModal
+      <MessageEditModal
         visible={editVisible}
         title="编辑批注"
         label={
