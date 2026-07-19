@@ -26,7 +26,7 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   -webkit-tap-highlight-color: transparent;
 }
 .annotate-bar {
-  z-index: 1000;
+  z-index: 2147483646;
   display: none;
   align-items: center;
   justify-content: center;
@@ -37,11 +37,11 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   appearance: none;
   border: none;
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 13px;
+  padding: 10px 14px;
+  font-size: 14px;
   font-weight: 600;
   color: #fff;
   background: var(--primary, #007aff);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
 }
 /* __RICH_CSS__ */
