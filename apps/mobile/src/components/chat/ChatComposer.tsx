@@ -553,6 +553,7 @@ export function ChatComposer({
     abortUiRun,
     onNeedModel,
     sendWithBridgeIfNeeded,
+    sessionId,
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
