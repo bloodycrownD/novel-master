@@ -7,7 +7,14 @@
 import { PromptError } from "@/errors/prompt-errors.js";
 import { scanMacroActions } from "@/infra/prompt-template/macro-scan.js";
 
-const ALLOWED_ROOT_MACROS = new Set(["time", "week_cn", "filetree"]);
+/** dynamic 区允许的 `$` 根宏键（与 UI 芯片白名单一致）。 */
+export const ALLOWED_DYNAMIC_ROOT_MACROS = [
+  "time",
+  "week_cn",
+  "filetree",
+] as const;
+
+const ALLOWED_ROOT_MACROS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 
 const LEGACY_DOT_MACROS = new Set(["worktree", "filetree"]);
 

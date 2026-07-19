@@ -24,7 +24,10 @@ export type {
   LlmExportZones,
   LlmExportZone,
 } from "../domain/prompt/logic/normalize-for-llm-export.js";
-export { validateDynamicMacros } from "../domain/prompt/logic/validate-dynamic-macros.js";
+export {
+  ALLOWED_DYNAMIC_ROOT_MACROS,
+  validateDynamicMacros,
+} from "../domain/prompt/logic/validate-dynamic-macros.js";
 export { expandDynamicMacros } from "../domain/prompt/logic/expand-dynamic-macros.js";
 export {
   buildPromptAssemblyFromLayout,

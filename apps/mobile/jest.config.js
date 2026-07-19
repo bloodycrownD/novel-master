@@ -88,6 +88,10 @@ module.exports = {
       repoRoot,
       'packages/core/dist/public/session-fs.js',
     ),
+    '^@novel-master/core/prompt$': path.join(
+      repoRoot,
+      'packages/core/dist/public/prompt.js',
+    ),
     '^@novel-master/core/provider$': path.join(
       repoRoot,
       'packages/core/dist/public/provider.js',
