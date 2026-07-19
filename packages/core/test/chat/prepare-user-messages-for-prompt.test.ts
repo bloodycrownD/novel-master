@@ -718,6 +718,50 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
     assert.equal(body2.includes("createdAt="), false);
   });
 
+  it("旧 <file> 落库内容 hydrate → 剥壳转 action JSON，不原样进 <user-ops>", async () => {
+    const ctx = getNovelMasterTestContext();
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+    const vfs = ctx.sessionVfs(project.id, session.id);
+    const sk = createSessionKkvService(ctx.conn);
+    const legacyFile = `<file path="/legacy.md" createdAt="x" updatedAt="x" updatedBy="user">
+1|hello
+2|world
+</file>`;
+    const prepared = await prepareUserMessagesForPrompt(
+      [
+        userMsg("看旧附件", {
+          sessionId: session.id,
+          attachments: [
+            {
+              name: "/legacy.md",
+              source: "attach",
+              type: "text",
+              content: legacyFile,
+              path: "/legacy.md",
+            },
+          ],
+        }),
+      ],
+      {
+        sessionId: session.id,
+        sessionKkv: sk,
+        vfs,
+      },
+    );
+    const body = messageBodyText(prepared[0]!);
+    assert.match(body, /<user-ops>/);
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"path": "\/legacy\.md"/);
+    assert.match(body, /1\|hello/);
+    assert.match(body, /2\|world/);
+    assert.equal(body.includes("<file "), false);
+    assert.equal(body.includes("createdAt="), false);
+    const att = prepared[0]!.attachments?.[0];
+    assert.equal(att?.action, "userAttach");
+    assert.equal(att?.content?.includes("<file "), false);
+  });
+
   it("T-PD8: 仅 workplace/attach 但 hydrate 后全部 body 空 → wrap 等于 plainText", async () => {
     const plain = "只有原文";
     const wrapped = wrapUserMessageForLlm(plain, [

@@ -173,24 +173,34 @@ async function hydrateFileFull(
         action: attachment.action ?? action,
       };
     }
-    // 旧 `<file>` 块：保留正文给 wrap（历史）；新路径不再产出
-    if (attachment.content.includes("<file ") || attachment.path == null) {
-      return { ...attachment, path: logicalPath };
-    }
+    // 旧 `<file>` 或裸正文：若含外壳则剥掉再包 action（对齐 hydrateDirAttach）
     const status =
       attachment.source === "workplace"
         ? await resolveWorkplaceStatus(logicalPath, runtime)
         : resolveAttachFileStatus(logicalPath, attachment.type);
+    const trimmed = attachment.content.trim();
+    const wasLegacyFile =
+      trimmed.startsWith("<file ") && trimmed.endsWith("</file>");
+    const fileBody = stripLegacyFileWrap(attachment.content, logicalPath);
+    // 旧块内层已是展示正文（含行号），勿再 contentLines；裸正文走 fileRefAction
+    const content = wasLegacyFile
+      ? buildFileRefActionXml({
+          action,
+          path: logicalPath,
+          content: fileBody,
+          display: status,
+        })
+      : fileRefAction(
+          attachment.source === "workplace" ? "workplace" : "attach",
+          logicalPath,
+          status,
+          fileBody,
+        );
     return {
       ...attachment,
       path: logicalPath,
       action,
-      content: fileRefAction(
-        attachment.source === "workplace" ? "workplace" : "attach",
-        logicalPath,
-        status,
-        attachment.content,
-      ),
+      content,
     };
   }
 
@@ -261,6 +271,24 @@ function stripLegacyDirWrap(content: string, logicalPath: string): string {
     return trimmed
       .replace(/^<dir\b[^>]*>\s*/i, "")
       .replace(/\s*<\/dir>\s*$/i, "");
+  }
+  void open;
+  return trimmed;
+}
+
+/** 剥旧增量外壳 `<file …>…</file>`，取内层正文；非外壳则原样返回。 */
+function stripLegacyFileWrap(content: string, logicalPath: string): string {
+  const trimmed = content.trim();
+  const open = `<file path="${logicalPath}">`;
+  if (trimmed.startsWith("<file ") && trimmed.endsWith("</file>")) {
+    const firstNl = trimmed.indexOf("\n");
+    const lastNl = trimmed.lastIndexOf("\n");
+    if (firstNl >= 0 && lastNl > firstNl) {
+      return trimmed.slice(firstNl + 1, lastNl);
+    }
+    return trimmed
+      .replace(/^<file\b[^>]*>\s*/i, "")
+      .replace(/\s*<\/file>\s*$/i, "");
   }
   void open;
   return trimmed;
