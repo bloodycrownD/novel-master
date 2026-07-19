@@ -34,12 +34,16 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(html).not.toContain('https://novel-master.local/');
   });
 
-  it('T-BR-RD-01: setDocument / themeUpdate; no chat menu handlers', () => {
+  it('T-BR-RD-01: setDocument / themeUpdate / annotate; no chat menu handlers', () => {
     const script = bootScript();
     expect(script).toContain('setDocument');
     expect(script).toContain('msg.type === "setDocument"');
     expect(script).toContain('handleHostMessage');
     expect(script).toContain('themeUpdate');
+    expect(script).toContain('setAnnotateEnabled');
+    expect(script).toContain('setAnnotations');
+    expect(script).toContain('selectionAnnotate');
+    expect(script).toContain('annotate-mark');
     expect(script).not.toContain('menuOverlayHandler');
     expect(script).not.toContain('openMessageMenu');
   });
@@ -59,10 +63,12 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).not.toContain("'<div class=\"doc-body rich\">'+");
   });
 
-  it('T-BR-CSS-02: rich list padding in app.css', () => {
+  it('T-BR-CSS-02: rich list padding + annotate underline in app.css', () => {
     const css = appCss();
     expect(css).toContain('padding-left: 1.5em');
     expect(css).toContain('list-style-position: outside');
     expect(css).toContain('#doc .doc-body.rich');
+    expect(css).toContain('annotate-mark');
+    expect(css).toContain('annotate-bar');
   });
 });

@@ -8,6 +8,7 @@ import {
   handleHostMessage,
   registerSetDocumentView,
 } from './runtime/bridge';
+import { bindAnnotateUi, refreshAnnotateMarks } from './runtime/annotate';
 import { DocumentApp } from './ui/DocumentApp';
 
 const docRoot = document.getElementById('doc');
@@ -15,7 +16,10 @@ const docRoot = document.getElementById('doc');
 registerSetDocumentView((payload) => {
   if (!docRoot) return;
   render(h(DocumentApp, { payload }), docRoot);
+  refreshAnnotateMarks();
 });
+
+bindAnnotateUi();
 
 document.addEventListener('message', function (e: Event) {
   const ev = e as MessageEvent;

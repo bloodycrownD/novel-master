@@ -7,17 +7,13 @@ import {
   type DocumentPayload,
   type HostTheme,
 } from './document-model';
-
-/** RN WebView 注入的 postMessage 桥（宿主 API）。 */
-type ReactNativeWebViewBridge = {
-  postMessage: (message: string) => void;
-};
-
-declare global {
-  interface Window {
-    ReactNativeWebView?: ReactNativeWebViewBridge;
-  }
-}
+import { post } from './post';
+import {
+  refreshAnnotateMarks,
+  setAnnotateEnabled,
+  setAnnotations,
+} from './annotate';
+import type { AnnotateMark } from './annotate-marks';
 
 /**
  * P0-3：setDocument 视图刷新注册门面。
@@ -43,12 +39,7 @@ export function invokeRegisteredSetDocumentView(
   return true;
 }
 
-export function post(type: string, payload?: Record<string, unknown>): void {
-  const msg = JSON.stringify({ v: BRIDGE_V, type: type, payload: payload || {} });
-  if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-    window.ReactNativeWebView.postMessage(msg);
-  }
-}
+export { post };
 
 export function applyTheme(theme: HostTheme | null | undefined): void {
   if (!theme) return;
@@ -66,6 +57,10 @@ export function applyTheme(theme: HostTheme | null | undefined): void {
 /** 门面：转发到已注册的 DocumentApp 视图刷新（符号名供契约测保留）。 */
 export function setDocument(payload: DocumentPayload | null | undefined): void {
   invokeRegisteredSetDocumentView(payload ?? {});
+  // Preact 重渲染会清掉 mark；下一帧重建下划线
+  window.setTimeout(() => {
+    refreshAnnotateMarks();
+  }, 0);
 }
 
 export function handleHostMessage(raw: unknown): void {
@@ -86,5 +81,17 @@ export function handleHostMessage(raw: unknown): void {
   }
   if (msg.type === 'themeUpdate') {
     applyTheme(msg.payload && (msg.payload.theme as HostTheme | undefined));
+    return;
+  }
+  if (msg.type === 'setAnnotateEnabled') {
+    setAnnotateEnabled(msg.payload?.enabled === true);
+    return;
+  }
+  if (msg.type === 'setAnnotations') {
+    const rawList = msg.payload?.annotations;
+    const list = Array.isArray(rawList)
+      ? (rawList as AnnotateMark[])
+      : [];
+    setAnnotations(list);
   }
 }

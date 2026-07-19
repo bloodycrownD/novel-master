@@ -1,6 +1,6 @@
 /**
  * RN ↔ Web document preview bridge: typed JSON envelopes ({ v, type, payload }).
- * Minimal surface — init / setDocument / themeUpdate / ready only (no scroll or menu).
+ * Supports document set/theme plus optional annotate (selection / marks).
  */
 export const RICH_DOCUMENT_BRIDGE_VERSION = 1 as const;
 
@@ -28,11 +28,22 @@ export type RichDocumentSetPayload = {
   readonly frontMatterHtml?: string;
 };
 
+/** 下划线标记（按 originalText 尽力匹配；重复则全部高亮）。 */
+export type RichDocumentAnnotationMark = {
+  readonly id: string;
+  readonly originalText: string;
+};
+
 /** Host → document WebView */
 export type HostToRichDocumentMessage =
   | BridgeEnvelope<'init', {theme: RichDocumentTheme}>
   | BridgeEnvelope<'setDocument', RichDocumentSetPayload>
-  | BridgeEnvelope<'themeUpdate', {theme: RichDocumentTheme}>;
+  | BridgeEnvelope<'themeUpdate', {theme: RichDocumentTheme}>
+  | BridgeEnvelope<'setAnnotateEnabled', {enabled: boolean}>
+  | BridgeEnvelope<
+      'setAnnotations',
+      {annotations: readonly RichDocumentAnnotationMark[]}
+    >;
 
 /** Document WebView → host */
 export type RichDocumentToHostMessage =
@@ -40,7 +51,9 @@ export type RichDocumentToHostMessage =
   | BridgeEnvelope<
       'log',
       {level: string; message: string; fields?: Record<string, unknown>}
-    >;
+    >
+  | BridgeEnvelope<'selectionAnnotate', {text: string}>
+  | BridgeEnvelope<'annotateOpen', {id: string}>;
 
 export function encodeHostToRichDocument(
   message: HostToRichDocumentMessage,

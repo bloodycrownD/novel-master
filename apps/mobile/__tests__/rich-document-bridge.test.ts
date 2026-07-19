@@ -1,9 +1,9 @@
 import {
-  RICH_DOCUMENT_BRIDGE_VERSION,
   decodeHostToRichDocument,
   decodeRichDocumentToHost,
   encodeHostToRichDocument,
   encodeRichDocumentToHost,
+  RICH_DOCUMENT_BRIDGE_VERSION,
 } from '../src/components/vfs/RichDocumentBridge';
 
 describe('rich-document-bridge', () => {
@@ -45,6 +45,44 @@ describe('rich-document-bridge', () => {
     };
     expect(decodeHostToRichDocument(encodeHostToRichDocument(message))).toEqual(
       message,
+    );
+  });
+
+  it('round-trips setAnnotateEnabled / setAnnotations', () => {
+    const enabled = {
+      v: RICH_DOCUMENT_BRIDGE_VERSION,
+      type: 'setAnnotateEnabled' as const,
+      payload: {enabled: true},
+    };
+    expect(decodeHostToRichDocument(encodeHostToRichDocument(enabled))).toEqual(
+      enabled,
+    );
+    const marks = {
+      v: RICH_DOCUMENT_BRIDGE_VERSION,
+      type: 'setAnnotations' as const,
+      payload: {
+        annotations: [{id: 'a1', originalText: 'hello'}],
+      },
+    };
+    expect(decodeHostToRichDocument(encodeHostToRichDocument(marks))).toEqual(
+      marks,
+    );
+  });
+
+  it('round-trips selectionAnnotate / annotateOpen', () => {
+    const sel = {
+      v: RICH_DOCUMENT_BRIDGE_VERSION,
+      type: 'selectionAnnotate' as const,
+      payload: {text: '选中原文'},
+    };
+    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(sel))).toEqual(sel);
+    const open = {
+      v: RICH_DOCUMENT_BRIDGE_VERSION,
+      type: 'annotateOpen' as const,
+      payload: {id: 'a1'},
+    };
+    expect(decodeRichDocumentToHost(encodeRichDocumentToHost(open))).toEqual(
+      open,
     );
   });
 
