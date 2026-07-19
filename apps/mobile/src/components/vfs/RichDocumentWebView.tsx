@@ -180,6 +180,25 @@ export function RichDocumentWebView({
     });
   }, [webReady, annotateEnabled, annotations, postToWeb]);
 
+  const handleCustomMenuSelection = useCallback(
+    (event: {nativeEvent: {key?: string; selectedText?: string}}) => {
+      if (!annotateEnabled) {
+        return;
+      }
+      const key = String(event.nativeEvent.key ?? '');
+      if (key !== 'annotate') {
+        return;
+      }
+      const text = String(event.nativeEvent.selectedText ?? '')
+        .replace(/\u00a0/g, ' ')
+        .trim();
+      if (text) {
+        onSelectionAnnotateRef.current?.(text);
+      }
+    },
+    [annotateEnabled],
+  );
+
   return (
     <View style={[styles.fill, style]}>
       <WebView
@@ -197,6 +216,15 @@ export function RichDocumentWebView({
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         keyboardDisplayRequiresUserAction={false}
+        /* 划词批注：用原生选区菜单「添加批注」替换系统 Copy/Share（DOM 浮动条在 Android 上常被盖住）。 */
+        menuItems={
+          annotateEnabled
+            ? [{label: '添加批注', key: 'annotate'}]
+            : undefined
+        }
+        onCustomMenuSelection={
+          annotateEnabled ? handleCustomMenuSelection : undefined
+        }
       />
     </View>
   );

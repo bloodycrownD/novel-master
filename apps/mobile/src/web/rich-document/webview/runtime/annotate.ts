@@ -12,6 +12,7 @@ let annotations: AnnotateMark[] = [];
 let barEl: HTMLDivElement | null = null;
 let selectionListenerBound = false;
 let clickListenerBound = false;
+let selectionShowTimer: number | null = null;
 
 export function setAnnotateEnabled(enabled: boolean): void {
   annotateEnabled = enabled === true;
@@ -58,16 +59,38 @@ export function bindAnnotateUi(): void {
   }
 }
 
+function scheduleShowAnnotateBar(): void {
+  if (selectionShowTimer != null) {
+    window.clearTimeout(selectionShowTimer);
+  }
+  // 原生 ActionMode 弹出后选区才稳定；兼作 selectionchange 防抖
+  selectionShowTimer = window.setTimeout(() => {
+    selectionShowTimer = null;
+    if (!annotateEnabled) {
+      hideAnnotateBar();
+      return;
+    }
+    const text = readDocSelectionText();
+    if (!text) {
+      hideAnnotateBar();
+      return;
+    }
+    showAnnotateBar(text);
+  }, 280);
+}
+
 function onSelectionChange(): void {
   if (!annotateEnabled) {
     hideAnnotateBar();
     return;
   }
-  // selectionchange 频繁；等 gesture end 再定位 bar，此处仅在无选区时隐藏
   const text = readDocSelectionText();
   if (!text) {
     hideAnnotateBar();
+    return;
   }
+  // 长按选区常无可靠 touchend；有选区时也调度显示浮动条（与原生 menuItems 双通道）
+  scheduleShowAnnotateBar();
 }
 
 function onSelectionGestureEnd(): void {
@@ -75,15 +98,7 @@ function onSelectionGestureEnd(): void {
     hideAnnotateBar();
     return;
   }
-  // 等选区稳定
-  window.setTimeout(() => {
-    const text = readDocSelectionText();
-    if (!text) {
-      hideAnnotateBar();
-      return;
-    }
-    showAnnotateBar(text);
-  }, 0);
+  scheduleShowAnnotateBar();
 }
 
 function readDocSelectionText(): string {
