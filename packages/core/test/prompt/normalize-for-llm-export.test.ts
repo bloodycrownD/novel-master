@@ -130,9 +130,9 @@ describe("normalizeForLlmExport", () => {
 
   it("T-WT9: worktree 双消息 persistCount=2 与 chat 跨区不 merge", () => {
     const messages = [
-      msg("user", "tree", { id: "prompt:worktree:canon" }),
+      msg("user", "tree", { id: "prompt:workplace" }),
       msg("assistant", TOOL_TURN_BRIDGE_TEXT, {
-        id: "prompt:worktree:canon:done",
+        id: "prompt:workplace:done",
       }),
       msg("user", "chat", { id: "c1" }),
     ];

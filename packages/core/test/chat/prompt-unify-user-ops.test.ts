@@ -180,7 +180,8 @@ describe("prompt unify user-ops (T-PR*)", () => {
         worktree: wt,
         vfs,
         layout: {
-          persist: [{ type: "worktree", name: "canon", role: "user" }],
+          workplace: true,
+          persist: [],
         },
       },
     );

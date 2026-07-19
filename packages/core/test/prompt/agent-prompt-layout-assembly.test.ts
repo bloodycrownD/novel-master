@@ -36,12 +36,12 @@ function mockWorktree(fileTree: string): WorktreeService {
 describe("buildPromptLlmInputFromLayout assembly order", () => {
   const layout: AgentPromptLayout = {
     system: "sys",
+    workplace: true,
     persistEnabled: true,
     dynamicEnabled: true,
     persist: [
       { name: "persona", type: "text", role: "user", content: "人设" },
       { name: "tail", type: "text", role: "assistant", content: "ok" },
-      { name: "canon", type: "worktree" },
     ],
     dynamic: [
       {
@@ -68,8 +68,8 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
     );
     assert.equal(input.system, "sys");
     assert.equal(input.messages.length, 6);
-    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
-    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[0]!.id, "prompt:workplace");
+    assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[2]!.id, "prompt:persona");
     assert.equal(input.messages[3]!.id, "prompt:tail");
     assert.equal(input.messages[4]!.id, "m1");
@@ -83,8 +83,8 @@ describe("buildPromptLlmInputFromLayout assembly order", () => {
       { agentStepIndex: 1 }
     );
     assert.equal(input.messages.length, 4);
-    assert.equal(input.messages[0]!.id, "prompt:worktree:canon");
-    assert.equal(input.messages[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(input.messages[0]!.id, "prompt:workplace");
+    assert.equal(input.messages[1]!.id, "prompt:workplace:done");
     assert.equal(input.messages[2]!.id, "prompt:persona");
     assert.equal(input.messages[3]!.id, "prompt:tail");
   });

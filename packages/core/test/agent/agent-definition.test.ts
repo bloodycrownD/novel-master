@@ -105,7 +105,7 @@ describe("agentDefinitionSchema", () => {
     );
     assert.deepEqual(
       def.prompts.persist.map((b) => b.name),
-      ["alpha", "beta"],
+      ["alpha"],
     );
     assert.deepEqual(
       def.prompts.dynamic.map((b) => b.name),

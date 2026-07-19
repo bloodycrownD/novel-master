@@ -1,4 +1,5 @@
 [
+  "ALLOWED_DYNAMIC_ROOT_MACROS",
   "PromptError",
   "buildPromptAssemblyFromLayout",
   "buildPromptLlmInputFromLayout",

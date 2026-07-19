@@ -20,14 +20,12 @@ import {
 
 novelMasterTestFixture();
 
-function layoutWithWorktree(): Pick<AgentPromptLayout, "persist"> {
-  return {
-    persist: [{ type: "worktree", name: "canon", role: "user" }],
-  };
+function layoutWithWorkplace(): Pick<AgentPromptLayout, "workplace"> {
+  return { workplace: true };
 }
 
-function layoutWithoutWorktree(): Pick<AgentPromptLayout, "persist"> {
-  return { persist: [{ type: "text", name: "t", role: "user", text: "hi" }] };
+function layoutWithoutWorkplace(): Pick<AgentPromptLayout, "workplace"> {
+  return { workplace: false };
 }
 
 describe("assembleWorkplaceDisplay", () => {
@@ -50,7 +48,7 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
         worktree: wt,
         vfs,
-        layout: layoutWithoutWorktree(),
+        layout: layoutWithoutWorkplace(),
       },
     );
     assert.equal(out.worktreeDisplay, "");
@@ -85,7 +83,7 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
         worktree: wt,
         vfs,
-        layout: layoutWithWorktree(),
+        layout: layoutWithWorkplace(),
       },
     );
     assert.match(out.worktreeDisplay, /<file /);
@@ -133,7 +131,7 @@ describe("assembleWorkplaceDisplay", () => {
         sessionKkv: sk,
         worktree: wt,
         vfs,
-        layout: layoutWithWorktree(),
+        layout: layoutWithWorkplace(),
       },
     );
     assert.match(out.worktreeDisplay, /revived/);
@@ -171,7 +169,7 @@ describe("assembleWorkplaceDisplay", () => {
       sessionKkv: sk,
       worktree: wt,
       vfs: vfs as typeof baseVfs,
-      layout: layoutWithWorktree(),
+      layout: layoutWithWorkplace(),
     };
     const scope = {
       kind: "session" as const,
@@ -275,7 +273,7 @@ describe("assembleWorkplaceDisplay", () => {
       sessionKkv: sk,
       worktree: wt,
       vfs,
-      layout: layoutWithWorktree(),
+      layout: layoutWithWorkplace(),
     };
     await assembleWorkplaceDisplay(scope, deps);
     assert.ok(

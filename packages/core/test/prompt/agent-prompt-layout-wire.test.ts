@@ -6,12 +6,12 @@ import {
 } from "../../src/domain/prompt/logic/agent-prompt-layout-wire.js";
 import type {
   DynamicPromptBlock,
-  PersistPromptBlock,
+  PersistTextPromptBlock,
 } from "../../src/domain/prompt/model/agent-prompt-layout.js";
 
 describe("agent-prompt-layout-wire", () => {
   it("persist text 块 wire 形状", () => {
-    const block: PersistPromptBlock = {
+    const block: PersistTextPromptBlock = {
       name: "intro",
       type: "text",
       role: "user",
@@ -21,29 +21,6 @@ describe("agent-prompt-layout-wire", () => {
       type: "text",
       role: "user",
       content: "hello",
-    });
-  });
-
-  it("persist worktree 缺省 role 为 user", () => {
-    const block: PersistPromptBlock = {
-      name: "canon",
-      type: "worktree",
-    };
-    assert.deepEqual(persistBlockToWire(block), {
-      type: "worktree",
-      role: "user",
-    });
-  });
-
-  it("persist worktree 显式 assistant role", () => {
-    const block: PersistPromptBlock = {
-      name: "canon",
-      type: "worktree",
-      role: "assistant",
-    };
-    assert.deepEqual(persistBlockToWire(block), {
-      type: "worktree",
-      role: "assistant",
     });
   });
 

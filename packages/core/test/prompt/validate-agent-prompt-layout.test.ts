@@ -70,79 +70,21 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     assert.equal(layout.dynamic.length, 1);
   });
 
-  it("拒绝 persist 多个 worktree 块", () => {
-    assert.throws(
-      () =>
-        validateAgentPromptLayoutFromMaps(
-          { a: { type: "worktree" }, b: { type: "worktree" } },
-          {}
-        ),
-      (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("最多只能有一个 worktree")
-    );
-  });
-
-  it("worktree 缺省 role 时 normalize 为 user", () => {
+  it("strip persist 旧 worktree 块（不升迁 workplace）", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       { canon: { type: "worktree" } },
       {}
     );
-    assert.equal(layout.persist.length, 1);
-    assert.equal(layout.persist[0]?.type, "worktree");
-    assert.equal(
-      layout.persist[0]?.type === "worktree"
-        ? layout.persist[0].role
-        : undefined,
-      "user"
-    );
+    assert.equal(layout.persist.length, 0);
+    assert.equal(layout.workplace, undefined);
   });
 
-  it("接受 worktree role assistant", () => {
-    const layout = validateAgentPromptLayoutFromMaps(
-      { canon: { type: "worktree", role: "assistant" } },
-      {}
-    );
-    assert.equal(
-      layout.persist[0]?.type === "worktree"
-        ? layout.persist[0].role
-        : undefined,
-      "assistant"
-    );
-  });
-
-  it("拒绝 worktree 含 content", () => {
-    assert.throws(
-      () =>
-        validateAgentPromptLayoutFromMaps(
-          { canon: { type: "worktree", content: "x" } },
-          {}
-        ),
-      (e: unknown) =>
-        e instanceof PromptError &&
-        e.message.includes("worktree 块不得包含 content")
-    );
-  });
-
-  it("拒绝 worktree 含 lifecycle", () => {
-    assert.throws(
-      () =>
-        validateAgentPromptLayoutFromMaps(
-          { canon: { type: "worktree", lifecycle: "once" } },
-          {}
-        ),
-      (e: unknown) =>
-        e instanceof PromptError && e.message.includes("worktree 块不得包含")
-    );
-  });
-
-  it("T-WT1: persist 开：文本末块非 assistant 失败（worktree 不参与）", () => {
+  it("T-WT1: persist 开：文本末块非 assistant 失败", () => {
     assert.throws(
       () =>
         validateAgentPromptLayoutFromMaps(
           {
             tail: { type: "text", role: "user", content: "x" },
-            canon: { type: "worktree" },
           },
           {},
           undefined,
@@ -153,27 +95,21 @@ describe("validateAgentPromptLayoutFromMaps", () => {
     );
   });
 
-  it("T-WT2: persist 开：文本末块 assistant + worktree 通过", () => {
+  it("T-WT2: persist 开：文本末块 assistant 通过", () => {
     const layout = validateAgentPromptLayoutFromMaps(
       {
         head: { type: "text", role: "user", content: "x" },
-        canon: { type: "worktree", role: "assistant" },
         tail: { type: "text", role: "assistant", content: "ok" },
       },
       {},
       undefined,
       { persistEnabled: true }
     );
-    assert.equal(layout.persist.length, 3);
-    assert.equal(layout.persist[1]?.type, "worktree");
-    assert.equal(layout.persist[2]?.type, "text");
-    assert.equal(
-      layout.persist[2]?.type === "text" ? layout.persist[2].role : undefined,
-      "assistant"
-    );
+    assert.equal(layout.persist.length, 2);
+    assert.equal(layout.persist[1]?.role, "assistant");
   });
 
-  it("T-WT3: persist 开：仅 worktree、无文本失败", () => {
+  it("T-WT3: persist 开：无文本块失败", () => {
     assert.throws(
       () =>
         validateAgentPromptLayoutFromMaps(

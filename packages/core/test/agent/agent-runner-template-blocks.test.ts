@@ -133,7 +133,8 @@ describe("AgentRunner template blocks", () => {
       name: "ctx-agent",
       prompts: {
         persistEnabled: true,
-        persist: [{ name: "canon", type: "worktree" }],
+        workplace: true,
+        persist: [],
         dynamic: [],
       },
     };
@@ -174,9 +175,9 @@ describe("AgentRunner template blocks", () => {
 
     const history = captured.options?.history ?? [];
     assert.equal(history.length, 3);
-    assert.equal(history[0]!.id, "prompt:worktree:canon");
+    assert.equal(history[0]!.id, "prompt:workplace");
     assert.match(messageBodyText(history[0]!), new RegExp(SNAPSHOT_BODY));
-    assert.equal(history[1]!.id, "prompt:worktree:canon:done");
+    assert.equal(history[1]!.id, "prompt:workplace:done");
     assert.equal(messageBodyText(history[1]!), TOOL_TURN_BRIDGE_TEXT);
     assert.equal(history[2]!.role, "user");
   });
@@ -189,7 +190,8 @@ describe("AgentRunner template blocks", () => {
       name: "ctx-agent",
       prompts: {
         persistEnabled: true,
-        persist: [{ name: "canon", type: "worktree" }],
+        workplace: true,
+        persist: [],
         dynamic: [],
       },
     };
@@ -249,16 +251,16 @@ describe("AgentRunner template blocks", () => {
     for (const opts of histories) {
       const history = opts.history ?? [];
       assert.equal(
-        history.some((m) => m.id === "prompt:worktree:canon"),
+        history.some((m) => m.id === "prompt:workplace"),
         true,
       );
       assert.equal(
-        history.some((m) => m.id === "prompt:worktree:canon:done"),
+        history.some((m) => m.id === "prompt:workplace:done"),
         true,
       );
-      const ctxMsg = history.find((m) => m.id === "prompt:worktree:canon");
+      const ctxMsg = history.find((m) => m.id === "prompt:workplace");
       const doneMsg = history.find(
-        (m) => m.id === "prompt:worktree:canon:done",
+        (m) => m.id === "prompt:workplace:done",
       );
       assert.match(
         ctxMsg != null ? messageBodyText(ctxMsg) : "",
