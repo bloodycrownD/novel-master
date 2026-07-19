@@ -59,7 +59,9 @@ import {
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from './composer-at-path';
+import { composerDockBottomPadding } from './composer-dock-padding';
 import { FileReferencePicker } from './FileReferencePicker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Props = {
   scope: AgentRunScope;
@@ -110,6 +112,7 @@ export function ChatComposer({
   onOpenMore,
 }: Props) {
   const { tokens } = useTheme();
+  const insets = useSafeAreaInsets();
   const runtime = useRuntime();
   const { sessionId } = scope;
   const initial = readChatComposerDraftState(sessionId);
@@ -546,7 +549,15 @@ export function ChatComposer({
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 
   return (
-    <View style={[styles.dock, { backgroundColor: tokens.background }]}>
+    <View
+      style={[
+        styles.dock,
+        {
+          backgroundColor: tokens.background,
+          paddingBottom: composerDockBottomPadding(insets.bottom),
+        },
+      ]}
+    >
       {!hasModel ? (
         <Pressable onPress={onNeedModel} style={styles.hintRow}>
           <Text style={{ color: tokens.primary }}>请先选择工作区模型</Text>

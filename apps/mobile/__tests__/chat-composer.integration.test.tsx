@@ -50,6 +50,10 @@ jest.mock('../src/runtime/novel-master-context', () => ({
   useNovelMaster: () => ({ appUi: null }),
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({top: 0, bottom: 0, left: 0, right: 0}),
+}));
+
 const mockGetLlmStreamEnabled = jest.fn(async () => true);
 const mockHasPendingTurns = jest.fn(async () => false);
 const mockGetComposerDraftJson = jest.fn(
