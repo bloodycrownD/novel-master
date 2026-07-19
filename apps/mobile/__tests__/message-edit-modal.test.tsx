@@ -298,17 +298,21 @@ describe('MessageEditModal', () => {
         }),
       ]),
     );
-    const texts = tree.root.findAllByType('Text' as never);
-    const edit = texts.find(t => t.props.children === '编辑');
-    const del = texts.find(t => t.props.children === '删除');
-    expect(edit).toBeTruthy();
-    expect(del).toBeTruthy();
+    const pressables = tree.root.findAllByType('Pressable' as never);
+    const editBtn = pressables.find(p =>
+      p.findAllByType('Text' as never).some(t => t.props.children === '编辑'),
+    );
+    const delBtn = pressables.find(p =>
+      p.findAllByType('Text' as never).some(t => t.props.children === '删除'),
+    );
+    expect(editBtn).toBeTruthy();
+    expect(delBtn).toBeTruthy();
     act(() => {
-      edit!.parent!.props.onPress();
+      editBtn!.props.onPress();
     });
     expect(onEdit).toHaveBeenCalled();
     act(() => {
-      del!.parent!.props.onPress();
+      delBtn!.props.onPress();
     });
     expect(onDelete).toHaveBeenCalled();
   });
