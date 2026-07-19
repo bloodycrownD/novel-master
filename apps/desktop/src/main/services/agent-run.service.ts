@@ -4,7 +4,7 @@
  * @module services/agent-run
  */
 import { AgentRunResolveError, AgentTurnError, resolveApplicationModelIdForRun, resolveCurrentAgentDefinition as resolveCoreAgentDefinition, resolveCurrentAgentId as resolveCoreAgentId, runAgentTurn as coreRunAgentTurn, type AgentDefinition, type AgentRunResult, type AgentTurnScope } from "@novel-master/core/agent";
-import type { MessageAttachment } from "@novel-master/core/chat";
+import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
 
 import {
   desktopLog,
@@ -56,6 +56,7 @@ export async function runAgentTurn(
     readonly stream?: boolean;
     readonly allowResumeWithoutInput?: boolean;
     readonly attachments?: readonly MessageAttachment[];
+    readonly annotateDrafts?: readonly AnnotateDraft[];
     readonly signal?: AbortSignal;
     readonly onUserMessageAppended?: () => void | Promise<void>;
   },

@@ -8,6 +8,7 @@ import {
   type VfsScopeRequest,
   type WorkspaceMutatedPayload,
   type ComposerAttachmentsSuggestPayload,
+  type AgentUserMessageAppendedPayload,
 } from '@shared/ipc-types';
 import { createInvokeClient } from './invoke-registry';
 
@@ -188,6 +189,16 @@ export function onComposerAttachmentsSuggest(
 ): () => void {
   return bridge().on(
     IPC_CHANNELS.COMPOSER_ATTACHMENTS_SUGGEST,
+    callback as (p: unknown) => void,
+  );
+}
+
+/** 订阅用户消息 append 成功（清 annotate；勿与 started/RUN_* 混用）。 */
+export function onUserMessageAppended(
+  callback: (payload: AgentUserMessageAppendedPayload) => void,
+): () => void {
+  return bridge().on(
+    IPC_CHANNELS.AGENT_USER_MESSAGE_APPENDED,
     callback as (p: unknown) => void,
   );
 }

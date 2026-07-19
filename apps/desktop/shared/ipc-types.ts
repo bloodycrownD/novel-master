@@ -14,6 +14,8 @@ export const IPC_CHANNELS = {
   WORKSPACE_MUTATED: 'nm:workspace/mutated',
   /** Main → renderer：规则差集 → Composer workplace 附件建议（不含 workspaceMutated） */
   COMPOSER_ATTACHMENTS_SUGGEST: 'nm:composer/attachmentsSuggest',
+  /** Main → renderer：用户消息已 append（清 annotate；勿与 started/RUN_* 混用） */
+  AGENT_USER_MESSAGE_APPENDED: 'nm:agent/userMessageAppended',
   /** Renderer → main：会话是否有 pending→user_ops（Composer 空发门闩） */
   USER_VFS_HAS_PENDING: 'nm:userVfs/hasPending',
 
@@ -568,7 +570,7 @@ export type AgentRunRequest = {
   readonly allowResumeWithoutInput?: boolean;
   /** Composer 附件（workplace / attach / user_ops）；Core 发送时再扫描合并 `@path`。 */
   readonly attachments?: readonly MessageAttachmentDto[];
-  /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`（handler 落地见后续节点）。 */
+  /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`。 */
   readonly annotateDrafts?: readonly AnnotateDraftDto[];
 };
 
@@ -696,6 +698,11 @@ export type AnnotateDraftDto = {
 export type ComposerAttachmentsSuggestPayload = {
   readonly sessionId: string;
   readonly attachments: readonly MessageAttachmentDto[];
+};
+
+/** Main → renderer：用户消息 append 成功（清 annotate store）。 */
+export type AgentUserMessageAppendedPayload = {
+  readonly sessionId: string;
 };
 
 export type UserVfsHasPendingRequest = {

@@ -19,6 +19,7 @@ import {
 } from "./ipc/forward-agent-activity.js";
 import { setWorkspaceMutatedForwardTarget } from "./ipc/forward-workspace-mutated.js";
 import { setComposerAttachmentsSuggestForwardTarget } from "./ipc/forward-composer-attachments-suggest.js";
+import { setUserMessageAppendedForwardTarget } from "./ipc/forward-user-message-appended.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { getDesktopRuntime } from "./runtime/desktop-runtime-singleton.js";
 import {
@@ -129,6 +130,7 @@ function createMainWindow(): BrowserWindow {
   };
   setWorkspaceMutatedForwardTarget(resolvePushWebContents);
   setComposerAttachmentsSuggestForwardTarget(resolvePushWebContents);
+  setUserMessageAppendedForwardTarget(resolvePushWebContents);
   setAgentActivityForwardTarget(resolvePushWebContents);
 
   if (isDev) {

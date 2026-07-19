@@ -42,6 +42,7 @@ import {
 } from "../../runtime/agent-activity.js";
 import { desktopLogError } from "../../log/desktop-log.js";
 import { formatIpcError } from "../format-ipc-error.js";
+import { notifyUserMessageAppendedToRenderer } from "../forward-user-message-appended.js";
 
 async function resolveModelLabel(
   rt: Awaited<ReturnType<typeof getDesktopRuntime>>,
@@ -286,7 +287,11 @@ export async function handleAgentRun(
         stream: req.stream !== false,
         allowResumeWithoutInput: req.allowResumeWithoutInput,
         attachments: req.attachments,
+        annotateDrafts: req.annotateDrafts,
         signal: controller.signal,
+        onUserMessageAppended: () => {
+          notifyUserMessageAppendedToRenderer({ sessionId });
+        },
       },
     )
       .catch((err) => {

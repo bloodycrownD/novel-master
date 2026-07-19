@@ -17,6 +17,7 @@ import {
   ipcSessionsProjectComposerStatus,
   ipcWorktreeBuildListRows,
   onComposerAttachmentsSuggest,
+  onUserMessageAppended,
   vfsScope,
 } from "@/ipc/client";
 import { useShellNav } from "@/providers/ShellNavProvider";
@@ -29,6 +30,13 @@ import {
   findActiveAtQuery,
   replaceActiveAtWithToken,
 } from "./composer-at-path";
+import {
+  clearChatAnnotateDrafts,
+  hasChatAnnotateDrafts,
+  listChatAnnotateDrafts,
+  subscribeChatAnnotateDraft,
+  unionComposerStatusWithAnnotate,
+} from "./chat-annotate-draft";
 import { resolveComposerSendIntent } from "./composer-send-intent";
 import { FileReferencePicker } from "./FileReferencePicker";
 
@@ -123,10 +131,41 @@ export function ChatComposer({
         return;
       }
       onAttachmentsChange(
-        replaceComposerStatusAttachments(
-          attachmentsRef.current,
-          payload.attachments,
+        unionComposerStatusWithAnnotate(
+          replaceComposerStatusAttachments(
+            attachmentsRef.current,
+            payload.attachments,
+          ),
+          sessionId,
         ),
+      );
+    });
+  }, [sessionId, onAttachmentsChange]);
+
+  // annotate store 变更时重合并状态条（删光 path → chip 消失等）
+  useEffect(() => {
+    return subscribeChatAnnotateDraft((changedSessionId) => {
+      if (changedSessionId !== sessionId) {
+        return;
+      }
+      onAttachmentsChange(
+        unionComposerStatusWithAnnotate(
+          attachmentsRef.current.filter((a) => a.action !== "annotate"),
+          sessionId,
+        ),
+      );
+    });
+  }, [sessionId, onAttachmentsChange]);
+
+  // 仅 append 成功推送后清 annotate（禁止 started:true 清）
+  useEffect(() => {
+    return onUserMessageAppended((payload) => {
+      if (payload.sessionId !== sessionId) {
+        return;
+      }
+      clearChatAnnotateDrafts(sessionId);
+      onAttachmentsChange(
+        attachmentsRef.current.filter((a) => a.action !== "annotate"),
       );
     });
   }, [sessionId, onAttachmentsChange]);
@@ -262,11 +301,13 @@ export function ChatComposer({
       beginUiRun();
 
       // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
+      // annotate：禁止在 started 清 store；仅清正文/ projected，再 ∪ annotate
       const shouldClearComposer =
         content.trim() !== "" ||
         hasPendingUserOps ||
         hasWorkplaceDelta;
       const previousValue = attachmentsRef.current;
+      const annotateDrafts = listChatAnnotateDrafts(sessionId);
 
       const streamResult = await ipcPreferencesGetLlmStream();
       const stream = streamResult.ok ? streamResult.data : true;
@@ -276,6 +317,8 @@ export function ChatComposer({
         userContent: content,
         stream,
         allowResumeWithoutInput,
+        annotateDrafts:
+          annotateDrafts.length > 0 ? annotateDrafts : undefined,
       });
 
       if (!result.ok) {
@@ -286,15 +329,21 @@ export function ChatComposer({
 
       if (shouldClearComposer) {
         onChange("");
-        onAttachmentsChange([]);
+        // 仅清 projected；annotate chip 经 reproject ∪ store 保留至 append 推送
+        onAttachmentsChange(
+          unionComposerStatusWithAnnotate([], sessionId),
+        );
       }
       await onMessagesChanged();
       const statusRes = await ipcSessionsProjectComposerStatus({ sessionId });
       if (statusRes.ok) {
         onAttachmentsChange(
-          replaceComposerStatusAttachments(
-            shouldClearComposer ? [] : previousValue,
-            statusRes.data,
+          unionComposerStatusWithAnnotate(
+            replaceComposerStatusAttachments(
+              shouldClearComposer ? [] : previousValue,
+              statusRes.data,
+            ),
+            sessionId,
           ),
         );
       }
@@ -326,6 +375,7 @@ export function ChatComposer({
       attachments,
       hasPendingUserOps,
       canResumeWithoutInput,
+      hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
       hasModel,
       running,
     });
@@ -378,6 +428,7 @@ export function ChatComposer({
     attachments,
     hasPendingUserOps,
     canResumeWithoutInput,
+    hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
     hasModel,
     running,
   }).sendDisabled;
