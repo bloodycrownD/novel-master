@@ -24,10 +24,10 @@ describe('prepareRichHtml', () => {
     expect(html).toContain('x');
   });
 
-  it('strips script in markdown html block', () => {
+  it('neutralizes script in markdown html block (no executable open tag)', () => {
     const {html} = prepareRichHtml('<script>alert(1)</script><p>safe</p>');
-    expect(html).not.toMatch(/script/i);
     expect(html).toContain('safe');
+    expect(html).not.toMatch(/<script\b/i);
   });
 
   it('extracts style block into classesStyles', () => {

@@ -21,4 +21,23 @@ describe('prepareStreamTailHtml', () => {
     const over = 'a'.repeat(RICH_CONTENT_MAX_CHARS + 1);
     expect(prepareStreamTailHtml(over, true)).toBeUndefined();
   });
+
+  it('T-S5: 定稿 HTML 对空伪标签不挖空', () => {
+    const html = prepareStreamTailHtml(
+      '表现为 <xxx></xxx> 之间没有文本',
+      true,
+    );
+    expect(html).toBeDefined();
+    expect(html).toContain('&lt;xxx&gt;');
+    expect(html).toContain('&lt;/xxx&gt;');
+    expect(html).not.toMatch(/表现为\s+之间没有文本/);
+  });
+
+  it('T-S5: 定稿 HTML 保留 file 伪标签结构', () => {
+    const html = prepareStreamTailHtml('<file>notes.md</file>', true);
+    expect(html).toBeDefined();
+    expect(html).toContain('&lt;file&gt;');
+    expect(html).toContain('notes.md');
+    expect(html).toContain('&lt;/file&gt;');
+  });
 });

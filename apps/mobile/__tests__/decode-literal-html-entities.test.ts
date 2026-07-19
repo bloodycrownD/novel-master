@@ -1,4 +1,8 @@
-import {decodeLiteralHtmlEntities} from '../src/components/rich-content/decode-literal-html-entities';
+import {
+  decodeAfterSanitize,
+  decodeForMarkdownInput,
+  decodeLiteralHtmlEntities,
+} from '../src/components/rich-content/decode-literal-html-entities';
 import {prepareTranscriptRichHtml} from '../src/components/rich-content/prepare-transcript-rich-html';
 
 describe('decodeLiteralHtmlEntities', () => {
@@ -11,6 +15,19 @@ describe('decodeLiteralHtmlEntities', () => {
 
   it('leaves normal Chinese quotes unchanged', () => {
     expect(decodeLiteralHtmlEntities('「有意思」')).toBe('「有意思」');
+  });
+
+  it('decodeForMarkdownInput 还原尖括号实体', () => {
+    expect(decodeForMarkdownInput('&lt;xxx&gt;')).toBe('<xxx>');
+  });
+
+  it('decodeAfterSanitize 保留尖括号实体并仍解 quot', () => {
+    expect(decodeAfterSanitize('&lt;xxx&gt;&amp;quot;x&amp;quot;')).toBe(
+      '&lt;xxx&gt;"x"',
+    );
+    expect(decodeAfterSanitize('hello &lt;file&gt;a&lt;/file&gt;')).toBe(
+      'hello &lt;file&gt;a&lt;/file&gt;',
+    );
   });
 });
 

@@ -28,4 +28,18 @@ describe('enrichTranscriptRows', () => {
     const userRow: TranscriptRow = {...baseRow, role: 'user'};
     expect(enrichTranscriptRows([userRow], true)).toEqual([userRow]);
   });
+
+  it('T-S4: richText=false 时 plain text 仍含尖括号', () => {
+    const withTags: TranscriptRow = {
+      ...baseRow,
+      text: '表现为 <xxx></xxx> 之间没有文本',
+    };
+    const [out] = enrichTranscriptRows([withTags], false);
+    expect(out.kind).toBe('message');
+    if (out.kind === 'message') {
+      expect(out.text).toContain('<xxx>');
+      expect(out.text).toContain('</xxx>');
+      expect(out.textHtml).toBeUndefined();
+    }
+  });
 });
