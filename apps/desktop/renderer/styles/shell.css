@@ -4590,6 +4590,93 @@ html[data-theme="dark"] .chat-batch-bar {
   font-size: 13px;
 }
 
+/* PreviewPane 划词批注（仅 chat + read） */
+.preview-annotate-mark {
+  background: transparent;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--accent-blue);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.preview-annotate-mark:hover {
+  background: var(--accent-blue-soft);
+}
+
+.preview-annotate-floating {
+  position: fixed;
+  z-index: 40;
+  transform: translate(-50%, -100%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0, 0, 0, 0.12));
+}
+
+.preview-annotate-floating__btn {
+  border: none;
+  background: transparent;
+  color: var(--accent-blue);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.preview-annotate-floating__btn:hover {
+  background: var(--accent-blue-soft);
+}
+
+.preview-annotate-detail__quote {
+  max-height: 4.5em;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 8px 10px;
+  margin-bottom: 12px;
+  background: var(--background);
+  border-radius: 8px;
+  border: 1px solid var(--border-light);
+}
+
+.preview-annotate-detail__spacer {
+  flex: 1;
+}
+
+.preview-annotate-pick-list {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.preview-annotate-pick-list__item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-light);
+  background: var(--background);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.preview-annotate-pick-list__item:hover {
+  border-color: var(--accent-blue-border);
+  background: var(--accent-blue-soft);
+}
+
 .chat-composer__error {
   color: var(--danger);
   font-size: 12px;

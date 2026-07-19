@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "../components/ui/Button";
@@ -7,10 +15,30 @@ import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
 import { formatVfsErrorForUser, type VfsScope } from "@novel-master/core/vfs";
+import type { AnnotateDraft } from "@novel-master/core/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
+import {
+  listChatAnnotateDrafts,
+  subscribeChatAnnotateDraft,
+} from "../features/chat/chat-annotate-draft";
 import { PreviewEditorTabs } from "./PreviewEditorTabs";
 import { shouldRenderMarkdownPreview } from "./preview-utils";
+import {
+  applyAnnotateHighlights,
+  getSelectionFloatingAnchor,
+  isPreviewAnnotateEnabled,
+  parseAnnotateIdsAttr,
+  PREVIEW_ANNOTATE_IDS_ATTR,
+  PREVIEW_ANNOTATE_MARK_CLASS,
+  readSelectionTextInContainer,
+} from "./preview-annotate";
+import {
+  PreviewAnnotateAddModal,
+  PreviewAnnotateDetailModal,
+  PreviewAnnotateFloatingBar,
+  PreviewAnnotatePickModal,
+} from "./PreviewAnnotateUi";
 
 function toCoreVfsScope(
   workspaceScope: WorkspacePanelScope,
@@ -42,6 +70,40 @@ export function PreviewPane() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fileMissing, setFileMissing] = useState(false);
+  const [annotateDrafts, setAnnotateDrafts] = useState<readonly AnnotateDraft[]>(
+    () => listChatAnnotateDrafts(sessionId),
+  );
+  const [floating, setFloating] = useState<{
+    top: number;
+    left: number;
+    text: string;
+  } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [pendingSelection, setPendingSelection] = useState("");
+  const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
+  const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
+  const previewContentRef = useRef<HTMLDivElement | null>(null);
+
+  const annotateEnabled = isPreviewAnnotateEnabled(
+    mode,
+    previewFile?.workspaceScope,
+  );
+
+  const pathDrafts = useMemo(() => {
+    if (!annotateEnabled || previewFile == null) {
+      return [] as AnnotateDraft[];
+    }
+    return annotateDrafts.filter((d) => d.path === previewFile.path);
+  }, [annotateEnabled, annotateDrafts, previewFile]);
+
+  useEffect(() => {
+    setAnnotateDrafts(listChatAnnotateDrafts(sessionId));
+    return subscribeChatAnnotateDraft((changed) => {
+      if (changed === sessionId) {
+        setAnnotateDrafts(listChatAnnotateDrafts(sessionId));
+      }
+    });
+  }, [sessionId]);
 
   const loadFile = useCallback(async () => {
     if (!previewFile) {
@@ -90,6 +152,100 @@ export function PreviewPane() {
       void loadFile();
     }
   }, [treeRefreshToken, previewFile, loadFile]);
+
+  useEffect(() => {
+    if (!annotateEnabled) {
+      setFloating(null);
+      setAddOpen(false);
+      setDetailDraft(null);
+      setPickDrafts(null);
+    }
+  }, [annotateEnabled]);
+
+  const refreshSelectionFloating = useCallback(() => {
+    if (!annotateEnabled) {
+      setFloating(null);
+      return;
+    }
+    const root = previewContentRef.current;
+    const text = readSelectionTextInContainer(root);
+    if (text == null) {
+      setFloating(null);
+      return;
+    }
+    const anchor = getSelectionFloatingAnchor();
+    if (anchor == null) {
+      setFloating(null);
+      return;
+    }
+    setFloating({ top: anchor.top, left: anchor.left, text });
+  }, [annotateEnabled]);
+
+  useEffect(() => {
+    if (!annotateEnabled) {
+      return;
+    }
+    const onMouseUp = () => {
+      // 等浏览器提交选区
+      window.setTimeout(refreshSelectionFloating, 0);
+    };
+    const onKeyUp = () => {
+      refreshSelectionFloating();
+    };
+    document.addEventListener("mouseup", onMouseUp);
+    document.addEventListener("keyup", onKeyUp);
+    return () => {
+      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+  }, [annotateEnabled, refreshSelectionFloating]);
+
+  useLayoutEffect(() => {
+    const root = previewContentRef.current;
+    if (root == null || !annotateEnabled) {
+      return;
+    }
+    applyAnnotateHighlights(root, pathDrafts);
+  }, [annotateEnabled, pathDrafts, content, loading]);
+
+  const openDraftsByIds = useCallback(
+    (ids: readonly string[]) => {
+      const matched = pathDrafts.filter((d) => ids.includes(d.id));
+      if (matched.length === 0) {
+        return;
+      }
+      if (matched.length === 1) {
+        setDetailDraft(matched[0]!);
+        return;
+      }
+      setPickDrafts(matched);
+    },
+    [pathDrafts],
+  );
+
+  const onPreviewClick = useCallback(
+    (e: ReactMouseEvent) => {
+      if (!annotateEnabled) {
+        return;
+      }
+      const target = e.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      const mark = target.closest(`mark.${PREVIEW_ANNOTATE_MARK_CLASS}`);
+      if (mark == null) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      const ids = parseAnnotateIdsAttr(
+        mark.getAttribute(PREVIEW_ANNOTATE_IDS_ATTR),
+      );
+      openDraftsByIds(ids);
+      setFloating(null);
+    },
+    [annotateEnabled, openDraftsByIds],
+  );
 
   const isDirty = content !== savedContent;
   const isMarkdown =
@@ -183,7 +339,12 @@ export function PreviewPane() {
             <p className="preview-empty">加载中…</p>
           </div>
         ) : mode === "read" ? (
-          <div className="preview-body" id="preview-body">
+          <div
+            className="preview-body"
+            id="preview-body"
+            ref={previewContentRef}
+            onClick={onPreviewClick}
+          >
             {isMarkdown ? (
               <div className="preview-markdown">
                 <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
@@ -218,6 +379,46 @@ export function PreviewPane() {
           </div>
         )}
       </section>
+      {annotateEnabled && floating != null ? (
+        <PreviewAnnotateFloatingBar
+          top={floating.top}
+          left={floating.left}
+          onAdd={() => {
+            setPendingSelection(floating.text);
+            setAddOpen(true);
+            setFloating(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        />
+      ) : null}
+      {annotateEnabled && previewFile != null && sessionId ? (
+        <PreviewAnnotateAddModal
+          open={addOpen}
+          selectedText={pendingSelection}
+          sessionId={sessionId}
+          filePath={previewFile.path}
+          onClose={() => setAddOpen(false)}
+        />
+      ) : null}
+      {annotateEnabled && sessionId ? (
+        <PreviewAnnotateDetailModal
+          open={detailDraft != null}
+          draft={detailDraft}
+          sessionId={sessionId}
+          onClose={() => setDetailDraft(null)}
+        />
+      ) : null}
+      {annotateEnabled ? (
+        <PreviewAnnotatePickModal
+          open={pickDrafts != null}
+          drafts={pickDrafts ?? []}
+          onPick={(d) => {
+            setPickDrafts(null);
+            setDetailDraft(d);
+          }}
+          onClose={() => setPickDrafts(null)}
+        />
+      ) : null}
     </>
   );
 }
