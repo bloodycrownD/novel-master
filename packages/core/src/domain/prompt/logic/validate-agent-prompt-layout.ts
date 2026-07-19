@@ -8,13 +8,17 @@ import { PromptError } from "@/errors/prompt-errors.js";
 import type {
   AgentPromptLayout,
   DynamicPromptBlock,
-  PersistPromptBlock,
+  PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
 import type { PromptBlockLifecycle } from "../model/prompt-block.js";
 import {
   dynamicBlockToWire,
   persistBlockToWire,
 } from "./agent-prompt-layout-wire.js";
+import {
+  isLegacyWorktreeWireBlock,
+  stripLegacyWorktreeBlocksFromPersistMap,
+} from "./normalize-agent-prompt-layout.js";
 import {
   rejectPersistMacros,
   validateDynamicMacros,
@@ -39,75 +43,62 @@ function rejectWhen(label: string, record: Record<string, unknown>): void {
   }
 }
 
-function parsePersistBlock(name: string, item: unknown): PersistPromptBlock {
+function parsePersistTextBlock(
+  name: string,
+  item: unknown,
+): PersistTextPromptBlock {
   if (item == null || typeof item !== "object" || Array.isArray(item)) {
     throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须为对象`);
   }
   const record = item as Record<string, unknown>;
   const type = record.type;
-  if (!isNonEmptyString(type)) {
-    throw new PromptError("INVALID_BLOCK", `${blockLabel(name)}须指定 type`);
+  if (type !== "text") {
+    if (type === "worktree") {
+      throw new PromptError(
+        "INVALID_BLOCK",
+        `${blockLabel(name)}：worktree 块已废弃，请使用 prompts.workplace 开关`
+      );
+    }
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${blockLabel(name)}：持久区须为 text 类型`
+    );
   }
   const label = blockLabel(name);
   rejectWhen(label, record);
 
-  if (type === "worktree") {
-    if ("content" in record || "lifecycle" in record) {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：worktree 块不得包含 content 或 lifecycle`
-      );
-    }
-    let role: "user" | "assistant" = "user";
-    if ("role" in record && record.role != null) {
-      const wireRole = record.role;
-      if (wireRole !== "user" && wireRole !== "assistant") {
-        throw new PromptError(
-          "INVALID_BLOCK",
-          `${label}：worktree 块的 role 须为 user 或 assistant`
-        );
-      }
-      role = wireRole;
-    }
-    return { name, type: "worktree", role };
+  const role = record.role;
+  if (role === "system") {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}：持久区文本块不得使用 system 角色，请改用 prompts.system`
+    );
   }
-
-  if (type === "text") {
-    const role = record.role;
-    if (role === "system") {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：持久区文本块不得使用 system 角色，请改用 prompts.system`
-      );
-    }
-    if (role !== "user" && role !== "assistant") {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：持久区文本块的 role 须为 user 或 assistant`
-      );
-    }
-    if (typeof record.content !== "string") {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：文本块须为字符串 content`
-      );
-    }
-    if ("lifecycle" in record) {
-      throw new PromptError(
-        "INVALID_BLOCK",
-        `${label}：持久区文本块不得包含 lifecycle`
-      );
-    }
-    rejectPersistMacros(record.content, label);
-    return {
-      name,
-      type: "text",
-      role,
-      content: record.content,
-    };
+  if (role !== "user" && role !== "assistant") {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}：持久区文本块的 role 须为 user 或 assistant`
+    );
   }
-
-  throw new PromptError("INVALID_BLOCK", `${label}：未知类型「${type}」`);
+  if (typeof record.content !== "string") {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}：文本块须为字符串 content`
+    );
+  }
+  if ("lifecycle" in record) {
+    throw new PromptError(
+      "INVALID_BLOCK",
+      `${label}：持久区文本块不得包含 lifecycle`
+    );
+  }
+  rejectPersistMacros(record.content, label);
+  return {
+    name,
+    type: "text",
+    role,
+    content: record.content,
+  };
 }
 
 function parseDynamicBlock(name: string, item: unknown): DynamicPromptBlock {
@@ -196,6 +187,7 @@ export function validateAgentPromptLayoutFromMaps(
   options?: {
     readonly persistEnabled?: boolean;
     readonly dynamicEnabled?: boolean;
+    readonly workplace?: boolean;
   }
 ): AgentPromptLayout {
   if (system != null && system.trim() === "") {
@@ -205,29 +197,25 @@ export function validateAgentPromptLayoutFromMaps(
     );
   }
 
-  const persistMap = validateBlockMap(persistRaw, "persist") as Record<
+  const persistMapRaw = validateBlockMap(persistRaw, "persist") as Record<
     string,
     unknown
   >;
+  const persistMap = stripLegacyWorktreeBlocksFromPersistMap(persistMapRaw);
   const dynamicMap = validateBlockMap(dynamicRaw, "dynamic") as Record<
     string,
     unknown
   >;
 
-  const persist: PersistPromptBlock[] = [];
+  const persist: PersistTextPromptBlock[] = [];
   for (const [name, item] of Object.entries(persistMap)) {
     if (!isNonEmptyString(name)) {
       throw new PromptError("INVALID_BLOCK", "块名称须为非空字符串");
     }
-    persist.push(parsePersistBlock(name, item));
-  }
-
-  const worktreeBlocks = persist.filter((b) => b.type === "worktree");
-  if (worktreeBlocks.length > 1) {
-    throw new PromptError(
-      "INVALID_YAML",
-      "prompts.persist 最多只能有一个 worktree 块"
-    );
+    if (isLegacyWorktreeWireBlock(item)) {
+      continue;
+    }
+    persist.push(parsePersistTextBlock(name, item));
   }
 
   const dynamic: DynamicPromptBlock[] = [];
@@ -240,16 +228,13 @@ export function validateAgentPromptLayoutFromMaps(
 
   const persistEnabled = options?.persistEnabled === true;
   const dynamicEnabled = options?.dynamicEnabled === true;
+  const workplace = options?.workplace === true;
 
   if (persistEnabled) {
-    const persistTextBlocks = persist.filter(
-      (block): block is Extract<PersistPromptBlock, { type: "text" }> =>
-        block.type === "text"
-    );
-    if (persistTextBlocks.length < 1) {
+    if (persist.length < 1) {
       throw new PromptError("INVALID_YAML", "启用持久区时至少需要一个文本块");
     }
-    const last = persistTextBlocks[persistTextBlocks.length - 1]!;
+    const last = persist[persist.length - 1]!;
     if (last.role !== "assistant") {
       throw new PromptError(
         "INVALID_YAML",
@@ -279,6 +264,7 @@ export function validateAgentPromptLayoutFromMaps(
     ...(system != null && system.trim() !== "" ? { system } : {}),
     ...(persistEnabled ? { persistEnabled: true } : {}),
     ...(dynamicEnabled ? { dynamicEnabled: true } : {}),
+    ...(workplace ? { workplace: true } : {}),
     persist,
     dynamic,
   };
@@ -325,6 +311,7 @@ export function validateAgentPromptLayout(
     {
       persistEnabled: layout.persistEnabled,
       dynamicEnabled: layout.dynamicEnabled,
+      workplace: layout.workplace,
     }
   );
 }

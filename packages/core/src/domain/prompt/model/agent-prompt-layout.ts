@@ -14,7 +14,10 @@ export type PersistTextPromptBlock = {
   readonly content: string;
 };
 
-/** persist 区 worktree 块（至多一个）。 */
+/**
+ * 编辑器/UI 用旧 worktree 块形状（域 layout 已废弃；读入 strip，写出 omit）。
+ * @deprecated 使用 {@link AgentPromptLayout.workplace} boolean。
+ */
 export type PersistWorktreePromptBlock = {
   readonly name: string;
   readonly type: "worktree";
@@ -22,10 +25,13 @@ export type PersistWorktreePromptBlock = {
   readonly role?: "user" | "assistant";
 };
 
-/** persist 区块：text 或 worktree。 */
-export type PersistPromptBlock =
+/** 编辑器 persist 块（含过渡态 worktree）；域 {@link AgentPromptLayout.persist} 仅 text。 */
+export type EditorPersistPromptBlock =
   | PersistTextPromptBlock
   | PersistWorktreePromptBlock;
+
+/** @deprecated 域 persist 仅 text；请用 {@link PersistTextPromptBlock}。 */
+export type PersistPromptBlock = EditorPersistPromptBlock;
 
 /** dynamic 区文本块（允许宏与 lifecycle）。 */
 export type DynamicPromptBlock = {
@@ -47,6 +53,9 @@ export interface AgentPromptLayout {
   readonly persistEnabled?: boolean;
   /** 动态区开关；缺省视为 `false`（组装跳过 dynamic）。 */
   readonly dynamicEnabled?: boolean;
-  readonly persist: readonly PersistPromptBlock[];
+  /** 常驻工作区开关；缺省视为 `false`（不注入双消息、不 assemble kkv）。 */
+  readonly workplace?: boolean;
+  /** 持久区文本块（不含 worktree 块）。 */
+  readonly persist: readonly PersistTextPromptBlock[];
   readonly dynamic: readonly DynamicPromptBlock[];
 }

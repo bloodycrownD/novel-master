@@ -6,7 +6,7 @@
 
 import type {
   DynamicPromptBlock,
-  PersistPromptBlock,
+  PersistTextPromptBlock,
 } from "../model/agent-prompt-layout.js";
 
 /** persist 文本块 wire 形状。 */
@@ -16,16 +16,8 @@ export type PersistTextBlockWire = {
   readonly content: string;
 };
 
-/** persist worktree 块 wire 形状。 */
-export type PersistWorktreeBlockWire = {
-  readonly type: "worktree";
-  readonly role: "user" | "assistant";
-};
-
-/** persist 块 wire 形状。 */
-export type PersistPromptBlockWire =
-  | PersistTextBlockWire
-  | PersistWorktreeBlockWire;
+/** persist 块 wire 形状（仅 text）。 */
+export type PersistPromptBlockWire = PersistTextBlockWire;
 
 /** dynamic 块 wire 形状。 */
 export type DynamicPromptBlockWire = {
@@ -36,14 +28,11 @@ export type DynamicPromptBlockWire = {
 };
 
 /**
- * 将 persist 区块序列化为 wire map 条目。
+ * 将 persist 文本块序列化为 wire map 条目。
  */
 export function persistBlockToWire(
-  block: PersistPromptBlock,
+  block: PersistTextPromptBlock,
 ): PersistPromptBlockWire {
-  if (block.type === "worktree") {
-    return { type: "worktree", role: block.role ?? "user" };
-  }
   return { type: "text", role: block.role, content: block.content };
 }
 

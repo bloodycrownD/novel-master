@@ -11,6 +11,7 @@ import {
   persistBlockToWire,
 } from "@/domain/prompt/logic/agent-prompt-layout-wire.js";
 import { validateAgentPromptLayoutFromMaps } from "@/domain/prompt/logic/validate-agent-prompt-layout.js";
+import { stripLegacyWorktreeBlocksFromPersistMap } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import type { AgentDefinition, AgentToolPolicy } from "./agent-definition.js";
 
 const persistTextBlockValueSchema = z
@@ -21,17 +22,7 @@ const persistTextBlockValueSchema = z
   })
   .strict();
 
-const persistWorktreeBlockValueSchema = z
-  .object({
-    type: z.literal("worktree"),
-    role: z.enum(["user", "assistant"]).optional(),
-  })
-  .strict();
-
-const persistBlockValueSchema = z.union([
-  persistTextBlockValueSchema,
-  persistWorktreeBlockValueSchema,
-]);
+const persistBlockValueSchema = persistTextBlockValueSchema;
 
 const dynamicTextBlockValueSchema = z
   .object({
@@ -68,8 +59,30 @@ function rejectLegacyPromptKeys(raw: unknown): unknown {
   return raw;
 }
 
+function stripLegacyWorktreeFromPromptsWire(raw: unknown): unknown {
+  const rejected = rejectLegacyPromptKeys(raw);
+  if (
+    rejected == null ||
+    typeof rejected !== "object" ||
+    Array.isArray(rejected)
+  ) {
+    return rejected;
+  }
+  const record = rejected as Record<string, unknown>;
+  const persist = record.persist;
+  if (persist == null || typeof persist !== "object" || Array.isArray(persist)) {
+    return rejected;
+  }
+  return {
+    ...record,
+    persist: stripLegacyWorktreeBlocksFromPersistMap(
+      persist as Record<string, unknown>,
+    ),
+  };
+}
+
 const promptsDocumentSchema = z.preprocess(
-  rejectLegacyPromptKeys,
+  stripLegacyWorktreeFromPromptsWire,
   z
     .object({
       system: z.string().optional(),
@@ -77,6 +90,7 @@ const promptsDocumentSchema = z.preprocess(
       dynamic: z.record(z.string().min(1), dynamicTextBlockValueSchema).default({}),
       persistEnabled: z.boolean().default(false),
       dynamicEnabled: z.boolean().default(false),
+      workplace: z.boolean().optional(),
     })
     .strict(),
 );
@@ -149,6 +163,7 @@ function documentToDefinition(doc: AgentDefinitionDocument): AgentDefinition {
     {
       persistEnabled: doc.prompts.persistEnabled,
       dynamicEnabled: doc.prompts.dynamicEnabled,
+      workplace: doc.prompts.workplace,
     },
   );
   const tools = wireToolsToDomain(doc.tools);
@@ -177,6 +192,7 @@ function definitionToDocument(def: AgentDefinition): AgentDefinitionDocument {
       ...(def.prompts.system != null ? { system: def.prompts.system } : {}),
       persistEnabled: def.prompts.persistEnabled ?? false,
       dynamicEnabled: def.prompts.dynamicEnabled ?? false,
+      ...(def.prompts.workplace === true ? { workplace: true } : {}),
       persist,
       dynamic,
     },
