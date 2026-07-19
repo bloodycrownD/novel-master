@@ -41,6 +41,9 @@ import { showToast } from '@/components/ui/show-toast';
 import { formatUserError } from '@/utils/format-user-error';
 import { ChatComposer } from './ChatComposer';
 import {
+  unionComposerStatusWithAnnotate,
+} from './chat-annotate-draft';
+import {
   deriveComposerSendState,
   findLastVisibleMessageDto,
   chatMessageFromDto,
@@ -219,8 +222,12 @@ export function ConversationPanel({
       const status = statusRes.ok ? statusRes.data : [];
       setComposerText(draft.text);
       // 历史 draft attach chip 丢弃；文件引用只认正文 `@路径`
+      // replace 后再 ∪ annotate（切会话回来 store 未清则 chip 仍在）
       setComposerAttachments(
-        replaceComposerStatusAttachments([], status),
+        unionComposerStatusWithAnnotate(
+          replaceComposerStatusAttachments([], status),
+          sessionId,
+        ),
       );
       composerDraftHydratedRef.current = true;
     })();

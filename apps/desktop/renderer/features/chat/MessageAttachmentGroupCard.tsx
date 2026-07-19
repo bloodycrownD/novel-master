@@ -1,6 +1,7 @@
 /**
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
+import { formatStatusChipLabelFromAttachment } from '@novel-master/core/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type MessageAttachmentGroupCardProps = {
@@ -19,25 +20,16 @@ function sourceLabel(a: MessageAttachmentDto): string {
 }
 
 /**
- * 消息气泡附件文案（与 Composer chip 分工不同）：
- * - workplace → `规则 · ${path}`
- * - user_ops → 直接 `${name}`（多为 `action:path`）
- * - attach → `@${path}`（禁止落入「规则 ·」）
+ * 消息气泡附件文案（与 Composer 状态 chip 同口径）：
+ * - workplace / user_ops / annotate → Core `formatStatusChipLabelFromAttachment`
+ * - attach → `@${path}`（不进状态 chip，气泡仍可展示）
  */
 export function formatMessageAttachmentLabel(a: MessageAttachmentDto): string {
-  if (a.source === 'user_ops') {
-    return a.name;
-  }
-  if (a.source === 'workplace') {
+  if (a.source === 'attach') {
     const path = a.path ?? a.name;
-    if (a.type === 'dir') {
-      const dirPath = path.endsWith('/') ? path : `${path}/`;
-      return `规则 · ${dirPath}`;
-    }
-    return `规则 · ${path}`;
+    return path.startsWith('@') ? path : `@${path}`;
   }
-  const path = a.path ?? a.name;
-  return path.startsWith('@') ? path : `@${path}`;
+  return formatStatusChipLabelFromAttachment(a);
 }
 
 export function MessageAttachmentGroupCard({

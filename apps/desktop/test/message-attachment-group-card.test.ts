@@ -1,5 +1,5 @@
 /**
- * MessageAttachmentGroupCard：气泡 attach 文案不得误标「规则 ·」（T-HC5）。
+ * MessageAttachmentGroupCard：气泡与 Composer 同口径；attach 为 @path（T-HC5 / T-CHIP2）。
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -44,7 +44,7 @@ test("T-HC5: attach 目录文案为 @path，不含「规则 ·」", () => {
   assert.ok(!label.includes("规则 ·"));
 });
 
-test("T-HC5: workplace 仍为「规则 ·」；user_ops 为 name（无「改稿 ·」）", () => {
+test("T-HC5/T-CHIP2: workplace 为「规则:/path」；user_ops 为中文二字:path", () => {
   assert.equal(
     formatMessageAttachmentLabel(
       attach({
@@ -54,7 +54,7 @@ test("T-HC5: workplace 仍为「规则 ·」；user_ops 为 name（无「改稿 
         name: "w.md",
       }),
     ),
-    "规则 · /w.md",
+    "规则:/w.md",
   );
   assert.equal(
     formatMessageAttachmentLabel(
@@ -62,9 +62,34 @@ test("T-HC5: workplace 仍为「规则 ·」；user_ops 为 name（无「改稿 
         source: "user_ops",
         type: "text",
         path: "/ops.md",
-        name: "write:/ops.md",
+        name: "/ops.md",
+        action: "write",
       }),
     ),
-    "write:/ops.md",
+    "创建:/ops.md",
+  );
+  assert.ok(
+    !formatMessageAttachmentLabel(
+      attach({
+        source: "workplace",
+        type: "text",
+        path: "/w.md",
+      }),
+    ).includes("规则 ·"),
+  );
+});
+
+test("T-CHIP2: annotate 气泡为「批注:/path」", () => {
+  assert.equal(
+    formatMessageAttachmentLabel(
+      attach({
+        source: "user_ops",
+        type: "text",
+        path: "/c.md",
+        name: "/c.md",
+        action: "annotate",
+      }),
+    ),
+    "批注:/c.md",
   );
 });

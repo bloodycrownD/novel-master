@@ -71,3 +71,27 @@ test("空输入 + 不可 resume → 禁用发送", () => {
   assert.equal(intent.sendDisabled, true);
   assert.equal(intent.hasSendable, false);
 });
+
+test("T-AN4: 仅 hasAnnotateDrafts → 可发；intent 须透传", () => {
+  const without = resolveComposerSendIntent({
+    text: "",
+    attachments: [],
+    hasPendingUserOps: false,
+    canResumeWithoutInput: false,
+    hasModel: true,
+  });
+  assert.equal(without.hasSendable, false);
+  assert.equal(without.sendDisabled, true);
+
+  const withAnnotate = resolveComposerSendIntent({
+    text: "",
+    attachments: [],
+    hasPendingUserOps: false,
+    canResumeWithoutInput: false,
+    hasAnnotateDrafts: true,
+    hasModel: true,
+  });
+  assert.equal(withAnnotate.hasSendable, true);
+  assert.equal(withAnnotate.sendDisabled, false);
+  assert.equal(withAnnotate.allowResumeWithoutInput, false);
+});

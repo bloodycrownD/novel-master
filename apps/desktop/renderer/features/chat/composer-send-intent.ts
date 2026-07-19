@@ -11,6 +11,8 @@ export type ComposerSendIntentInput = {
   attachments: readonly MessageAttachmentDto[];
   hasPendingUserOps: boolean;
   canResumeWithoutInput: boolean;
+  /** 本会话有未发送批注草稿（须透传 hasComposerSendableInput）。 */
+  hasAnnotateDrafts?: boolean;
   /** 默认 true（测门闩时）；组件内以模型探测为准。 */
   hasModel?: boolean;
   running?: boolean;
@@ -38,6 +40,7 @@ export function resolveComposerSendIntent(
     attachmentCount: scannedCount,
     hasPendingUserOps: input.hasPendingUserOps,
     hasWorkplaceDelta,
+    hasAnnotateDrafts: input.hasAnnotateDrafts === true,
   });
   const allowResumeWithoutInput =
     !hasSendable && input.canResumeWithoutInput;
