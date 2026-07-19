@@ -49,7 +49,7 @@ export interface UserVfsTurnService {
   /**
    * pending 非空时按 checkpoint 净 diff 合成 `user_ops` 附件并清空 pending；**不** insert UA 两段。
    *
-   * @remarks flush 禁止再次调用 ToolRunner；附件按净 action 各一条（`name` = `action:path`），
+   * @remarks flush 禁止再次调用 ToolRunner；附件按净 action 各一条（`name` = path），
    * 不以 pending 历史 tool 名拼接。checkpoint 改挂带 user_ops 的 user append（见 runAgentTurn）。
    */
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;

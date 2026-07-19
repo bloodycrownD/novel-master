@@ -29,7 +29,7 @@ export type ProjectComposerStatusAttachmentsDeps = {
 };
 
 /**
- * preview 摘要 → 每条状态条 `user_ops`（`content: null`，`name` = `action:path`）。
+ * preview 摘要 → 每条状态条 `user_ops`（`content: null`，`name` = path）。
  *
  * @deprecated 优先 `userOpsAttachmentsFromSummaries`；保留 path-only 兼容。
  */

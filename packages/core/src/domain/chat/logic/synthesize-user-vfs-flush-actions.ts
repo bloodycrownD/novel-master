@@ -1,5 +1,5 @@
 /**
- * 将 flush 终态 diff 合成为多行 `<action name="…">` XML（及 UI 用 action:path 摘要）。
+ * 将 flush 终态 diff 合成为多行 `<action name="…">` XML（及 UI 用摘要）。
  *
  * @module domain/chat/logic/synthesize-user-vfs-flush-actions
  */
@@ -11,11 +11,12 @@ import {
   mapUserSaveToToolUses,
 } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import type { WorkspaceFlushDiff } from "./diff-workspace-for-user-vfs-flush.js";
+import { formatStatusChipLabel } from "./status-chip-label.js";
 
-/** flush / Composer 共用的单条 user_ops 摘要（展示 `action:path`）。 */
+/** flush / Composer 共用的单条 user_ops 摘要。 */
 export type UserOpsActionSummary = {
   readonly action: "write" | "edit" | "mkdir" | "delete" | "rename";
-  /** 展示用 path；rename 为 `from→to`。 */
+  /** 逻辑 path；rename 为 `from→to`（chip 取右侧 to）。 */
   readonly path: string;
 };
 
@@ -24,11 +25,17 @@ export type SynthesizedUserVfsAction = UserOpsActionSummary & {
   readonly xml: string;
 };
 
-/** `name` / chip 文案：`write:/xxx.md`。 */
+/**
+ * @deprecated 优先用 `formatStatusChipLabel`；保留给旧调用方。
+ * 返回中文二字 chip 文案（rename 取 `→` 右侧）。
+ */
 export function formatUserOpsActionLabel(
   summary: UserOpsActionSummary,
 ): string {
-  return `${summary.action}:${summary.path}`;
+  const chipPath = summary.action === "rename"
+    ? summary.path.split("→")[1] ?? summary.path
+    : summary.path;
+  return formatStatusChipLabel(summary.action, chipPath);
 }
 
 /**

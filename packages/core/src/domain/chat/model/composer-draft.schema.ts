@@ -9,12 +9,13 @@
 
 import { z } from "zod";
 import {
+  messageAttachmentObjectSchema,
   messageAttachmentSchema,
   type MessageAttachment,
 } from "./message-attachment.schema.js";
 
 /** Composer 草稿中允许持久的附件（仅 attach）。 */
-export const composerDraftAttachmentSchema = messageAttachmentSchema
+export const composerDraftAttachmentSchema = messageAttachmentObjectSchema
   .omit({ source: true })
   .extend({ source: z.literal("attach") });
 

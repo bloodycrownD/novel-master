@@ -77,6 +77,7 @@ export function workplaceAttachmentsFromNeededPaths(
     type: "text" as const,
     content: null,
     path,
+    action: "workplaceChange" as const,
   }));
 }
 

@@ -385,8 +385,10 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.attachments.length, 3);
     assert.deepEqual(
       flush.attachments.map((a) => a.name).sort(),
-      ["write:/1.md", "write:/2.md", "write:/3.md"],
+      ["/1.md", "/2.md", "/3.md"],
     );
+    assert.ok(flush.attachments.every((a) => a.action === "write"));
+    assert.ok(flush.attachments.every((a) => a.name === a.path));
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
   });
 
@@ -408,7 +410,9 @@ describe("UserVfsTurnService", () => {
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
     assert.equal(flush.attachments.length, 1);
-    assert.equal(flush.attachments[0]!.name, "write:/net.md");
+    assert.equal(flush.attachments[0]!.name, "/net.md");
+    assert.equal(flush.attachments[0]!.action, "write");
+    assert.equal(flush.attachments[0]!.path, "/net.md");
     assert.match(flush.attachments[0]!.content ?? "", /name="write"/);
     assert.match(flush.attachments[0]!.content ?? "", /"content"/);
     assert.ok((flush.attachments[0]!.content ?? "").includes("beta-edited"));

@@ -4,15 +4,17 @@
  * @module domain/chat/logic/build-user-ops-attachment
  */
 
-import type { MessageAttachment } from "../model/message-attachment.schema.js";
 import {
-  formatUserOpsActionLabel,
-  type SynthesizedUserVfsAction,
-  type UserOpsActionSummary,
+  attachmentStorageName,
+  type MessageAttachment,
+} from "../model/message-attachment.schema.js";
+import type {
+  SynthesizedUserVfsAction,
+  UserOpsActionSummary,
 } from "./synthesize-user-vfs-flush-actions.js";
 
 /**
- * 单条：`name` = `action:path`，`content` 为现网同源 action XML。
+ * 单条：`name` = path（空 → `__no_path__`），`action` 枚举，`content` 为 action XML。
  */
 export function buildUserOpsAttachmentFromEntry(
   entry: SynthesizedUserVfsAction,
@@ -21,11 +23,12 @@ export function buildUserOpsAttachmentFromEntry(
     ? entry.path.split("→")[1] ?? entry.path
     : entry.path;
   return {
-    name: formatUserOpsActionLabel(entry),
+    name: attachmentStorageName(storagePath),
     source: "user_ops",
     type: "text",
     content: entry.xml.trim(),
     path: storagePath,
+    action: entry.action,
   };
 }
 
@@ -68,7 +71,7 @@ export function previewPendingUserOpsAttachment(
 }
 
 /**
- * Composer 状态条：每条摘要一条 `user_ops`（`content: null`，`name` = `action:path`）。
+ * Composer 状态条：每条摘要一条 `user_ops`（`content: null`，`name` = path）。
  */
 export function userOpsAttachmentsFromSummaries(
   summaries: readonly UserOpsActionSummary[],
@@ -78,11 +81,12 @@ export function userOpsAttachmentsFromSummaries(
       ? summary.path.split("→")[1] ?? summary.path
       : summary.path;
     return {
-      name: formatUserOpsActionLabel(summary),
+      name: attachmentStorageName(storagePath),
       source: "user_ops" as const,
       type: "text" as const,
       content: null,
       path: storagePath,
+      action: summary.action,
     };
   });
 }

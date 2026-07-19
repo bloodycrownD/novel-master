@@ -41,6 +41,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
           type: "text",
           content: null,
           path: "/b.md",
+          action: "workplaceChange",
         },
       ],
     );
@@ -59,8 +60,8 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ];
     const cacheKeys = [fileCacheKey("full", "/cached.md")];
     const out = buildComposerStatusAttachments(live, cacheKeys, [
-      "/ops.md",
-      "/other.md",
+      { action: "write", path: "/ops.md" },
+      { action: "write", path: "/other.md" },
     ]);
 
     assert.deepEqual(out, [
@@ -70,6 +71,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/need.md",
+        action: "workplaceChange",
       },
       {
         name: "/ops.md",
@@ -77,6 +79,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/ops.md",
+        action: "write",
       },
       {
         name: "/other.md",
@@ -84,6 +87,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/other.md",
+        action: "write",
       },
     ]);
   });
@@ -96,6 +100,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/a.md",
+        action: "write",
       },
     ]);
   });
@@ -148,7 +153,9 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
       loadLiveWorkplacePaths: async () => [
         { path: "/w.md", status: "full" },
       ],
-      previewUserOpsChangedPaths: async () => ["/u.md"],
+      previewUserOpsActions: async () => [
+        { action: "write" as const, path: "/u.md" },
+      ],
     });
     assert.deepEqual(out, [
       {
@@ -157,6 +164,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/w.md",
+        action: "workplaceChange",
       },
       {
         name: "/u.md",
@@ -164,6 +172,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         type: "text",
         content: null,
         path: "/u.md",
+        action: "write",
       },
     ]);
   });
@@ -239,7 +248,7 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     const projected = await projectComposerStatusAttachments(session.id, {
       sessionKkv: sk,
       loadLiveWorkplacePaths: async () => live,
-      previewUserOpsChangedPaths: async () => [],
+      previewUserOpsActions: async () => [],
     });
     assert.equal(
       projected.filter((a) => a.source === "workplace").length,

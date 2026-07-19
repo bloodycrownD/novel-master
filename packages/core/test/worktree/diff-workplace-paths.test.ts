@@ -57,6 +57,7 @@ describe("diffWorkplacePaths (T-RD1 / T-RD2)", () => {
         type: "text",
         content: null,
         path: "/need.md",
+        action: "workplaceChange",
       },
     ]);
   });
