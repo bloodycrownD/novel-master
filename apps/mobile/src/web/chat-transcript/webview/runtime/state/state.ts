@@ -36,6 +36,8 @@ export type AttachmentChip = {
   type?: string;
   name?: string;
   path?: string;
+  action?: string;
+  content?: string | null;
 };
 
 /** 普通消息行。 */

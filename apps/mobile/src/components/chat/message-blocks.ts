@@ -361,6 +361,8 @@ export function buildTranscriptRows(
             type: a.type,
             name: a.name,
             path: a.path ?? a.name,
+            ...(a.action != null ? { action: a.action } : {}),
+            ...(a.content !== undefined ? { content: a.content } : {}),
           }))
         : undefined;
     rows.push({

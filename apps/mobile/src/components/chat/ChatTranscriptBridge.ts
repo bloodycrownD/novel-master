@@ -25,6 +25,17 @@ export type TranscriptAttachmentView = {
   readonly type: 'text' | 'image' | 'dir';
   readonly name: string;
   readonly path: string;
+  /** 结构化 action（中文 chip 真源）；缺省时 Web 侧按 name 降级。 */
+  readonly action?:
+    | 'delete'
+    | 'write'
+    | 'edit'
+    | 'mkdir'
+    | 'rename'
+    | 'workplaceChange'
+    | 'userAttach'
+    | 'annotate';
+  readonly content?: string | null;
 };
 
 export type TranscriptRow =

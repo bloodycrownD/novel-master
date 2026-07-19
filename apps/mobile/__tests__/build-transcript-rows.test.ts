@@ -116,6 +116,48 @@ describe('buildTranscriptRows', () => {
     });
   });
 
+  it('T-CHIP: transcript 透传 action/content，供气泡中文 action:path', () => {
+    const withAction: ChatMessage = {
+      ...msg('u-act', 'user', [{type: 'text', text: 'hi'}], 4),
+      attachments: [
+        {
+          name: '/a.md',
+          source: 'user_ops',
+          type: 'text',
+          path: '/a.md',
+          action: 'write',
+          content: '<action name="write">\n{"path":"/a.md"}\n</action>',
+        },
+        {
+          name: '/r.md',
+          source: 'workplace',
+          type: 'text',
+          path: '/r.md',
+          action: 'workplaceChange',
+          content: null,
+        },
+      ],
+    };
+    const row = buildTranscriptRows([withAction])[0];
+    expect(row).toMatchObject({
+      kind: 'message',
+      attachments: [
+        {
+          source: 'user_ops',
+          name: '/a.md',
+          path: '/a.md',
+          action: 'write',
+          content: '<action name="write">\n{"path":"/a.md"}\n</action>',
+        },
+        {
+          source: 'workplace',
+          path: '/r.md',
+          action: 'workplaceChange',
+        },
+      ],
+    });
+  });
+
   it('T-UO2x: 历史 UA fixture → 仅 message，无 user_vfs_turn', () => {
     const actionXml = '<action name="delete">\n{"path":"/a.md"}\n</action>';
     const messages = [
