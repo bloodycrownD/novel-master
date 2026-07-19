@@ -4,7 +4,6 @@
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -32,6 +31,7 @@ import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
+import {AnnotateDetailModal} from './AnnotateDetailModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
@@ -103,6 +103,8 @@ export function FileMarkdownPreview({
   const [pathDrafts, setPathDrafts] = useState<AnnotateDraft[]>([]);
   const [addVisible, setAddVisible] = useState(false);
   const [pendingOriginalText, setPendingOriginalText] = useState('');
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [editVisible, setEditVisible] = useState(false);
   const [editingDraft, setEditingDraft] = useState<AnnotateDraft | null>(null);
 
@@ -182,30 +184,30 @@ export function FileMarkdownPreview({
       if (!draft) {
         return;
       }
-      Alert.alert('批注', draft.userAnnotation || '（空说明）', [
-        {
-          text: '删除',
-          style: 'destructive',
-          onPress: () => {
-            if (!sessionId) {
-              return;
-            }
-            removeChatAnnotateDraft(sessionId, draft.id);
-            refreshComposerAnnotateChips(sessionId);
-          },
-        },
-        {
-          text: '编辑',
-          onPress: () => {
-            setEditingDraft(draft);
-            setEditVisible(true);
-          },
-        },
-        {text: '关闭', style: 'cancel'},
-      ]);
+      setDetailDraft(draft);
+      setDetailVisible(true);
     },
-    [pathDrafts, sessionId],
+    [pathDrafts],
   );
+
+  const handleDetailDelete = useCallback(() => {
+    if (!sessionId || !detailDraft) {
+      return;
+    }
+    removeChatAnnotateDraft(sessionId, detailDraft.id);
+    refreshComposerAnnotateChips(sessionId);
+    setDetailVisible(false);
+    setDetailDraft(null);
+  }, [sessionId, detailDraft]);
+
+  const handleDetailEdit = useCallback(() => {
+    if (!detailDraft) {
+      return;
+    }
+    setEditingDraft(detailDraft);
+    setDetailVisible(false);
+    setEditVisible(true);
+  }, [detailDraft]);
 
   const handleEditConfirm = useCallback(
     async (userAnnotation: string) => {
@@ -214,6 +216,7 @@ export function FileMarkdownPreview({
       }
       updateChatAnnotateDraft(sessionId, editingDraft.id, {userAnnotation});
       refreshComposerAnnotateChips(sessionId);
+      setEditingDraft(null);
     },
     [sessionId, editingDraft],
   );
@@ -315,6 +318,17 @@ export function FileMarkdownPreview({
         confirmLabel="添加"
         onClose={() => setAddVisible(false)}
         onConfirm={handleAddConfirm}
+      />
+      <AnnotateDetailModal
+        visible={detailVisible}
+        originalText={detailDraft?.originalText ?? ''}
+        userAnnotation={detailDraft?.userAnnotation ?? ''}
+        onClose={() => {
+          setDetailVisible(false);
+          setDetailDraft(null);
+        }}
+        onEdit={handleDetailEdit}
+        onDelete={handleDetailDelete}
       />
       <MessageEditModal
         visible={editVisible}
