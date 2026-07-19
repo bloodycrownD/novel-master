@@ -60,6 +60,27 @@ describe("messageAttachmentSchema", () => {
       }),
     );
 
+    // 有 action 时 name 须 === attachmentStorageName(path)
+    assert.throws(() =>
+      messageAttachmentSchema.parse({
+        name: "/wrong.md",
+        source: "user_ops",
+        type: "text",
+        content: null,
+        path: "/right.md",
+        action: "write",
+      }),
+    );
+    assert.throws(() =>
+      messageAttachmentSchema.parse({
+        name: "自定义名",
+        source: "user_ops",
+        type: "text",
+        content: null,
+        action: "mkdir",
+      }),
+    );
+
     // 历史无 action：仍允许旧展示 name（不做批量迁移）
     const legacy = messageAttachmentSchema.parse({
       name: "write:/old.md",

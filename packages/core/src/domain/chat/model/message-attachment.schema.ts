@@ -58,7 +58,7 @@ export const messageAttachmentObjectSchema = z
   })
   .strict();
 
-/** 单条消息附件（含新写入 name 禁展示 tag 校验）。 */
+/** 单条消息附件（含新写入 name 禁展示 tag / 须等于 storage name 校验）。 */
 export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine(
   (val, ctx) => {
     // 新写入（带 action）禁止把展示 tag 写入 name
@@ -68,6 +68,17 @@ export const messageAttachmentSchema = messageAttachmentObjectSchema.superRefine
         message: "name 禁止为 action:path 展示 tag（须 name=path）",
         path: ["name"],
       });
+    }
+    // 有 action 时 name 须与 attachmentStorageName(path) 一致
+    if (val.action != null) {
+      const expected = attachmentStorageName(val.path);
+      if (val.name !== expected) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `有 action 时 name 须等于 attachmentStorageName(path)（期望 ${expected}）`,
+          path: ["name"],
+        });
+      }
     }
   },
 );
