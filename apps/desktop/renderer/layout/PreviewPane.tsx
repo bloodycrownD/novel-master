@@ -87,6 +87,7 @@ export function PreviewPane() {
   const annotateEnabled = isPreviewAnnotateEnabled(
     mode,
     previewFile?.workspaceScope,
+    sessionId,
   );
 
   const pathDrafts = useMemo(() => {
@@ -185,18 +186,43 @@ export function PreviewPane() {
     if (!annotateEnabled) {
       return;
     }
-    const onMouseUp = () => {
-      // 等浏览器提交选区
-      window.setTimeout(refreshSelectionFloating, 0);
+    let timer: number | undefined;
+    const scheduleRefresh = (delayMs: number) => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(() => {
+        timer = undefined;
+        refreshSelectionFloating();
+      }, delayMs);
     };
-    const onKeyUp = () => {
-      refreshSelectionFloating();
+    const onMouseUp = () => scheduleRefresh(0);
+    const onKeyUp = () => scheduleRefresh(0);
+    const onSelectionChange = () => scheduleRefresh(50);
+    const onContextMenu = () => {
+      const root = previewContentRef.current;
+      if (root == null) {
+        return;
+      }
+      const text = readSelectionTextInContainer(root);
+      if (text == null) {
+        return;
+      }
+      // 有有效选区时刷新浮动条；不 preventDefault，保留系统复制菜单
+      scheduleRefresh(0);
     };
     document.addEventListener("mouseup", onMouseUp);
     document.addEventListener("keyup", onKeyUp);
+    document.addEventListener("selectionchange", onSelectionChange);
+    document.addEventListener("contextmenu", onContextMenu, true);
     return () => {
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
       document.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("keyup", onKeyUp);
+      document.removeEventListener("selectionchange", onSelectionChange);
+      document.removeEventListener("contextmenu", onContextMenu, true);
     };
   }, [annotateEnabled, refreshSelectionFloating]);
 

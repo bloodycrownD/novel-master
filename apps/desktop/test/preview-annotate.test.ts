@@ -30,22 +30,29 @@ const previewAnnotateUiPath = path.join(
 );
 
 describe("isPreviewAnnotateEnabled", () => {
-  it("仅 read + chat 为真", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "chat"), true);
+  it("仅 read + chat + 非空 sessionId 为真", () => {
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", "s1"), true);
   });
 
   it("编辑态无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("edit", "chat"), false);
+    assert.equal(isPreviewAnnotateEnabled("edit", "chat", "s1"), false);
   });
 
   it("global / session 无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", "global"), false);
-    assert.equal(isPreviewAnnotateEnabled("read", "session"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "global", "s1"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "session", "s1"), false);
   });
 
   it("缺 scope 无入口", () => {
-    assert.equal(isPreviewAnnotateEnabled("read", null), false);
-    assert.equal(isPreviewAnnotateEnabled("read", undefined), false);
+    assert.equal(isPreviewAnnotateEnabled("read", null, "s1"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", undefined, "s1"), false);
+  });
+
+  it("缺 sessionId / 空串无入口", () => {
+    assert.equal(isPreviewAnnotateEnabled("read", "chat"), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", null), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", undefined), false);
+    assert.equal(isPreviewAnnotateEnabled("read", "chat", ""), false);
   });
 });
 
@@ -112,6 +119,16 @@ describe("readSelectionTextInContainer", () => {
   });
 });
 
+describe("applyAnnotateHighlights order (source)", () => {
+  it("按 originalText 长度降序再 wrap", () => {
+    const src = readFileSync(
+      path.join(__dirname, "..", "renderer", "layout", "preview-annotate.ts"),
+      "utf8",
+    );
+    assert.match(src, /b\.length\s*-\s*a\.length/);
+  });
+});
+
 describe("Preview annotate UI wiring (source)", () => {
   it("弹层组件接线 store CRUD 与「添加批注」文案", () => {
     const ui = readFileSync(previewAnnotateUiPath, "utf8");
@@ -119,6 +136,8 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.match(ui, /添加批注/);
     assert.match(ui, /updateChatAnnotateDraft/);
     assert.match(ui, /removeChatAnnotateDraft/);
+    assert.match(ui, /text-prompt-modal__textarea/);
+    assert.doesNotMatch(ui, /TextPromptModal/);
   });
 
   it("PreviewPane 门闩与浮动条接入", () => {
@@ -127,5 +146,7 @@ describe("Preview annotate UI wiring (source)", () => {
     assert.match(pane, /PreviewAnnotateFloatingBar/);
     assert.match(pane, /previewFile\?\.workspaceScope/);
     assert.match(pane, /applyAnnotateHighlights/);
+    assert.match(pane, /sessionId/);
+    assert.doesNotMatch(pane, /e\.preventDefault\(\);\s*\n\s*scheduleRefresh/);
   });
 });

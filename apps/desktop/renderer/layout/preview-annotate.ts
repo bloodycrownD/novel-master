@@ -1,6 +1,6 @@
 /**
  * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配下划线（尽力）。
- * 仅 mode==="read" 且 workspaceScope==="chat" 启用。
+ * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
 import type { WorkspacePanelScope } from "@shared/ipc-types";
@@ -8,12 +8,18 @@ import type { WorkspacePanelScope } from "@shared/ipc-types";
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";
 
-/** 划词批注入口门闩（编辑态 / global / session 均无入口）。 */
+/** 划词批注入口门闩（编辑态 / global / session / 无 sessionId 均无入口）。 */
 export function isPreviewAnnotateEnabled(
   mode: "read" | "edit",
   workspaceScope: WorkspacePanelScope | null | undefined,
+  sessionId?: string | null,
 ): boolean {
-  return mode === "read" && workspaceScope === "chat";
+  return (
+    mode === "read" &&
+    workspaceScope === "chat" &&
+    typeof sessionId === "string" &&
+    sessionId.length > 0
+  );
 }
 
 /** 按 originalText 聚合 draft id（同文多条共用一处下划线点击）。 */

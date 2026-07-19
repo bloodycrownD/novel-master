@@ -5,7 +5,6 @@
 import { useEffect, useState } from "react";
 import type { AnnotateDraft } from "@novel-master/core/chat";
 import { Button } from "../components/ui/Button";
-import { TextPromptModal } from "../components/ui/TextPromptModal";
 import {
   addChatAnnotateDraft,
   removeChatAnnotateDraft,
@@ -61,23 +60,92 @@ export function PreviewAnnotateAddModal({
   filePath,
   onClose,
 }: AddModalProps) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setValue("");
+    }
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const canSubmit = trimmed.length > 0 && !saving;
+  const label =
+    selectedText.length > 80
+      ? `${selectedText.slice(0, 80)}…`
+      : selectedText;
+
+  const handleConfirm = () => {
+    if (!canSubmit) {
+      return;
+    }
+    setSaving(true);
+    try {
+      addChatAnnotateDraft(sessionId, {
+        id: randomUUID(),
+        path: filePath,
+        originalText: selectedText,
+        userAnnotation: trimmed,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <TextPromptModal
-      open={open}
-      title="添加批注"
-      label={selectedText.length > 80 ? `${selectedText.slice(0, 80)}…` : selectedText}
-      placeholder="输入批注说明"
-      confirmLabel="添加"
-      onClose={onClose}
-      onConfirm={(userAnnotation) => {
-        addChatAnnotateDraft(sessionId, {
-          id: randomUUID(),
-          path: filePath,
-          originalText: selectedText,
-          userAnnotation,
-        });
-      }}
-    />
+    <div className="text-prompt-overlay" onClick={onClose}>
+      <div
+        className="text-prompt-modal text-prompt-modal--wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="preview-annotate-add-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3
+          id="preview-annotate-add-title"
+          className="text-prompt-modal__title"
+        >
+          添加批注
+        </h3>
+        {label ? (
+          <p className="text-prompt-modal__label preview-annotate-detail__quote">
+            {label}
+          </p>
+        ) : null}
+        <textarea
+          className="text-prompt-modal__textarea"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="输入批注说明"
+          rows={4}
+          autoFocus
+        />
+        <div className="text-prompt-modal__actions">
+          <button
+            type="button"
+            className="text-prompt-modal__btn"
+            onClick={onClose}
+            disabled={saving}
+          >
+            取消
+          </button>
+          <button
+            type="button"
+            className="text-prompt-modal__btn text-prompt-modal__btn--primary"
+            disabled={!canSubmit}
+            onClick={handleConfirm}
+          >
+            {saving ? "添加中…" : "添加"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
