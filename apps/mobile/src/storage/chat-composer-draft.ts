@@ -201,13 +201,6 @@ export function applyComposerStatusAttachmentsReplace(payload: {
 }
 
 /**
- * @deprecated 使用 {@link applyComposerStatusAttachmentsReplace}（整表替换）。
- * 保留别名以免旧 import 瞬间断掉；语义已改为 replace。
- */
-export const applyComposerAttachmentsSuggest =
-  applyComposerStatusAttachmentsReplace;
-
-/**
  * 仅按 annotate store 重合并状态条（CRUD 后调用；不改 projected 半边）。
  */
 export function refreshComposerAnnotateChips(sessionId: string): void {
