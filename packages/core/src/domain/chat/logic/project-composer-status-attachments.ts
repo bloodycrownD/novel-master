@@ -29,19 +29,6 @@ export type ProjectComposerStatusAttachmentsDeps = {
 };
 
 /**
- * preview 摘要 → 每条状态条 `user_ops`（`content: null`，`name` = path）。
- *
- * @deprecated 优先 `userOpsAttachmentsFromSummaries`；保留 path-only 兼容。
- */
-export function userOpsAttachmentsFromChangedPaths(
-  paths: readonly string[],
-): MessageAttachment[] {
-  return userOpsAttachmentsFromSummaries(
-    paths.map((path) => ({ action: "write" as const, path })),
-  );
-}
-
-/**
  * 由 live / cacheKeys / user_ops 摘要合成状态条附件（纯函数，便于 T-WP1）。
  */
 export function buildComposerStatusAttachments(

@@ -57,22 +57,6 @@ export function tryNormalizePromptSeenPath(path: string): string | null {
   }
 }
 
-/**
- * @deprecated 增量已改 `alreadyReferenced` JSON；保留给旧断言 / 兼容调用。
- * 文本文件非首次专用最小 XML（不经 `renderFileBlock`，无行号 / createdAt 等）。
- */
-export function renderPromptFileSeenShortTip(logicalPath: string): string {
-  const path = normalizePromptSeenPath(logicalPath);
-  return `<file path="${escapeXmlAttr(path)}">${PROMPT_FILE_SEEN_SHORT_TIP}</file>`;
-}
-
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
-
 /** 由初始前缀 path 列表构造可变 seen 集合（写入前均规范化）。 */
 export function createPromptPathSeenSet(
   initialPaths?: readonly string[],

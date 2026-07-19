@@ -11,7 +11,6 @@ import {
   mapUserSaveToToolUses,
 } from "@/domain/vfs/logic/user-vfs-save-mapping.js";
 import type { WorkspaceFlushDiff } from "./diff-workspace-for-user-vfs-flush.js";
-import { formatStatusChipLabel } from "./status-chip-label.js";
 
 /** flush / Composer 共用的单条 user_ops 摘要。 */
 export type UserOpsActionSummary = {
@@ -24,19 +23,6 @@ export type UserOpsActionSummary = {
 export type SynthesizedUserVfsAction = UserOpsActionSummary & {
   readonly xml: string;
 };
-
-/**
- * @deprecated 优先用 `formatStatusChipLabel`；保留给旧调用方。
- * 返回中文二字 chip 文案（rename 取 `→` 右侧）。
- */
-export function formatUserOpsActionLabel(
-  summary: UserOpsActionSummary,
-): string {
-  const chipPath = summary.action === "rename"
-    ? summary.path.split("→")[1] ?? summary.path
-    : summary.path;
-  return formatStatusChipLabel(summary.action, chipPath);
-}
 
 /**
  * 按 mkdir → rename → 新增/变更 save → 删文件 → 删目录 顺序合成条目。

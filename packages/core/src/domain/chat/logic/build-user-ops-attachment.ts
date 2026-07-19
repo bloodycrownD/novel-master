@@ -42,21 +42,6 @@ export function buildUserOpsAttachmentsFromEntries(
 }
 
 /**
- * @deprecated 优先用 `buildUserOpsAttachmentsFromEntries`；保留兼容单包 XML。
- */
-export function buildUserOpsAttachment(
-  actionsXml: string,
-  name = "user_ops",
-): MessageAttachment {
-  return {
-    name,
-    source: "user_ops",
-    type: "text",
-    content: actionsXml.trim(),
-  };
-}
-
-/**
  * pending 镜像到 Composer chip 的预览附件（`content` 可 null；真正 XML 在发送 flush 时合成）。
  */
 export function previewPendingUserOpsAttachment(

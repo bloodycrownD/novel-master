@@ -73,7 +73,6 @@ export {
   isPromptDirTokenPath,
   normalizePromptSeenPath,
   normalizePromptStorePath,
-  renderPromptFileSeenShortTip,
   tryNormalizePromptSeenPath,
 } from '../domain/chat/logic/prompt-path-seen.js';
 export {
@@ -143,14 +142,12 @@ export type {
 } from '../domain/chat/logic/diff-workspace-for-user-vfs-flush.js';
 export { synthesizeUserVfsFlushActions } from '../domain/chat/logic/synthesize-user-vfs-flush-actions.js';
 export {
-  buildUserOpsAttachment,
   previewPendingUserOpsAttachment,
 } from '../domain/chat/logic/build-user-ops-attachment.js';
 export {
   buildComposerStatusAttachments,
   projectComposerStatusAttachments,
   replaceComposerStatusAttachments,
-  userOpsAttachmentsFromChangedPaths,
 } from '../domain/chat/logic/project-composer-status-attachments.js';
 export type { ProjectComposerStatusAttachmentsDeps } from '../domain/chat/logic/project-composer-status-attachments.js';
 export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';

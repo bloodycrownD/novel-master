@@ -14,8 +14,8 @@ import {
   buildComposerStatusAttachments,
   projectComposerStatusAttachments,
   replaceComposerStatusAttachments,
-  userOpsAttachmentsFromChangedPaths,
 } from "@/domain/chat/logic/project-composer-status-attachments.js";
+import { userOpsAttachmentsFromSummaries } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import { workplaceAttachmentsFromRuleDelta } from "@/domain/worktree/logic/diff-workplace-paths.js";
 import { prepareUserMessagesForPrompt } from "@/domain/chat/logic/prepare-user-messages-for-prompt.js";
 import { createSessionKkvService } from "@/service/session-kkv/create-session-kkv-service.js";
@@ -92,8 +92,10 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
     ]);
   });
 
-  it("userOpsAttachmentsFromChangedPaths：path → user_ops attachment", () => {
-    assert.deepEqual(userOpsAttachmentsFromChangedPaths(["/a.md"]), [
+  it("userOpsAttachmentsFromSummaries：path → user_ops attachment", () => {
+    assert.deepEqual(
+      userOpsAttachmentsFromSummaries([{ action: "write", path: "/a.md" }]),
+      [
       {
         name: "/a.md",
         source: "user_ops",
@@ -102,7 +104,8 @@ describe("projectComposerStatusAttachments (T-WP1)", () => {
         path: "/a.md",
         action: "write",
       },
-    ]);
+    ],
+    );
   });
 
   it("replaceComposerStatusAttachments：整表替换为投影，不保留 attach", () => {
