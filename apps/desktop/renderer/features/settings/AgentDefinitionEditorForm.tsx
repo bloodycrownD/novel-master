@@ -21,9 +21,8 @@ import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
-  WORKTREE_BLOCK_LABEL,
-  WORKTREE_BLOCK_HINT,
-  addPersistWorktreeBlock,
+  WORKPLACE_BLOCK_LABEL,
+  WORKPLACE_BLOCK_HINT,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countEffectiveFormPromptSources,
@@ -36,8 +35,6 @@ import {
   hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistTextBlock,
-  removePersistWorktreeBlock,
-  splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
@@ -104,6 +101,7 @@ function applyDefinitionToFormState(
     setSystemContent: (v: string) => void;
     setPersistEnabled: (v: boolean) => void;
     setDynamicEnabled: (v: boolean) => void;
+    setWorkplace: (v: boolean) => void;
     setPersist: (v: PersistPromptBlock[]) => void;
     setDynamic: (v: DynamicPromptBlock[]) => void;
     setToolsMode: (v: ToolsMode) => void;
@@ -125,6 +123,7 @@ function applyDefinitionToFormState(
   setters.setSystemContent(promptForm.systemContent);
   setters.setPersistEnabled(promptForm.persistEnabled);
   setters.setDynamicEnabled(promptForm.dynamicEnabled);
+  setters.setWorkplace(promptForm.workplace);
   setters.setPersist([...promptForm.persist]);
   setters.setDynamic([...promptForm.dynamic]);
 
@@ -184,6 +183,7 @@ export const AgentDefinitionEditorForm = forwardRef<
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
+  const [workplace, setWorkplace] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -214,6 +214,7 @@ export const AgentDefinitionEditorForm = forwardRef<
         systemContent,
         persistEnabled,
         dynamicEnabled,
+        workplace,
         persist,
         dynamic,
       }),
@@ -229,6 +230,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     ]
@@ -289,6 +291,7 @@ export const AgentDefinitionEditorForm = forwardRef<
           setSystemContent,
           setPersistEnabled,
           setDynamicEnabled,
+          setWorkplace,
           setPersist,
           setDynamic,
           setToolsMode,
@@ -326,6 +329,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     });
@@ -350,6 +354,7 @@ export const AgentDefinitionEditorForm = forwardRef<
     systemContent,
     persistEnabled,
     dynamicEnabled,
+    workplace,
     persist,
     dynamic,
   ]);
@@ -368,11 +373,6 @@ export const AgentDefinitionEditorForm = forwardRef<
     savedModels.find((m) => m.id === savedModelId)?.displayName ??
     savedModelId ??
     "—";
-
-  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
-    () => splitPersistBlocksForEditor(persist),
-    [persist]
-  );
 
   const movePersist = (textIndex: number, dir: -1 | 1) => {
     setPersist((prev) => movePersistTextBlock(prev, textIndex, dir));
@@ -395,6 +395,7 @@ export const AgentDefinitionEditorForm = forwardRef<
     systemContent,
     persistEnabled,
     dynamicEnabled,
+    workplace,
     persist,
     dynamic,
   });
@@ -421,7 +422,7 @@ export const AgentDefinitionEditorForm = forwardRef<
       setPersist(nextPersist);
       return;
     }
-    if (countFormPromptSources(nextForm, { excludeWorktree: true }) < 1) {
+    if (countFormPromptSources(nextForm) < 1) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
@@ -437,16 +438,10 @@ export const AgentDefinitionEditorForm = forwardRef<
   };
 
   const addPersistTextBlock = () => {
-    setPersist((prev) => {
-      const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
-      return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
-    });
-  };
-
-  const setPersistWorktreeEnabled = (enabled: boolean) => {
-    setPersist((prev) =>
-      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev)
-    );
+    setPersist((prev) => [
+      ...prev,
+      createDefaultPersistTextBlock(prev.length),
+    ]);
   };
 
   const addDynamicBlock = () => {
@@ -664,24 +659,24 @@ export const AgentDefinitionEditorForm = forwardRef<
 
         <div className="config-block-card__section-head">
           <span className="config-block-card__section-label">
-            {WORKTREE_BLOCK_LABEL}
+            {WORKPLACE_BLOCK_LABEL}
           </span>
         </div>
         <div className="config-block-card config-block-card--prompt">
           <div className="config-block-card__header">
             <span className="config-block-card__badge">
-              {WORKTREE_BLOCK_LABEL}
+              {WORKPLACE_BLOCK_LABEL}
             </span>
             <Switch
-              checked={persistWorktree != null}
+              checked={workplace}
               disabled={disabled}
-              onChange={setPersistWorktreeEnabled}
-              aria-label={WORKTREE_BLOCK_LABEL}
+              onChange={setWorkplace}
+              aria-label={WORKPLACE_BLOCK_LABEL}
             />
           </div>
           <div className="config-block-card__body">
-            {persistWorktree != null ? (
-              <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
+            {workplace ? (
+              <p className="config-block-card__hint">{WORKPLACE_BLOCK_HINT}</p>
             ) : (
               <p className="config-block-card__hint">
                 关闭时不注入项目文件树。
@@ -725,17 +720,17 @@ export const AgentDefinitionEditorForm = forwardRef<
                 </div>
                 <div
                   className={
-                    persistTextBlocks.length === 0
-                      ? "config-block-list config-block-list--empty"
-                      : "config-block-list"
-                  }
-                >
-                  {persistTextBlocks.length === 0 ? (
-                    <p className="config-block-card__empty-hint">
-                      {PROMPT_REGION_LABELS.emptyPersistHint}
-                    </p>
-                  ) : null}
-                  {persistTextBlocks.map((block, index) => (
+                    persist.length === 0
+                        ? "config-block-list config-block-list--empty"
+                        : "config-block-list"
+                    }
+                  >
+                  {persist.length === 0 ? (
+                      <p className="config-block-card__empty-hint">
+                        {PROMPT_REGION_LABELS.emptyPersistHint}
+                      </p>
+                    ) : null}
+                  {persist.map((block, index) => (
                     <div
                       key={`persist-${index}`}
                       className="config-block-card config-block-card--prompt"
@@ -749,7 +744,7 @@ export const AgentDefinitionEditorForm = forwardRef<
                         </span>
                         {renderBlockActions(
                           index,
-                          persistTextBlocks.length,
+                          persist.length,
                           movePersist,
                           deletePersist
                         )}

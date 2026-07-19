@@ -17,9 +17,8 @@ import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
-  WORKTREE_BLOCK_LABEL,
-  WORKTREE_BLOCK_HINT,
-  addPersistWorktreeBlock,
+  WORKPLACE_BLOCK_LABEL,
+  WORKPLACE_BLOCK_HINT,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countEffectiveFormPromptSources,
@@ -32,8 +31,6 @@ import {
   hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistTextBlock,
-  removePersistWorktreeBlock,
-  splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
@@ -120,6 +117,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   const [systemContent, setSystemContent] = useState("");
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
+  const [workplace, setWorkplace] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [toolsMode, setToolsMode] = useState<ToolsMode>("default");
@@ -159,6 +157,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
         systemContent,
         persistEnabled,
         dynamicEnabled,
+        workplace,
         persist,
         dynamic,
       }),
@@ -174,6 +173,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     ]
@@ -239,6 +239,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setSystemContent(promptForm.systemContent);
       setPersistEnabled(promptForm.persistEnabled);
       setDynamicEnabled(promptForm.dynamicEnabled);
+      setWorkplace(promptForm.workplace);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -295,11 +296,6 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   useEffect(() => {
     void loadAgent();
   }, [loadAgent]);
-
-  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
-    () => splitPersistBlocksForEditor(persist),
-    [persist]
-  );
 
   const displayName = name.trim() || "未命名 Agent";
 
@@ -425,6 +421,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     });
@@ -476,6 +473,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
     systemContent,
     persistEnabled,
     dynamicEnabled,
+    workplace,
     persist,
     dynamic,
   });
@@ -503,7 +501,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
       setPersist(nextPersist);
       return;
     }
-    if (countFormPromptSources(nextForm, { excludeWorktree: true }) < 1) {
+    if (countFormPromptSources(nextForm) < 1) {
       showToast("至少保留一个 Prompt 块");
       return;
     }
@@ -519,16 +517,10 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
   };
 
   const addPersistTextBlock = () => {
-    setPersist((prev) => {
-      const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
-      return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
-    });
-  };
-
-  const setPersistWorktreeEnabled = (enabled: boolean) => {
-    setPersist((prev) =>
-      enabled ? addPersistWorktreeBlock(prev) : removePersistWorktreeBlock(prev)
-    );
+    setPersist((prev) => [
+      ...prev,
+      createDefaultPersistTextBlock(prev.length),
+    ]);
   };
 
   const addDynamicBlock = () => {
@@ -771,23 +763,23 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
 
           <div className="config-block-card__section-head">
             <span className="config-block-card__section-label">
-              {WORKTREE_BLOCK_LABEL}
+              {WORKPLACE_BLOCK_LABEL}
             </span>
           </div>
           <div className="config-block-card config-block-card--prompt">
             <div className="config-block-card__header">
               <span className="config-block-card__badge">
-                {WORKTREE_BLOCK_LABEL}
+                {WORKPLACE_BLOCK_LABEL}
               </span>
               <Switch
-                checked={persistWorktree != null}
-                onChange={setPersistWorktreeEnabled}
-                aria-label={WORKTREE_BLOCK_LABEL}
+                checked={workplace}
+                onChange={setWorkplace}
+                aria-label={WORKPLACE_BLOCK_LABEL}
               />
             </div>
             <div className="config-block-card__body">
-              {persistWorktree != null ? (
-                <p className="config-block-card__hint">{WORKTREE_BLOCK_HINT}</p>
+              {workplace ? (
+                <p className="config-block-card__hint">{WORKPLACE_BLOCK_HINT}</p>
               ) : (
                 <p className="config-block-card__hint">
                   关闭时不注入项目文件树。
@@ -829,17 +821,17 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                   </div>
                   <div
                     className={
-                      persistTextBlocks.length === 0
+                      persist.length === 0
                         ? "config-block-list config-block-list--empty"
                         : "config-block-list"
                     }
                   >
-                    {persistTextBlocks.length === 0 ? (
+                    {persist.length === 0 ? (
                       <p className="config-block-card__empty-hint">
                         {PROMPT_REGION_LABELS.emptyPersistHint}
                       </p>
                     ) : null}
-                    {persistTextBlocks.map((block, index) => (
+                    {persist.map((block, index) => (
                       <div
                         key={`persist-${index}`}
                         className="config-block-card config-block-card--prompt"
@@ -853,7 +845,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           </span>
                           {renderBlockActions(
                             index,
-                            persistTextBlocks.length,
+                            persist.length,
                             movePersist,
                             deletePersist
                           )}
