@@ -79,7 +79,7 @@ describe('rich-document-bridge', () => {
     const open = {
       v: RICH_DOCUMENT_BRIDGE_VERSION,
       type: 'annotateOpen' as const,
-      payload: {id: 'a1'},
+      payload: {ids: ['a1', 'a2']},
     };
     expect(decodeRichDocumentToHost(encodeRichDocumentToHost(open))).toEqual(
       open,

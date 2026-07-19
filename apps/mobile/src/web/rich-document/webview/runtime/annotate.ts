@@ -3,9 +3,12 @@
  * 「添加批注」由 RN WebView `menuItems` 提供（见 RichDocumentWebView）；
  * 不再叠 DOM 浮动条，避免与原生选区菜单双开。
  */
-import { post } from './post';
+import {post} from './post';
 import {
+  ANNOTATE_IDS_ATTR,
+  ANNOTATE_MARK_CLASS,
   applyAnnotateMarks,
+  parseAnnotateIdsAttr,
   type AnnotateMark,
 } from './annotate-marks';
 
@@ -61,15 +64,15 @@ function onDocClick(e: Event): void {
   if (!target || typeof target.closest !== 'function') {
     return;
   }
-  const mark = target.closest(`.annotate-mark`);
+  const mark = target.closest(`.${ANNOTATE_MARK_CLASS}`);
   if (!mark) {
     return;
   }
-  const id = mark.getAttribute('data-annotate-id');
-  if (!id) {
+  const ids = parseAnnotateIdsAttr(mark.getAttribute(ANNOTATE_IDS_ATTR));
+  if (ids.length === 0) {
     return;
   }
   e.preventDefault();
   e.stopPropagation();
-  post('annotateOpen', { id });
+  post('annotateOpen', {ids});
 }

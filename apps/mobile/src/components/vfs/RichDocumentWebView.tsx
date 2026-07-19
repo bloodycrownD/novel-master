@@ -37,7 +37,8 @@ export type RichDocumentWebViewProps = {
   readonly annotateEnabled?: boolean;
   readonly annotations?: readonly RichDocumentAnnotationMark[];
   readonly onSelectionAnnotate?: (text: string) => void;
-  readonly onAnnotateOpen?: (id: string) => void;
+  /** 同文多条时传入全部 id，由上层弹出选择列表。 */
+  readonly onAnnotateOpen?: (ids: readonly string[]) => void;
 };
 
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
@@ -123,9 +124,12 @@ export function RichDocumentWebView({
         return;
       }
       if (message.type === 'annotateOpen') {
-        const id = String(message.payload.id ?? '');
-        if (id) {
-          onAnnotateOpenRef.current?.(id);
+        const rawIds = message.payload.ids;
+        const ids = Array.isArray(rawIds)
+          ? rawIds.map(id => String(id ?? '')).filter(id => id.length > 0)
+          : [];
+        if (ids.length > 0) {
+          onAnnotateOpenRef.current?.(ids);
         }
       }
     } catch {

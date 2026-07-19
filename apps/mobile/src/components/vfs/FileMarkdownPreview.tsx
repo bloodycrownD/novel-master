@@ -34,6 +34,7 @@ import {MessageEditModal} from '../chat/MessageEditModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
+import {AnnotatePickModal} from './AnnotatePickModal';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
@@ -106,6 +107,7 @@ export function FileMarkdownPreview({
   const [detailDraft, setDetailDraft] = useState<AnnotateDraft | null>(null);
   const [editVisible, setEditVisible] = useState(false);
   const [editingDraft, setEditingDraft] = useState<AnnotateDraft | null>(null);
+  const [pickDrafts, setPickDrafts] = useState<AnnotateDraft[] | null>(null);
 
   const refreshPreviewEngine = useCallback(async () => {
     setPreviewEngine(await readVfsMarkdownPreviewEngine(appUi));
@@ -178,13 +180,17 @@ export function FileMarkdownPreview({
   );
 
   const handleAnnotateOpen = useCallback(
-    (id: string) => {
-      const draft = pathDrafts.find(d => d.id === id);
-      if (!draft) {
+    (ids: readonly string[]) => {
+      const matched = pathDrafts.filter(d => ids.includes(d.id));
+      if (matched.length === 0) {
         return;
       }
-      setDetailDraft(draft);
-      setDetailVisible(true);
+      if (matched.length === 1) {
+        setDetailDraft(matched[0]!);
+        setDetailVisible(true);
+        return;
+      }
+      setPickDrafts(matched);
     },
     [pathDrafts],
   );
@@ -346,6 +352,16 @@ export function FileMarkdownPreview({
           setEditingDraft(null);
         }}
         onConfirm={handleEditConfirm}
+      />
+      <AnnotatePickModal
+        visible={pickDrafts != null}
+        drafts={pickDrafts ?? []}
+        onPick={d => {
+          setPickDrafts(null);
+          setDetailDraft(d);
+          setDetailVisible(true);
+        }}
+        onClose={() => setPickDrafts(null)}
       />
     </>
   );

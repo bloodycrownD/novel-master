@@ -46,6 +46,10 @@ jest.mock('../src/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
 
+jest.mock('../src/components/vfs/AnnotatePickModal', () => ({
+  AnnotatePickModal: () => null,
+}));
+
 import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
 
@@ -140,6 +144,49 @@ hello world
     // chip 联动：refreshComposerAnnotateChips 由添加路径调用；此处直接断言 store→chip
     expect(chipsFromAnnotateStore(sessionId)).toHaveLength(1);
     expect(chipsFromAnnotateStore(sessionId)[0]?.action).toBe('annotate');
+  });
+
+  it('同文多条 annotations 均传入 WebView（A-1）', async () => {
+    const sessionId = 's-same-text';
+    const path = '/note.md';
+    const content = `---
+title: T
+---
+hello world
+`;
+    addChatAnnotateDraft(sessionId, {
+      id: 'a1',
+      path,
+      originalText: 'hello',
+      userAnnotation: '一',
+    });
+    addChatAnnotateDraft(sessionId, {
+      id: 'a2',
+      path,
+      originalText: 'hello',
+      userAnnotation: '二',
+    });
+
+    await act(async () => {
+      TestRenderer.create(
+        <FileMarkdownPreview
+          path={path}
+          content={content}
+          tokens={tokens}
+          annotateEnabled
+          sessionId={sessionId}
+        />,
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const last = mockRichDocumentWebView.mock.calls.at(-1)?.[0];
+    expect(last?.annotations).toEqual([
+      {id: 'a1', originalText: 'hello'},
+      {id: 'a2', originalText: 'hello'},
+    ]);
   });
 
   it('txt + annotateEnabled 走 WebView plain（md/txt 同验收）', async () => {

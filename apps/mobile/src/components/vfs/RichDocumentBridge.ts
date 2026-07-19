@@ -53,7 +53,8 @@ export type RichDocumentToHostMessage =
       {level: string; message: string; fields?: Record<string, unknown>}
     >
   | BridgeEnvelope<'selectionAnnotate', {text: string}>
-  | BridgeEnvelope<'annotateOpen', {id: string}>;
+  /** 同文多条时 ids 含全部可改删项；单条时长度为 1。 */
+  | BridgeEnvelope<'annotateOpen', {ids: readonly string[]}>;
 
 export function encodeHostToRichDocument(
   message: HostToRichDocumentMessage,

@@ -1,5 +1,6 @@
 /**
  * 批注下划线：按 originalText 在 .doc-body 内尽力匹配高亮；重复片段全部高亮。
+ * 同文多条批注共用一处 mark（data-annotate-ids）；长 needle 优先以免短串抢占。
  */
 
 export type AnnotateMark = {
@@ -7,7 +8,8 @@ export type AnnotateMark = {
   readonly originalText: string;
 };
 
-const MARK_CLASS = 'annotate-mark';
+export const ANNOTATE_MARK_CLASS = 'annotate-mark';
+export const ANNOTATE_IDS_ATTR = 'data-annotate-ids';
 
 /** 非重叠查找 needle 在 haystack 中的全部起始下标（供单测）。 */
 export function findAllOccurrences(
@@ -30,9 +32,50 @@ export function findAllOccurrences(
   return out;
 }
 
+/** 按 originalText 聚合 draft id（同文多条共用一处下划线点击）。 */
+export function groupAnnotateIdsByOriginalText(
+  drafts: readonly {readonly id: string; readonly originalText: string}[],
+): Map<string, string[]> {
+  const byText = new Map<string, string[]>();
+  for (const d of drafts) {
+    const text = d.originalText;
+    if (!text || !d.id) {
+      continue;
+    }
+    const list = byText.get(text);
+    if (list == null) {
+      byText.set(text, [d.id]);
+    } else {
+      list.push(d.id);
+    }
+  }
+  return byText;
+}
+
+/** 解析 mark 上的 id 列表。 */
+export function parseAnnotateIdsAttr(raw: string | null | undefined): string[] {
+  if (raw == null || raw === '') {
+    return [];
+  }
+  return raw
+    .split(',')
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+/**
+ * 应用顺序：originalText 长度降序（长优先），重叠/嵌套时避免短针抢占。
+ * 供单测断言。
+ */
+export function sortAnnotateTextsLongestFirst(
+  texts: readonly string[],
+): string[] {
+  return [...texts].sort((a, b) => b.length - a.length);
+}
+
 /** 解开已有 mark，恢复纯文本节点。 */
 export function unwrapAnnotateMarks(root: ParentNode): void {
-  const marks = root.querySelectorAll?.(`.${MARK_CLASS}`);
+  const marks = root.querySelectorAll?.(`.${ANNOTATE_MARK_CLASS}`);
   if (!marks) {
     return;
   }
@@ -52,27 +95,29 @@ export function unwrapAnnotateMarks(root: ParentNode): void {
 }
 
 /**
- * 在 root 内为每条批注包裹全部原文匹配。
- * 同 path 多条、原文重复时：各条分别匹配；重叠处后写可能跳过已 mark 内文本。
+ * 在 root 内按原文匹配包裹下划线。
+ * 同文多 id 挂同一 mark；先长后短，减少重叠丢失。
  */
 export function applyAnnotateMarks(
   root: ParentNode,
   annotations: readonly AnnotateMark[],
 ): void {
   unwrapAnnotateMarks(root);
-  for (const ann of annotations) {
-    const text = ann.originalText;
-    if (!text || !ann.id) {
+  const byText = groupAnnotateIdsByOriginalText(annotations);
+  const texts = sortAnnotateTextsLongestFirst([...byText.keys()]);
+  for (const text of texts) {
+    const ids = byText.get(text);
+    if (ids == null || ids.length === 0) {
       continue;
     }
-    wrapAllPlainMatches(root, text, ann.id);
+    wrapAllPlainMatches(root, text, ids);
   }
 }
 
 function wrapAllPlainMatches(
   root: ParentNode,
   needle: string,
-  id: string,
+  ids: readonly string[],
 ): void {
   // 反复查找直至无更多未包装匹配（每次 wrap 会改 DOM）
   let guard = 0;
@@ -81,7 +126,7 @@ function wrapAllPlainMatches(
     if (!hit) {
       break;
     }
-    wrapRange(hit.node, hit.start, hit.end, id);
+    wrapRange(hit.node, hit.start, hit.end, ids);
   }
 }
 
@@ -95,7 +140,8 @@ function findFirstUnmarkedPlainMatch(
   root: ParentNode,
   needle: string,
 ): PlainHit | null {
-  const doc = root.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
+  const doc =
+    root.ownerDocument ?? (typeof document !== 'undefined' ? document : null);
   if (!doc || typeof doc.createTreeWalker !== 'function') {
     return null;
   }
@@ -124,7 +170,7 @@ function isInsideAnnotateMark(node: Node): boolean {
   while (cur) {
     if (
       cur.nodeType === 1 &&
-      (cur as Element).classList?.contains(MARK_CLASS)
+      (cur as Element).classList?.contains(ANNOTATE_MARK_CLASS)
     ) {
       return true;
     }
@@ -137,7 +183,7 @@ function wrapRange(
   textNode: Text,
   start: number,
   end: number,
-  id: string,
+  ids: readonly string[],
 ): void {
   const doc = textNode.ownerDocument;
   if (!doc) {
@@ -148,8 +194,8 @@ function wrapRange(
   const mid = value.slice(start, end);
   const after = value.slice(end);
   const mark = doc.createElement('mark');
-  mark.className = MARK_CLASS;
-  mark.setAttribute('data-annotate-id', id);
+  mark.className = ANNOTATE_MARK_CLASS;
+  mark.setAttribute(ANNOTATE_IDS_ATTR, ids.join(','));
   mark.textContent = mid;
 
   const parent = textNode.parentNode;
