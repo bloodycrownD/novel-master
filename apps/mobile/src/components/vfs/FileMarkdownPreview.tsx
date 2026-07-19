@@ -31,7 +31,6 @@ import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
 import {MessageEditModal} from '../chat/MessageEditModal';
-import {AnnotateDetailModal} from './AnnotateDetailModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
 import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
@@ -319,9 +318,11 @@ export function FileMarkdownPreview({
         onClose={() => setAddVisible(false)}
         onConfirm={handleAddConfirm}
       />
-      <AnnotateDetailModal
+      <MessageEditModal
         visible={detailVisible}
-        userAnnotation={detailDraft?.userAnnotation ?? ''}
+        title="批注"
+        initialValue={detailDraft?.userAnnotation ?? ''}
+        readOnly
         onClose={() => {
           setDetailVisible(false);
           setDetailDraft(null);

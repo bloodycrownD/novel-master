@@ -13,6 +13,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
       textSecondary: '#666',
       textTertiary: '#999',
       primary: '#06c',
+      danger: '#FF3B30',
     },
   }),
 }));
@@ -267,5 +268,48 @@ describe('MessageEditModal', () => {
     });
     const input = findTextInput(tree.root);
     expect(hasScrollViewAncestor(input)).toBe(false);
+  });
+
+  it('readOnly: 输入禁用；同高度区间；删除/编辑可点', () => {
+    const onEdit = jest.fn();
+    const onDelete = jest.fn();
+    let tree!: TestRenderer.ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <MessageEditModal
+          visible
+          title="批注"
+          initialValue={'很长的批注\n'.repeat(20)}
+          readOnly
+          onClose={jest.fn()}
+          onEdit={onEdit}
+          onDelete={onDelete}
+        />,
+      );
+    });
+    const input = findTextInput(tree.root);
+    expect(input.props.editable).toBe(false);
+    expect(input.props.scrollEnabled).toBe(true);
+    expect(input.props.style).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          minHeight: 120,
+          maxHeight: Math.min(280, 800 * 0.32),
+        }),
+      ]),
+    );
+    const texts = tree.root.findAllByType('Text' as never);
+    const edit = texts.find(t => t.props.children === '编辑');
+    const del = texts.find(t => t.props.children === '删除');
+    expect(edit).toBeTruthy();
+    expect(del).toBeTruthy();
+    act(() => {
+      edit!.parent!.props.onPress();
+    });
+    expect(onEdit).toHaveBeenCalled();
+    act(() => {
+      del!.parent!.props.onPress();
+    });
+    expect(onDelete).toHaveBeenCalled();
   });
 });

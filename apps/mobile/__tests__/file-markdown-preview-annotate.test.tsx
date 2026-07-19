@@ -46,10 +46,6 @@ jest.mock('../src/components/chat/MessageEditModal', () => ({
   MessageEditModal: () => null,
 }));
 
-jest.mock('../src/components/vfs/AnnotateDetailModal', () => ({
-  AnnotateDetailModal: () => null,
-}));
-
 import {FileMarkdownPreview} from '../src/components/vfs/FileMarkdownPreview';
 import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
 
