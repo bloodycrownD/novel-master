@@ -30,13 +30,19 @@ function msg(
   };
 }
 
+/**
+ * 产品契约（annotate-user-ops-unify / vfs-user-ops）：落库与解析真源为
+ * `<action name="…">{json}</action>`；旧 `<user-vfs-action kind=…>` 夹具已过时，不再作为解析输入。
+ */
+const DELETE_ACTION_XML =
+  '<action name="delete">\n{"path":"/a.md"}\n</action>';
+const BURST_ACTIONS_XML =
+  '<action name="delete">\n{"path":"/a.md"}\n</action>\n' +
+  '<action name="edit">\n{"path":"/b.md","oldString":"x","newString":"y"}\n</action>';
+
 describe("parseAllUserVfsActionsFromText", () => {
   it("解析 burst 合并的多条 action", () => {
-    const actions = parseAllUserVfsActionsFromText(
-      '<user-vfs-action kind="delete" path="/a.md" />\n' +
-        '<user-vfs-action kind="save" path="/b.md" method="edit" hunks="1">' +
-        '<edit-hunk index="1"><old>x</old><new>y</new></edit-hunk></user-vfs-action>',
-    );
+    const actions = parseAllUserVfsActionsFromText(BURST_ACTIONS_XML);
     assert.equal(actions.length, 2);
     assert.equal(actions[0]?.kind, "delete");
     assert.equal(actions[1]?.method, "edit");
@@ -46,9 +52,8 @@ describe("parseAllUserVfsActionsFromText", () => {
 
 describe("matchUserVfsTurnAt", () => {
   it("UA 两段可匹配（LLM 路径）", () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages: ChatMessage[] = [
-      msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }], {
+      msg("u1", 1, "user", [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }], {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       }),
       msg("a1", 2, "assistant", [{ type: "text", text: USER_VFS_TURN_ACK_TEXT }], {
@@ -60,16 +65,17 @@ describe("matchUserVfsTurnAt", () => {
     const view = buildUserVfsTurnView(turn);
     assert.equal(view.id, "u1");
     assert.equal(view.bridgeText, USER_VFS_TURN_ACK_TEXT);
+    assert.equal(view.actions.length, 1);
+    assert.equal(view.actions[0]?.name, "delete");
   });
 
   it("hidden UA 对：At 返回 null", () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const hiddenMessages: ChatMessage[] = [
       msg(
         "u1",
         1,
         "user",
-        [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }],
+        [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }],
         { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
       ),
       msg(
@@ -87,13 +93,12 @@ describe("matchUserVfsTurnAt", () => {
   });
 
   it("仅 ack hidden 时 At 返回 null", () => {
-    const actionXml = '<user-vfs-action kind="delete" path="/a.md" />';
     const messages: ChatMessage[] = [
       msg(
         "u1",
         1,
         "user",
-        [{ type: "text", text: wrapUserVfsActionsForStorage(actionXml) }],
+        [{ type: "text", text: wrapUserVfsActionsForStorage(DELETE_ACTION_XML) }],
         { metadata: { kind: "user_vfs_action", source: "user", synthetic: true } },
       ),
       msg(
@@ -110,7 +115,7 @@ describe("matchUserVfsTurnAt", () => {
 
   it("旧 U-A-U-A 四段不匹配", () => {
     const messages: ChatMessage[] = [
-      msg("u1", 1, "user", [{ type: "text", text: "<user-vfs-action kind=\"delete\" path=\"/a.md\" />" }], {
+      msg("u1", 1, "user", [{ type: "text", text: DELETE_ACTION_XML }], {
         metadata: { kind: "user_vfs_action", source: "user", synthetic: true },
       }),
       msg("a1", 2, "assistant", [

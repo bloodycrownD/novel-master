@@ -423,6 +423,7 @@ describe("runAgentTurn", () => {
     assert.deepEqual(order, ["flush"]);
   });
 
+  // 落库 path 一律带前导 `/`（composer-at-token-prompt-dedup SPEC / scanAtPathAttachments）
   it("T-AT5: 手输 @path 入库 attachments 且 content 保留 token", async () => {
     resetUserVfsUnifiedToolTurnSnapshotForTests();
     refreshUserVfsUnifiedToolTurnSnapshot(false);
@@ -449,7 +450,7 @@ describe("runAgentTurn", () => {
     });
     assert.equal(appendedOptions?.attachments?.length, 1);
     assert.equal(appendedOptions?.attachments?.[0]?.source, "attach");
-    assert.equal(appendedOptions?.attachments?.[0]?.path, "notes/a.md");
+    assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
@@ -475,7 +476,7 @@ describe("runAgentTurn", () => {
               source: "attach",
               type: "text",
               content: null,
-              path: "notes/a.md",
+              path: "/notes/a.md",
             },
           ],
         },
@@ -484,7 +485,7 @@ describe("runAgentTurn", () => {
       // runner deps stubbed
     }
     assert.equal(appendedOptions?.attachments?.length, 1);
-    assert.equal(appendedOptions?.attachments?.[0]?.path, "notes/a.md");
+    assert.equal(appendedOptions?.attachments?.[0]?.path, "/notes/a.md");
     resetUserVfsUnifiedToolTurnSnapshotForTests();
   });
 
