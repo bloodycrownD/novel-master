@@ -16,9 +16,8 @@ import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
-  WORKTREE_BLOCK_LABEL,
-  WORKTREE_BLOCK_HINT,
-  addPersistWorktreeBlock,
+  WORKPLACE_BLOCK_LABEL,
+  WORKPLACE_BLOCK_HINT,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countFormPromptSources,
@@ -30,8 +29,6 @@ import {
   hasAnyPromptRegionEnabled,
   mapPersistTextBlocks,
   movePersistTextBlock,
-  removePersistWorktreeBlock,
-  splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
@@ -128,6 +125,7 @@ export function AgentEditorForm(props: Props) {
   const [systemContent, setSystemContent] = useState('');
   const [persistEnabled, setPersistEnabled] = useState(false);
   const [dynamicEnabled, setDynamicEnabled] = useState(false);
+  const [workplace, setWorkplace] = useState(false);
   const [persist, setPersist] = useState<PersistPromptBlock[]>([]);
   const [dynamic, setDynamic] = useState<DynamicPromptBlock[]>([]);
   const [providers, setProviders] = useState<
@@ -162,6 +160,7 @@ export function AgentEditorForm(props: Props) {
         systemContent,
         persistEnabled,
         dynamicEnabled,
+        workplace,
         persist,
         dynamic,
       }),
@@ -177,6 +176,7 @@ export function AgentEditorForm(props: Props) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     ],
@@ -220,6 +220,7 @@ export function AgentEditorForm(props: Props) {
       setSystemContent(promptForm.systemContent);
       setPersistEnabled(promptForm.persistEnabled);
       setDynamicEnabled(promptForm.dynamicEnabled);
+      setWorkplace(promptForm.workplace);
       setPersist([...promptForm.persist]);
       setDynamic([...promptForm.dynamic]);
 
@@ -462,6 +463,7 @@ export function AgentEditorForm(props: Props) {
       systemContent,
       persistEnabled,
       dynamicEnabled,
+      workplace,
       persist,
       dynamic,
     });
@@ -533,16 +535,12 @@ export function AgentEditorForm(props: Props) {
     ]);
   }, [runtime, agentId, loadAgent, showToast]);
 
-  const { textBlocks: persistTextBlocks, worktree: persistWorktree } = useMemo(
-    () => splitPersistBlocksForEditor(persist),
-    [persist],
-  );
-
   const promptRegionForm = () => ({
     systemEnabled,
     systemContent,
     persistEnabled,
     dynamicEnabled,
+    workplace,
     persist,
     dynamic,
   });
@@ -572,7 +570,7 @@ export function AgentEditorForm(props: Props) {
       setPersist(nextPersist);
       return;
     }
-    if (countFormPromptSources(nextForm, { excludeWorktree: true }) < 1) {
+    if (countFormPromptSources(nextForm) < 1) {
       showToast('至少保留一个 Prompt 块');
       return;
     }
@@ -584,18 +582,7 @@ export function AgentEditorForm(props: Props) {
   };
 
   const addPersistTextBlock = () => {
-    setPersist(prev => {
-      const { blocks, textBlocks } = splitPersistBlocksForEditor(prev);
-      return [...blocks, createDefaultPersistTextBlock(textBlocks.length)];
-    });
-  };
-
-  const setPersistWorktreeEnabled = (enabled: boolean) => {
-    setPersist(prev =>
-      enabled
-        ? addPersistWorktreeBlock(prev)
-        : removePersistWorktreeBlock(prev),
-    );
+    setPersist(prev => [...prev, createDefaultPersistTextBlock(prev.length)]);
   };
 
   const addDynamicBlock = () => {
@@ -974,7 +961,7 @@ export function AgentEditorForm(props: Props) {
             )}
           </View>
 
-          {renderPromptSectionHead(WORKTREE_BLOCK_LABEL)}
+          {renderPromptSectionHead(WORKPLACE_BLOCK_LABEL)}
           <View
             style={[
               styles.blockCard,
@@ -989,19 +976,19 @@ export function AgentEditorForm(props: Props) {
                 ]}
               >
                 <Text style={[styles.typeBadgeText, { color: tokens.primary }]}>
-                  {WORKTREE_BLOCK_LABEL}
+                  {WORKPLACE_BLOCK_LABEL}
                 </Text>
               </View>
               <View style={styles.blockHeaderSpacer} />
               <Switch
-                value={persistWorktree != null}
-                onValueChange={setPersistWorktreeEnabled}
+                value={workplace}
+                onValueChange={setWorkplace}
                 trackColor={{ false: tokens.border, true: tokens.primary }}
               />
             </View>
             <Text style={[styles.fieldHint, { color: tokens.textSecondary }]}>
-              {persistWorktree != null
-                ? WORKTREE_BLOCK_HINT
+              {workplace
+                ? WORKPLACE_BLOCK_HINT
                 : '关闭时不注入项目文件树。'}
             </Text>
           </View>
@@ -1019,7 +1006,7 @@ export function AgentEditorForm(props: Props) {
           >
             {persistEnabled ? (
               <View style={styles.blockList}>
-                {persistTextBlocks.length === 0 ? (
+                {persist.length === 0 ? (
                   <Text
                     style={[
                       styles.emptyHint,
@@ -1032,7 +1019,7 @@ export function AgentEditorForm(props: Props) {
                     {PROMPT_REGION_LABELS.emptyPersistHint}
                   </Text>
                 ) : null}
-                {persistTextBlocks.map((block, index) => (
+                {persist.map((block, index) => (
                   <View
                     key={`persist-block-${index}`}
                     style={[
@@ -1067,7 +1054,7 @@ export function AgentEditorForm(props: Props) {
                       </Text>
                       {renderBlockActions(
                         index,
-                        persistTextBlocks.length,
+                        persist.length,
                         movePersist,
                         deletePersist,
                       )}
