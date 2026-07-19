@@ -321,7 +321,6 @@ export function FileMarkdownPreview({
       />
       <AnnotateDetailModal
         visible={detailVisible}
-        originalText={detailDraft?.originalText ?? ''}
         userAnnotation={detailDraft?.userAnnotation ?? ''}
         onClose={() => {
           setDetailVisible(false);

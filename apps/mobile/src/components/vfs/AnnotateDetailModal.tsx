@@ -1,5 +1,6 @@
 /**
- * 批注详情弹窗：可滚动预览原文与说明，替代原生 Alert（长文可读）。
+ * 批注详情弹窗：可滚动预览批注说明（替代原生 Alert）。
+ * 面板与 backdrop 分离，避免外层 Pressable 抢走 ScrollView 手势。
  */
 import React, {useMemo} from 'react';
 import {
@@ -16,7 +17,6 @@ import {AppModal} from '@/components/ui/AppModal';
 
 type Props = {
   visible: boolean;
-  originalText: string;
   userAnnotation: string;
   onClose: () => void;
   onEdit: () => void;
@@ -25,7 +25,6 @@ type Props = {
 
 export function AnnotateDetailModal({
   visible,
-  originalText,
   userAnnotation,
   onClose,
   onEdit,
@@ -33,10 +32,12 @@ export function AnnotateDetailModal({
 }: Props) {
   const {tokens} = useTheme();
   const insets = useSafeAreaInsets();
-  const bodyMaxHeight = useMemo(() => {
+  const bodyHeight = useMemo(() => {
     const windowHeight = Dimensions.get('window').height;
-    return Math.min(360, windowHeight * 0.45);
+    return Math.min(360, Math.round(windowHeight * 0.45));
   }, []);
+
+  const bodyText = userAnnotation.trim() ? userAnnotation : '（空说明）';
 
   return (
     <AppModal
@@ -44,34 +45,19 @@ export function AnnotateDetailModal({
       animationType="fade"
       transparent
       onRequestClose={onClose}>
-      <Pressable
-        style={[styles.backdrop, {paddingBottom: 24 + insets.bottom}]}
-        onPress={onClose}>
-        <View style={styles.topSpacer} />
-        <Pressable
-          style={[styles.panel, {backgroundColor: tokens.surface}]}
-          onPress={e => e.stopPropagation()}>
+      <View style={[styles.backdrop, {paddingBottom: 24 + insets.bottom}]}>
+        <Pressable style={styles.topSpacer} onPress={onClose} />
+        <View style={[styles.panel, {backgroundColor: tokens.surface}]}>
           <Text style={[styles.title, {color: tokens.text}]}>批注</Text>
           <ScrollView
-            style={{maxHeight: bodyMaxHeight}}
+            style={[styles.scroll, {height: bodyHeight}]}
             contentContainerStyle={styles.scrollContent}
+            nestedScrollEnabled
             keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator>
-            {originalText.trim() ? (
-              <>
-                <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-                  原文
-                </Text>
-                <Text style={[styles.body, {color: tokens.textSecondary}]}>
-                  {originalText}
-                </Text>
-              </>
-            ) : null}
-            <Text style={[styles.sectionLabel, {color: tokens.textSecondary}]}>
-              说明
-            </Text>
-            <Text style={[styles.body, {color: tokens.text}]}>
-              {userAnnotation.trim() ? userAnnotation : '（空说明）'}
+            showsVerticalScrollIndicator
+            bounces>
+            <Text style={[styles.body, {color: tokens.text}]} selectable>
+              {bodyText}
             </Text>
           </ScrollView>
           <View style={styles.actions}>
@@ -89,9 +75,9 @@ export function AnnotateDetailModal({
               </Pressable>
             </View>
           </View>
-        </Pressable>
-        <View style={styles.bottomSpacer} />
-      </Pressable>
+        </View>
+        <Pressable style={styles.bottomSpacer} onPress={onClose} />
+      </View>
     </AppModal>
   );
 }
@@ -106,12 +92,12 @@ const styles = StyleSheet.create({
   },
   topSpacer: {
     flex: 1,
-    flexShrink: 0,
+    alignSelf: 'stretch',
     minHeight: 0,
   },
   bottomSpacer: {
     flex: 1,
-    flexShrink: 1,
+    alignSelf: 'stretch',
     minHeight: 0,
   },
   panel: {
@@ -119,8 +105,7 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     borderRadius: 16,
     padding: 20,
-    maxHeight: '85%',
-    overflow: 'hidden',
+    flexShrink: 0,
   },
   title: {
     fontSize: 18,
@@ -128,14 +113,12 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     textAlign: 'center',
   },
-  scrollContent: {
-    paddingBottom: 4,
+  scroll: {
+    width: '100%',
   },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 4,
-    marginTop: 8,
+  scrollContent: {
+    paddingBottom: 8,
+    flexGrow: 1,
   },
   body: {
     fontSize: 15,
