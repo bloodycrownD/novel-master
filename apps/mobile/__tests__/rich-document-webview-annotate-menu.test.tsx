@@ -24,6 +24,11 @@ jest.mock('@/webview-host/rich-document/uri', () => ({
   getRichDocumentPackageDirUri: () => 'file:///rich-document/',
 }));
 
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: {setString: jest.fn()},
+}));
+
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     tokens: {
@@ -37,11 +42,16 @@ jest.mock('../src/theme/ThemeProvider', () => ({
   }),
 }));
 
-import {RichDocumentWebView} from '../src/components/vfs/RichDocumentWebView';
+import Clipboard from '@react-native-clipboard/clipboard';
+import {
+  RICH_DOCUMENT_ANNOTATE_MENU_ITEMS,
+  RichDocumentWebView,
+} from '../src/components/vfs/RichDocumentWebView';
 
 describe('RichDocumentWebView annotate menuItems', () => {
   beforeEach(() => {
     mockWebViewProps.length = 0;
+    (Clipboard.setString as jest.Mock).mockClear();
   });
 
   it('annotateEnabled=false 不挂 menuItems', () => {
@@ -54,7 +64,7 @@ describe('RichDocumentWebView annotate menuItems', () => {
     expect(last?.menuItems).toBeUndefined();
   });
 
-  it('annotateEnabled=true 挂「添加批注」并回调 onCustomMenuSelection', () => {
+  it('annotateEnabled=true 挂「批注」「复制」；批注回调 / 复制写剪贴板', () => {
     const onSelectionAnnotate = jest.fn();
     act(() => {
       TestRenderer.create(
@@ -66,7 +76,7 @@ describe('RichDocumentWebView annotate menuItems', () => {
       );
     });
     const last = mockWebViewProps[mockWebViewProps.length - 1];
-    expect(last?.menuItems).toEqual([{label: '添加批注', key: 'annotate'}]);
+    expect(last?.menuItems).toEqual([...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]);
     const handler = last?.onCustomMenuSelection as
       | ((e: {nativeEvent: {key: string; selectedText: string}}) => void)
       | undefined;
@@ -75,5 +85,9 @@ describe('RichDocumentWebView annotate menuItems', () => {
       nativeEvent: {key: 'annotate', selectedText: '  hello  '},
     });
     expect(onSelectionAnnotate).toHaveBeenCalledWith('hello');
+    handler?.({
+      nativeEvent: {key: 'copy', selectedText: '  world  '},
+    });
+    expect(Clipboard.setString).toHaveBeenCalledWith('world');
   });
 });

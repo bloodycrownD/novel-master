@@ -3,6 +3,7 @@
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, View, type StyleProp, type ViewStyle} from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import WebView, {type WebViewMessageEvent} from 'react-native-webview';
 import type {ThemeTokens} from '../../theme/tokens';
 import {
@@ -19,6 +20,12 @@ import {
 import {useTheme} from '../../theme/ThemeProvider';
 
 const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
+
+/** 划词开启时替换系统选区菜单（自定义项会盖掉原生 Copy/Share，故自备「复制」）。 */
+export const RICH_DOCUMENT_ANNOTATE_MENU_ITEMS = [
+  {label: '批注', key: 'annotate'},
+  {label: '复制', key: 'copy'},
+] as const;
 
 export type RichDocumentWebViewProps = {
   readonly html?: string;
@@ -186,14 +193,18 @@ export function RichDocumentWebView({
         return;
       }
       const key = String(event.nativeEvent.key ?? '');
-      if (key !== 'annotate') {
-        return;
-      }
       const text = String(event.nativeEvent.selectedText ?? '')
         .replace(/\u00a0/g, ' ')
         .trim();
-      if (text) {
+      if (!text) {
+        return;
+      }
+      if (key === 'annotate') {
         onSelectionAnnotateRef.current?.(text);
+        return;
+      }
+      if (key === 'copy') {
+        Clipboard.setString(text);
       }
     },
     [annotateEnabled],
@@ -216,10 +227,10 @@ export function RichDocumentWebView({
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}
         keyboardDisplayRequiresUserAction={false}
-        /* 划词批注：用原生选区菜单「添加批注」替换系统 Copy/Share（DOM 浮动条在 Android 上常被盖住）。 */
+        /* 划词批注：自定义选区菜单替换系统项；须自备「复制」。 */
         menuItems={
           annotateEnabled
-            ? [{label: '添加批注', key: 'annotate'}]
+            ? [...RICH_DOCUMENT_ANNOTATE_MENU_ITEMS]
             : undefined
         }
         onCustomMenuSelection={
