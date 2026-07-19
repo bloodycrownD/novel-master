@@ -24,6 +24,7 @@ import {
   FileMarkdownPreview,
   isMarkdownPreviewPath,
 } from '../../components/vfs/FileMarkdownPreview';
+import {shouldEnableFileAnnotate} from '../../components/vfs/file-annotate-gate';
 import {SegmentedControl} from '../../components/ui/SegmentedControl';
 import {formatCharCount} from '@novel-master/core/format';
 
@@ -177,6 +178,12 @@ export function FileEditorScreen() {
     setPreviewMode(prev => !prev);
   };
 
+  const annotateEnabled = shouldEnableFileAnnotate({
+    previewMode,
+    scopeKind,
+    sessionId,
+  });
+
   if (loading) {
     return (
       <View style={[styles.center, {backgroundColor: tokens.background}]}>
@@ -248,6 +255,8 @@ export function FileEditorScreen() {
             tokens={tokens}
             previewFill
             renderKind={previewRenderKind}
+            annotateEnabled={annotateEnabled}
+            sessionId={annotateEnabled ? sessionId : undefined}
           />
         </View>
       ) : (

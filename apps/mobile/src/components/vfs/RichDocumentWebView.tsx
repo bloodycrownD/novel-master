@@ -9,6 +9,7 @@ import {
   encodeHostToRichDocument,
   decodeRichDocumentToHost,
   type HostToRichDocumentMessage,
+  type RichDocumentAnnotationMark,
   type RichDocumentTheme,
 } from './RichDocumentBridge';
 import {
@@ -17,12 +18,19 @@ import {
 } from '@/webview-host/rich-document/uri';
 import {useTheme} from '../../theme/ThemeProvider';
 
+const EMPTY_ANNOTATIONS: readonly RichDocumentAnnotationMark[] = [];
+
 export type RichDocumentWebViewProps = {
   readonly html?: string;
   readonly plain?: string;
   readonly overLimit?: boolean;
   readonly frontMatterHtml?: string;
   readonly style?: StyleProp<ViewStyle>;
+  /** 划词批注入口（仅 session 预览态由上层打开）。 */
+  readonly annotateEnabled?: boolean;
+  readonly annotations?: readonly RichDocumentAnnotationMark[];
+  readonly onSelectionAnnotate?: (text: string) => void;
+  readonly onAnnotateOpen?: (id: string) => void;
 };
 
 function themeFromTokens(tokens: ThemeTokens): RichDocumentTheme {
@@ -68,10 +76,18 @@ export function RichDocumentWebView({
   overLimit = false,
   frontMatterHtml,
   style,
+  annotateEnabled = false,
+  annotations = EMPTY_ANNOTATIONS,
+  onSelectionAnnotate,
+  onAnnotateOpen,
 }: RichDocumentWebViewProps) {
   const {tokens} = useTheme();
   const webRef = useRef<WebView>(null);
   const [webReady, setWebReady] = useState(false);
+  const onSelectionAnnotateRef = useRef(onSelectionAnnotate);
+  const onAnnotateOpenRef = useRef(onAnnotateOpen);
+  onSelectionAnnotateRef.current = onSelectionAnnotate;
+  onAnnotateOpenRef.current = onAnnotateOpen;
 
   const postToWeb = useCallback((message: HostToRichDocumentMessage) => {
     webRef.current?.postMessage(encodeHostToRichDocument(message));
@@ -90,6 +106,20 @@ export function RichDocumentWebView({
       const message = decodeRichDocumentToHost(event.nativeEvent.data);
       if (message.type === 'ready') {
         setWebReady(true);
+        return;
+      }
+      if (message.type === 'selectionAnnotate') {
+        const text = String(message.payload.text ?? '').trim();
+        if (text) {
+          onSelectionAnnotateRef.current?.(text);
+        }
+        return;
+      }
+      if (message.type === 'annotateOpen') {
+        const id = String(message.payload.id ?? '');
+        if (id) {
+          onAnnotateOpenRef.current?.(id);
+        }
       }
     } catch {
       // ignore malformed messages
@@ -120,6 +150,35 @@ export function RichDocumentWebView({
     }
     postToWeb(buildSetDocumentPayload(html, plain, overLimit, frontMatterHtml));
   }, [webReady, html, plain, overLimit, frontMatterHtml, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'setAnnotateEnabled',
+      payload: {enabled: annotateEnabled === true},
+    });
+  }, [webReady, annotateEnabled, postToWeb]);
+
+  useEffect(() => {
+    if (!webReady) {
+      return;
+    }
+    postToWeb({
+      v: 1,
+      type: 'setAnnotations',
+      payload: {
+        annotations: annotateEnabled
+          ? annotations.map(a => ({
+              id: a.id,
+              originalText: a.originalText,
+            }))
+          : [],
+      },
+    });
+  }, [webReady, annotateEnabled, annotations, postToWeb]);
 
   return (
     <View style={[styles.fill, style]}>

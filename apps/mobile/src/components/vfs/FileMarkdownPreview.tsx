@@ -1,10 +1,18 @@
 /**
  * Markdown file preview with Front Matter card and themed body rendering.
+ * 划词批注：仅 annotateEnabled（session 预览态）经 WebView 桥接入。
  */
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import {splitMarkdownFrontMatter} from '@novel-master/core/worktree';
+import type {AnnotateDraft} from '@novel-master/core/chat';
 import type {ThemeTokens} from '../../theme/tokens';
 import {useNovelMaster} from '../../runtime/novel-master-context';
 import {
@@ -12,11 +20,21 @@ import {
   readVfsMarkdownPreviewEngine,
   type VfsMarkdownPreviewEngine,
 } from '../../storage/vfs-markdown-preview-engine';
+import {
+  addChatAnnotateDraft,
+  listChatAnnotateDrafts,
+  removeChatAnnotateDraft,
+  subscribeChatAnnotateDraft,
+  updateChatAnnotateDraft,
+} from '../../storage/chat-annotate-draft';
+import {refreshComposerAnnotateChips} from '../../storage/chat-composer-draft';
 import {RichContentBody} from '../rich-content/RichContentBody';
 import {prepareTranscriptRichHtml} from '../rich-content/prepare-transcript-rich-html';
 import {isRichContentOverLimit} from '../rich-content/rich-content-limits';
+import {TextPromptModal} from '../ui/TextPromptModal';
 import {buildFrontMatterDocumentHtml} from './build-front-matter-document-html';
 import {parseFrontMatterFields} from './front-matter-fields';
+import type {RichDocumentAnnotationMark} from './RichDocumentBridge';
 import {RichDocumentWebView} from './RichDocumentWebView';
 
 const MARKDOWN_PATH = /\.(md|markdown)$/i;
@@ -35,6 +53,17 @@ interface FileMarkdownPreviewProps {
   previewFill?: boolean;
   /** Tab selection: 'txt' shows raw source; 'markdown' runs the preview pipeline. */
   renderKind?: PreviewRenderKind;
+  /**
+   * 划词批注入口。仅 FileEditorScreen 在 previewMode && scopeKind==="session" 时打开。
+   * project/global/编辑态必须为 false。
+   */
+  annotateEnabled?: boolean;
+  /** annotateEnabled 时必填：写入 chat-annotate-draft 会话 Map。 */
+  sessionId?: string;
+}
+
+function newAnnotateId(): string {
+  return `ann-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /** Wrap plain/RN markdown in ScrollView when previewFill — WebView paths skip this. */
@@ -64,11 +93,18 @@ export function FileMarkdownPreview({
   tokens,
   previewFill = false,
   renderKind = 'markdown',
+  annotateEnabled = false,
+  sessionId,
 }: FileMarkdownPreviewProps) {
   const {appUi} = useNovelMaster();
   const [previewEngine, setPreviewEngine] = useState<VfsMarkdownPreviewEngine>(
     defaultVfsMarkdownPreviewEngine(),
   );
+  const [pathDrafts, setPathDrafts] = useState<AnnotateDraft[]>([]);
+  const [addVisible, setAddVisible] = useState(false);
+  const [pendingOriginalText, setPendingOriginalText] = useState('');
+  const [editVisible, setEditVisible] = useState(false);
+  const [editingDraft, setEditingDraft] = useState<AnnotateDraft | null>(null);
 
   const refreshPreviewEngine = useCallback(async () => {
     setPreviewEngine(await readVfsMarkdownPreviewEngine(appUi));
@@ -82,6 +118,104 @@ export function FileMarkdownPreview({
     useCallback(() => {
       refreshPreviewEngine().catch(() => undefined);
     }, [refreshPreviewEngine]),
+  );
+
+  const syncPathDrafts = useCallback(() => {
+    if (!annotateEnabled || sessionId == null || sessionId === '') {
+      setPathDrafts([]);
+      return;
+    }
+    setPathDrafts(
+      listChatAnnotateDrafts(sessionId).filter(d => d.path === path),
+    );
+  }, [annotateEnabled, sessionId, path]);
+
+  useEffect(() => {
+    syncPathDrafts();
+    if (!annotateEnabled || sessionId == null || sessionId === '') {
+      return;
+    }
+    return subscribeChatAnnotateDraft(changed => {
+      if (changed === sessionId) {
+        syncPathDrafts();
+      }
+    });
+  }, [annotateEnabled, sessionId, syncPathDrafts]);
+
+  const annotationMarks: readonly RichDocumentAnnotationMark[] = useMemo(
+    () =>
+      pathDrafts.map(d => ({
+        id: d.id,
+        originalText: d.originalText,
+      })),
+    [pathDrafts],
+  );
+
+  const handleSelectionAnnotate = useCallback((text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return;
+    }
+    setPendingOriginalText(trimmed);
+    setAddVisible(true);
+  }, []);
+
+  const handleAddConfirm = useCallback(
+    async (userAnnotation: string) => {
+      if (!annotateEnabled || sessionId == null || sessionId === '') {
+        return;
+      }
+      addChatAnnotateDraft(sessionId, {
+        id: newAnnotateId(),
+        path,
+        originalText: pendingOriginalText,
+        userAnnotation,
+      });
+      refreshComposerAnnotateChips(sessionId);
+    },
+    [annotateEnabled, sessionId, path, pendingOriginalText],
+  );
+
+  const handleAnnotateOpen = useCallback(
+    (id: string) => {
+      const draft = pathDrafts.find(d => d.id === id);
+      if (!draft) {
+        return;
+      }
+      Alert.alert('批注', draft.userAnnotation || '（空说明）', [
+        {
+          text: '删除',
+          style: 'destructive',
+          onPress: () => {
+            if (!sessionId) {
+              return;
+            }
+            removeChatAnnotateDraft(sessionId, draft.id);
+            refreshComposerAnnotateChips(sessionId);
+          },
+        },
+        {
+          text: '编辑',
+          onPress: () => {
+            setEditingDraft(draft);
+            setEditVisible(true);
+          },
+        },
+        {text: '关闭', style: 'cancel'},
+      ]);
+    },
+    [pathDrafts, sessionId],
+  );
+
+  const handleEditConfirm = useCallback(
+    async (userAnnotation: string) => {
+      if (!sessionId || !editingDraft) {
+        return;
+      }
+      updateChatAnnotateDraft(sessionId, editingDraft.id, {userAnnotation});
+      refreshComposerAnnotateChips(sessionId);
+    },
+    [sessionId, editingDraft],
   );
 
   const isMdPath = isMarkdownPreviewPath(path);
@@ -107,6 +241,7 @@ export function FileMarkdownPreview({
 
   const mdOverLimit = isRichContentOverLimit(mdBody);
   const nonMdOverLimit = isRichContentOverLimit(nonMdBody);
+  const plainOverLimit = isRichContentOverLimit(content);
 
   const mdBodyHtml = useMemo(() => {
     if (!mdBody || mdOverLimit || previewEngine !== 'webview') {
@@ -157,6 +292,50 @@ export function FileMarkdownPreview({
     fmLines,
   ]);
 
+  const annotateWebProps = annotateEnabled
+    ? {
+        annotateEnabled: true as const,
+        annotations: annotationMarks,
+        onSelectionAnnotate: handleSelectionAnnotate,
+        onAnnotateOpen: handleAnnotateOpen,
+      }
+    : {annotateEnabled: false as const};
+
+  const annotateModals = (
+    <>
+      <TextPromptModal
+        visible={addVisible}
+        title="添加批注"
+        label={
+          pendingOriginalText.length > 80
+            ? `${pendingOriginalText.slice(0, 80)}…`
+            : pendingOriginalText
+        }
+        placeholder="批注说明"
+        confirmLabel="添加"
+        onClose={() => setAddVisible(false)}
+        onConfirm={handleAddConfirm}
+      />
+      <TextPromptModal
+        visible={editVisible}
+        title="编辑批注"
+        label={
+          editingDraft && editingDraft.originalText.length > 80
+            ? `${editingDraft.originalText.slice(0, 80)}…`
+            : editingDraft?.originalText
+        }
+        placeholder="批注说明"
+        initialValue={editingDraft?.userAnnotation ?? ''}
+        confirmLabel="保存"
+        onClose={() => {
+          setEditVisible(false);
+          setEditingDraft(null);
+        }}
+        onConfirm={handleEditConfirm}
+      />
+    </>
+  );
+
   if (!content.trim()) {
     return (
       <Text style={[styles.empty, {color: tokens.textSecondary}]}>
@@ -166,7 +345,21 @@ export function FileMarkdownPreview({
   }
 
   // renderKind drives tab: txt shows raw source for all file types.
+  // 划词批注开启时走 WebView plain，以便选区/下划线（md/txt 同验收）。
   if (renderKind === 'txt') {
+    if (annotateEnabled) {
+      return (
+        <View style={[styles.root, previewFill && styles.fillRoot]}>
+          <RichDocumentWebView
+            plain={content}
+            overLimit={plainOverLimit}
+            style={previewFill ? styles.webBody : undefined}
+            {...annotateWebProps}
+          />
+          {annotateModals}
+        </View>
+      );
+    }
     const plain = (
       <Text style={[styles.plain, {color: tokens.text}]}>{content}</Text>
     );
@@ -182,13 +375,15 @@ export function FileMarkdownPreview({
         style={[
           styles.root,
           previewFill && nonMdUseWebViewPreview && styles.fillRoot,
+          previewFill && annotateEnabled && styles.fillRoot,
         ]}>
-        {nonMdUseWebViewPreview ? (
+        {nonMdUseWebViewPreview || annotateEnabled ? (
           <RichDocumentWebView
             html={nonMdBodyHtml}
             plain={nonMdBody}
             overLimit={nonMdOverLimit}
             style={previewFill ? styles.webBody : undefined}
+            {...annotateWebProps}
           />
         ) : nonMdBody ? (
           <PreviewScrollWrap previewFill={previewFill}>
@@ -199,24 +394,31 @@ export function FileMarkdownPreview({
             />
           </PreviewScrollWrap>
         ) : null}
+        {annotateEnabled ? annotateModals : null}
       </View>
     );
   }
 
   return (
-    <View style={[styles.root, previewFill && mdUseWebViewPreview && styles.fillRoot]}>
+    <View
+      style={[
+        styles.root,
+        previewFill && mdUseWebViewPreview && styles.fillRoot,
+        previewFill && annotateEnabled && styles.fillRoot,
+      ]}>
       {!split?.closed ? (
         <Text style={{color: tokens.textSecondary, fontSize: 14}}>
           请返回编辑并补全结束的 --- 后再预览正文。
         </Text>
       ) : null}
-      {mdUseWebViewPreview ? (
+      {mdUseWebViewPreview || (annotateEnabled && split?.closed) ? (
         <RichDocumentWebView
           html={mdBodyHtml}
-          plain={mdBody}
+          plain={mdBody || content}
           overLimit={mdOverLimit}
           frontMatterHtml={frontMatterHtml}
           style={previewFill ? styles.webBody : undefined}
+          {...annotateWebProps}
         />
       ) : mdBody ? (
         <>
@@ -250,6 +452,7 @@ export function FileMarkdownPreview({
           </Text>
         </>
       ) : null}
+      {annotateEnabled ? annotateModals : null}
     </View>
   );
 }
