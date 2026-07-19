@@ -1,10 +1,13 @@
 /**
- * Composer 状态 chip（不可叉）：workplace + user_ops。
- * 文件引用不再使用 attach chip（认正文 `@路径`）。
+ * Composer 状态 chip（不可叉）：workplace + user_ops（含 annotate 预览）。
+ * 文件引用不再使用 attach chip（认正文 `@路径`）；userAttach 不进状态条。
  */
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { MessageAttachment } from '@novel-master/core/chat';
+import {
+  formatStatusChipLabelFromAttachment,
+  type MessageAttachment,
+} from '@novel-master/core/chat';
 import { useTheme } from '@/theme/ThemeProvider';
 
 export type AttachmentDraftChipsProps = {
@@ -21,8 +24,11 @@ export type AttachmentDraftChipsProps = {
   transparentRow?: boolean;
 };
 
-/** 是否为状态条附件（workplace / user_ops）。 */
+/** 是否为状态条附件（workplace / user_ops；不含 attach/userAttach）。 */
 export function isComposerStatusAttachment(a: MessageAttachment): boolean {
+  if (a.action === 'userAttach' || a.source === 'attach') {
+    return false;
+  }
   return a.source === 'workplace' || a.source === 'user_ops';
 }
 
@@ -46,20 +52,10 @@ export function partitionComposerChipAttachments(
 }
 
 /**
- * Chip 文案：与文件引用 `@路径` 区分。
- * - workplace → `规则 · /path`（目录保留尾 `/`）
- * - user_ops → 直接 `name`（多为 `action:path`，如 `write:/ops.md`）
+ * Chip 文案：中文二字 + `:` + path（Core `formatStatusChipLabelFromAttachment`）。
  */
 export function formatAttachmentChipLabel(a: MessageAttachment): string {
-  if (a.source === 'user_ops') {
-    return a.name;
-  }
-  const path = a.path ?? a.name;
-  if (a.type === 'dir') {
-    const dirPath = path.endsWith('/') ? path : `${path}/`;
-    return `规则 · ${dirPath}`;
-  }
-  return `规则 · ${path}`;
+  return formatStatusChipLabelFromAttachment(a);
 }
 
 export function AttachmentDraftChips({

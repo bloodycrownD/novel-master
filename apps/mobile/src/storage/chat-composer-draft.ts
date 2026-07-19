@@ -9,6 +9,7 @@ import {
   serializeComposerDraftJson,
   type MessageAttachment,
 } from '@novel-master/core/chat';
+import { unionComposerStatusWithAnnotate } from './chat-annotate-draft';
 
 export type ChatComposerDraft = {
   readonly text: string;
@@ -173,7 +174,8 @@ export async function hydrateChatComposerDraftFromDb(
 }
 
 /**
- * 投影结果整表替换状态条（workplace|user_ops）；draft attach 恒空，不保留 existing attach。
+ * 投影结果整表替换状态条（workplace|user_ops），再 ∪ annotate store chips。
+ * draft attach 恒空，不保留 existing attach；annotate 永不指望 Core replace 保留。
  */
 export function applyComposerStatusAttachmentsReplace(payload: {
   readonly sessionId: string;
@@ -184,10 +186,11 @@ export function applyComposerStatusAttachmentsReplace(payload: {
     return;
   }
   const prev = bySession.get(sessionId) ?? EMPTY;
-  const merged = replaceComposerStatusAttachments(
+  const replaced = replaceComposerStatusAttachments(
     prev.attachments,
     statusProjected,
   );
+  const merged = unionComposerStatusWithAnnotate(replaced, sessionId);
   if (!prev.text && merged.length === 0) {
     bySession.delete(sessionId);
     notifyDraftListeners(sessionId);
@@ -203,3 +206,17 @@ export function applyComposerStatusAttachmentsReplace(payload: {
  */
 export const applyComposerAttachmentsSuggest =
   applyComposerStatusAttachmentsReplace;
+
+/**
+ * 仅按 annotate store 重合并状态条（CRUD 后调用；不改 projected 半边）。
+ */
+export function refreshComposerAnnotateChips(sessionId: string): void {
+  if (sessionId === '') {
+    return;
+  }
+  const prev = bySession.get(sessionId) ?? EMPTY;
+  applyComposerStatusAttachmentsReplace({
+    sessionId,
+    attachments: prev.attachments.filter(a => a.action !== 'annotate'),
+  });
+}

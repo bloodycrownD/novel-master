@@ -40,9 +40,16 @@ import {
   clearChatComposerDraft,
   hydrateChatComposerDraftFromDb,
   readChatComposerDraftState,
+  refreshComposerAnnotateChips,
   subscribeChatComposerDraft,
   writeChatComposerDraftState,
 } from '@/storage/chat-composer-draft';
+import {
+  clearChatAnnotateDrafts,
+  hasChatAnnotateDrafts,
+  listChatAnnotateDrafts,
+  subscribeChatAnnotateDraft,
+} from '@/storage/chat-annotate-draft';
 
 import { projectComposerStatusForSession } from '@/services/project-composer-status.service';
 
@@ -266,6 +273,15 @@ export function ChatComposer({
     });
   }, [sessionId, refreshPendingUserOps]);
 
+  useEffect(() => {
+    return subscribeChatAnnotateDraft(changedSessionId => {
+      if (changedSessionId !== sessionId) {
+        return;
+      }
+      refreshComposerAnnotateChips(sessionId);
+    });
+  }, [sessionId]);
+
   const executeRun = useCallback(
     async (
       content: string,
@@ -283,6 +299,7 @@ export function ChatComposer({
       beginUiRun();
 
       // 有正文 / pending / workplace 差集 → 成功后清输入；pending 仍可发（门闩）
+      // annotate 仅在 onUserMessageAppended 清 store（与正文分轨可并存于回调）
       const shouldClearComposer =
         content.trim() !== '' ||
         hasPendingUserOps ||
@@ -302,13 +319,17 @@ export function ChatComposer({
 
       try {
         const stream = await runtime.preferences.getLlmStreamEnabled();
+        const annotateDrafts = listChatAnnotateDrafts(sessionId);
         // 文件引用由 Core 扫描正文 `@`；workplace 由 Core materialize
         await runAgentTurn(runtime, scope, content, {
           stream,
           allowResumeWithoutInput,
           signal: controller.signal,
+          annotateDrafts:
+            annotateDrafts.length > 0 ? annotateDrafts : undefined,
           onUserMessageAppended: () => {
-            // append 成功后再清输入，避免失败时「字没了、消息也没落盘」
+            // append 成功后再清输入 + annotate，避免失败时丢草稿
+            clearChatAnnotateDrafts(sessionId);
             clearComposerNow();
             void Promise.resolve(
               streamHandlersRef.current.onMessagesChanged(),
@@ -502,6 +523,7 @@ export function ChatComposer({
       attachmentCount: scannedCount,
       hasPendingUserOps,
       hasWorkplaceDelta,
+      hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
     });
     // 仅当无可发输入（含无 workplace）且 canResume 时才允许空续跑
     const allowResumeWithoutInput = !hasSendable && canResumeWithoutInput;
@@ -543,6 +565,7 @@ export function ChatComposer({
         attachmentCount: countScannedAtPathAttachments(text),
         hasPendingUserOps,
         hasWorkplaceDelta: sendHasWorkplaceDelta,
+        hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
       }) &&
       !canResumeWithoutInput);
 

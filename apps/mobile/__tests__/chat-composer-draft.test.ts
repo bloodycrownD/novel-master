@@ -6,6 +6,10 @@ import {
   writeChatComposerDraft,
   writeChatComposerDraftState,
 } from '../src/storage/chat-composer-draft';
+import {
+  addChatAnnotateDraft,
+  resetChatAnnotateDraftStoreForTests,
+} from '../src/storage/chat-annotate-draft';
 
 describe('chat-composer-draft', () => {
   it('reads and writes per session', () => {
@@ -70,5 +74,48 @@ describe('chat-composer-draft', () => {
       'workplace:/b.md',
     ]);
     expect(state.attachments.every(a => a.source !== 'attach')).toBe(true);
+  });
+
+  it('T-AN1: replace projected 后再 ∪ annotate，chip 不被冲掉', () => {
+    resetChatAnnotateDraftStoreForTests();
+    const sessionId = 's-an1-m';
+    addChatAnnotateDraft(sessionId, {
+      id: 'a1',
+      path: '/note.md',
+      originalText: 'sel',
+      userAnnotation: 'mark',
+    });
+    addChatAnnotateDraft(sessionId, {
+      id: 'a2',
+      path: '/note.md',
+      originalText: 'sel2',
+      userAnnotation: 'mark2',
+    });
+    writeChatComposerDraftState(sessionId, {
+      text: '',
+      attachments: [],
+    });
+    applyComposerStatusAttachmentsReplace({
+      sessionId,
+      attachments: [
+        {
+          name: '/w.md',
+          source: 'workplace',
+          type: 'text',
+          content: null,
+          path: '/w.md',
+          action: 'workplaceChange',
+        },
+      ],
+    });
+    const state = readChatComposerDraftState(sessionId);
+    expect(
+      state.attachments.map(a => `${a.action ?? a.source}:${a.path}`),
+    ).toEqual(['workplaceChange:/w.md', 'annotate:/note.md']);
+    // 同 path 两条草稿仍只一只 chip
+    expect(
+      state.attachments.filter(a => a.action === 'annotate').length,
+    ).toBe(1);
+    resetChatAnnotateDraftStoreForTests();
   });
 });

@@ -3,6 +3,7 @@
  * 行列表结构主路径在 ui/render；由 main 注册 Preact 实现。
  * 流式壳已迁 ui/stream；不再保留 renderAssistantBubbleInner 拼串。
  */
+import { formatStatusChipLabelFromAttachment } from '@novel-master/core/chat';
 import type { TranscriptFlags } from '../state/state';
 
 export type RenderRowsView = () => void;
@@ -32,21 +33,35 @@ export function renderRows(): void {
   invokeRegisteredRenderRows();
 }
 
-/** 附件芯片主标签（明文）。 */
+/** 附件芯片主标签（明文；无 emoji /「规则 ·」）。 */
 export function attachmentChipLabel(a: {
   source?: string;
   type?: string;
   name?: string;
   path?: string;
+  action?: string;
+  content?: string | null;
 }): string {
-  if (a.source === 'user_ops') {
-    return a.name || '';
+  if (a.source === 'attach') {
+    const path = a.path || a.name || '';
+    return path.startsWith('@') ? path : `@${path}`;
   }
-  const path = a.path || a.name || '';
-  if (a.type === 'dir') {
-    return '📁' + path;
-  }
-  return '📄' + path;
+  return formatStatusChipLabelFromAttachment({
+    source: (a.source as 'workplace' | 'attach' | 'user_ops') ?? 'user_ops',
+    name: a.name ?? '',
+    path: a.path,
+    action: a.action as
+      | 'delete'
+      | 'write'
+      | 'edit'
+      | 'mkdir'
+      | 'rename'
+      | 'workplaceChange'
+      | 'userAttach'
+      | 'annotate'
+      | undefined,
+    content: a.content ?? null,
+  });
 }
 
 /** 附件来源副标签（明文）。 */
