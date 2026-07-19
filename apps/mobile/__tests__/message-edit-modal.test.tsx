@@ -298,15 +298,22 @@ describe('MessageEditModal', () => {
         }),
       ]),
     );
-    const pressables = tree.root.findAllByType('Pressable' as never);
-    const editBtn = pressables.find(p =>
-      p.findAllByType('Text' as never).some(t => t.props.children === '编辑'),
+    const editLabel = tree.root.find(
+      node => node.type === 'Text' && node.props.children === '编辑',
     );
-    const delBtn = pressables.find(p =>
-      p.findAllByType('Text' as never).some(t => t.props.children === '删除'),
+    const delLabel = tree.root.find(
+      node => node.type === 'Text' && node.props.children === '删除',
     );
-    expect(editBtn).toBeTruthy();
-    expect(delBtn).toBeTruthy();
+    let editBtn: TestRenderer.ReactTestInstance | null = editLabel;
+    while (editBtn && editBtn.type !== 'Pressable') {
+      editBtn = editBtn.parent;
+    }
+    let delBtn: TestRenderer.ReactTestInstance | null = delLabel;
+    while (delBtn && delBtn.type !== 'Pressable') {
+      delBtn = delBtn.parent;
+    }
+    expect(editBtn?.props.onPress).toEqual(expect.any(Function));
+    expect(delBtn?.props.onPress).toEqual(expect.any(Function));
     act(() => {
       editBtn!.props.onPress();
     });
