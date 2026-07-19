@@ -27,22 +27,6 @@ function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
 }
 
-/** 属性值转义（与 {@link renderFileBlock} 口径一致）。 */
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
-
-/**
- * 用 `<dir path="…">` 包裹 ASCII 树，与附件侧 `<file path="…">` 对称分段。
- */
-function wrapDirAttachBlock(logicalPath: string, treeBody: string): string {
-  const pathAttr = escapeXmlAttr(logicalPath);
-  return `<dir path="${pathAttr}">\n${treeBody}\n</dir>`;
-}
-
 /**
  * 根行标签：与 {@link worktreeFileTreeRootLabel} 口径一致——
  * `/` → `/`；其它 path → `basename/`（例 `/notes` → `notes/`）。
@@ -68,16 +52,14 @@ function entryDisplayName(
 }
 
 /**
- * 渲染以 `rootDir` 为根的 depth=1 `$filetree` ASCII 树，外包 `<dir path="…">`；
- * 超长截断并在树末追加 `[truncated]` 注释行（仍在标签内）。
+ * 渲染以 `rootDir` 为根的 depth=1 `$filetree` ASCII 树正文（**无**外层 `<dir>`）；
+ * 超长截断并在树末追加 `[truncated]` 注释行。
  *
  * 例：
  * ```
- * <dir path="/notes">
  * notes/
  * ├── sub/
  * └── a.md
- * </dir>
  * ```
  */
 export async function renderDirAttachTree(
@@ -93,7 +75,7 @@ export async function renderDirAttachTree(
     entries = await deps.vfs.list(normalizedRoot, { recursive: false });
   } catch {
     // 目录不存在时仍输出根行，便于 prompt 侧感知路径
-    return wrapDirAttachBlock(normalizedRoot, rootLine);
+    return rootLine;
   }
 
   const dirs: ChildEntry[] = [];
@@ -129,5 +111,5 @@ export async function renderDirAttachTree(
   if (truncated) {
     treeBody = `${treeBody}\n<!-- [truncated] -->`;
   }
-  return wrapDirAttachBlock(normalizedRoot, treeBody);
+  return treeBody;
 }

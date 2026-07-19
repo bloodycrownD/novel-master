@@ -9,7 +9,9 @@
 
 import { resolveLogicalPath } from "@/domain/vfs/logic/vfs-path-mapper.js";
 
-/** 文本文件非首次附件的短提示正文。 */
+/**
+ * 文本文件非首次专用短提示正文（JSON 字段口径仍用此常量断言语义）。
+ */
 export const PROMPT_FILE_SEEN_SHORT_TIP = "该文件前文已引用，无需读取或加载";
 
 /** 目录 token：规范化前看尾部 `/` 或 `\`。 */
@@ -55,19 +57,20 @@ export function tryNormalizePromptSeenPath(path: string): string | null {
   }
 }
 
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;");
-}
-
 /**
+ * @deprecated 增量已改 `alreadyReferenced` JSON；保留给旧断言 / 兼容调用。
  * 文本文件非首次专用最小 XML（不经 `renderFileBlock`，无行号 / createdAt 等）。
  */
 export function renderPromptFileSeenShortTip(logicalPath: string): string {
   const path = normalizePromptSeenPath(logicalPath);
   return `<file path="${escapeXmlAttr(path)}">${PROMPT_FILE_SEEN_SHORT_TIP}</file>`;
+}
+
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
 }
 
 /** 由初始前缀 path 列表构造可变 seen 集合（写入前均规范化）。 */
@@ -86,3 +89,4 @@ export function createPromptPathSeenSet(
   }
   return set;
 }
+

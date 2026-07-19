@@ -49,6 +49,22 @@ function contentLines(
   }
 }
 
+/**
+ * 与 {@link renderFileBlock} 标签内正文同形的行号正文（无外层 `<file>` / 无 mtime 属性）。
+ * 供消息增量 `userAttach` / `workplaceChange` JSON `content` 使用。
+ */
+export function renderFileBlockBody(params: {
+  readonly logicalPath: string;
+  readonly display: DisplayState;
+  readonly content: string;
+}): string {
+  return contentLines(
+    params.display,
+    params.logicalPath,
+    params.content,
+  ).join("\n");
+}
+
 /** Renders a single visible file block. */
 export function renderFileBlock(params: {
   readonly logicalPath: string;
@@ -56,7 +72,11 @@ export function renderFileBlock(params: {
   readonly display: DisplayState;
   readonly content: string;
 }): string {
-  const lines = contentLines(params.display, params.logicalPath, params.content);
+  const body = renderFileBlockBody({
+    logicalPath: params.logicalPath,
+    display: params.display,
+    content: params.content,
+  });
   const mtimeLocal = formatLocalMtime(params.mtimeMs);
   const attrs = [
     `path="${escapeXmlAttr(params.logicalPath)}"`,
@@ -64,7 +84,6 @@ export function renderFileBlock(params: {
     `updatedAt="${escapeXmlAttr(mtimeLocal)}"`,
     `updatedBy="user"`,
   ].join(" ");
-  const body = lines.join("\n");
   return `<file ${attrs}>\n${body}\n</file>`;
 }
 

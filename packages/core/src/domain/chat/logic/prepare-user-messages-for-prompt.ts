@@ -2,7 +2,8 @@
  * 异步 hydrate + wrap 用户消息附件；LLM / 预览 / token 的唯一拼装入口。
  *
  * 按可见序共享「已出现路径」：常驻前缀 S0 → attach → workplace；user_ops 不参与。
- * 文件 attach 非首次 → 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
+ * 文件 attach 非首次 → alreadyReferenced 短提示；workplace 非首次 → content 空；目录每次拼树仍计 seen。
+ * 增量统一为 `<action name="userAttach|workplaceChange|…">` + JSON（行号正文；无 mtime/createdAt）。
  *
  * @module domain/chat/logic/prepare-user-messages-for-prompt
  */
@@ -19,7 +20,7 @@ import {
   parseRuleSnapshotJson,
   serializeFileCachePayload,
 } from "@/domain/worktree/logic/rule-snapshot-codec.js";
-import { renderFileBlock } from "@/domain/worktree/logic/worktree-display.js";
+import { renderFileBlockBody } from "@/domain/worktree/logic/worktree-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
 import { messageBodyTextFromContent } from "../content/message-body-text.js";
@@ -31,8 +32,12 @@ import {
   isImageAttachPath,
 } from "./attach-binary-heuristic.js";
 import {
+  buildAlreadyReferencedActionXml,
+  buildDirTreeActionXml,
+  buildFileRefActionXml,
+} from "./build-attachment-action-xml.js";
+import {
   createPromptPathSeenSet,
-  renderPromptFileSeenShortTip,
   tryNormalizePromptSeenPath,
 } from "./prompt-path-seen.js";
 import { renderDirAttachTree } from "./render-dir-attach-tree.js";
@@ -131,13 +136,44 @@ async function loadOrFillFileCache(
   return { body, mtimeMs };
 }
 
-/** 首次全文 hydrate（文本 / workplace / filename 档）。 */
+function fileRefAction(
+  source: "attach" | "workplace",
+  logicalPath: string,
+  display: WorkplaceDisplayStatus,
+  rawContent: string,
+): string {
+  const lineBody = renderFileBlockBody({
+    logicalPath,
+    display,
+    content: rawContent,
+  });
+  return buildFileRefActionXml({
+    action: source === "workplace" ? "workplaceChange" : "userAttach",
+    path: logicalPath,
+    content: lineBody,
+    display,
+  });
+}
+
+/** 首次全文 hydrate（文本 / workplace / filename 档）→ action XML。 */
 async function hydrateFileFull(
   attachment: MessageAttachment,
   logicalPath: string,
   runtime: PrepareUserMessagesForPromptRuntime,
 ): Promise<MessageAttachment> {
+  const action =
+    attachment.source === "workplace" ? "workplaceChange" as const : "userAttach" as const;
+
   if (attachment.content != null) {
+    // 已是 action XML → 原样带过
+    if (attachment.content.includes("<action ")) {
+      return {
+        ...attachment,
+        path: logicalPath,
+        action: attachment.action ?? action,
+      };
+    }
+    // 旧 `<file>` 块：保留正文给 wrap（历史）；新路径不再产出
     if (attachment.content.includes("<file ") || attachment.path == null) {
       return { ...attachment, path: logicalPath };
     }
@@ -148,12 +184,13 @@ async function hydrateFileFull(
     return {
       ...attachment,
       path: logicalPath,
-      content: renderFileBlock({
+      action,
+      content: fileRefAction(
+        attachment.source === "workplace" ? "workplace" : "attach",
         logicalPath,
-        mtimeMs: 0,
-        display: status,
-        content: attachment.content,
-      }),
+        status,
+        attachment.content,
+      ),
     };
   }
 
@@ -166,12 +203,13 @@ async function hydrateFileFull(
   return {
     ...attachment,
     path: logicalPath,
-    content: renderFileBlock({
+    action,
+    content: fileRefAction(
+      attachment.source === "workplace" ? "workplace" : "attach",
       logicalPath,
-      mtimeMs: cached.mtimeMs,
-      display: status,
-      content: cached.body,
-    }),
+      status,
+      cached.body,
+    ),
   };
 }
 
@@ -181,14 +219,51 @@ async function hydrateDirAttach(
   runtime: PrepareUserMessagesForPromptRuntime,
 ): Promise<MessageAttachment> {
   if (attachment.content != null) {
-    return { ...attachment, path: logicalPath };
+    if (attachment.content.includes("<action ")) {
+      return {
+        ...attachment,
+        path: logicalPath,
+        action: attachment.action ?? "userAttach",
+      };
+    }
+    // 旧 `<dir>` 或已拼好的 ASCII：若含外壳则剥掉再包 action
+    const treeBody = stripLegacyDirWrap(attachment.content, logicalPath);
+    return {
+      ...attachment,
+      path: logicalPath,
+      action: "userAttach",
+      content: buildDirTreeActionXml(logicalPath, treeBody),
+    };
   }
   const tree = await renderDirAttachTree(logicalPath, {
     sessionId: runtime.sessionId,
     sessionKkv: runtime.sessionKkv,
     vfs: runtime.vfs,
   });
-  return { ...attachment, path: logicalPath, content: tree };
+  return {
+    ...attachment,
+    path: logicalPath,
+    action: "userAttach",
+    content: buildDirTreeActionXml(logicalPath, tree),
+  };
+}
+
+function stripLegacyDirWrap(content: string, logicalPath: string): string {
+  const trimmed = content.trim();
+  const open = `<dir path="${logicalPath}">`;
+  if (trimmed.startsWith("<dir ") && trimmed.endsWith("</dir>")) {
+    const firstNl = trimmed.indexOf("\n");
+    const lastNl = trimmed.lastIndexOf("\n");
+    if (firstNl >= 0 && lastNl > firstNl) {
+      return trimmed.slice(firstNl + 1, lastNl);
+    }
+    // 退化：去掉首尾标签行
+    return trimmed
+      .replace(/^<dir\b[^>]*>\s*/i, "")
+      .replace(/\s*<\/dir>\s*$/i, "");
+  }
+  void open;
+  return trimmed;
 }
 
 /**
@@ -230,7 +305,8 @@ async function hydrateAttachWithSeen(
     return {
       ...attachment,
       path: logicalPath,
-      content: renderPromptFileSeenShortTip(logicalPath),
+      action: "userAttach",
+      content: buildAlreadyReferencedActionXml(logicalPath),
     };
   }
 
@@ -259,7 +335,12 @@ async function hydrateWorkplaceWithSeen(
   }
 
   if (seen.has(logicalPath)) {
-    return { ...attachment, path: logicalPath, content: "" };
+    return {
+      ...attachment,
+      path: logicalPath,
+      action: "workplaceChange",
+      content: "",
+    };
   }
   seen.add(logicalPath);
   return hydrateFileFull(

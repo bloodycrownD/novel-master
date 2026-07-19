@@ -116,15 +116,13 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       vfs,
     });
 
-    // 外层 <dir path> + 内层 basename+/ ASCII；├──/└──；dirs 先 files 后
+    // 外层无 <dir>；内层 basename+/ ASCII；├──/└──；dirs 先 files 后
     assert.equal(
       tree,
       [
-        `<dir path="/notes">`,
         "notes/",
         "├── sub/",
         "└── a.md",
-        `</dir>`,
       ].join("\n"),
     );
     assert.ok(tree.includes("├──"));
@@ -160,9 +158,9 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
       vfs,
     });
     const body = messageBodyText(prepared[0]!);
-    assert.match(body, /<attach>/);
-    assert.match(body, /<dir path="\/notes">/);
-    assert.match(body, /<\/dir>/);
+    assert.match(body, /<user-ops>/);
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"kind": "dirTree"/);
     assert.match(body, /notes\//);
     assert.match(body, /├──/);
     assert.match(body, /└──/);
@@ -170,7 +168,10 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.match(body, /sub\//);
     assert.ok(!body.includes("AAA"));
     assert.ok(!body.includes("b.md"));
+    assert.ok(!body.includes("<dir "));
     assert.ok(!body.includes("<file"));
+    assert.ok(!body.includes("<attach>"));
+    assert.ok(!body.includes("<workplace>"));
 
     const cacheKeysAfter = await sk.listKeys(
       session.id,
@@ -288,9 +289,14 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     });
     const body = messageBodyText(prepared[0]!);
     assert.match(body, /<attachment>/);
-    assert.match(body, /<workplace>/);
+    assert.match(body, /<user-ops>/);
+    assert.match(body, /<action name="workplaceChange">/);
     assert.match(body, /<user-input>\n你好\n<\/user-input>/);
     assert.match(body, /workplace-body/);
+    assert.ok(!body.includes("<workplace>"));
+    assert.ok(!body.includes("<file "));
+    assert.ok(!body.includes("createdAt="));
+    assert.ok(!body.includes("mtime"));
   });
 
   it("hidden user 不 hydrate/wrap（T-HD1；agent-runner / session-prompt-input 已接线 prepare）", async () => {
@@ -407,15 +413,21 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
     assert.ok(realPromptUser, "layout 须含原 user 消息");
     const realPromptUserWrap = messageBodyText(realPromptUser);
 
-    // 同 path：attach 优先，workplace 不进；二者同源
-    assert.match(agentUserWrap, /<attach>/);
+    // 同 path：attach 优先，workplace 不进；二者同源；单一 <user-ops>
     assert.match(agentUserWrap, /<user-ops>/);
+    assert.match(agentUserWrap, /<action name="userAttach">/);
+    assert.match(agentUserWrap, /<action name="write">/);
     assert.match(agentUserWrap, /<user-input>\n继续\n<\/user-input>/);
     assert.equal(
       agentUserWrap.includes("<workplace>"),
       false,
       "同 path 时 workplace 应被 attach 抢先 seen 后省略",
     );
+    assert.equal(agentUserWrap.includes("<attach>"), false);
+    // T-PR1：action 顺序 attach → workplace → user_ops（本例无 workplace 内容）
+    const attachIdx = agentUserWrap.indexOf('name="userAttach"');
+    const writeIdx = agentUserWrap.indexOf('name="write"');
+    assert.ok(attachIdx >= 0 && writeIdx > attachIdx);
     assert.equal(
       realPromptUserWrap,
       agentUserWrap,
@@ -425,7 +437,7 @@ describe("wrapUserMessageForLlm / prepareUserMessagesForPrompt (Step 6)", () => 
 });
 
 describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
-  it("T-PD1: 可见消息首次文件 attach → 提示词含全文 <file（可经 renderFileBlock）", async () => {
+  it("T-PD1 / T-PR2: 可见消息首次文件 attach → userAttach JSON 行号正文，无 <file>/mtime", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -451,13 +463,16 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
     const body = messageBodyText(prepared[0]!);
-    assert.match(body, /<file /);
-    assert.match(body, /FULL-BODY-A/);
-    assert.match(body, /createdAt=/);
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"display": "full"/);
+    assert.match(body, /1\|FULL-BODY-A/);
+    assert.equal(body.includes("<file "), false);
+    assert.equal(body.includes("createdAt="), false);
+    assert.equal(body.includes("mtime"), false);
     assert.equal(body.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
   });
 
-  it("T-PD2: 第二条可见消息同 path 文本 attach → 专用最小短提示", async () => {
+  it("T-PD2 / T-PR2: 第二条可见消息同 path 文本 attach → alreadyReferenced，无 content", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -497,20 +512,15 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
     const body2 = messageBodyText(prepared[1]!);
-    assert.equal(
-      body2.includes(PROMPT_FILE_SEEN_SHORT_TIP),
-      true,
-    );
-    assert.match(
-      body2,
-      /<file path="\/a\.md">该文件前文已引用，无需读取或加载<\/file>/,
-    );
+    assert.match(body2, /<action name="userAttach">/);
+    assert.match(body2, /"alreadyReferenced": true/);
     assert.equal(body2.includes("FULL-BODY-A"), false);
     assert.equal(body2.includes("createdAt="), false);
     assert.equal(body2.includes("1|"), false);
+    assert.equal(body2.includes('"content"'), false);
   });
 
-  it("T-PD3: 常驻前缀已含 path A 时再 @A（缺前导 /）→ 短提示；落库 path 带 /", async () => {
+  it("T-PD3: 常驻前缀已含 path A 时再 @A（缺前导 /）→ alreadyReferenced；落库 path 带 /", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -542,15 +552,14 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
       },
     );
     const body = messageBodyText(prepared[0]!);
-    assert.match(
-      body,
-      /<file path="\/pref\.md">该文件前文已引用，无需读取或加载<\/file>/,
-    );
+    assert.match(body, /<action name="userAttach">/);
+    assert.match(body, /"path": "\/pref\.md"/);
+    assert.match(body, /"alreadyReferenced": true/);
     assert.equal(body.includes("PREFIX-BODY"), false);
     assert.equal(prepared[0]!.attachments?.[0]?.path, "/pref.md");
   });
 
-  it("T-PD4: 同条 workplace+attach 同 path，数组 workplace 在前 → 仍仅 attach 有内容", async () => {
+  it("T-PD4 / T-PR1: 同条 workplace+attach 同 path → 仅 userAttach 有内容；顺序 attach 先", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -583,14 +592,17 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
     const body = messageBodyText(prepared[0]!);
-    assert.match(body, /<attach>/);
+    assert.match(body, /<user-ops>/);
+    assert.match(body, /<action name="userAttach">/);
     assert.match(body, /SAME-BODY/);
     assert.equal(body.includes("<workplace>"), false);
+    assert.equal(body.includes("<attach>"), false);
+    assert.equal(body.includes('name="workplaceChange"'), false);
     const wp = prepared[0]!.attachments?.find((a) => a.source === "workplace");
     assert.equal(wp?.content, "");
   });
 
-  it("T-PD5: 目录 attach 两次均含 <dir 树；目录计 seen 后同 path 文件为非首次", async () => {
+  it("T-PD5: 目录 attach 两次均含 dirTree；目录计 seen 后同 path 文件为非首次", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -650,17 +662,15 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
     const b1 = messageBodyText(prepared[0]!);
     const b2 = messageBodyText(prepared[1]!);
     const b3 = messageBodyText(prepared[2]!);
-    assert.match(b1, /<dir path="\/notes">/);
-    assert.match(b2, /<dir path="\/notes">/);
+    assert.match(b1, /"kind": "dirTree"/);
+    assert.match(b2, /"kind": "dirTree"/);
     assert.equal(b1.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
     assert.equal(b2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
-    assert.match(
-      b3,
-      /<file path="\/notes">该文件前文已引用，无需读取或加载<\/file>/,
-    );
+    assert.match(b3, /"alreadyReferenced": true/);
+    assert.match(b3, /"path": "\/notes"/);
   });
 
-  it("T-PD7: image/binary attach 非首次 → 仍 filename 档，无中文短提示", async () => {
+  it("T-PD7: image/binary attach 非首次 → 仍 filename 档，无 alreadyReferenced", async () => {
     const ctx = getNovelMasterTestContext();
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
     const session = await ctx.sessions.create(project.id);
@@ -700,10 +710,12 @@ describe("prepareUserMessagesForPrompt path degrade (T-PD*)", () => {
       { sessionId: session.id, sessionKkv: sk, vfs },
     );
     const body2 = messageBodyText(prepared[1]!);
-    assert.match(body2, /<file /);
-    assert.match(body2, /pic\.png/);
-    assert.equal(body2.includes(PROMPT_FILE_SEEN_SHORT_TIP), false);
-    assert.match(body2, /createdAt=/);
+    assert.match(body2, /<action name="userAttach">/);
+    assert.match(body2, /"display": "filename"/);
+    assert.match(body2, /1\|pic\.png/);
+    assert.equal(body2.includes("alreadyReferenced"), false);
+    assert.equal(body2.includes("<file "), false);
+    assert.equal(body2.includes("createdAt="), false);
   });
 
   it("T-PD8: 仅 workplace/attach 但 hydrate 后全部 body 空 → wrap 等于 plainText", async () => {

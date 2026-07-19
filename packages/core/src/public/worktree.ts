@@ -38,6 +38,7 @@ export {
 } from "../domain/worktree/logic/worktree-labels.js";
 export {
   renderFileBlock,
+  renderFileBlockBody,
   joinFileBlocks,
   formatLocalMtime,
 } from "../domain/worktree/logic/worktree-display.js";
