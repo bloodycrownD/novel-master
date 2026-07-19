@@ -1,5 +1,5 @@
 /**
- * Prompt → LLM input and CLI formatting（三区 layout；worktree 双段在 persist 文本与 chat 之前注入）。
+ * Prompt → LLM input and CLI formatting（三区 layout；workplace 双段在 persist 文本与 chat 之前注入）。
  *
  * @module service/prompt/render-prompt
  */
@@ -11,7 +11,6 @@ import { formatChatMessageForCliPreview } from "../../domain/chat/content/messag
 import type {
   AgentPromptLayout,
   DynamicPromptBlock,
-  PersistPromptBlock,
   PersistTextPromptBlock,
 } from "../../domain/prompt/model/agent-prompt-layout.js";
 import { expandDynamicMacros } from "../../domain/prompt/logic/expand-dynamic-macros.js";
@@ -53,23 +52,20 @@ export interface PromptAssemblyOptions {
 /**
  * 计算 `buildPromptLlmInputFromLayout` 输出 messages 的三区边界。
  *
- * @remarks 传入 `worktreeDisplay` 时与注入逻辑一致：空串不算 worktree 双段。
+ * @remarks 传入 `worktreeDisplay` 时与注入逻辑一致：空串不算 workplace 双段。
  */
 export function computeLlmExportZonesFromLayout(
   layout: AgentPromptLayout,
   options?: PromptAssemblyOptions & { readonly worktreeDisplay?: string }
 ): LlmExportZones {
   const agentStepIndex = resolveAgentStepIndex(options);
-  const hasWorktreeBlock = layout.persist.some((block) => block.type === "worktree");
-  const injectWorktree =
-    hasWorktreeBlock &&
+  const injectWorkplace =
+    layout.workplace === true &&
     (options?.worktreeDisplay === undefined ||
       options.worktreeDisplay.trim() !== "");
-  const textBlockCount = layout.persist.filter(
-    (block) => block.type === "text"
-  ).length;
+  const textBlockCount = layout.persist.length;
   const persistCount =
-    (injectWorktree ? 2 : 0) +
+    (injectWorkplace ? 2 : 0) +
     (layout.persistEnabled === true ? textBlockCount : 0);
   let dynamicCount = 0;
   if (layout.dynamicEnabled === true) {
@@ -116,22 +112,12 @@ function syntheticTemplateMessage(
   };
 }
 
-function findWorktreeBlock(
-  layout: AgentPromptLayout
-): Extract<PersistPromptBlock, { type: "worktree" }> | undefined {
-  return layout.persist.find(
-    (block): block is Extract<PersistPromptBlock, { type: "worktree" }> =>
-      block.type === "worktree"
-  );
-}
-
-function syntheticWorktreeUserMessage(
-  block: Extract<PersistPromptBlock, { type: "worktree" }>,
+function syntheticWorkplaceUserMessage(
   worktreeDisplay: string,
   ctx: PromptRenderContext
 ): ChatMessage {
   return {
-    id: `prompt:worktree:${block.name}`,
+    id: "prompt:workplace",
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role: "user",
@@ -143,12 +129,11 @@ function syntheticWorktreeUserMessage(
   };
 }
 
-function syntheticWorktreeDoneMessage(
-  block: Extract<PersistPromptBlock, { type: "worktree" }>,
+function syntheticWorkplaceDoneMessage(
   ctx: PromptRenderContext
 ): ChatMessage {
   return {
-    id: `prompt:worktree:${block.name}:done`,
+    id: "prompt:workplace:done",
     sessionId: ctx.messages[0]?.sessionId ?? "",
     seq: 0,
     role: "assistant",
@@ -160,50 +145,48 @@ function syntheticWorktreeDoneMessage(
   };
 }
 
-/** 存在 worktree 块且展示非空时追加 user 文件树 + assistant done。 */
-function appendWorktreePairIfPresent(
+/** `workplace` 开且展示非空时追加 user 文件树 + assistant done。 */
+function appendWorkplacePairIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   messages: ChatMessage[]
 ): void {
-  const block = findWorktreeBlock(layout);
-  if (block == null) {
+  if (layout.workplace !== true) {
     return;
   }
   if (ctx.worktreeDisplay.trim() === "") {
     return;
   }
-  messages.push(syntheticWorktreeUserMessage(block, ctx.worktreeDisplay, ctx));
-  messages.push(syntheticWorktreeDoneMessage(block, ctx));
+  messages.push(syntheticWorkplaceUserMessage(ctx.worktreeDisplay, ctx));
+  messages.push(syntheticWorkplaceDoneMessage(ctx));
 }
 
-function appendWorktreePairSegmentsIfPresent(
+function appendWorkplacePairSegmentsIfPresent(
   layout: AgentPromptLayout,
   ctx: PromptRenderContext,
   segments: PromptAssemblySegment[]
 ): void {
-  const block = findWorktreeBlock(layout);
-  if (block == null || ctx.worktreeDisplay.trim() === "") {
+  if (layout.workplace !== true || ctx.worktreeDisplay.trim() === "") {
     return;
   }
   segments.push({
-    id: `prompt-worktree-${block.name}`,
+    id: "prompt-workplace",
     role: "user",
-    title: block.name,
+    title: "workplace",
     body: ctx.worktreeDisplay,
     source: "template",
   });
   segments.push({
-    id: `prompt-worktree-${block.name}-done`,
+    id: "prompt-workplace-done",
     role: "assistant",
-    title: `${block.name} · done`,
+    title: "workplace · done",
     body: TOOL_TURN_BRIDGE_TEXT,
     source: "template",
   });
 }
 
 /**
- * 三区 layout 单次遍历：system → worktree 双段（若存在）→ persist 文本 → chat → dynamic。
+ * 三区 layout 单次遍历：system → workplace 双段（若开启）→ persist 文本 → chat → dynamic。
  */
 export async function buildPromptAssemblyFromLayout(
   layout: AgentPromptLayout,
@@ -224,19 +207,17 @@ export async function buildPromptAssemblyFromLayout(
     });
   }
 
-  appendWorktreePairSegmentsIfPresent(layout, ctx, segments);
+  appendWorkplacePairSegmentsIfPresent(layout, ctx, segments);
 
   if (layout.persistEnabled === true) {
     for (const block of layout.persist) {
-      if (block.type === "text") {
-        segments.push({
-          id: `persist-${block.name}`,
-          role: block.role,
-          title: block.name,
-          body: block.content,
-          source: "template",
-        });
-      }
+      segments.push({
+        id: `persist-${block.name}`,
+        role: block.role,
+        title: block.name,
+        body: block.content,
+        source: "template",
+      });
     }
   }
 
@@ -296,13 +277,11 @@ export async function buildPromptLlmInputFromLayout(
   const agentStepIndex = resolveAgentStepIndex(options);
   const messages: ChatMessage[] = [];
 
-  appendWorktreePairIfPresent(layout, ctx, messages);
+  appendWorkplacePairIfPresent(layout, ctx, messages);
 
   if (layout.persistEnabled === true) {
     for (const block of layout.persist) {
-      if (block.type === "text") {
-        messages.push(syntheticTemplateMessage(block, block.content, ctx));
-      }
+      messages.push(syntheticTemplateMessage(block, block.content, ctx));
     }
   }
 

@@ -62,6 +62,7 @@ export { createTemplatePullService } from "../service/template/create-template-p
 export type { TemplatePullService } from "../service/template/template-pull.port.js";
 export {
   assembleWorkplaceDisplay,
+  layoutHasWorkplace,
   layoutHasWorktreeBlock,
   type AssembleWorkplaceDisplayDeps,
   type AssembleWorkplaceDisplayResult,

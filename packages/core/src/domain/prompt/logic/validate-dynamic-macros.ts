@@ -32,7 +32,7 @@ export function validateDynamicMacros(content: string, blockLabel: string): void
       if (LEGACY_DOT_MACROS.has(top)) {
         const hint =
           top === "worktree"
-            ? "请改用持久区 worktree 块，不要使用 {{.worktree}}"
+            ? "请改用 prompts.workplace 常驻工作区开关，不要使用 {{.worktree}}"
             : "请使用 {{$filetree}} 替代 {{.filetree}}";
         throw new PromptError(
           "UNSUPPORTED_SYNTAX",

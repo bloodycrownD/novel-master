@@ -35,8 +35,8 @@ export interface AssembleWorkplaceDisplayDeps {
   readonly sessionKkv: SessionKkvService;
   readonly worktree: WorktreeService;
   readonly vfs: VfsService;
-  /** Agent layout；无 `type:"worktree"` 块则短路返回空且不写 kkv。 */
-  readonly layout: Pick<AgentPromptLayout, "persist">;
+/** Agent layout；`workplace` 未开则短路返回空且不写 kkv。 */
+  readonly layout: Pick<AgentPromptLayout, "workplace">;
 }
 
 /** {@link assembleWorkplaceDisplay} 返回值。 */
@@ -51,13 +51,16 @@ export interface AssembleWorkplaceDisplayResult {
 }
 
 /**
- * 布局是否含常驻工作区（worktree）块。
+ * 布局是否启用常驻工作区。
  */
-export function layoutHasWorktreeBlock(
-  layout: Pick<AgentPromptLayout, "persist">,
+export function layoutHasWorkplace(
+  layout: Pick<AgentPromptLayout, "workplace">,
 ): boolean {
-  return layout.persist.some((block) => block.type === "worktree");
+  return layout.workplace === true;
 }
+
+/** @deprecated 使用 {@link layoutHasWorkplace}。 */
+export const layoutHasWorktreeBlock = layoutHasWorkplace;
 
 /**
  * 拼装常驻工作区前缀文本（替代进程内 capture），并收集前缀 path 集合 S0。
@@ -71,7 +74,7 @@ export async function assembleWorkplaceDisplay(
   scope: Extract<VfsScope, { kind: "session" }>,
   deps: AssembleWorkplaceDisplayDeps,
 ): Promise<AssembleWorkplaceDisplayResult> {
-  if (!layoutHasWorktreeBlock(deps.layout)) {
+  if (!layoutHasWorkplace(deps.layout)) {
     return { worktreeDisplay: "", prefixPaths: [] };
   }
 

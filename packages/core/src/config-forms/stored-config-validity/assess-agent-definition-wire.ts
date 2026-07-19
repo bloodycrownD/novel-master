@@ -6,6 +6,7 @@
 
 import { agentDefinitionSchema } from "@/domain/agent/model/agent-definition.schema.js";
 import type { AgentDefinition } from "@/domain/agent/model/agent-definition.js";
+import { normalizeAgentPromptLayoutDomain } from "@/domain/prompt/logic/normalize-agent-prompt-layout.js";
 import { AgentConfigError } from "@/errors/agent-config-errors.js";
 import { decode } from "@/infra/serialization/decode.js";
 import type { StoredConfigHealth, StoredConfigInvalidCode } from "./types.js";
@@ -75,7 +76,13 @@ export function resolveAgentDefinitionFromStorage(
   stored: unknown,
 ): StoredConfigHealth<AgentDefinition> {
   if (isAgentDefinitionDomainShape(stored)) {
-    return { status: "valid", value: stored };
+    return {
+      status: "valid",
+      value: {
+        ...stored,
+        prompts: normalizeAgentPromptLayoutDomain(stored.prompts),
+      },
+    };
   }
   return assessAgentDefinitionWire(stored);
 }

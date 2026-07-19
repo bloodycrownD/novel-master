@@ -5,7 +5,7 @@ import type {
 import type {
   AgentPromptLayout,
   DynamicPromptBlock,
-  PersistPromptBlock,
+  EditorPersistPromptBlock,
   PersistTextPromptBlock,
   PersistWorktreePromptBlock,
 } from "@/domain/prompt/model/agent-prompt-layout.js";
@@ -51,7 +51,9 @@ export type AgentEditorFormInput = {
   systemContent: string;
   persistEnabled: boolean;
   dynamicEnabled: boolean;
-  persist: readonly PersistPromptBlock[];
+  /** 常驻工作区开关（与域 `prompts.workplace` 对应）。 */
+  workplace: boolean;
+  persist: readonly EditorPersistPromptBlock[];
   dynamic: readonly DynamicPromptBlock[];
 };
 
@@ -82,14 +84,24 @@ export function toolsFromDefinition(def: AgentDefinition): {
 
 export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 
-/** 工作树块在 wire 中的固定键名（UI 不暴露、不可改）。 */
+/** @deprecated 使用 {@link WORKPLACE_BLOCK_WIRE_NAME}。 */
 export const WORKTREE_BLOCK_WIRE_NAME = "canon";
 
-/** 常驻工作区块在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
+/** 常驻工作区在 wire 中的固定键名（UI 不暴露、不可改；仅 GUI 过渡）。 */
+export const WORKPLACE_BLOCK_WIRE_NAME = WORKTREE_BLOCK_WIRE_NAME;
+
+/** @deprecated 使用 {@link WORKPLACE_BLOCK_LABEL}。 */
 export const WORKTREE_BLOCK_LABEL = "常驻工作区";
-/** 常驻工作区块说明（用户可见，避免技术术语）。 */
+
+/** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
+export const WORKPLACE_BLOCK_LABEL = WORKTREE_BLOCK_LABEL;
+
+/** @deprecated 使用 {@link WORKPLACE_BLOCK_HINT}。 */
 export const WORKTREE_BLOCK_HINT =
   "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。";
+
+/** 常驻工作区说明（用户可见，避免技术术语）。 */
+export const WORKPLACE_BLOCK_HINT = WORKTREE_BLOCK_HINT;
 
 /** Agent 编辑器三区 Prompt 用户可见文案（wire 字段名与类型名保持英文）。 */
 export const PROMPT_REGION_LABELS = {
@@ -126,21 +138,21 @@ export const PROMPT_REGION_LABELS = {
 } as const;
 
 export function blockTypeLabel(
-  type: PersistPromptBlock["type"] | DynamicPromptBlock["type"]
+  type: EditorPersistPromptBlock["type"] | DynamicPromptBlock["type"]
 ): string {
   if (type === "worktree") {
-    return WORKTREE_BLOCK_LABEL;
+    return WORKPLACE_BLOCK_LABEL;
   }
   return "文本";
 }
 
-/** 规范化单个 persist 块（工作树固定 name，缺省 role 为 user）。 */
+/** 规范化单个 persist 文本块。 */
 export function normalizePersistBlock(
-  block: PersistPromptBlock
-): PersistPromptBlock {
+  block: EditorPersistPromptBlock
+): EditorPersistPromptBlock {
   if (block.type === "worktree") {
     return {
-      name: WORKTREE_BLOCK_WIRE_NAME,
+      name: WORKPLACE_BLOCK_WIRE_NAME,
       type: "worktree",
       role: block.role ?? "user",
     };
@@ -148,11 +160,11 @@ export function normalizePersistBlock(
   return block;
 }
 
-/** 将 persist 拆为有序块列表与编辑器辅助视图（保留混排顺序）。 */
+/** 将 persist 拆为有序块列表与编辑器辅助视图（保留混排顺序；过渡态仍含 worktree）。 */
 export function splitPersistBlocksForEditor(
-  persist: readonly PersistPromptBlock[]
+  persist: readonly EditorPersistPromptBlock[]
 ): {
-  readonly blocks: readonly PersistPromptBlock[];
+  readonly blocks: readonly EditorPersistPromptBlock[];
   readonly textBlocks: readonly PersistTextPromptBlock[];
   readonly worktree: PersistWorktreePromptBlock | null;
 } {
@@ -169,37 +181,18 @@ export function splitPersistBlocksForEditor(
 
 /** 合并有序 persist 块（保留传入顺序）。 */
 export function joinPersistBlocksForLayout(
-  blocks: readonly PersistPromptBlock[]
-): PersistPromptBlock[];
-/** @deprecated 请直接传入完整有序 persist 数组。 */
-export function joinPersistBlocksForLayout(
-  textBlocks: readonly PersistTextPromptBlock[],
-  worktree: PersistWorktreePromptBlock | null
-): PersistPromptBlock[];
-export function joinPersistBlocksForLayout(
-  blocksOrText:
-    | readonly PersistPromptBlock[]
-    | readonly PersistTextPromptBlock[],
-  worktree?: PersistWorktreePromptBlock | null
-): PersistPromptBlock[] {
-  if (worktree === undefined) {
-    return (blocksOrText as readonly PersistPromptBlock[]).map(
-      normalizePersistBlock
-    );
-  }
-  const textBlocks = blocksOrText as readonly PersistTextPromptBlock[];
-  return worktree != null
-    ? [...textBlocks, normalizePersistBlock(worktree)]
-    : [...textBlocks];
+  blocks: readonly EditorPersistPromptBlock[]
+): EditorPersistPromptBlock[] {
+  return blocks.map(normalizePersistBlock);
 }
 
 export function mapPersistTextBlocks(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly EditorPersistPromptBlock[],
   mapper: (
     block: PersistTextPromptBlock,
     index: number
   ) => PersistTextPromptBlock
-): PersistPromptBlock[] {
+): EditorPersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   let textIndex = 0;
   return blocks.map((block) => {
@@ -213,10 +206,10 @@ export function mapPersistTextBlocks(
 }
 
 export function movePersistBlock(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly EditorPersistPromptBlock[],
   index: number,
   direction: -1 | 1
-): PersistPromptBlock[] {
+): EditorPersistPromptBlock[] {
   const blocks = [...splitPersistBlocksForEditor(persist).blocks];
   const target = index + direction;
   if (target < 0 || target >= blocks.length) {
@@ -229,10 +222,10 @@ export function movePersistBlock(
 }
 
 export function movePersistTextBlock(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly EditorPersistPromptBlock[],
   textIndex: number,
   direction: -1 | 1
-): PersistPromptBlock[] {
+): EditorPersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   const textIndices = blocks
     .map((block, index) => (block.type === "text" ? index : -1))
@@ -255,9 +248,9 @@ export function movePersistTextBlock(
 }
 
 export function deletePersistTextBlock(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly EditorPersistPromptBlock[],
   textIndex: number
-): PersistPromptBlock[] {
+): EditorPersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   let currentTextIndex = 0;
   return blocks.filter((block) => {
@@ -270,9 +263,10 @@ export function deletePersistTextBlock(
   });
 }
 
+/** @deprecated GUI 应改接 `input.workplace`；过渡：向 persist 追加合成 worktree 块。 */
 export function addPersistWorktreeBlock(
-  persist: readonly PersistPromptBlock[]
-): PersistPromptBlock[] {
+  persist: readonly EditorPersistPromptBlock[]
+): EditorPersistPromptBlock[] {
   const { blocks } = splitPersistBlocksForEditor(persist);
   if (blocks.some((block) => block.type === "worktree")) {
     return [...persist];
@@ -280,19 +274,20 @@ export function addPersistWorktreeBlock(
   return [...blocks, createDefaultWorktreeBlock()];
 }
 
+/** @deprecated GUI 应改接 `input.workplace`；过渡：从 persist 移除 worktree 块。 */
 export function removePersistWorktreeBlock(
-  persist: readonly PersistPromptBlock[]
-): PersistPromptBlock[] {
+  persist: readonly EditorPersistPromptBlock[]
+): EditorPersistPromptBlock[] {
   return splitPersistBlocksForEditor(persist).blocks.filter(
     (block) => block.type !== "worktree"
   );
 }
 
-/** @deprecated 运行时固定 user + assistant 双消息，不再使用 worktree 块 role。 */
+/** @deprecated 运行时固定 user + assistant 双消息。 */
 export function updatePersistWorktreeRole(
-  persist: readonly PersistPromptBlock[],
+  persist: readonly EditorPersistPromptBlock[],
   role: "user" | "assistant"
-): PersistPromptBlock[] {
+): EditorPersistPromptBlock[] {
   return splitPersistBlocksForEditor(persist).blocks.map((block) =>
     block.type === "worktree" ? { ...block, role } : block
   );
@@ -324,6 +319,7 @@ export function createDefaultAgentEditorPrompts(): Pick<
   | "systemContent"
   | "persistEnabled"
   | "dynamicEnabled"
+  | "workplace"
   | "persist"
   | "dynamic"
 > {
@@ -332,6 +328,7 @@ export function createDefaultAgentEditorPrompts(): Pick<
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
+    workplace: false,
     persist: [],
     dynamic: [],
   };
@@ -355,6 +352,7 @@ export function hasEffectivePromptSource(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
+    | "workplace"
     | "persist"
     | "dynamic"
   >
@@ -370,6 +368,7 @@ export function countEffectiveFormPromptSources(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
+    | "workplace"
     | "persist"
     | "dynamic"
   >
@@ -382,6 +381,9 @@ export function countEffectiveFormPromptSources(
     count += 1;
   }
   if (input.dynamicEnabled && input.dynamic.length > 0) {
+    count += 1;
+  }
+  if (input.workplace === true) {
     count += 1;
   }
   return count;
@@ -409,23 +411,22 @@ export function countMinimumPromptSources(
 export function countFormPromptSources(
   input: Pick<
     AgentEditorFormInput,
-    "systemEnabled" | "systemContent" | "persist" | "dynamic"
+    "systemEnabled" | "systemContent" | "workplace" | "persist" | "dynamic"
   >,
   options?: {
     excludePersistTextIndex?: number;
     excludeDynamicIndex?: number;
-    excludeWorktree?: boolean;
   }
 ): number {
   let count = 0;
   if (input.systemEnabled && input.systemContent.trim() !== "") {
     count += 1;
   }
-  const { textBlocks, worktree } = splitPersistBlocksForEditor(input.persist);
+  const { textBlocks } = splitPersistBlocksForEditor(input.persist);
   count += textBlocks.filter(
     (_, index) => index !== options?.excludePersistTextIndex
   ).length;
-  if (worktree != null && !options?.excludeWorktree) {
+  if (input.workplace === true) {
     count += 1;
   }
   count += input.dynamic.filter(
@@ -445,9 +446,10 @@ export function createDefaultPersistTextBlock(
   };
 }
 
+/** @deprecated 过渡态 GUI 用；域模型使用 `workplace` boolean。 */
 export function createDefaultWorktreeBlock(): PersistWorktreePromptBlock {
   return {
-    name: WORKTREE_BLOCK_WIRE_NAME,
+    name: WORKPLACE_BLOCK_WIRE_NAME,
     type: "worktree",
     role: "user",
   };
@@ -464,6 +466,16 @@ export function createDefaultDynamicTextBlock(
   };
 }
 
+function editorWorkplaceEnabled(
+  persist: readonly EditorPersistPromptBlock[],
+  workplace?: boolean,
+): boolean {
+  if (workplace === true) {
+    return true;
+  }
+  return splitPersistBlocksForEditor(persist).worktree != null;
+}
+
 /** AgentDefinition → 编辑器表单 Prompt 字段。 */
 export function definitionToForm(
   def: AgentDefinition
@@ -473,16 +485,23 @@ export function definitionToForm(
   | "systemContent"
   | "persistEnabled"
   | "dynamicEnabled"
+  | "workplace"
   | "persist"
   | "dynamic"
 > {
   const system = def.prompts.system?.trim() ?? "";
+  const workplace = def.prompts.workplace === true;
+  const textPersist = [...def.prompts.persist];
+  const persist: EditorPersistPromptBlock[] = workplace
+    ? [...textPersist, createDefaultWorktreeBlock()]
+    : textPersist;
   return {
     systemEnabled: system.length > 0,
     systemContent: def.prompts.system ?? "",
     persistEnabled: def.prompts.persistEnabled ?? false,
     dynamicEnabled: def.prompts.dynamicEnabled ?? false,
-    persist: [...def.prompts.persist],
+    workplace,
+    persist,
     dynamic: [...def.prompts.dynamic],
   };
 }
@@ -495,6 +514,7 @@ export function layoutFromFormInput(
     | "systemContent"
     | "persistEnabled"
     | "dynamicEnabled"
+    | "workplace"
     | "persist"
     | "dynamic"
   >
@@ -503,11 +523,14 @@ export function layoutFromFormInput(
     input.systemEnabled && input.systemContent.trim() !== ""
       ? input.systemContent
       : undefined;
+  const { textBlocks } = splitPersistBlocksForEditor(input.persist);
+  const workplace = editorWorkplaceEnabled(input.persist, input.workplace);
   return {
     ...(system != null ? { system } : {}),
     ...(input.persistEnabled ? { persistEnabled: true } : {}),
     ...(input.dynamicEnabled ? { dynamicEnabled: true } : {}),
-    persist: [...splitPersistBlocksForEditor(input.persist).blocks],
+    ...(workplace ? { workplace: true } : {}),
+    persist: [...textBlocks],
     dynamic: [...input.dynamic],
   };
 }
@@ -530,6 +553,7 @@ export function formSnapshotJson(input: AgentEditorFormInput): string {
     systemContent: input.systemContent,
     persistEnabled: input.persistEnabled,
     dynamicEnabled: input.dynamicEnabled,
+    workplace: input.workplace,
     persist: input.persist,
     dynamic: input.dynamic,
   });
