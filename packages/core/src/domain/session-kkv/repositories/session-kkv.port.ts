@@ -25,6 +25,9 @@ export interface SessionKkvRepository {
 
   delete(sessionId: string, domain: string, key: string): Promise<boolean>;
 
+  /** 删除该会话下指定 domain 的全部行。 */
+  clearDomain(sessionId: string, domain: string): Promise<void>;
+
   /** 删除该会话下全部行（所有 domain）。 */
   clearSession(sessionId: string): Promise<void>;
 

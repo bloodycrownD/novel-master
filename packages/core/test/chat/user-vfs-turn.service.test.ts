@@ -36,6 +36,7 @@ import { createScopedVfsService } from "../../src/service/vfs/create-scoped-vfs-
 import {
   buildUserVfsDeleteOp,
   buildUserVfsMkdirOp,
+  buildUserVfsSaveOp,
 } from "../../src/service/vfs/build-user-vfs-turn-op.js";
 import { createMessageCheckpointService } from "../../src/service/message-checkpoint/create-message-checkpoint-services.js";
 import type { UserVfsTurnServiceDeps } from "../../src/service/chat/impl/user-vfs-turn.service.js";
@@ -118,7 +119,7 @@ function makeUserVfsTurnDeps(
 
 function writeOp(path: string, content: string, toolId = "tu_write") {
   return {
-    actionXml: `<user-vfs-action kind="save" path="${path}" method="write" />`,
+    actionXml: `<action name="write">\n${JSON.stringify({ path, content }, null, 2)}\n</action>`,
     tools: [
       {
         id: toolId,
@@ -132,7 +133,10 @@ function writeOp(path: string, content: string, toolId = "tu_write") {
 /** 从 user_ops attachment XML 抽取 path/from/to（稳定排序）。 */
 function pathsFromUserOpsXml(content: string): string[] {
   const paths = new Set<string>();
-  for (const match of content.matchAll(/\b(?:path|from|to)="([^"]+)"/g)) {
+  for (const match of content.matchAll(/"path"\s*:\s*"([^"]+)"/g)) {
+    paths.add(match[1]!);
+  }
+  for (const match of content.matchAll(/"(?:from|to)"\s*:\s*"([^"]+)"/g)) {
     paths.add(match[1]!);
   }
   return [...paths].sort();
@@ -261,7 +265,7 @@ describe("UserVfsTurnService", () => {
     const session = await ctx.sessions.create(project.id);
 
     const fail = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<user-vfs-action kind="save" path="/x.md" method="write" />',
+      actionXml: '<action name="write">\n{"path":"/x.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_bad",
@@ -319,7 +323,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(flush.flushed, true);
     const content = flush.attachments[0]!.content;
     assert.ok(typeof content === "string");
-    assert.match(content!, /<user-vfs-action/);
+    assert.match(content!, /<action/);
     assert.equal(content!.trimStart().startsWith("{"), false);
     assert.equal(content!.includes("<system-message>"), false);
   });
@@ -366,7 +370,7 @@ describe("UserVfsTurnService", () => {
     assert.equal(runParallelCalls, 1);
   });
 
-  it("burst 3 次 pending flush 为 1×user_ops 附件且无消息行", async () => {
+  it("burst 3 次 pending flush 为 3×user_ops 附件（每 path 一条）且无消息行", async () => {
     const ctx = getNovelMasterTestContext();
     const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
     const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
@@ -378,12 +382,40 @@ describe("UserVfsTurnService", () => {
 
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
-    assert.equal(flush.attachments.length, 1);
-    const content = flush.attachments[0]!.content ?? "";
-    assert.ok(content.includes("/1.md"));
-    assert.ok(content.includes("/2.md"));
-    assert.ok(content.includes("/3.md"));
+    assert.equal(flush.attachments.length, 3);
+    assert.deepEqual(
+      flush.attachments.map((a) => a.name).sort(),
+      ["write:/1.md", "write:/2.md", "write:/3.md"],
+    );
     assert.equal((await ctx.messages.listBySession(session.id)).length, 0);
+  });
+
+  it("创建后再改同一文件：flush 仅一条 write，不以 pending write+edit 命名", async () => {
+    const ctx = getNovelMasterTestContext();
+    const { userVfsTurn } = createUserVfsTurnServiceBundle(ctx.conn);
+    const project = await ctx.projects.create(`P-${testIsolationSuffix()}`);
+    const session = await ctx.sessions.create(project.id);
+
+    const v1 = "alpha\nbeta\ngamma\n";
+    const v2 = "alpha\nbeta-edited\ngamma\n";
+    await userVfsTurn.executeOp(session.id, writeOp("/net.md", v1, "tu_w"));
+    // 再保存：相对刚写入内容走 edit；相对 checkpoint（空）净 diff 仍为 added → write
+    const saveOp = buildUserVfsSaveOp(v1, v2, "/net.md", v2);
+    assert.ok(saveOp);
+    assert.equal(saveOp!.tools[0]?.name, "edit");
+    await userVfsTurn.executeOp(session.id, saveOp!);
+
+    const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
+    assert.equal(flush.flushed, true);
+    assert.equal(flush.attachments.length, 1);
+    assert.equal(flush.attachments[0]!.name, "write:/net.md");
+    assert.match(flush.attachments[0]!.content ?? "", /name="write"/);
+    assert.match(flush.attachments[0]!.content ?? "", /"content"/);
+    assert.ok((flush.attachments[0]!.content ?? "").includes("beta-edited"));
+    assert.equal(
+      (flush.attachments[0]!.content ?? "").includes('name="edit"'),
+      false,
+    );
   });
 
   it("flush 本身不 capture；带 user_ops 的 user append 后可锚定 checkpoint", async () => {
@@ -502,7 +534,7 @@ describe("UserVfsTurnService", () => {
     );
 
     const result = await userVfsTurn.executeOp(session.id, {
-      actionXml: '<user-vfs-action kind="save" path="/f.md" method="write" />',
+      actionXml: '<action name="write">\n{"path":"/f.md","content":""}\n</action>',
       tools: [{ id: "tu_boom", name: "test.boom", input: {} }],
     });
     assert.equal(result.ok, false);
@@ -546,7 +578,7 @@ describe("UserVfsTurnService", () => {
 
     const result = await userVfsTurn.executeOp(session.id, {
       actionXml:
-        '<user-vfs-action kind="save" path="/a.md" method="write" />\n<user-vfs-action kind="save" path="/b.md" method="write" />',
+        '<action name="write">\n{"path":"/a.md","content":""}\n</action>\n<action name="write">\n{"path":"/b.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_1",
@@ -581,7 +613,7 @@ describe("UserVfsTurnService", () => {
 
     const ok = await userVfsTurn.executeOp(session.id, {
       actionXml:
-        '<user-vfs-action kind="save" path="/1.md" method="write" />\n<user-vfs-action kind="save" path="/2.md" method="write" />',
+        '<action name="write">\n{"path":"/1.md","content":""}\n</action>\n<action name="write">\n{"path":"/2.md","content":""}\n</action>',
       tools: [
         {
           id: "tu_1",
@@ -696,7 +728,7 @@ describe("UserVfsTurnService", () => {
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
     assert.match(flush.attachments[0]!.content ?? "", /\/gone\.md/);
-    assert.match(flush.attachments[0]!.content ?? "", /kind="delete"/);
+    assert.match(flush.attachments[0]!.content ?? "", /name="delete"/);
     assert.equal((await ctx.messages.listBySession(session.id)).length, 1);
   });
 
@@ -784,7 +816,9 @@ describe("UserVfsTurnService", () => {
     const flush = await userVfsTurn.flushPendingUserVfsTurns(session.id);
     assert.equal(flush.flushed, true);
     assert.deepEqual(
-      pathsFromUserOpsXml(flush.attachments[0]!.content ?? ""),
+      pathsFromUserOpsXml(
+        flush.attachments.map((a) => a.content ?? "").join("\n"),
+      ),
       [...preview],
     );
     assert.equal(await loadPendingQueueJson(ctx.conn, session.id), null);
@@ -843,8 +877,8 @@ describe("UserVfsTurnService", () => {
     const statusDeps = {
       sessionKkv: ctx.sessionKkv,
       loadLiveWorkplacePaths: async () => [] as const,
-      previewUserOpsChangedPaths: (id: string) =>
-        userVfsTurn.previewUserOpsChangedPaths(id),
+      previewUserOpsActions: (id: string) =>
+        userVfsTurn.previewUserOpsActions(id),
     };
 
     const before = await projectComposerStatusAttachments(

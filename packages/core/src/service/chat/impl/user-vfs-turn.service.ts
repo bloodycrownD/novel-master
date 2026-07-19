@@ -4,7 +4,7 @@
  * @module service/chat/impl/user-vfs-turn.service
  */
 
-import { buildUserOpsAttachment } from "@/domain/chat/logic/build-user-ops-attachment.js";
+import { buildUserOpsAttachmentsFromEntries } from "@/domain/chat/logic/build-user-ops-attachment.js";
 import {
   collectUserOpsChangedPaths,
   diffWorkspaceForUserVfsFlush,
@@ -13,7 +13,11 @@ import {
 } from "@/domain/chat/logic/diff-workspace-for-user-vfs-flush.js";
 import { resolveCurrentWorkspaceSnapshot } from "@/domain/chat/logic/resolve-current-workspace-snapshot.js";
 import { resolveFlushBaselineTree } from "@/domain/chat/logic/resolve-flush-baseline-tree.js";
-import { synthesizeUserVfsFlushActions } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
+import {
+  collectUserOpsActionSummaries,
+  synthesizeUserVfsFlushActionEntries,
+  type UserOpsActionSummary,
+} from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
 import type { WorkspaceFlushSnapshot } from "@/domain/chat/logic/workspace-flush-snapshot.js";
 import type { MessageRepository } from "@/domain/chat/repositories/message.port.js";
 import type { SessionRepository } from "@/domain/chat/repositories/session.port.js";
@@ -258,20 +262,35 @@ export class DefaultUserVfsTurnService implements UserVfsTurnService {
       sessionId,
       session.projectId,
     );
-    const actionsXml = synthesizeUserVfsFlushActions(diff);
+    const entries = synthesizeUserVfsFlushActionEntries(diff);
 
-    if (isWorkspaceFlushDiffEmpty(diff) || actionsXml.trim() === "") {
+    if (isWorkspaceFlushDiffEmpty(diff) || entries.length === 0) {
       await savePendingQueue(this.deps.sessionKkv, sessionId, []);
       return { flushed: false, attachments: [] };
     }
 
-    const toolNames = pending.flatMap((e) => e.tools.map((t) => t.name));
-    const name =
-      toolNames.length > 0 ? [...new Set(toolNames)].join(", ") : "user_ops";
-    const attachments = [buildUserOpsAttachment(actionsXml, name)];
+    const attachments = buildUserOpsAttachmentsFromEntries(entries);
 
     await savePendingQueue(this.deps.sessionKkv, sessionId, []);
     return { flushed: true, attachments };
+  }
+
+  /**
+   * 相对 checkpoint 的净 action 摘要；不读 pending 也不改队列。
+   */
+  async previewUserOpsActions(
+    sessionId: string,
+  ): Promise<readonly UserOpsActionSummary[]> {
+    const session = await this.deps.sessions.findById(sessionId);
+    if (session == null) {
+      throw chatNotFound("session", sessionId);
+    }
+
+    const diff = await this.resolveWorkspaceFlushDiff(
+      sessionId,
+      session.projectId,
+    );
+    return collectUserOpsActionSummaries(diff);
   }
 
   /**

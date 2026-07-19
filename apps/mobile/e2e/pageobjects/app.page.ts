@@ -138,7 +138,7 @@ export class AppPage {
     // 对话态底栏隐藏，不可点「我的」：先回列表
     await this.leaveConversationIfNeeded();
     await this.switchToProfilePanel();
-    const modelMenu = await $('android=new UiSelector().text("当前模型")');
+    const modelMenu = await $('android=new UiSelector().text("当前大模型")');
     await modelMenu.waitForDisplayed({timeout: 10000});
     await modelMenu.click();
     await this.selectFirstWorkspaceModel();

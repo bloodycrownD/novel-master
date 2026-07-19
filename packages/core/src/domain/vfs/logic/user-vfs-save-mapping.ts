@@ -259,42 +259,61 @@ function escapeXmlAttr(value: string): string {
   return escapeXmlText(value).replace(/"/g, "&quot;");
 }
 
-/** 生成 save + edit 的 `<user-vfs-action>` XML。 */
+/**
+ * 通用 action XML：`<action name="…">{json}</action>`。
+ * JSON 为对应 tool / 操作入参（写盘后供 LLM 与 round-trip）。
+ */
+export function buildUserVfsActionXml(
+  name: string,
+  params: Record<string, unknown>,
+): string {
+  const body = escapeXmlText(JSON.stringify(params, null, 2));
+  return `<action name="${escapeXmlAttr(name)}">\n${body}\n</action>`;
+}
+
+/** 生成 write 的 `<action name="write">`（正文在 JSON `content`）。 */
+export function buildUserVfsSaveWriteActionXml(
+  path: string,
+  _reason: "new-file" | "anchor-not-unique" = "anchor-not-unique",
+  content = "",
+): string {
+  return buildUserVfsActionXml("write", { path, content });
+}
+
+/** 生成 edit：每个 hunk 一条 `<action name="edit">`（oldString/newString）。 */
 export function buildUserVfsSaveEditActionXml(
   path: string,
   editHunks: readonly UserVfsEditHunk[],
 ): string {
-  const hunkXml = editHunks
-    .map(
-      (hunk) =>
-        `  <edit-hunk index="${hunk.index}">\n` +
-        `    <old>${escapeXmlText(hunk.oldString)}</old>\n` +
-        `    <new>${escapeXmlText(hunk.newString)}</new>\n` +
-        `  </edit-hunk>`,
+  return editHunks
+    .map((hunk) =>
+      buildUserVfsActionXml("edit", {
+        path,
+        oldString: hunk.oldString,
+        newString: hunk.newString,
+      }),
     )
     .join("\n");
-  return (
-    `<user-vfs-action kind="save" path="${escapeXmlAttr(path)}" method="edit" hunks="${editHunks.length}">\n` +
-    `${hunkXml}\n` +
-    `</user-vfs-action>`
-  );
 }
 
-/** 生成 save + write fallback 的 `<user-vfs-action>` XML。 */
-export function buildUserVfsSaveWriteActionXml(
-  path: string,
-  reason: "new-file" | "anchor-not-unique" = "anchor-not-unique",
-): string {
-  return `<user-vfs-action kind="save" path="${escapeXmlAttr(path)}" method="write" reason="${reason}" />`;
-}
-
-/** 生成 delete / mkdir / rename 等非 save 类 action XML。 */
+/** 生成 delete / mkdir / rename 的 `<action name="…">`。 */
 export function buildUserVfsSimpleActionXml(
   kind: "delete" | "mkdir" | "rename",
   attrs: Record<string, string>,
 ): string {
-  const parts = Object.entries(attrs)
-    .map(([key, value]) => `${key}="${escapeXmlAttr(value)}"`)
-    .join(" ");
-  return `<user-vfs-action kind="${kind}" ${parts} />`;
+  if (kind === "delete") {
+    const params: Record<string, unknown> = { path: attrs.path ?? "" };
+    if (attrs.recursive === "true") {
+      params.recursive = true;
+    }
+    return buildUserVfsActionXml("delete", params);
+  }
+  if (kind === "mkdir") {
+    return buildUserVfsActionXml("mkdir", { path: attrs.path ?? "" });
+  }
+  return buildUserVfsActionXml("rename", {
+    from: attrs.from ?? "",
+    to: attrs.to ?? "",
+  });
 }
+

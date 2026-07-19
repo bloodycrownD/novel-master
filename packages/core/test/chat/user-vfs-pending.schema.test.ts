@@ -13,7 +13,7 @@ describe("userVfsPendingQueueSchema", () => {
   it("合法 JSON round-trip", () => {
     const raw = [
       {
-        actionXml: '<user-vfs-action kind="delete" path="a.md" />',
+        actionXml: '<action name="delete">\n{"path":"a.md"}\n</action>',
         tools: [{ id: "tu_1", name: "fs" }],
         createdAtMs: 1710000000000,
       },
@@ -35,7 +35,7 @@ describe("userVfsPendingQueueSchema", () => {
   it("缺 tools[].id 拒绝", () => {
     assert.throws(() =>
       userVfsPendingEntrySchema.parse({
-        actionXml: "<user-vfs-action />",
+        actionXml: '<action name="delete">\n{"path":"/x"}\n</action>',
         tools: [{ name: "fs" }],
         createdAtMs: 1,
       }),

@@ -21,7 +21,7 @@ agile_trace: true
 | `selectedDir` 单值 + 互斥清空；丢弃并列文件 | `selectedDirs: Set`；确认并列产出 dir/text |
 | 过滤 `displayState:hidden` | 去掉 hidden 滤，与工作区列表可见集合对齐 |
 | 选中态依赖 row 背景；目录 chip 前缀/同色 | 去 selected 背景；目录 chip `` `@${path}` `` + warning |
-| `renderDirAttachTree` 曾递归读正文 / 后改为缩进名树 | 改为 `$filetree` ASCII depth=1（抄 branch 规则，不调用 `renderWorktreeFileTreeForMacro`） |
+| `renderDirAttachTree` 曾递归读正文 / 后改为纯 ASCII | `$filetree` ASCII depth=1 + 外层 `<dir path>`（抄 branch 规则，不调用 `renderWorktreeFileTreeForMacro`） |
 
 ## 变更点清单
 
@@ -32,7 +32,7 @@ agile_trace: true
 | `apps/desktop/.../vfs-tree-utils.ts` | 导出 `isDirectChild` |
 | `apps/desktop/renderer/styles/shell.css` | 导航/勾选；去 `.is-selected` 背景；`.chat-composer__chip--dir` |
 | `apps/*/.../AttachmentDraftChips.tsx` | `formatAttachmentChipLabel`；目录黄 |
-| `packages/core/.../render-dir-attach-tree.ts` | `$filetree` ASCII depth=1；根 `basename/`；dirs→files |
+| `packages/core/.../render-dir-attach-tree.ts` | `$filetree` ASCII depth=1 + `<dir path>` 外壳；根 `basename/`；dirs→files |
 | 对应 Desktop / Mobile / core 单测 | 导航、多选、chip、T-AT3 |
 
 ## 详细改动说明
@@ -56,21 +56,24 @@ agile_trace: true
 1. Picker：仅保留 hover 背景；选中靠勾选框。
 2. Chip：`type==='dir' && source!=='workplace'` → `` `@${path}` `` + `--warning` / `tokens.warning`；文件不动。
 
-### 4. `$filetree` ASCII depth=1（本敏捷核心）
+### 4. `$filetree` ASCII depth=1 + `<dir>` 外壳（本敏捷核心）
 
 1. `vfs.list(normalizedRoot, { recursive: false })`。
 2. 根行：与 `worktreeFileTreeRootLabel` 口径一致——`/` → `/`；否则 `basename/`（例 `/notes` → `notes/`）。
 3. 子项：dirs 先、files 后；同组 `localeCompare`。
 4. 分支字符：`├── ` / `└── `（单层无 `│   ` 前缀）。
-5. **无**「全部加载」等后缀；**无**正文；**不写** file_cache；**禁止** `<dir>` / `<file` XML。
-6. `sessionKkv` 仅透传兼容；超长追加 `<!-- [truncated] -->`。
+5. 返回前 `wrapDirAttachBlock`：`<dir path="{normalizedRoot}">\n{tree}\n</dir>`（`path` 经 `escapeXmlAttr`；与 `<file path>` 对称）。
+6. **无**「全部加载」等后缀；**无**正文；**不写** file_cache；**内层禁止**嵌套 `<file>`。
+7. `sessionKkv` 仅透传兼容；超长追加 `<!-- [truncated] -->`（仍在 `</dir>` 内）。
 
 输出示例：
 
 ```
+<dir path="/notes">
 notes/
 ├── sub/
 └── a.md
+</dir>
 ```
 
 ## 测试策略
@@ -78,7 +81,7 @@ notes/
 ### 测试用例
 
 - Mobile / Desktop：导航、多选、hidden 可见、chip 文案、无 selected 背景。
-- core：`prepare-user-messages-for-prompt` **T-AT3** 翻转（含 `├──`/`└──`；无深层/正文/XML；cache 不变）。
+- core：`prepare-user-messages-for-prompt` **T-AT3**（`<dir path>` + `├──`/`└──`；无深层/正文/`<file>`；cache 不变）。
 
 ### 历史提交（合并前 features）
 

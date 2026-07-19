@@ -80,6 +80,16 @@ export class SqliteSessionKkvRepository implements SessionKkvRepository {
     return result.changes > 0;
   }
 
+  async clearDomain(sessionId: string, domain: string): Promise<void> {
+    await executeTemplate(
+      this.conn,
+      this.parser,
+      `DELETE FROM session_kkv_entry
+       WHERE session_id = #{sessionId} AND domain = #{domain}`,
+      { sessionId, domain },
+    );
+  }
+
   async clearSession(sessionId: string): Promise<void> {
     await executeTemplate(
       this.conn,

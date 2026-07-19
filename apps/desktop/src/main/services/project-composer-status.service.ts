@@ -23,7 +23,12 @@ export async function projectComposerStatusForSession(
       const view = await worktree.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);
     },
-    previewUserOpsChangedPaths: (id) =>
-      rt.userVfsTurn.previewUserOpsChangedPaths(id),
+    previewUserOpsActions: async (id) => {
+      // chip 以 pending 为门闩：flush 清队列后上条必空
+      if (!(await rt.userVfsTurn.hasPendingTurns(id))) {
+        return [];
+      }
+      return rt.userVfsTurn.previewUserOpsActions(id);
+    },
   });
 }

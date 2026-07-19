@@ -41,7 +41,7 @@ date: 2026-07-16
 
 **关键不变**：发送时仍走现网 `flushPendingUserVfsTurns`（算净 diff → user_ops attachment → **清空 pending**）；状态条 chip **禁止**调用 flush 来「刷新」（否则会误清队列）。投影复用 `resolveFlushBaselineTree` + `resolveCurrentWorkspaceSnapshot` + `diffWorkspaceForUserVfsFlush`（或抽取共享 `previewUserOpsPaths`）。
 
-**置位/压缩**：Core 已 `clearSession` → 新 pending 域一并空；App 在成功钩子过滤内存/草稿中的 workplace|user_ops，并对上条强制 `projectStatusChips` 重读（应为空）。`composer_draft_json` **不删**。
+**置位/压缩**：Core 已 `clearSession` → pending 一并空；App 成功钩子 **直接以空列表替换状态条**（不可再 `projectComposerStatus`：空 `file_cache` 会对 live 跑全量规则差集）。`composer_draft_json` **不删**。
 
 ## 最终项目结构（增量）
 
@@ -79,7 +79,7 @@ apps/{desktop,mobile}/
 - Step 4 — phase-composer-draft-column — blocking: yes — qa: auto：`composer_draft_json` DDL+align+repo get/set；zod；Mobile/Desktop 读写取代纯内存 Map（Desktop 切会话按 sessionId 读写库）。
 - Step 5 — phase-status-project — blocking: yes — qa: auto：统一 `projectComposerStatusAttachments(sessionId)`（workplace 差集 + user_ops paths → `MessageAttachment[]`）；规则变更与 executeOp 成功后 **整表替换** UI 上条数据源（可不经「累加 suggest」）。
 - Step 6 — phase-dual-chip-ui — blocking: yes — qa: auto：双端拆条渲染 + emoji 文案 + 去目录 warning；下条 `onRemove` 仅 attach，并回写 `composer_draft_json`；单测翻转文案期望。
-- Step 7 — phase-clear-hooks — blocking: yes — qa: auto：置位/压缩（及手动清 kkv）成功后清 UI 上条并 `project…`；断言 draft 正文+attach 保留；Desktop `runCompaction` 补 ok 收尾。
+- Step 7 — phase-clear-hooks — blocking: yes — qa: auto：置位/压缩（及手动清 kkv）成功后 **直接清空** UI 上条（禁止再 project）；断言 draft 正文+attach 保留；Desktop `runCompaction` 补 ok 收尾。
 - Step 8 — phase-send-wire — blocking: yes — qa: auto：发送仍 flush→合并 attachments；成功后 pending 已空 → 上条空；`composer_draft` 清空策略与现网一致（整清 text+attach）；空发门闩仍认 pending/文本/附件。
 - Step 9 — phase-docs-parent-note — blocking: no — qa: auto：在父级 PRD/SPEC 加一行 supersede 指向本 Feature（可选同 PR 勘误「可单条删除」句）。
 - Step 10 — phase-manual-smoke — blocking: no — qa: manual_user：双端杀进程恢复草稿；置位后上条空、下条与正文在；抵消 chip 消失。
@@ -113,9 +113,12 @@ apps/{desktop,mobile}/
 ### UI 布局
 
 ```text
-[ 状态条：无叉横滑 | 仅 workplace+user_ops | 空则 null ]
-[ 附件条：有叉横滑 | 仅 attach           | 空则 null ]
-[ 输入框 … ]
+[ 状态条：输入框外上方 | 无叉 | workplace+user_ops | 空则 null ]
+┌─ 输入框 ─────────────────────────────────────────────┐
+│ [ 附件条：有叉横滑 | 仅 attach | 空则 null ]          │
+│ [ 文本输入 … ]                                        │
+│ [ 工具栏 ]                                            │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## 兼容性 / 迁移

@@ -6,6 +6,7 @@
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import type { UserOpsActionSummary } from "@/domain/chat/logic/synthesize-user-vfs-flush-actions.js";
 
 /** 单次 VFS 操作中的 tool 调用规格（含 flush 配对用 id）。 */
 export interface UserVfsTurnToolSpec {
@@ -46,11 +47,21 @@ export interface UserVfsTurnService {
   ): Promise<UserVfsTurnExecuteResult>;
 
   /**
-   * pending 非空时合成 action XML → `user_ops` 附件并清空 pending；**不** insert UA 两段。
+   * pending 非空时按 checkpoint 净 diff 合成 `user_ops` 附件并清空 pending；**不** insert UA 两段。
    *
-   * @remarks flush 禁止再次调用 ToolRunner。checkpoint 改挂带 user_ops 的 user append（见 runAgentTurn）。
+   * @remarks flush 禁止再次调用 ToolRunner；附件按净 action 各一条（`name` = `action:path`），
+   * 不以 pending 历史 tool 名拼接。checkpoint 改挂带 user_ops 的 user append（见 runAgentTurn）。
    */
   flushPendingUserVfsTurns(sessionId: string): Promise<UserVfsFlushResult>;
+
+  /**
+   * 相对上次发送 checkpoint 的净 action 摘要（稳定顺序）；**不清** pending。
+   *
+   * @remarks 复用 flush 同源 baseline / current / diff；禁止调用 flush 或 `savePendingQueue([])`。
+   */
+  previewUserOpsActions(
+    sessionId: string,
+  ): Promise<readonly UserOpsActionSummary[]>;
 
   /**
    * 相对上次发送 checkpoint 的净变更 path 集（稳定排序）；**不清** pending。

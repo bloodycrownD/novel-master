@@ -104,7 +104,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
           type="button"
           className={`workspace-pick${agentLocked ? " workspace-pick--locked" : ""}`}
           data-action="open-agent-picker"
-          aria-label={agentLocked ? "项目专属智能体（不可切换）" : "切换 agent"}
+          aria-label={agentLocked ? "项目专属智能体（不可切换）" : "切换智能体"}
           aria-disabled={agentLocked}
           onClick={() => void openAgentPicker()}
         >
@@ -120,7 +120,7 @@ export function WorkspaceFooter({ projectId, sessionId }: WorkspaceFooterProps) 
           type="button"
           className="workspace-pick"
           data-action="open-model-picker"
-          aria-label="切换模型"
+          aria-label="切换大模型"
           onClick={() => void openModelPicker()}
         >
           <span className="workspace-pick__icon" aria-hidden="true">

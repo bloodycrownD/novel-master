@@ -63,10 +63,14 @@ describe("normalizeForLlmExport", () => {
   });
 
   it("vfs 段（metadata.kind）不与 plain chat merge", () => {
-    const vfsAction = msg("user", "<user-vfs-action/>", {
-      id: "vfs1",
-      raw: { metadata: { kind: "user_vfs_action", source: "user" } },
-    });
+    const vfsAction = msg(
+      "user",
+      '<action name="delete">\n{"path":"/x"}\n</action>',
+      {
+        id: "vfs1",
+        raw: { metadata: { kind: "user_vfs_action", source: "user" } },
+      },
+    );
     const plain = msg("user", "hello", { id: "c1" });
     const out = normalizeForLlmExport([vfsAction, plain], "anthropic", {
       persistCount: 0,
@@ -90,10 +94,14 @@ describe("normalizeForLlmExport", () => {
 
   it("UA 两条不拆分（条数保持）", () => {
     const ua = [
-      msg("user", "<system-message>\n<user-vfs-action/>\n</system-message>", {
-        id: "u1",
-        raw: { metadata: { kind: "user_vfs_action", source: "user" } },
-      }),
+      msg(
+        "user",
+        '<system-message>\n<action name="delete">\n{"path":"/x"}\n</action>\n</system-message>',
+        {
+          id: "u1",
+          raw: { metadata: { kind: "user_vfs_action", source: "user" } },
+        },
+      ),
       msg("assistant", "收到通知", {
         id: "a1",
         raw: { metadata: { kind: "user_vfs_ack", synthetic: true } },

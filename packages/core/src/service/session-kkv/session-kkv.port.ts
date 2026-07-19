@@ -28,6 +28,9 @@ export interface SessionKkvService {
 
   delete(sessionId: string, domain: string, key: string): Promise<void>;
 
+  /** 清空指定 domain（如 file_cache / user_vfs_pending）。 */
+  clearDomain(sessionId: string, domain: string): Promise<void>;
+
   clearSession(sessionId: string): Promise<void>;
 
   listKeys(sessionId: string, domain: string): Promise<string[]>;

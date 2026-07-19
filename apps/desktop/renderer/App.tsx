@@ -380,7 +380,7 @@ function DesktopOverlays() {
             })();
           }}
         >
-          切换模型
+          切换大模型
         </button>
         <button
           type="button"
@@ -398,7 +398,7 @@ function DesktopOverlays() {
             })();
           }}
         >
-          切换 Agent
+          切换智能体
         </button>
       </div>
 

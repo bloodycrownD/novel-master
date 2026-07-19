@@ -1,5 +1,5 @@
 /**
- * 从 `<user-vfs-action>` XML 推导 tool 名与 input 结构（flush 压缩 tool_use 用）。
+ * 从 `<action name="…">` JSON 推导 tool 名与 input。
  *
  * @module domain/vfs/logic/action-xml-to-tool-uses
  */
@@ -10,7 +10,7 @@ export interface DerivedToolUseInput {
 }
 
 const ACTION_TAG_RE =
-  /<user-vfs-action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/user-vfs-action>)/g;
+  /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
 
 const ATTR_RE = /(\w+)="([^"]*)"/g;
 
@@ -22,19 +22,6 @@ function parseAttrs(attrText: string): Record<string, string> {
   return attrs;
 }
 
-function parseEditHunks(inner: string): Array<{ oldString: string; newString: string }> {
-  const hunks: Array<{ oldString: string; newString: string }> = [];
-  const hunkRe =
-    /<edit-hunk[^>]*>[\s\S]*?<old>([\s\S]*?)<\/old>[\s\S]*?<new>([\s\S]*?)<\/new>[\s\S]*?<\/edit-hunk>/g;
-  for (const match of inner.matchAll(hunkRe)) {
-    hunks.push({
-      oldString: unescapeXml(match[1] ?? ""),
-      newString: unescapeXml(match[2] ?? ""),
-    });
-  }
-  return hunks;
-}
-
 function unescapeXml(text: string): string {
   return text
     .replace(/&lt;/g, "<")
@@ -43,43 +30,78 @@ function unescapeXml(text: string): string {
     .replace(/&amp;/g, "&");
 }
 
-function deriveFromAction(
-  attrs: Record<string, string>,
-  inner: string,
-): DerivedToolUseInput[] {
-  const kind = attrs.kind;
-  switch (kind) {
-    case "delete": {
-      const path = attrs.path ?? "";
-      const command = attrs.recursive === "true" ? `rm -r ${path}` : `rm ${path}`;
-      return [{ name: "fs", input: { command } }];
+function parseJsonBody(inner: string): Record<string, unknown> {
+  const raw = unescapeXml(inner).trim();
+  if (raw === "") {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed != null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
     }
+  } catch {
+    // fall through
+  }
+  return {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function deriveFromNamedAction(
+  name: string,
+  params: Record<string, unknown>,
+): DerivedToolUseInput[] {
+  switch (name) {
+    case "write":
+      return [
+        {
+          name: "write",
+          input: {
+            path: asString(params.path),
+            content: asString(params.content),
+          },
+        },
+      ];
+    case "edit":
+      return [
+        {
+          name: "edit",
+          input: {
+            path: asString(params.path),
+            oldString: asString(params.oldString),
+            newString: asString(params.newString),
+          },
+        },
+      ];
     case "mkdir":
-      return [{ name: "fs", input: { command: `mkdir ${attrs.path ?? ""}` } }];
+      return [
+        {
+          name: "fs",
+          input: { command: `mkdir ${asString(params.path)}` },
+        },
+      ];
+    case "delete": {
+      const path = asString(params.path);
+      const recursive = params.recursive === true || params.recursive === "true";
+      return [
+        {
+          name: "fs",
+          input: { command: recursive ? `rm -r ${path}` : `rm ${path}` },
+        },
+      ];
+    }
     case "rename":
       return [
         {
           name: "fs",
           input: {
-            command: `mv ${attrs.from ?? ""} ${attrs.to ?? ""}`,
+            command: `mv ${asString(params.from)} ${asString(params.to)}`,
           },
         },
       ];
-    case "save": {
-      const path = attrs.path ?? "";
-      if (attrs.method === "write") {
-        return [{ name: "write", input: { path, content: "" } }];
-      }
-      const hunks = parseEditHunks(inner);
-      return hunks.map((hunk) => ({
-        name: "edit",
-        input: {
-          path,
-          oldString: hunk.oldString,
-          newString: hunk.newString,
-        },
-      }));
-    }
     default:
       return [];
   }
@@ -92,8 +114,9 @@ export function actionXmlToToolUses(actionXml: string): DerivedToolUseInput[] {
   const results: DerivedToolUseInput[] = [];
   for (const match of actionXml.matchAll(ACTION_TAG_RE)) {
     const attrs = parseAttrs(match[1] ?? "");
-    const inner = match[2] ?? "";
-    results.push(...deriveFromAction(attrs, inner));
+    const name = attrs.name ?? "";
+    const params = parseJsonBody(match[2] ?? "");
+    results.push(...deriveFromNamedAction(name, params));
   }
   return results;
 }

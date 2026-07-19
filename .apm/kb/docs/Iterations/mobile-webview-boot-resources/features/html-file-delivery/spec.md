@@ -5,9 +5,11 @@ agile_trace: true
 
 # html-file-delivery 实现规格（SPEC）
 
+> **过渡交付**：本 feature 的「assembled `.html` + `source.html`」为 boot-resources 阶段交付面。**加载终局**见 [`Iterations/mobile-webview-boot-bundler`](../../../mobile-webview-boot-bundler/spec.md)（`uri` + esbuild IIFE + 原生 assets/bundle）。父 SPEC 文首已标 Superseded。
+
 ## 根因 / 方案摘要
 
-巨型 `*.generated.ts` 把整页 HTML 嵌进 TS，diff/审查差、与父级「真实 HTML 交付」冲突。定案：**组装写真实 `.html`**；**加载主路径 A**：Metro/Jest 将 `.html` 变为 UTF-8 字符串模块 → 薄 TS export → WebView 仍 `source={{ html, baseUrl }}`（本期不做 uri/android_asset）。
+巨型 `*.generated.ts` 把整页 HTML 嵌进 TS，diff/审查差、与父级「真实 HTML 交付」冲突。定案：**组装写真实 `.html`**；**加载主路径 A**（过渡）：Metro/Jest 将 `.html` 变为 UTF-8 字符串模块 → 薄 TS export → WebView 仍 `source={{ html, baseUrl }}`（本 feature 不做 uri/android_asset；终局由 bundler 接替）。
 
 ## 变更点清单
 

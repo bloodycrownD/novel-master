@@ -71,7 +71,7 @@ export function buildUserVfsCreateFileOp(
   path: string,
   content = "",
 ): UserVfsTurnOp {
-  const actionXml = buildUserVfsSaveWriteActionXml(path, "new-file");
+  const actionXml = buildUserVfsSaveWriteActionXml(path, "new-file", content);
   const [id] = allocToolIds(1, "create");
   return toOp(actionXml, [{ id, name: "write", input: { path, content } }]);
 }
@@ -103,6 +103,7 @@ export function buildUserVfsSaveOp(
     const actionXml = buildUserVfsSaveWriteActionXml(
       mapped.path,
       mapped.reason ?? "anchor-not-unique",
+      mapped.content,
     );
     const [id] = allocToolIds(1, "write");
     const writeInput: Record<string, unknown> = {

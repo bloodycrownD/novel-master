@@ -22,7 +22,7 @@ dependency: Iterations/message-attachment-unified/prd.md
 1. **导航**：cwd 直子浏览、进入目录、上一级、选用当前文件夹。
 2. **多选 / 可见性**：多文件 + 多目录并列确认；不滤 `displayState:hidden`。
 3. **选中样式 / chip**：选中仅勾选框；目录 chip `@${path}` + warning 黄。
-4. **`$filetree` ASCII depth=1**：`@` 目录附件拼装对齐宏树分支字符与根标签口径（无宏加载后缀、无正文、不写 file_cache）。
+4. **`$filetree` ASCII depth=1**：`@` 目录附件拼装对齐宏树分支字符与根标签口径；外包 `<dir path="…">` 与 `<file>` 对称分段（无宏加载后缀、无正文、不写 file_cache、内层不嵌 `<file>`）。
 
 ## 范围说明
 
@@ -58,13 +58,13 @@ dependency: Iterations/message-attachment-unified/prd.md
 7. Desktop/Mobile Picker：选中行无背景高亮，仅 ☑/☐ 表达选中。
 8. 非 workplace 的 `type:'dir'` chip 文案为 `@${path}`（例 `@/555`），颜色为 warning 黄；文件 chip 仍为 `@ ${path}`。
 
-### `$filetree` ASCII depth=1
+### `$filetree` ASCII depth=1 + `<dir>` 外壳
 
 9. `vfs.list(root, { recursive: false })` 仅直子；输出 `├──` / `└──` ASCII（单层无需 `│` 深层）。
 10. 根行：非 `/` 用 **basename+`/`**（例 `notes/`）；根 `/` 仍为 `/`。
 11. 排序：**dirs 再 files**，同组内 `localeCompare`。
-12. **无**「全部加载」等宏后缀；**无**正文；**不写** file_cache；**禁止** `<dir>`/`<file` XML。
-13. 超长仍按 512KiB 截断。
+12. 整体外包 `<dir path="{逻辑绝对 path}">…</dir>`（与 `<file path>` 对称）；**无**「全部加载」等宏后缀；**无**正文；**不写** file_cache；**内层禁止**嵌套 `<file>`。
+13. 超长仍按 512KiB 截断（预算计树正文；截断标记仍在标签内）。
 
 ## 测试用例
 
@@ -79,4 +79,4 @@ dependency: Iterations/message-attachment-unified/prd.md
 | T-M3 | `listPickerChildRows` 含 `displayState:hidden` 的文件 |
 | T-S1 | 勾选文件/目录 → 无 selected 背景（样式） |
 | T-S2 | dir chip → `@/path` + warning 色 |
-| T-AT3 | `/notes` 含 `a.md`+`sub/b.md` → `notes/\n├── sub/\n└── a.md`；含 `├──`/`└──`；无 b.md/正文/`<file`/`<dir`；cache 不变 |
+| T-AT3 | `/notes` → `<dir path="/notes">\nnotes/\n├── sub/\n└── a.md\n</dir>`；无 b.md/正文/`<file`；cache 不变 |

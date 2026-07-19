@@ -21,7 +21,7 @@ type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const WORKSPACE_MODEL_MENU = {
   icon: '🤖',
-  label: '当前模型',
+  label: '当前大模型',
 } as const;
 
 const WORKSPACE_AGENT_MENU = {

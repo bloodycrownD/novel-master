@@ -228,7 +228,7 @@ describe("schema 列对齐（T-B3）", () => {
     const sessionKkv = createSessionKkvService(conn);
     const pendingJson = JSON.stringify([
       {
-        actionXml: "<user-vfs-action/>",
+        actionXml: '<action name="delete">\n{"path":"/x"}\n</action>',
         tools: [{ id: "tu_kkv", name: "edit" }],
         createdAtMs: now,
       },
