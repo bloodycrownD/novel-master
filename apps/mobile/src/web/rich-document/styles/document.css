@@ -25,23 +25,4 @@ html, body { height: 100%; background: var(--bg, #fff); color: var(--text, #111)
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.annotate-bar {
-  z-index: 2147483646;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  pointer-events: auto;
-}
-.annotate-bar-btn {
-  appearance: none;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 14px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--primary, #007aff);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
-}
 /* __RICH_CSS__ */

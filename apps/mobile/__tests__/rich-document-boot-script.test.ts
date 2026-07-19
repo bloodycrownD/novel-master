@@ -42,8 +42,11 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(script).toContain('themeUpdate');
     expect(script).toContain('setAnnotateEnabled');
     expect(script).toContain('setAnnotations');
-    expect(script).toContain('selectionAnnotate');
+    expect(script).toContain('annotateOpen');
     expect(script).toContain('annotate-mark');
+    // 「添加批注」由 RN menuItems 负责，Web 侧不再发 selectionAnnotate / 不叠 DOM 浮动条
+    expect(script).not.toContain('selectionAnnotate');
+    expect(script).not.toContain('annotate-bar');
     expect(script).not.toContain('menuOverlayHandler');
     expect(script).not.toContain('openMessageMenu');
   });
@@ -69,6 +72,6 @@ describe('rich-document WebView boot (T-BB-07 / dist)', () => {
     expect(css).toContain('list-style-position: outside');
     expect(css).toContain('#doc .doc-body.rich');
     expect(css).toContain('annotate-mark');
-    expect(css).toContain('annotate-bar');
+    expect(css).not.toContain('annotate-bar');
   });
 });
