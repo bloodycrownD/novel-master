@@ -87,7 +87,10 @@ export function AppHeader({pageKey, onBack, onMenu}: Props) {
       ]}>
       <View style={styles.row}>
         {resolved.showBack ? (
-          <Pressable onPress={resolved.onBack} style={styles.iconBtn}>
+          <Pressable
+            onPress={resolved.onBack}
+            style={styles.iconBtn}
+            accessibilityLabel="返回">
             <BackIcon color={tokens.primary} />
           </Pressable>
         ) : (

@@ -93,6 +93,24 @@ export class AppPage {
   }
 
   /**
+   * 对话态会隐藏 MainTabs：若「我的」不可见，先回会话列表再继续依赖底栏的流程。
+   */
+  async leaveConversationIfNeeded(): Promise<void> {
+    await switchToNative();
+    const profileTab = await $('~我的');
+    if (await profileTab.isDisplayed()) {
+      return;
+    }
+    const backBtn = await $('~返回');
+    if (await backBtn.isExisting()) {
+      await backBtn.click();
+    } else {
+      await driver.back();
+    }
+    await profileTab.waitForDisplayed({timeout: 10000});
+  }
+
+  /**
    * Ensure a workspace model is selected so ChatComposer hasModel is true.
    * Opens the in-chat or profile model picker and selects the first saved model.
    */
@@ -117,11 +135,22 @@ export class AppPage {
       }
     }
 
+    // 对话态底栏隐藏，不可点「我的」：先回列表
+    await this.leaveConversationIfNeeded();
     await this.switchToProfilePanel();
     const modelMenu = await $('android=new UiSelector().text("当前模型")');
     await modelMenu.waitForDisplayed({timeout: 10000});
     await modelMenu.click();
     await this.selectFirstWorkspaceModel();
+
+    const chatMainTab = await $('~对话');
+    await chatMainTab.waitForDisplayed({timeout: 10000});
+    await chatMainTab.click();
+
+    const tabChat = await $('~tab-chat');
+    if (!(await tabChat.isExisting())) {
+      await this.openLatestSession();
+    }
     await this.switchToChatPanel();
   }
 
