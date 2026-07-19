@@ -190,6 +190,11 @@ export function chatMessagesToOpenAi(
         }
       }
 
+      // 无 content 且无 tool_calls → OpenAI 兼容网关会 400 invalid_request_error
+      if (message.content == null && message.tool_calls == null) {
+        continue;
+      }
+
       out.push(message);
     }
   }

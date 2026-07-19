@@ -167,7 +167,10 @@ function appendWorktreePairIfPresent(
   messages: ChatMessage[]
 ): void {
   const block = findWorktreeBlock(layout);
-  if (block == null || ctx.worktreeDisplay.trim() === "") {
+  if (block == null) {
+    return;
+  }
+  if (ctx.worktreeDisplay.trim() === "") {
     return;
   }
   messages.push(syntheticWorktreeUserMessage(block, ctx.worktreeDisplay, ctx));

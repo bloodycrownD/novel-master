@@ -48,6 +48,23 @@ describe("SessionKkvService", () => {
     );
   });
 
+  it("clearDomain 仅删该 domain", async () => {
+    const ctx = getNovelMasterTestContext();
+    const sk = createSessionKkvService(ctx.conn);
+    const sid = `dom-${testIsolationSuffix()}`;
+    await sk.set(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY, "[]");
+    await sk.set(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md", '{"body":"z","mtimeMs":1}');
+    await sk.clearDomain(sid, SESSION_KKV_DOMAIN_FILE_CACHE);
+    assert.equal(
+      await sk.get(sid, SESSION_KKV_DOMAIN_FILE_CACHE, "full:/z.md"),
+      null,
+    );
+    assert.equal(
+      await sk.get(sid, SESSION_KKV_DOMAIN_RULE_SNAPSHOT, RULE_SNAPSHOT_CANON_KEY),
+      "[]",
+    );
+  });
+
   it("clearSession 删除该会话全部 domain", async () => {
     const ctx = getNovelMasterTestContext();
     const sk = createSessionKkvService(ctx.conn);

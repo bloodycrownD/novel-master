@@ -118,7 +118,7 @@ export class AppPage {
     }
 
     await this.switchToProfilePanel();
-    const modelMenu = await $('android=new UiSelector().text("当前模型")');
+    const modelMenu = await $('android=new UiSelector().text("当前大模型")');
     await modelMenu.waitForDisplayed({timeout: 10000});
     await modelMenu.click();
     await this.selectFirstWorkspaceModel();

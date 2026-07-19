@@ -12,6 +12,7 @@ import {
   actionXmlToToolUses,
   type DerivedToolUseInput,
 } from "../../vfs/logic/action-xml-to-tool-uses.js";
+import { buildUserVfsActionXml } from "../../vfs/logic/user-vfs-save-mapping.js";
 import { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
 
 export { USER_VFS_TURN_ACK_TEXT } from "./user-vfs-turn-constants.js";
@@ -23,92 +24,130 @@ export type ParsedUserVfsEditHunk = {
 };
 
 export type ParsedUserVfsAction = {
-  readonly kind: string;
+  /** 操作名：write / edit / mkdir / delete / rename。 */
+  readonly name: string;
   readonly path: string;
+  readonly params: Record<string, unknown>;
+  /** 与 name 对齐（UI 卡片仍读 kind）。 */
+  readonly kind: string;
   readonly method?: string;
   readonly hunks: readonly ParsedUserVfsEditHunk[];
 };
 
-const USER_VFS_ACTION_RE =
-  /<user-vfs-action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/user-vfs-action>)/g;
-const EDIT_HUNK_RE =
-  /<edit-hunk[^>]*index="(\d+)"[^>]*>[\s\S]*?<old>([\s\S]*?)<\/old>[\s\S]*?<new>([\s\S]*?)<\/new>[\s\S]*?<\/edit-hunk>/g;
+const ACTION_TAG_RE =
+  /<action\s+([^>]*?)(?:\/>|>([\s\S]*?)<\/action>)/g;
 
-function parseAttrs(attrs: string): Omit<ParsedUserVfsAction, "hunks"> {
+function parseAttrs(attrs: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const match of attrs.matchAll(/(\w+)="([^"]*)"/g)) {
+    out[match[1]!] = match[2]!;
+  }
+  return out;
+}
+
+function unescapeXml(text: string): string {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&");
+}
+
+function parseJsonParams(inner: string): Record<string, unknown> {
+  const raw = unescapeXml(inner).trim();
+  if (raw === "") {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed != null && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function asString(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function actionFromNamedTag(
+  name: string,
+  params: Record<string, unknown>,
+): ParsedUserVfsAction {
+  const path =
+    name === "rename"
+      ? `${asString(params.from)}→${asString(params.to)}`
+      : asString(params.path);
+  const hunks: ParsedUserVfsEditHunk[] =
+    name === "edit"
+      ? [
+          {
+            index: "1",
+            old: asString(params.oldString),
+            new: asString(params.newString),
+          },
+        ]
+      : [];
   return {
-    kind: attrs.match(/kind="([^"]+)"/)?.[1] ?? "",
-    path: attrs.match(/path="([^"]+)"/)?.[1] ?? "",
-    method: attrs.match(/method="([^"]+)"/)?.[1],
+    name,
+    path,
+    params,
+    kind: name,
+    method: name === "write" || name === "edit" ? name : undefined,
+    hunks,
   };
 }
 
-function parseHunks(inner: string): ParsedUserVfsEditHunk[] {
-  const hunks: ParsedUserVfsEditHunk[] = [];
-  const hunkRe = new RegExp(EDIT_HUNK_RE.source, "g");
-  let hm: RegExpExecArray | null;
-  while ((hm = hunkRe.exec(inner)) !== null) {
-    hunks.push({
-      index: hm[1] ?? "",
-      old: hm[2] ?? "",
-      new: hm[3] ?? "",
-    });
-  }
-  return hunks;
-}
-
-/** 解析文本中全部 `<user-vfs-action>`（burst flush 可含多条）。 */
+/** 解析文本中全部 `<action name="…">`。 */
 export function parseAllUserVfsActionsFromText(
   text: string,
 ): readonly ParsedUserVfsAction[] {
-  if (!text.includes("<user-vfs-action")) {
+  if (!text.includes("<action")) {
     return [];
   }
   const actions: ParsedUserVfsAction[] = [];
-  const re = new RegExp(USER_VFS_ACTION_RE.source, "g");
+  const re = new RegExp(ACTION_TAG_RE.source, "g");
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
-    const attrs = match[1] ?? "";
-    const inner = match[2] ?? "";
-    actions.push({ ...parseAttrs(attrs), hunks: parseHunks(inner) });
+    const attrs = parseAttrs(match[1] ?? "");
+    const name = attrs.name ?? "";
+    if (name === "") {
+      continue;
+    }
+    actions.push(actionFromNamedTag(name, parseJsonParams(match[2] ?? "")));
   }
   return actions;
 }
 
-function escapeXmlAttr(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;");
-}
-
-function escapeXmlText(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 function formatUserVfsActionXml(action: ParsedUserVfsAction): string {
-  const attrs = [
-    `kind="${escapeXmlAttr(action.kind)}"`,
-    `path="${escapeXmlAttr(action.path)}"`,
-  ];
-  if (action.method) {
-    attrs.push(`method="${escapeXmlAttr(action.method)}"`);
+  if (action.name === "edit" && action.hunks.length > 0) {
+    return action.hunks
+      .map((hunk) =>
+        buildUserVfsActionXml("edit", {
+          path: action.path,
+          oldString: hunk.old,
+          newString: hunk.new,
+        }),
+      )
+      .join("\n");
   }
-  if (action.hunks.length === 0) {
-    return `<user-vfs-action ${attrs.join(" ")} />`;
-  }
-  const inner = action.hunks
-    .map(
-      (hunk) =>
-        `<edit-hunk index="${escapeXmlAttr(hunk.index)}"><old>${escapeXmlText(hunk.old)}</old><new>${escapeXmlText(hunk.new)}</new></edit-hunk>`,
-    )
-    .join("");
-  return `<user-vfs-action ${attrs.join(" ")}>${inner}</user-vfs-action>`;
+  const params =
+    Object.keys(action.params).length > 0
+      ? action.params
+      : action.name === "rename"
+        ? (() => {
+            const [from = "", to = ""] = action.path.split("→");
+            return { from, to };
+          })()
+        : { path: action.path };
+  return buildUserVfsActionXml(action.name || action.kind, params);
 }
 
 /**
- * 从已解析的 user-vfs-action 还原 flush 前的完整 tool input（用于 UI 展示）。
+ * 从已解析的 action 还原 flush 前的完整 tool input（用于 UI 展示）。
  */
 export function deriveToolUsesFromVfsActions(
   actions: readonly ParsedUserVfsAction[],
@@ -168,7 +207,7 @@ function matchUserVfsTurnStructureAt(
     return null;
   }
   const actionText = messageBodyTextFromContent(m0.content);
-  if (!actionText.includes("<user-vfs-action")) {
+  if (!actionText.includes("<action")) {
     return null;
   }
   if (m1.role !== "assistant") {
@@ -233,8 +272,9 @@ export function buildUserVfsTurnView(
 }
 
 function formatActionLine(action: ParsedUserVfsAction): string {
-  const base = `${action.kind} · ${action.path}`;
-  if (action.method) {
+  const label = action.name || action.kind;
+  const base = `${label} · ${action.path}`;
+  if (action.method && action.method !== label) {
     return `${base} (${action.method})`;
   }
   return base;

@@ -330,6 +330,8 @@ export async function handleMessagesRollback(
       req.messageId,
       rollbackOptions,
     );
+    // truncate 已按域清空状态条 kkv；UI 空替换（勿再 project，避免灌满 workplace）
+    await notifyComposerStatusAfterSessionKkvCleared(rt, req.sessionId);
     return { ok: true, data: undefined };
   } catch (err) {
     return { ok: false, error: formatIpcError(err) };

@@ -359,7 +359,8 @@ export function ChatTabProvider({ children }: { children: ReactNode }) {
       chatMessages: messages.chatMessages,
       hasMoreMessages: messages.hasMoreMessages,
       loadingMoreMessages: messages.loadingMoreMessages,
-      onMessagesChanged: () => handleMessagesChanged().catch(() => undefined),
+      onMessagesChanged: () =>
+        handleMessagesChanged().catch(() => undefined),
       canResumeWithoutInput: messages.canResumeWithoutInput,
       lastMessageHasToolResult: messages.lastMessageHasToolResult,
       lastMessageIsPlainUserText: messages.lastMessageIsPlainUserText,

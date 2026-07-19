@@ -1,0 +1,13 @@
+dag_version: 1
+loop: code-dev
+iteration_name: webview-imperative-shell-debt
+branch: feature/webview-imperative-shell-debt
+base_sha: a064a386
+head_sha: 1a4f63cb
+prd_path: .apm/kb/docs/Iterations/mobile-webview-preact-htm/features/webview-imperative-shell-debt/prd.md
+spec_path: .apm/kb/docs/Iterations/mobile-webview-preact-htm/features/webview-imperative-shell-debt/spec.md
+status: dev-ready
+open_must_fix: []
+spec_deviations: []
+remaining: Step6 manual_user device smoke
+updatedAt: "2026-07-18 01:40:00"

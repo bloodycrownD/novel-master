@@ -39,7 +39,7 @@ describe("message attachments round-trip (Step 5)", () => {
         name: "ops",
         source: "user_ops",
         type: "text",
-        content: `<user-vfs-action kind="write" path="/x.md"/>`,
+        content: `<action name="write">\n{"path":"/x.md","content":""}\n</action>`,
       },
     ];
     const withAtt = await ctx.messages.append(

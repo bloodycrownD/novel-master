@@ -19,6 +19,14 @@ export function createMemorySessionKkv(): SessionKkvService {
     async delete(sessionId, domain, key) {
       map.delete(slot(sessionId, domain, key));
     },
+    async clearDomain(sessionId, domain) {
+      const prefix = `${sessionId}\0${domain}\0`;
+      for (const k of [...map.keys()]) {
+        if (k.startsWith(prefix)) {
+          map.delete(k);
+        }
+      }
+    },
     async clearSession(sessionId) {
       const prefix = `${sessionId}\0`;
       for (const k of [...map.keys()]) {

@@ -39,6 +39,10 @@ export class DefaultSessionKkvService implements SessionKkvService {
     await this.repo.delete(sessionId, domain, key);
   }
 
+  clearDomain(sessionId: string, domain: string): Promise<void> {
+    return this.repo.clearDomain(sessionId, domain);
+  }
+
   clearSession(sessionId: string): Promise<void> {
     return this.repo.clearSession(sessionId);
   }

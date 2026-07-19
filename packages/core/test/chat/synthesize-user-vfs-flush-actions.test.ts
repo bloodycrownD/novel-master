@@ -21,7 +21,7 @@ describe("synthesizeUserVfsFlushActions", () => {
     assert.equal(synthesizeUserVfsFlushActions(diff), "");
   });
 
-  it("输出含可解析的 user-vfs-action", () => {
+  it("输出含可解析的 action", () => {
     const diff: WorkspaceFlushDiff = {
       addedDirs: ["/notes"],
       addedFiles: [{ path: "/notes/a.md", content: "hello" }],
@@ -31,17 +31,17 @@ describe("synthesizeUserVfsFlushActions", () => {
       renames: [],
     };
     const xml = synthesizeUserVfsFlushActions(diff);
-    assert.ok(xml.includes("<user-vfs-action"));
+    assert.ok(xml.includes("<action"));
+    assert.ok(xml.includes('"content": "hello"'));
     const actions = parseAllUserVfsActionsFromText(xml);
     assert.equal(actions.length, 2);
-    assert.equal(actions[0]?.kind, "mkdir");
+    assert.equal(actions[0]?.name, "mkdir");
     assert.equal(actions[0]?.path, "/notes");
-    assert.equal(actions[1]?.kind, "save");
+    assert.equal(actions[1]?.name, "write");
     assert.equal(actions[1]?.path, "/notes/a.md");
-    assert.equal(actions[1]?.method, "write");
   });
 
-  it("rename 输出 kind=rename 而非 delete+write", () => {
+  it("rename 输出 name=rename 而非 delete+write", () => {
     const diff: WorkspaceFlushDiff = {
       renames: [{ from: "/a.md", to: "/b.md" }],
       addedFiles: [],
@@ -53,9 +53,9 @@ describe("synthesizeUserVfsFlushActions", () => {
     const xml = synthesizeUserVfsFlushActions(diff);
     const actions = parseAllUserVfsActionsFromText(xml);
     assert.equal(actions.length, 1);
-    assert.equal(actions[0]?.kind, "rename");
-    assert.ok(!xml.includes('kind="delete"'));
-    assert.ok(!xml.includes('method="write"'));
+    assert.equal(actions[0]?.name, "rename");
+    assert.ok(!xml.includes('"name": "delete"'));
+    assert.ok(!xml.includes('name="write"'));
   });
 
   it("内容变更合成 edit 或 write action", () => {
@@ -74,11 +74,10 @@ describe("synthesizeUserVfsFlushActions", () => {
       renames: [],
     };
     const xml = synthesizeUserVfsFlushActions(diff);
-    assert.ok(xml.includes("<user-vfs-action"));
+    assert.ok(xml.includes("<action"));
     const actions = parseAllUserVfsActionsFromText(xml);
     assert.equal(actions.length, 1);
-    assert.equal(actions[0]?.kind, "save");
-    assert.equal(actions[0]?.method, "edit");
+    assert.equal(actions[0]?.name, "edit");
     assert.equal(actions[0]?.path, "/ch.md");
   });
 
@@ -94,7 +93,7 @@ describe("synthesizeUserVfsFlushActions", () => {
     const xml = synthesizeUserVfsFlushActions(diff);
     const actions = parseAllUserVfsActionsFromText(xml);
     assert.equal(actions.length, 1);
-    assert.equal(actions[0]?.kind, "delete");
+    assert.equal(actions[0]?.name, "delete");
     assert.equal(actions[0]?.path, "/gone.md");
   });
 });

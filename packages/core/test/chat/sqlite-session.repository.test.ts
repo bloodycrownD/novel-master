@@ -156,7 +156,7 @@ describe("SqliteSessionRepository", () => {
     const status = await projectComposerStatusAttachments(session.id, {
       sessionKkv: ctx.sessionKkv,
       loadLiveWorkplacePaths: async () => [],
-      previewUserOpsChangedPaths: async () => [],
+      previewUserOpsActions: async () => [],
     });
     assert.deepEqual(status, []);
   });

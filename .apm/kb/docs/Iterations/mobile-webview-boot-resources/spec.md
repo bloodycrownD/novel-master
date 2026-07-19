@@ -4,6 +4,8 @@ date: 2026-07-17
 
 # Mobile WebView Boot 资源化与源码拆分 技术规格（SPEC）
 
+> **Superseded（交付与加载）**：路径 A（`source.html` + Node assemble + `*.assembled.html` 入库）由 [`Iterations/mobile-webview-boot-bundler`](../mobile-webview-boot-bundler/spec.md) 接替。本 SPEC 仅保留「编辑面资源化 / 禁 generated.ts / 双 WebView / 桥行为」等已被继承的历史约束说明。加载终局：`uri` + esbuild IIFE 产物 + 原生 assets/bundle（见 bundler SPEC）。
+
 > **PRD**：[`prd.md`](./prd.md)  
 > **建议分支**：`feat/mobile-webview-boot-resources`  
 > **代码基线**：`feat/message-attachment-unified` 工作区（含 transcript UI 兜底移除后的现状）  

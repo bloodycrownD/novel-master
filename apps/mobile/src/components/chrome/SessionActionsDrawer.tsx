@@ -31,8 +31,8 @@ export function SessionActionsDrawer({
     { label: '聊天重命名', action: onRename },
     { label: '查看提示词', action: onRealPrompt },
     { label: '压缩上下文', action: onCompact },
-    { label: '切换模型', action: onSwitchModel },
-    { label: '切换 Agent', action: onSwitchAgent },
+    { label: '切换大模型', action: onSwitchModel },
+    { label: '切换智能体', action: onSwitchAgent },
   ];
 
   return (

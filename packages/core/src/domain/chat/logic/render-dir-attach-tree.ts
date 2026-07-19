@@ -27,6 +27,22 @@ function utf8ByteLength(text: string): number {
   return Buffer.byteLength(text, "utf8");
 }
 
+/** 属性值转义（与 {@link renderFileBlock} 口径一致）。 */
+function escapeXmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+}
+
+/**
+ * 用 `<dir path="…">` 包裹 ASCII 树，与附件侧 `<file path="…">` 对称分段。
+ */
+function wrapDirAttachBlock(logicalPath: string, treeBody: string): string {
+  const pathAttr = escapeXmlAttr(logicalPath);
+  return `<dir path="${pathAttr}">\n${treeBody}\n</dir>`;
+}
+
 /**
  * 根行标签：与 {@link worktreeFileTreeRootLabel} 口径一致——
  * `/` → `/`；其它 path → `basename/`（例 `/notes` → `notes/`）。
@@ -52,13 +68,16 @@ function entryDisplayName(
 }
 
 /**
- * 渲染以 `rootDir` 为根的 depth=1 `$filetree` ASCII 树；超长截断并在末尾追加 `[truncated]` 注释行。
+ * 渲染以 `rootDir` 为根的 depth=1 `$filetree` ASCII 树，外包 `<dir path="…">`；
+ * 超长截断并在树末追加 `[truncated]` 注释行（仍在标签内）。
  *
  * 例：
  * ```
+ * <dir path="/notes">
  * notes/
- * ├── a.md
- * └── sub/
+ * ├── sub/
+ * └── a.md
+ * </dir>
  * ```
  */
 export async function renderDirAttachTree(
@@ -74,7 +93,7 @@ export async function renderDirAttachTree(
     entries = await deps.vfs.list(normalizedRoot, { recursive: false });
   } catch {
     // 目录不存在时仍输出根行，便于 prompt 侧感知路径
-    return rootLine;
+    return wrapDirAttachBlock(normalizedRoot, rootLine);
   }
 
   const dirs: ChildEntry[] = [];
@@ -90,7 +109,7 @@ export async function renderDirAttachTree(
   files.sort((a, b) => a.name.localeCompare(b.name));
   const children = [...dirs, ...files];
 
-  // 根行 + 直子（├── / └──）；单层无需 │ 深层前缀
+  // 根行 + 直子（├── / └──）；单层无需 │ 深层前缀；截断预算仅计树正文（不含外壳）
   const parts: string[] = [`${rootLine}\n`];
   let truncated = false;
 
@@ -106,9 +125,9 @@ export async function renderDirAttachTree(
     parts.push(chunk);
   }
 
-  let out = parts.join("").replace(/\n$/, "");
+  let treeBody = parts.join("").replace(/\n$/, "");
   if (truncated) {
-    out = `${out}\n<!-- [truncated] -->`;
+    treeBody = `${treeBody}\n<!-- [truncated] -->`;
   }
-  return out;
+  return wrapDirAttachBlock(normalizedRoot, treeBody);
 }

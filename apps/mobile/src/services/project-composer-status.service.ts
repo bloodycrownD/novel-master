@@ -24,30 +24,29 @@ export async function projectComposerStatusForSession(
       const view = await worktree.evaluateRuleView();
       return ruleViewToSnapshotEntries(view);
     },
-    previewUserOpsChangedPaths: id =>
-      runtime.userVfsTurn.previewUserOpsChangedPaths(id),
+    previewUserOpsActions: async id => {
+      // chip 以 pending 为门闩：flush 清队列后上条必空，避免「pending 已空但 checkpoint 落后」粘住 mkdir 等 chip
+      if (!(await runtime.userVfsTurn.hasPendingTurns(id))) {
+        return [];
+      }
+      return runtime.userVfsTurn.previewUserOpsActions(id);
+    },
   });
 }
 
 /**
- * session kkv 清空后重投影上条（应空）；保留 composer_draft 正文+attach。
+ * session kkv 清空后（置位 / 压缩 / 手动清缓存）：**直接清空**状态条。
+ *
+ * 不可再调用 {@link projectComposerStatusForSession}：file_cache 已空时，
+ * 规则差集会把 live 中几乎全部 path 当成「未加载」而灌满 workplace chip。
+ * 正文 + `@` attach 由 replace 保留。
  */
 export async function refreshComposerStatusAfterSessionKkvCleared(
-  runtime: MobileNovelMasterRuntime,
+  _runtime: MobileNovelMasterRuntime,
   scope: { readonly projectId: string; readonly sessionId: string },
 ): Promise<void> {
-  const worktree = runtime.worktree({
-    kind: 'session',
-    projectId: scope.projectId,
-    sessionId: scope.sessionId,
-  });
-  const attachments = await projectComposerStatusForSession(
-    runtime,
-    worktree,
-    scope.sessionId,
-  );
   applyComposerStatusAttachmentsReplace({
     sessionId: scope.sessionId,
-    attachments,
+    attachments: [],
   });
 }

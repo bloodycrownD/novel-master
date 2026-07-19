@@ -175,7 +175,7 @@ export function WorkspaceSettingsView() {
       >
         <SettingsRows>
           <SettingsRow
-            label="当前模型"
+            label="当前大模型"
             value={modelLabel}
             onClick={() => void openPicker("model")}
           />

@@ -1,5 +1,5 @@
 /**
- * Composer 状态条投影：workplace 差集 + user_ops 净 path → MessageAttachment[]。
+ * Composer 状态条投影：workplace 差集 + user_ops 净 action → MessageAttachment[]。
  *
  * @module domain/chat/logic/project-composer-status-attachments
  */
@@ -10,6 +10,8 @@ import {
   workplaceAttachmentsFromRuleDelta,
   type WorkplaceLivePath,
 } from "@/domain/worktree/logic/diff-workplace-paths.js";
+import { userOpsAttachmentsFromSummaries } from "./build-user-ops-attachment.js";
+import type { UserOpsActionSummary } from "./synthesize-user-vfs-flush-actions.js";
 
 /** `projectComposerStatusAttachments` 所需依赖（不绑定完整 Service）。 */
 export type ProjectComposerStatusAttachmentsDeps = {
@@ -20,38 +22,36 @@ export type ProjectComposerStatusAttachmentsDeps = {
   readonly loadLiveWorkplacePaths: () => Promise<
     readonly WorkplaceLivePath[]
   >;
-  /** 相对 checkpoint 的净 path 集（须走 preview，禁止 flush）。 */
-  readonly previewUserOpsChangedPaths: (
+  /** 相对 checkpoint 的净 action 摘要（须走 preview，禁止 flush）。 */
+  readonly previewUserOpsActions: (
     sessionId: string,
-  ) => Promise<readonly string[]>;
+  ) => Promise<readonly UserOpsActionSummary[]>;
 };
 
 /**
- * preview paths → 每 path 一条状态条 `user_ops`（`content: null`）。
+ * preview 摘要 → 每条状态条 `user_ops`（`content: null`，`name` = `action:path`）。
+ *
+ * @deprecated 优先 `userOpsAttachmentsFromSummaries`；保留 path-only 兼容。
  */
 export function userOpsAttachmentsFromChangedPaths(
   paths: readonly string[],
 ): MessageAttachment[] {
-  return paths.map((path) => ({
-    name: path,
-    source: "user_ops" as const,
-    type: "text" as const,
-    content: null,
-    path,
-  }));
+  return userOpsAttachmentsFromSummaries(
+    paths.map((path) => ({ action: "write" as const, path })),
+  );
 }
 
 /**
- * 由 live / cacheKeys / user_ops paths 合成状态条附件（纯函数，便于 T-WP1）。
+ * 由 live / cacheKeys / user_ops 摘要合成状态条附件（纯函数，便于 T-WP1）。
  */
 export function buildComposerStatusAttachments(
   live: readonly WorkplaceLivePath[],
   cacheKeys: ReadonlySet<string> | readonly string[],
-  userOpsPaths: readonly string[],
+  userOpsActions: readonly UserOpsActionSummary[],
 ): MessageAttachment[] {
   return [
     ...workplaceAttachmentsFromRuleDelta(live, cacheKeys),
-    ...userOpsAttachmentsFromChangedPaths(userOpsPaths),
+    ...userOpsAttachmentsFromSummaries(userOpsActions),
   ];
 }
 
@@ -73,10 +73,10 @@ export async function projectComposerStatusAttachments(
   sessionId: string,
   deps: ProjectComposerStatusAttachmentsDeps,
 ): Promise<MessageAttachment[]> {
-  const [live, cacheKeys, userOpsPaths] = await Promise.all([
+  const [live, cacheKeys, userOpsActions] = await Promise.all([
     deps.loadLiveWorkplacePaths(),
     deps.sessionKkv.listKeys(sessionId, SESSION_KKV_DOMAIN_FILE_CACHE),
-    deps.previewUserOpsChangedPaths(sessionId),
+    deps.previewUserOpsActions(sessionId),
   ]);
-  return buildComposerStatusAttachments(live, cacheKeys, userOpsPaths);
+  return buildComposerStatusAttachments(live, cacheKeys, userOpsActions);
 }

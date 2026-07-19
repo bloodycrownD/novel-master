@@ -381,7 +381,7 @@ export async function runAgentTurn(
       options?.maxStepsOverride ??
       definition.runtime?.maxSteps ??
       DEFAULT_AGENT_MAX_STEPS;
-    return await runner.run({
+    const result = await runner.run({
       definition,
       sessionId: scope.sessionId,
       projectId: scope.projectId,
@@ -394,6 +394,7 @@ export async function runAgentTurn(
       signal: options?.signal,
       onStream: options?.onStream,
     });
+    return result;
   } catch (error) {
     options?.onRunFailed?.({
       stage,

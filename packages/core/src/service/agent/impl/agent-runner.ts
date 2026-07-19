@@ -5,7 +5,11 @@
  */
 
 import type { ChatMessage } from "@/domain/chat/model/message.js";
-import type { ToolResultBlock, ToolUseBlock } from "@/domain/chat/model/content-block.js";
+import type {
+  ContentBlock,
+  ToolResultBlock,
+  ToolUseBlock,
+} from "@/domain/chat/model/content-block.js";
 import type { AgentSession } from "@/domain/agent/session/agent-session.port.js";
 import { depthByMessageId } from "@/domain/depth/logic/depth-from-tail.js";
 import { listVisibleForDepth } from "@/domain/depth/logic/depth-from-tail.js";
@@ -85,6 +89,30 @@ function truncateRaw(raw: string, maxLen: number): string {
     return raw;
   }
   return raw.slice(0, maxLen) + "…";
+}
+
+/** 避免落库空正文 assistant（真实提示词 #seq 断层、UI 也不展示）。 */
+function hasMeaningfulAssistantBlocks(
+  blocks: readonly ContentBlock[],
+): boolean {
+  for (const block of blocks) {
+    switch (block.type) {
+      case "tool_use":
+      case "image":
+        return true;
+      case "text":
+      case "thinking":
+        if (block.text.trim() !== "") {
+          return true;
+        }
+        break;
+      case "redacted_thinking":
+        return true;
+      default:
+        break;
+    }
+  }
+  return false;
 }
 
 /**
@@ -238,6 +266,7 @@ export class DefaultAgentRunner implements AgentRunner {
         const llmInput = promptInput;
         const zones = computeLlmExportZonesFromLayout(options.definition.prompts, {
           agentStepIndex: step,
+          worktreeDisplay,
         });
         const protocol = await inferLlmProtocolFromSavedModelId(
           options.savedModelId,
@@ -288,9 +317,11 @@ export class DefaultAgentRunner implements AgentRunner {
           throw e;
         }
 
+        const meaningful = hasMeaningfulAssistantBlocks(result.blocks);
+
         if (signal?.aborted) {
           stopReason = "cancelled";
-          if (result.blocks.length > 0) {
+          if (result.blocks.length > 0 && meaningful) {
             await session.append("assistant", { blocks: result.blocks }, {
               raw: result.raw as Record<string, unknown>,
             });
@@ -310,7 +341,7 @@ export class DefaultAgentRunner implements AgentRunner {
         stepsExecuted += 1;
 
         let assistantMessage: ChatMessage | undefined;
-        if (result.blocks.length > 0) {
+        if (result.blocks.length > 0 && meaningful) {
           assistantMessage = await session.append("assistant", { blocks: result.blocks }, {
             raw: result.raw as Record<string, unknown>,
           });

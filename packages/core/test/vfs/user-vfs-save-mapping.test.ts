@@ -66,14 +66,19 @@ describe("buildUserVfsSaveActionXml", () => {
     const xml = buildUserVfsSaveEditActionXml("a.md", [
       { index: 1, oldString: "old", newString: "new" },
     ]);
-    assert.ok(xml.includes('method="edit"'));
-    assert.ok(xml.includes("<old>old</old>"));
-    assert.ok(xml.includes("<new>new</new>"));
+    assert.ok(xml.includes('<action name="edit">'));
+    assert.ok(xml.includes('"oldString": "old"'));
+    assert.ok(xml.includes('"newString": "new"'));
   });
 
-  it("生成 write fallback action XML", () => {
-    const xml = buildUserVfsSaveWriteActionXml("a.md", "anchor-not-unique");
-    assert.ok(xml.includes('method="write"'));
-    assert.ok(xml.includes('reason="anchor-not-unique"'));
+  it("生成 write action XML（JSON 正文）", () => {
+    const xml = buildUserVfsSaveWriteActionXml(
+      "a.md",
+      "anchor-not-unique",
+      "full body",
+    );
+    assert.ok(xml.includes('<action name="write">'));
+    assert.ok(xml.includes('"path": "a.md"'));
+    assert.ok(xml.includes('"content": "full body"'));
   });
 });

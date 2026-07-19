@@ -78,6 +78,7 @@ function createOrchestrator(input: {
       },
       async set() {},
       async delete() {},
+      async clearDomain() {},
       async clearSession() {},
       async listKeys() {
         return [];
