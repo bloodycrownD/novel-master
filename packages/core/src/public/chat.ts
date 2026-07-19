@@ -21,11 +21,23 @@ export type {
   MessageContent,
 } from '../domain/chat/model/message.js';
 export {
+  NO_PATH_ATTACHMENT_NAME,
+  attachmentStorageName,
+  messageAttachmentActionSchema,
   messageAttachmentSchema,
   messageAttachmentsSchema,
   parseAttachmentsJson,
   serializeAttachmentsJson,
 } from '../domain/chat/model/message-attachment.schema.js';
+export type { MessageAttachmentAction } from '../domain/chat/model/message-attachment.schema.js';
+export {
+  annotateDraftSchema,
+  annotateDraftsSchema,
+} from '../domain/chat/model/annotate-draft.schema.js';
+export type {
+  AnnotateDraft,
+  AnnotateDrafts,
+} from '../domain/chat/model/annotate-draft.schema.js';
 export {
   EMPTY_COMPOSER_DRAFT,
   composerDraftAttachmentSchema,
@@ -43,6 +55,18 @@ export {
   prepareUserMessagesForPrompt,
 } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
 export type { PrepareUserMessagesForPromptRuntime } from '../domain/chat/logic/prepare-user-messages-for-prompt.js';
+export {
+  STATUS_CHIP_ZH,
+  formatStatusChipLabel,
+  formatStatusChipLabelFromAttachment,
+} from '../domain/chat/logic/status-chip-label.js';
+export {
+  buildAlreadyReferencedActionXml,
+  buildAnnotateAttachmentFromDraft,
+  buildAttachmentActionXml,
+  buildDirTreeActionXml,
+  buildFileRefActionXml,
+} from '../domain/chat/logic/build-attachment-action-xml.js';
 export {
   PROMPT_FILE_SEEN_SHORT_TIP,
   createPromptPathSeenSet,

@@ -15,8 +15,10 @@
  * ## 契约
  * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
  *   `@` 扫描仍由 Core 合并；禁止 composer status 原样当 payload。
- * - `hasInput` / `shouldAppendNewUser` 在 materialize 非空时为真（真源差集由 Core 算）。
+ * - `hasInput` / `shouldAppendNewUser` 在 materialize / annotateDrafts 非空时为真。
  * - 有 workplace 差集时禁止 `allowResumeWithoutInput` 纯 resume（差集=新输入）。
+ * - 有 `annotateDrafts` 时本轮视 `allowResumeWithoutInput` 为 false（禁空续跑 re-append）。
+ * - annotate 附件 **concat** 追加，禁止 `mergeAttachmentsByPath` / path 去重。
  * - `allowAssistantContinue`（空正文续跑）约定不 append user；即便有 workplace 差集也不因
  *   `hasWorkplaceDelta` 误 append 空 user（continue 时忽略差集对 append 的驱动）。
  * - wrap/assemble **不**在本模块写库（T-SR0）；双渲染只读。
@@ -35,7 +37,9 @@ import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { SimpleEventBus } from "@/infra/events/simple-event-bus.js";
 import { textBlocks } from "@/domain/chat/content/text-blocks.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
+import type { AnnotateDraft } from "@/domain/chat/model/annotate-draft.schema.js";
 import type { MessageAttachment } from "@/domain/chat/model/message-attachment.schema.js";
+import { buildAnnotateAttachmentFromDraft } from "@/domain/chat/logic/build-attachment-action-xml.js";
 import { mergeAttachmentsWithScannedAtPaths } from "@/domain/chat/logic/scan-at-path-attachments.js";
 import { SESSION_KKV_DOMAIN_FILE_CACHE } from "@/domain/session-kkv/model/session-kkv-domains.js";
 import { ruleViewToSnapshotEntries } from "@/domain/worktree/logic/rule-snapshot-codec.js";
@@ -138,6 +142,11 @@ export interface RunAgentTurnOptions {
    * 误传的 workplace/`user_ops` 预览一律丢弃；`@` 扫描由 Core 合并。
    */
   readonly attachments?: readonly MessageAttachment[];
+  /**
+   * App 本轮未发送批注草稿；Core 物化为 `action:annotate` 并 **concat** 进落库。
+   * 非空时计入 hasInput / shouldAppendNewUser，且禁止空续跑 re-append。
+   */
+  readonly annotateDrafts?: readonly AnnotateDraft[];
   readonly onUserMessageAppended?: () => void | Promise<void>;
   readonly onAfterResolveModel?: (
     ctx: RunAgentTurnAfterResolveContext,
@@ -196,7 +205,11 @@ export async function runAgentTurn(
   let stage = "start";
   const stream = options?.stream !== false;
   const trimmed = userContent.trim();
-  const allowResumeWithoutInput = options?.allowResumeWithoutInput === true;
+  const annotateDrafts = options?.annotateDrafts ?? [];
+  const hasAnnotateDrafts = annotateDrafts.length > 0;
+  // 有批注草稿时本轮禁止空续跑 re-append（prepare 不得删末条）
+  const allowResumeWithoutInput =
+    options?.allowResumeWithoutInput === true && !hasAnnotateDrafts;
   const allowAssistantContinue = options?.allowAssistantContinue === true;
 
   // 入参清洗：误传的 workplace / user_ops 预览一律丢弃，只保留 attach
@@ -204,7 +217,10 @@ export async function runAgentTurn(
     (a) => a.source === "attach",
   );
 
-  if (allowResumeWithoutInput && allowAssistantContinue) {
+  if (
+    options?.allowResumeWithoutInput === true &&
+    allowAssistantContinue
+  ) {
     throw new AgentTurnError(
       "allowResumeWithoutInput 与 allowAssistantContinue 互斥",
     );
@@ -222,7 +238,8 @@ export async function runAgentTurn(
     trimmed !== "" ||
     composerAttachOnly.length > 0 ||
     hasPending ||
-    hasWorkplaceDelta;
+    hasWorkplaceDelta ||
+    hasAnnotateDrafts;
 
   if (!hasInput && !allowResumeWithoutInput && !allowAssistantContinue) {
     throw new AgentTurnError("消息不能为空");
@@ -305,12 +322,20 @@ export async function runAgentTurn(
     }
   }
 
-  // 新 append merge：materialize ∪ attach(@扫描) ∪ flush user_ops
-  const mergedAttachments = mergeAttachmentsWithScannedAtPaths("", [
-    ...workplaceAtts,
-    ...userOpsAttachments,
-    ...scannedComposer,
-  ]);
+  // annotate：concat 追加（禁止 mergeAttachmentsByPath / path 去重，以免同 path 丢条）
+  const annotateAttachments = annotateDrafts.map(
+    buildAnnotateAttachmentFromDraft,
+  );
+
+  // 新 append merge：materialize ∪ attach(@扫描) ∪ flush user_ops；再 concat annotate
+  const mergedAttachments = [
+    ...mergeAttachmentsWithScannedAtPaths("", [
+      ...workplaceAtts,
+      ...userOpsAttachments,
+      ...scannedComposer,
+    ]),
+    ...annotateAttachments,
+  ];
 
   // allowAssistantContinue：空正文续跑约定不 append user；continue 时忽略 hasWorkplaceDelta
   const shouldAppendNewUser =
@@ -319,7 +344,8 @@ export async function runAgentTurn(
     (trimmed !== "" ||
       scannedComposer.length > 0 ||
       userOpsAttachments.length > 0 ||
-      hasWorkplaceDelta);
+      hasWorkplaceDelta ||
+      hasAnnotateDrafts);
 
   if (shouldAppendNewUser) {
     stage = "append-user-message";

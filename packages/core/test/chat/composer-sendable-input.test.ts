@@ -68,6 +68,30 @@ describe("hasComposerSendableInput", () => {
     );
   });
 
+  it("仅 hasAnnotateDrafts → 可发（仅批注门闩）", () => {
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasAnnotateDrafts: true,
+      }),
+      true,
+    );
+  });
+
+  it("hasAnnotateDrafts 缺省/false → 不可发（兼容旧调用）", () => {
+    assert.equal(
+      hasComposerSendableInput({
+        text: "",
+        attachmentCount: 0,
+        hasPendingUserOps: false,
+        hasAnnotateDrafts: false,
+      }),
+      false,
+    );
+  });
+
   it("三者皆空 → 不可发", () => {
     assert.equal(
       hasComposerSendableInput({

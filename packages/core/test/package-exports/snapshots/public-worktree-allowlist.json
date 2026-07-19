@@ -1,9 +1,9 @@
 [
-  "DEFAULT_WORKTREE_DIR_RULE",
   "assembleWorkplaceDisplay",
   "computeHeadTailIndices",
   "createTemplatePullService",
   "createWorktreeService",
+  "DEFAULT_WORKTREE_DIR_RULE",
   "diffWorkplacePaths",
   "displayStateLabel",
   "evaluateFileDisplay",
@@ -19,6 +19,7 @@
   "parseMarkdownFrontMatter",
   "parseRuleSnapshotJson",
   "renderFileBlock",
+  "renderFileBlockBody",
   "renderWorktreeFileTree",
   "ruleStateLabel",
   "ruleViewToSnapshotEntries",

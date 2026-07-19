@@ -3,6 +3,7 @@
   "VfsZipError",
   "actionXmlToToolUses",
   "assertLogicalPathAllowed",
+  "buildUserVfsActionXml",
   "buildUserVfsCreateFileOp",
   "buildUserVfsDeleteOp",
   "buildUserVfsMkdirOp",

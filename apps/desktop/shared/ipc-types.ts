@@ -568,6 +568,8 @@ export type AgentRunRequest = {
   readonly allowResumeWithoutInput?: boolean;
   /** Composer 附件（workplace / attach / user_ops）；Core 发送时再扫描合并 `@path`。 */
   readonly attachments?: readonly MessageAttachmentDto[];
+  /** 本轮未发送批注草稿；main 透传至 Core `runAgentTurn`（handler 落地见后续节点）。 */
+  readonly annotateDrafts?: readonly AnnotateDraftDto[];
 };
 
 export type AgentAbortRequest = {
@@ -657,6 +659,17 @@ export type WorkspaceMutatedPayload = {
   readonly sessionId?: string;
 };
 
+/** 与 Core `MessageAttachmentAction` 对齐。 */
+export type MessageAttachmentActionDto =
+  | 'delete'
+  | 'write'
+  | 'edit'
+  | 'mkdir'
+  | 'rename'
+  | 'workplaceChange'
+  | 'userAttach'
+  | 'annotate';
+
 /** 与 Core `MessageAttachment` 对齐的 IPC DTO（renderer 不直接依赖 core）。 */
 export type MessageAttachmentDto = {
   readonly name: string;
@@ -664,6 +677,16 @@ export type MessageAttachmentDto = {
   readonly type: 'text' | 'image' | 'dir';
   readonly content: string | null;
   readonly path?: string;
+  /** 结构化 action；新写入应带；历史可缺省。 */
+  readonly action?: MessageAttachmentActionDto;
+};
+
+/** 与 Core `AnnotateDraft` 对齐（App → main → runAgentTurn）。 */
+export type AnnotateDraftDto = {
+  readonly id: string;
+  readonly path: string;
+  readonly originalText: string;
+  readonly userAnnotation: string;
 };
 
 /**
