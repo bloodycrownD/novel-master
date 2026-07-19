@@ -1,6 +1,6 @@
 import MarkdownIt from 'markdown-it';
 import type {MixedStyleRecord} from 'react-native-render-html';
-import {decodeLiteralHtmlEntities} from './decode-literal-html-entities';
+import {decodeForMarkdownInput} from './decode-literal-html-entities';
 import {extractStyleBlocksFromHtml} from './extract-style-classes';
 import {liftInlineColorToInnerSpan} from './lift-inline-color';
 import {materializeInlineColors} from './materialize-inline-colors';
@@ -10,15 +10,15 @@ const markdown = new MarkdownIt({html: true, linkify: true});
 
 export interface PreparedRichHtml {
   readonly html: string;
-  /** From `<style>` blocks in source; merged with theme tagsStyles in RichContentBody. */
+  /** 来自源中的 `<style>` 块；在 RichContentBody 中与主题 tagsStyles 合并。 */
   readonly classesStyles: Record<string, MixedStyleRecord>;
 }
 
 /**
- * Converts Markdown (with embedded HTML) to sanitized HTML for RenderHTML.
+ * 将 Markdown（可含嵌入 HTML）转为消毒后的 HTML，供 RenderHTML 使用。
  */
 export function prepareRichHtml(content: string): PreparedRichHtml {
-  const rawHtml = markdown.render(decodeLiteralHtmlEntities(content));
+  const rawHtml = markdown.render(decodeForMarkdownInput(content));
   const {htmlWithoutStyle, classesStyles} = extractStyleBlocksFromHtml(rawHtml);
   const sanitized = liftInlineColorToInnerSpan(
     sanitizeRichHtml(htmlWithoutStyle),
