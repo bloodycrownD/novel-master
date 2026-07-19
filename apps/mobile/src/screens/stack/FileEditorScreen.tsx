@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -63,6 +64,7 @@ export function FileEditorScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewMode, setPreviewMode] = useState(true);
+  const [editorFocused, setEditorFocused] = useState(false);
   const [previewRenderKind, setPreviewRenderKind] = useState<
     'markdown' | 'txt'
   >('markdown');
@@ -171,12 +173,28 @@ export function FileEditorScreen() {
     }
   };
 
+  const enterBrowseMode = useCallback(() => {
+    setEditorFocused(false);
+    Keyboard.dismiss();
+  }, []);
+
   const togglePreview = () => {
     if (!previewMode) {
-      Keyboard.dismiss();
+      enterBrowseMode();
     }
     setPreviewMode(prev => !prev);
   };
+
+  const handleEditorBlur = useCallback(() => {
+    enterBrowseMode();
+  }, [enterBrowseMode]);
+
+  // 进入编辑态时默认未聚焦，便于滑动浏览正文而不弹软键盘。
+  useEffect(() => {
+    if (!previewMode) {
+      setEditorFocused(false);
+    }
+  }, [previewMode]);
 
   const annotateEnabled = shouldEnableFileAnnotate({
     previewMode,
@@ -259,19 +277,44 @@ export function FileEditorScreen() {
             sessionId={annotateEnabled ? sessionId : undefined}
           />
         </View>
-      ) : (
+      ) : editorFocused ? (
         <TextInput
+          testID="file-editor-input"
           style={[
             styles.editor,
             {color: tokens.text, backgroundColor: tokens.surface},
           ]}
           multiline
+          scrollEnabled
+          showSoftInputOnFocus
+          autoFocus
           value={content}
           onChangeText={setContent}
+          onBlur={handleEditorBlur}
           autoCapitalize="none"
           autoCorrect={false}
           textAlignVertical="top"
         />
+      ) : (
+        <ScrollView
+          testID="file-editor-browse-scroll"
+          style={[styles.browseScroll, {backgroundColor: tokens.surface}]}
+          contentContainerStyle={styles.browseContent}
+          keyboardShouldPersistTaps="handled">
+          <Pressable
+            testID="file-editor-browse-press"
+            onPress={() => setEditorFocused(true)}
+            accessibilityRole="button">
+            <Text
+              style={[
+                styles.editorText,
+                {color: tokens.text},
+                content.length === 0 ? styles.editorPlaceholder : null,
+              ]}>
+              {content.length > 0 ? content : '点击开始编辑…'}
+            </Text>
+          </Pressable>
+        </ScrollView>
       )}
     </View>
   );
@@ -308,6 +351,20 @@ const styles = StyleSheet.create({
     padding: 12,
     fontFamily: 'monospace',
     fontSize: 14,
+  },
+  editorText: {
+    fontFamily: 'monospace',
+    fontSize: 14,
+  },
+  editorPlaceholder: {
+    opacity: 0.5,
+  },
+  browseScroll: {
+    flex: 1,
+  },
+  browseContent: {
+    flexGrow: 1,
+    padding: 12,
   },
   preview: {flex: 1, minHeight: 0, padding: 12},
 });
