@@ -1,27 +1,22 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  addPersistWorktreeBlock,
   buildAgentDefinitionFromForm,
   buildToolsPolicyFromSelection,
   countEffectiveFormPromptSources,
   countFormPromptSources,
   countMinimumPromptSources,
   createDefaultAgentEditorPrompts,
-  createDefaultWorktreeBlock,
   definitionToForm,
   formSnapshotJson,
   isDynamicBlockPersistent,
   layoutFromFormInput,
   movePersistBlock,
   PROMPT_REGION_LABELS,
-  removePersistWorktreeBlock,
   splitPersistBlocksForEditor,
   toolsSelectionFromDefinition,
-  updatePersistWorktreeRole,
   withDynamicBlockPersistence,
-  WORKTREE_BLOCK_WIRE_NAME,
-  WORKTREE_BLOCK_HINT,
+  WORKPLACE_BLOCK_HINT,
 } from "../../src/config-forms/agent/agent-editor-state.js";
 import { validateAgentPromptLayout } from "../../src/domain/prompt/logic/validate-agent-prompt-layout.js";
 
@@ -79,9 +74,9 @@ test("PROMPT_REGION_LABELS 三区主文案为中文且无 wire 英文主标签",
   }
 });
 
-test("T-WT13: WORKTREE_BLOCK_HINT 新文案", () => {
+test("WORKPLACE_BLOCK_HINT 新文案", () => {
   assert.equal(
-    WORKTREE_BLOCK_HINT,
+    WORKPLACE_BLOCK_HINT,
     "开启后每轮在会话前注入：用户侧项目文件树 + 助手侧 done 确认（【done】）。"
   );
 });
@@ -127,7 +122,6 @@ test("definitionToForm maps system toggle and three regions", () => {
       system: "sys",
       persistEnabled: true,
       dynamicEnabled: true,
-    workplace: false,
       workplace: true,
       persist: [],
       dynamic: [
@@ -145,7 +139,8 @@ test("definitionToForm maps system toggle and three regions", () => {
   assert.equal(form.systemContent, "sys");
   assert.equal(form.persistEnabled, true);
   assert.equal(form.dynamicEnabled, true);
-  assert.equal(form.persist.length, 1);
+  assert.equal(form.workplace, true);
+  assert.equal(form.persist.length, 0);
   assert.equal(form.dynamic[0]?.lifecycle, "once");
 });
 
@@ -159,6 +154,7 @@ test("definitionToForm 缺省 persistEnabled/dynamicEnabled 为 false", () => {
   });
   assert.equal(form.persistEnabled, false);
   assert.equal(form.dynamicEnabled, false);
+  assert.equal(form.workplace, false);
 });
 
 test("layoutFromFormInput omits system when switch off", () => {
@@ -208,38 +204,24 @@ test("withDynamicBlockPersistence maps UI switch to lifecycle", () => {
   assert.equal(again.lifecycle, undefined);
 });
 
-test("createDefaultWorktreeBlock uses stable name and default role", () => {
-  assert.deepEqual(createDefaultWorktreeBlock(), {
-    name: WORKTREE_BLOCK_WIRE_NAME,
-    type: "worktree",
-    role: "user",
-  });
-});
-
-test("splitPersistBlocksForEditor normalizes worktree wire name and role", () => {
+test("splitPersistBlocksForEditor strips legacy worktree blocks", () => {
   const split = splitPersistBlocksForEditor([
     { name: "persona", type: "text", role: "user", content: "x" },
     { name: "custom", type: "worktree" },
   ]);
   assert.equal(split.textBlocks.length, 1);
-  assert.deepEqual(split.worktree, {
-    name: WORKTREE_BLOCK_WIRE_NAME,
-    type: "worktree",
-    role: "user",
-  });
   assert.deepEqual(split.blocks, [
     { name: "persona", type: "text", role: "user", content: "x" },
-    { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree", role: "user" },
   ]);
 });
 
-test("layoutFromFormInput maps workplace from editor worktree block", () => {
+test("layoutFromFormInput maps workplace boolean and strips legacy worktree", () => {
   const layout = layoutFromFormInput({
     systemEnabled: false,
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplace: true,
     persist: [
       { name: "custom", type: "worktree", role: "assistant" },
       { name: "persona", type: "text", role: "user", content: "x" },
@@ -252,16 +234,9 @@ test("layoutFromFormInput maps workplace from editor worktree block", () => {
   ]);
 });
 
-test("movePersistBlock reorders worktree-only persist", () => {
-  const only = [createDefaultWorktreeBlock()];
-  assert.deepEqual(movePersistBlock(only, 0, -1), only);
-  assert.deepEqual(movePersistBlock(only, 0, 1), only);
-});
-
-test("movePersistBlock swaps text and worktree in mixed persist", () => {
-  const mixed = [
+test("movePersistBlock swaps text blocks", () => {
+  const blocks = [
     { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
-    createDefaultWorktreeBlock(),
     {
       name: "p2",
       type: "text" as const,
@@ -269,37 +244,14 @@ test("movePersistBlock swaps text and worktree in mixed persist", () => {
       content: "b",
     },
   ];
-  const movedUp = movePersistBlock(mixed, 1, -1);
+  const movedDown = movePersistBlock(blocks, 0, 1);
   assert.deepEqual(
-    movedUp.map((block) => block.type),
-    ["worktree", "text", "text"]
-  );
-  const movedDown = movePersistBlock(mixed, 0, 1);
-  assert.deepEqual(
-    movedDown.map((block) => block.type),
-    ["worktree", "text", "text"]
+    movedDown.map((block) => block.name),
+    ["p2", "p1"]
   );
 });
 
-test("updatePersistWorktreeRole updates worktree role only", () => {
-  const persist = [
-    { name: "p1", type: "text" as const, role: "user" as const, content: "a" },
-    createDefaultWorktreeBlock(),
-  ];
-  const updated = updatePersistWorktreeRole(persist, "assistant");
-  assert.equal(updated[0]?.type, "text");
-  assert.equal(
-    updated[0]?.type === "text" ? updated[0].role : undefined,
-    "user"
-  );
-  assert.deepEqual(updated[1], {
-    name: WORKTREE_BLOCK_WIRE_NAME,
-    type: "worktree",
-    role: "assistant",
-  });
-});
-
-test("buildAgentDefinitionFromForm maps editor worktree to workplace boolean", () => {
+test("buildAgentDefinitionFromForm maps workplace boolean", () => {
   const result = buildAgentDefinitionFromForm({
     name: "writer",
     maxSteps: "20",
@@ -312,9 +264,8 @@ test("buildAgentDefinitionFromForm maps editor worktree to workplace boolean", (
     systemContent: "",
     persistEnabled: false,
     dynamicEnabled: false,
-    workplace: false,
+    workplace: true,
     persist: [
-      createDefaultWorktreeBlock(),
       { name: "p1", type: "text", role: "user", content: "after tree" },
     ],
     dynamic: [],
@@ -330,23 +281,36 @@ test("buildAgentDefinitionFromForm maps editor worktree to workplace boolean", (
   }
 });
 
-test("T-WT10: createDefaultAgentEditorPrompts persist 无 worktree", () => {
+test("T-W7: definitionToForm ↔ layoutFromFormInput round-trip workplace", () => {
+  const formOn = definitionToForm({
+    name: "writer",
+    prompts: {
+      workplace: true,
+      persist: [],
+      dynamic: [],
+    },
+  });
+  assert.equal(formOn.workplace, true);
+  assert.equal(layoutFromFormInput(formOn).workplace, true);
+
+  const formOff = { ...formOn, workplace: false };
+  assert.equal(layoutFromFormInput(formOff).workplace, undefined);
+
+  const roundTrip = definitionToForm({
+    name: "writer",
+    prompts: layoutFromFormInput(formOn),
+  });
+  assert.equal(roundTrip.workplace, true);
+});
+
+test("createDefaultAgentEditorPrompts persist 无 worktree", () => {
   const defaults = createDefaultAgentEditorPrompts();
   assert.equal(defaults.persist.length, 0);
+  assert.equal(defaults.workplace, false);
   assert.ok(defaults.persist.every((block) => block.type !== "worktree"));
 });
 
-test("T-WT11: addPersistWorktreeBlock / removePersistWorktreeBlock round-trip", () => {
-  const added = addPersistWorktreeBlock([]);
-  assert.equal(added.length, 1);
-  assert.equal(added[0]?.type, "worktree");
-  const removed = removePersistWorktreeBlock(added);
-  assert.equal(removed.length, 0);
-  const again = addPersistWorktreeBlock(added);
-  assert.equal(again.length, 1);
-});
-
-test("T-WT12: definitionToForm workplace:true 可 derive Switch 开", () => {
+test("definitionToForm workplace:true 可 derive Switch 开", () => {
   const form = definitionToForm({
     name: "writer",
     prompts: {
@@ -356,10 +320,7 @@ test("T-WT12: definitionToForm workplace:true 可 derive Switch 开", () => {
     },
   });
   assert.equal(form.workplace, true);
-  assert.equal(
-    splitPersistBlocksForEditor(form.persist).worktree?.name,
-    WORKTREE_BLOCK_WIRE_NAME
-  );
+  assert.equal(form.persist.length, 0);
 });
 
 test("createDefaultAgentEditorPrompts starts with empty persist", () => {
@@ -371,7 +332,7 @@ test("createDefaultAgentEditorPrompts starts with empty persist", () => {
   assert.equal(defaults.dynamic.length, 0);
 });
 
-test("formSnapshotJson includes persistEnabled/dynamicEnabled", () => {
+test("formSnapshotJson includes persistEnabled/dynamicEnabled and workplace", () => {
   const json = formSnapshotJson({
     name: "agent",
     maxSteps: "20",
@@ -383,11 +344,12 @@ test("formSnapshotJson includes persistEnabled/dynamicEnabled", () => {
     ...createDefaultAgentEditorPrompts(),
     persistEnabled: true,
     dynamicEnabled: false,
-    workplace: false,
+    workplace: true,
   });
   const parsed = JSON.parse(json) as Record<string, unknown>;
   assert.equal(parsed.persistEnabled, true);
   assert.equal(parsed.dynamicEnabled, false);
+  assert.equal(parsed.workplace, true);
 });
 
 test("formSnapshotJson omits model fields when disabled", () => {
@@ -484,7 +446,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "",
       persistEnabled: false,
       dynamicEnabled: false,
-    workplace: false,
+      workplace: false,
       persist: [],
       dynamic: [],
     }),
@@ -496,7 +458,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "sys",
       persistEnabled: true,
       dynamicEnabled: true,
-    workplace: false,
+      workplace: false,
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
@@ -508,7 +470,7 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "   ",
       persistEnabled: true,
       dynamicEnabled: false,
-    workplace: false,
+      workplace: false,
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "y" }],
     }),
@@ -520,8 +482,20 @@ test("countEffectiveFormPromptSources 按区域开关统计有效来源", () => 
       systemContent: "ignored",
       persistEnabled: true,
       dynamicEnabled: false,
-    workplace: false,
+      workplace: false,
       persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
+      dynamic: [],
+    }),
+    1
+  );
+  assert.equal(
+    countEffectiveFormPromptSources({
+      systemEnabled: false,
+      systemContent: "",
+      persistEnabled: false,
+      dynamicEnabled: false,
+      workplace: true,
+      persist: [],
       dynamic: [],
     }),
     1
@@ -632,6 +606,7 @@ test("countFormPromptSources ignores enabled system without content", () => {
     countFormPromptSources({
       systemEnabled: true,
       systemContent: "   ",
+      workplace: false,
       persist: [],
       dynamic: [{ name: "d1", type: "text", role: "user", content: "x" }],
     }),
@@ -642,6 +617,7 @@ test("countFormPromptSources ignores enabled system without content", () => {
       {
         systemEnabled: true,
         systemContent: "sys",
+        workplace: false,
         persist: [{ name: "p1", type: "text", role: "user", content: "x" }],
         dynamic: [],
       },
@@ -656,10 +632,7 @@ test("countFormPromptSources counts all regions and respects exclusions", () => 
     systemEnabled: true,
     systemContent: "sys",
     workplace: true,
-    persist: [
-      { name: "p1", type: "text", role: "user", content: "a" },
-      { name: WORKTREE_BLOCK_WIRE_NAME, type: "worktree" as const },
-    ],
+    persist: [{ name: "p1", type: "text", role: "user", content: "a" }],
     dynamic: [
       {
         name: "d1",
@@ -903,4 +876,20 @@ test("buildAgentDefinitionFromForm rejects dynamic legacy dot macros", () => {
     ],
   });
   assert.equal(result.ok, false);
+});
+
+test("layoutFromFormInput output passes validateAgentPromptLayout", () => {
+  const layout = layoutFromFormInput({
+    systemEnabled: true,
+    systemContent: "sys",
+    persistEnabled: true,
+    dynamicEnabled: true,
+    workplace: true,
+    persist: [{ name: "p1", type: "text", role: "assistant", content: "ok" }],
+    dynamic: [
+      { name: "d1", type: "text", role: "assistant", content: "a" },
+      { name: "d2", type: "text", role: "user", content: "b" },
+    ],
+  });
+  assert.doesNotThrow(() => validateAgentPromptLayout(layout));
 });
