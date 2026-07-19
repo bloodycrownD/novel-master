@@ -272,6 +272,20 @@ describe("gemini-content-mapper", () => {
     assert.equal(contents[0]?.parts[0]?.functionResponse, undefined);
   });
 
+  it("非 thought 正文含内嵌标签时原样进 text，不挖入 thinking", () => {
+    const blocks = geminiPartsToBlocks([
+      { text: "plan", thought: true },
+      { text: "<thought>leak</thought>你好。" },
+    ]);
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0]?.type, "thinking");
+    assert.equal(blocks[1]?.type, "text");
+    if (blocks[0]?.type === "thinking" && blocks[1]?.type === "text") {
+      assert.equal(blocks[0].text, "plan");
+      assert.equal(blocks[1].text, "<thought>leak</thought>你好。");
+    }
+  });
+
   it("toolsToGeminiFunctionDeclarations wraps schemas", () => {
     const tools = toolsToGeminiFunctionDeclarations([
       { name: "read", description: "read", inputSchema: { type: "object" } },

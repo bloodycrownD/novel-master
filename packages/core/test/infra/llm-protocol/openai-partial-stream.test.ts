@@ -23,7 +23,7 @@ describe("openAiStreamAccumulatorsToPartialBlocks", () => {
     assert.deepEqual(openAiStreamAccumulatorsToPartialBlocks(state), []);
   });
 
-  it("T-partial-abort: 流中带标签 mid-stream 不丢字、不 panic", () => {
+  it("T-partial-abort: 流中带标签 mid-stream 不丢字、不 panic，标签留在 text", () => {
     const state = createOpenAiSseParserState();
     openAiStreamDeltaToEvents({ content: "<thought>half" }, state);
     openAiStreamDeltaToEvents({ content: " thought</thought>可见" }, state);
@@ -34,7 +34,7 @@ describe("openAiStreamAccumulatorsToPartialBlocks", () => {
     const text = blocks.find((b) => b.type === "text");
     assert.ok(thinking && thinking.type === "thinking");
     assert.ok(text && text.type === "text");
-    assert.match(thinking.text, /half thought/);
-    assert.equal(text.text, "可见");
+    assert.equal(thinking.text, "structured");
+    assert.equal(text.text, "<thought>half thought</thought>可见");
   });
 });

@@ -36,7 +36,7 @@ describe("gemini-sse-parser", () => {
     }
   });
 
-  it("T7b: strips inline >thought leak when structured thought parts exist", () => {
+  it("T7b: 内嵌 >thought 泄漏留在 text，结构化 thought 仍进 thinking", () => {
     const state = createGeminiSseParserState();
     const streamEvents: Array<{ type: string; text?: string }> = [];
     const onStream = (ev: { type: string; text?: string }) => {
@@ -62,14 +62,18 @@ describe("gemini-sse-parser", () => {
         ev.text != null &&
         ev.text.includes(">thought"),
     );
-    assert.ok(leakDelta, "默认直通：含 >thought 的 chunk 应以 text-delta 原文流出");
+    assert.ok(leakDelta, "含 >thought 的 chunk 应以 text-delta 原文流出");
 
     const { blocks } = finishGeminiSse(state);
     assert.equal(blocks.length, 2);
     assert.equal(blocks[0]?.type, "thinking");
     assert.equal(blocks[1]?.type, "text");
+    if (blocks[0]?.type === "thinking") {
+      assert.equal(blocks[0].text, "plan");
+    }
     if (blocks[1]?.type === "text") {
-      assert.equal(blocks[1].text, "你好。");
+      // 不再从 content 挖标签：泄漏段与可见回复均留在 text
+      assert.equal(blocks[1].text, "黎明前94>thought plan\n\n你好。");
     }
   });
 

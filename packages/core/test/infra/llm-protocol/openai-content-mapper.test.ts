@@ -175,6 +175,20 @@ describe("openai-content-mapper", () => {
     assert.equal(blocks[1]!.type, "text");
   });
 
+  it("string content 含内嵌标签时原样进 text，不挖入 thinking", () => {
+    const blocks = openAiChoiceToBlocks({
+      content: "<thought>secret</thought>可见回复",
+      reasoning_content: "structured",
+    });
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0]!.type, "thinking");
+    assert.equal(blocks[1]!.type, "text");
+    if (blocks[0]!.type === "thinking" && blocks[1]!.type === "text") {
+      assert.equal(blocks[0].text, "structured");
+      assert.equal(blocks[1].text, "<thought>secret</thought>可见回复");
+    }
+  });
+
   it("maps reasoning-only inbound to thinking only (no GLM promotion)", () => {
     const blocks = openAiChoiceToBlocks({
       content: "",

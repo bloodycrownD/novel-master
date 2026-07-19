@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "node:test";
-import {
-  feedInlineThinkingAwareTextDelta,
-  finishInlineThinkingAwareText,
-} from "../../../src/infra/llm-protocol/logic/inline-thinking-parser.js";
+import { describe, it } from "node:test";
 import {
   openAiStreamAccumulatorsToBlocks,
   openAiStreamDeltaToEvents,
 } from "../../../src/infra/llm-protocol/logic/openai-content-mapper.js";
-import {
-  inlineStreamThinkingSplitEnabled,
-  setInlineStreamThinkingSplitForTests,
-} from "../../../src/infra/llm-protocol/logic/stream-inline-thinking-split-mode.js";
 import type { LlmStreamEvent } from "../../../src/infra/llm-protocol/ports/adapter.port.js";
 
 function createStreamState() {
@@ -31,15 +23,7 @@ function collectEvents(
   return events;
 }
 
-describe("stream-inline-thinking-split-mode", () => {
-  afterEach(() => {
-    setInlineStreamThinkingSplitForTests(undefined);
-  });
-
-  it("默认关闭 legacy splitter（直通 delta）", () => {
-    assert.equal(inlineStreamThinkingSplitEnabled(), false);
-  });
-
+describe("openai stream text passthrough", () => {
   it("T-direct-default: content Hello 发出一条 text-delta", () => {
     const state = createStreamState();
     const events = collectEvents((onStream) => {
@@ -52,7 +36,7 @@ describe("stream-inline-thinking-split-mode", () => {
     }
   });
 
-  it("T-direct-tags: 流式内嵌标签均为 text-delta，finish 时 cleanse 分离", () => {
+  it("T-direct-tags: 流式内嵌标签均为 text-delta，finish 时标签留在 text", () => {
     const state = createStreamState();
     const chunks = ["<thought>", "a", "</thought>", "b"];
     const events: LlmStreamEvent[] = [];
@@ -71,16 +55,14 @@ describe("stream-inline-thinking-split-mode", () => {
     );
 
     const { blocks } = openAiStreamAccumulatorsToBlocks(state);
-    assert.equal(blocks.length, 2);
-    assert.equal(blocks[0]!.type, "thinking");
-    assert.equal(blocks[1]!.type, "text");
-    if (blocks[0]!.type === "thinking" && blocks[1]!.type === "text") {
-      assert.equal(blocks[0].text, "a");
-      assert.equal(blocks[1].text, "b");
+    assert.equal(blocks.length, 1);
+    assert.equal(blocks[0]!.type, "text");
+    if (blocks[0]!.type === "text") {
+      assert.equal(blocks[0].text, "<thought>a</thought>b");
     }
   });
 
-  it("T-direct-entities: 分 chunk 直通实体原文，finish 解码并分离", () => {
+  it("T-direct-entities: 分 chunk 直通实体原文，finish 时实体留在 text", () => {
     const state = createStreamState();
     const chunks = ["&lt;thought&gt;", "a", "&lt;/thought&gt;", "b"];
     const events: LlmStreamEvent[] = [];
@@ -99,10 +81,9 @@ describe("stream-inline-thinking-split-mode", () => {
     );
 
     const { blocks } = openAiStreamAccumulatorsToBlocks(state);
-    assert.equal(blocks.length, 2);
-    if (blocks[0]!.type === "thinking" && blocks[1]!.type === "text") {
-      assert.equal(blocks[0].text, "a");
-      assert.equal(blocks[1].text, "b");
+    assert.equal(blocks.length, 1);
+    if (blocks[0]!.type === "text") {
+      assert.equal(blocks[0].text, "&lt;thought&gt;a&lt;/thought&gt;b");
     }
   });
 
@@ -124,36 +105,19 @@ describe("stream-inline-thinking-split-mode", () => {
     );
   });
 
-  it("T-legacy-split: 启用 splitter 时与 inline-thinking-parser 行为一致", () => {
-    setInlineStreamThinkingSplitForTests(true);
-    assert.equal(inlineStreamThinkingSplitEnabled(), true);
-
-    const legacyState = { textParts: [] as string[], thinkingParts: [] as string[] };
-    const legacyDeltas: Array<{ type: string; text: string }> = [];
-    const onLegacy = (ev: { type: string; text: string }) => {
-      legacyDeltas.push(ev);
-    };
-    feedInlineThinkingAwareTextDelta(legacyState, ">thought internal\n\n", onLegacy);
-    feedInlineThinkingAwareTextDelta(legacyState, "visible", onLegacy);
-    finishInlineThinkingAwareText(legacyState, onLegacy);
-
-    const streamState = createStreamState();
-    const streamDeltas: Array<{ type: string; text: string }> = [];
-    const onStream = (ev: LlmStreamEvent) => {
-      if (ev.type === "text-delta" || ev.type === "thinking-delta") {
-        streamDeltas.push(ev);
-      }
-    };
+  it("T-structured-only: reasoning_content 进入 thinking，content 标签不挖空", () => {
+    const state = createStreamState();
     openAiStreamDeltaToEvents(
-      { content: ">thought internal\n\n" },
-      streamState,
-      onStream,
+      { content: "<thought>leak</thought>可见", reasoning_content: "structured" },
+      state,
     );
-    openAiStreamDeltaToEvents({ content: "visible" }, streamState, onStream);
-    openAiStreamAccumulatorsToBlocks(streamState, onStream);
-
-    assert.equal(streamState.thinkingParts.join(""), legacyState.thinkingParts.join(""));
-    assert.equal(streamState.textParts.join(""), legacyState.textParts.join(""));
-    assert.ok(streamDeltas.some((d) => d.type === "thinking-delta"));
+    const { blocks } = openAiStreamAccumulatorsToBlocks(state);
+    assert.equal(blocks.length, 2);
+    assert.equal(blocks[0]!.type, "thinking");
+    assert.equal(blocks[1]!.type, "text");
+    if (blocks[0]!.type === "thinking" && blocks[1]!.type === "text") {
+      assert.equal(blocks[0].text, "structured");
+      assert.equal(blocks[1].text, "<thought>leak</thought>可见");
+    }
   });
 });
