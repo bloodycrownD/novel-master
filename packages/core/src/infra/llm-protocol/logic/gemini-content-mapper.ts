@@ -13,7 +13,6 @@ import type {
 } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmToolDefinition } from "../ports/adapter.port.js";
-import { splitInlineThinkingFromText } from "./inline-thinking-parser.js";
 
 type GeminiPart = Record<string, unknown>;
 type GeminiContent = { role: string; parts: GeminiPart[] };
@@ -243,23 +242,15 @@ export function geminiPartsToBlocks(
     const thoughtSignature = readThoughtSignature(part);
     if (typeof part.text === "string" && part.text !== "") {
       if (part.thought === true) {
+        // 结构化 thought 字段 → thinking 块
         blocks.push({
           type: "thinking",
           text: part.text,
           ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
         });
       } else {
-        const split = splitInlineThinkingFromText(part.text);
-        if (split.thinking !== "") {
-          blocks.push({
-            type: "thinking",
-            text: split.thinking,
-            ...(thoughtSignature != null ? { thinkingSignature: thoughtSignature } : {}),
-          });
-        }
-        if (split.visible !== "") {
-          blocks.push({ type: "text", text: split.visible });
-        }
+        // 非 thought 正文直通为 text，不做内嵌标签清洗
+        blocks.push({ type: "text", text: part.text });
       }
       continue;
     }

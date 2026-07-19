@@ -7,13 +7,7 @@
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { DegradedToolCall, LlmStreamEvent } from "../ports/adapter.port.js";
 import { geminiPartsToBlocks } from "./gemini-content-mapper.js";
-import {
-  cleanseReplyTextAndThinking,
-  emitDirectTextDelta,
-  feedInlineThinkingAwareTextDelta,
-  finishInlineThinkingAwareText,
-} from "./inline-thinking-parser.js";
-import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
+import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
 import { feedSseLines } from "./sse-line-buffer.js";
 import {
@@ -41,7 +35,6 @@ export type GeminiSseParserState = SseParseDiagnostics & {
   thinkingSignature?: string;
   functionCalls: Map<string, FunctionCallAccumulator>;
   streamRaw: unknown;
-  inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   emittedFunctionCallKeys: Set<string>;
 };
 
@@ -141,6 +134,7 @@ function processGeminiResponseChunk(
     }
     if (typeof part.text === "string" && part.text !== "") {
       if (part.thought === true) {
+        // 结构化 thought → thinking-delta
         state.thinkingParts.push(part.text);
         onStream?.({ type: "thinking-delta", text: part.text });
         const thoughtSignature = readThoughtSignature(part);
@@ -148,12 +142,8 @@ function processGeminiResponseChunk(
           state.thinkingSignature = thoughtSignature;
         }
       } else {
-        // Gemini gateways may also embed <thought> / >thought markers in plain text.
-        if (inlineStreamThinkingSplitEnabled()) {
-          feedInlineThinkingAwareTextDelta(state, part.text, onStream);
-        } else {
-          emitDirectTextDelta(state, part.text, onStream);
-        }
+        // 非 thought 正文直通 text-delta，不做内嵌标签拆分
+        emitDirectTextDelta(state, part.text, onStream);
       }
     } else if (part.thought === true) {
       const thoughtSignature = readThoughtSignature(part);
@@ -306,24 +296,21 @@ export function finishGeminiSse(
     feedGeminiSseChunk(state, "\n", onStream);
   }
 
-  finishInlineThinkingAwareText(state, onStream);
-  const cleansed = cleanseReplyTextAndThinking(
-    state.textParts.join(""),
-    state.thinkingParts.join(""),
-  );
+  const text = state.textParts.join("");
+  const thinking = state.thinkingParts.join("");
 
   const blocks: ContentBlock[] = [];
-  if (cleansed.thinking !== "" || state.thinkingSignature != null) {
+  if (thinking !== "" || state.thinkingSignature != null) {
     blocks.push({
       type: "thinking",
-      text: cleansed.thinking,
+      text: thinking,
       ...(state.thinkingSignature != null
         ? { thinkingSignature: state.thinkingSignature }
         : {}),
     });
   }
-  if (cleansed.visible !== "") {
-    blocks.push({ type: "text", text: cleansed.visible });
+  if (text !== "") {
+    blocks.push({ type: "text", text });
   }
   const { toolUses, degradedToolCalls } = functionCallsToToolUses(state, true);
   blocks.push(
@@ -364,16 +351,11 @@ export function finishGeminiSsePartial(
     feedGeminiSseChunk(state, "\n", onStream);
   }
 
-  finishInlineThinkingAwareText(state, onStream);
-  const cleansed = cleanseReplyTextAndThinking(
-    state.textParts.join(""),
-    state.thinkingParts.join(""),
-  );
   const { toolUses } = functionCallsToToolUses(state);
   const blocks = buildStreamPartialBlocks(
     {
-      text: cleansed.visible,
-      thinking: cleansed.thinking,
+      text: state.textParts.join(""),
+      thinking: state.thinkingParts.join(""),
       toolUses,
     },
     onStream,

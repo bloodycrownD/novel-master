@@ -1,7 +1,7 @@
 /**
  * Bidirectional mapping between NM content blocks and OpenAI Chat Completions wire format.
  *
- * Pure serialization â€?no HTTP. Used by {@link OpenAiProtocolAdapter} only.
+ * Pure serialization — no HTTP. Used by {@link OpenAiProtocolAdapter} only.
  *
  * @module infra/llm-protocol/logic/openai-content-mapper
  */
@@ -10,14 +10,8 @@ import { ProviderError } from "@/errors/provider-errors.js";
 import type { ContentBlock } from "@/domain/chat/model/content-block.js";
 import type { ChatMessage } from "@/domain/chat/model/message.js";
 import type { LlmStreamEvent, DegradedToolCall } from "../ports/adapter.port.js";
-import { cleanseReplyTextAndThinking } from "./inline-thinking-parser.js";
+import { emitDirectTextDelta } from "./inline-thinking-parser.js";
 import { buildStreamPartialBlocks } from "./stream-partial-blocks.js";
-import {
-  emitDirectTextDelta,
-  feedInlineThinkingAwareTextDelta,
-  finishInlineThinkingAwareText,
-} from "./inline-thinking-parser.js";
-import { inlineStreamThinkingSplitEnabled } from "./stream-inline-thinking-split-mode.js";
 import { tryParseToolArgumentsJson } from "./tool-arguments-parse.js";
 
 export type OpenAiChatMessage = Record<string, unknown>;
@@ -29,22 +23,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Build NM blocks from accumulated reply strings (normal stream finish).
- * Aligns with {@link buildStreamPartialBlocks}: keep thinking separate; omit empty
- * text blocks (content_json rejects `text: ""`). Thinking-only replies are valid.
+ * 由累加的正文 / 结构化 thinking 字符串组装 NM 块。
+ * thinkingRaw → thinking 块，textRaw → text 块，互不改写（不做内嵌标签清洗）。
+ * 与 {@link buildStreamPartialBlocks} 对齐：thinking 独立；省略空 text（content_json 拒绝 `text: ""`）。
  */
 function blocksFromReplyStrings(textRaw: string, thinkingRaw: string): ContentBlock[] {
-  // Final pass: proxies may duplicate structured reasoning inside content text.
-  const { visible: text, thinking } = cleanseReplyTextAndThinking(
-    textRaw,
-    thinkingRaw,
-  );
   const blocks: ContentBlock[] = [];
-  if (thinking.trim() !== "") {
-    blocks.push({ type: "thinking", text: thinking });
+  if (thinkingRaw.trim() !== "") {
+    blocks.push({ type: "thinking", text: thinkingRaw });
   }
-  if (text.trim() !== "") {
-    blocks.push({ type: "text", text });
+  if (textRaw.trim() !== "") {
+    blocks.push({ type: "text", text: textRaw });
   }
   return blocks;
 }
@@ -53,17 +42,12 @@ function appendOpenAiStreamTextDelta(
   state: {
     textParts: string[];
     thinkingParts: string[];
-    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   content: unknown,
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
-  const feedText = inlineStreamThinkingSplitEnabled()
-    ? feedInlineThinkingAwareTextDelta
-    : emitDirectTextDelta;
-
   if (typeof content === "string" && content !== "") {
-    feedText(state, content, onStream);
+    emitDirectTextDelta(state, content, onStream);
     return;
   }
   if (!Array.isArray(content)) {
@@ -74,7 +58,7 @@ function appendOpenAiStreamTextDelta(
       continue;
     }
     if (part.type === "text" && typeof part.text === "string" && part.text !== "") {
-      feedText(state, part.text, onStream);
+      emitDirectTextDelta(state, part.text, onStream);
     }
   }
 }
@@ -87,7 +71,7 @@ function imageUrlFromBlock(block: Extract<ContentBlock, { type: "image" }>): str
 }
 
 /**
- * NM blocks â†?OpenAI message `content` (string or multimodal parts array).
+ * NM blocks → OpenAI message `content` (string or multimodal parts array).
  * `tool_use` / `tool_result` are handled at the message level by {@link chatMessagesToOpenAi}.
  */
 export function blocksToOpenAiMessageContent(
@@ -147,7 +131,7 @@ function toolCallsFromBlocks(
 }
 
 /**
- * Session history â†?OpenAI `messages[]` (`tool_result` â†?`role: tool`; assistant `tool_use` â†?`tool_calls`).
+ * Session history → OpenAI `messages[]` (`tool_result` → `role: tool`; assistant `tool_use` → `tool_calls`).
  */
 export function chatMessagesToOpenAi(
   messages: readonly ChatMessage[],
@@ -203,7 +187,7 @@ export function chatMessagesToOpenAi(
 }
 
 /**
- * OpenAI `choices[0].message` (or equivalent) â†?NM {@link ContentBlock} array.
+ * OpenAI `choices[0].message` (or equivalent) → NM {@link ContentBlock} array.
  */
 export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
   if (!isRecord(message)) {
@@ -221,14 +205,8 @@ export function openAiChoiceToBlocks(message: unknown): ContentBlock[] {
 
   const content = message.content;
   if (typeof content === "string" && content !== "") {
-    const split = cleanseReplyTextAndThinking(content, thinkingParts.join(""));
-    if (split.thinking !== "") {
-      thinkingParts.length = 0;
-      thinkingParts.push(split.thinking);
-    }
-    if (split.visible !== "") {
-      textParts.push(split.visible);
-    }
+    // 字符串 content 直接进 text，不做内嵌 thinking 清洗
+    textParts.push(content);
   } else if (Array.isArray(content)) {
     for (const part of content) {
       if (!isRecord(part)) {
@@ -339,7 +317,6 @@ export function openAiStreamDeltaToEvents(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
-    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): void {
@@ -393,11 +370,9 @@ export function openAiStreamAccumulatorsToBlocks(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
-    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): { blocks: ContentBlock[]; degradedToolCalls: DegradedToolCall[] } {
-  finishInlineThinkingAwareText(state, onStream);
   const blocks = blocksFromReplyStrings(
     state.textParts.join(""),
     state.thinkingParts.join(""),
@@ -447,19 +422,13 @@ export function openAiStreamAccumulatorsToPartialBlocks(
     thinkingParts: string[];
     toolCalls: Map<number, ToolCallAccumulator>;
     emittedToolIndices: Set<number>;
-    inlineTextSplitter?: import("./inline-thinking-parser.js").InlineThinkingStreamSplitter;
   },
   onStream?: (event: LlmStreamEvent) => void,
 ): ContentBlock[] {
-  finishInlineThinkingAwareText(state, onStream);
-  const cleansed = cleanseReplyTextAndThinking(
-    state.textParts.join(""),
-    state.thinkingParts.join(""),
-  );
   const blocks = buildStreamPartialBlocks(
     {
-      text: cleansed.visible,
-      thinking: cleansed.thinking,
+      text: state.textParts.join(""),
+      thinking: state.thinkingParts.join(""),
     },
     onStream,
   );
