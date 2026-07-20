@@ -166,11 +166,11 @@ Spec: `.apm/kb/docs/Iterations/mobile-vfs-markdown-webview/spec.md`
 
 ## WebView 资源（最短开发路径）
 
-聊天 Transcript 与富文档预览各为一包。Web 真源在 `src/web/{chat-transcript,rich-document}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
+三包 WebView：`chat-transcript`（聊天 Transcript）、`rich-document`（富文档预览）、`code-editor`（VFS 代码编辑）。Web 真源在 `src/web/{chat-transcript,rich-document,code-editor}/webview/`；RN 宿主胶水（URI / 包根纯函数）在 `src/webview-host/`。经 esbuild **IIFE + classic `<script src>` + `minify: false`** 产出到 `webview-dist/`（gitignore），再拷入原生落点后真机才可见。
 
 ### Preact + TSX 与目录分层
 
-双包视图主写法为 **Preact + TSX**（不上 `htm` 主路径）。每个包 `webview/` 内强制：
+CT / RD 视图主写法为 **Preact + TSX**（不上 `htm` 主路径）；`code-editor` 为 CodeMirror runtime（无 Preact `ui/`）。CT / RD 每个包 `webview/` 内强制：
 
 | 目录 | 内容 |
 |------|------|

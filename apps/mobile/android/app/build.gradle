@@ -148,9 +148,10 @@ android {
 }
 
 /**
- * WebView 壳（chat-transcript / rich-document）由 `npm run build:webview:native` 拷入
- * `src/main/assets/webview/`（gitignore）。裸 gradlew 漏拷时 APK 会缺文件 → 运行时
- * net::ERR_FILE_NOT_FOUND。在 preBuild 前硬失败，避免静默打出坏包。
+ * WebView 壳（chat-transcript / rich-document / code-editor 三包）由
+ * `npm run build:webview:native` 拷入 `src/main/assets/webview/`（gitignore）。
+ * 裸 gradlew 漏拷时 APK 会缺文件 → 运行时 net::ERR_FILE_NOT_FOUND。
+ * 在 preBuild 前硬失败，避免静默打出坏包。
  */
 tasks.register("checkWebViewAssets") {
     doLast {

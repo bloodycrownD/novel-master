@@ -1,5 +1,5 @@
 /**
- * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言）。
+ * T-BB-04：URI helper + WebView 必配 props 矩阵（静态断言；三包 CT/RD/code-editor）。
  */
 import React from 'react';
 import { Platform } from 'react-native';
@@ -14,6 +14,7 @@ import {
 import TestRenderer, { act } from 'react-test-renderer';
 import { ChatTranscriptWebView } from '../src/components/chat/ChatTranscriptWebView';
 import { RichDocumentWebView } from '../src/components/vfs/RichDocumentWebView';
+import { CodeEditorWebView } from '../src/components/vfs/CodeEditorWebView';
 import {
   getChatTranscriptPackageDirUri,
   getChatTranscriptUri,
@@ -22,6 +23,10 @@ import {
   getRichDocumentPackageDirUri,
   getRichDocumentUri,
 } from '../src/webview-host/rich-document/uri';
+import {
+  getCodeEditorPackageDirUri,
+  getCodeEditorUri,
+} from '../src/webview-host/code-editor/uri';
 
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
@@ -34,6 +39,11 @@ jest.mock('../src/theme/ThemeProvider', () => ({
       text: '#fff',
     },
   }),
+}));
+
+jest.mock('@react-native-clipboard/clipboard', () => ({
+  __esModule: true,
+  default: { setString: jest.fn(), getString: jest.fn(async () => '') },
 }));
 
 jest.mock('react-native-blob-util', () => ({
@@ -67,11 +77,17 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getRichDocumentUri()).toBe(
         'file:///android_asset/webview/rich-document/index.html',
       );
+      expect(getCodeEditorUri()).toBe(
+        'file:///android_asset/webview/code-editor/index.html',
+      );
       expect(getChatTranscriptPackageDirUri()).toBe(
         'file:///android_asset/webview/chat-transcript/',
       );
       expect(getRichDocumentPackageDirUri()).toBe(
         'file:///android_asset/webview/rich-document/',
+      );
+      expect(getCodeEditorPackageDirUri()).toBe(
+        'file:///android_asset/webview/code-editor/',
       );
     });
 
@@ -86,8 +102,17 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(getRichDocumentUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/rich-document/index.html',
       );
+      expect(getCodeEditorUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/code-editor/index.html',
+      );
       expect(getChatTranscriptPackageDirUri()).toBe(
         'file:///App/NovelMaster.app/WebViewDist/chat-transcript/',
+      );
+      expect(getRichDocumentPackageDirUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/rich-document/',
+      );
+      expect(getCodeEditorPackageDirUri()).toBe(
+        'file:///App/NovelMaster.app/WebViewDist/code-editor/',
       );
     });
   });
@@ -136,6 +161,31 @@ describe('WebView URI load (T-BB-04)', () => {
       expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
       expect(webView.props.allowingReadAccessToURL).toBe(
         'file:///android_asset/webview/rich-document/',
+      );
+      expect(webView.props.javaScriptEnabled).toBe(true);
+    });
+
+    it('CodeEditorWebView：source.uri + 双端必配 props', () => {
+      let root: TestRenderer.ReactTestRenderer;
+      act(() => {
+        root = TestRenderer.create(
+          <CodeEditorWebView
+            value=""
+            path="/note.ts"
+            onChange={() => undefined}
+          />,
+        );
+      });
+      const webView = root!.root.findByType(
+        require('react-native-webview').default as React.ComponentType,
+      );
+      expect(webView.props.source).toEqual({
+        uri: 'file:///android_asset/webview/code-editor/index.html',
+      });
+      expect(webView.props.allowFileAccess).toBe(true);
+      expect(webView.props.allowFileAccessFromFileURLs).toBe(true);
+      expect(webView.props.allowingReadAccessToURL).toBe(
+        'file:///android_asset/webview/code-editor/',
       );
       expect(webView.props.javaScriptEnabled).toBe(true);
     });
