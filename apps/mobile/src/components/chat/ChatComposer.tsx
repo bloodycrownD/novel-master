@@ -16,7 +16,7 @@ import {
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import {
-  hasComposerSendableInput,
+  resolveComposerSendIntent,
   TOOL_TURN_BRIDGE_TEXT,
   type MessageAttachment,
 } from '@novel-master/core/chat';
@@ -61,7 +61,6 @@ import {
 import { AtPathTypeahead } from './AtPathTypeahead';
 import {
   type AtPathRef,
-  countScannedAtPathAttachments,
   filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
   replaceActiveAtWithToken,
@@ -515,18 +514,16 @@ export function ChatComposer({
     }
 
     const content = text.trim();
-    const scannedCount = countScannedAtPathAttachments(text);
-    // 状态条 workplace 差集 = 可发输入；有差集禁止纯 resume
-    const hasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
-    const hasSendable = hasComposerSendableInput({
-      text: content,
-      attachmentCount: scannedCount,
+    const intent = resolveComposerSendIntent({
+      text,
+      attachments,
       hasPendingUserOps,
-      hasWorkplaceDelta,
+      canResumeWithoutInput,
       hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+      hasModel,
+      running,
     });
-    // 仅当无可发输入（含无 workplace）且 canResume 时才允许空续跑
-    const allowResumeWithoutInput = !hasSendable && canResumeWithoutInput;
+    const { hasSendable, allowResumeWithoutInput, hasWorkplaceDelta } = intent;
 
     if (!hasSendable && !allowResumeWithoutInput) {
       return;
@@ -557,18 +554,15 @@ export function ChatComposer({
   ]);
 
   const inputDisabled = !hasModel || running || lastMessageIsPlainUserText;
-  const sendHasWorkplaceDelta = attachments.some(a => a.source === 'workplace');
-  const sendDisabled =
-    !hasModel ||
-    (!running &&
-      !hasComposerSendableInput({
-        text,
-        attachmentCount: countScannedAtPathAttachments(text),
-        hasPendingUserOps,
-        hasWorkplaceDelta: sendHasWorkplaceDelta,
-        hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
-      }) &&
-      !canResumeWithoutInput);
+  const sendDisabled = resolveComposerSendIntent({
+    text,
+    attachments,
+    hasPendingUserOps,
+    canResumeWithoutInput,
+    hasAnnotateDrafts: hasChatAnnotateDrafts(sessionId),
+    hasModel,
+    running,
+  }).sendDisabled;
 
   const inputPlaceholder = hasModel ? '输入消息…' : '选择模型后可发送';
 

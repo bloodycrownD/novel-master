@@ -151,6 +151,12 @@ export {
 } from '../domain/chat/logic/project-composer-status-attachments.js';
 export type { ProjectComposerStatusAttachmentsDeps } from '../domain/chat/logic/project-composer-status-attachments.js';
 export { hasComposerSendableInput } from '../domain/chat/logic/composer-sendable-input.js';
+export { resolveComposerSendIntent } from '../domain/chat/logic/composer-send-intent.js';
+export type {
+  ComposerSendIntent,
+  ComposerSendIntentAttachment,
+  ComposerSendIntentInput,
+} from '../domain/chat/logic/composer-send-intent.js';
 export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,

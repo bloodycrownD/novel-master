@@ -76,6 +76,7 @@
   "readMessageMetadata",
   "renderDirAttachTree",
   "replaceComposerStatusAttachments",
+  "resolveComposerSendIntent",
   "resolveCurrentWorkspaceSnapshot",
   "resolveFlushBaselineTree",
   "resolveRollbackConfirmMessage",
