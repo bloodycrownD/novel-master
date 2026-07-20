@@ -62,4 +62,22 @@ export default tseslint.config(
     },
     rules: sharedTsRules,
   },
+  // X1 gate: ban literal @novel-master/core* in renderer only (main/shared/test remain allowed).
+  {
+    files: ["renderer/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@novel-master/core", "@novel-master/core/*"],
+              message:
+                "Desktop renderer must not import @novel-master/core; use @shared/logic or @shared instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
