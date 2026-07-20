@@ -163,6 +163,15 @@ export {
 } from '../domain/chat/logic/composer-chip-attachment.js';
 export type { ComposerChipAttachment } from '../domain/chat/logic/composer-chip-attachment.js';
 export {
+  atPathTokensFromPickerSelection,
+  countScannedAtPathAttachments,
+  filterAtPathTypeaheadCandidates,
+  findActiveAtQuery,
+  formatComposerAtPathToken,
+  replaceActiveAtWithToken,
+} from '../domain/chat/logic/composer-at-path.js';
+export type { AtPathRef } from '../domain/chat/logic/composer-at-path.js';
+export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from '../domain/chat/logic/user-vfs-turn-constants.js';

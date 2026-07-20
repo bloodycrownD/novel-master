@@ -9,15 +9,17 @@ import {
   countScannedAtPathAttachments,
   filterAtPathTypeaheadCandidates,
   findActiveAtQuery,
-  formatAtPathMentionMarkup,
   formatComposerAtPathToken,
+  replaceActiveAtWithToken,
+} from '../src/components/chat/composer-at-path';
+import {
+  formatAtPathMentionMarkup,
   mentionValueToPlain,
   mergeProgrammaticPlainIntoMentionValue,
-  replaceActiveAtWithToken,
   suggestionFromAtPathToken,
   tryAtomicMentionDelete,
   type ComposerAtPathTriggersConfig,
-} from '../src/components/chat/composer-at-path';
+} from '../src/components/chat/composer-at-path-mention';
 
 const triggersConfig: ComposerAtPathTriggersConfig = {
   atPath: {

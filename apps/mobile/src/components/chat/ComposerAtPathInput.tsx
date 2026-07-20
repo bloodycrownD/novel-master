@@ -33,7 +33,7 @@ import {
   mergeProgrammaticPlainIntoMentionValue,
   suggestionFromAtPathToken,
   tryAtomicMentionDelete,
-} from './composer-at-path';
+} from './composer-at-path-mention';
 
 export type ComposerAtPathInputHandle = {
   /**
