@@ -3,7 +3,7 @@ import {
   defaultDirRuleForm,
   dirRuleToForm,
   emptyDirRuleForm,
-} from '../src/services/worktree-operations.service';
+} from '../src/services/workplace-operations.service';
 
 describe('normalizeFillPolicyForMobile', () => {
   it('maps full to hidden', () => {

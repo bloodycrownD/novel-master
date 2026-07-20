@@ -72,10 +72,10 @@ import {
   defaultDirRuleForm,
   dirRuleToForm,
   emptyDirRuleForm,
-  migrateWorktreeDirRename,
+  migrateWorkplaceDirRename,
   toggleDirRuleEnabled,
   vfsScopeRootPath,
-} from '../../services/worktree-operations.service';
+} from '../../services/workplace-operations.service';
 import { suggestWorkplaceAttachmentsToComposerDraft } from '../../services/workplace-rule-delta-draft.service';
 import { toastMessage } from '../../errors/toast-message';
 import { useRuntime } from '../../hooks/useRuntime';
@@ -570,7 +570,7 @@ export const VfsFileManager = forwardRef<
                 } else {
                   await renameVfsDirectory(vfs, menuPath, newPath);
                 }
-                await migrateWorktreeDirRename(workplace, menuPath, newPath);
+                await migrateWorkplaceDirRename(workplace, menuPath, newPath);
                 if (
                   currentPath === menuPath ||
                   currentPath.startsWith(`${menuPath}/`)

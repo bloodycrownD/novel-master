@@ -4,7 +4,7 @@
 import { useCallback } from 'react';
 import { Alert } from 'react-native';
 import { buildMessageActionItems } from '@/components/chat/message-edit';
-import { clearSessionWorkplaceKkv } from '@/services/worktree-block.service';
+import { clearSessionWorkplaceKkv } from '@/services/workplace-block.service';
 import { useChatTabContext } from './ChatTabProvider';
 import { useChatTabMessageActions } from './useChatTabMessages';
 

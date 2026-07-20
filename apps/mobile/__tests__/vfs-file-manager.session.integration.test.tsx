@@ -59,16 +59,16 @@ jest.mock('../src/services/vfs-operations.service', () => ({
   sessionRenameVfsFile: jest.fn(),
 }));
 
-jest.mock('../src/services/worktree-operations.service', () => {
+jest.mock('../src/services/workplace-operations.service', () => {
   const actual = jest.requireActual(
-    '../src/services/worktree-operations.service',
-  ) as typeof import('../src/services/worktree-operations.service');
+    '../src/services/workplace-operations.service',
+  ) as typeof import('../src/services/workplace-operations.service');
   return {
     ...actual,
     batchSetDirRulesDisabled: jest.fn(),
     batchSetDirRulesEnabled: jest.fn(),
     cycleFileInclusion: jest.fn(),
-    migrateWorktreeDirRename: jest.fn(),
+    migrateWorkplaceDirRename: jest.fn(),
     toggleDirRuleEnabled: jest.fn(),
   };
 });
@@ -121,7 +121,7 @@ jest.mock('../src/services/vfs-zip.service', () => ({
   importVfsZip: jest.fn(),
 }));
 
-import { cycleFileInclusion } from '../src/services/worktree-operations.service';
+import { cycleFileInclusion } from '../src/services/workplace-operations.service';
 
 const { VfsFileManager } =
   require('../src/components/vfs/VfsFileManager') as typeof import('../src/components/vfs/VfsFileManager');

@@ -1,5 +1,5 @@
 /**
- * worktree-block.service：手动重置 → clearSession + 清 Composer 上条。
+ * workplace-block.service：手动重置 → clearSession + 清 Composer 上条。
  */
 import { describe, expect, it, jest } from '@jest/globals';
 
@@ -10,9 +10,9 @@ jest.mock('../src/services/project-composer-status.service', () => ({
     mockRefresh(...args),
 }));
 
-import { clearSessionWorkplaceKkv } from '../src/services/worktree-block.service';
+import { clearSessionWorkplaceKkv } from '../src/services/workplace-block.service';
 
-describe('worktree-block.service', () => {
+describe('workplace-block.service', () => {
   it('clearSessionWorkplaceKkv 清空 session kkv 并刷新状态条', async () => {
     const clearSession = jest.fn(async () => undefined);
     const runtime = { sessionKkv: { clearSession } } as any;

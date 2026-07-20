@@ -1,5 +1,5 @@
 /**
- * Worktree rule toggles for VFS file manager row actions.
+ * Workplace rule toggles for VFS file manager row actions.
  */
 import { type VfsScope } from '@novel-master/core/vfs';
 
@@ -158,10 +158,10 @@ function pathUnderDir(dirPath: string, candidate: string): boolean {
 }
 
 /**
- * Copy worktree dir/file rules from oldDir prefix onto newDir after a VFS rename.
+ * Copy workplace dir/file rules from oldDir prefix onto newDir after a VFS rename.
  * Old rule rows may remain until Core exposes delete; new paths get matching rules.
  */
-export async function migrateWorktreeDirRename(
+export async function migrateWorkplaceDirRename(
   workplace: WorkplaceService,
   oldDir: string,
   newDir: string,
