@@ -9,17 +9,12 @@
  */
 
 import {
-  fileCacheKey,
   RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
   type WorkplaceDisplayStatus,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
-import {
-  parseFileCachePayload,
-  parseRuleSnapshotJson,
-  serializeFileCachePayload,
-} from "@/domain/workplace/logic/rule-snapshot-codec.js";
+import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
+import { parseRuleSnapshotJson } from "@/domain/workplace/logic/rule-snapshot-codec.js";
 import { renderFileBlockBody } from "@/domain/workplace/logic/workplace-display.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import type { SessionKkvService } from "@/service/session-kkv/session-kkv.port.js";
@@ -91,49 +86,6 @@ function isBinaryOrImageAttach(attachment: MessageAttachment): boolean {
   }
   const path = attachment.path ?? "";
   return isBinaryAttachPath(path) || isImageAttachPath(path);
-}
-
-async function loadOrFillFileCache(
-  path: string,
-  status: WorkplaceDisplayStatus,
-  runtime: PrepareUserMessagesForPromptRuntime,
-): Promise<{ body: string; mtimeMs: number }> {
-  const key = fileCacheKey(status, path);
-  const raw = await runtime.sessionKkv.get(
-    runtime.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    key,
-  );
-  if (raw != null) {
-    const parsed = parseFileCachePayload(raw);
-    if (parsed != null) {
-      return parsed;
-    }
-  }
-
-  let body = "";
-  let mtimeMs = 0;
-  if (status === "filename") {
-    body = "";
-    mtimeMs = 0;
-  } else {
-    try {
-      const result = await runtime.vfs.read(path);
-      body = result.content;
-      mtimeMs = result.mtimeMs;
-    } catch {
-      body = "(missing)";
-      mtimeMs = 0;
-    }
-  }
-
-  await runtime.sessionKkv.set(
-    runtime.sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    key,
-    serializeFileCachePayload({ body, mtimeMs }),
-  );
-  return { body, mtimeMs };
 }
 
 function fileRefAction(
@@ -209,7 +161,13 @@ async function hydrateFileFull(
       ? await resolveWorkplaceStatus(logicalPath, runtime)
       : resolveAttachFileStatus(logicalPath, attachment.type);
 
-  const cached = await loadOrFillFileCache(logicalPath, status, runtime);
+  const cached = await loadOrFillFileCache({
+    sessionId: runtime.sessionId,
+    sessionKkv: runtime.sessionKkv,
+    vfs: runtime.vfs,
+    path: logicalPath,
+    status,
+  });
   return {
     ...attachment,
     path: logicalPath,

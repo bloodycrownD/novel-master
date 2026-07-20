@@ -8,21 +8,17 @@ import type { AgentPromptLayout } from "@/domain/prompt/model/agent-prompt-layou
 import type { VfsScope } from "@/domain/vfs/logic/vfs-path-mapper.js";
 import type { VfsService } from "@/domain/vfs/ports/vfs-service.port.js";
 import {
-  fileCacheKey,
   RULE_SNAPSHOT_CANON_KEY,
-  SESSION_KKV_DOMAIN_FILE_CACHE,
   SESSION_KKV_DOMAIN_RULE_SNAPSHOT,
-  type WorkplaceDisplayStatus,
 } from "@/domain/session-kkv/model/session-kkv-domains.js";
+import { loadOrFillFileCache } from "@/domain/workplace/logic/load-or-fill-file-cache.js";
 import {
   joinFileBlocks,
   renderFileBlock,
 } from "@/domain/workplace/logic/workplace-display.js";
 import {
-  parseFileCachePayload,
   parseRuleSnapshotJson,
   ruleViewToSnapshotEntries,
-  serializeFileCachePayload,
   serializeRuleSnapshot,
   type RuleSnapshotEntry,
 } from "@/domain/workplace/logic/rule-snapshot-codec.js";
@@ -85,7 +81,13 @@ export async function assembleWorkplaceDisplay(
   const blocks: string[] = [];
   for (const entry of entries) {
     prefixPaths.push(normalizePromptSeenPath(entry.path));
-    const cached = await loadOrFillFileCache(sessionId, entry, deps);
+    const cached = await loadOrFillFileCache({
+      sessionId,
+      sessionKkv: deps.sessionKkv,
+      vfs: deps.vfs,
+      path: entry.path,
+      status: entry.status,
+    });
     blocks.push(
       renderFileBlock({
         logicalPath: entry.path,
@@ -127,51 +129,4 @@ async function loadOrCreateRuleSnapshot(
     serializeRuleSnapshot(entries),
   );
   return entries;
-}
-
-async function loadOrFillFileCache(
-  sessionId: string,
-  entry: RuleSnapshotEntry,
-  deps: AssembleWorkplaceDisplayDeps,
-): Promise<{ body: string; mtimeMs: number }> {
-  const key = fileCacheKey(entry.status, entry.path);
-  const raw = await deps.sessionKkv.get(
-    sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    key,
-  );
-  if (raw != null) {
-    const parsed = parseFileCachePayload(raw);
-    if (parsed != null) {
-      return parsed;
-    }
-  }
-
-  const filled = await readWorkplaceFile(entry, deps.vfs);
-  await deps.sessionKkv.set(
-    sessionId,
-    SESSION_KKV_DOMAIN_FILE_CACHE,
-    key,
-    serializeFileCachePayload(filled),
-  );
-  return filled;
-}
-
-/**
- * 按展示档位从 VFS 取正文；filename 不读盘；缺失用占位正文（不强制改已有 cache）。
- */
-async function readWorkplaceFile(
-  entry: RuleSnapshotEntry,
-  vfs: VfsService,
-): Promise<{ body: string; mtimeMs: number }> {
-  const status: WorkplaceDisplayStatus = entry.status;
-  if (status === "filename") {
-    return { body: "", mtimeMs: 0 };
-  }
-  try {
-    const result = await vfs.read(entry.path);
-    return { body: result.content, mtimeMs: result.mtimeMs };
-  } catch {
-    return { body: "(missing)", mtimeMs: 0 };
-  }
 }
