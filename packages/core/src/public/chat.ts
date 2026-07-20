@@ -158,6 +158,11 @@ export type {
   ComposerSendIntentInput,
 } from '../domain/chat/logic/composer-send-intent.js';
 export {
+  isComposerStatusAttachment,
+  partitionComposerChipAttachments,
+} from '../domain/chat/logic/composer-chip-attachment.js';
+export type { ComposerChipAttachment } from '../domain/chat/logic/composer-chip-attachment.js';
+export {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
 } from '../domain/chat/logic/user-vfs-turn-constants.js';
