@@ -18,7 +18,7 @@ const SUB_ENTRIES = [
   "regex",
   "session-fs",
   "vfs",
-  "worktree",
+  "workplace",
 ];
 
 /** @type {Map<string, string>} */
