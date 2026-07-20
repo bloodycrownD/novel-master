@@ -22,8 +22,6 @@ import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
   PROMPT_REGION_LABELS,
-  WORKPLACE_BLOCK_LABEL,
-  WORKPLACE_BLOCK_HINT,
   blockTypeLabel,
   buildAgentDefinitionFromForm,
   countEffectiveFormPromptSources,
@@ -41,6 +39,7 @@ import {
   withDynamicBlockPersistence,
   type ToolsMode,
 } from "@novel-master/core/config-forms/agent";
+import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { showToast } from "@/components/ui/show-toast";
 import { Switch } from "@/components/ui/Switch";
@@ -649,33 +648,11 @@ export const AgentDefinitionEditorForm = forwardRef<
           </div>
         </div>
 
-        <div className="config-block-card__section-head">
-          <span className="config-block-card__section-label">
-            {WORKPLACE_BLOCK_LABEL}
-          </span>
-        </div>
-        <div className="config-block-card config-block-card--prompt">
-          <div className="config-block-card__header">
-            <span className="config-block-card__badge">
-              {WORKPLACE_BLOCK_LABEL}
-            </span>
-            <Switch
-              checked={workplace}
-              disabled={disabled}
-              onChange={setWorkplace}
-              aria-label={WORKPLACE_BLOCK_LABEL}
-            />
-          </div>
-          <div className="config-block-card__body">
-            {workplace ? (
-              <p className="config-block-card__hint">{WORKPLACE_BLOCK_HINT}</p>
-            ) : (
-              <p className="config-block-card__hint">
-                关闭时不注入项目文件树。
-              </p>
-            )}
-          </div>
-        </div>
+        <AgentWorkplaceBlockCard
+          checked={workplace}
+          disabled={disabled}
+          onChange={setWorkplace}
+        />
 
         <div className="config-block-card__section-head">
           <span className="config-block-card__section-label">
