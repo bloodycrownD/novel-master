@@ -12,6 +12,10 @@ import {
 } from "@/infra/tdbc/logic/template-helper.js";
 import type { Row } from "@/infra/tdbc/types.js";
 import { normalizePath } from "@/domain/vfs/repositories/impl/normalize-path.js";
+import {
+  WORKPLACE_DIR_RULE_TABLE,
+  WORKPLACE_FILE_RULE_TABLE,
+} from "@/bootstrap/workplace/workplace-schema.js";
 import type {
   FillPolicy,
   InclusionMode,
@@ -60,7 +64,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO worktree_dir_rule (
+      `INSERT INTO ${WORKPLACE_DIR_RULE_TABLE} (
         scope_key, logical_path, rule_enabled, sort_field, sort_order,
         head_count, tail_count, fill_policy
       ) VALUES (
@@ -92,7 +96,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `INSERT INTO worktree_file_rule (scope_key, logical_path, inclusion_mode)
+      `INSERT INTO ${WORKPLACE_FILE_RULE_TABLE} (scope_key, logical_path, inclusion_mode)
        VALUES (#{scopeKey}, #{logicalPath}, #{inclusionMode})
        ON CONFLICT(scope_key, logical_path) DO UPDATE SET
          inclusion_mode = excluded.inclusion_mode`,
@@ -108,13 +112,13 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM worktree_dir_rule WHERE scope_key = #{scopeKey}`,
+      `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
       { scopeKey },
     );
     await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM worktree_file_rule WHERE scope_key = #{scopeKey}`,
+      `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
       { scopeKey },
     );
   }
@@ -125,7 +129,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.parser,
       `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
-       FROM worktree_dir_rule WHERE scope_key = #{scopeKey}`,
+       FROM ${WORKPLACE_DIR_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
       { scopeKey },
     );
     return rows.map(rowToDirRule);
@@ -136,7 +140,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.conn,
       this.parser,
       `SELECT scope_key, logical_path, inclusion_mode
-       FROM worktree_file_rule WHERE scope_key = #{scopeKey}`,
+       FROM ${WORKPLACE_FILE_RULE_TABLE} WHERE scope_key = #{scopeKey}`,
       { scopeKey },
     );
     return rows.map(rowToFileRule);
@@ -151,7 +155,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.parser,
       `SELECT scope_key, logical_path, rule_enabled, sort_field, sort_order,
               head_count, tail_count, fill_policy
-       FROM worktree_dir_rule
+       FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
       { scopeKey, logicalPath: normalizePath(logicalPath) },
     );
@@ -169,7 +173,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
       this.conn,
       this.parser,
       `SELECT scope_key, logical_path, inclusion_mode
-       FROM worktree_file_rule
+       FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey} AND logical_path = #{logicalPath}`,
       { scopeKey, logicalPath: normalizePath(logicalPath) },
     );
@@ -213,7 +217,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM worktree_dir_rule
+      `DELETE FROM ${WORKPLACE_DIR_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
       { scopeKey, path: base, childPattern },
@@ -221,7 +225,7 @@ export class SqliteWorkplaceRepository implements WorkplaceRepository {
     await executeTemplate(
       this.conn,
       this.parser,
-      `DELETE FROM worktree_file_rule
+      `DELETE FROM ${WORKPLACE_FILE_RULE_TABLE}
        WHERE scope_key = #{scopeKey}
          AND (logical_path = #{path} OR logical_path LIKE #{childPattern} ESCAPE '\\')`,
       { scopeKey, path: base, childPattern },

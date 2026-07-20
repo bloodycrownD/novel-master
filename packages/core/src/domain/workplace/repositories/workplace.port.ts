@@ -11,7 +11,7 @@ import type {
 } from "../model/workplace-types.js";
 
 /**
- * Persistence for worktree_dir_rule and worktree_file_rule.
+ * Persistence for workplace_dir_rule and workplace_file_rule.
  */
 export interface WorkplaceRepository {
   upsertDirRule(rule: WorkplaceDirRule): Promise<void>;
