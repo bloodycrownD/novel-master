@@ -17,7 +17,7 @@ import { runWrite } from "../vfs/commands/write.js";
 import { runExportZip } from "../vfs/commands/export-zip.js";
 import { runImportZip } from "../vfs/commands/import-zip.js";
 import { runSessionTemplate } from "./template.js";
-import { runSessionWorktree } from "./worktree.js";
+import { runSessionWorkplace } from "./workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
 /** Session VFS subcommands except `write` (version check comes from preferences). */
@@ -40,7 +40,7 @@ type SessionDeps = Pick<
   | "sessionFs"
   | "sessionVfs"
   | "scope"
-  | "worktree"
+  | "workplace"
 >;
 
 export async function runSession(
@@ -115,8 +115,8 @@ export async function runSession(
       await runSessionVfs(deps, vfsRest);
       return;
     }
-    case "worktree":
-      await runSessionWorktree(deps, args);
+    case "workplace":
+      await runSessionWorkplace(deps, args);
       return;
     case "template": {
       const templateSub = args[0];
@@ -139,7 +139,7 @@ export async function runSession(
     }
     default:
       throw new Error(
-        "Usage: nm session <list|create|use|current|delete|copy|vfs|worktree|template|rollback> ...",
+        "Usage: nm session <list|create|use|current|delete|copy|vfs|workplace|template|rollback> ...",
       );
   }
 }

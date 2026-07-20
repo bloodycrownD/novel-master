@@ -1,22 +1,22 @@
 /**
- * `nm session worktree` subcommands.
+ * `nm session workplace` subcommands.
  *
- * @module session/worktree
+ * @module session/workplace
  */
 
 import type { NovelMasterRuntime } from "../runtime.js";
-import { runWorktree } from "../worktree/run-worktree.js";
+import { runWorkplace } from "../workplace/run-workplace.js";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-type SessionWorktreeDeps = Pick<NovelMasterRuntime, "scope" | "worktree">;
+type SessionWorkplaceDeps = Pick<NovelMasterRuntime, "scope" | "workplace">;
 
-export async function runSessionWorktree(
-  rt: SessionWorktreeDeps,
+export async function runSessionWorkplace(
+  rt: SessionWorkplaceDeps,
   args: readonly string[],
 ): Promise<void> {
   const { flags } = parseCliArgs(args);
   const { projectId, sessionId } = await rt.scope.resolveProjectSession(flags);
-  const wt = rt.worktree({ kind: "session", projectId, sessionId });
-  const rest = args[0] === "worktree" ? args.slice(1) : args;
-  await runWorktree(wt, rest);
+  const wt = rt.workplace({ kind: "session", projectId, sessionId });
+  const rest = args[0] === "workplace" ? args.slice(1) : args;
+  await runWorkplace(wt, rest);
 }

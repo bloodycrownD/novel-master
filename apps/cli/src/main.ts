@@ -12,7 +12,7 @@ import { runPreferences } from "./preferences-cmd/commands.js";
 import { runMessage } from "./message/commands.js";
 import { runProject } from "./project/commands.js";
 import { runProjectVfs } from "./project/vfs.js";
-import { runVfsWorktree } from "./vfs/worktree.js";
+import { runVfsWorkplace } from "./vfs/workplace.js";
 import { runPrompt } from "./prompt/commands.js";
 import { runProvider } from "./provider/commands.js";
 import { runModel } from "./model/commands.js";
@@ -60,10 +60,10 @@ async function runVfs(argv: string[]): Promise<number> {
   const subcommand = rest[0];
   const subArgs = rest.slice(1);
 
-  if (subcommand === "worktree") {
+  if (subcommand === "workplace") {
     const rt = await createNovelMasterRuntime(argv);
     try {
-      await runVfsWorktree(rt, subArgs);
+      await runVfsWorkplace(rt, subArgs);
       return 0;
     } finally {
       await rt.conn.close();
@@ -82,7 +82,7 @@ async function runVfs(argv: string[]): Promise<number> {
     }
     if (subcommand == null || !(subcommand in GLOBAL_VFS_COMMANDS)) {
       console.error(
-        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|worktree> ...",
+        "Usage: novel-master vfs <list|read|write|replace|glob|grep|delete|mkdir|export-zip|import-zip|workplace> ...",
       );
       return EXIT_USAGE;
     }

@@ -1,13 +1,13 @@
 /**
- * Shared `worktree` subcommand handler.
+ * Shared `workplace` subcommand handler.
  *
- * @module worktree/run-worktree
+ * @module workplace/run-workplace
  */
 
 import { type FillPolicy, type InclusionMode, type SortField, type SortOrder, type WorkplaceService } from "@novel-master/core/workplace";
 import { parseCliArgs } from "../vfs/parse-args.js";
 
-export async function runWorktree(
+export async function runWorkplace(
   service: WorkplaceService,
   args: readonly string[],
 ): Promise<void> {
@@ -39,7 +39,7 @@ export async function runWorktree(
     case "dir": {
       const logicalPath = rest[0];
       if (logicalPath == null) {
-        throw new Error("Usage: worktree dir <logicalPath> [--rule on|off] ...");
+        throw new Error("Usage: workplace dir <logicalPath> [--rule on|off] ...");
       }
       const ruleRaw = flags.get("rule");
       const sortRaw = flags.get("sort");
@@ -68,7 +68,7 @@ export async function runWorktree(
       const modeRaw = flags.get("mode");
       if (logicalPath == null || typeof modeRaw !== "string") {
         throw new Error(
-          "Usage: worktree file <logicalPath> --mode auto|show|hide",
+          "Usage: workplace file <logicalPath> --mode auto|show|hide",
         );
       }
       await service.setFileRule({
@@ -79,7 +79,7 @@ export async function runWorktree(
     }
     default:
       throw new Error(
-        "Usage: worktree <display|dir|file|list> ...",
+        "Usage: workplace <display|dir|file|list> ...",
       );
   }
 }

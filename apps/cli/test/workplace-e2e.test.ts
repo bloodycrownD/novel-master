@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { runNm } from "./helpers.js";
 
-describe("worktree CLI e2e", () => {
-  it("T1 project pull aligns worktree list with global", async () => {
+describe("workplace CLI e2e", () => {
+  it("T1 project pull aligns workplace list with global", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-wt-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -37,7 +37,7 @@ describe("worktree CLI e2e", () => {
       ]);
       const list = runNm([
         "project",
-        "worktree",
+        "workplace",
         "list",
         "--project",
         projectId,
@@ -45,14 +45,14 @@ describe("worktree CLI e2e", () => {
         dbPath,
       ]);
       assert.equal(list.status, 0, list.stderr);
-      assert.match(list.stdout, /隐藏/);
+      assert.match(list.stdout, /\thide\thidden/);
       assert.match(list.stdout, /\/t\.md/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
   });
 
-  it("T2 session create inherits mapped worktree", async () => {
+  it("T2 session create inherits mapped workplace", async () => {
     const dir = await mkdtemp(join(tmpdir(), "nm-wt-"));
     const dbPath = join(dir, "novel.db");
     try {
@@ -73,7 +73,7 @@ describe("worktree CLI e2e", () => {
       );
       runNm([
         "project",
-        "worktree",
+        "workplace",
         "file",
         "/s.md",
         "--mode",
@@ -94,7 +94,7 @@ describe("worktree CLI e2e", () => {
       const sessionId = sess.stdout.trim();
       const list = runNm([
         "session",
-        "worktree",
+        "workplace",
         "list",
         "--project",
         projectId,
@@ -105,7 +105,7 @@ describe("worktree CLI e2e", () => {
       ]);
       assert.equal(list.status, 0, list.stderr);
       assert.match(list.stdout, /\t\/s\.md\t/);
-      assert.match(list.stdout, /展示/);
+      assert.match(list.stdout, /\tshow\tfull/);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -129,7 +129,7 @@ describe("worktree CLI e2e", () => {
         "--db",
         dbPath,
       ]);
-      const display = runNm(["vfs", "worktree", "display", "--db", dbPath]);
+      const display = runNm(["vfs", "workplace", "display", "--db", dbPath]);
       assert.equal(display.status, 0, display.stderr);
       assert.equal(display.stdout.trim(), "");
     } finally {
@@ -155,7 +155,7 @@ describe("worktree CLI e2e", () => {
         "--db",
         dbPath,
       ]);
-      const display = runNm(["vfs", "worktree", "display", "--db", dbPath]);
+      const display = runNm(["vfs", "workplace", "display", "--db", dbPath]);
       assert.equal(display.status, 0, display.stderr);
       assert.match(display.stdout, /<file path="/);
       assert.match(display.stdout, /1\|line1/);

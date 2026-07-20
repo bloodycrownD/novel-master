@@ -1,16 +1,16 @@
 /**
- * `nm vfs worktree` (global scope).
+ * `nm vfs workplace` (global scope).
  *
- * @module vfs/worktree
+ * @module vfs/workplace
  */
 
 import type { NovelMasterRuntime } from "../runtime.js";
-import { runWorktree } from "../worktree/run-worktree.js";
+import { runWorkplace } from "../workplace/run-workplace.js";
 
-export async function runVfsWorktree(
+export async function runVfsWorkplace(
   rt: NovelMasterRuntime,
   args: readonly string[],
 ): Promise<void> {
-  const wt = rt.worktree({ kind: "global" });
-  await runWorktree(wt, args);
+  const wt = rt.workplace({ kind: "global" });
+  await runWorkplace(wt, args);
 }
