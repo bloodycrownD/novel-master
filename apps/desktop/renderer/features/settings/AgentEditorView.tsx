@@ -818,12 +818,18 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                         : "config-block-list"
                     }
                   >
-                    {persist.length === 0 ? (
+                    {persist.filter(
+                      (b): b is PersistTextPromptBlock => b.type === "text"
+                    ).length === 0 ? (
                       <p className="config-block-card__empty-hint">
                         {PROMPT_REGION_LABELS.emptyPersistHint}
                       </p>
                     ) : null}
-                    {persist.map((block, index) => (
+                    {persist
+                      .filter(
+                        (b): b is PersistTextPromptBlock => b.type === "text"
+                      )
+                      .map((block, index, textBlocks) => (
                       <div
                         key={`persist-${index}`}
                         className="config-block-card config-block-card--prompt"
@@ -837,7 +843,7 @@ export function AgentEditorView({ nav }: { nav: Nav }) {
                           </span>
                           {renderBlockActions(
                             index,
-                            persist.length,
+                            textBlocks.length,
                             movePersist,
                             deletePersist
                           )}

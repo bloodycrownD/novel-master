@@ -1,10 +1,16 @@
 import {ALLOWED_DYNAMIC_ROOT_MACROS} from '@novel-master/core/prompt';
 
+export type PromptInsertableMacro = {
+  readonly label: string;
+  readonly token: string;
+};
+
 /** dynamic 区可插入的 Prompt 宏（白名单 $ 根键）。 */
-export const PROMPT_INSERTABLE_MACROS = ALLOWED_DYNAMIC_ROOT_MACROS.map(key => ({
-  label: `$${key}`,
-  token: `{{$${key}}}`,
-})) as const;
+export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] =
+  ALLOWED_DYNAMIC_ROOT_MACROS.map(key => ({
+    label: `$${key}`,
+    token: `{{$${key}}}`,
+  }));
 
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 

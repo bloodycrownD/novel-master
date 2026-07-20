@@ -1006,7 +1006,9 @@ export function AgentEditorForm(props: Props) {
           >
             {persistEnabled ? (
               <View style={styles.blockList}>
-                {persist.length === 0 ? (
+                {persist.filter(
+                  (b): b is PersistTextPromptBlock => b.type === 'text',
+                ).length === 0 ? (
                   <Text
                     style={[
                       styles.emptyHint,
@@ -1019,7 +1021,11 @@ export function AgentEditorForm(props: Props) {
                     {PROMPT_REGION_LABELS.emptyPersistHint}
                   </Text>
                 ) : null}
-                {persist.map((block, index) => (
+                {persist
+                  .filter(
+                    (b): b is PersistTextPromptBlock => b.type === 'text',
+                  )
+                  .map((block, index, textBlocks) => (
                   <View
                     key={`persist-block-${index}`}
                     style={[
@@ -1054,7 +1060,7 @@ export function AgentEditorForm(props: Props) {
                       </Text>
                       {renderBlockActions(
                         index,
-                        persist.length,
+                        textBlocks.length,
                         movePersist,
                         deletePersist,
                       )}

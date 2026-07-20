@@ -3,12 +3,16 @@
  */
 import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@novel-master/core/prompt";
 
-export const PROMPT_INSERTABLE_MACROS = ALLOWED_DYNAMIC_ROOT_MACROS.map(
-  (key) => ({
+export type PromptInsertableMacro = {
+  readonly label: string;
+  readonly token: string;
+};
+
+export const PROMPT_INSERTABLE_MACROS: readonly PromptInsertableMacro[] =
+  ALLOWED_DYNAMIC_ROOT_MACROS.map((key) => ({
     label: `$${key}`,
     token: `{{$${key}}}`,
-  })
-) as const;
+  }));
 
 const ALLOWED_ROOT_MACRO_KEYS = new Set<string>(ALLOWED_DYNAMIC_ROOT_MACROS);
 

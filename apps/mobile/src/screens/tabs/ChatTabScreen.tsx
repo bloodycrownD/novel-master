@@ -3,7 +3,11 @@
  */
 import React, { useCallback, useLayoutEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import {
+  useNavigation,
+  type CompositeNavigationProp,
+} from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppHeader } from '@/components/chrome/AppHeader';
@@ -14,7 +18,10 @@ import { useBatchSelection } from '@/hooks/useBatchSelection';
 import { useMobileScope } from '@/hooks/useMobileScope';
 import { useTheme } from '@/theme/ThemeProvider';
 import { resolveChatTabBarStyle } from '@/navigation/main-tab-bar-style';
-import type { RootStackParamList } from '@/navigation/types';
+import type {
+  MainTabParamList,
+  RootStackParamList,
+} from '@/navigation/types';
 import { ChatConversationPanel } from './chat-tab/ChatConversationPanel';
 import { ChatSessionListPanel } from './chat-tab/ChatSessionListPanel';
 import { ChatTabProvider, useChatTabContext } from './chat-tab/ChatTabProvider';
@@ -24,7 +31,10 @@ import {
 } from './chat-tab/ChatTabNavigationProvider';
 import { useChatTabController } from './chat-tab/useChatTabController';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = CompositeNavigationProp<
+  BottomTabNavigationProp<MainTabParamList, 'Chat'>,
+  NativeStackNavigationProp<RootStackParamList>
+>;
 
 function ChatTabScreenInner() {
   const sessionBatch = useBatchSelection();
