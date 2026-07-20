@@ -14,8 +14,8 @@ import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { CodeEditor } from "../components/ui/CodeEditor";
 import { ipcVfsRead, ipcVfsWrite, vfsScope } from "../ipc/client";
 import { showToast } from "../components/ui/show-toast";
-import { formatVfsErrorForUser, type VfsScope } from "@novel-master/core/vfs";
-import type { AnnotateDraft } from "@novel-master/core/chat";
+import { formatVfsErrorForUser, type VfsScope } from "@shared/logic/vfs";
+import type { AnnotateDraft } from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 import { useShellNav } from "../providers/ShellNavProvider";
 import {

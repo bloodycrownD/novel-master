@@ -3,7 +3,7 @@ import {
   displayStateLabel,
   inclusionModeLabel,
   ruleStateLabel,
-} from "@novel-master/core/workplace";
+} from "@shared/logic/workplace";
 import type { WorkplaceListRowDto } from "@shared/ipc-types";
 
 /** `/notes/ch1.md` → [`notes`, `ch1.md`]（跳过空段） */

@@ -3,7 +3,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scanAtPathAttachments } from "@novel-master/core/chat";
+import { scanAtPathAttachments } from "@shared/logic/chat";
 import {
   atPathTokensFromPickerSelection,
   countScannedAtPathAttachments,

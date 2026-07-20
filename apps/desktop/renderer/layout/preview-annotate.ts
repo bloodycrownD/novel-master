@@ -1,13 +1,13 @@
 /**
  * Desktop PreviewPane 划词批注：入口门闩 + 选区 + 原文匹配下划线（尽力）。
- * 纯算法在 `@novel-master/core/chat`；本文件保留 DOM wrap 壳。
+ * 纯算法在 `@shared/logic/chat`；本文件保留 DOM wrap 壳。
  * 仅 mode==="read" 且 workspaceScope==="chat" 且非空 sessionId 启用。
  */
 
 import {
   groupAnnotateIdsByOriginalText,
   sortAnnotateTextsLongestFirst,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 import type { WorkspacePanelScope } from "@shared/ipc-types";
 
 export {
@@ -15,7 +15,7 @@ export {
   groupAnnotateIdsByOriginalText,
   parseAnnotateIdsAttr,
   sortAnnotateTextsLongestFirst,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 
 export const PREVIEW_ANNOTATE_MARK_CLASS = "preview-annotate-mark";
 export const PREVIEW_ANNOTATE_IDS_ATTR = "data-annotate-ids";

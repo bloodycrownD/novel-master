@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PromptPreviewSegmentDto } from "@shared/ipc-types";
-import { PROMPT_REGION_LABELS } from "@novel-master/core/config-forms/agent";
+import { PROMPT_REGION_LABELS } from "@shared/logic/config-forms-agent";
 import { ipcPromptRealPreview } from "@/ipc/client";
 
 interface RealPromptPanelProps {

@@ -1,9 +1,9 @@
 /**
- * Desktop 入口：批注草稿 store 在 `@novel-master/core/chat`；
+ * Desktop 入口：批注草稿 store 在 `@shared/logic/chat`；
  * chip / ∪ 投影映射为 `MessageAttachmentDto`。
  */
 
-import type { AnnotateDraft, MessageAttachment } from "@novel-master/core/chat";
+import type { AnnotateDraft, MessageAttachment } from "@shared/logic/chat";
 import {
   addChatAnnotateDraft,
   chipsFromAnnotateStore as chipsFromAnnotateStoreCore,
@@ -16,7 +16,7 @@ import {
   subscribeChatAnnotateDraft,
   unionComposerStatusWithAnnotate as unionComposerStatusWithAnnotateCore,
   updateChatAnnotateDraft,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 import type { MessageAttachmentDto } from "@shared/ipc-types";
 
 export {

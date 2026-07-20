@@ -5,7 +5,7 @@
 import {
   WORKPLACE_BLOCK_LABEL,
   WORKPLACE_BLOCK_HINT,
-} from "@novel-master/core/config-forms/agent";
+} from "@shared/logic/config-forms-agent";
 import { Switch } from "@/components/ui/Switch";
 
 type Props = {

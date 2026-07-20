@@ -6,7 +6,7 @@ import {
   shouldAcceptRunEvent,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
-} from "@novel-master/core/agent";
+} from "@shared/logic/agent";
 import {
   shouldApplyTranscriptReload,
   useAgentRunLifecycle,

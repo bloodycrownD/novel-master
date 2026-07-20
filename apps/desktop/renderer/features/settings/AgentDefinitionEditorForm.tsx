@@ -12,12 +12,12 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from "react";
-import { type AgentDefinition } from "@novel-master/core/agent";
+import { type AgentDefinition } from "@shared/logic/agent";
 import {
   type DynamicPromptBlock,
   type PersistPromptBlock,
   type PersistTextPromptBlock,
-} from "@novel-master/core/prompt";
+} from "@shared/logic/prompt";
 import {
   ROLE_OPTIONS,
   TOOL_MODE_OPTIONS,
@@ -38,7 +38,7 @@ import {
   isDynamicBlockPersistent,
   withDynamicBlockPersistence,
   type ToolsMode,
-} from "@novel-master/core/config-forms/agent";
+} from "@shared/logic/config-forms-agent";
 import { AgentWorkplaceBlockCard } from "./AgentWorkplaceBlockCard";
 import { ToolPolicyPicker } from "./ToolPolicyPicker";
 import { showToast } from "@/components/ui/show-toast";

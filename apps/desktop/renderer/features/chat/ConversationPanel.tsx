@@ -5,7 +5,7 @@ import {
   resolveRollbackConfirmMessage,
   serializeComposerDraftJson,
   type RollbackMode,
-} from '@novel-master/core/chat';
+} from '@shared/logic/chat';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ChatMessageDto,

@@ -4,7 +4,7 @@ import type { ChatMessageDto } from "@shared/ipc-types";
 import {
   USER_VFS_TURN_ACK_TEXT,
   wrapUserVfsActionsForStorage,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 import {
   buildChatListItems,
   isTurnToolExecuting,

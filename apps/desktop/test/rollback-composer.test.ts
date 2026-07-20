@@ -4,7 +4,7 @@ import type { ChatMessageDto, MessageAttachmentDto } from '@shared/ipc-types';
 import {
   isPlainUserUndoSendEligible,
   type RollbackMode,
-} from '@novel-master/core/chat';
+} from '@shared/logic/chat';
 import { editableTextFromMessage } from '@/features/chat/message-edit';
 import { resolveComposerDraftAfterRollbackSuccess } from '@/features/chat/rollback-composer';
 import { chatMessageFromDto } from '@/features/chat/composer-send-state';

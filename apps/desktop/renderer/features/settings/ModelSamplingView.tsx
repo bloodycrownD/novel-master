@@ -6,7 +6,7 @@ import {
   type ModelSamplingParams,
   type ThinkingLevel,
   type TokenizerOverride,
-} from "@novel-master/core/provider";
+} from "@shared/logic/provider";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { toastSettingsError, toastSettingsSuccess } from "@/utils/settings-feedback";

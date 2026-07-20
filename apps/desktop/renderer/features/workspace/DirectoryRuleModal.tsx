@@ -1,4 +1,4 @@
-import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import { useEffect, useState } from "react";
 import type { WorkplaceSetDirRuleRequest } from "@shared/ipc-types";
 import { Button } from "@/components/ui/Button";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import {
   emptyDirRuleForm,
   defaultDirRuleRequest,

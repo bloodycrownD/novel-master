@@ -59,6 +59,7 @@ export {
   resolveComposerSendIntent,
   resolveRollbackConfirmMessage,
   resolveVfsToolFilePath,
+  scanAtPathAttachments,
   selectTailBatchEligibleIdsFromAnchor,
   selectVisibilityBatchEligibleIdsFromAnchor,
   serializeComposerDraftJson,
@@ -69,4 +70,6 @@ export {
   transcriptSelectableRole,
   unionComposerStatusWithAnnotate,
   updateChatAnnotateDraft,
+  USER_VFS_TURN_ACK_TEXT,
+  wrapUserVfsActionsForStorage,
 } from "@novel-master/core/chat";

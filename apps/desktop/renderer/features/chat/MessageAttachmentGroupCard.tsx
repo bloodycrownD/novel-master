@@ -1,7 +1,7 @@
 /**
  * 消息附件组：样式对齐 ToolCallGroupCard（可折叠 summary + 卡片列表）。
  */
-import { formatStatusChipLabelFromAttachment } from '@novel-master/core/chat';
+import { formatStatusChipLabelFromAttachment } from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type MessageAttachmentGroupCardProps = {

@@ -6,7 +6,7 @@ import {
   shouldApplyTranscriptReload,
   shouldIgnoreStaleRunStarted,
   shouldReloadTranscriptOnRunEvent,
-} from "@novel-master/core/agent";
+} from "@shared/logic/agent";
 import { useCallback, useRef, useState } from "react";
 import type {
   AgentRunFailedPayload,

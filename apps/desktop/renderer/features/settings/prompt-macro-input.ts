@@ -1,7 +1,7 @@
 /**
  * Desktop 动态区宏：白名单分段 / 高亮 HTML / 原子删（与 Mobile prompt-macro-input 对齐）。
  */
-import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@novel-master/core/prompt";
+import { ALLOWED_DYNAMIC_ROOT_MACROS } from "@shared/logic/prompt";
 
 export type PromptInsertableMacro = {
   readonly label: string;

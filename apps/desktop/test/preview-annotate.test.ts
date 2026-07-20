@@ -122,13 +122,14 @@ describe("readSelectionTextInContainer", () => {
 });
 
 describe("applyAnnotateHighlights order (source)", () => {
-  it("按 originalText 长度降序再 wrap（调 core sort）", () => {
+  it("按 originalText 长度降序再 wrap（经 @shared/logic 调 core sort）", () => {
     const src = readFileSync(
       path.join(__dirname, "..", "renderer", "layout", "preview-annotate.ts"),
       "utf8",
     );
     assert.match(src, /sortAnnotateTextsLongestFirst/);
-    assert.match(src, /@novel-master\/core\/chat/);
+    assert.match(src, /@shared\/logic\/chat/);
+    assert.doesNotMatch(src, /@novel-master\/core/);
   });
 });
 

@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type { AnnotateDraft } from "@novel-master/core/chat";
+import type { AnnotateDraft } from "@shared/logic/chat";
 import { Button } from "../components/ui/Button";
 import {
   addChatAnnotateDraft,

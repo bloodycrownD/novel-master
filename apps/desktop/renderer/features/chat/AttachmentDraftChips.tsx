@@ -1,12 +1,12 @@
 /**
  * Composer 状态 chip（不可叉）：workplace + user_ops（含 annotate 预览）。
  * 文件引用不再使用 attach chip（认正文 `@路径`）；userAttach 不进状态条。
- * 判定 / partition 单点：`@novel-master/core/chat`。
+ * 判定 / partition 单点：`@shared/logic/chat`。
  */
 import {
   formatStatusChipLabelFromAttachment,
   partitionComposerChipAttachments,
-} from '@novel-master/core/chat';
+} from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type AttachmentDraftChipsProps = {

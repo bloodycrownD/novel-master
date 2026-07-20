@@ -1,6 +1,6 @@
-/** Desktop 薄 re-export：可见性 / tail 批量范围逻辑见 @novel-master/core/chat。 */
+/** Desktop 薄 re-export：可见性 / tail 批量范围逻辑见 @shared/logic/chat。 */
 import type { ChatMessageDto } from "@shared/ipc-types";
-import type { TailBatchRow } from "@novel-master/core/chat";
+import type { TailBatchRow } from "@shared/logic/chat";
 import { buildChatListItems } from "./message-blocks";
 
 export type {
@@ -8,7 +8,7 @@ export type {
   TranscriptSelectableRole,
   TailBatchMode,
   TailBatchRow,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 export {
   transcriptSelectableRole,
   isTranscriptRowSelectable,
@@ -21,7 +21,7 @@ export {
   computeTailBatchAffectedIds,
   computeTailBatchRangeFromSelection,
   tailBatchDeleteAfterSeq,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 
 /** Desktop 消息批量模式（含 delete）。 */
 export type MessageBatchMode = "hide" | "restore" | "delete";

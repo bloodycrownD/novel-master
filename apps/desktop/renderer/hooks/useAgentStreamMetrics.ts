@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildStreamMetricsLine,
   formatCharCount,
-} from "@novel-master/core/format";
+} from "@shared/logic/format";
 
 export { formatCharCount };
 

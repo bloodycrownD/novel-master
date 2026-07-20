@@ -5,7 +5,7 @@ import { handleMultilineSubmitKeyDown } from "@/utils/textarea-enter-shortcuts";
 import {
   replaceComposerStatusAttachments,
   TOOL_TURN_BRIDGE_TEXT,
-} from "@novel-master/core/chat";
+} from "@shared/logic/chat";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {

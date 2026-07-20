@@ -1,7 +1,7 @@
 import {
   isComposerStatusAttachment,
   type RollbackMode,
-} from '@novel-master/core/chat';
+} from '@shared/logic/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
 
 export type ComposerDraftSnapshot = {

@@ -3,7 +3,7 @@
  */
 import {
   extractEditableTextFromMessage,
-} from '@novel-master/core/chat';
+} from '@shared/logic/chat';
 import type { ChatMessageDto, ContentBlockDto } from '@shared/ipc-types';
 import { chatMessageFromDto } from './composer-send-state';
 

@@ -1,4 +1,4 @@
-import { DEFAULT_WORKPLACE_DIR_RULE } from "@novel-master/core/workplace";
+import { DEFAULT_WORKPLACE_DIR_RULE } from "@shared/logic/workplace";
 import type {
   VfsScopeRequest,
   WorkplaceSetDirRuleRequest,

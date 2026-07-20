@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { SESSION_FS_LABELS } from "@novel-master/core/config-forms/shared";
+import { SESSION_FS_LABELS } from "@shared/logic/config-forms-shared";
 import {
   ipcAgentListPicker,
   ipcAgentResolveCurrent,
