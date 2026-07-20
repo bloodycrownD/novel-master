@@ -5,12 +5,12 @@
  * 1. `prepareUserVfsTurnForAgentRun`：flush pending → `user_ops`；
  *    materialize workplace 差集（定案 A 并入 re-append merge =
  *    trailing∪flush∪attach∪materialize）；
- * 2. 外层新 append（`!reAppended`）：merge =
- *    materialize∪attach∪@扫描∪flush `user_ops` → append(user, 原文, attachments)。
+ * 2. 外层新 append（`!reAppended`）：直 concat =
+ *    materialize∪flush `user_ops`∪attach(@扫描)∪annotate → append(user, 原文, attachments)。
  *
  * ## Runner 内（agent-runner 每 step；本模块不调用 wrap/assemble）
- * 3. `prepareUserMessagesForPrompt`（hydrate+wrap）
- * 4. `assembleWorkplaceDisplay` → layout → normalize → protocol map
+ * 3. `assembleWorkplaceDisplay` → layout → normalize → protocol map
+ * 4. `prepareUserMessagesForPrompt`（hydrate+wrap；S0）
  *
  * ## 契约
  * - App `attachments` 入参仅 `source===attach`；误传 workplace/`user_ops` 预览一律丢弃；
@@ -327,13 +327,11 @@ export async function runAgentTurn(
     buildAnnotateAttachmentFromDraft,
   );
 
-  // 新 append merge：materialize ∪ attach(@扫描) ∪ flush user_ops；再 concat annotate
+  // 新 append：workplace ∪ user_ops ∪ scannedComposer 直 concat；再 concat annotate（禁 path 去重）
   const mergedAttachments = [
-    ...mergeAttachmentsWithScannedAtPaths("", [
-      ...workplaceAtts,
-      ...userOpsAttachments,
-      ...scannedComposer,
-    ]),
+    ...workplaceAtts,
+    ...userOpsAttachments,
+    ...scannedComposer,
     ...annotateAttachments,
   ];
 
