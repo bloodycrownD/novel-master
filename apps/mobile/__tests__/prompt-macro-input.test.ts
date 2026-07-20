@@ -63,11 +63,27 @@ describe('tryAtomicMacroDelete', () => {
     return value.slice(0, cursor - 1) + value.slice(cursor);
   }
 
+  /** 模拟 Delete 一次：删掉 cursor 后一字 */
+  function deleteForwardOnce(value: string, cursor: number): string {
+    if (cursor >= value.length) {
+      return value;
+    }
+    return value.slice(0, cursor) + value.slice(cursor + 1);
+  }
+
   it('T-M1：芯片 {{$time}} 内退格整段删', () => {
     const prev = '前缀{{$time}}后缀';
     const macroStart = prev.indexOf('{{$time}}');
     const cursorInside = macroStart + '{{$time'.length;
     const changed = backspaceOnce(prev, cursorInside);
+
+    expect(tryAtomicMacroDelete(prev, changed)).toBe('前缀后缀');
+  });
+
+  it('T-M1：芯片 {{$time}} 上 Delete 整段删', () => {
+    const prev = '前缀{{$time}}后缀';
+    const macroStart = prev.indexOf('{{$time}}');
+    const changed = deleteForwardOnce(prev, macroStart);
 
     expect(tryAtomicMacroDelete(prev, changed)).toBe('前缀后缀');
   });

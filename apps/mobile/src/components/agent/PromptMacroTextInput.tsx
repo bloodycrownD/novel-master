@@ -1,7 +1,7 @@
 /**
- * Multiline prompt field with clickable macro chips (plain text, no overlay).
+ * 动态区多行输入：白名单宏着色 + 退格/删除整段删；对外始终纯文本。
  */
-import React, {useCallback, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -15,6 +15,8 @@ import {FormTextInput} from '../form/FormTextInput';
 import {
   PROMPT_INSERTABLE_MACROS,
   insertTextAtSelection,
+  splitPromptMacroSegments,
+  tryAtomicMacroDelete,
 } from './prompt-macro-input';
 
 type Props = {
@@ -31,6 +33,7 @@ export function PromptMacroTextInput({
   placeholder,
 }: Props) {
   const selectionRef = useRef({start: value.length, end: value.length});
+  const prevValueRef = useRef(value);
   const [pendingSelection, setPendingSelection] = useState<{
     start: number;
     end: number;
@@ -44,6 +47,16 @@ export function PromptMacroTextInput({
     [],
   );
 
+  const handleChangeText = useCallback(
+    (next: string) => {
+      const atomic = tryAtomicMacroDelete(prevValueRef.current, next);
+      const resolved = atomic ?? next;
+      prevValueRef.current = resolved;
+      onChangeText(resolved);
+    },
+    [onChangeText],
+  );
+
   const insertMacro = useCallback(
     (token: string) => {
       const {next, selection} = insertTextAtSelection(
@@ -51,6 +64,7 @@ export function PromptMacroTextInput({
         selectionRef.current,
         token,
       );
+      prevValueRef.current = next;
       onChangeText(next);
       selectionRef.current = selection;
       setPendingSelection(selection);
@@ -58,19 +72,45 @@ export function PromptMacroTextInput({
     [onChangeText, value],
   );
 
+  useEffect(() => {
+    prevValueRef.current = value;
+  }, [value]);
+
+  const segments = splitPromptMacroSegments(value);
+
   return (
     <View style={styles.root}>
       <FormTextInput
         tokens={tokens}
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={handleChangeText}
         onSelectionChange={handleSelectionChange}
         selection={pendingSelection ?? undefined}
         multiline
         placeholder={placeholder}
         autoCapitalize="none"
-        autoCorrect={false}
-      />
+        autoCorrect={false}>
+        {segments.length === 0 ? null : (
+          <Text>
+            {segments.map((segment, index) =>
+              segment.kind === 'macro' ? (
+                <Text
+                  key={`m-${index}-${segment.value}`}
+                  style={{
+                    color: tokens.primary,
+                    backgroundColor: `${tokens.primary}22`,
+                  }}>
+                  {segment.value}
+                </Text>
+              ) : (
+                <Text key={`t-${index}`} style={{color: tokens.text}}>
+                  {segment.value}
+                </Text>
+              ),
+            )}
+          </Text>
+        )}
+      </FormTextInput>
       <View style={styles.chipRow}>
         <Text style={[styles.chipLabel, {color: tokens.textSecondary}]}>
           宏
