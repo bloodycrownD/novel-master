@@ -1,14 +1,11 @@
 import type { RollbackMode } from '@novel-master/core/chat';
 import type { MessageAttachmentDto } from '@shared/ipc-types';
+import { isComposerStatusAttachment } from './AttachmentDraftChips';
 
 export type ComposerDraftSnapshot = {
   readonly text: string;
   readonly attachments: readonly MessageAttachmentDto[];
 };
-
-function isComposerStatusAttachment(a: MessageAttachmentDto): boolean {
-  return a.source === 'workplace' || a.source === 'user_ops';
-}
 
 /** 回填仅保留状态投影；文件引用认正文 `@路径`，不再恢复 attach chip。 */
 function statusOnly(
