@@ -15,10 +15,7 @@ import {
   dynamicBlockToWire,
   persistBlockToWire,
 } from "./agent-prompt-layout-wire.js";
-import {
-  isLegacyWorktreeWireBlock,
-  stripLegacyWorktreeBlocksFromPersistMap,
-} from "./normalize-agent-prompt-layout.js";
+import { stripLegacyWorktreeBlocksFromPersistMap } from "./normalize-agent-prompt-layout.js";
 import {
   rejectPersistMacros,
   validateDynamicMacros,
@@ -56,7 +53,7 @@ function parsePersistTextBlock(
     if (type === "worktree") {
       throw new PromptError(
         "INVALID_BLOCK",
-        `${blockLabel(name)}：worktree 块已废弃，请使用 prompts.workplace 开关`
+        `${blockLabel(name)}：请改用常驻工作区（prompts.workplace）开关`
       );
     }
     throw new PromptError(
@@ -211,9 +208,6 @@ export function validateAgentPromptLayoutFromMaps(
   for (const [name, item] of Object.entries(persistMap)) {
     if (!isNonEmptyString(name)) {
       throw new PromptError("INVALID_BLOCK", "块名称须为非空字符串");
-    }
-    if (isLegacyWorktreeWireBlock(item)) {
-      continue;
     }
     persist.push(parsePersistTextBlock(name, item));
   }

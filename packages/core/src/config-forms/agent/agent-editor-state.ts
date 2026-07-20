@@ -83,9 +83,6 @@ export function toolsFromDefinition(def: AgentDefinition): {
 
 export { buildToolsPolicyFromSelection, toolsSelectionFromDefinition };
 
-/** 常驻工作区在 wire 中的固定键名（UI 不暴露、不可改）。 */
-export const WORKPLACE_BLOCK_WIRE_NAME = "canon";
-
 /** 常驻工作区在编辑器中的类型标签（菜单与徽章；不展示 wire 槽位名）。 */
 export const WORKPLACE_BLOCK_LABEL = "常驻工作区";
 
